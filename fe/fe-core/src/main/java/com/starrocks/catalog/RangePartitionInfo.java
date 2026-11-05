@@ -477,6 +477,38 @@ public class RangePartitionInfo extends PartitionInfo {
         return -1;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * The formal partition whose range contains {@code key}, as (partition id, its range), or null when no formal
+     * partition contains it. O(log n) on the concurrent range index, so it may run without the table lock, where it
+     * can miss a partition that changes meanwhile.
+     */
+    public Map.Entry<Long, Range<PartitionKey>> getFormalPartitionContaining(PartitionKey key) {
+        // Ranges never overlap, so only the range starting at or right below the key can contain it. The probe
+        // [key, key] sorts with a non-empty range that starts at the key, and after an empty (shadow) one there.
+        Map.Entry<Range<PartitionKey>, Map.Entry<Long, Range<PartitionKey>>> floor =
+                rangeIndex.floorEntry(Range.closed(key, key));
+        // Check the entry's own range: on a table whose ranges already overlap, two of them can share a lower
+        // endpoint, and then the index keeps the key of one and the entry of the other.
+        while (floor != null && floor.getValue().getValue().isEmpty()) {
+            floor = rangeIndex.lowerEntry(floor.getKey());
+        }
+        return floor != null && floor.getValue().getValue().contains(key) ? floor.getValue() : null;
+    }
+
+    private NavigableMap<Range<PartitionKey>, Map.Entry<Long, Range<PartitionKey>>> rangeIndex(boolean isTemp) {
+        return isTemp ? tempRangeIndex : rangeIndex;
+    }
+
+    private void rebuildRangeIndexes() {
+        rangeIndex.clear();
+        tempRangeIndex.clear();
+        idToRange.forEach((id, range) -> rangeIndex.put(range, Maps.immutableEntry(id, range)));
+        idToTempRange.forEach((id, range) -> tempRangeIndex.put(range, Maps.immutableEntry(id, range)));
+    }
+
+>>>>>>> 8085390 ([BugFix] Let a temporary partition adopt the bounds of the partition it overwrites (#78707))
     private void setRangeInternal(long partitionId, boolean isTemp, Range<PartitionKey> range) {
         if (isTemp) {
             idToTempRange.put(partitionId, range);
