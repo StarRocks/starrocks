@@ -15,8 +15,14 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.PlanMode;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
@@ -31,6 +37,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.RowDelta;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.TableScan;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterable;
@@ -45,11 +52,15 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.Executors;
 
+import static com.starrocks.connector.iceberg.IcebergMetadataTest.DEFAULT_CATALOG_PROPERTIES;
 import static com.starrocks.connector.iceberg.IcebergMetadataTest.DEFAULT_CONFIG;
+import static com.starrocks.connector.iceberg.IcebergMetadataTest.HDFS_ENVIRONMENT;
+import static com.starrocks.type.IntegerType.INT;
 
 // The manifest cache keeps file-level min/max of columns outside the partition/sort keep-set, so a warm cache prunes
 // the same files as a cold one.
@@ -221,5 +232,210 @@ public class IcebergManifestCacheStatsTest extends TableTestBase {
 
         Assertions.assertEquals(1, planFiles(catalog, mockedNativeTableA, Expressions.equal("id", 25)).size());
         Assertions.assertEquals(FILES, planFiles(catalog, mockedNativeTableA, Expressions.equal("id", 25)).size());
+    }
+    // Plans with the statistics of `statsColumns` (all when null), as the min/max optimization does.
+    private static List<FileScanTask> planTasksWithStats(CachingIcebergCatalog catalog, Table table,
+                                                         List<String> statsColumns) throws IOException {
+        StarRocksIcebergTableScanContext scanContext =
+                new StarRocksIcebergTableScanContext(CATALOG_NAME, DB_NAME, TABLE_NAME, PlanMode.LOCAL);
+        TableScan scan = catalog.getTableScan(table, scanContext).useSnapshot(table.currentSnapshot().snapshotId());
+        scan = statsColumns == null ? scan.includeColumnStats() : scan.includeColumnStats(statsColumns);
+        try (CloseableIterable<FileScanTask> tasks = scan.planFiles()) {
+            return Lists.newArrayList(tasks);
+        }
+    }
+
+    private static Map<String, List<Object>> statsByFile(List<FileScanTask> tasks) {
+        Map<String, List<Object>> stats = new HashMap<>();
+        for (FileScanTask task : tasks) {
+            DataFile file = task.file();
+            stats.put(file.location(), List.of(orEmpty(file.lowerBounds()), orEmpty(file.upperBounds()),
+                    orEmpty(file.nullValueCounts()), orEmpty(file.valueCounts()), orEmpty(file.columnSizes())));
+        }
+        return stats;
+    }
+
+    // A file read fresh has null for a statistic the manifest lacks, a cached one an empty map: the same to min/max.
+    private static <V> Map<Integer, V> orEmpty(Map<Integer, V> values) {
+        return values == null ? Map.of() : values;
+    }
+
+    // Whether the tasks were served from the manifest cache: cached files reach the tasks as wrappers that carry
+    // copied statistics, not the shared store.
+    private static boolean fromCache(List<FileScanTask> tasks) {
+        boolean fromCache = tasks.stream().allMatch(task -> task.file() instanceof DataFileWrapper);
+        if (fromCache) {
+            tasks.forEach(task -> Assertions.assertNull(((DataFileWrapper) task.file()).columnStats()));
+        }
+        return fromCache;
+    }
+
+    @Test
+    public void testMinMaxStatsServedFromWarmCache() throws IOException {
+        appendFiles(mockedNativeTableA);
+        CachingIcebergCatalog catalog = newCatalog(Map.of());
+
+        List<FileScanTask> cold = planTasksWithStats(catalog, mockedNativeTableA, List.of("id"));
+        Assertions.assertFalse(fromCache(cold));
+        Map<String, List<Object>> expected = statsByFile(cold);
+        Assertions.assertEquals(FILES, expected.size());
+        Assertions.assertEquals(List.of(Map.of(1, id(30)), Map.of(1, id(39)), Map.of(1, 0L), Map.of(1, 10L),
+                Map.of(1, 43L)), expected.get("/path/to/data-id-3.parquet"));
+
+        for (int round = 0; round < 2; round++) {
+            List<FileScanTask> warm = planTasksWithStats(catalog, mockedNativeTableA, List.of("id"));
+            Assertions.assertTrue(fromCache(warm), "round " + round);
+            Assertions.assertEquals(expected, statsByFile(warm), "round " + round);
+        }
+        // the keep-set column (the bucket source) is served from the cache too; it has no statistics here
+        Assertions.assertTrue(fromCache(planTasksWithStats(catalog, mockedNativeTableA, List.of("data"))));
+    }
+
+    @Test
+    public void testStatsNotKeptByCacheBypassIt() throws IOException {
+        appendFiles(mockedNativeTableA);
+        // all columns' statistics: never covered by the cache
+        CachingIcebergCatalog catalog = newCatalog(Map.of());
+        planFiles(catalog, mockedNativeTableA, Expressions.alwaysTrue());
+        for (int round = 0; round < 2; round++) {
+            List<FileScanTask> tasks = planTasksWithStats(catalog, mockedNativeTableA, null);
+            Assertions.assertFalse(fromCache(tasks));
+            Assertions.assertEquals(Map.of(1, id(30)), statsByFile(tasks).get("/path/to/data-id-3.parquet").get(0));
+        }
+
+        // column limit 0: only the keep-set is cached, so id is read fresh while data is served from the cache
+        CachingIcebergCatalog keepSetOnly = newCatalog(
+                Map.of(IcebergCatalogProperties.ICEBERG_MANIFEST_CACHE_STATISTICS_MAX_COLUMNS, "0"));
+        planFiles(keepSetOnly, mockedNativeTableA, Expressions.alwaysTrue());
+        List<FileScanTask> tasks = planTasksWithStats(keepSetOnly, mockedNativeTableA, List.of("id"));
+        Assertions.assertFalse(fromCache(tasks));
+        Assertions.assertEquals(Map.of(1, id(30)), statsByFile(tasks).get("/path/to/data-id-3.parquet").get(0));
+        Assertions.assertTrue(fromCache(planTasksWithStats(keepSetOnly, mockedNativeTableA, List.of("data"))));
+
+        // without cached column statistics nothing is served from the cache, not even the keep-set
+        CachingIcebergCatalog withoutStats = newCatalog(
+                Map.of(IcebergCatalogProperties.ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS, "false"));
+        planFiles(withoutStats, mockedNativeTableA, Expressions.alwaysTrue());
+        Assertions.assertFalse(fromCache(planTasksWithStats(withoutStats, mockedNativeTableA, List.of("data"))));
+        tasks = planTasksWithStats(withoutStats, mockedNativeTableA, List.of("id"));
+        Assertions.assertFalse(fromCache(tasks));
+        Assertions.assertEquals(Map.of(1, id(30)), statsByFile(tasks).get("/path/to/data-id-3.parquet").get(0));
+    }
+
+    // Only the columns ranked within the column limit are kept in every manifest: a column ranked past it may be
+    // crowded out, so a scan asking for it bypasses the cache.
+    @Test
+    public void testOnlyColumnsRankedWithinLimitAreServedFromCache() throws IOException {
+        Schema schema = new Schema(List.of(
+                Types.NestedField.optional(1, "a", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "b", Types.IntegerType.get()),
+                Types.NestedField.optional(3, "c", Types.IntegerType.get())));
+        Table table = create(schema, PartitionSpec.unpartitioned(), "t_ranked", 2);
+        AppendFiles append = table.newAppend();
+        for (int i = 0; i < FILES; i++) {
+            append.appendFile(DataFiles.builder(PartitionSpec.unpartitioned())
+                    .withPath("/path/to/ranked-" + i + ".parquet")
+                    .withFileSizeInBytes(10)
+                    .withRecordCount(10)
+                    .withMetrics(new Metrics(10L, null, Map.of(1, 10L, 2, 10L, 3, 10L), Map.of(1, 0L, 2, 0L, 3, 0L),
+                            null, Map.of(1, id(i), 2, id(10 + i), 3, id(20 + i)),
+                            Map.of(1, id(i), 2, id(10 + i), 3, id(20 + i))))
+                    .build());
+        }
+        append.commit();
+
+        CachingIcebergCatalog catalog = newCatalog(
+                Map.of(IcebergCatalogProperties.ICEBERG_MANIFEST_CACHE_STATISTICS_MAX_COLUMNS, "2"));
+        Map<String, List<Object>> cold = statsByFile(planTasksWithStats(catalog, table, List.of("a", "b")));
+        List<FileScanTask> warm = planTasksWithStats(catalog, table, List.of("a", "b"));
+        Assertions.assertTrue(fromCache(warm));
+        Assertions.assertEquals(cold, statsByFile(warm));
+        Assertions.assertEquals(Map.of(1, id(3), 2, id(13)), statsByFile(warm).get("/path/to/ranked-3.parquet").get(0));
+
+        for (List<String> columns : List.of(List.of("c"), List.of("a", "c"))) {
+            List<FileScanTask> tasks = planTasksWithStats(catalog, table, columns);
+            Assertions.assertFalse(fromCache(tasks), columns.toString());
+            Assertions.assertEquals(id(23), tasks.stream()
+                    .filter(t -> t.file().location().equals("/path/to/ranked-3.parquet"))
+                    .findFirst().orElseThrow().file().lowerBounds().get(3), columns.toString());
+        }
+    }
+
+    // The keep-set columns count against the column limit, so only the budget left after them is sure to be cached.
+    @Test
+    public void testKeepSetColumnsUseTheColumnLimit() throws IOException {
+        Schema schema = new Schema(List.of(
+                Types.NestedField.optional(1, "p", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "c", Types.IntegerType.get())));
+        PartitionSpec spec = PartitionSpec.builderFor(schema).identity("p").build();
+        Table table = create(schema, spec, "t_keep_budget", 2);
+        AppendFiles append = table.newAppend();
+        for (int i = 0; i < FILES; i++) {
+            append.appendFile(DataFiles.builder(spec)
+                    .withPath("/path/to/keep-budget-" + i + ".parquet")
+                    .withFileSizeInBytes(10)
+                    .withPartitionPath("p=0")
+                    .withRecordCount(10)
+                    .withMetrics(new Metrics(10L, null, Map.of(1, 10L, 2, 10L), Map.of(1, 0L, 2, 0L), null,
+                            Map.of(1, id(0), 2, id(i)), Map.of(1, id(0), 2, id(i))))
+                    .build());
+        }
+        append.commit();
+
+        // limit 1: the partition source p takes it, so c is not cached and is read fresh
+        CachingIcebergCatalog one = newCatalog(
+                Map.of(IcebergCatalogProperties.ICEBERG_MANIFEST_CACHE_STATISTICS_MAX_COLUMNS, "1"));
+        planFiles(one, table, Expressions.alwaysTrue());
+        List<FileScanTask> tasks = planTasksWithStats(one, table, List.of("c"));
+        Assertions.assertFalse(fromCache(tasks));
+        Assertions.assertEquals(Map.of(2, id(3)), statsByFile(tasks).get("/path/to/keep-budget-3.parquet").get(0));
+        Assertions.assertTrue(fromCache(planTasksWithStats(one, table, List.of("p"))));
+
+        // limit 2: room for c too
+        CachingIcebergCatalog two = newCatalog(
+                Map.of(IcebergCatalogProperties.ICEBERG_MANIFEST_CACHE_STATISTICS_MAX_COLUMNS, "2"));
+        Map<String, List<Object>> cold = statsByFile(planTasksWithStats(two, table, List.of("c")));
+        tasks = planTasksWithStats(two, table, List.of("c"));
+        Assertions.assertTrue(fromCache(tasks));
+        Assertions.assertEquals(cold, statsByFile(tasks));
+        Assertions.assertEquals(Map.of(2, id(3)), statsByFile(tasks).get("/path/to/keep-budget-3.parquet").get(0));
+    }
+
+    // The min/max optimization through IcebergMetadata: each query plans afresh (a new metadata), the first one
+    // fills the manifest cache and the later ones are served from it with the same file statistics.
+    @Test
+    public void testMinMaxOptPlanningWarmCacheMatchesCold() {
+        appendFiles(mockedNativeTableA);
+        CachingIcebergCatalog catalog = newCatalog(Map.of());
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", DB_NAME,
+                TABLE_NAME, "", Lists.newArrayList(new Column("id", INT)), mockedNativeTableA, Maps.newHashMap());
+
+        List<Map<String, List<Object>>> rounds = new ArrayList<>();
+        for (int round = 0; round < 3; round++) {
+            IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, catalog,
+                    Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+            IcebergGetRemoteFilesParams params = (IcebergGetRemoteFilesParams) IcebergGetRemoteFilesParams.newBuilder()
+                    .setAllParams(IcebergTableMORParams.EMPTY)
+                    .setParams(IcebergMORParams.EMPTY)
+                    .setTableVersionRange(TvrTableSnapshot.of(
+                            Optional.of(mockedNativeTableA.currentSnapshot().snapshotId())))
+                    .setPredicate(ConstantOperator.TRUE)
+                    .setEnableColumnStats(true)
+                    .setFieldNames(List.of("id"))
+                    .setStatsColumnNames(Set.of("id"))
+                    .build();
+            RemoteFileInfoSource source = metadata.getRemoteFilesAsync(icebergTable, params);
+            List<FileScanTask> tasks = new ArrayList<>();
+            while (source.hasMoreOutput()) {
+                tasks.add(((IcebergRemoteFileInfo) source.getOutput()).getFileScanTask());
+            }
+            Assertions.assertEquals(round > 0, fromCache(tasks), "round " + round);
+            rounds.add(statsByFile(tasks));
+        }
+        Assertions.assertEquals(FILES, rounds.get(0).size());
+        Assertions.assertEquals(List.of(Map.of(1, id(70)), Map.of(1, id(79))),
+                rounds.get(0).get("/path/to/data-id-7.parquet").subList(0, 2));
+        Assertions.assertEquals(rounds.get(0), rounds.get(1));
+        Assertions.assertEquals(rounds.get(0), rounds.get(2));
     }
 }
