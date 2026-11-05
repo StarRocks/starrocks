@@ -93,8 +93,16 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     // LakeIOOptions' in-class defaults for every field not listed, which silently turned metadata
     // caching off.
     const bool reuse_via_shared_cache = !_hold_input_segments;
+    // Adapt the per-column buffers for concurrent reads, retaining the configured size when
+    // parallel prefill is disabled.
+    const int64_t read_buffer_size =
+            config::enable_compaction_parallel_merge_init
+                    ? std::min(_stream_buffer_size, CompactionUtils::get_read_buffer_size(
+                                                            input_bytes, _context->stats->read_segment_count,
+                                                            _tablet_schema->num_columns(), _stream_buffer_size))
+                    : _stream_buffer_size;
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_horizontal_compaction_fill_data_cache,
-                                  .buffer_size = _stream_buffer_size,
+                                  .buffer_size = read_buffer_size,
                                   .fill_metadata_cache = reuse_via_shared_cache,
                                   .hold_segments = _hold_input_segments};
     reader_params.column_access_paths = &_column_access_paths;
@@ -306,6 +314,19 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
     int64_t total_num_rows = 0;
     int64_t total_mem_footprint = 0;
     int64_t held_segments_bytes = 0;
+    int64_t read_buffer_size = _stream_buffer_size;
+    if (config::enable_compaction_parallel_merge_init) {
+        // Sized from rowset metadata alone, so it is known before any segment is opened.
+        int64_t est_input_bytes = 0;
+        int64_t est_segments = 0;
+        for (auto& rowset : _input_rowsets) {
+            est_input_bytes += rowset->data_size_after_deletion();
+            est_segments += rowset->num_segments();
+        }
+        read_buffer_size = std::min(_stream_buffer_size, CompactionUtils::get_read_buffer_size(
+                                                                 est_input_bytes, est_segments,
+                                                                 _tablet_schema->num_columns(), _stream_buffer_size));
+    }
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
         // This pass only touches segment footers and column indexes, never column data, so the
@@ -318,7 +339,7 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         // same reasoning as in execute().
         const bool reuse_via_shared_cache = !_hold_input_segments;
         LakeIOOptions lake_io_opts{.fill_data_cache = false,
-                                   .buffer_size = _stream_buffer_size,
+                                   .buffer_size = read_buffer_size,
                                    .fill_metadata_cache = reuse_via_shared_cache,
                                    .hold_segments = _hold_input_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));

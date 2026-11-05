@@ -89,6 +89,8 @@ public:
         config::lake_publish_version_slow_log_ms = _publish_slow_log_ms;
         config::enable_light_pk_compaction_publish = _light_pk_publish;
         config::primary_key_compaction_replace_batch_rows = _replace_batch_rows;
+        config::enable_compaction_parallel_merge_init = _parallel_merge_init;
+        config::compaction_parallel_merge_prefetch_bytes = _prefetch_bytes;
     }
 
 private:
@@ -113,6 +115,8 @@ private:
     int64_t _publish_slow_log_ms = config::lake_publish_version_slow_log_ms;
     bool _light_pk_publish = config::enable_light_pk_compaction_publish;
     int32_t _replace_batch_rows = config::primary_key_compaction_replace_batch_rows;
+    bool _parallel_merge_init = config::enable_compaction_parallel_merge_init;
+    int64_t _prefetch_bytes = config::compaction_parallel_merge_prefetch_bytes;
 };
 
 class LakePrimaryKeyCompactionTest : public TestBase, public testing::WithParamInterface<CompactionParam> {
@@ -235,6 +239,8 @@ protected:
         }
     }
 
+    void test_compaction_with_overwritten_rows();
+
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
@@ -247,7 +253,7 @@ protected:
 };
 
 // each time overwrite last rows
-TEST_P(LakePrimaryKeyCompactionTest, test1) {
+void LakePrimaryKeyCompactionTest::test_compaction_with_overwritten_rows() {
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize, 0);
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -311,6 +317,22 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     EXPECT_EQ(3, new_tablet_metadata2->compaction_inputs_size());
     EXPECT_FALSE(new_tablet_metadata2->has_prev_garbage_version());
     EXPECT_EQ(new_tablet_metadata2->rowsets(0).num_dels(), 0);
+}
+
+TEST_P(LakePrimaryKeyCompactionTest, test1) {
+    test_compaction_with_overwritten_rows();
+}
+
+TEST_P(LakePrimaryKeyCompactionTest, test_parallel_prefill_skips_fully_deleted_segments) {
+    config::enable_compaction_parallel_merge_init = true;
+    config::compaction_parallel_merge_prefetch_bytes = 256 * 1024 * 1024;
+    test_compaction_with_overwritten_rows();
+}
+
+TEST_P(LakePrimaryKeyCompactionTest, test_parallel_prefill_skips_fully_deleted_segments_without_budget) {
+    config::enable_compaction_parallel_merge_init = true;
+    config::compaction_parallel_merge_prefetch_bytes = 0;
+    test_compaction_with_overwritten_rows();
 }
 
 // test write 3 diff chunk

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <unordered_set>
 #include <vector>
@@ -23,6 +24,7 @@
 #include "column/schema.h"
 #include "common/constexpr.h"
 #include "common/runtime_profile.h"
+#include "common/statusor.h"
 #include "storage_primitive/row_source_mask.h"
 
 namespace starrocks {
@@ -32,6 +34,7 @@ class Status;
 namespace starrocks {
 
 class Chunk;
+struct OlapReaderStatistics;
 
 class ChunkIterator {
 public:
@@ -85,6 +88,22 @@ public:
         DCHECK_CHUNK(chunk);
         return st;
     }
+
+    // Make the bytes this iterator is going to read resident in its own read buffers without
+    // decoding anything. Returns true only when the whole scan is covered, so the following
+    // get_next calls decode without waiting on any IO. Returns false when the iterator cannot
+    // hold (all of) its reads up front; reading stays correct either way. This is the IO half of
+    // a read split off for an IO worker thread, so an implementation must not decode pages or
+    // build chunks here. |budget| is the caller's remaining residency allowance, shared by every
+    // sibling iterator of the same read: reserve from it before loading, and report false once it
+    // runs out.
+    virtual StatusOr<bool> prefetch(std::atomic<int64_t>* budget) { return false; }
+
+    // Redirect a not-yet-read iterator tree's counters. Returns the previous destination, or
+    // nullptr if the tree has no reader counters. Parallel merges give each child a private
+    // destination, then publish snapshots to the original destination on the consuming thread.
+    // All statistics-bearing leaves in a tree must share the same original destination.
+    virtual OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) { return nullptr; }
 
     // Release resources associated with this iterator, e.g, deallocate memory.
     // This routine can be called at most once.
