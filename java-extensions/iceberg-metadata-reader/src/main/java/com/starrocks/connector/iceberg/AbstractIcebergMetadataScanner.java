@@ -45,10 +45,6 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     protected FileIO fileIO;
     protected String timezone;
 
-    // expire after 600 seconds long enough for most credential expiration
-    // max 1000 entries large enough for most use cases
-    private static final TableFileIOCache TABLE_FILE_IO_CACHE = new TableFileIOCache(600, 1000);
-
     public AbstractIcebergMetadataScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.requiredFields = params.get("required_fields").split(",");
@@ -64,7 +60,10 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
             this.table = deserializeFromBase64(serializedTable);
-            this.fileIO = TABLE_FILE_IO_CACHE.get(table);
+            // Each scanner owns the FileIO of the table it deserialized and closes it. The credentials come
+            // with that table, so a fresh one is never stale or another user's; the IMDS pressure a FileIO
+            // per scanner used to cause is gone since IcebergAwsClientFactory shares the machine providers.
+            this.fileIO = table.io();
             parseRequiredTypes();
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
             doOpen();
@@ -91,7 +90,14 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     @Override
     public void close() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            doClose();
+            try {
+                doClose();
+            } finally {
+                if (fileIO != null) {
+                    fileIO.close();
+                    fileIO = null;
+                }
+            }
         } catch (IOException e) {
             LOG.error("Failed to close the {}.", this.getClass().getSimpleName(), e);
             throw new IOException(String.format("Failed to close the %s.", this.getClass().getSimpleName()), e);
