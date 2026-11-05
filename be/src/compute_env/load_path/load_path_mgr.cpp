@@ -34,11 +34,13 @@
 
 #include "compute_env/load_path/load_path_mgr.h"
 
+#include <openssl/rand.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include <chrono>
+#include <iomanip>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -157,9 +159,19 @@ void LoadPathMgr::get_load_data_path(std::vector<std::string>* data_paths) {
 const std::string ERROR_FILE_NAME = "error_log";
 
 Status LoadPathMgr::get_load_error_file_name(const TUniqueId& fragment_instance_id, std::string* error_path) {
+    // The error log holds the rejected rows, and /api/_load_error_log serves it to anyone who names it. The
+    // instance id follows from the load's query id, which users can see, so a random suffix keeps the name known
+    // only through the URL the load reports.
+    uint8_t nonce[16];
+    if (RAND_bytes(nonce, static_cast<int>(sizeof(nonce))) != 1) {
+        return Status::InternalError("failed to generate a random error log file name");
+    }
     std::stringstream ss;
-    // add shard sub dir to file path
-    ss << ERROR_FILE_NAME << "_" << std::hex << fragment_instance_id.hi << "_" << fragment_instance_id.lo;
+    ss << ERROR_FILE_NAME << "_" << std::hex << fragment_instance_id.hi << "_" << fragment_instance_id.lo << "_"
+       << std::setfill('0');
+    for (uint8_t byte : nonce) {
+        ss << std::setw(2) << static_cast<int>(byte);
+    }
     *error_path = ss.str();
     return Status::OK();
 }
