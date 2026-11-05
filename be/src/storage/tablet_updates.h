@@ -305,9 +305,15 @@ public:
     //   ]
     // ]
     Status get_column_values(const std::vector<uint32_t>& column_ids, int64_t read_version, bool with_default,
+<<<<<<< HEAD
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<MutableColumnPtr>* columns, void* state, const TabletSchemaCSPtr& tablet_schema,
                              const std::map<string, string>* column_to_expr_value = nullptr);
+=======
+                             std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid, MutableColumns* columns,
+                             void* state, const TabletSchemaCSPtr& tablet_schema,
+                             const std::map<string, string>* column_to_expr_value = nullptr, bool pad_char = true);
+>>>>>>> 900dd44 ([BugFix] Return CHAR unpadded from a primary-key point lookup (#82413))
 
     Status get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
                                 std::vector<uint64_t>* rss_rowids, int64_t timeout_ms = 0);
