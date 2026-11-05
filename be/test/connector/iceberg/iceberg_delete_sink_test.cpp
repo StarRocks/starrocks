@@ -297,6 +297,7 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_with_delete_file) {
     // Verify that the sink processed the commit result correctly
     // The callback should have updated the runtime state with sink commit info
     ASSERT_EQ(runtime_state->sink_commit_infos().size(), initial_sink_commit_info_count + 1);
+    EXPECT_EQ(runtime_state->num_rows_load_sink(), 100);
 
     // Verify the last added sink commit info has the expected iceberg data file
     const auto& last_commit_info = runtime_state->sink_commit_infos().back();
@@ -309,6 +310,28 @@ TEST_F(IcebergDeleteSinkTest, callback_on_commit_with_delete_file) {
     EXPECT_EQ(iceberg_data_file.partition_null_fingerprint, result_obj.partition_null_fingerprint);
     EXPECT_EQ(iceberg_data_file.referenced_data_file, result_obj.referenced_data_file);
     EXPECT_EQ(iceberg_data_file.file_content, TIcebergFileContent::POSITION_DELETES);
+}
+
+// A row-delta delete sub-sink still reports its file but leaves row counting to the composite sink.
+TEST_F(IcebergDeleteSinkTest, callback_on_commit_without_row_count) {
+    auto context = create_delete_sink_context();
+    context->count_loaded_rows = false;
+    auto provider = std::make_unique<IcebergDeleteSinkProvider>(context);
+    auto result = provider->create_sink(0);
+    ASSERT_TRUE(result.ok());
+    auto sink = std::move(result).value();
+    auto delete_sink = dynamic_cast<IcebergDeleteSink*>(sink.get());
+    ASSERT_NE(delete_sink, nullptr);
+
+    CommitResult result_obj;
+    result_obj.file_result.io_status = Status::OK();
+    result_obj.file_result.location = "/test/path/delete_file.parquet";
+    result_obj.file_result.format = "parquet";
+    result_obj.file_result.file_statistics.record_count = 100;
+    delete_sink->callback_on_commit(result_obj);
+
+    EXPECT_EQ(_runtime_state->sink_commit_infos().size(), 1u);
+    EXPECT_EQ(_runtime_state->num_rows_load_sink(), 0);
 }
 
 // Test callback_on_commit function with IO failure
