@@ -38,12 +38,8 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
-import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.lake.LakeTable;
->>>>>>> f1019d08304... [BugFix][RB-96] Allow metadata-only ALTER TABLE while a range table is resharding (#68305)
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
