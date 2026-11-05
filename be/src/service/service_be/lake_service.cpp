@@ -711,7 +711,7 @@ void submit_publish_resharding_tablet_task(PublishVersionContext* ctx,
             [ctx, resharding_tablet_info] {
                 g_publish_version_failed_tasks << 1;
                 Status st = Status::Cancelled(
-                        fmt::format("publish splitting tablet task has been cancelled, resharding_tablet_info={}",
+                        fmt::format("publish resharding tablet task has been cancelled, resharding_tablet_info={}",
                                     resharding_tablet_info.DebugString()));
                 LOG(WARNING) << st;
                 ctx->record_cancellation(resharding_tablet_info, st);
@@ -721,7 +721,7 @@ void submit_publish_resharding_tablet_task(PublishVersionContext* ctx,
     auto st = thread_pool_token->submit(std::move(task), ctx->timeout_deadline);
     if (!st.ok()) {
         g_publish_version_failed_tasks << 1;
-        LOG(WARNING) << "Failed to submit publish splitting tablet task: " << st
+        LOG(WARNING) << "Failed to submit publish resharding tablet task: " << st
                      << ". resharding_tablet_info=" << resharding_tablet_info.DebugString()
                      << " txn_infos=" << JoinMapped(ctx->request->txn_infos(), txn_info_string, ",")
                      << " version=" << ctx->request->new_version();
@@ -756,8 +756,6 @@ LakeServiceImpl::~LakeServiceImpl() = default;
 // in the txn-log apply path (OSS read of txn_log, broken segment, ...),
 // which no_op_publish=true bypasses entirely (transactions.cpp:320).
 DEFINE_FAIL_POINT(lake_publish_version_rpc_fail);
-// Forces the query-side parent alias back to the pre-fix behaviour (merge the primary-index
-// sstables too), so the cost of that merge can be measured against the same data.
 
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
                                       const ::starrocks::PublishVersionRequest* request,
