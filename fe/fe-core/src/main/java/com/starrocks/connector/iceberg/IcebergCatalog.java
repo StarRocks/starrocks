@@ -58,6 +58,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalLong;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -137,6 +138,24 @@ public interface IcebergCatalog extends MemoryTrackable {
     void renameTable(ConnectContext context, String dbName, String tblName, String newTblName) throws StarRocksConnectorException;
 
     Table getTable(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException;
+
+    /**
+     * The table as the catalog serves it now, never from a table cache: for a caller that needs what the
+     * catalog vends at this moment, such as a running scan whose vended credentials are about to expire.
+     */
+    default Table getTableUncached(ConnectContext context, String dbName, String tableName)
+            throws StarRocksConnectorException {
+        return getTable(context, dbName, tableName);
+    }
+
+    /**
+     * When {@code table}, as getTable returned it, was loaded from the catalog, or empty if unknown. Without a
+     * table cache it was loaded for the query being planned, at about {@code nowMs}.
+     */
+    default OptionalLong tableLoadedAtMs(ConnectContext context, String dbName, String tableName, Table table,
+                                         long nowMs) {
+        return OptionalLong.of(nowMs);
+    }
 
     default boolean tableExists(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
         try {

@@ -64,6 +64,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -89,6 +90,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final String catalogName;
     private final IcebergCatalog delegate;
     private final com.github.benmanes.caffeine.cache.LoadingCache<IcebergTableName, Table> tables;
+    // When each table object in the cache was loaded from the catalog, by identity: a reload that fails keeps the
+    // old object and resets the entry's write time, so the entry's age does not tell how old its credentials are.
+    private final com.github.benmanes.caffeine.cache.Cache<Table, Long> tableLoadTimes =
+            Caffeine.newBuilder().weakKeys().build();
     private final com.github.benmanes.caffeine.cache.Cache<String, Database> databases;
     private final ExecutorService backgroundExecutor;
 
@@ -139,14 +144,14 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                         LOG.debug("Loading iceberg table {}.{} from remote catalog",
                                 key.dbName, key.tableName);
                         ConnectContext context = TABLE_LOAD_CONTEXT.get();
-                        return delegate.getTable(context != null ? context : new ConnectContext(),
-                                key.dbName, key.tableName);
+                        return recordLoadTime(delegate.getTable(context != null ? context : new ConnectContext(),
+                                key.dbName, key.tableName));
                     }
 
                     @Override
                     public Table reload(IcebergTableName key, Table oldValue) {
                         try {
-                            return delegate.getTable(new ConnectContext(), key.dbName, key.tableName);
+                            return recordLoadTime(delegate.getTable(new ConnectContext(), key.dbName, key.tableName));
                         } catch (Exception e) {
                             LOG.warn("refresh table {}.{} failed", key.dbName, key.tableName, e);
                             return oldValue;
@@ -278,10 +283,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public Table getTable(ConnectContext connectContext, String dbName, String tableName) throws StarRocksConnectorException {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
 
-        // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
-        boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() &&
-                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog));
-        if (!cacheAllowed) {
+        if (!tableCacheAllowed(connectContext)) {
             return delegate.getTable(connectContext, dbName, tableName);
         }
 
@@ -304,6 +306,35 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         } finally {
             TABLE_LOAD_CONTEXT.remove();
         }
+    }
+
+    // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
+    private boolean tableCacheAllowed(ConnectContext connectContext) {
+        return icebergProperties.isEnableIcebergTableCache() &&
+                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog));
+    }
+
+    private Table recordLoadTime(Table table) {
+        if (table != null) {
+            tableLoadTimes.put(table, System.currentTimeMillis());
+        }
+        return table;
+    }
+
+    @Override
+    public OptionalLong tableLoadedAtMs(ConnectContext connectContext, String dbName, String tableName, Table table,
+                                        long nowMs) {
+        if (connectContext != null && !tableCacheAllowed(connectContext)) {
+            return OptionalLong.of(nowMs);
+        }
+        Long loadedAt = tableLoadTimes.getIfPresent(table);
+        return loadedAt == null ? OptionalLong.empty() : OptionalLong.of(loadedAt);
+    }
+
+    @Override
+    public Table getTableUncached(ConnectContext connectContext, String dbName, String tableName)
+            throws StarRocksConnectorException {
+        return delegate.getTableUncached(connectContext, dbName, tableName);
     }
 
     @Override
