@@ -165,21 +165,20 @@ In `be/src/base/simd/filter.cpp`:
 #if defined(__x86_64__)
 
 MFV_DEFAULT(size_t filter_impl(void* dst, const void* src, size_t element_size, const uint8_t* selector, size_t from,
-                               size_t to) { return scan_scalar_any(dst, src, element_size, selector, from, to); })
+                               size_t to) { return scan_scalar_any(dst, src, element_size, selector, from, to); });
 
 MFV_AVX2(size_t filter_impl(void* dst, const void* src, size_t element_size, const uint8_t* selector, size_t from,
                             size_t to) {
     if (element_size == 4) return FILTER_CALL(detail::compress_avx2_w4, uint32_t);
-    if (element_size == 8) return FILTER_CALL(detail::compress_avx2_w8, uint64_t);
     return scan_avx2_any(dst, src, element_size, selector, from, to);
-})
+});
 
 MFV_AVX512VLBW(size_t filter_impl(void* dst, const void* src, size_t element_size, const uint8_t* selector, size_t from,
                                   size_t to) {
     if (element_size == 4) return FILTER_CALL(compress_w4, uint32_t);
     if (element_size == 8) return FILTER_CALL(compress_w8, uint64_t);
     return scan_avx2_any(dst, src, element_size, selector, from, to);
-})
+});
 
 #endif
 ```
@@ -352,14 +351,17 @@ Executed with `GLIBC_TUNABLES=glibc.cpu.hwcaps=-AVX512F,-AVX512VL,-AVX512BW` to 
 | uint64_t (8-Byte) sel=20% Cluster=32 | 2415.4 ns | 2586.4 ns | $\Delta = 7.1\%$ | `MFV_AVX2` (`compress_avx2_w8`) |
 | uint64_t (8-Byte) sel=50% Cluster=32 | 5769.9 ns | 8329.0 ns | $\Delta = 44.4\%$ | `MFV_AVX2` (`compress_avx2_w8`) |
 
-### 7.5. Acceptance Gate & Criteria Verification
-1. **Speedup $\ge 10\%$ ($p < 0.01$) on 4-Byte Compaction**: **PASSED**.
-   - On random bitmasks: Selectivities 40%–90% achieve **1.59x to 2.29x** speedup with $p = 1.83 \times 10^{-4} < 0.01$.
-   - On clustered 16-row runs: Selectivities 10%–70% achieve **1.26x to 2.38x** speedup with $p = 1.83 \times 10^{-4} < 0.01$.
-2. **Speedup $\ge 10\%$ ($p < 0.01$) on 8-Byte Compaction & Sparsity Parity**: **PASSED**.
-   - On clustered 16-row runs: Selectivities 10%–40% achieve **1.13x to 1.46x** speedup with $p = 1.83 \times 10^{-4} < 0.01$.
-   - Density guard (`popcount < 4`) ensures ultra-sparse batches maintain near-parity with scalar bit-drain.
-   - Dense 32-row runs maintain strict parity ($\sim 0.95\text{x} - 1.01\text{x}$).
-3. **Deterministic Dispatch**: **PASSED**.
-   - `GLIBC_TUNABLES` masked execution routes directly to `MFV_AVX2` without touching `MFV_AVX512VLBW`.
-   - Native AVX-512 execution preserves hardware `vpcompress` performance.
+### 7.5. Acceptance Gate & Production Dispatch Rationale
+
+1. **4-Byte Compaction (`compress_avx2_w4`)**: **ACCEPTED FOR PRODUCTION DISPATCH**.
+   - **Performance**: Achieves **1.59x to 2.29x** speedup on random bitmasks (selectivities 40%–90%, $p = 1.83 \times 10^{-4} < 0.01$) and **1.26x to 2.38x** speedup on clustered 16-row runs (selectivities 10%–70%, $p = 1.83 \times 10^{-4} < 0.01$).
+   - **Production Dispatch**: Wires directly into `MFV_AVX2` for `element_size == 4`.
+
+2. **8-Byte Compaction (`compress_avx2_w8`)**: **RESTRICTED FROM MFV_AVX2 PRODUCTION DISPATCH (EXPOSED UNDER `detail::`)**.
+   - **Empirical Findings**: While `compress_avx2_w8` demonstrates **1.13x to 1.46x** speedup on clustered 16-row masks (selectivities 10%–40%, $p < 0.01$), empirical benchmarks on random/unclustered masks show a regression of up to **2.16x (+116.0% latency)** at 20% selectivity (4653.0 ns vs. 2154.2 ns baseline) and +100.4% latency at 30% selectivity. This regression stems from the overhead of eight 4-lane subgroup extractions and permutes across each 32-element batch compared to the highly optimized scalar `ctz` bit-drain loop.
+   - **Production Decision**: To strictly safeguard production queries on 64-bit columns (BIGINT, DOUBLE, DATE/DATETIME64) against severe regressions on unclustered data, `MFV_AVX2` leaves `element_size == 8` on `scan_avx2_any` (scalar ctz drain).
+   - **Kernel Availability**: The `compress_avx2_w8` implementation remains compiled and exposed under `detail::compress_avx2_w8` for rigorous unit testing (`SimdFilterTest`), differential fuzzing, and benchmarking (`column_ops_bench`), preserving an algorithmic foundation for future hybrid or adaptive dispatch.
+
+3. **Deterministic Dispatch Verification**: **PASSED**.
+   - On AVX2-only hardware / `GLIBC_TUNABLES` masked execution: 4-byte compaction dispatches to `compress_avx2_w4` with full speedups, while 8-byte compaction safely routes to `scan_avx2_any`.
+   - On AVX-512 hardware: `MFV_AVX512VLBW` dispatches both 4-byte and 8-byte compaction via native single-instruction `vpcompressd` and `vpcompressq` without regression.
