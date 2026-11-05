@@ -152,6 +152,7 @@ import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.exceptions.ValidationException;
+import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ExpressionUtil;
@@ -178,6 +179,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
@@ -1779,6 +1781,88 @@ public class IcebergMetadata implements ConnectorMetadata {
         };
     }
 
+    // A table scan of `snapshotId` with the catalog's planning settings, not yet planned.
+    private TableScan newSnapshotTableScan(IcebergTable icebergTable, long snapshotId, ConnectContext connectContext) {
+        org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
+        // Force local planning for time-travel reads: the remote metadata-collection scanner
+        // (IcebergMetadataScanner) binds the pushed-down predicate against the current table specs, so a
+        // predicate on a column renamed after the target snapshot fails to bind. Local planning rebinds
+        // the specs to the snapshot's read schema and evaluates correctly. Remove once the remote
+        // metadata reader honors the snapshot schema/specs.
+        PlanMode planMode = icebergTable.isTimeTravelRead() ? PlanMode.LOCAL : planMode(connectContext);
+        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
+                catalogName, icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), planMode,
+                connectContext);
+        scanContext.setLocalParallelism(catalogProperties.getIcebergJobPlanningThreadNum());
+        scanContext.setLocalPlanningMaxSlotSize(catalogProperties.getLocalPlanningMaxSlotBytes());
+
+        // Bind the scan to the query's read schema so scan planning matches the predicate/descriptor:
+        //  - time-travel read: the targeted snapshot's schema (pinned via IcebergTable#withReadMetadata);
+        //  - ordinary current read: the current table schema, so a metadata-only ADD COLUMN (no new
+        //    snapshot) is visible instead of the stale schema recorded on the current snapshot.
+        // Other reads (e.g. an internal read pinned to an older snapshot) keep Iceberg's per-snapshot schema.
+        Snapshot currentSnapshot = nativeTbl.currentSnapshot();
+        if (icebergTable.isTimeTravelRead()) {
+            scanContext.setReadSchema(icebergTable.getReadSchema());
+        } else if (currentSnapshot != null && snapshotId == currentSnapshot.snapshotId()) {
+            scanContext.setReadSchema(nativeTbl.schema());
+        }
+        return icebergCatalog.getTableScan(nativeTbl, scanContext).useSnapshot(snapshotId);
+    }
+
+    // The columns whose file statistics the column-statistics path requests: the estimated top-level primitive
+    // columns, plus the fields the pushed-down predicate prunes files on, when the manifest cache keeps all of their
+    // statistics, so the path is served from the cache and prunes the same files. Otherwise null (all columns, read
+    // past the cache as before), which also keeps one planning per table and predicate however many column sets
+    // the optimizer estimates.
+    @VisibleForTesting
+    Set<String> statsColumnNamesServedFromCache(IcebergTable icebergTable, Collection<Column> columns,
+                                                ScalarOperator predicate, TvrVersionRange version,
+                                                ConnectContext connectContext) {
+        if (version.isEmpty() || !version.end().isPresent() ||
+                (version instanceof TvrTableDelta && version.start() != null && version.start().isPresent())) {
+            // incremental scans never use the manifest cache
+            return null;
+        }
+        TableScan scan = newSnapshotTableScan(icebergTable, version.end().get(), connectContext);
+        if (!(scan instanceof StarRocksIcebergTableScan)) {
+            return null;
+        }
+        Schema schema = scan.schema();
+        Set<String> names = new HashSet<>();
+        for (Column column : columns) {
+            Types.NestedField field = schema.caseInsensitiveFindField(column.getName());
+            // the provider estimates top-level primitive columns only; the others need no file statistics
+            if (field != null && field.type().isPrimitiveType() &&
+                    schema.asStruct().field(field.fieldId()) != null) {
+                names.add(field.name());
+            }
+        }
+        if (names.isEmpty()) {
+            return null;
+        }
+        if (predicate != null) {
+            // e.g. a struct subfield, which no estimated column covers
+            Expression icebergPredicate = convertPredicate(icebergTable, predicate);
+            if (icebergPredicate.op() != Expression.Operation.TRUE) {
+                try {
+                    for (Integer fieldId : Binder.boundReferences(schema.asStruct(), List.of(icebergPredicate),
+                            false)) {
+                        String name = schema.findColumnName(fieldId);
+                        if (name == null) {
+                            return null;
+                        }
+                        names.add(name);
+                    }
+                } catch (ValidationException e) {
+                    return null;
+                }
+            }
+        }
+        boolean covered = ((StarRocksIcebergTableScan) scan.includeColumnStats(names)).statsServedFromCache();
+        return covered ? names : null;
+    }
+
     // Plans the files of `key`: its version, column statistics (the stats columns) and projected field names.
     // `icebergPredicate` is the key's predicate converted for Iceberg, which callers may have narrowed.
     private CloseableIterator<FileScanTask> buildFileScanTaskIterator(IcebergTable icebergTable,
@@ -1816,30 +1900,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         checkUnsupportedEncryption(nativeTbl);
         traceIcebergMetricsConfig(nativeTbl);
 
-        // Force local planning for time-travel reads: the remote metadata-collection scanner
-        // (IcebergMetadataScanner) binds the pushed-down predicate against the current table specs, so a
-        // predicate on a column renamed after the target snapshot fails to bind. Local planning rebinds
-        // the specs to the snapshot's read schema and evaluates correctly. Remove once the remote
-        // metadata reader honors the snapshot schema/specs.
-        PlanMode planMode = icebergTable.isTimeTravelRead() ? PlanMode.LOCAL : planMode(connectContext);
-        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
-                catalogName, dbName, tableName, planMode, connectContext);
-        scanContext.setLocalParallelism(catalogProperties.getIcebergJobPlanningThreadNum());
-        scanContext.setLocalPlanningMaxSlotSize(catalogProperties.getLocalPlanningMaxSlotBytes());
-
         final long snapshotId = tvrVersionRange.end().orElseThrow(() -> new StarRocksConnectorException(
                 "Snapshot ID is not present in tvrVersionRange: " + tvrVersionRange));
-        // Bind the scan to the query's read schema so scan planning matches the predicate/descriptor:
-        //  - time-travel read: the targeted snapshot's schema (pinned via IcebergTable#withReadMetadata);
-        //  - ordinary current read: the current table schema, so a metadata-only ADD COLUMN (no new
-        //    snapshot) is visible instead of the stale schema recorded on the current snapshot.
-        // Other reads (e.g. an internal read pinned to an older snapshot) keep Iceberg's per-snapshot schema.
-        Snapshot currentSnapshot = nativeTbl.currentSnapshot();
-        if (icebergTable.isTimeTravelRead()) {
-            scanContext.setReadSchema(icebergTable.getReadSchema());
-        } else if (currentSnapshot != null && snapshotId == currentSnapshot.snapshotId()) {
-            scanContext.setReadSchema(nativeTbl.schema());
-        }
         Scan scan;
         IcebergMetricsReporter metricsReporter = icebergTable.getIcebergMetricsReporter();
         if (metricsReporter == null) {
@@ -1857,8 +1919,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     .metricsReporter(metricsReporter)
                     .planWith(jobPlanningExecutor);
         } else {
-            scan = icebergCatalog.getTableScan(nativeTbl, scanContext)
-                    .useSnapshot(snapshotId)
+            scan = newSnapshotTableScan(icebergTable, snapshotId, connectContext)
                     .metricsReporter(metricsReporter)
                     .planWith(jobPlanningExecutor);
         }
@@ -2401,6 +2462,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                 .setLimit(limit)
                 .setTableVersionRange(version)
                 .setEnableColumnStats(true)
+                .setStatsColumnNames(statsColumnNamesServedFromCache(
+                        icebergTable, columns.values(), predicate, version, ConnectContext.get()))
                 .build();
         PredicateSearchKey key = PredicateSearchKey.of(
                 icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), params);
@@ -2552,7 +2615,11 @@ public class IcebergMetadata implements ConnectorMetadata {
             FileScanTask fileScanTask, Expression icebergPredicate, PredicateSearchKey filter) {
         long offset = fileScanTask.start();
         long length = fileScanTask.length();
-        DataFile dataFileWithoutStats = fileScanTask.file().copyWithoutStats();
+        // With the statistics of a few columns requested, the file already carries just those (cheap to keep), and the
+        // min/max optimization may reuse these tasks under the same key, so they keep them. All columns' statistics
+        // are dropped.
+        DataFile dataFile = filter.getParams().isEnableColumnStats() && filter.getParams().getStatsColumnNames() != null ?
+                fileScanTask.file() : fileScanTask.file().copyWithoutStats();
         DeleteFile[] deleteFiles = fileScanTask.deletes().stream()
                 .map(DeleteFile::copyWithoutStats)
                 .toArray(DeleteFile[]::new);
@@ -2576,7 +2643,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         ResidualEvaluator residualEvaluator = ResidualEvaluator.of(taskSpec, icebergPredicate, true);
 
         BaseFileScanTask baseFileScanTask = new BaseFileScanTask(
-                dataFileWithoutStats,
+                dataFile,
                 deleteFiles,
                 schemaString,
                 partitionString,

@@ -307,6 +307,15 @@ public class StarRocksIcebergTableScan
         return covered;
     }
 
+    /**
+     * Whether this scan, which returns column statistics, will be served from the manifest cache, i.e. the cache
+     * keeps the statistics of every requested column. Planning nothing, it lets a caller decide which statistics
+     * to request before planning.
+     */
+    public boolean statsServedFromCache() {
+        return dataFileCache != null && shouldReturnColumnStats() && cacheKeepsStatsColumns(columnsToKeepStats());
+    }
+
     // Whether every manifest cache entry keeps the statistics of `columnIds`: the cache always keeps the keep-set
     // (statsKeepColumnIds) and fills the rest of the cacheStatsColumnLimit budget, which the keep-set columns with
     // statistics count against, with the lowest ranked other columns that have statistics in the manifest. So a
