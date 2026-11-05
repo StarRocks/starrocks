@@ -910,6 +910,210 @@ PARALLEL_TEST(SimdFilterTest, sparse_eight_byte_batches_avx2) {
         }
     }
 }
+
+PARALLEL_TEST(SimdFilterTest, randomized_differential_fuzz_avx2) {
+    constexpr int kIterations = 2000;
+    std::mt19937_64 rng(0x1337C0DE5EEDULL);
+    std::uniform_int_distribution<size_t> dist_len(0, 256);
+    std::uniform_int_distribution<size_t> dist_from(0, 64);
+    std::uniform_int_distribution<int> dist_sel(0, 100);
+    std::uniform_int_distribution<size_t> dist_cluster_idx(0, 2);
+    const int clusters[] = {1, 4, 16};
+    const uint8_t non_canonical_palette[] = {0x01, 0x02, 0x7F, 0x80, 0xAA, 0xFE, 0xFF};
+    std::uniform_int_distribution<size_t> dist_palette(0, std::size(non_canonical_palette) - 1);
+    std::uniform_int_distribution<int> dist_bool(0, 1);
+
+    for (int iter = 0; iter < kIterations; ++iter) {
+        size_t len = 0;
+        size_t from = 0;
+        size_t to = 0;
+
+        if (iter % 2 == 0) {
+            // Variant A: len in [0, 256], from in [0, 64]
+            len = dist_len(rng);
+            from = (iter % 8 == 0) ? 0 : dist_from(rng);
+            to = from + len;
+        } else {
+            // Variant B: N in [0, 256], from and to in [0, N]
+            size_t n = dist_len(rng);
+            if (n == 0) {
+                from = 0;
+                to = 0;
+            } else {
+                from = std::uniform_int_distribution<size_t>(0, n)(rng);
+                to = std::uniform_int_distribution<size_t>(from, n)(rng);
+            }
+            len = to - from;
+        }
+
+        int cluster = clusters[dist_cluster_idx(rng)];
+        int selectivity_pct = dist_sel(rng);
+        bool use_non_canonical = (dist_bool(rng) == 1);
+
+        size_t buf_size = to + 16;
+        std::vector<uint8_t> selector(buf_size, 0);
+        for (size_t i = 0; i < buf_size; i += cluster) {
+            bool keep = (std::uniform_int_distribution<int>(0, 100)(rng) <= selectivity_pct);
+            uint8_t val = 0;
+            if (keep) {
+                val = use_non_canonical ? non_canonical_palette[dist_palette(rng)] : 1;
+            }
+            size_t chunk_len = std::min<size_t>(cluster, buf_size - i);
+            std::fill_n(&selector[i], chunk_len, val);
+        }
+
+        // Test uint32_t (4-byte)
+        {
+            std::vector<uint32_t> src(buf_size);
+            for (size_t i = 0; i < buf_size; ++i) {
+                src[i] = static_cast<uint32_t>(rng());
+            }
+            std::vector<uint32_t> expected;
+            for (size_t i = from; i < to; ++i) {
+                if (selector[i]) {
+                    expected.push_back(src[i]);
+                }
+            }
+
+            // 1. Direct kernel compress_avx2_w4: out-of-place
+            {
+                std::vector<uint32_t> dst(buf_size, 0xBAADF00D);
+                size_t out_sz =
+                        SIMD::Filter::detail::compress_avx2_w4(dst.data(), src.data(), selector.data(), from, to);
+                ASSERT_EQ(from + expected.size(), out_sz) << "compress_avx2_w4 out-of-place iter=" << iter;
+                for (size_t i = 0; i < from; ++i) {
+                    ASSERT_EQ(0xBAADF00Du, dst[i])
+                            << "compress_avx2_w4 prefix clobbered at i=" << i << " iter=" << iter;
+                }
+                for (size_t i = 0; i < expected.size(); ++i) {
+                    ASSERT_EQ(expected[i], dst[from + i]) << "compress_avx2_w4 mismatch at i=" << i << " iter=" << iter;
+                }
+            }
+
+            // 2. Direct kernel compress_avx2_w4: in-place
+            {
+                std::vector<uint32_t> in_place = src;
+                size_t ip_sz = SIMD::Filter::detail::compress_avx2_w4(in_place.data(), in_place.data(), selector.data(),
+                                                                      from, to);
+                ASSERT_EQ(from + expected.size(), ip_sz) << "compress_avx2_w4 in-place iter=" << iter;
+                for (size_t i = 0; i < from; ++i) {
+                    ASSERT_EQ(src[i], in_place[i])
+                            << "compress_avx2_w4 in-place prefix clobbered at i=" << i << " iter=" << iter;
+                }
+                for (size_t i = 0; i < expected.size(); ++i) {
+                    ASSERT_EQ(expected[i], in_place[from + i])
+                            << "compress_avx2_w4 in-place mismatch at i=" << i << " iter=" << iter;
+                }
+            }
+
+            // 3. Public API filter_range<uint32_t>: out-of-place
+            {
+                std::vector<uint32_t> dst(buf_size, 0xBAADF00D);
+                size_t out_sz = SIMD::Filter::filter_range(dst.data(), src.data(), selector.data(), from, to);
+                ASSERT_EQ(from + expected.size(), out_sz) << "filter_range<uint32_t> out-of-place iter=" << iter;
+                for (size_t i = 0; i < from; ++i) {
+                    ASSERT_EQ(0xBAADF00Du, dst[i])
+                            << "filter_range<uint32_t> prefix clobbered at i=" << i << " iter=" << iter;
+                }
+                for (size_t i = 0; i < expected.size(); ++i) {
+                    ASSERT_EQ(expected[i], dst[from + i])
+                            << "filter_range<uint32_t> mismatch at i=" << i << " iter=" << iter;
+                }
+            }
+
+            // 4. Public API filter_range<uint32_t>: in-place
+            {
+                std::vector<uint32_t> in_place = src;
+                size_t ip_sz = SIMD::Filter::filter_range(in_place.data(), in_place.data(), selector.data(), from, to);
+                ASSERT_EQ(from + expected.size(), ip_sz) << "filter_range<uint32_t> in-place iter=" << iter;
+                for (size_t i = 0; i < from; ++i) {
+                    ASSERT_EQ(src[i], in_place[i])
+                            << "filter_range<uint32_t> in-place prefix clobbered at i=" << i << " iter=" << iter;
+                }
+                for (size_t i = 0; i < expected.size(); ++i) {
+                    ASSERT_EQ(expected[i], in_place[from + i])
+                            << "filter_range<uint32_t> in-place mismatch at i=" << i << " iter=" << iter;
+                }
+            }
+        }
+
+        // Test uint64_t (8-byte)
+        {
+            std::vector<uint64_t> src(buf_size);
+            for (size_t i = 0; i < buf_size; ++i) {
+                src[i] = static_cast<uint64_t>(rng());
+            }
+            std::vector<uint64_t> expected;
+            for (size_t i = from; i < to; ++i) {
+                if (selector[i]) {
+                    expected.push_back(src[i]);
+                }
+            }
+
+            // 1. Direct kernel compress_avx2_w8: out-of-place
+            {
+                std::vector<uint64_t> dst(buf_size, 0xBAADF00DDEADBEEFULL);
+                size_t out_sz =
+                        SIMD::Filter::detail::compress_avx2_w8(dst.data(), src.data(), selector.data(), from, to);
+                ASSERT_EQ(from + expected.size(), out_sz) << "compress_avx2_w8 out-of-place iter=" << iter;
+                for (size_t i = 0; i < from; ++i) {
+                    ASSERT_EQ(0xBAADF00DDEADBEEFULL, dst[i])
+                            << "compress_avx2_w8 prefix clobbered at i=" << i << " iter=" << iter;
+                }
+                for (size_t i = 0; i < expected.size(); ++i) {
+                    ASSERT_EQ(expected[i], dst[from + i]) << "compress_avx2_w8 mismatch at i=" << i << " iter=" << iter;
+                }
+            }
+
+            // 2. Direct kernel compress_avx2_w8: in-place
+            {
+                std::vector<uint64_t> in_place = src;
+                size_t ip_sz = SIMD::Filter::detail::compress_avx2_w8(in_place.data(), in_place.data(), selector.data(),
+                                                                      from, to);
+                ASSERT_EQ(from + expected.size(), ip_sz) << "compress_avx2_w8 in-place iter=" << iter;
+                for (size_t i = 0; i < from; ++i) {
+                    ASSERT_EQ(src[i], in_place[i])
+                            << "compress_avx2_w8 in-place prefix clobbered at i=" << i << " iter=" << iter;
+                }
+                for (size_t i = 0; i < expected.size(); ++i) {
+                    ASSERT_EQ(expected[i], in_place[from + i])
+                            << "compress_avx2_w8 in-place mismatch at i=" << i << " iter=" << iter;
+                }
+            }
+
+            // 3. Public API filter_range<uint64_t>: out-of-place
+            {
+                std::vector<uint64_t> dst(buf_size, 0xBAADF00DDEADBEEFULL);
+                size_t out_sz = SIMD::Filter::filter_range(dst.data(), src.data(), selector.data(), from, to);
+                ASSERT_EQ(from + expected.size(), out_sz) << "filter_range<uint64_t> out-of-place iter=" << iter;
+                for (size_t i = 0; i < from; ++i) {
+                    ASSERT_EQ(0xBAADF00DDEADBEEFULL, dst[i])
+                            << "filter_range<uint64_t> prefix clobbered at i=" << i << " iter=" << iter;
+                }
+                for (size_t i = 0; i < expected.size(); ++i) {
+                    ASSERT_EQ(expected[i], dst[from + i])
+                            << "filter_range<uint64_t> mismatch at i=" << i << " iter=" << iter;
+                }
+            }
+
+            // 4. Public API filter_range<uint64_t>: in-place
+            {
+                std::vector<uint64_t> in_place = src;
+                size_t ip_sz = SIMD::Filter::filter_range(in_place.data(), in_place.data(), selector.data(), from, to);
+                ASSERT_EQ(from + expected.size(), ip_sz) << "filter_range<uint64_t> in-place iter=" << iter;
+                for (size_t i = 0; i < from; ++i) {
+                    ASSERT_EQ(src[i], in_place[i])
+                            << "filter_range<uint64_t> in-place prefix clobbered at i=" << i << " iter=" << iter;
+                }
+                for (size_t i = 0; i < expected.size(); ++i) {
+                    ASSERT_EQ(expected[i], in_place[from + i])
+                            << "filter_range<uint64_t> in-place mismatch at i=" << i << " iter=" << iter;
+                }
+            }
+        }
+    }
+}
+
 #endif // __x86_64__
 
 } // namespace starrocks
