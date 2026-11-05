@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KuduTable;
@@ -28,6 +29,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -52,6 +54,7 @@ import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -73,6 +76,8 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import io.delta.kernel.engine.Engine;
+import io.delta.kernel.internal.SnapshotImpl;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -84,6 +89,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.Mockito;
 
 import java.io.File;
 import java.io.IOException;
@@ -351,17 +357,18 @@ public class StatisticsCalculatorTest {
                                 new ColumnStatistic(0, 100, 0.0, 5.0, 100))
                 );
                 builder.setOutputRowCount(100);
-                return builder.build();
+                // like the real method: internal statistics are tagged ANALYZE
+                return builder.setStatsSource(Statistics.StatsSource.ANALYZE).build();
             }
         };
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, optimizerContext);
         statisticsCalculator.estimatorStats();
+        // ANALYZE statistics are table-wide, so the partition predicate is still estimated
         Assertions.assertEquals(50, expressionContext.getStatistics().getOutputRowCount(), 0.001);
         Assertions.assertEquals(50, expressionContext.getStatistics().
                 getColumnStatistic(partitionColumn).getMaxValue(), 0.001);
-        Assertions.assertTrue(optimizerContext.isObtainedFromInternalStatistics());
-        optimizerContext.setObtainedFromInternalStatistics(false);
+        Assertions.assertEquals(Statistics.StatsSource.ANALYZE, expressionContext.getStatistics().getStatsSource());
     }
 
     @Test
@@ -384,7 +391,7 @@ public class StatisticsCalculatorTest {
                     Column> cols) {
                 Statistics.Builder builder = Statistics.builder();
                 cols.keySet().forEach(col -> builder.addColumnStatistic(col, new ColumnStatistic(0, 100, 0.0, 5.0, 100)));
-                return builder.setOutputRowCount(100).build();
+                return builder.setOutputRowCount(100).setStatsSource(Statistics.StatsSource.ANALYZE).build();
             }
         };
         String analyzed = columns.get(0).getName();
@@ -415,7 +422,6 @@ public class StatisticsCalculatorTest {
             estimateIcebergScan(icebergTable, refToColumn, columnToRef);
         } finally {
             connectContext.setDumpInfo(previous);
-            optimizerContext.setObtainedFromInternalStatistics(false);
         }
     }
 
@@ -428,6 +434,76 @@ public class StatisticsCalculatorTest {
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
         new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
         Assertions.assertEquals(100, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+    }
+
+    private static Statistics statisticsFrom(Statistics.StatsSource source) {
+        return Statistics.builder().setOutputRowCount(100).setStatsSource(source).build();
+    }
+
+    @Test
+    public void testRemoveIcebergPartitionPredicateFollowsScanStatsSource() {
+        // The decision is taken from the scan's own statistics, never from another table of the query: a connector
+        // row count already counts only the pruned partitions, while ANALYZE statistics are table-wide.
+        Table icebergTable = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "partitioned_db", "t1");
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        ColumnRefOperator partitionColumn = null;
+        List<Column> columns = icebergTable.getColumns();
+        for (int i = 0; i < columns.size(); i++) {
+            ColumnRefOperator ref = new ColumnRefOperator(i, columns.get(i).getType(), columns.get(i).getName(), true);
+            if (columns.get(i).getName().equals("date")) {
+                partitionColumn = ref;
+            }
+            refToColumn.put(ref, columns.get(i));
+            columnToRef.put(columns.get(i), ref);
+        }
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                partitionColumn, ConstantOperator.createVarchar("2024-01-01"));
+        LogicalIcebergScanOperator scan = new LogicalIcebergScanOperator(icebergTable, refToColumn, columnToRef, -1,
+                predicate, TvrTableSnapshot.empty());
+
+        StatisticsCalculator calculator = new StatisticsCalculator();
+        Assertions.assertEquals(ConstantOperator.TRUE, calculator.removePartitionPredicate(predicate, scan,
+                statisticsFrom(Statistics.StatsSource.TABLE_METADATA)));
+        Assertions.assertEquals(ConstantOperator.TRUE, calculator.removePartitionPredicate(predicate, scan,
+                statisticsFrom(Statistics.StatsSource.NONE)));
+        Assertions.assertEquals(predicate, calculator.removePartitionPredicate(predicate, scan,
+                statisticsFrom(Statistics.StatsSource.ANALYZE)));
+    }
+
+    @Test
+    public void testRemoveDeltaLakePartitionPredicateFollowsScanStatsSource() {
+        // Delta Lake metadata counts the rows of the files planned with the scan predicate, so the partition
+        // predicate must not be estimated again on top of it.
+        Column dt = new Column("dt", DateType.DATE, true);
+        Column v = new Column("v", IntegerType.INT, true);
+        MetastoreTable metastore = Mockito.mock(MetastoreTable.class);
+        Mockito.when(metastore.getCreateTime()).thenReturn(0L);
+        Mockito.when(metastore.getTableLocation()).thenReturn("/tmp");
+        List<String> partitionColumnNames = Lists.newArrayList("dt");
+        DeltaLakeTable deltaTable = new DeltaLakeTable(1, "delta0", "db", "tbl", List.of(dt, v),
+                partitionColumnNames, Mockito.mock(SnapshotImpl.class), Mockito.mock(Engine.class), metastore);
+
+        ColumnRefOperator dtRef = new ColumnRefOperator(1, DateType.DATE, "dt", true);
+        ColumnRefOperator vRef = new ColumnRefOperator(2, IntegerType.INT, "v", true);
+        Map<ColumnRefOperator, Column> refToColumn = ImmutableMap.of(dtRef, dt, vRef, v);
+        Map<Column, ColumnRefOperator> columnToRef = ImmutableMap.of(dt, dtRef, v, vRef);
+        BinaryPredicateOperator partitionPredicate = new BinaryPredicateOperator(BinaryType.EQ,
+                dtRef, ConstantOperator.createDate(LocalDateTime.of(2024, 1, 1, 0, 0, 0)));
+        BinaryPredicateOperator otherPredicate = new BinaryPredicateOperator(BinaryType.GT,
+                vRef, ConstantOperator.createInt(10));
+        ScalarOperator predicate = Utils.compoundAnd(partitionPredicate, otherPredicate);
+        LogicalDeltaLakeScanOperator scan = new LogicalDeltaLakeScanOperator(deltaTable, refToColumn, columnToRef,
+                -1, predicate);
+
+        StatisticsCalculator calculator = new StatisticsCalculator();
+        Assertions.assertEquals(otherPredicate, calculator.removePartitionPredicate(predicate, scan,
+                statisticsFrom(Statistics.StatsSource.TABLE_METADATA)));
+        Assertions.assertEquals(predicate, calculator.removePartitionPredicate(predicate, scan,
+                statisticsFrom(Statistics.StatsSource.ANALYZE)));
+        // the table's own partition column list is not modified
+        Assertions.assertEquals(List.of("dt"), deltaTable.getPartitionColumnNames());
     }
 
     @Test
