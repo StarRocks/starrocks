@@ -602,6 +602,31 @@ static void check_exact_capacity_asan_for_type() {
                             << "Redzone canary clobbered at byte offset " << b << " past to=" << to
                             << " for from=" << from << " case=" << selectivity_case;
                 }
+
+#if defined(__x86_64__)
+                if (__builtin_cpu_supports("avx2")) {
+                    std::fill(dst_buf.begin(), dst_buf.begin() + to, T{0});
+                    std::memset(dst_buf.data() + to, kCanaryByte, kRedzone * sizeof(T));
+                    ASAN_POISON_MEMORY_REGION(dst_buf.data() + to, kRedzone * sizeof(T));
+
+                    size_t avx2_out_sz = SIMD::Filter::detail::filter_range_avx2(dst_buf.data(), src.data(), sizeof(T),
+                                                                                 selector.data(), from, to);
+                    ASSERT_EQ(from + expected.size(), avx2_out_sz)
+                            << "AVX2 from=" << from << " to=" << to << " case=" << selectivity_case;
+
+                    for (size_t i = 0; i < expected.size(); ++i) {
+                        ASSERT_EQ(expected[i], dst_buf[from + i]);
+                    }
+
+                    ASAN_UNPOISON_MEMORY_REGION(dst_buf.data() + to, kRedzone * sizeof(T));
+
+                    for (size_t b = 0; b < kRedzone * sizeof(T); ++b) {
+                        ASSERT_EQ(kCanaryByte, redzone_bytes[b])
+                                << "AVX2 redzone canary clobbered at byte offset " << b << " past to=" << to
+                                << " for from=" << from << " case=" << selectivity_case;
+                    }
+                }
+#endif
             }
         }
     }
@@ -615,6 +640,9 @@ PARALLEL_TEST(SimdFilterTest, exact_capacity_asan) {
 
 #if defined(__x86_64__)
 PARALLEL_TEST(SimdFilterTest, x86_64_explicit_avx2_w4) {
+    if (!__builtin_cpu_supports("avx2")) {
+        GTEST_SKIP() << "AVX2 is not supported on this CPU";
+    }
     const std::vector<size_t> sizes = {0, 1, 7, 16, 31, 32, 33, 64, 129};
     const std::vector<size_t> from_offsets = {0, 1, 7, 15, 16, 31, 32};
     const uint8_t non_canonical_palette[] = {0x80, 0x00, 0x7F, 0x00, 0xFF, 0x01, 0x00, 0x02};
@@ -719,6 +747,9 @@ PARALLEL_TEST(SimdFilterTest, x86_64_explicit_avx2_w4) {
 }
 
 PARALLEL_TEST(SimdFilterTest, x86_64_explicit_avx2_w8) {
+    if (!__builtin_cpu_supports("avx2")) {
+        GTEST_SKIP() << "AVX2 is not supported on this CPU";
+    }
     const std::vector<size_t> sizes = {0, 1, 7, 16, 31, 32, 33, 64, 129};
     const std::vector<size_t> from_offsets = {0, 1, 7, 15, 16, 31, 32};
     const uint8_t non_canonical_palette[] = {0x80, 0x00, 0x7F, 0x00, 0xFF, 0x01, 0x00, 0x02};
@@ -823,6 +854,9 @@ PARALLEL_TEST(SimdFilterTest, x86_64_explicit_avx2_w8) {
 }
 
 PARALLEL_TEST(SimdFilterTest, sparse_eight_byte_batches_avx2) {
+    if (!__builtin_cpu_supports("avx2")) {
+        GTEST_SKIP() << "AVX2 is not supported on this CPU";
+    }
     const std::vector<size_t> popcounts = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 31, 32};
     const std::vector<size_t> test_lengths = {32, 35, 64};
     const std::vector<size_t> from_offsets = {0, 7};
@@ -951,6 +985,9 @@ PARALLEL_TEST(SimdFilterTest, sparse_eight_byte_batches_avx2) {
 }
 
 PARALLEL_TEST(SimdFilterTest, randomized_differential_fuzz_avx2) {
+    if (!__builtin_cpu_supports("avx2")) {
+        GTEST_SKIP() << "AVX2 is not supported on this CPU";
+    }
     constexpr int kIterations = 2000;
     std::mt19937_64 rng(0x1337C0DE5EEDULL);
     std::uniform_int_distribution<size_t> dist_len(0, 256);
@@ -1218,6 +1255,9 @@ PARALLEL_TEST(SimdFilterTest, randomized_differential_fuzz_avx2) {
 }
 
 PARALLEL_TEST(SimdFilterTest, x86_64_avx2_dispatch_entrypoint) {
+    if (!__builtin_cpu_supports("avx2")) {
+        GTEST_SKIP() << "AVX2 is not supported on this CPU";
+    }
     const std::vector<size_t> from_offsets = {0, 1, 7, 16, 32};
     const std::vector<size_t> lengths = {0, 1, 15, 31, 32, 33, 64, 129};
     const uint8_t non_canonical_palette[] = {0x80, 0x00, 0x7F, 0x00, 0xFF, 0x01, 0x00, 0x02};

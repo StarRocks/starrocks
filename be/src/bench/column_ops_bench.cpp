@@ -400,6 +400,10 @@ static std::vector<std::vector<uint8_t>> make_filter_selector_ring(size_t n, int
 
 template <typename T, size_t (*Kernel)(T*, const T*, const uint8_t*, size_t, size_t)>
 static void BM_SimdFilterKernel(benchmark::State& state) {
+    if (!__builtin_cpu_supports("avx2")) {
+        state.SkipWithError("AVX2 is not supported on this CPU");
+        return;
+    }
     const int selectivity = state.range(0);
     const int cluster = state.range(1);
 
@@ -485,6 +489,10 @@ BENCHMARK_TEMPLATE(BM_SimdFilterRange, uint64_t)->Name("BM_SimdFilterRange_w8")-
 
 template <typename T>
 static void BM_SimdFilterRangeAvx2(benchmark::State& state) {
+    if (!__builtin_cpu_supports("avx2")) {
+        state.SkipWithError("AVX2 is not supported on this CPU");
+        return;
+    }
     const int selectivity = state.range(0);
     const int cluster = state.range(1);
 
