@@ -370,7 +370,7 @@ StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& pa
                                                        path));
     VLOG(3) << "create parquet file, path=" << path;
     auto rollback_action = [fs = _fs, path = path]() {
-        WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
+        WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "Failed to delete " + path);
     };
     auto column_evaluators = ColumnEvaluator::clone(*_column_evaluators);
     auto types = ColumnEvaluator::types(*_column_evaluators);
@@ -383,6 +383,7 @@ StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& pa
     return WriterAndStream{
             .stream = std::move(async_output_stream),
             .writer = std::move(writer),
+            .rollback_action = std::move(rollback_action),
     };
 }
 
