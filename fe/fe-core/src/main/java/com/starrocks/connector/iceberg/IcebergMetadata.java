@@ -264,6 +264,11 @@ public class IcebergMetadata implements ConnectorMetadata {
                 null);
     }
 
+    /** The catalog this metadata reads through; a {@link CachingIcebergCatalog} when metadata caching is on. */
+    public IcebergCatalog getIcebergCatalog() {
+        return icebergCatalog;
+    }
+
     public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
                            ExecutorService jobPlanningExecutor,
                            IcebergCatalogProperties catalogProperties, ConnectorProperties properties,

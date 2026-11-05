@@ -14,12 +14,16 @@
 
 package com.starrocks.planner;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
+import com.starrocks.connector.DelegatingConnectorMetadata;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
@@ -29,17 +33,21 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergConnectorScanRangeSource;
 import com.starrocks.connector.iceberg.IcebergGetRemoteFilesParams;
 import com.starrocks.connector.iceberg.IcebergMORParams;
+import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.connector.iceberg.IcebergRemoteSourceTrigger;
 import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.connector.iceberg.IcebergVendedCredentials;
 import com.starrocks.connector.iceberg.QueueIcebergRemoteFileInfoSource;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CredentialRefreshPolicy;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -56,7 +64,9 @@ import org.apache.logging.log4j.Logger;
 import java.util.Deque;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
@@ -67,7 +77,14 @@ public class IcebergScanNode extends ScanNode {
     protected final IcebergTable icebergTable;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private ScalarOperator icebergJobPlanningPredicate = null;
-    private CloudConfiguration cloudConfiguration = null;
+    private volatile CloudConfiguration cloudConfiguration = null;
+    // The table's own vended credentials, when it has them: they expire, so a running scan renews them through
+    // refreshScanCredentials and every later serialization carries the newest. Renewed under vendedCredentialsLock.
+    private volatile IcebergVendedCredentials vendedCredentials = null;
+    private final ReentrantLock vendedCredentialsLock = new ReentrantLock();
+    // After a failed renewal, the backends asking meanwhile get the failure without calling the catalog again.
+    private long renewalRetryAfterMs = 0;
+    private String lastRenewalFailure = null;
     private IcebergConnectorScanRangeSource scanRangeSource = null;
     private final IcebergTableMORParams tableFullMORParams;
     private final IcebergMORParams morParams;
@@ -254,10 +271,117 @@ public class IcebergScanNode extends ScanNode {
         }
 
         cloudConfiguration = IcebergUtil.getVendedCloudConfiguration(catalogName, icebergTable);
+        // Non-null exactly when the configuration above is the table's own vended one.
+        long nowMs = System.currentTimeMillis();
+        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+        vendedCredentials = IcebergVendedCredentials.of(nativeTable, nowMs, () -> tableLoadedAtMs(nativeTable, nowMs));
+    }
+
+    @Override
+    public TCloudConfiguration refreshScanCredentials(ConnectContext context) {
+        IcebergVendedCredentials current = vendedCredentials;
+        if (current == null) {
+            return null;
+        }
+        if (System.currentTimeMillis() < current.refreshAfterMs()) {
+            return toThrift(current);
+        }
+        // Every backend of the query asks at about the same time, each on a shared FrontendService thread. Only
+        // one renews; the others answer at once with the current credentials, which are still valid, and their
+        // backends ask again later instead of holding a thread for the duration of the catalog call.
+        if (!vendedCredentialsLock.tryLock()) {
+            return toThrift(current);
+        }
+        try {
+            current = vendedCredentials;
+            if (current == null) {
+                return null;
+            }
+            long nowMs = System.currentTimeMillis();
+            if (nowMs >= current.refreshAfterMs()) {
+                if (nowMs < renewalRetryAfterMs) {
+                    throw new StarRocksConnectorException("Renewing the vended credentials failed moments ago: "
+                            + lastRenewalFailure);
+                }
+                try {
+                    current = IcebergVendedCredentials.renewedFrom(icebergTable.getNativeTable(),
+                            loadTableUncached(context), nowMs, icebergTable.getCatalogName() + "."
+                                    + icebergTable.getCatalogDBName() + "." + icebergTable.getCatalogTableName());
+                } catch (RuntimeException e) {
+                    // From when the call ended: a slow failure must still hold back the whole window.
+                    renewalRetryAfterMs = System.currentTimeMillis() + CredentialRefreshPolicy.FAILED_RENEWAL_RETRY_MS;
+                    lastRenewalFailure = e.getMessage();
+                    throw e;
+                }
+                renewalRetryAfterMs = 0;
+                lastRenewalFailure = null;
+                vendedCredentials = current;
+                cloudConfiguration = current.cloudConfiguration();
+                LOG.info("Renewed vended credentials of Iceberg table {}.{}.{} for scan node {},"
+                                + " next refresh after {}", icebergTable.getCatalogName(),
+                        icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), getId().asInt(),
+                        current.refreshAfterMs());
+            }
+            return toThrift(current);
+        } finally {
+            vendedCredentialsLock.unlock();
+        }
+    }
+
+    // Loads the table again past every table cache, with the running query's own context so a per-user token is
+    // used the same way planning used it.
+    @VisibleForTesting
+    org.apache.iceberg.Table loadTableUncached(ConnectContext context) {
+        return icebergMetadata().getIcebergCatalog().getTableUncached(context, icebergTable.getCatalogDBName(),
+                icebergTable.getCatalogTableName());
+    }
+
+    // When the planned table was loaded from the catalog, for credentials that do not say when they expire. Unknown
+    // on any failure: the refresh time then only comes sooner.
+    @VisibleForTesting
+    OptionalLong tableLoadedAtMs(org.apache.iceberg.Table nativeTable, long nowMs) {
+        try {
+            return icebergMetadata().getIcebergCatalog().tableLoadedAtMs(ConnectContext.get(),
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), nativeTable, nowMs);
+        } catch (RuntimeException e) {
+            LOG.debug("Cannot tell when Iceberg table {}.{}.{} was loaded", icebergTable.getCatalogName(),
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), e);
+            return OptionalLong.empty();
+        }
+    }
+
+    private IcebergMetadata icebergMetadata() {
+        String catalogName = icebergTable.getCatalogName();
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+        if (connector == null) {
+            throw new StarRocksConnectorException("Catalog " + catalogName + " no longer exists");
+        }
+        ConnectorMetadata metadata = connector.getMetadata();
+        while (metadata instanceof DelegatingConnectorMetadata delegating) {
+            ConnectorMetadata next = delegating.delegateFor(icebergTable);
+            if (next == metadata) {
+                break;
+            }
+            metadata = next;
+        }
+        if (!(metadata instanceof IcebergMetadata icebergMetadata)) {
+            throw new StarRocksConnectorException("Catalog " + catalogName + " is not an Iceberg catalog");
+        }
+        return icebergMetadata;
+    }
+
+    private TCloudConfiguration toThrift(IcebergVendedCredentials credentials) {
+        TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+        credentials.cloudConfiguration().toThrift(tCloudConfiguration);
+        tCloudConfiguration.setRefresh_after_ms(credentials.refreshAfterMs());
+        tCloudConfiguration.setRefresh_token(credentialRefreshToken());
+        return tCloudConfiguration;
     }
 
     public void setCloudConfiguration(CloudConfiguration cloudConfiguration) {
         this.cloudConfiguration = cloudConfiguration;
+        // An explicitly set configuration replaces the vended one and is not refreshed.
+        this.vendedCredentials = null;
     }
 
     public void setUsedForDelete(boolean usedForDelete) {
@@ -473,7 +597,12 @@ public class IcebergScanNode extends ScanNode {
         }
         msg.hdfs_scan_node.setTable_name(icebergTable.getName());
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
-        HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
+        IcebergVendedCredentials vended = vendedCredentials;
+        if (vended != null) {
+            tHdfsScanNode.setCloud_configuration(toThrift(vended));
+        } else {
+            HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
+        }
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
         if (columnAccessPaths != null && !columnAccessPaths.isEmpty()) {

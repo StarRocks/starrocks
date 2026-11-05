@@ -166,6 +166,7 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.ProxyContextManager;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryStatisticsInfo;
+import com.starrocks.qe.ScanCredentialsRefresher;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.warehouse.WarehouseQueryQueueMetrics;
@@ -367,6 +368,8 @@ import com.starrocks.thrift.TPrivilegeRequirement;
 import com.starrocks.thrift.TQueryStatisticsInfo;
 import com.starrocks.thrift.TRefreshConnectionsRequest;
 import com.starrocks.thrift.TRefreshConnectionsResponse;
+import com.starrocks.thrift.TRefreshScanCredentialsRequest;
+import com.starrocks.thrift.TRefreshScanCredentialsResponse;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TReleaseSlotRequest;
@@ -2062,6 +2065,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             return new TRefreshTableResponse(status);
         }
+    }
+
+    @Override
+    public TRefreshScanCredentialsResponse refreshScanCredentials(TRefreshScanCredentialsRequest request)
+            throws TException {
+        return ScanCredentialsRefresher.refresh(request);
     }
 
     @Override
