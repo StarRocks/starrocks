@@ -40,7 +40,7 @@ namespace starrocks {
 
 static void generate_test_files(const std::string& arrow_path, const std::string& json_path,
                                 const std::string& json_unicode_path, const std::string& json_number_path,
-                                int64_t num_rows) {
+                                const std::string& json_wide_path, int64_t num_rows) {
     // 1. Generate Arrow IPC Stream File
     arrow::Int32Builder int_builder;
     arrow::StringBuilder str_builder;
@@ -114,6 +114,34 @@ static void generate_test_files(const std::string& arrow_path, const std::string
                          << "}\n";
     }
     json_number_file.close();
+
+    // 5. Generate Wide-record NDJSON File (16 unprojected fields followed by 3 projected table columns)
+    std::ofstream json_wide_file(json_wide_path);
+    if (!json_wide_file.is_open()) {
+        LOG(FATAL) << "Failed to open JSON wide file for writing: " << json_wide_path;
+    }
+    static constexpr const char* kWidePrefix =
+            "{\"f01\":\"payload_padding_string_0123456789\","
+            "\"f02\":\"payload_padding_string_0123456789\","
+            "\"f03\":\"payload_padding_string_0123456789\","
+            "\"f04\":\"payload_padding_string_0123456789\","
+            "\"f05\":\"payload_padding_string_0123456789\","
+            "\"f06\":\"payload_padding_string_0123456789\","
+            "\"f07\":\"payload_padding_string_0123456789\","
+            "\"f08\":\"payload_padding_string_0123456789\","
+            "\"f09\":\"payload_padding_string_0123456789\","
+            "\"f10\":\"payload_padding_string_0123456789\","
+            "\"f11\":\"payload_padding_string_0123456789\","
+            "\"f12\":\"payload_padding_string_0123456789\","
+            "\"f13\":\"payload_padding_string_0123456789\","
+            "\"f14\":\"payload_padding_string_0123456789\","
+            "\"f15\":\"payload_padding_string_0123456789\","
+            "\"f16\":\"payload_padding_string_0123456789\",";
+    for (int64_t i = 0; i < num_rows; ++i) {
+        json_wide_file << kWidePrefix << "\"c0_int\":" << i << ",\"c1_str\":\"varchar_str_" << (i % 100)
+                       << "\",\"c2_double\":" << (static_cast<double>(i) * 1.5) << "}\n";
+    }
+    json_wide_file.close();
 }
 
 static DescriptorTbl* create_descriptor_table(RuntimeState* state, ObjectPool* pool) {
@@ -223,6 +251,7 @@ static std::string g_arrow_file_path;
 static std::string g_json_file_path;
 static std::string g_json_unicode_file_path;
 static std::string g_json_number_file_path;
+static std::string g_json_wide_file_path;
 static constexpr int64_t kNumRows = 100000;
 
 static void setup_global_files() {
@@ -262,8 +291,17 @@ static void setup_global_files() {
         g_json_number_file_path = "/tmp/json_number_bench.json";
     }
 
+    char json_wide_pattern[] = "/tmp/json_wide_bench_XXXXXX.json";
+    int fd_json_wide = mkstemps(json_wide_pattern, 5);
+    if (fd_json_wide != -1) {
+        close(fd_json_wide);
+        g_json_wide_file_path = json_wide_pattern;
+    } else {
+        g_json_wide_file_path = "/tmp/json_wide_bench.json";
+    }
+
     generate_test_files(g_arrow_file_path, g_json_file_path, g_json_unicode_file_path, g_json_number_file_path,
-                        kNumRows);
+                        g_json_wide_file_path, kNumRows);
 }
 
 static void cleanup_global_files() {
@@ -272,6 +310,7 @@ static void cleanup_global_files() {
     std::filesystem::remove(g_json_file_path, ec);
     std::filesystem::remove(g_json_unicode_file_path, ec);
     std::filesystem::remove(g_json_number_file_path, ec);
+    std::filesystem::remove(g_json_wide_file_path, ec);
 }
 
 static void BM_ArrowScanner(benchmark::State& state) {
@@ -389,6 +428,10 @@ static void BM_JsonScanner_NumberHeavy(benchmark::State& state) {
     run_json_scanner_benchmark(state, g_json_number_file_path);
 }
 
+static void BM_JsonScanner_Icelake(benchmark::State& state) {
+    run_json_scanner_benchmark(state, g_json_file_path, "icelake");
+}
+
 static void BM_JsonScanner_Haswell(benchmark::State& state) {
     run_json_scanner_benchmark(state, g_json_file_path, "haswell");
 }
@@ -397,11 +440,30 @@ static void BM_JsonScanner_Westmere(benchmark::State& state) {
     run_json_scanner_benchmark(state, g_json_file_path, "westmere");
 }
 
-BENCHMARK(BM_JsonScanner)->Unit(benchmark::kMillisecond)->Iterations(10);
-BENCHMARK(BM_JsonScanner_UnicodeEscapes)->Unit(benchmark::kMillisecond)->Iterations(10);
-BENCHMARK(BM_JsonScanner_NumberHeavy)->Unit(benchmark::kMillisecond)->Iterations(10);
-BENCHMARK(BM_JsonScanner_Haswell)->Unit(benchmark::kMillisecond)->Iterations(10);
-BENCHMARK(BM_JsonScanner_Westmere)->Unit(benchmark::kMillisecond)->Iterations(10);
+static void BM_JsonScanner_WideRecord_Icelake(benchmark::State& state) {
+    run_json_scanner_benchmark(state, g_json_wide_file_path, "icelake");
+}
+
+static void BM_JsonScanner_WideRecord_Haswell(benchmark::State& state) {
+    run_json_scanner_benchmark(state, g_json_wide_file_path, "haswell");
+}
+
+static void BM_JsonScanner_WideRecord_Westmere(benchmark::State& state) {
+    run_json_scanner_benchmark(state, g_json_wide_file_path, "westmere");
+}
+
+#define STARROCKS_JSON_BENCH(name) \
+    BENCHMARK(name)->Unit(benchmark::kMillisecond)->Iterations(10)->Repetitions(7)->ReportAggregatesOnly(true)
+STARROCKS_JSON_BENCH(BM_JsonScanner);
+STARROCKS_JSON_BENCH(BM_JsonScanner_UnicodeEscapes);
+STARROCKS_JSON_BENCH(BM_JsonScanner_NumberHeavy);
+STARROCKS_JSON_BENCH(BM_JsonScanner_Icelake);
+STARROCKS_JSON_BENCH(BM_JsonScanner_Haswell);
+STARROCKS_JSON_BENCH(BM_JsonScanner_Westmere);
+STARROCKS_JSON_BENCH(BM_JsonScanner_WideRecord_Icelake);
+STARROCKS_JSON_BENCH(BM_JsonScanner_WideRecord_Haswell);
+STARROCKS_JSON_BENCH(BM_JsonScanner_WideRecord_Westmere);
+#undef STARROCKS_JSON_BENCH
 BENCHMARK(BM_ArrowScanner)->Unit(benchmark::kMillisecond);
 
 } // namespace starrocks
