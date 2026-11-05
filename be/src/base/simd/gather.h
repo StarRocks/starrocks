@@ -14,14 +14,31 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <type_traits>
+
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
 #endif
 
-#include <cstddef>
-#include <cstdint>
+#if defined(__x86_64__) || defined(_M_X64)
+#include <xmmintrin.h>
+#endif
+
+// Read prefetch into all cache levels. Never faults, even for invalid addresses.
+#ifndef STARROCKS_PREFETCH
+#if defined(__x86_64__) || defined(_M_X64)
+#define STARROCKS_PREFETCH(addr) _mm_prefetch(reinterpret_cast<const char*>(addr), _MM_HINT_T0)
+#elif defined(__aarch64__) || defined(__arm__)
+#define STARROCKS_PREFETCH(addr) __builtin_prefetch(static_cast<const void*>(addr), 0, 3)
+#elif defined(__GNUC__) || defined(__clang__)
+#define STARROCKS_PREFETCH(addr) __builtin_prefetch(static_cast<const void*>(addr), 0, 3)
+#else
+#define STARROCKS_PREFETCH(addr) ((void)0)
+#endif
+#endif
 
 namespace starrocks {
 
@@ -77,89 +94,245 @@ struct SIMDGather {
 #endif
     }
 
-    /// dest[i] = src[indexes[i]]
+    /// Helper: 8-element unrolled gather step with independent loads and stores
     template <typename DataType, typename IndexType>
-    static void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows) {
-        static_assert(std::is_integral_v<IndexType>);
+    static inline void gather_8_unrolled(DataType* __restrict__ dest, const DataType* __restrict__ src,
+                                         const IndexType* __restrict__ indexes, size_t i) {
+        if constexpr (std::is_trivially_copyable_v<DataType>) {
+            DataType v0 = src[indexes[i + 0]];
+            DataType v1 = src[indexes[i + 1]];
+            DataType v2 = src[indexes[i + 2]];
+            DataType v3 = src[indexes[i + 3]];
+            DataType v4 = src[indexes[i + 4]];
+            DataType v5 = src[indexes[i + 5]];
+            DataType v6 = src[indexes[i + 6]];
+            DataType v7 = src[indexes[i + 7]];
 
-        static constexpr uint32_t SIMD_WIDTH = simd_register_bitwidth();
-        static constexpr uint32_t NUM_BATCH_VALUES = SIMD_WIDTH / (8 * sizeof(DataType));
-
-        size_t i = 0;
-
-        // Skip batch processing when NUM_BATCH_VALUES = 0 to avoid infinite loop
-        // This happens for large data types (e.g., int256_t) on small SIMD registers (e.g., ARM NEON 128-bit)
-        if constexpr (NUM_BATCH_VALUES > 0) {
-            DataType buffer[NUM_BATCH_VALUES];
-
-            for (; i + NUM_BATCH_VALUES <= num_rows; i += NUM_BATCH_VALUES) {
-                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                    buffer[j] = src[indexes[i + j]];
-                }
-
-                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                    dest[i + j] = buffer[j];
-                }
-            }
+            dest[i + 0] = v0;
+            dest[i + 1] = v1;
+            dest[i + 2] = v2;
+            dest[i + 3] = v3;
+            dest[i + 4] = v4;
+            dest[i + 5] = v5;
+            dest[i + 6] = v6;
+            dest[i + 7] = v7;
+        } else {
+            dest[i + 0] = src[indexes[i + 0]];
+            dest[i + 1] = src[indexes[i + 1]];
+            dest[i + 2] = src[indexes[i + 2]];
+            dest[i + 3] = src[indexes[i + 3]];
+            dest[i + 4] = src[indexes[i + 4]];
+            dest[i + 5] = src[indexes[i + 5]];
+            dest[i + 6] = src[indexes[i + 6]];
+            dest[i + 7] = src[indexes[i + 7]];
         }
+    }
 
-        for (; i < num_rows; i++) {
+    /// Helper: 8-way unrolled loop for high-throughput default gather
+    template <typename DataType, typename IndexType>
+    static inline void gather_unrolled(DataType* __restrict__ dest, const DataType* __restrict__ src,
+                                       const IndexType* __restrict__ indexes, size_t num_rows, size_t& i) {
+        for (; i + 8 <= num_rows; i += 8) {
+            gather_8_unrolled(dest, src, indexes, i);
+        }
+    }
+
+    /// Helper: Scalar tail gather
+    template <typename DataType, typename IndexType>
+    static inline void gather_scalar(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows,
+                                     size_t& i) {
+        for (; i < num_rows; ++i) {
             dest[i] = src[indexes[i]];
         }
     }
 
-    /// dest[i] = is_filtered[i] == 0 ? src[indexes[i]] : 0
+    /// Helper: 8-element filtered gather step with condition checks before dereferencing
     template <typename DataType, typename IndexType, typename CondType>
-    static void gather(DataType* dest, const DataType* src, const IndexType* indexes, const CondType* is_filtered,
-                       size_t num_rows) {
-        static_assert(std::is_integral_v<IndexType>);
+    static inline void gather_filtered_8_unrolled(DataType* __restrict__ dest, const DataType* __restrict__ src,
+                                                  const IndexType* __restrict__ indexes,
+                                                  const CondType* __restrict__ is_filtered, size_t i) {
+        if constexpr (std::is_trivially_copyable_v<DataType>) {
+            DataType v0 = (is_filtered[i + 0] == 0) ? src[indexes[i + 0]] : DataType(0);
+            DataType v1 = (is_filtered[i + 1] == 0) ? src[indexes[i + 1]] : DataType(0);
+            DataType v2 = (is_filtered[i + 2] == 0) ? src[indexes[i + 2]] : DataType(0);
+            DataType v3 = (is_filtered[i + 3] == 0) ? src[indexes[i + 3]] : DataType(0);
+            DataType v4 = (is_filtered[i + 4] == 0) ? src[indexes[i + 4]] : DataType(0);
+            DataType v5 = (is_filtered[i + 5] == 0) ? src[indexes[i + 5]] : DataType(0);
+            DataType v6 = (is_filtered[i + 6] == 0) ? src[indexes[i + 6]] : DataType(0);
+            DataType v7 = (is_filtered[i + 7] == 0) ? src[indexes[i + 7]] : DataType(0);
 
-        static constexpr uint32_t SIMD_WIDTH = simd_register_bitwidth();
-        static constexpr uint32_t NUM_BATCH_VALUES = SIMD_WIDTH / (8 * sizeof(DataType));
-
-        size_t i = 0;
-
-        // Skip batch processing when NUM_BATCH_VALUES = 0 to avoid infinite loop
-        // This happens for large data types (e.g., int256_t) on small SIMD registers (e.g., ARM NEON 128-bit)
-        if constexpr (NUM_BATCH_VALUES > 0) {
-            DataType buffer[NUM_BATCH_VALUES];
-
-            for (; i + NUM_BATCH_VALUES <= num_rows; i += NUM_BATCH_VALUES) {
-                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                    if (is_filtered[i + j] == 0) {
-                        buffer[j] = src[indexes[i + j]];
-                    } else {
-                        buffer[j] = 0;
-                    }
-                }
-
-                for (int j = 0; j < NUM_BATCH_VALUES; j++) {
-                    dest[i + j] = buffer[j];
-                }
+            dest[i + 0] = v0;
+            dest[i + 1] = v1;
+            dest[i + 2] = v2;
+            dest[i + 3] = v3;
+            dest[i + 4] = v4;
+            dest[i + 5] = v5;
+            dest[i + 6] = v6;
+            dest[i + 7] = v7;
+        } else {
+            if constexpr (std::is_constructible_v<DataType, int>) {
+                dest[i + 0] = (is_filtered[i + 0] == 0) ? src[indexes[i + 0]] : DataType(0);
+                dest[i + 1] = (is_filtered[i + 1] == 0) ? src[indexes[i + 1]] : DataType(0);
+                dest[i + 2] = (is_filtered[i + 2] == 0) ? src[indexes[i + 2]] : DataType(0);
+                dest[i + 3] = (is_filtered[i + 3] == 0) ? src[indexes[i + 3]] : DataType(0);
+                dest[i + 4] = (is_filtered[i + 4] == 0) ? src[indexes[i + 4]] : DataType(0);
+                dest[i + 5] = (is_filtered[i + 5] == 0) ? src[indexes[i + 5]] : DataType(0);
+                dest[i + 6] = (is_filtered[i + 6] == 0) ? src[indexes[i + 6]] : DataType(0);
+                dest[i + 7] = (is_filtered[i + 7] == 0) ? src[indexes[i + 7]] : DataType(0);
+            } else {
+                dest[i + 0] = (is_filtered[i + 0] == 0) ? src[indexes[i + 0]] : DataType{};
+                dest[i + 1] = (is_filtered[i + 1] == 0) ? src[indexes[i + 1]] : DataType{};
+                dest[i + 2] = (is_filtered[i + 2] == 0) ? src[indexes[i + 2]] : DataType{};
+                dest[i + 3] = (is_filtered[i + 3] == 0) ? src[indexes[i + 3]] : DataType{};
+                dest[i + 4] = (is_filtered[i + 4] == 0) ? src[indexes[i + 4]] : DataType{};
+                dest[i + 5] = (is_filtered[i + 5] == 0) ? src[indexes[i + 5]] : DataType{};
+                dest[i + 6] = (is_filtered[i + 6] == 0) ? src[indexes[i + 6]] : DataType{};
+                dest[i + 7] = (is_filtered[i + 7] == 0) ? src[indexes[i + 7]] : DataType{};
             }
         }
+    }
 
-        for (; i < num_rows; i++) {
+    /// Helper: 8-way unrolled loop for filtered gather
+    template <typename DataType, typename IndexType, typename CondType>
+    static inline void gather_filtered_unrolled(DataType* __restrict__ dest, const DataType* __restrict__ src,
+                                                const IndexType* __restrict__ indexes,
+                                                const CondType* __restrict__ is_filtered, size_t num_rows, size_t& i) {
+        for (; i + 8 <= num_rows; i += 8) {
+            gather_filtered_8_unrolled(dest, src, indexes, is_filtered, i);
+        }
+    }
+
+    /// Helper: Scalar tail filtered gather
+    template <typename DataType, typename IndexType, typename CondType>
+    static inline void gather_filtered_scalar(DataType* dest, const DataType* src, const IndexType* indexes,
+                                              const CondType* is_filtered, size_t num_rows, size_t& i) {
+        for (; i < num_rows; ++i) {
             if (is_filtered[i] == 0) {
                 dest[i] = src[indexes[i]];
             } else {
-                dest[i] = 0;
+                if constexpr (std::is_constructible_v<DataType, int>) {
+                    dest[i] = DataType(0);
+                } else {
+                    dest[i] = DataType{};
+                }
             }
         }
     }
 
-    /// Caller-informed gather forwarding to gather(dest, src, indexes, num_rows)
+    /// dest[i] = src[indexes[i]]
     template <typename DataType, typename IndexType>
-    static void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows,
-                       size_t pool_size) {
-        gather(dest, src, indexes, num_rows);
+    static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows) {
+        static_assert(std::is_integral_v<IndexType>);
+        size_t i = 0;
+        gather_unrolled(dest, src, indexes, num_rows, i);
+        gather_scalar(dest, src, indexes, num_rows, i);
     }
 
-    /// Caller-informed filtered gather forwarding to gather(dest, src, indexes, is_filtered, num_rows)
+    /// dest[i] = is_filtered[i] == 0 ? src[indexes[i]] : 0
     template <typename DataType, typename IndexType, typename CondType>
-    static void gather(DataType* dest, const DataType* src, const IndexType* indexes, const CondType* is_filtered,
-                       size_t num_rows, size_t pool_size) {
-        gather(dest, src, indexes, is_filtered, num_rows);
+    static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes,
+                              const CondType* is_filtered, size_t num_rows) {
+        static_assert(std::is_integral_v<IndexType>);
+        size_t i = 0;
+        gather_filtered_unrolled(dest, src, indexes, is_filtered, num_rows, i);
+        gather_filtered_scalar(dest, src, indexes, is_filtered, num_rows, i);
+    }
+
+    /// Caller-informed gather with DRAM prefetch heuristic
+    template <typename DataType, typename IndexType>
+    static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows,
+                              size_t pool_size) {
+        static_assert(std::is_integral_v<IndexType>);
+        size_t i = 0;
+
+#if defined(__x86_64__) || defined(_M_X64)
+        constexpr size_t kDRAMThreshold = 16 * 1024 * 1024;
+        constexpr size_t kBatchThreshold = 4096;
+        constexpr size_t kPrefetchLookahead = 8;
+        const bool is_large_pool = (pool_size >= kDRAMThreshold) ||
+                                   (sizeof(DataType) > 0 && pool_size >= kDRAMThreshold / sizeof(DataType));
+
+        if (num_rows >= kBatchThreshold && is_large_pool) {
+            for (size_t p = 0; p < kPrefetchLookahead; ++p) {
+                STARROCKS_PREFETCH(src + indexes[p]);
+            }
+            for (; i + kPrefetchLookahead + 8 <= num_rows; i += 8) {
+                STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 0]);
+                STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 1]);
+                STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 2]);
+                STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 3]);
+                STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 4]);
+                STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 5]);
+                STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 6]);
+                STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 7]);
+
+                gather_8_unrolled(dest, src, indexes, i);
+            }
+        }
+#else
+        (void)pool_size;
+#endif
+
+        gather_unrolled(dest, src, indexes, num_rows, i);
+        gather_scalar(dest, src, indexes, num_rows, i);
+    }
+
+    /// Caller-informed filtered gather with DRAM prefetch heuristic
+    template <typename DataType, typename IndexType, typename CondType>
+    static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes,
+                              const CondType* is_filtered, size_t num_rows, size_t pool_size) {
+        static_assert(std::is_integral_v<IndexType>);
+        size_t i = 0;
+
+#if defined(__x86_64__) || defined(_M_X64)
+        constexpr size_t kDRAMThreshold = 16 * 1024 * 1024;
+        constexpr size_t kBatchThreshold = 4096;
+        constexpr size_t kPrefetchLookahead = 8;
+        const bool is_large_pool = (pool_size >= kDRAMThreshold) ||
+                                   (sizeof(DataType) > 0 && pool_size >= kDRAMThreshold / sizeof(DataType));
+
+        if (num_rows >= kBatchThreshold && is_large_pool) {
+            for (size_t p = 0; p < kPrefetchLookahead; ++p) {
+                if (is_filtered[p] == 0) {
+                    STARROCKS_PREFETCH(src + indexes[p]);
+                }
+            }
+            for (; i + kPrefetchLookahead + 8 <= num_rows; i += 8) {
+                if (is_filtered[i + kPrefetchLookahead + 0] == 0) {
+                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 0]);
+                }
+                if (is_filtered[i + kPrefetchLookahead + 1] == 0) {
+                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 1]);
+                }
+                if (is_filtered[i + kPrefetchLookahead + 2] == 0) {
+                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 2]);
+                }
+                if (is_filtered[i + kPrefetchLookahead + 3] == 0) {
+                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 3]);
+                }
+                if (is_filtered[i + kPrefetchLookahead + 4] == 0) {
+                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 4]);
+                }
+                if (is_filtered[i + kPrefetchLookahead + 5] == 0) {
+                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 5]);
+                }
+                if (is_filtered[i + kPrefetchLookahead + 6] == 0) {
+                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 6]);
+                }
+                if (is_filtered[i + kPrefetchLookahead + 7] == 0) {
+                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 7]);
+                }
+
+                gather_filtered_8_unrolled(dest, src, indexes, is_filtered, i);
+            }
+        }
+#else
+        (void)pool_size;
+#endif
+
+        gather_filtered_unrolled(dest, src, indexes, is_filtered, num_rows, i);
+        gather_filtered_scalar(dest, src, indexes, is_filtered, num_rows, i);
     }
 };
+
 } // namespace starrocks
