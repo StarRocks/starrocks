@@ -88,17 +88,22 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           PR_NUMBER=`echo ${PR_NUMBER}`
-          pr_info=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName,headRefName,state,title`
+          pr_info=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName,headRefName,state,title,isCrossRepository`
           base_ref=$(echo ${pr_info} | jq -r .baseRefName)
           head_ref=$(echo ${pr_info} | jq -r .headRefName)
           pr_state=$(echo ${pr_info} | jq -r .state)
           pr_title=$(echo ${pr_info} | jq -r .title)
+          cross_repo=$(echo ${pr_info} | jq -r .isCrossRepository)
           echo "BASE_REF=${base_ref}" >> $GITHUB_OUTPUT
           echo "HEAD_REF=${head_ref}" >> $GITHUB_OUTPUT
           echo "PR_STATE=${pr_state}" >> $GITHUB_OUTPUT
           echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_OUTPUT
 
-          if [[ "${pr_title}" == *"[UT]"* || "${pr_title}" == *"[Doc]"* ]]; then
+          # A PR synced from CelerData (<base>-cd-contributed-pr-<n>, pushed to this repo by the
+          # sync bot) already passed coverage there; the code is not new here. A fork cannot
+          # use the branch name to skip, since its head is cross-repository.
+          if [[ "${pr_title}" == *"[UT]"* || "${pr_title}" == *"[Doc]"* ]] \
+              || [[ "${head_ref}" == *-cd-contributed-pr-* && "${cross_repo}" == "false" ]]; then
             echo "SKIP_COV=true" >> $GITHUB_OUTPUT
           else
             echo "SKIP_COV=false" >> $GITHUB_OUTPUT
