@@ -20,6 +20,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -108,6 +109,7 @@ static void generate_test_files(const std::string& arrow_path, const std::string
     if (!json_number_file.is_open()) {
         LOG(FATAL) << "Failed to open JSON number file for writing: " << json_number_path;
     }
+    json_number_file << std::fixed << std::setprecision(6);
     for (int64_t i = 0; i < num_rows; ++i) {
         json_number_file << "{\"c0_int\":" << (100000000 + i)
                          << ",\"c1_str\":\"n\",\"c2_double\":" << (123456.789012 + static_cast<double>(i) * 0.125)
