@@ -5537,6 +5537,29 @@ TEST_F(LakeServiceTest, test_task_cleared_in_thread_pool_queue) {
         ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*has been cancelled*"));
     }
 
+    // The resharding task's text must not name a split when it publishes a merge.
+    {
+        auto other_tablet_id = next_id();
+        PublishVersionRequest request;
+        PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        auto* txn_info = request.add_txn_infos();
+        txn_info->set_txn_id(next_id());
+        txn_info->set_txn_type(TXN_TABLET_RESHARD);
+        auto* merging = request.add_resharding_tablet_infos()->mutable_merging_tablet_info();
+        merging->add_old_tablet_ids(_tablet_id);
+        merging->add_old_tablet_ids(other_tablet_id);
+        merging->set_new_tablet_id(next_id());
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(2, response.failed_tablets_size());
+        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        ASSERT_EQ(other_tablet_id, response.failed_tablets(1));
+        ASSERT_TRUE(
+                MatchPattern(response.status().error_msgs(0), "*publish resharding tablet task has been cancelled*"))
+                << response.status().error_msgs(0);
+    }
+
     {
         auto txn_id = next_id();
         PublishLogVersionRequest request;
