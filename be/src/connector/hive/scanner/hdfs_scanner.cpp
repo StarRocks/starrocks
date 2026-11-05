@@ -72,6 +72,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.format_scan_context.is_first_split = false;
     ctx.format_scan_context.first_row_id.reset();
     ctx.format_scan_context.min_max_values.clear();
+    ctx.format_scan_context.min_max_value_cursors.clear();
     ctx.format_scan_context.extended_column_exprs.clear();
     ctx.format_scan_context.predicate_tree = nullptr;
     ctx.format_scan_context.runtime_filter_scan_range_pruner = nullptr;

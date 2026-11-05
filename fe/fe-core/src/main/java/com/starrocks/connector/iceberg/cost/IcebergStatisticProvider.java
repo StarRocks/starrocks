@@ -462,16 +462,17 @@ public class IcebergStatisticProvider {
             return;
         }
 
+        Set<Integer> corruptedStats = icebergFileStats.getCorruptedStats(current);
         for (PartitionField field : partitionFields) {
             int id = field.sourceId();
-            if (icebergFileStats.getCorruptedStats().contains(id)) {
+            if (corruptedStats.contains(id)) {
                 continue;
             }
 
             Object newValue = newStats.get(id);
             if (newValue == null) {
                 current.remove(id);
-                icebergFileStats.getCorruptedStats().add(id);
+                corruptedStats.add(id);
                 continue;
             }
 
