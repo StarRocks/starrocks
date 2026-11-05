@@ -95,7 +95,7 @@ public class CTASAnalyzer {
         createTableStmt.setTableRef(normalizedTableRef);
         TableName tableNameObject = TableName.fromTableRef(normalizedTableRef);
         CreateTableAnalyzer.analyzeEngineName(createTableStmt, tableNameObject.getCatalog());
-        if (createTableStmt.getEngineName().equalsIgnoreCase("paimon")) {
+        if (Table.TableType.PAIMON.name().equalsIgnoreCase(createTableStmt.getEngineName())) {
             throw new SemanticException("Paimon CREATE TABLE AS SELECT is not supported");
         }
 

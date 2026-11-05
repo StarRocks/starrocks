@@ -116,7 +116,7 @@ public class CreateTableAnalyzer {
         }
         if (statement instanceof CreateTemporaryTableStmt) {
             analyzeTemporaryTable(statement, context, catalogName, dbObj, tableName);
-        } else if (!"paimon".equalsIgnoreCase(
+        } else if (!ConnectorType.PAIMON.getName().equalsIgnoreCase(
                 GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalogName))) {
             // Paimon creation checks the native catalog; a cached positive may refer to an externally dropped table.
             boolean tableExists = preResolved != null ? preResolved.tableExists()

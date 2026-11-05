@@ -304,7 +304,7 @@ public class MetadataMgr {
                 }
 
                 // Paimon's native create handles existing tables without consulting the read-side table cache.
-                if (!"paimon".equalsIgnoreCase(stmt.getEngineName())
+                if (!Table.TableType.PAIMON.name().equalsIgnoreCase(stmt.getEngineName())
                         && tableExists(context, catalogName, dbName, tableName)) {
                     if (stmt.isSetIfNotExists()) {
                         LOG.info("create table[{}] which already exists", tableName);
