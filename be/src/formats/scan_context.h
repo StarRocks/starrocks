@@ -281,6 +281,8 @@ struct FormatScanContext {
     int64_t scan_range_length = std::numeric_limits<int64_t>::max();
     int32_t scan_range_id = -1;
     std::map<int32_t, TExprMinMaxValue> min_max_values;
+    // Per slot, how many values of its [null?, min, max] the batches too small to hold them all have emitted.
+    std::unordered_map<int32_t, size_t> min_max_value_cursors;
     std::map<int32_t, TExpr> extended_column_exprs;
     std::optional<int64_t> first_row_id;
     int64_t file_record_count = 0;
