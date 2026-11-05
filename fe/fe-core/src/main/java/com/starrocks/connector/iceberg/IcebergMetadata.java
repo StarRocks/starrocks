@@ -3043,7 +3043,8 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private org.apache.iceberg.DataFile buildDataFile(
             TIcebergDataFile dataFile, PartitionSpec partitionSpec, org.apache.iceberg.Table nativeTbl) {
-        Metrics metrics = IcebergApiConverter.buildDataFileMetrics(dataFile, nativeTbl);
+        Metrics metrics = IcebergApiConverter.applyWriteMetricsConfig(
+                IcebergApiConverter.buildDataFileMetrics(dataFile, nativeTbl), nativeTbl);
         DataFiles.Builder builder = DataFiles.builder(partitionSpec)
                 .withMetrics(metrics)
                 .withPath(dataFile.path)
