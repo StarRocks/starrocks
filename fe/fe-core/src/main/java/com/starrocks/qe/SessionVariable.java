@@ -635,6 +635,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_USE_HISTOGRAM_EVALUDATE_LIST_PARTITION = "cbo_use_histogram_evaluate_list_partition";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
+    public static final String ENABLE_OUTER_JOIN_SEMI_JOIN_REDUCTION = "enable_outer_join_semi_join_reduction";
+    public static final String OUTER_JOIN_SEMI_JOIN_REDUCTION_MIN_AGG_ROWS =
+            "outer_join_semi_join_reduction_min_agg_rows";
+    public static final String OUTER_JOIN_SEMI_JOIN_REDUCTION_MAX_KEY_SET_RATIO =
+            "outer_join_semi_join_reduction_max_key_set_ratio";
     public static final String ENABLE_PARTITION_LEVEL_CARDINALITY_ESTIMATION =
             "enable_partition_level_cardinality_estimation";
     public static final String ENABLE_OPTIMIZER_SKEW_JOIN_V1 =
@@ -2102,6 +2107,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
+
+    // A LEFT JOIN B LEFT JOIN C WHERE (pred on B) OR (pred on C): pre-filter A's aggregation with a
+    // semi join on the join keys that can satisfy the OR. See OuterJoinSemiJoinReductionRule.
+    @VariableMgr.VarAttr(name = ENABLE_OUTER_JOIN_SEMI_JOIN_REDUCTION, flag = VariableMgr.INVISIBLE)
+    private boolean enableOuterJoinSemiJoinReduction = true;
+
+    // The rewrite only pays off when the aggregation it filters is large: below this estimated group count it is
+    // skipped. <= 0 removes the limit.
+    @VariableMgr.VarAttr(name = OUTER_JOIN_SEMI_JOIN_REDUCTION_MIN_AGG_ROWS, flag = VariableMgr.INVISIBLE)
+    private long outerJoinSemiJoinReductionMinAggRows = 1_000_000L;
+
+    // The rewrite is skipped when the key set (bounded by the rows of the right sides it reads) exceeds this
+    // multiple of the aggregation's input. <= 0 removes the limit. Q78 on 1T statistics comes out at 2.19: the
+    // store_sales anti-join (LEFT JOIN store_returns ... IS NULL) is estimated at the 0.1 IS NULL floor although
+    // about 90% of its rows survive, so the bound leaves margin above that.
+    @VariableMgr.VarAttr(name = OUTER_JOIN_SEMI_JOIN_REDUCTION_MAX_KEY_SET_RATIO, flag = VariableMgr.INVISIBLE)
+    private double outerJoinSemiJoinReductionMaxKeySetRatio = 3.0;
 
     @VariableMgr.VarAttr(name = ENABLE_PARTITION_LEVEL_CARDINALITY_ESTIMATION, flag = VariableMgr.INVISIBLE)
     private boolean enablePartitionLevelCardinalityEstimation = true;
@@ -5471,6 +5493,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableRewriteGroupingSetsToUnionAll(boolean enableRewriteGroupingSetsToUnionAll) {
         this.enableRewriteGroupingSetsToUnionAll = enableRewriteGroupingSetsToUnionAll;
+    }
+
+    public boolean isEnableOuterJoinSemiJoinReduction() {
+        return enableOuterJoinSemiJoinReduction;
+    }
+
+    public void setEnableOuterJoinSemiJoinReduction(boolean enableOuterJoinSemiJoinReduction) {
+        this.enableOuterJoinSemiJoinReduction = enableOuterJoinSemiJoinReduction;
+    }
+
+    public long getOuterJoinSemiJoinReductionMinAggRows() {
+        return outerJoinSemiJoinReductionMinAggRows;
+    }
+
+    public void setOuterJoinSemiJoinReductionMinAggRows(long outerJoinSemiJoinReductionMinAggRows) {
+        this.outerJoinSemiJoinReductionMinAggRows = outerJoinSemiJoinReductionMinAggRows;
+    }
+
+    public double getOuterJoinSemiJoinReductionMaxKeySetRatio() {
+        return outerJoinSemiJoinReductionMaxKeySetRatio;
+    }
+
+    public void setOuterJoinSemiJoinReductionMaxKeySetRatio(double outerJoinSemiJoinReductionMaxKeySetRatio) {
+        this.outerJoinSemiJoinReductionMaxKeySetRatio = outerJoinSemiJoinReductionMaxKeySetRatio;
     }
 
     public boolean isEnablePartitionLevelCardinalityEstimation() {
