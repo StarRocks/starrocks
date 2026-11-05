@@ -538,60 +538,60 @@ Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const Pag
 }
 
 Status ColumnReader::_ensure_zstd_compression_ddict(const ColumnIteratorOptions& iter_opts) {
-    return success_once(
-                   _zstd_compression_ddict_once,
-                   [&]() -> Status {
-                       // Bootstrap-read the compression-dict page directly through
-                       // PageIO (NOT read_page: that would re-enter
-                       // _ensure_zstd_compression_ddict on this same thread and deadlock
-                       // the OnceFlag). The dict page is a no-dict ZSTD frame,
-                       // so codec is set but dict stays null (self-decoding).
-                       PageReadOptions opts;
-                       opts.read_file = iter_opts.read_file;
-                       opts.page_pointer = _zstd_compression_dict_page_pointer;
-                       opts.codec = _compress_codec;
-                       opts.stats = iter_opts.stats;
-                       opts.verify_checksum = true;
-                       opts.use_page_cache = iter_opts.use_page_cache;
-                       opts.encoding_type = _encoding_info->encoding();
-                       opts.dict = nullptr;
+    return success_once(_zstd_compression_ddict_once,
+                        [&]() -> Status {
+                            // Bootstrap-read the compression-dict page directly through
+                            // PageIO (NOT read_page: that would re-enter
+                            // _ensure_zstd_compression_ddict on this same thread and deadlock
+                            // the OnceFlag). The dict page is a no-dict ZSTD frame,
+                            // so codec is set but dict stays null (self-decoding).
+                            PageReadOptions opts;
+                            opts.read_file = iter_opts.read_file;
+                            opts.page_pointer = _zstd_compression_dict_page_pointer;
+                            opts.codec = _compress_codec;
+                            opts.stats = iter_opts.stats;
+                            opts.verify_checksum = true;
+                            opts.use_page_cache = iter_opts.use_page_cache;
+                            opts.encoding_type = _encoding_info->encoding();
+                            opts.dict = nullptr;
 
-                       PageHandle handle;
-                       Slice body;
-                       PageFooterPB footer;
-                       RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &handle, &body, &footer));
-                       // ZSTD copies the dictionary bytes internally, so the
-                       // page handle may be released after create().
-                       //
-                       // That copy is a plain malloc, and malloc is hooked, so without
-                       // a scope it is charged to whatever tracker the first reader of
-                       // this segment happens to be running under -- usually a query's.
-                       // The dictionary then outlives that query, for as long as the
-                       // segment stays in the metacache, and is freed on whichever
-                       // thread evicts it. Pointing the allocation at the process
-                       // tracker moves the charge to where the memory actually lives
-                       // instead of adding a second one; the explicit consume below is
-                       // on the parentless metadata tree, which is what sizes the
-                       // metacache and does not participate in process accounting.
-                       // ~ColumnReader releases under the same scope.
-                       RETURN_IF_ERROR(with_memory_tracker(process_memory_tracker(), [&]() -> Status {
-                           ASSIGN_OR_RETURN(auto ddict, compression::ZstdDDict::create(body));
-                           // Both the dictionary and its shared_ptr control block
-                           // must be released under the same process owner.
-                           _zstd_compression_ddict = std::move(ddict);
-                           return Status::OK();
-                       }));
-                       // The DDict holds its own copy of the dictionary and lives as long
-                       // as this reader does, which for a cached segment means as long as
-                       // the segment stays in the metacache. Report it the way every other
-                       // lazily loaded per-column structure here does, or the metacache
-                       // sizes itself against a number that leaves these dictionaries out.
-                       const size_t ddict_bytes = _zstd_compression_ddict->mem_usage();
-                       MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(), ddict_bytes);
-                       _meta_mem_usage.fetch_add(ddict_bytes, std::memory_order_relaxed);
-                       _segment->update_cache_size();
-                       return Status::OK();
-                   })
+                            PageHandle handle;
+                            Slice body;
+                            PageFooterPB footer;
+                            RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &handle, &body, &footer));
+                            // ZSTD copies the dictionary bytes internally, so the
+                            // page handle may be released after create().
+                            //
+                            // That copy is a plain malloc, and malloc is hooked, so without
+                            // a scope it is charged to whatever tracker the first reader of
+                            // this segment happens to be running under -- usually a query's.
+                            // The dictionary then outlives that query, for as long as the
+                            // segment stays in the metacache, and is freed on whichever
+                            // thread evicts it. Pointing the allocation at the process
+                            // tracker moves the charge to where the memory actually lives
+                            // instead of adding a second one; the explicit consume below is
+                            // on the parentless metadata tree, which is what sizes the
+                            // metacache and does not participate in process accounting.
+                            // ~ColumnReader releases under the same scope.
+                            RETURN_IF_ERROR(with_memory_tracker(process_memory_tracker(), [&]() -> Status {
+                                ASSIGN_OR_RETURN(auto ddict, compression::ZstdDDict::create(body));
+                                // Both the dictionary and its shared_ptr control block
+                                // must be released under the same process owner.
+                                _zstd_compression_ddict = std::move(ddict);
+                                return Status::OK();
+                            }));
+                            // The DDict holds its own copy of the dictionary and lives as long
+                            // as this reader does, which for a cached segment means as long as
+                            // the segment stays in the metacache. Report it the way every other
+                            // lazily loaded per-column structure here does, or the metacache
+                            // sizes itself against a number that leaves these dictionaries out.
+                            const size_t ddict_bytes = _zstd_compression_ddict->mem_usage();
+                            MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(),
+                                                     ddict_bytes);
+                            _meta_mem_usage.fetch_add(ddict_bytes, std::memory_order_relaxed);
+                            _segment->update_cache_size();
+                            return Status::OK();
+                        })
             .status();
 }
 

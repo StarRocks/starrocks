@@ -542,8 +542,8 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts, OlapReaderStatist
         DeferOp record_index_reads([&] { add_read_file_io_stats(*read_file, opts.stats); });
         RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &_sk_index_handle, &body, &footer));
 
-    DCHECK_EQ(footer.type(), SHORT_KEY_PAGE);
-    DCHECK(footer.has_short_key_page_footer());
+        DCHECK_EQ(footer.type(), SHORT_KEY_PAGE);
+        DCHECK(footer.has_short_key_page_footer());
 
         _sk_index_decoder = std::make_unique<ShortKeyIndexDecoder>();
         return _sk_index_decoder->parse(body, footer.short_key_page_footer());
