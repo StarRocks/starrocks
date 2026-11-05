@@ -42,6 +42,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -67,10 +68,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 public class LoadsSystemTableTest {
 
+    // The stream load tasks authorized by the current test.
+    private static final AtomicInteger AUTHORIZED_TASKS = new AtomicInteger();
+
     // These tests pin the request predicates and paging. How much of a job a caller may see is covered by
     // LoadJobVisibilityTest, so here every job is shown in full.
     @BeforeEach
     public void showEveryJob() {
+        AUTHORIZED_TASKS.set(0);
         new MockUp<LoadJobVisibility>() {
             @Mock
             public ConnectContext callerOf(TGetLoadsParams request) {
@@ -85,7 +90,8 @@ public class LoadsSystemTableTest {
             @Mock
             public List<LoadJobVisibility.VisibleTask> visibleTasks(ConnectContext context,
                                                                      AbstractStreamLoadTask task) {
-                return List.of(new LoadJobVisibility.VisibleTask(task, LoadJobVisibility.Access.FULL));
+                AUTHORIZED_TASKS.incrementAndGet();
+                return LoadJobVisibility.allTasksInFull(task);
             }
         };
     }
@@ -1208,5 +1214,7 @@ public class LoadsSystemTableTest {
 
         assertEquals(0, labels(result).size());
         assertFalse(result.isSetNext_job_id_offset());
+        // Authorizing locks the target tables, so a task the request rules out is not authorized.
+        assertEquals(0, AUTHORIZED_TASKS.get());
     }
 }

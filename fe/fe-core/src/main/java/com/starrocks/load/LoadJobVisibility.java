@@ -122,15 +122,24 @@ public final class LoadJobVisibility {
 
     /**
      * The tasks to show for {@code task}, with how much of each: the task itself unless the caller may not see it. A
-     * multi-statement transaction is split into its statements, each loading one table into its own error log, and
-     * only those the caller may see are kept. The result is one snapshot, so build the output from it: a statement
-     * the transaction adds later is neither in it nor authorized.
+     * multi-statement transaction is split into its statements, and only those the caller may see are kept. Each
+     * statement loads one table into its own error log, but a failed transaction gives every statement its error,
+     * which can name the error-log URL of another statement; so a statement is shown in full only if every statement
+     * is. The result is one snapshot, so build the output from it: a statement the transaction adds later is neither
+     * in it nor authorized. Pass the transaction, not one of its statements.
      */
     public static List<VisibleTask> visibleTasks(ConnectContext context, AbstractStreamLoadTask task) {
         List<VisibleTask> visible = new ArrayList<>();
         if (task instanceof StreamLoadMultiStmtTask multiStmtTask) {
-            for (StreamLoadTask child : multiStmtTask.getTasks()) {
-                addIfVisible(visible, child, accessOf(context, child.getDBId(), List.of(child.getTableId())));
+            List<StreamLoadTask> children = new ArrayList<>(multiStmtTask.getTasks());
+            List<Access> accesses = new ArrayList<>();
+            for (StreamLoadTask child : children) {
+                accesses.add(accessOf(context, child.getDBId(), List.of(child.getTableId())));
+            }
+            boolean allFull = accesses.stream().allMatch(access -> access == Access.FULL);
+            for (int i = 0; i < children.size(); i++) {
+                Access access = accesses.get(i);
+                addIfVisible(visible, children.get(i), access == Access.FULL && !allFull ? Access.METADATA : access);
             }
         } else {
             addIfVisible(visible, task, accessOf(context, task.getDBId(), List.of(targetTableId(task))));
