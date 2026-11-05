@@ -82,6 +82,26 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
+    public void testStructFieldIsSubjectToGroupBy() {
+        // A field of a struct-valued expression is constant within a group exactly when the struct is. The check
+        // used to reject every such field access, even when the struct was built from aggregates.
+        analyzeSuccess("select named_struct('a', sum(v1), 'b', max(v2)).a from t0");
+        analyzeSuccess("select v1, named_struct('a', sum(v2)).a from t0 group by v1");
+        analyzeSuccess("select any_value(vs).a from ttypes");
+        analyzeSuccess("select v1 from t0 group by v1 having named_struct('a', sum(v2)).a > 1");
+        analyzeSuccess("select v1 from t0 group by v1 order by named_struct('a', sum(v2)).a");
+        analyzeSuccess("select named_struct('a', v2).a from t0 group by named_struct('a', v2)");
+
+        // A bare column inside the struct still has to be grouped.
+        analyzeFail("select named_struct('a', v2).a from t0 group by v1",
+                "must be an aggregate expression or appear in GROUP BY clause");
+        analyzeFail("select named_struct('a', sum(v1), 'b', v2).a from t0",
+                "must be an aggregate expression or appear in GROUP BY clause");
+        analyzeFail("select v1 from t0 group by v1 having named_struct('a', v2).a > 1",
+                "must be an aggregate expression or appear in GROUP BY clause");
+    }
+
+    @Test
     public void testCollectionSubscriptIsSubjectToGroupBy() {
         // The subscript of a collection element is an ordinary expression: a bare column there is no more
         // legal than anywhere else. It used to slip past this check and blow up later in the optimizer
