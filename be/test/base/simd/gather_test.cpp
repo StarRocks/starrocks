@@ -523,4 +523,37 @@ TEST(SIMDGatherTest, unrolled_default_gated_by_arch_and_element_size) {
     EXPECT_EQ(kArm, SIMDGather::use_unrolled_default<int64_t>());
 }
 
+TEST(SIMDGatherTest, prefetch_constants_pinned) {
+    static_assert(SIMDGather::kPrefetchMinRows == 512);
+    static_assert(SIMDGather::kPrefetchPoolBytes == 16 * 1024 * 1024);
+    static_assert(SIMDGather::kPrefetchLookahead == 8);
+    EXPECT_EQ(512u, SIMDGather::kPrefetchMinRows);
+}
+
+// Row counts around the prefetch row gate and the unroll/lookahead tails, pool hints one below,
+// at and one above the byte threshold.
+template <typename T>
+void check_prefetch_gate_boundaries() {
+    const std::vector<size_t> row_counts = {0,   1,   7,   8,   15,  16,   17,   511, 512,
+                                            513, 519, 520, 527, 528, 1000, 4095, 4096};
+    const size_t threshold = SIMDGather::kPrefetchPoolBytes / sizeof(T);
+    for (size_t pool : {threshold - 1, threshold, threshold + 1}) {
+        for (size_t n : row_counts) {
+            check_caller_informed_gather<T, uint32_t>(n, pool);
+            check_caller_informed_gather<T, int32_t>(n, pool);
+            for (FilterPattern pattern : {FilterPattern::Alternating, FilterPattern::ModuloMix, FilterPattern::AllOnes,
+                                          FilterPattern::AllZeros}) {
+                check_caller_informed_filtered<T, uint32_t, uint8_t>(n, pool, pattern, false);
+                // Filtered rows carry out-of-range indexes: they must be neither dereferenced nor prefetched.
+                check_caller_informed_filtered<T, int32_t, uint8_t>(n, pool, pattern, true);
+            }
+        }
+    }
+}
+
+TEST(SIMDGatherTest, prefetch_gate_boundaries) {
+    check_prefetch_gate_boundaries<int32_t>();
+    check_prefetch_gate_boundaries<int64_t>();
+}
+
 } // namespace starrocks

@@ -233,6 +233,18 @@ struct SIMDGather {
         }
     }
 
+    /// Prefetch tuning for the SourcePoolSize overloads (x86-64 only; ARM never prefetches).
+    /// Measured on x86 (GCP c4, Emerald Rapids, g++ 13.3, -O3): with pools <= 8 MiB prefetch loses
+    /// +4..+13%; with pools >= 16 MiB it wins -8..-16% for 512..8192 rows, flat in rows down to the
+    /// smallest measured count (512). The crossover was bracketed only between 8 and 16 MiB on that
+    /// CPU, so it is CPU/LLC dependent; 16 MiB is the conservative upper edge.
+    /// Minimum row count to start prefetching.
+    static constexpr size_t kPrefetchMinRows = 512;
+    /// Source-pool size threshold in BYTES (compared against `pool_size.elements * sizeof(DataType)`).
+    static constexpr size_t kPrefetchPoolBytes = 16 * 1024 * 1024;
+    /// How many rows ahead of the loads the prefetches are issued.
+    static constexpr size_t kPrefetchLookahead = 8;
+
     /// Whether the default (non-prefetch) gather path uses the 8-way unrolled loop instead of the
     /// original SIMD-width buffered loop. True only for AArch64 with 8-byte elements.
     /// Measured (g++ 13.3, -O3, 10 reps, GCP c4a / c4, wide benchmark grid), unrolled vs buffered:
@@ -374,12 +386,9 @@ struct SIMDGather {
         size_t i = 0;
 
 #if defined(__x86_64__) || defined(_M_X64)
-        constexpr size_t kDRAMByteThreshold = 16 * 1024 * 1024;
-        constexpr size_t kBatchThreshold = 4096;
-        constexpr size_t kPrefetchLookahead = 8;
-        const bool is_large_pool = (pool_size.elements >= kDRAMByteThreshold / sizeof(DataType));
+        const bool is_large_pool = (pool_size.elements >= kPrefetchPoolBytes / sizeof(DataType));
 
-        if (num_rows >= kBatchThreshold && is_large_pool) {
+        if (num_rows >= kPrefetchMinRows && is_large_pool) {
             for (size_t p = 0; p < kPrefetchLookahead; ++p) {
                 STARROCKS_PREFETCH(src + indexes[p]);
             }
@@ -418,12 +427,9 @@ struct SIMDGather {
         size_t i = 0;
 
 #if defined(__x86_64__) || defined(_M_X64)
-        constexpr size_t kDRAMByteThreshold = 16 * 1024 * 1024;
-        constexpr size_t kBatchThreshold = 4096;
-        constexpr size_t kPrefetchLookahead = 8;
-        const bool is_large_pool = (pool_size.elements >= kDRAMByteThreshold / sizeof(DataType));
+        const bool is_large_pool = (pool_size.elements >= kPrefetchPoolBytes / sizeof(DataType));
 
-        if (num_rows >= kBatchThreshold && is_large_pool) {
+        if (num_rows >= kPrefetchMinRows && is_large_pool) {
             for (size_t p = 0; p < kPrefetchLookahead; ++p) {
                 if (is_filtered[p] == 0) {
                     STARROCKS_PREFETCH(src + indexes[p]);
