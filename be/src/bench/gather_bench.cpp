@@ -35,19 +35,6 @@
 
 #include "base/simd/gather.h"
 
-// Read prefetch into all cache levels. Never faults, even for invalid addresses.
-#ifndef STARROCKS_PREFETCH
-#if defined(__x86_64__) || defined(_M_X64)
-#define STARROCKS_PREFETCH(addr) _mm_prefetch(reinterpret_cast<const char*>(addr), _MM_HINT_T0)
-#elif defined(__aarch64__) || defined(__arm__)
-#define STARROCKS_PREFETCH(addr) __builtin_prefetch(static_cast<const void*>(addr), 0, 3)
-#elif defined(__GNUC__) || defined(__clang__)
-#define STARROCKS_PREFETCH(addr) __builtin_prefetch(static_cast<const void*>(addr), 0, 3)
-#else
-#define STARROCKS_PREFETCH(addr) ((void)0)
-#endif
-#endif
-
 namespace starrocks {
 
 namespace {

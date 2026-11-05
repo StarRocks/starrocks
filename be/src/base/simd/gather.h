@@ -152,14 +152,14 @@ struct SIMDGather {
                                                   const IndexType* __restrict__ indexes,
                                                   const CondType* __restrict__ is_filtered, size_t i) {
         if constexpr (std::is_trivially_copyable_v<DataType>) {
-            DataType v0 = (is_filtered[i + 0] == 0) ? src[indexes[i + 0]] : DataType(0);
-            DataType v1 = (is_filtered[i + 1] == 0) ? src[indexes[i + 1]] : DataType(0);
-            DataType v2 = (is_filtered[i + 2] == 0) ? src[indexes[i + 2]] : DataType(0);
-            DataType v3 = (is_filtered[i + 3] == 0) ? src[indexes[i + 3]] : DataType(0);
-            DataType v4 = (is_filtered[i + 4] == 0) ? src[indexes[i + 4]] : DataType(0);
-            DataType v5 = (is_filtered[i + 5] == 0) ? src[indexes[i + 5]] : DataType(0);
-            DataType v6 = (is_filtered[i + 6] == 0) ? src[indexes[i + 6]] : DataType(0);
-            DataType v7 = (is_filtered[i + 7] == 0) ? src[indexes[i + 7]] : DataType(0);
+            DataType v0 = (is_filtered[i + 0] == 0) ? src[indexes[i + 0]] : DataType{};
+            DataType v1 = (is_filtered[i + 1] == 0) ? src[indexes[i + 1]] : DataType{};
+            DataType v2 = (is_filtered[i + 2] == 0) ? src[indexes[i + 2]] : DataType{};
+            DataType v3 = (is_filtered[i + 3] == 0) ? src[indexes[i + 3]] : DataType{};
+            DataType v4 = (is_filtered[i + 4] == 0) ? src[indexes[i + 4]] : DataType{};
+            DataType v5 = (is_filtered[i + 5] == 0) ? src[indexes[i + 5]] : DataType{};
+            DataType v6 = (is_filtered[i + 6] == 0) ? src[indexes[i + 6]] : DataType{};
+            DataType v7 = (is_filtered[i + 7] == 0) ? src[indexes[i + 7]] : DataType{};
 
             dest[i + 0] = v0;
             dest[i + 1] = v1;
@@ -238,7 +238,8 @@ struct SIMDGather {
         gather_filtered_scalar(dest, src, indexes, is_filtered, num_rows, i);
     }
 
-    /// Caller-informed gather with DRAM prefetch heuristic
+    /// Caller-informed gather with DRAM prefetch heuristic.
+    /// @param pool_size Element count of the source array (`src`).
     template <typename DataType, typename IndexType>
     static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows,
                               size_t pool_size) {
@@ -246,11 +247,10 @@ struct SIMDGather {
         size_t i = 0;
 
 #if defined(__x86_64__) || defined(_M_X64)
-        constexpr size_t kDRAMThreshold = 16 * 1024 * 1024;
+        constexpr size_t kDRAMByteThreshold = 16 * 1024 * 1024;
         constexpr size_t kBatchThreshold = 4096;
         constexpr size_t kPrefetchLookahead = 8;
-        const bool is_large_pool = (pool_size >= kDRAMThreshold) ||
-                                   (sizeof(DataType) > 0 && pool_size >= kDRAMThreshold / sizeof(DataType));
+        const bool is_large_pool = (pool_size >= kDRAMByteThreshold / sizeof(DataType));
 
         if (num_rows >= kBatchThreshold && is_large_pool) {
             for (size_t p = 0; p < kPrefetchLookahead; ++p) {
@@ -277,7 +277,8 @@ struct SIMDGather {
         gather_scalar(dest, src, indexes, num_rows, i);
     }
 
-    /// Caller-informed filtered gather with DRAM prefetch heuristic
+    /// Caller-informed filtered gather with DRAM prefetch heuristic.
+    /// @param pool_size Element count of the source array (`src`).
     template <typename DataType, typename IndexType, typename CondType>
     static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes,
                               const CondType* is_filtered, size_t num_rows, size_t pool_size) {
@@ -285,11 +286,10 @@ struct SIMDGather {
         size_t i = 0;
 
 #if defined(__x86_64__) || defined(_M_X64)
-        constexpr size_t kDRAMThreshold = 16 * 1024 * 1024;
+        constexpr size_t kDRAMByteThreshold = 16 * 1024 * 1024;
         constexpr size_t kBatchThreshold = 4096;
         constexpr size_t kPrefetchLookahead = 8;
-        const bool is_large_pool = (pool_size >= kDRAMThreshold) ||
-                                   (sizeof(DataType) > 0 && pool_size >= kDRAMThreshold / sizeof(DataType));
+        const bool is_large_pool = (pool_size >= kDRAMByteThreshold / sizeof(DataType));
 
         if (num_rows >= kBatchThreshold && is_large_pool) {
             for (size_t p = 0; p < kPrefetchLookahead; ++p) {

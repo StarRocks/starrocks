@@ -372,4 +372,102 @@ TEST(SIMDGatherTest, test_caller_informed_filtered_pool_size) {
     }
 }
 
+namespace {
+struct TestPOD {
+    int64_t x{0};
+    int64_t y{0};
+    TestPOD() = default;
+    TestPOD(int64_t x_, int64_t y_) : x(x_), y(y_) {}
+    bool operator==(const TestPOD& o) const = default;
+};
+
+inline std::ostream& operator<<(std::ostream& os, const TestPOD& p) {
+    return os << "{" << p.x << ", " << p.y << "}";
+}
+} // namespace
+
+static_assert(std::is_trivially_copyable_v<TestPOD>);
+static_assert(!std::is_constructible_v<TestPOD, int>);
+
+TEST(SIMDGatherTest, test_custom_trivially_copyable_struct) {
+    constexpr size_t kPodPoolSize = 1000;
+    std::vector<TestPOD> src(kPodPoolSize);
+    for (size_t i = 0; i < kPodPoolSize; ++i) {
+        src[i] = TestPOD{static_cast<int64_t>(i * 3 + 1), static_cast<int64_t>(i * 7 + 2)};
+    }
+    const std::vector<TestPOD> src_copy = src;
+
+    const std::vector<size_t> row_counts = {0, 1, 7, 8, 15, 16, 31, 32, 63, 64, 100, 4096, 4104};
+    const std::vector<FilterPattern> patterns = {
+            FilterPattern::AllZeros, FilterPattern::AllOnes,   FilterPattern::Alternating,
+            FilterPattern::Random,   FilterPattern::ModuloMix,
+    };
+
+    for (size_t n : row_counts) {
+        std::mt19937 rng(12345 + n);
+        std::uniform_int_distribution<uint32_t> dist(0, kPodPoolSize - 1);
+        std::vector<uint32_t> indexes(n);
+        for (auto& idx : indexes) {
+            idx = dist(rng);
+        }
+
+        // 1. Basic gather (4-arg)
+        {
+            std::vector<TestPOD> dest(n + kGuard, TestPOD{-1, -1});
+            SIMDGather::gather(dest.data(), src.data(), indexes.data(), n);
+            for (size_t i = 0; i < n; ++i) {
+                ASSERT_EQ(src[indexes[i]], dest[i]) << "Basic gather failed at n=" << n << " i=" << i;
+            }
+            for (size_t g = n; g < n + kGuard; ++g) {
+                ASSERT_EQ((TestPOD{-1, -1}), dest[g]) << "Guard corrupted in basic gather at n=" << n << " g=" << g;
+            }
+        }
+
+        // 2. Caller-informed gather (5-arg)
+        for (size_t pool_size : {size_t(0), size_t(1000), size_t(16 * 1024 * 1024), size_t(64 * 1024 * 1024)}) {
+            std::vector<TestPOD> dest(n + kGuard, TestPOD{-1, -1});
+            SIMDGather::gather(dest.data(), src.data(), indexes.data(), n, pool_size);
+            for (size_t i = 0; i < n; ++i) {
+                ASSERT_EQ(src[indexes[i]], dest[i])
+                        << "Caller-informed gather failed at n=" << n << " pool=" << pool_size;
+            }
+            for (size_t g = n; g < n + kGuard; ++g) {
+                ASSERT_EQ((TestPOD{-1, -1}), dest[g]) << "Guard corrupted at n=" << n << " g=" << g;
+            }
+        }
+
+        // 3. Filtered gather (5-arg and 6-arg)
+        for (FilterPattern pattern : patterns) {
+            auto is_filtered = make_filter<uint8_t>(n, pattern, 42 + n);
+            // 5-arg gather_filtered
+            {
+                std::vector<TestPOD> dest(n + kGuard, TestPOD{-1, -1});
+                SIMDGather::gather(dest.data(), src.data(), indexes.data(), is_filtered.data(), n);
+                for (size_t i = 0; i < n; ++i) {
+                    TestPOD expected = (is_filtered[i] == 0) ? src[indexes[i]] : TestPOD{};
+                    ASSERT_EQ(expected, dest[i]) << "Filtered gather failed at n=" << n << " i=" << i;
+                }
+                for (size_t g = n; g < n + kGuard; ++g) {
+                    ASSERT_EQ((TestPOD{-1, -1}), dest[g]) << "Guard corrupted at n=" << n << " g=" << g;
+                }
+            }
+
+            // 6-arg caller-informed gather_filtered
+            for (size_t pool_size : {size_t(0), size_t(1000), size_t(16 * 1024 * 1024), size_t(64 * 1024 * 1024)}) {
+                std::vector<TestPOD> dest(n + kGuard, TestPOD{-1, -1});
+                SIMDGather::gather(dest.data(), src.data(), indexes.data(), is_filtered.data(), n, pool_size);
+                for (size_t i = 0; i < n; ++i) {
+                    TestPOD expected = (is_filtered[i] == 0) ? src[indexes[i]] : TestPOD{};
+                    ASSERT_EQ(expected, dest[i])
+                            << "Caller-informed filtered gather failed at n=" << n << " pool=" << pool_size;
+                }
+                for (size_t g = n; g < n + kGuard; ++g) {
+                    ASSERT_EQ((TestPOD{-1, -1}), dest[g]) << "Guard corrupted at n=" << n << " g=" << g;
+                }
+            }
+        }
+    }
+    ASSERT_EQ(src_copy, src);
+}
+
 } // namespace starrocks
