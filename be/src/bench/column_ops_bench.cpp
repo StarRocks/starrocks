@@ -426,7 +426,10 @@ static void BM_SimdFilterKernel(benchmark::State& state) {
 }
 
 static void SimdFilterKernelArgs(benchmark::Benchmark* b) {
-    for (int cluster : {0, 16, 32}) {
+    // cluster = 0 is random per-element; 7, 13, and 16 test clustered runs that cross 4/8-lane sub-group
+    // and 32-row batch boundaries (avoiding cluster = 32 aligned to from = 0, where every 32-row batch is
+    // trivially all-zero or all-one).
+    for (int cluster : {0, 7, 13, 16}) {
         for (int sel : {10, 20, 30, 40, 50, 60, 70, 80, 90}) {
             b->Args({sel, cluster});
         }
