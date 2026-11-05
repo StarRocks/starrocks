@@ -252,6 +252,7 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | RuntimeFilterInputRows | ParquetリーダーのJoin Runtime Filter評価に入力された行数。 |
 | RuntimeFilterOutputRows | ParquetリーダーのJoin Runtime Filter評価を通過した行数。`RuntimeFilterInputRows` との差が大きいほど、Lazy列がマテリアライズされる前に多くの行がフィルタリングされたことを意味します。 |
 | ScanRangesPrunedByPartitionValue | identity パーティション値が述語または到着済みの Join Runtime Filter で除外されたため、読み取り前にスキップされた Scan Range の数。 |
+| ScanRangesPrunedByFileStats | Iceberg Manifest のファイルレベルの min/max 値から、述語または到着済みの Runtime Filter（Join または Top-N）を満たす行が存在しないと判断されたため、データファイルを開く前にスキップされた Scan Range の数。Parquet および ORC ファイルのみが対象です。 |
 | PaimonFSAppIOCount | Paimonファイルシステムアダプターが受け取った有効な読み取り試行回数。順次読み取り、位置指定読み取り、非同期読み取りの合計です。 |
 | PaimonFSAppIOBytes | Paimonファイルシステムアダプター境界で正常に返された読み取りバイト数。 |
 | PaimonFSAppIOTime | Paimonファイルシステムアダプター境界での読み取りのエンドツーエンド時間。 |

@@ -485,7 +485,20 @@ public class PlanFragmentBuilder {
         private final List<Integer> collectExecStatsIds = Lists.newArrayList();
         private ExecGroup currentExecGroup = execGroups.newExecGroup();
 
+<<<<<<< HEAD
         public PhysicalPlanTranslator(ColumnRefFactory columnRefFactory) {
+=======
+        // see findResultTopN; null when the plan has none or its root fragment does not end in a result sink
+        private final OptExpression resultTopN;
+        private boolean resultTopNMergeSkipped = false;
+
+        // Columns that a runtime filter of an enclosing hash join or top-n may probe in the subtree being visited.
+        // Runtime filters are assigned after the scans are set up, so an Iceberg scan uses this to request the file
+        // bounds of these columns, which let the BE skip a file once the filter arrives.
+        private Set<ColumnRefOperator> runtimeFilterProbeColumns = Set.of();
+
+        public PhysicalPlanTranslator(ColumnRefFactory columnRefFactory, OptExpression resultTopN) {
+>>>>>>> 35fc336d7b0... [Enhancement][RB-225] Skip Iceberg data files ruled out by runtime filters before opening them (#68495)
             this.columnRefFactory = columnRefFactory;
         }
 
@@ -2150,6 +2163,12 @@ public class PlanFragmentBuilder {
             }
 
             icebergScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            if (!isEqDeleteScan && !runtimeFilterProbeColumns.isEmpty()) {
+                icebergScanNode.setRuntimeFilterProbeColumnNames(node.getColRefToColumnMetaMap().entrySet().stream()
+                        .filter(entry -> runtimeFilterProbeColumns.contains(entry.getKey()))
+                        .map(entry -> entry.getValue().getName())
+                        .collect(Collectors.toSet()));
+            }
             icebergScanNode.setColumnAccessPaths(node.getColumnAccessPaths());
             icebergScanNode.computeStatistics(expression.getStatistics());
             currentExecGroup.add(icebergScanNode, true);
@@ -3266,12 +3285,25 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalTopN(OptExpression optExpr, ExecPlan context) {
+            PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpr.getOp();
             ExecGroup lastExecGroup = currentExecGroup;
             currentExecGroup = execGroups.newExecGroup();
-            PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
+            Set<ColumnRefOperator> outerProbeColumns = runtimeFilterProbeColumns;
+            // the top-n runtime filter probes the first ORDER BY column (see SortNode#buildRuntimeFilters)
+            List<Ordering> orderings = topN.getOrderSpec().getOrderDescs();
+            if (topN.getLimit() >= 0 && !orderings.isEmpty() && ConnectContext.get() != null &&
+                    ConnectContext.get().getSessionVariable().getEnableTopNRuntimeFilter()) {
+                runtimeFilterProbeColumns = new HashSet<>(outerProbeColumns);
+                runtimeFilterProbeColumns.add(orderings.get(0).getColumnRef());
+            }
+            PlanFragment inputFragment;
+            try {
+                inputFragment = visit(optExpr.inputAt(0), context);
+            } finally {
+                runtimeFilterProbeColumns = outerProbeColumns;
+            }
             currentExecGroup = lastExecGroup;
 
-            PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpr.getOp();
             Preconditions.checkState(topN.getOffset() >= 0);
             if (!topN.isSplit()) {
                 return buildPartialTopNFragment(optExpr, context, topN.getPartitionByColumns(),
@@ -3463,13 +3495,43 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalHashJoin(OptExpression optExpr, ExecPlan context) {
-            PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
+            Set<ColumnRefOperator> outerProbeColumns = runtimeFilterProbeColumns;
+            runtimeFilterProbeColumns = withHashJoinProbeColumns(optExpr, outerProbeColumns);
+            PlanFragment leftFragment;
+            try {
+                leftFragment = visit(optExpr.inputAt(0), context);
+            } finally {
+                runtimeFilterProbeColumns = outerProbeColumns;
+            }
             leftFragment.getPlanRoot().forceCollectExecStats();
             ExecGroup leftExecGroup = this.currentExecGroup;
             this.currentExecGroup = execGroups.newExecGroup();
             PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
             rightFragment.getPlanRoot().forceCollectExecStats();
             return visitPhysicalJoin(leftFragment, rightFragment, leftExecGroup, currentExecGroup, optExpr, context);
+        }
+
+        // `probeColumns` plus the probe-side columns of the join's equi-conditions, which its runtime filters probe
+        // (see JoinNode#buildRuntimeFilters for the join types that build them).
+        private Set<ColumnRefOperator> withHashJoinProbeColumns(OptExpression optExpr,
+                                                               Set<ColumnRefOperator> probeColumns) {
+            PhysicalHashJoinOperator join = (PhysicalHashJoinOperator) optExpr.getOp();
+            JoinOperator joinType = join.getJoinType();
+            if (!joinType.isAnyInnerJoin() && !joinType.isLeftSemiJoin() && !joinType.isRightJoin()) {
+                return probeColumns;
+            }
+            ColumnRefSet leftColumns = optExpr.inputAt(0).getOutputColumns();
+            ColumnRefSet rightColumns = optExpr.inputAt(1).getOutputColumns();
+            Set<ColumnRefOperator> result = new HashSet<>(probeColumns);
+            for (BinaryPredicateOperator eq : JoinHelper.getEqualsPredicate(leftColumns, rightColumns,
+                    Utils.extractConjuncts(join.getOnPredicate()))) {
+                for (ScalarOperator child : eq.getChildren()) {
+                    if (child instanceof ColumnRefOperator columnRef && leftColumns.contains(columnRef)) {
+                        result.add(columnRef);
+                    }
+                }
+            }
+            return result;
         }
 
         private List<Expr> extractConjuncts(ScalarOperator predicate, ExecPlan context) {

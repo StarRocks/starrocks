@@ -61,6 +61,11 @@ public class PredicateSearchKey {
         return params.isEnableColumnStats() ? params.getStatsColumnNames() : null;
     }
 
+    // Optional statistics may be missing from the planned files, so they must not serve a scan that needs them.
+    private boolean optionalColumnStats() {
+        return params.isEnableColumnStats() && params.isOptionalColumnStats();
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -84,7 +89,8 @@ public class PredicateSearchKey {
             }
         }
         if (params.isEnableColumnStats() != that.params.isEnableColumnStats() ||
-                !Objects.equals(statsColumns(), that.statsColumns())) {
+                !Objects.equals(statsColumns(), that.statsColumns()) ||
+                optionalColumnStats() != that.optionalColumnStats()) {
             return false;
         }
 
@@ -96,7 +102,7 @@ public class PredicateSearchKey {
     @Override
     public int hashCode() {
         return Objects.hash(databaseName, tableName, getVersion(), getPredicate(), params.isEnableColumnStats(),
-                statsColumns());
+                statsColumns(), optionalColumnStats());
     }
 
     @Override

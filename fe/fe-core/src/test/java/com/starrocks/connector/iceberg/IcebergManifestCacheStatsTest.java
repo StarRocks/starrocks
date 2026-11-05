@@ -420,6 +420,33 @@ public class IcebergManifestCacheStatsTest extends TableTestBase {
         Assertions.assertEquals(Map.of(2, id(3)), statsByFile(tasks).get("/path/to/keep-budget-3.parquet").get(0));
     }
 
+    // The runtime filter probe columns ask only for statistics the cache keeps: the keep-set plus the columns ranked
+    // within the budget left after it, the same columns a scan serves from the cache.
+    @Test
+    public void testStatsColumnsKeptByManifestCache() throws IOException {
+        Schema schema = new Schema(List.of(
+                Types.NestedField.optional(1, "p", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "a", Types.IntegerType.get()),
+                Types.NestedField.optional(3, "b", Types.IntegerType.get())));
+        PartitionSpec spec = PartitionSpec.builderFor(schema).identity("p").build();
+        Table table = create(schema, spec, "t_kept_columns", 2);
+        Set<String> all = Set.of("p", "a", "b", "no_such_column");
+
+        CachingIcebergCatalog two = newCatalog(
+                Map.of(IcebergCatalogProperties.ICEBERG_MANIFEST_CACHE_STATISTICS_MAX_COLUMNS, "2"));
+        Assertions.assertEquals(Set.of("p", "a"), two.statsColumnsKeptByManifestCache(table, schema, all));
+        Assertions.assertEquals(Set.of(), two.statsColumnsKeptByManifestCache(table, schema, Set.of("b")));
+        Assertions.assertEquals(Set.of(), two.statsColumnsKeptByManifestCache(table, schema, Set.of()));
+
+        CachingIcebergCatalog zero = newCatalog(
+                Map.of(IcebergCatalogProperties.ICEBERG_MANIFEST_CACHE_STATISTICS_MAX_COLUMNS, "0"));
+        Assertions.assertEquals(Set.of("p"), zero.statsColumnsKeptByManifestCache(table, schema, all));
+
+        CachingIcebergCatalog withoutStats = newCatalog(
+                Map.of(IcebergCatalogProperties.ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS, "false"));
+        Assertions.assertEquals(Set.of(), withoutStats.statsColumnsKeptByManifestCache(table, schema, all));
+    }
+
     // The min/max optimization through IcebergMetadata: each query plans afresh (a new metadata), the first one
     // fills the manifest cache and the later ones are served from it with the same file statistics.
     @Test
@@ -771,6 +798,34 @@ public class IcebergManifestCacheStatsTest extends TableTestBase {
         Assertions.assertEquals(FILES, tasks.size());
         // reused from the statistics request
         tasks.forEach(task -> Assertions.assertInstanceOf(IcebergSplitScanTask.class, task));
+        Assertions.assertEquals(List.of(Map.of(1, id(70)), Map.of(1, id(79))),
+                statsByFile(tasks).get("/path/to/data-id-7.parquet").subList(0, 2));
+    }
+
+    // Optional statistics (the runtime filter probe columns) reach the scan ranges on the planning path that plans
+    // every file up front too: the tasks keep them, and no table statistics are collected from them.
+    @Test
+    public void testOptionalStatsKeptOnSynchronouslyPlannedTasks() {
+        appendFiles(mockedNativeTableA);
+        CachingIcebergCatalog catalog = newCatalog(Map.of());
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", DB_NAME,
+                TABLE_NAME, "", Lists.newArrayList(new Column("id", INT)), mockedNativeTableA, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, catalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergGetRemoteFilesParams params = (IcebergGetRemoteFilesParams) IcebergGetRemoteFilesParams.newBuilder()
+                .setAllParams(IcebergTableMORParams.EMPTY)
+                .setParams(IcebergMORParams.EMPTY)
+                .setTableVersionRange(TvrTableSnapshot.of(
+                        Optional.of(mockedNativeTableA.currentSnapshot().snapshotId())))
+                .setPredicate(ConstantOperator.TRUE)
+                .setEnableColumnStats(true)
+                .setOptionalColumnStats(true)
+                .setFieldNames(List.of("id"))
+                .setStatsColumnNames(Set.of("id"))
+                .build();
+        List<FileScanTask> tasks = metadata.getRemoteFiles(icebergTable, params).stream()
+                .map(info -> ((IcebergRemoteFileInfo) info).getFileScanTask()).toList();
+        Assertions.assertEquals(FILES, tasks.size());
         Assertions.assertEquals(List.of(Map.of(1, id(70)), Map.of(1, id(79))),
                 statsByFile(tasks).get("/path/to/data-id-7.parquet").subList(0, 2));
     }

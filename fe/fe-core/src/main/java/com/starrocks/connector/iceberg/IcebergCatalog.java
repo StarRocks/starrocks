@@ -59,6 +59,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.OptionalLong;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -287,6 +288,12 @@ public interface IcebergCatalog extends MemoryTrackable {
 
     /** Releases clients and threads owned by this catalog; called when its connector shuts down. */
     default void shutdown() {
+    }
+
+    // The columns of `columnNames` (in `schema`) whose file statistics a scan of `table` serves from the manifest
+    // cache, so requesting them costs neither a manifest re-read nor cache memory. None without a manifest cache.
+    default Set<String> statsColumnsKeptByManifestCache(Table table, Schema schema, Set<String> columnNames) {
+        return Set.of();
     }
 
     default StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext srScanContext) {
