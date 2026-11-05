@@ -19,6 +19,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
@@ -45,6 +46,8 @@ import com.starrocks.credential.CredentialRefreshPolicy;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -53,6 +56,7 @@ import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
@@ -62,6 +66,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -95,6 +100,14 @@ public class IcebergScanNode extends ScanNode {
     private IcebergMetricsReporter icebergScanMetricsReporter;
     private boolean usedForDelete = false;
     private Set<String> runtimeFilterPruningColumns = Set.of();
+    // Columns probed by a join or top-n runtime filter. Their file bounds let the BE skip a whole file once the
+    // filter arrives, so the scan asks for their statistics when the manifest cache keeps them.
+    private Set<String> runtimeFilterProbeColumnNames = Set.of();
+    // the slot types whose file bounds the BE compares with runtime filters (HdfsScanner::_pruned_by_file_stats);
+    // DATETIME only for a timestamp without time zone, whose bounds are sent as they are
+    private static final Set<PrimitiveType> FILE_STATS_PRUNING_TYPES = Set.of(PrimitiveType.TINYINT,
+            PrimitiveType.SMALLINT, PrimitiveType.INT, PrimitiveType.BIGINT, PrimitiveType.DATE,
+            PrimitiveType.DATETIME);
     private boolean enableGlobalLateMaterialization = false;
     private boolean enableIncrementalScanRanges = false;
 
@@ -146,11 +159,24 @@ public class IcebergScanNode extends ScanNode {
             return List.of();
         }
 
+        // Runtime filters are assigned after the source is set up, so read them when the ranges are built.
+        scanRangeSource.setRuntimeFilterProbeSlotIds(runtimeFilterProbeSlotIds());
         if (maxScanRangeLength == 0) {
             return scanRangeSource.getAllOutputs();
         }
 
         return scanRangeSource.getOutputs((int) maxScanRangeLength);
+    }
+
+    private Set<Integer> runtimeFilterProbeSlotIds() {
+        Set<Integer> slotIds = new HashSet<>();
+        for (RuntimeFilterDescription rf : getProbeRuntimeFilters()) {
+            Expr probeExpr = rf.getNodeIdToProbeExpr().get(getId().asInt());
+            if (probeExpr instanceof SlotRef slotRef) {
+                slotIds.add(slotRef.getSlotId().asInt());
+            }
+        }
+        return slotIds;
     }
 
     public IcebergConnectorScanRangeSource getSourceRange() {
@@ -224,16 +250,25 @@ public class IcebergScanNode extends ScanNode {
             scanRowsCap = sessionVariable.getExternalStatsScanRowsCap();
         }
 
+        // the min/max optimization reads the file statistics of the scanned columns only; the runtime filter probe
+        // columns add theirs when the manifest cache keeps them
+        boolean canUseMinMaxOpt = scanOptimizeOption.getCanUseMinMaxOpt();
+        Set<String> statsColumnNames = new HashSet<>();
+        if (canUseMinMaxOpt) {
+            statsColumnNames.addAll(requiredColumnNames);
+        }
+        statsColumnNames.addAll(runtimeFilterProbeStatsColumnNames(readSchemaColumnNames, statsColumnNames));
+
         GetRemoteFilesParams params =
                 IcebergGetRemoteFilesParams.newBuilder()
                         .setAllParams(tableFullMORParams)
                         .setParams(morParams)
                         .setTableVersionRange(tvrVersionRange)
                         .setPredicate(icebergJobPlanningPredicate)
-                        .setEnableColumnStats(scanOptimizeOption.getCanUseMinMaxOpt())
-                        // the min/max optimization reads the file statistics of the scanned columns only
-                        .setStatsColumnNames(scanOptimizeOption.getCanUseMinMaxOpt() ?
-                                Set.copyOf(requiredColumnNames) : null)
+                        .setEnableColumnStats(canUseMinMaxOpt || !statsColumnNames.isEmpty())
+                        .setStatsColumnNames(canUseMinMaxOpt || !statsColumnNames.isEmpty() ? statsColumnNames : null)
+                        // the runtime filter probe columns alone only want what the manifest cache already keeps
+                        .setOptionalColumnStats(!canUseMinMaxOpt)
                         .setUsedForDelete(usedForDelete)
                         .setFieldNames(requiredColumnNames)
                         .setScanBytesCap(scanBytesCap)
@@ -265,6 +300,61 @@ public class IcebergScanNode extends ScanNode {
                 remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, false,
                 scanOptimizeOption.getCanUseMinMaxOpt(), usedForDelete);
         scanRangeSource.setRuntimeFilterPruningColumns(runtimeFilterPruningColumns);
+    }
+
+    // A DATETIME slot only from an Iceberg timestamp (with or without time zone; the bounds of the former are
+    // widened to the session time zone conservatively), not a nanosecond one, which has no file bounds here.
+    private boolean fileStatsPruningType(SlotDescriptor slot) {
+        PrimitiveType type = slot.getType().getPrimitiveType();
+        if (!FILE_STATS_PRUNING_TYPES.contains(type)) {
+            return false;
+        }
+        if (type != PrimitiveType.DATETIME) {
+            return true;
+        }
+        Types.NestedField field = icebergTable.getReadSchema().findField(slot.getColumn().getName());
+        return field != null && field.type() instanceof Types.TimestampType;
+    }
+
+    // The runtime filter probe columns outside `requested` of the types the BE builds a file zone map for. None for a
+    // table with equality deletes: its scans share one planning per table, keyed by the requested statistics, and the
+    // equality-delete scan requests none, so asking for them would plan the table twice.
+    @VisibleForTesting
+    public Set<String> runtimeFilterProbeStatsCandidates(Set<String> readSchemaColumnNames, Set<String> requested) {
+        if (!tableFullMORParams.isEmpty()) {
+            return Set.of();
+        }
+        return desc.getSlots().stream()
+                .filter(slot -> slot.getColumn() != null && fileStatsPruningType(slot))
+                .map(slot -> slot.getColumn().getName())
+                .filter(runtimeFilterProbeColumnNames::contains)
+                .filter(readSchemaColumnNames::contains)
+                .filter(name -> !requested.contains(name))
+                .collect(Collectors.toSet());
+    }
+
+    // The runtime filter probe columns, outside `requested`, whose file statistics the manifest cache keeps. Others
+    // are left out: requesting them would make every query re-read the manifests.
+    private Set<String> runtimeFilterProbeStatsColumnNames(Set<String> readSchemaColumnNames, Set<String> requested) {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null || !connectContext.getSessionVariable().isEnableDynamicPruneScanRange()) {
+            return Set.of();
+        }
+        Set<String> candidates = runtimeFilterProbeStatsCandidates(readSchemaColumnNames, requested);
+        if (candidates.isEmpty()) {
+            return Set.of();
+        }
+        try {
+            Set<String> kept = icebergMetadata().getIcebergCatalog().statsColumnsKeptByManifestCache(
+                    icebergTable.getNativeTable(), icebergTable.getReadSchema(), candidates);
+            Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.RF_STATS_COLUMNS." + icebergTable.getCatalogDBName() +
+                    "." + icebergTable.getCatalogTableName(), candidates + " kept " + kept);
+            return kept;
+        } catch (RuntimeException e) {
+            LOG.debug("Cannot tell which runtime filter columns the manifest cache of {} keeps",
+                    icebergTable.getCatalogTableName(), e);
+            return Set.of();
+        }
     }
 
     private void setupCloudCredential() {
@@ -393,6 +483,15 @@ public class IcebergScanNode extends ScanNode {
 
     public boolean isUsedForDelete() {
         return usedForDelete;
+    }
+
+    public void setRuntimeFilterProbeColumnNames(Set<String> runtimeFilterProbeColumnNames) {
+        this.runtimeFilterProbeColumnNames = runtimeFilterProbeColumnNames;
+    }
+
+    @VisibleForTesting
+    public Set<String> getRuntimeFilterProbeColumnNames() {
+        return runtimeFilterProbeColumnNames;
     }
 
     public void setRuntimeFilterPruningColumns(Set<String> runtimeFilterPruningColumns) {

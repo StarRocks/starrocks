@@ -171,6 +171,10 @@ struct FormatScannerStats {
 struct FormatScannerOptions {
     bool case_sensitive = false;
     bool use_min_max_opt = false;
+    // The scan node plans with the min/max optimization, so min_max_values carry every slot (use_min_max_opt may be
+    // turned off for one scan range). Otherwise they carry only the runtime filter probe slots the FE chose for file
+    // pruning.
+    bool min_max_values_of_all_slots = false;
     // Set by PruneHDFSScanColumnRule when all queried columns are partition columns
     // and a placeholder materialized column was injected.  Combined with
     // use_min_max_opt to skip reading the placeholder from the data file.

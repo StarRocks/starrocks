@@ -51,6 +51,7 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.types.Types;
 import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -329,6 +330,29 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         }
         Long loadedAt = tableLoadTimes.getIfPresent(table);
         return loadedAt == null ? OptionalLong.empty() : OptionalLong.of(loadedAt);
+    }
+
+    @Override
+    public Set<String> statsColumnsKeptByManifestCache(Table table, Schema schema, Set<String> columnNames) {
+        if (columnNames.isEmpty() || !icebergProperties.isIcebergManifestCacheWithColumnStatistics()) {
+            return Set.of();
+        }
+        Map<Integer, String> namesById = new HashMap<>();
+        for (String name : columnNames) {
+            Types.NestedField field = schema.findField(name);
+            if (field != null) {
+                namesById.put(field.fieldId(), name);
+            }
+        }
+        if (namesById.isEmpty()) {
+            return Set.of();
+        }
+        int limit = Math.max(icebergProperties.getIcebergManifestCacheStatisticsMaxColumns(), 0);
+        Set<String> kept = new HashSet<>();
+        for (Integer id : StarRocksIcebergTableScan.statsColumnIdsKeptByCache(table, schema, limit, namesById.keySet())) {
+            kept.add(namesById.get(id));
+        }
+        return kept;
     }
 
     @Override
