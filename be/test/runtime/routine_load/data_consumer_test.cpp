@@ -61,7 +61,7 @@ protected:
                            {"fetch.wait.max.ms", "10"},           {"fetch.message.max.bytes", "1024"},
                            {"queued.min.messages", "100000"},     {"queued.max.messages.kbytes", "64"},
                            {"fetch.queue.backoff.ms", "10"}};
-        _context = std::make_unique<StreamLoadContext>(nullptr);
+        _context = std::make_unique<StreamLoadContext>(ExecEnv::GetInstance());
         _context->kafka_info = std::make_unique<KafkaLoadInfo>(info);
         _consumer = std::make_unique<KafkaDataConsumer>(_context.get());
         ASSERT_OK(_consumer->init(_context.get()));
@@ -263,7 +263,7 @@ TEST_F(KafkaDataConsumerEofTest, partition_offset_is_found_after_refreshing_stal
     info.brokers = rd_kafka_mock_cluster_bootstraps(cluster);
     info.topic = topic;
     info.properties = {{"group.id", "routine-load-late-topic-test"}, {"enable.auto.commit", "false"}};
-    auto context = std::make_unique<StreamLoadContext>(nullptr);
+    auto context = std::make_unique<StreamLoadContext>(ExecEnv::GetInstance());
     context->kafka_info = std::make_unique<KafkaLoadInfo>(info);
     auto consumer = std::make_unique<KafkaDataConsumer>(context.get());
     ASSERT_OK(consumer->init(context.get()));
