@@ -218,10 +218,16 @@ struct SIMDGather {
     /// The 8-way unroll exists only in the x86-64 prefetch body. An AArch64 int64 unrolled default was
     /// NOT adopted: wins at small pools (e.g. about -10% at 256K-element pools) could not be confirmed on
     /// the available noisy ARM VM, and the 1M-element pool leaned toward a regression (+4.6..+11.5%).
-    /// Measured on x86 (GCP c4, Emerald Rapids, g++ 13.3, -O3): with pools <= 8 MiB prefetch loses
-    /// +4..+13%; with pools >= 16 MiB it wins -8..-16% for 512..8192 rows, flat in rows down to the
-    /// smallest measured count (512). The crossover was bracketed only between 8 and 16 MiB on that
-    /// CPU, so it is CPU/LLC dependent; 16 MiB is the conservative upper edge.
+    /// Clean-harness data (null control -2.5..+1.5%, 10 reps, rows 512..8192) on x86 Xeon Platinum 8581C
+    /// (Emerald Rapids; VM reports 2 MiB L2 per core and shared 260 MiB L3; g++ 13.3, -O3 -mavx2) for
+    /// CallerInformed vs default loop: pools below 16 MiB are gated off and equal default (measured -1.3..+0.4%);
+    /// int32 wins -10.5..-11.4% at 16 MiB and -5.1..-9.6% at 256 MiB; int64 wins -9.7..-10.5% at 16 MiB,
+    /// -4.9..-5.4% at 32 MiB, and no win at 512 MiB (-0.6..+0.1%). Gain is flat across 512..8192 rows.
+    /// The <= 8 MiB loss figure (+4..+13%) is from an earlier layout-biased harness and was not re-measured.
+    /// The 16 MiB gate is the conservative edge of the bracket (loss at 8 MiB, win at 16 MiB), so crossover is
+    /// CPU/LLC-dependent on this hardware. A join stage microbenchmark (hash + gather, not a join) showed 5-10%
+    /// faster lookup_init stage for int32 first arrays of 16-128 MiB (no change below 16 MiB); no end-to-end
+    /// join speedup was measured.
     /// Minimum row count to start prefetching.
     static constexpr size_t kPrefetchMinRows = 512;
     /// Source-pool size threshold in BYTES (compared against `pool_size.elements * sizeof(DataType)`).
