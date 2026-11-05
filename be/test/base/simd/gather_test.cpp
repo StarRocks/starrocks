@@ -506,23 +506,6 @@ TEST(SIMDGatherTest, pool_size_hint_rejects_raw_size_t) {
     static_assert(SourcePoolSize{7}.elements == 7);
 }
 
-TEST(SIMDGatherTest, unrolled_default_gated_by_arch_and_element_size) {
-    // The unrolled default loop is enabled only for AArch64 with 8-byte elements; every other
-    // (arch, element size) combination uses the original buffered loop.
-#if defined(__aarch64__)
-    constexpr bool kArm = true;
-#else
-    constexpr bool kArm = false;
-#endif
-    static_assert(SIMDGather::use_unrolled_default<int64_t>() == kArm);
-    static_assert(SIMDGather::use_unrolled_default<uint64_t>() == kArm);
-    static_assert(!SIMDGather::use_unrolled_default<int32_t>());
-    static_assert(!SIMDGather::use_unrolled_default<uint32_t>());
-    static_assert(!SIMDGather::use_unrolled_default<int16_t>());
-    static_assert(!SIMDGather::use_unrolled_default<int8_t>());
-    EXPECT_EQ(kArm, SIMDGather::use_unrolled_default<int64_t>());
-}
-
 TEST(SIMDGatherTest, prefetch_constants_pinned) {
     static_assert(SIMDGather::kPrefetchMinRows == 512);
     static_assert(SIMDGather::kPrefetchPoolBytes == 16 * 1024 * 1024);

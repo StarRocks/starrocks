@@ -107,7 +107,8 @@ struct SIMDGather {
 #endif
     }
 
-    /// Helper: 8-element unrolled gather step with independent loads and stores
+    /// Helper: 8-element unrolled gather step with independent loads and stores. Used only by the
+    /// x86-64 prefetch loop bodies; the default path is the buffered loop.
     template <typename DataType, typename IndexType>
     static inline void gather_8_unrolled(DataType* __restrict__ dest, const DataType* __restrict__ src,
                                          const IndexType* __restrict__ indexes, size_t i) {
@@ -138,16 +139,6 @@ struct SIMDGather {
             dest[i + 5] = src[indexes[i + 5]];
             dest[i + 6] = src[indexes[i + 6]];
             dest[i + 7] = src[indexes[i + 7]];
-        }
-    }
-
-    /// Helper: 8-way unrolled loop (default gather on AArch64 with 8-byte elements, see
-    /// use_unrolled_default(); also the body of the x86-64 prefetch loop)
-    template <typename DataType, typename IndexType>
-    static inline void gather_unrolled(DataType* __restrict__ dest, const DataType* __restrict__ src,
-                                       const IndexType* __restrict__ indexes, size_t num_rows, size_t& i) {
-        for (; i + 8 <= num_rows; i += 8) {
-            gather_8_unrolled(dest, src, indexes, i);
         }
     }
 
@@ -206,16 +197,6 @@ struct SIMDGather {
         }
     }
 
-    /// Helper: 8-way unrolled loop for filtered gather
-    template <typename DataType, typename IndexType, typename CondType>
-    static inline void gather_filtered_unrolled(DataType* __restrict__ dest, const DataType* __restrict__ src,
-                                                const IndexType* __restrict__ indexes,
-                                                const CondType* __restrict__ is_filtered, size_t num_rows, size_t& i) {
-        for (; i + 8 <= num_rows; i += 8) {
-            gather_filtered_8_unrolled(dest, src, indexes, is_filtered, i);
-        }
-    }
-
     /// Helper: Scalar tail filtered gather
     template <typename DataType, typename IndexType, typename CondType>
     static inline void gather_filtered_scalar(DataType* dest, const DataType* src, const IndexType* indexes,
@@ -234,6 +215,9 @@ struct SIMDGather {
     }
 
     /// Prefetch tuning for the SourcePoolSize overloads (x86-64 only; ARM never prefetches).
+    /// The 8-way unroll exists only in the x86-64 prefetch body. An AArch64 int64 unrolled default was
+    /// NOT adopted: wins at small pools (e.g. about -10% at 256K-element pools) could not be confirmed on
+    /// the available noisy ARM VM, and the 1M-element pool leaned toward a regression (+4.6..+11.5%).
     /// Measured on x86 (GCP c4, Emerald Rapids, g++ 13.3, -O3): with pools <= 8 MiB prefetch loses
     /// +4..+13%; with pools >= 16 MiB it wins -8..-16% for 512..8192 rows, flat in rows down to the
     /// smallest measured count (512). The crossover was bracketed only between 8 and 16 MiB on that
@@ -245,27 +229,8 @@ struct SIMDGather {
     /// How many rows ahead of the loads the prefetches are issued.
     static constexpr size_t kPrefetchLookahead = 8;
 
-    /// Whether the default (non-prefetch) gather path uses the 8-way unrolled loop instead of the
-    /// original SIMD-width buffered loop. True only for AArch64 with 8-byte elements.
-    /// Measured (g++ 13.3, -O3, 10 reps, GCP c4a / c4, wide benchmark grid), unrolled vs buffered:
-    ///  - AArch64 int64: wins everywhere: -26% at a 4K-element pool, -19% at 16K, -7.7% at 256K,
-    ///    -1..-4% at >= 2M elements.
-    ///  - x86-64 int64: regresses +13..+55% (4K/16K-element pools, rows >= 1024..2048; bimodal).
-    ///  - AArch64 int32: regresses +3..+8% at small pools (reproduced).
-    ///  - x86-64 int32: neutral (an initial +3..+6% did not reproduce).
-    /// Everything else therefore keeps the original buffered loop, so those combinations behave
-    /// exactly like the code before the unrolled loop was introduced.
-    template <typename DataType>
-    static constexpr bool use_unrolled_default() {
-#if defined(__aarch64__)
-        return sizeof(DataType) == 8;
-#else
-        return false;
-#endif
-    }
-
-    /// Helper: original buffered gather loop (SIMD-width batches staged through a local buffer),
-    /// continuing from index `i`. Skips batching when NUM_BATCH_VALUES == 0 (e.g. int256_t on
+    /// Default gather loop on every target and element size: SIMD-width batches staged through a
+    /// local buffer, continuing from index `i` (where the prefetch loop stopped, if it ran). Skips batching when NUM_BATCH_VALUES == 0 (e.g. int256_t on
     /// 128-bit NEON) to avoid an infinite loop; the scalar tail then handles every row.
     template <typename DataType, typename IndexType>
     static inline void gather_buffered(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows,
@@ -292,8 +257,8 @@ struct SIMDGather {
         gather_scalar(dest, src, indexes, num_rows, i);
     }
 
-    /// Helper: original buffered filtered gather loop, continuing from index `i`. Filtered rows
-    /// write 0 and never dereference `src[indexes[i]]`.
+    /// Default filtered gather loop on every target and element size, continuing from index `i`.
+    /// Filtered rows write 0 and never dereference `src[indexes[i]]`.
     template <typename DataType, typename IndexType, typename CondType>
     static inline void gather_filtered_buffered(DataType* dest, const DataType* src, const IndexType* indexes,
                                                 const CondType* is_filtered, size_t num_rows, size_t& i) {
@@ -325,31 +290,6 @@ struct SIMDGather {
         gather_filtered_scalar(dest, src, indexes, is_filtered, num_rows, i);
     }
 
-    /// Default (non-prefetch) routing from index `i` to the end: unrolled loop where
-    /// use_unrolled_default<DataType>() holds, otherwise the original buffered loop.
-    template <typename DataType, typename IndexType>
-    static inline void gather_default(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows,
-                                      size_t& i) {
-        if constexpr (use_unrolled_default<DataType>()) {
-            gather_unrolled(dest, src, indexes, num_rows, i);
-            gather_scalar(dest, src, indexes, num_rows, i);
-        } else {
-            gather_buffered(dest, src, indexes, num_rows, i);
-        }
-    }
-
-    /// Filtered twin of gather_default().
-    template <typename DataType, typename IndexType, typename CondType>
-    static inline void gather_filtered_default(DataType* dest, const DataType* src, const IndexType* indexes,
-                                               const CondType* is_filtered, size_t num_rows, size_t& i) {
-        if constexpr (use_unrolled_default<DataType>()) {
-            gather_filtered_unrolled(dest, src, indexes, is_filtered, num_rows, i);
-            gather_filtered_scalar(dest, src, indexes, is_filtered, num_rows, i);
-        } else {
-            gather_filtered_buffered(dest, src, indexes, is_filtered, num_rows, i);
-        }
-    }
-
     /// dest[i] = src[indexes[i]]
     /// Contract: `dest`, `src` and `indexes` must not overlap: the helpers take `__restrict__`
     /// pointers, so overlapping ranges are undefined behaviour.
@@ -357,7 +297,7 @@ struct SIMDGather {
     static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows) {
         static_assert(std::is_integral_v<IndexType>);
         size_t i = 0;
-        gather_default(dest, src, indexes, num_rows, i);
+        gather_buffered(dest, src, indexes, num_rows, i);
     }
 
     /// dest[i] = is_filtered[i] == 0 ? src[indexes[i]] : 0
@@ -368,7 +308,7 @@ struct SIMDGather {
                               const CondType* is_filtered, size_t num_rows) {
         static_assert(std::is_integral_v<IndexType>);
         size_t i = 0;
-        gather_filtered_default(dest, src, indexes, is_filtered, num_rows, i);
+        gather_filtered_buffered(dest, src, indexes, is_filtered, num_rows, i);
     }
 
     /// Caller-informed gather with DRAM prefetch heuristic.
@@ -377,7 +317,7 @@ struct SIMDGather {
     /// `pool_size` is a PERFORMANCE hint only and never affects correctness. Prefetch is issued only
     /// for rows whose indexes the subsequent loads will read (filtered rows are skipped). Prefetch is
     /// x86-64 only (measured regression on AArch64); elsewhere this overload degenerates to the plain
-    /// default loop (see use_unrolled_default()).
+    /// buffered default loop.
     /// @param pool_size Element count of the source array (`src`), wrapped in SourcePoolSize.
     template <typename DataType, typename IndexType>
     static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows,
@@ -409,7 +349,7 @@ struct SIMDGather {
         (void)pool_size;
 #endif
 
-        gather_default(dest, src, indexes, num_rows, i);
+        gather_buffered(dest, src, indexes, num_rows, i);
     }
 
     /// Caller-informed filtered gather with DRAM prefetch heuristic.
@@ -418,7 +358,7 @@ struct SIMDGather {
     /// `pool_size` is a PERFORMANCE hint only and never affects correctness. Prefetch is issued only
     /// for rows whose indexes the subsequent loads will read (filtered rows are skipped). Prefetch is
     /// x86-64 only (measured regression on AArch64); elsewhere this overload degenerates to the plain
-    /// default loop (see use_unrolled_default()).
+    /// buffered default loop.
     /// @param pool_size Element count of the source array (`src`), wrapped in SourcePoolSize.
     template <typename DataType, typename IndexType, typename CondType>
     static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes,
@@ -468,7 +408,7 @@ struct SIMDGather {
         (void)pool_size;
 #endif
 
-        gather_filtered_default(dest, src, indexes, is_filtered, num_rows, i);
+        gather_filtered_buffered(dest, src, indexes, is_filtered, num_rows, i);
     }
 };
 
