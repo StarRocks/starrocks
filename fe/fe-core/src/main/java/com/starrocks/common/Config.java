@@ -2844,13 +2844,8 @@ public class Config extends ConfigBase {
     /**
      * iceberg metadata cache dir
      */
-<<<<<<< HEAD
-    @ConfField(mutable = true)
-    public static String iceberg_metadata_cache_disk_path = StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg";
-=======
     @ConfField
-    public static String iceberg_metadata_cache_disk_path = Config.STARROCKS_HOME_DIR + "/caches/iceberg";
->>>>>>> 1799d44 ([BugFix][RB-225] Share the Hadoop configuration and AWS credentials providers across Iceberg FileIOs (#82448))
+    public static String iceberg_metadata_cache_disk_path = StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg";
 
     /**
      * iceberg metadata memory cache total size, default 0MB (turn off)
