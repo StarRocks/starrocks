@@ -16,27 +16,34 @@ package com.starrocks.scheduler.mv;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshPartitioner;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshRangePartitioner;
 import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
+import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.PCellNone;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
+import com.starrocks.type.DateType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -169,5 +176,37 @@ public class MVPCTRefreshRangePartitionerTest {
         partitioner.filterPartitionsByTTL(toRefreshPartitions, true);
 
         Assertions.assertEquals(2, toRefreshPartitions.size());
+    }
+
+    /**
+     * A requested range that only touches a deferred shape change (adjacent ranges) does not conflict: the
+     * request holds no part of the component. Guava's {@code Range#isConnected} alone would report it.
+     */
+    @Test
+    public void testIntersectsRequestedRangeRequiresNonEmptyIntersection() throws Exception {
+        Range<PartitionKey> april = range("2021-04-01", "2021-05-01");
+        Range<PartitionKey> may = range("2021-05-01", "2021-06-01");
+        Range<PartitionKey> mayFirstHalf = range("2021-05-01", "2021-05-16");
+        Range<PartitionKey> june = range("2021-06-01", "2021-07-01");
+
+        Assertions.assertFalse(MVPCTRefreshRangePartitioner.intersectsRequestedRange(april, may),
+                "adjacent ranges ([Apr, May) and [May, Jun)) do not overlap");
+        Assertions.assertFalse(MVPCTRefreshRangePartitioner.intersectsRequestedRange(may, april),
+                "adjacent ranges are symmetric");
+        Assertions.assertFalse(MVPCTRefreshRangePartitioner.intersectsRequestedRange(april, june),
+                "disjoint ranges do not overlap");
+        Assertions.assertTrue(MVPCTRefreshRangePartitioner.intersectsRequestedRange(mayFirstHalf, may));
+        Assertions.assertTrue(MVPCTRefreshRangePartitioner.intersectsRequestedRange(may, mayFirstHalf));
+    }
+
+    private static Range<PartitionKey> range(String lower, String upper) throws AnalysisException {
+        Column partitionColumn = new Column("k1", DateType.DATETIME);
+        PartitionKey lo = PartitionKey.createPartitionKey(
+                Collections.singletonList(new PartitionValue(lower)),
+                Collections.singletonList(partitionColumn));
+        PartitionKey hi = PartitionKey.createPartitionKey(
+                Collections.singletonList(new PartitionValue(upper)),
+                Collections.singletonList(partitionColumn));
+        return Range.closedOpen(lo, hi);
     }
 }

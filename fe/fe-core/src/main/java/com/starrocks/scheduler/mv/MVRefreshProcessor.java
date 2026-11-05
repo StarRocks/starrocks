@@ -152,7 +152,10 @@ public abstract class MVRefreshProcessor {
             // The partitions the user asked for are fresh; others may still be stale.
             SCOPE_UP_TO_DATE,
             // Another refresh job owns the pinning, so this batch's partitions are left unrefreshed.
-            STALE_PINNED_BATCH
+            STALE_PINNED_BATCH,
+            // The requested range only partially covers a partition shape change, which cannot be applied
+            // atomically: the range's replacement partitions were left out, so nothing covered it.
+            PARTIAL_SHAPE_CHANGE
         }
 
         public static ProcessExecPlan success(ExecPlan execPlan, InsertStmt insertStmt) {
@@ -294,9 +297,13 @@ public abstract class MVRefreshProcessor {
      * partition that a shape change would replace; leaving the old partitions untouched avoids
      * turning materialized history into empty partitions. A later PCT (or hybrid PCT fallback)
      * refresh recomputes the diff and materializes the replacements.
+     *
+     * <p>EXPLAIN REFRESH also synchronizes partitions against the live MV, so it must never apply a
+     * shape-change replacement either: a plan request would otherwise drop populated partitions and
+     * create empty ones without executing the insert that fills them.
      */
     public boolean shouldRetainExistingPartitionLayout() {
-        return false;
+        return mvContext.isExplain();
     }
 
     /**

@@ -34,6 +34,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.mv.MVRefreshSchemaChecker;
+import com.starrocks.scheduler.mv.MVVersionManager;
 import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
 import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
@@ -166,6 +167,16 @@ public final class MVPCTRefreshSynchronizer {
         processor.getMvPctRefreshPartitioner()
                 .setRetainExistingLayout(processor.shouldRetainExistingPartitionLayout());
         boolean result = processor.getMvPctRefreshPartitioner().syncAddOrDropPartitions();
+        if (result && !processor.getMvContext().isExplain()
+                && !processor.getMvContext().getReplacementAddPartitions().isEmpty()) {
+            // A shape change just dropped populated partitions and created their empty replacements. The
+            // insert that fills them is committed later (or never, if this run fails), while IVM only applies
+            // base-table deltas. Drop the IVM checkpoint now so a later run cannot report the mv up to date
+            // while the replacements are still empty: without a checkpoint the next refresh takes the PCT path
+            // and re-materializes them.
+            new MVVersionManager(processor.getMv(), processor.getMvContext())
+                    .invalidateIvmCheckpointForPendingReplacement();
+        }
         if (result && processor.getMv().isPartitionedTable() && processor.getMvContext().getPartitionTopology() == null) {
             throw new DmlException("Materialized view %s.%s refresh failed: partition topology was not published "
                             + "after sync partitions succeeded",

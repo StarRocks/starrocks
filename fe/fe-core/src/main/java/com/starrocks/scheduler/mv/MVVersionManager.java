@@ -149,6 +149,44 @@ public class MVVersionManager {
                 MVTimelinessMgr.MVChangeEvent.MV_REFRESHED);
     }
 
+    /**
+     * Drop the IVM base-table checkpoint after a partition shape change replaced populated partitions.
+     * IVM only applies base-table deltas, so it cannot rebuild a replacement partition: if this run's insert
+     * never commits, the replacement stays empty and IVM would later report the mv up to date because the base
+     * tables have not changed. Invalidating the checkpoint forces the next refresh onto the PCT path, which
+     * re-materializes the replacement partitions from the base tables. The journaled scheme keeps this across a
+     * leader failover; the next successful refresh writes the new checkpoint.
+     */
+    public void invalidateIvmCheckpointForPendingReplacement() {
+        MaterializedView.AsyncRefreshContext refreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
+        if (refreshContext.getBaseTableInfoTvrVersionRangeMap().isEmpty()) {
+            // Nothing to invalidate: no IVM checkpoint exists (e.g. the first refresh of the mv).
+            return;
+        }
+        Locker locker = new Locker();
+        if (!locker.tryLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE,
+                Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+            // Still drop the checkpoint in memory: the retries in this process must not skip the rebuild. A
+            // failover still reads the old checkpoint from the journal, which is the pre-existing window.
+            logger.warn("failed to lock mv {} to invalidate the IVM checkpoint, only clearing it in memory",
+                    mv.getName());
+            refreshContext.getBaseTableInfoTvrVersionRangeMap().clear();
+            return;
+        }
+        try {
+            if (!mv.isInCatalog()) {
+                return;
+            }
+            logger.info("invalidate the IVM checkpoint of materialized view {} because a pending partition "
+                    + "shape replacement is not materialized yet", mv.getName());
+            MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy();
+            copiedScheme.getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap().clear();
+            persistRefreshScheme(copiedScheme);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE);
+        }
+    }
+
     // Persist freshness for a successful refresh that changed no version. Idempotent: a no-op when the version-change
     // log already recorded this run's freshness, so the main path writes no extra edit-log entry.
     public void confirmFreshness() {

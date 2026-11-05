@@ -15,6 +15,7 @@
 
 package com.starrocks.scheduler.mv.pct;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
@@ -138,6 +139,11 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         logger.info("Materialized view [{}] partition diff result: {}",
                 mv.getName(), result);
 
+        // A bounded refresh cannot apply a shape-change component partially. When the requested range
+        // intersects a component this diff kept untouched, the request cannot be satisfied: remember the
+        // conflict so the refresh reports it instead of claiming the range is already up to date.
+        recordDeferredShapeChangeRanges(rangeToInclude, result.diff.getDeferredReplacementRanges());
+
         // Delete old partitions and then add new partitions because the old and new partitions may overlap
         PCellSortedSet deletes = result.diff.getDeletes();
         for (String mvPartitionName : deletes.getPartitionNames()) {
@@ -181,6 +187,40 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     public Expr generatePartitionPredicate(Table table, PCellSortedSet refBaseTablePartitionNames,
                                            List<Expr> mvPartitionSlotRefs) throws AnalysisException {
         return new PCTPredicateBuilder(this).buildPartitionPredicate(table, refBaseTablePartitionNames, mvPartitionSlotRefs);
+    }
+
+    /**
+     * Remember the shape-change components this sync left untouched that overlap the requested range.
+     * The refresh planner reports them when no partition of the MV can cover the request, so a bounded
+     * refresh never claims a range it could not materialize is already up to date.
+     */
+    private void recordDeferredShapeChangeRanges(Range<PartitionKey> rangeToInclude,
+                                                 List<Range<PartitionKey>> deferredRanges) {
+        if (rangeToInclude == null || deferredRanges.isEmpty()) {
+            return;
+        }
+        List<Range<PartitionKey>> intersected = deferredRanges.stream()
+                .filter(deferred -> intersectsRequestedRange(rangeToInclude, deferred))
+                .collect(Collectors.toList());
+        if (intersected.isEmpty()) {
+            return;
+        }
+        mvContext.setDeferredShapeChangeRanges(intersected);
+        logger.warn("Materialized view {} cannot refresh the requested range {}: it only partially covers "
+                        + "the pending partition shape change {}, which cannot be applied atomically. "
+                        + "Refresh a range covering the whole component or the whole materialized view.",
+                mv.getName(), rangeToInclude, intersected);
+    }
+
+    /**
+     * Whether the requested range takes part in a deferred shape-change component. Guava's
+     * {@link Range#isConnected} is also true for merely adjacent ranges (e.g. {@code [Apr, May)} and
+     * {@code [May, Jun)}), which do not conflict at all: the request holds no part of the component, so only a
+     * non-empty intersection makes it unsatisfiable.
+     */
+    @VisibleForTesting
+    public static boolean intersectsRequestedRange(Range<PartitionKey> requested, Range<PartitionKey> component) {
+        return requested.isConnected(component) && !requested.intersection(component).isEmpty();
     }
 
     @Override

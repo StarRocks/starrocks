@@ -319,6 +319,56 @@ public class RangePartitionDifferTest extends MVTestBase {
         Assertions.assertTrue(diff.getDeletes().getPartitionNames().isEmpty(), "deletes: " + diff.getDeletes());
     }
 
+    /**
+     * A component that the bounded range does not fully cover is deferred and reported, so a refresh can
+     * tell the request was not satisfiable instead of claiming the range is up to date.
+     */
+    @Test
+    public void testSubRangeReportsDeferredReplacementRange() throws Exception {
+        PCellSortedSet src = cells(Map.of("p20210501_20210601", range("2021-05-01", "2021-06-01")));
+        PCellSortedSet dst = cells(Map.of(
+                "p20210501_20210502", range("2021-05-01", "2021-05-02"),
+                "p20210502_20210503", range("2021-05-02", "2021-05-03")));
+
+        PartitionDiff diff = differ(range("2021-05-15", "2021-05-16")).diff(src, dst, true);
+
+        Assertions.assertTrue(diff.getAdds().isEmpty(), "adds: " + diff.getAdds());
+        Assertions.assertEquals(List.of(range("2021-05-01", "2021-06-01")),
+                diff.getDeferredReplacementRanges());
+    }
+
+    /** A component fully inside the requested range is applied, so nothing is reported as deferred. */
+    @Test
+    public void testFullyInRangeReplacementIsNotDeferred() throws Exception {
+        PCellSortedSet src = cells(Map.of("p20210501_20210601", range("2021-05-01", "2021-06-01")));
+        PCellSortedSet dst = cells(Map.of(
+                "p20210501_20210502", range("2021-05-01", "2021-05-02"),
+                "p20210502_20210503", range("2021-05-02", "2021-05-03")));
+
+        PartitionDiff diff = differ(range("2021-05-01", "2021-06-01")).diff(src, dst, true);
+
+        Assertions.assertEquals(Collections.singleton("p20210501_20210601"),
+                diff.getAdds().getPartitionNames());
+        Assertions.assertTrue(diff.getDeferredReplacementRanges().isEmpty(),
+                "deferred: " + diff.getDeferredReplacementRanges());
+    }
+
+    /** Retaining the layout (IVM or EXPLAIN) reports the kept components as deferred as well. */
+    @Test
+    public void testRetainExistingLayoutReportsDeferredReplacementRanges() throws Exception {
+        PCellSortedSet src = cells(Map.of("p20210501_20210601", range("2021-05-01", "2021-06-01")));
+        PCellSortedSet dst = cells(Map.of(
+                "p20210501_20210502", range("2021-05-01", "2021-05-02"),
+                "p20210502_20210503", range("2021-05-02", "2021-05-03")));
+
+        RangePartitionDiffer differ = differ(range("2021-05-15", "2021-05-16"));
+        differ.setRetainExistingLayout(true);
+        PartitionDiff diff = differ.diff(src, dst, true);
+
+        Assertions.assertEquals(List.of(range("2021-05-01", "2021-06-01")),
+                diff.getDeferredReplacementRanges());
+    }
+
     /** A genuine removal without any replacement keeps the existing behavior. */
     @Test
     public void testGenuineDeleteUnaffected() throws Exception {

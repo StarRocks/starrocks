@@ -125,6 +125,10 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         }
         Map<String, PCell> deletes = diffRange(dstRangeMap, srcRangeMap);
         PCellSortedSet replacementAdds = PCellSortedSet.of();
+        // Shape-change components left untouched by this refresh: the requested range does not cover them,
+        // or this refresh cannot rebuild their history. Reported to the caller so a request that the diff
+        // cannot satisfy is not silently answered with "already up to date".
+        List<Range<PartitionKey>> deferredReplacementRanges = Lists.newArrayList();
         if ((retainExistingLayout || applyAtomicReplacement) && !deletes.isEmpty()) {
             // Replacement relationships: a source range not matching an existing MV partition is a
             // potential addition, an MV range not matching a source range is a deletion.
@@ -132,9 +136,10 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             if (!rawAdds.isEmpty()) {
                 List<ReplacementComponent> components = collectReplacementComponents(rawAdds, deletes);
                 if (retainExistingLayout) {
-                    keepExistingLayoutForReplacements(components, adds, deletes);
+                    keepExistingLayoutForReplacements(components, adds, deletes, deferredReplacementRanges);
                 } else if (rangeToInclude != null) {
-                    replacementAdds = applyComponentsFullyInRange(components, adds, deletes);
+                    replacementAdds = applyComponentsFullyInRange(components, adds, deletes,
+                            deferredReplacementRanges);
                 } else if (autoRefreshPartitionsLimit > 0) {
                     Set<String> refreshWindow = computeRefreshWindow(rawAdds, dstRangeMap, deletes);
                     replacementAdds = applyComponentsInRefreshWindow(
@@ -144,7 +149,8 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 }
             }
         }
-        return new PartitionDiff(PCellSortedSet.of(adds), PCellSortedSet.of(deletes), replacementAdds);
+        return new PartitionDiff(PCellSortedSet.of(adds), PCellSortedSet.of(deletes), replacementAdds,
+                deferredReplacementRanges);
     }
 
     /**
@@ -162,7 +168,8 @@ public final class RangePartitionDiffer extends PartitionDiffer {
      */
     private PCellSortedSet applyComponentsFullyInRange(List<ReplacementComponent> components,
                                                        Map<String, PCell> adds,
-                                                       Map<String, PCell> deletes) {
+                                                       Map<String, PCell> deletes,
+                                                       List<Range<PartitionKey>> deferred) {
         PCellSortedSet replacementAdds = PCellSortedSet.of();
         for (ReplacementComponent component : components) {
             if (!component.isReplacement()) {
@@ -172,6 +179,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 component.collectAddsPresentIn(adds, replacementAdds);
             } else {
                 component.removeFrom(adds, deletes);
+                deferred.add(component.range());
             }
         }
         return replacementAdds;
@@ -185,7 +193,8 @@ public final class RangePartitionDiffer extends PartitionDiffer {
      */
     private void keepExistingLayoutForReplacements(List<ReplacementComponent> components,
                                                    Map<String, PCell> adds,
-                                                   Map<String, PCell> deletes) {
+                                                   Map<String, PCell> deletes,
+                                                   List<Range<PartitionKey>> deferred) {
         for (ReplacementComponent component : components) {
             if (!component.isReplacement()) {
                 continue;
@@ -194,6 +203,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                             + "because this refresh cannot rebuild their history",
                     mv.getName(), component.deleteNames, component.addNames);
             component.removeFrom(adds, deletes);
+            deferred.add(component.range());
         }
     }
 
@@ -321,6 +331,10 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         private boolean isReplacement() {
             // pure additions / genuine removals keep the existing behavior
             return !addNames.isEmpty() && !deleteNames.isEmpty();
+        }
+
+        private Range<PartitionKey> range() {
+            return Range.closedOpen(lo, hi);
         }
 
         private boolean isFullyInRange(Range<PartitionKey> rangeToInclude) {
