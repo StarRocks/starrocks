@@ -314,8 +314,7 @@ MFV_DEFAULT(size_t filter_impl(void* dst, const void* src, size_t element_size, 
 
 MFV_AVX2(size_t filter_impl(void* dst, const void* src, size_t element_size, const uint8_t* selector, size_t from,
                             size_t to) {
-    if (element_size == 4) return FILTER_CALL(detail::compress_avx2_w4, uint32_t);
-    return scan_avx2_any(dst, src, element_size, selector, from, to);
+    return detail::filter_range_avx2(dst, src, element_size, selector, from, to);
 });
 
 MFV_AVX512VLBW(size_t filter_impl(void* dst, const void* src, size_t element_size, const uint8_t* selector, size_t from,
@@ -343,12 +342,8 @@ size_t detail::filter_range(void* dst, const void* src, size_t element_size, con
 #if defined(__x86_64__)
 __attribute__((target("avx2"))) size_t detail::filter_range_avx2(void* dst, const void* src, size_t element_size,
                                                                  const uint8_t* selector, size_t from, size_t to) {
-    (void)dst;
-    (void)src;
-    (void)element_size;
-    (void)selector;
-    (void)to;
-    return from;
+    if (element_size == 4) return FILTER_CALL(detail::compress_avx2_w4, uint32_t);
+    return scan_avx2_any(dst, src, element_size, selector, from, to);
 }
 
 __attribute__((target("avx2"))) size_t detail::compress_avx2_w4(uint32_t* dst, const uint32_t* src,
