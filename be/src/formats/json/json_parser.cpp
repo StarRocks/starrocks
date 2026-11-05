@@ -174,6 +174,11 @@ Status JsonDocumentStreamParser::advance() noexcept {
         _check_and_new_doc_stream_iterator()) {
         return Status::OK();
     }
+    if (_doc_stream_itr.error() != simdjson::SUCCESS && _doc_stream_itr.error() != simdjson::EMPTY) {
+        auto err_msg = strings::Substitute("Failed to iterate document stream as object. error: $0",
+                                           simdjson::error_message(_doc_stream_itr.error()));
+        return status_from_json_parse_error(err_msg);
+    }
     return Status::EndOfFile("all documents of the stream are iterated");
 }
 
