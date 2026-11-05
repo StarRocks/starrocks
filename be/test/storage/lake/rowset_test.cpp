@@ -243,7 +243,7 @@ TEST_F(LakeRowsetTest, test_load_segments) {
     ASSIGN_OR_ABORT(auto segments1, rowset->segments(false));
     ASSERT_EQ(3, segments1.size());
     for (const auto& seg : segments1) {
-        auto segment = cache->lookup_segment(seg->file_name());
+        auto segment = cache->lookup_segment(MetacacheKey::TEST_from_string(seg->file_name()));
         ASSERT_TRUE(segment == nullptr);
     }
 
@@ -252,7 +252,7 @@ TEST_F(LakeRowsetTest, test_load_segments) {
     ASSIGN_OR_ABORT(auto segments2, rowset->segments(lake_io_opts));
     ASSERT_EQ(3, segments2.size());
     for (const auto& seg : segments2) {
-        auto segment = cache->lookup_segment(seg->file_name());
+        auto segment = cache->lookup_segment(MetacacheKey::TEST_from_string(seg->file_name()));
         ASSERT_TRUE(segment != nullptr);
     }
 }
@@ -277,7 +277,7 @@ TEST_F(LakeRowsetTest, test_hold_segments_reuses_and_skips_metacache) {
     ASSIGN_OR_ABORT(auto first, rowset->segments(lake_io_opts));
     ASSERT_EQ(3, first.size());
     for (const auto& seg : first) {
-        EXPECT_TRUE(cache->lookup_segment(seg->file_name()) == nullptr);
+        EXPECT_TRUE(cache->lookup_segment(MetacacheKey::TEST_from_string(seg->file_name())) == nullptr);
     }
 
     // Second call: the very same Segment instances, no reload.
@@ -294,7 +294,7 @@ TEST_F(LakeRowsetTest, test_hold_segments_reuses_and_skips_metacache) {
         EXPECT_EQ(first[i].get(), via_get_segments[i].get());
     }
     for (const auto& seg : first) {
-        EXPECT_TRUE(cache->lookup_segment(seg->file_name()) == nullptr);
+        EXPECT_TRUE(cache->lookup_segment(MetacacheKey::TEST_from_string(seg->file_name())) == nullptr);
     }
 }
 
@@ -321,7 +321,7 @@ TEST_F(LakeRowsetTest, test_hold_segments_falls_back_for_segment_range_rowset) {
     ASSERT_EQ(2, first.size());
     // The fallback keeps filling the shared metadata cache, which is what the read pass relies on.
     for (const auto& seg : first) {
-        EXPECT_TRUE(cache->lookup_segment(seg->file_name()) != nullptr);
+        EXPECT_TRUE(cache->lookup_segment(MetacacheKey::TEST_from_string(seg->file_name())) != nullptr);
     }
     // And the reuse still works, through the cache rather than through a held set.
     ASSIGN_OR_ABORT(auto second, rowset->segments(lake_io_opts));
@@ -951,7 +951,8 @@ TEST_F(LakeRowsetTest, test_chunk_size_falls_back_when_held_segments_do_not_fit)
     // ... and the downgrade turned the metadata cache back on for it, so the reuse mechanism the
     // fallback restores is actually in place.
     for (const auto& seg : sibling_segments) {
-        EXPECT_TRUE(_tablet_mgr->metacache()->lookup_segment(seg->file_name()) != nullptr);
+        EXPECT_TRUE(_tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(seg->file_name())) !=
+                    nullptr);
     }
 }
 
@@ -1117,8 +1118,8 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
         //create the dummy segment and put it into metacache
         auto dummy_segment =
                 std::make_shared<Segment>(fs, FileInfo{path}, sample_segment->id(), schema, _tablet_mgr.get());
-        cache->cache_segment(path, dummy_segment);
-        EXPECT_EQ(dummy_segment, cache->lookup_segment(path));
+        cache->cache_segment(MetacacheKey::TEST_from_string(path), dummy_segment);
+        EXPECT_EQ(dummy_segment, cache->lookup_segment(MetacacheKey::TEST_from_string(path)));
         auto sz1 = cache->segment_metadata_memory_usage();
 
         auto mirror_segment =
@@ -1138,7 +1139,7 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
         //create the dummy segment and put it into metacache
         auto mirror_segment =
                 std::make_shared<Segment>(fs, FileInfo{path}, sample_segment->id(), schema, _tablet_mgr.get());
-        cache->cache_segment(path, mirror_segment);
+        cache->cache_segment(MetacacheKey::TEST_from_string(path), mirror_segment);
         auto sz1 = cache->segment_metadata_memory_usage();
         auto ssz1 = mirror_segment->mem_usage();
 
@@ -1517,8 +1518,8 @@ TEST_F(LakeRowsetTest, test_read_fills_metadata_cache_for_unholdable_rowset) {
     // The read went through the per-read load path with the downgrade applied: segments cached.
     const auto& rs_meta = _tablet_metadata->rowsets(0);
     for (int i = 1; i < 3; i++) {
-        EXPECT_TRUE(cache->lookup_segment(_tablet_mgr->segment_location(
-                            _tablet_metadata->id(), rs_meta.segment_metas(i).filename())) != nullptr);
+        EXPECT_TRUE(cache->lookup_segment(MetacacheKey::TEST_from_string(_tablet_mgr->segment_location(
+                            _tablet_metadata->id(), rs_meta.segment_metas(i).filename()))) != nullptr);
     }
 }
 
@@ -2641,10 +2642,10 @@ TEST_F(LakeRowsetTest, test_read_stops_loading_segments_after_cancel) {
     auto segment_path = [&](int i) {
         return _tablet_mgr->segment_location(_tablet_metadata->id(), rs_meta.segment_metas(i).filename());
     };
-    auto first = cache->lookup_segment(segment_path(0));
+    auto first = cache->lookup_segment(MetacacheKey::TEST_from_string(segment_path(0)));
     ASSERT_NE(nullptr, first);
-    EXPECT_EQ(nullptr, cache->lookup_segment(segment_path(1)));
-    EXPECT_EQ(nullptr, cache->lookup_segment(segment_path(2)));
+    EXPECT_EQ(nullptr, cache->lookup_segment(MetacacheKey::TEST_from_string(segment_path(1))));
+    EXPECT_EQ(nullptr, cache->lookup_segment(MetacacheKey::TEST_from_string(segment_path(2))));
     // Nothing but the cache and this test holds the segment that was loaded before the cancel.
     cache->prune();
     EXPECT_EQ(1, first.use_count());
@@ -2727,8 +2728,8 @@ TEST_F(LakeRowsetTest, test_segments_stops_after_cancel) {
     ASSERT_TRUE(res.status().is_cancelled()) << res.status();
     const auto& rs_meta = _tablet_metadata->rowsets(0);
     for (int i = 0; i < 3; i++) {
-        EXPECT_EQ(nullptr, cache->lookup_segment(_tablet_mgr->segment_location(_tablet_metadata->id(),
-                                                                               rs_meta.segment_metas(i).filename())));
+        EXPECT_EQ(nullptr, cache->lookup_segment(MetacacheKey::TEST_from_string(_tablet_mgr->segment_location(
+                                   _tablet_metadata->id(), rs_meta.segment_metas(i).filename()))));
     }
 
     cancelled.store(false);
@@ -3312,8 +3313,8 @@ TEST_F(LakeRowsetTest, test_checked_segments_preserves_query_options_stats_and_m
     EXPECT_EQ(3, stats.segments_opened);
     EXPECT_GT(stats.io_ns, 0);
     for (const auto& sm : _tablet_metadata->rowsets(0).segment_metas()) {
-        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(
-                                   _tablet_mgr->segment_location(_tablet_metadata->id(), sm.filename())));
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(MetacacheKey::segment(FileInfo{
+                                   .path = _tablet_mgr->segment_location(_tablet_metadata->id(), sm.filename())})));
     }
     ASSIGN_OR_ABORT(auto planned_segments, rowset->get_segments_checked());
     EXPECT_EQ(segments, planned_segments);

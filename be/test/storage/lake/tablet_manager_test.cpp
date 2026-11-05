@@ -394,7 +394,8 @@ TEST_F(LakeTabletManagerTest, txnlog_read_corrupted_drop_cache_failed) {
     ASSERT_TRUE(res.status().is_corruption()) << res.status();
     EXPECT_EQ(1, read_count);
     // A failed load must not leave anything in the metacache.
-    EXPECT_EQ(nullptr, _tablet_manager->metacache()->lookup_txn_log(_tablet_manager->txn_log_location(tablet_id, 3)));
+    EXPECT_EQ(nullptr, _tablet_manager->metacache()->lookup_txn_log(starrocks::lake::MetacacheKey::txn_log(
+                               _tablet_manager->txn_log_location(tablet_id, 3))));
 }
 
 // With lake_clear_corrupted_cache_meta off, a corrupted txn log read is reported as is: no cache drop
@@ -486,7 +487,8 @@ TEST_F(LakeTabletManagerTest, combined_txnlog_read_corrupted_and_recover) {
     EXPECT_EQ(tablet_id_2, res.value()->txn_logs(1).tablet_id());
     EXPECT_EQ(txn_id, res.value()->txn_logs(1).txn_id());
     // The healed copy, not the corrupted one, is what the metacache serves from now on.
-    auto cached = _tablet_manager->metacache()->lookup_combined_txn_log(log_path);
+    auto cached = _tablet_manager->metacache()->lookup_combined_txn_log(
+            starrocks::lake::MetacacheKey::TEST_from_string(log_path));
     ASSERT_NE(nullptr, cached);
     EXPECT_EQ(2, cached->txn_logs_size());
 }
@@ -1544,7 +1546,8 @@ TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {
     metadata->set_version(2);
     ASSERT_TRUE(_tablet_manager->cache_tablet_metadata(metadata).ok());
     auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
-    ASSERT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) != nullptr);
+    ASSERT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(
+                        starrocks::lake::MetacacheKey::tablet_metadata(path)) != nullptr);
     ASSERT_TRUE(_tablet_manager->get_latest_cached_tablet_metadata(tablet_id) != nullptr);
 }
 
@@ -1561,8 +1564,10 @@ TEST_F(LakeTabletManagerTest, bundled_metadata_partition_marker_uses_real_locati
     _tablet_manager->cache_bundled_metadata_partition_marker(tablet_id);
 
     EXPECT_TRUE(_tablet_manager->lookup_cached_bundled_metadata_partition_marker(tablet_id));
-    EXPECT_TRUE(_tablet_manager->metacache()->lookup_bundled_metadata_marker(real_key));
-    EXPECT_FALSE(_tablet_manager->metacache()->lookup_bundled_metadata_marker(virtual_key));
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_bundled_metadata_marker(
+            starrocks::lake::MetacacheKey::TEST_from_string(real_key)));
+    EXPECT_FALSE(_tablet_manager->metacache()->lookup_bundled_metadata_marker(
+            starrocks::lake::MetacacheKey::TEST_from_string(virtual_key)));
 }
 
 TEST_F(LakeTabletManagerTest, bundled_metadata_not_found_reads_bundle_once) {
@@ -1647,7 +1652,7 @@ TEST_F(LakeTabletManagerTest, shared_first_hint_skips_per_tablet_probe) {
     shared->set_version(1);
     ASSERT_OK(_tablet_manager->put_tablet_metadata(shared, shared_location));
     // put_tablet_metadata() caches what it wrote; drop it so the reads below are the real thing.
-    _tablet_manager->metacache()->erase(shared_location);
+    _tablet_manager->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(shared_location));
 
     MetadataReadRecorder reads;
     ASSIGN_OR_ABORT(auto meta_a, read_v1_shared_first(_tablet_manager, tablet_a));
@@ -1666,7 +1671,8 @@ TEST_F(LakeTabletManagerTest, shared_first_hint_skips_per_tablet_probe) {
     // Each caller got its own id, and the PB cached under the shared key still carries the id it was
     // written with -- the shared object must never be stamped in place.
     EXPECT_NE(meta_a.get(), meta_b.get());
-    auto cached_shared = _tablet_manager->metacache()->lookup_tablet_metadata(shared_location);
+    auto cached_shared = _tablet_manager->metacache()->lookup_tablet_metadata(
+            starrocks::lake::MetacacheKey::tablet_metadata(shared_location));
     ASSERT_TRUE(cached_shared != nullptr);
     EXPECT_EQ(tablet_a, cached_shared->id());
 }
@@ -1682,13 +1688,13 @@ TEST_F(LakeTabletManagerTest, shared_first_hint_is_not_remembered) {
     shared->set_id(tablet_id);
     shared->set_version(1);
     ASSERT_OK(_tablet_manager->put_tablet_metadata(shared, shared_location));
-    _tablet_manager->metacache()->erase(shared_location);
+    _tablet_manager->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(shared_location));
 
     // A hinted read with per-tablet caching off, as publish issues it. It caches the shared OBJECT
     // (dropped again below so the remote reads stay visible) but nothing about the ORDER.
     ASSIGN_OR_ABORT(auto hinted_meta, read_v1_shared_first(_tablet_manager, tablet_id, /*fill_cache=*/false));
     EXPECT_EQ(tablet_id, hinted_meta->id());
-    _tablet_manager->metacache()->erase(shared_location);
+    _tablet_manager->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(shared_location));
 
     // An unhinted read of the same tablet probes its own key first, exactly as before the hint
     // existed, and only then falls back to the shared object.
@@ -1711,7 +1717,7 @@ TEST_F(LakeTabletManagerTest, shared_first_hint_falls_back_when_absent) {
     per_tablet->set_id(tablet_id);
     per_tablet->set_version(1);
     ASSERT_OK(_tablet_manager->put_tablet_metadata(per_tablet));
-    _tablet_manager->metacache()->erase(per_tablet_location);
+    _tablet_manager->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(per_tablet_location));
 
     MetadataReadRecorder reads;
     ASSIGN_OR_ABORT(auto metadata, read_v1_shared_first(_tablet_manager, tablet_id));
@@ -1733,7 +1739,7 @@ TEST_F(LakeTabletManagerTest, shared_object_is_cached_when_per_tablet_caching_is
     shared->set_id(tablet_a);
     shared->set_version(1);
     ASSERT_OK(_tablet_manager->put_tablet_metadata(shared, shared_location));
-    _tablet_manager->metacache()->erase(shared_location);
+    _tablet_manager->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(shared_location));
 
     // Exactly the CacheOptions lake::publish_version() reads its base version with.
     MetadataReadRecorder reads;
@@ -1743,10 +1749,11 @@ TEST_F(LakeTabletManagerTest, shared_object_is_cached_when_per_tablet_caching_is
     EXPECT_EQ(1UL, reads.count_ending_with(lake::tablet_initial_metadata_filename()));
 
     // fill_meta_cache=false is honored for the tablet's own entry ...
-    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(
-                        _tablet_manager->tablet_metadata_location(tablet_a, 1)) == nullptr);
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(starrocks::lake::MetacacheKey::tablet_metadata(
+                        _tablet_manager->tablet_metadata_location(tablet_a, 1))) == nullptr);
     // ... while the shared object is cached regardless, under its own key.
-    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(shared_location) != nullptr);
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(
+                        starrocks::lake::MetacacheKey::tablet_metadata(shared_location)) != nullptr);
 
     // So a sibling tablet in the same publish issues no remote read at all.
     reads.clear();
@@ -1767,7 +1774,7 @@ TEST_F(LakeTabletManagerTest, unhinted_fallback_reads_shared_object_once_per_par
     shared->set_id(tablet_a);
     shared->set_version(1);
     ASSERT_OK(_tablet_manager->put_tablet_metadata(shared, shared_location));
-    _tablet_manager->metacache()->erase(shared_location);
+    _tablet_manager->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(shared_location));
 
     MetadataReadRecorder reads;
     ASSIGN_OR_ABORT(auto meta_a, _tablet_manager->get_tablet_metadata(tablet_a, 1, read_opts(false)));
@@ -1794,7 +1801,7 @@ TEST_F(LakeTabletManagerTest, concurrent_shared_initial_reads_coalesce) {
     shared->set_id(tablet_a);
     shared->set_version(1);
     ASSERT_OK(_tablet_manager->put_tablet_metadata(shared, shared_location));
-    _tablet_manager->metacache()->erase(shared_location);
+    _tablet_manager->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(shared_location));
 
     constexpr auto kDeadline = std::chrono::seconds(30);
     std::atomic<int> remote_reads{0};
@@ -1858,7 +1865,7 @@ TEST_F(LakeTabletManagerTest, shared_initial_read_does_not_affect_other_index) {
     shared->set_version(1);
     shared->mutable_schema()->set_id(1111);
     ASSERT_OK(_tablet_manager->put_tablet_metadata(shared, shared_location));
-    _tablet_manager->metacache()->erase(shared_location);
+    _tablet_manager->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(shared_location));
 
     const auto shadow_location = _tablet_manager->tablet_metadata_location(shadow_tablet, 1);
     auto shadow = std::make_shared<TabletMetadata>();
@@ -1866,7 +1873,7 @@ TEST_F(LakeTabletManagerTest, shared_initial_read_does_not_affect_other_index) {
     shadow->set_version(1);
     shadow->mutable_schema()->set_id(4242);
     ASSERT_OK(_tablet_manager->put_tablet_metadata(shadow));
-    _tablet_manager->metacache()->erase(shadow_location);
+    _tablet_manager->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(shadow_location));
 
     // The base tablet resolves through the unhinted last-resort fallback.
     ASSIGN_OR_ABORT(auto base_meta, _tablet_manager->get_tablet_metadata(base_tablet, 1, read_opts(false)));
@@ -1895,13 +1902,15 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
     _tablet_manager->metacache()->prune();
     auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2, {true, true});
     EXPECT_TRUE(res.ok());
-    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) != nullptr);
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(
+                        starrocks::lake::MetacacheKey::tablet_metadata(path)) != nullptr);
 
     // 2. fill_meta_cache=false
     _tablet_manager->metacache()->prune();
     res = _tablet_manager->get_tablet_metadata(tablet_id, 2, {false, true});
     EXPECT_TRUE(res.ok());
-    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) == nullptr);
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(
+                        starrocks::lake::MetacacheKey::tablet_metadata(path)) == nullptr);
 }
 
 // skip_meta_cache=true must distinguish "durably persisted" from "only in the
@@ -1915,7 +1924,7 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_skip_meta_cache_cache_only) {
 
     // Cache-only: present in the metacache, no durable file.
     auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
-    _tablet_manager->metacache()->cache_tablet_metadata(path, metadata);
+    _tablet_manager->metacache()->cache_tablet_metadata(starrocks::lake::MetacacheKey::tablet_metadata(path), metadata);
 
     // A cache-hitting read sees it...
     auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2, lake::CacheOptions{});
@@ -1981,7 +1990,7 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_skip_meta_cache_reads_durable)
     auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
     auto stale = std::make_shared<TabletMetadata>(*metadata);
     stale->set_commit_time(kStaleCommitTime);
-    _tablet_manager->metacache()->cache_tablet_metadata(path, stale);
+    _tablet_manager->metacache()->cache_tablet_metadata(starrocks::lake::MetacacheKey::tablet_metadata(path), stale);
 
     // A cache-hitting read returns the stale copy.
     auto res = _tablet_manager->get_tablet_metadata(tablet_id, 2, lake::CacheOptions{});
@@ -1996,7 +2005,8 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_skip_meta_cache_reads_durable)
     EXPECT_EQ(kDurableCommitTime, res.value()->commit_time());
 
     // ...and fill_meta_cache=true refreshed the cache with it.
-    auto cached = _tablet_manager->metacache()->lookup_tablet_metadata(path);
+    auto cached =
+            _tablet_manager->metacache()->lookup_tablet_metadata(starrocks::lake::MetacacheKey::tablet_metadata(path));
     ASSERT_TRUE(cached != nullptr);
     EXPECT_EQ(kDurableCommitTime, cached->commit_time());
 }
@@ -2710,10 +2720,14 @@ TEST_F(LakeTabletManagerTest, load_segment_returns_distinct_slices_for_same_path
     // Seed the metacache with a marker for key_a, prove a lookup by key_b does NOT find it.
     // This mirrors the failure mode pre-fix: lookup by path-only would collide.
     auto marker = std::make_shared<Segment>(fs, info_a, /*segment_id*/ 0, nullptr, _tablet_manager);
-    auto cached = _tablet_manager->metacache()->cache_segment_if_absent(key_a, marker);
+    auto cached = _tablet_manager->metacache()->cache_segment_if_absent(
+            starrocks::lake::MetacacheKey::TEST_from_string(key_a), marker);
     ASSERT_NE(cached, nullptr);
-    EXPECT_EQ(_tablet_manager->metacache()->lookup_segment(key_a).get(), marker.get());
-    EXPECT_EQ(_tablet_manager->metacache()->lookup_segment(key_b), nullptr);
+    EXPECT_EQ(
+            _tablet_manager->metacache()->lookup_segment(starrocks::lake::MetacacheKey::TEST_from_string(key_a)).get(),
+            marker.get());
+    EXPECT_EQ(_tablet_manager->metacache()->lookup_segment(starrocks::lake::MetacacheKey::TEST_from_string(key_b)),
+              nullptr);
 
     ASSERT_OK(fs->delete_file(path));
 }
@@ -2745,7 +2759,9 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_reads_physical_values
         ASSIGN_OR_ABORT(auto values, read_segment_schema_cache_values(data, reopened));
         EXPECT_EQ(std::vector<int32_t>({101, 102, 103}), values);
         EXPECT_EQ(fill_cache ? reopened.get() : cached.get(),
-                  _tablet_manager->metacache()->lookup_segment(cache_key).get());
+                  _tablet_manager->metacache()
+                          ->lookup_segment(starrocks::lake::MetacacheKey::TEST_from_string(cache_key))
+                          .get());
         if (!fill_cache) EXPECT_EQ(cache_size, _tablet_manager->metacache()->segment_metadata_memory_usage());
 
         OlapReaderStatistics repeated_stats;
@@ -2781,7 +2797,9 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_preserves_inflight_fu
         EXPECT_EQ(fill_cache ? _tablet_manager : nullptr, narrowed->lake_tablet_manager());
         EXPECT_EQ(nullptr, narrowed->column_with_uid(1));
         EXPECT_EQ(fill_cache ? narrowed.get() : cached.get(),
-                  _tablet_manager->metacache()->lookup_segment(cache_key).get());
+                  _tablet_manager->metacache()
+                          ->lookup_segment(starrocks::lake::MetacacheKey::TEST_from_string(cache_key))
+                          .get());
         if (fill_cache) {
             OlapReaderStatistics stats;
             size_t footer_hint = 16 * 1024;
@@ -2806,7 +2824,7 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_handles_null_cached_s
     ASSIGN_OR_ABORT(auto data, write_segment_schema_cache_test_data(_tablet_manager));
     auto marker = std::make_shared<Segment>(data.fs, data.file_info, 0, nullptr, _tablet_manager);
     const auto cache_key = data.file_info.cache_key();
-    _tablet_manager->metacache()->cache_segment(cache_key, marker);
+    _tablet_manager->metacache()->cache_segment(starrocks::lake::MetacacheKey::TEST_from_string(cache_key), marker);
     for (bool fill_cache : {false, true}) {
         SCOPED_TRACE(fill_cache);
         const auto rejected_before = segment_cache_schema_reject_count();
@@ -2818,7 +2836,9 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_handles_null_cached_s
         ASSIGN_OR_ABORT(auto values, read_segment_schema_cache_values(data, reopened));
         EXPECT_EQ(std::vector<int32_t>({101, 102, 103}), values);
         EXPECT_EQ(fill_cache ? reopened.get() : marker.get(),
-                  _tablet_manager->metacache()->lookup_segment(cache_key).get());
+                  _tablet_manager->metacache()
+                          ->lookup_segment(starrocks::lake::MetacacheKey::TEST_from_string(cache_key))
+                          .get());
         EXPECT_EQ(nullptr, marker->tablet_schema_share_ptr());
     }
 }
@@ -2829,11 +2849,13 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_checks_cache_insert_w
     size_t footer_hint = 16 * 1024;
     ASSIGN_OR_ABORT(auto winner, Segment::open(data.fs, data.file_info, 0, data.narrow_schema, &footer_hint, nullptr,
                                                LakeIOOptions{}, _tablet_manager));
-    ASSERT_EQ(nullptr, _tablet_manager->metacache()->lookup_segment(cache_key));
+    ASSERT_EQ(nullptr,
+              _tablet_manager->metacache()->lookup_segment(starrocks::lake::MetacacheKey::TEST_from_string(cache_key)));
     int callback_count = 0;
     SyncPoint::GetInstance()->SetCallBack("TabletManager::load_segment:before_cache_insert", [&](void*) {
         ++callback_count;
-        auto inserted = _tablet_manager->metacache()->cache_segment_if_absent(cache_key, winner);
+        auto inserted = _tablet_manager->metacache()->cache_segment_if_absent(
+                starrocks::lake::MetacacheKey::TEST_from_string(cache_key), winner);
         EXPECT_EQ(winner.get(), inserted.get());
     });
     SyncPoint::GetInstance()->EnableProcessing();
@@ -2851,7 +2873,9 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_checks_cache_insert_w
     EXPECT_NE(nullptr, reopened->column_with_uid(1));
     ASSIGN_OR_ABORT(auto values, read_segment_schema_cache_values(data, reopened));
     EXPECT_EQ(std::vector<int32_t>({101, 102, 103}), values);
-    EXPECT_EQ(reopened.get(), _tablet_manager->metacache()->lookup_segment(cache_key).get());
+    EXPECT_EQ(reopened.get(), _tablet_manager->metacache()
+                                      ->lookup_segment(starrocks::lake::MetacacheKey::TEST_from_string(cache_key))
+                                      .get());
     EXPECT_EQ(nullptr, winner->column_with_uid(1));
     OlapReaderStatistics stats;
     ASSIGN_OR_ABORT(auto repeated, _tablet_manager->load_segment(data.file_info, 0, &footer_hint, LakeIOOptions{},
@@ -2871,7 +2895,7 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_preserves_newer_repla
     int callback_count = 0;
     SyncPoint::GetInstance()->SetCallBack("TabletManager::load_segment:before_cache_replace", [&](void*) {
         ++callback_count;
-        _tablet_manager->metacache()->cache_segment(cache_key, winner);
+        _tablet_manager->metacache()->cache_segment(starrocks::lake::MetacacheKey::TEST_from_string(cache_key), winner);
     });
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp clear_callback([]() {
@@ -2886,7 +2910,9 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_preserves_newer_repla
     EXPECT_EQ(rejected_before + 1, segment_cache_schema_reject_count());
     EXPECT_EQ(1, stats.segments_opened);
     EXPECT_EQ(nullptr, reopened->lake_tablet_manager());
-    EXPECT_EQ(winner.get(), _tablet_manager->metacache()->lookup_segment(cache_key).get());
+    EXPECT_EQ(winner.get(), _tablet_manager->metacache()
+                                    ->lookup_segment(starrocks::lake::MetacacheKey::TEST_from_string(cache_key))
+                                    .get());
     ASSIGN_OR_ABORT(auto values, read_segment_schema_cache_values(data, reopened));
     EXPECT_EQ(std::vector<int32_t>({101, 102, 103}), values);
     ASSIGN_OR_ABORT(auto old_values, read_segment_schema_cache_values(data, old));
@@ -3456,8 +3482,9 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_via_anchor_resolves_only_the_a
                                            lake::CacheOptions{.fill_meta_cache = true, .fill_data_cache = false}));
     EXPECT_EQ(remote_id, metadata->id());
     EXPECT_EQ(3, metadata->version());
-    EXPECT_NE(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(
-                               _tablet_manager->tablet_metadata_location(remote_id, 3)));
+    EXPECT_NE(nullptr,
+              _tablet_manager->metacache()->lookup_tablet_metadata(starrocks::lake::MetacacheKey::tablet_metadata(
+                      _tablet_manager->tablet_metadata_location(remote_id, 3))));
 
     // A missing version still reports NotFound, so vacuum can tell the chain bottom from an error.
     EXPECT_TRUE(_tablet_manager

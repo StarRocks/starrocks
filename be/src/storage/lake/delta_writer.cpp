@@ -1058,10 +1058,10 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                     << " txn=" << _txn_id;
         } else if (_is_multi_statements_txn) {
             auto cache_key = _tablet_manager->txn_log_location(_tablet_id, _txn_id, _load_id);
-            _tablet_manager->metacache()->cache_txn_log(cache_key, txn_log);
+            _tablet_manager->metacache()->cache_txn_log(MetacacheKey::txn_log(cache_key), txn_log);
         } else {
             auto cache_key = _tablet_manager->txn_log_location(_tablet_id, _txn_id);
-            _tablet_manager->metacache()->cache_txn_log(cache_key, txn_log);
+            _tablet_manager->metacache()->cache_txn_log(MetacacheKey::txn_log(cache_key), txn_log);
         }
         VLOG(2) << "Cached txn log for tablet=" << _tablet_id << " txn=" << _txn_id
                 << " load_id=" << UniqueId(_load_id).to_string();

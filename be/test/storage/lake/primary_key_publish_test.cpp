@@ -2948,7 +2948,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_retry_publish_reads_written_new_version) 
                                      /*skip_write_tablet_metadata=*/false, kBuiltVersion,
                                      InitialMetadataOrder::kPerTabletFirst, /*is_retry_publish=*/true));
     }
-    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path));
+    EXPECT_EQ(nullptr,
+              _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(new_metadata_path)));
     evict_caches();
     ASSIGN_OR_ABORT(auto republished,
                     publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), base_version, new_version, txns,
