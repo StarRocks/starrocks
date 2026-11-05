@@ -823,7 +823,7 @@ PARALLEL_TEST(SimdFilterTest, x86_64_explicit_avx2_w8) {
 }
 
 PARALLEL_TEST(SimdFilterTest, sparse_eight_byte_batches_avx2) {
-    const std::vector<size_t> popcounts = {0, 1, 2, 3, 4, 5, 6, 7, 15, 16};
+    const std::vector<size_t> popcounts = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 31, 32};
     const std::vector<size_t> test_lengths = {32, 35, 64};
     const std::vector<size_t> from_offsets = {0, 7};
 
@@ -902,6 +902,45 @@ PARALLEL_TEST(SimdFilterTest, sparse_eight_byte_batches_avx2) {
                                 ASSERT_EQ(expected[i], in_place[from + i])
                                         << "In-place mismatch at i=" << i << " from=" << from << " pop=" << pop
                                         << " rot=" << rot << " variant=" << pattern_variant;
+                            }
+                        }
+
+                        // 3. AVX2 dispatch entrypoint filter_range_avx2: separate destination buffer
+                        {
+                            std::vector<uint64_t> dst(to + 16, 0xCAFEBABECAFEBABEULL);
+                            size_t out_sz = SIMD::Filter::detail::filter_range_avx2(
+                                    dst.data(), src.data(), sizeof(uint64_t), selector.data(), from, to);
+                            ASSERT_EQ(from + expected.size(), out_sz)
+                                    << "filter_range_avx2(8B) separate: from=" << from << " len=" << len
+                                    << " pop=" << pop << " rot=" << rot << " variant=" << pattern_variant;
+                            for (size_t i = 0; i < from; ++i) {
+                                ASSERT_EQ(0xCAFEBABECAFEBABEULL, dst[i])
+                                        << "filter_range_avx2(8B) prefix clobbered at i=" << i << " from=" << from;
+                            }
+                            for (size_t i = 0; i < expected.size(); ++i) {
+                                ASSERT_EQ(expected[i], dst[from + i])
+                                        << "filter_range_avx2(8B) mismatch at i=" << i << " from=" << from
+                                        << " pop=" << pop << " rot=" << rot << " variant=" << pattern_variant;
+                            }
+                        }
+
+                        // 4. AVX2 dispatch entrypoint filter_range_avx2: in-place stream compaction
+                        {
+                            std::vector<uint64_t> in_place = src;
+                            size_t ip_sz = SIMD::Filter::detail::filter_range_avx2(
+                                    in_place.data(), in_place.data(), sizeof(uint64_t), selector.data(), from, to);
+                            ASSERT_EQ(from + expected.size(), ip_sz)
+                                    << "filter_range_avx2(8B) in-place: from=" << from << " len=" << len
+                                    << " pop=" << pop << " rot=" << rot << " variant=" << pattern_variant;
+                            for (size_t i = 0; i < from; ++i) {
+                                ASSERT_EQ(src[i], in_place[i])
+                                        << "filter_range_avx2(8B) prefix clobbered in-place at i=" << i
+                                        << " from=" << from;
+                            }
+                            for (size_t i = 0; i < expected.size(); ++i) {
+                                ASSERT_EQ(expected[i], in_place[from + i])
+                                        << "filter_range_avx2(8B) in-place mismatch at i=" << i << " from=" << from
+                                        << " pop=" << pop << " rot=" << rot << " variant=" << pattern_variant;
                             }
                         }
                     }
