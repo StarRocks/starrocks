@@ -219,19 +219,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public OutputFile newOutputFile(String path) {
         try {
-<<<<<<< HEAD
-            wrappedIO.setConf(buildConfFromProperties(properties, path));
-=======
             setWrappedConf(buildConfFromProperties(properties, path));
-            // Wrapped rather than returned as is: newOutputFile itself contacts nothing -- the wait is in
-            // create()/createOrOverwrite() on the object handed back, which is where the guard has to be.
-            // Returned as the wrapped IO made it, deliberately. The write has no door and cannot have one
-            // here: the wait is in create() on this object, but iceberg dispatches on what the object *is*
-            // -- Parquet.WriteBuilder and ParquetIO look for HadoopOutputFile and for NativelyEncryptedFile
-            // -- so wrapping it to add a guard would quietly move the writer onto its generic path and take
-            // the Hadoop configuration, the block size and native encryption with it. An observability
-            // change does not get to cost that; the gap is recorded in BlockingCallValidator's javadoc.
->>>>>>> 1799d44 ([BugFix][RB-225] Share the Hadoop configuration and AWS credentials providers across Iceberg FileIOs (#82448))
             return wrappedIO.newOutputFile(path);
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new output file for path: %s, properties: %s", path, properties);
