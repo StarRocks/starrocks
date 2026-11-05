@@ -457,7 +457,8 @@ static void BM_Gather_LegacyBuffered(benchmark::State& state) {
         return;
     }
 
-    run_gather_fn(state, *src, *index_ring, num_rows, legacy_buffered_gather<T>);
+    run_gather_fn(state, *src, *index_ring, num_rows,
+                  [](T* d, const T* s, const uint32_t* idx, size_t n) { legacy_buffered_gather<T>(d, s, idx, n); });
 }
 
 // Args are {num_rows, pool_size}.
@@ -495,17 +496,29 @@ BENCHMARK_TEMPLATE(BM_Gather_CallerInformed, int64_t)->STARROCKS_GATHER_SIZES;
 
 // Wide matrix (int32/int64 only): old buffered loop, current default 4-arg gather, pool-hint overload, and one
 // prefetch ablation point. Other lookahead/AVX2/strided variants are intentionally not registered here.
-BENCHMARK_TEMPLATE(BM_Gather_LegacyBuffered, int32_t)->STARROCKS_GATHER_WIDE_SIZES;
-BENCHMARK_TEMPLATE(BM_Gather_LegacyBuffered, int64_t)->STARROCKS_GATHER_WIDE_SIZES;
+BENCHMARK_TEMPLATE(BM_Gather_LegacyBuffered, int32_t)
+        ->Name("BM_Gather_LegacyBuffered_wide<int32_t>")
+        ->STARROCKS_GATHER_WIDE_SIZES;
+BENCHMARK_TEMPLATE(BM_Gather_LegacyBuffered, int64_t)
+        ->Name("BM_Gather_LegacyBuffered_wide<int64_t>")
+        ->STARROCKS_GATHER_WIDE_SIZES;
 
-BENCHMARK_TEMPLATE(BM_Gather_Baseline, int32_t)->STARROCKS_GATHER_WIDE_SIZES;
-BENCHMARK_TEMPLATE(BM_Gather_Baseline, int64_t)->STARROCKS_GATHER_WIDE_SIZES;
+BENCHMARK_TEMPLATE(BM_Gather_Baseline, int32_t)->Name("BM_Gather_Baseline_wide<int32_t>")->STARROCKS_GATHER_WIDE_SIZES;
+BENCHMARK_TEMPLATE(BM_Gather_Baseline, int64_t)->Name("BM_Gather_Baseline_wide<int64_t>")->STARROCKS_GATHER_WIDE_SIZES;
 
-BENCHMARK_TEMPLATE(BM_Gather_CallerInformed, int32_t)->STARROCKS_GATHER_WIDE_SIZES;
-BENCHMARK_TEMPLATE(BM_Gather_CallerInformed, int64_t)->STARROCKS_GATHER_WIDE_SIZES;
+BENCHMARK_TEMPLATE(BM_Gather_CallerInformed, int32_t)
+        ->Name("BM_Gather_CallerInformed_wide<int32_t>")
+        ->STARROCKS_GATHER_WIDE_SIZES;
+BENCHMARK_TEMPLATE(BM_Gather_CallerInformed, int64_t)
+        ->Name("BM_Gather_CallerInformed_wide<int64_t>")
+        ->STARROCKS_GATHER_WIDE_SIZES;
 
-BENCHMARK_TEMPLATE(BM_Gather_Prefetch, int32_t, 8)->STARROCKS_GATHER_WIDE_SIZES;
-BENCHMARK_TEMPLATE(BM_Gather_Prefetch, int64_t, 8)->STARROCKS_GATHER_WIDE_SIZES;
+BENCHMARK_TEMPLATE(BM_Gather_Prefetch, int32_t, 8)
+        ->Name("BM_Gather_Prefetch_wide<int32_t,8>")
+        ->STARROCKS_GATHER_WIDE_SIZES;
+BENCHMARK_TEMPLATE(BM_Gather_Prefetch, int64_t, 8)
+        ->Name("BM_Gather_Prefetch_wide<int64_t,8>")
+        ->STARROCKS_GATHER_WIDE_SIZES;
 
 } // namespace starrocks
 
