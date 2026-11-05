@@ -188,6 +188,19 @@ public final class IcebergUtil {
                                                                     Map<Integer, Long> nullValueCounts,
                                                                     Map<Integer, Long> valueCounts,
                                                                     List<SlotDescriptor> slots) {
+        return parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots, false);
+    }
+
+    // `widenTimestampTz`: give a timestamp with time zone bounds that surely contain every value of the file in the
+    // session time zone, for skipping the file, instead of the endpoint conversion the min/max optimization uses.
+    @VisibleForTesting
+    public static Map<Integer, MinMaxValue> parseMinMaxValueBySlots(Schema schema,
+                                                                    Map<Integer, ByteBuffer> lowerBounds,
+                                                                    Map<Integer, ByteBuffer> upperBounds,
+                                                                    Map<Integer, Long> nullValueCounts,
+                                                                    Map<Integer, Long> valueCounts,
+                                                                    List<SlotDescriptor> slots,
+                                                                    boolean widenTimestampTz) {
 
         Preconditions.checkArgument(nullValueCounts != null && valueCounts != null,
                 "nullValueCounts and valueCounts cannot be null");
@@ -238,8 +251,13 @@ public final class IcebergUtil {
                     // UTC offset changes over time (for example DST or historical rule changes), UTC->local is
                     // not strictly monotonic over an arbitrary interval, so the converted low/high remain a
                     // best-effort approximation rather than an exact local min/max for the full file.
-                    minMaxValue.minValue = adjustTimestampMicrosToSessionTz((Long) low);
-                    minMaxValue.maxValue = adjustTimestampMicrosToSessionTz((Long) high);
+                    if (widenTimestampTz) {
+                        minMaxValue.minValue = widenedSessionTzLowerBound((Long) low);
+                        minMaxValue.maxValue = widenedSessionTzUpperBound((Long) high);
+                    } else {
+                        minMaxValue.minValue = adjustTimestampMicrosToSessionTz((Long) low);
+                        minMaxValue.maxValue = adjustTimestampMicrosToSessionTz((Long) high);
+                    }
                 }
             }
         }
@@ -252,6 +270,29 @@ public final class IcebergUtil {
     public static boolean isPromotedDateBound(Type type, ByteBuffer bound) {
         return bound != null && bound.remaining() < 8 &&
                 (type.typeId() == Type.TypeID.TIMESTAMP || type.typeId() == Type.TypeID.TIMESTAMP_NANO);
+    }
+
+    // Session-local micros of a UTC instant are the instant plus the zone offset then. A fixed-offset zone converts
+    // exactly; any other may change its offset inside the file's range (DST, rule changes), so widen by the widest
+    // offset any zone can have (18 hours) instead of trusting the offsets at the two ends.
+    private static final long MAX_ZONE_OFFSET_MICROS = ZoneOffset.MAX.getTotalSeconds() * 1_000_000L;
+
+    @VisibleForTesting
+    static long widenedSessionTzLowerBound(long utcMicros) {
+        if (TimeUtils.getTimeZone().toZoneId().getRules().isFixedOffset()) {
+            return adjustTimestampMicrosToSessionTz(utcMicros);
+        }
+        return utcMicros < Long.MIN_VALUE + MAX_ZONE_OFFSET_MICROS ? Long.MIN_VALUE
+                : utcMicros - MAX_ZONE_OFFSET_MICROS;
+    }
+
+    @VisibleForTesting
+    static long widenedSessionTzUpperBound(long utcMicros) {
+        if (TimeUtils.getTimeZone().toZoneId().getRules().isFixedOffset()) {
+            return adjustTimestampMicrosToSessionTz(utcMicros);
+        }
+        return utcMicros > Long.MAX_VALUE - MAX_ZONE_OFFSET_MICROS ? Long.MAX_VALUE
+                : utcMicros + MAX_ZONE_OFFSET_MICROS;
     }
 
     private static long adjustTimestampMicrosToSessionTz(long micros) {
@@ -269,9 +310,19 @@ public final class IcebergUtil {
                                                                             Map<Integer, Long> nullValueCounts,
                                                                             Map<Integer, Long> valueCounts,
                                                                             List<SlotDescriptor> slots) {
+        return toThriftMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots, false);
+    }
+
+    public static Map<Integer, TExprMinMaxValue> toThriftMinMaxValueBySlots(Schema schema,
+                                                                            Map<Integer, ByteBuffer> lowerBounds,
+                                                                            Map<Integer, ByteBuffer> upperBounds,
+                                                                            Map<Integer, Long> nullValueCounts,
+                                                                            Map<Integer, Long> valueCounts,
+                                                                            List<SlotDescriptor> slots,
+                                                                            boolean widenTimestampTz) {
         Map<Integer, TExprMinMaxValue> result = new HashMap<>();
-        Map<Integer, MinMaxValue> minMaxValues =
-                parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+        Map<Integer, MinMaxValue> minMaxValues = parseMinMaxValueBySlots(schema, lowerBounds, upperBounds,
+                nullValueCounts, valueCounts, slots, widenTimestampTz);
         for (SlotDescriptor slot : slots) {
             Types.NestedField field = schema.findField(slot.getColumn().getName());
             if (field == null) {

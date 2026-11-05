@@ -528,6 +528,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     }
     if (hdfs_scan_node.__isset.can_use_min_max_opt) {
         _scanner_ctx.format_scan_context.options.use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
+        _scanner_ctx.format_scan_context.options.min_max_values_of_all_slots = hdfs_scan_node.can_use_min_max_opt;
     }
     // can_use_any_column is set by PruneHDFSScanColumnRule when every queried column is
     // a partition column and a placeholder materialized column was injected to satisfy
@@ -674,6 +675,8 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _scanner_ctx.profile.scan_ranges_size = ADD_COUNTER(_runtime_profile, "ScanRangesSize", TUnit::BYTES);
     _scan_ranges_pruned_by_partition_value_counter =
             ADD_COUNTER(_runtime_profile, "ScanRangesPrunedByPartitionValue", TUnit::UNIT);
+    _scanner_ctx.profile.scan_ranges_pruned_by_file_stats_counter =
+            ADD_COUNTER(_runtime_profile, "ScanRangesPrunedByFileStats", TUnit::UNIT);
 
     _scanner_ctx.profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
     _scanner_ctx.profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");

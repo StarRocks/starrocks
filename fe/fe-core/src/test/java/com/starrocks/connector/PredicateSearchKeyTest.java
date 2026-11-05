@@ -25,12 +25,18 @@ import java.util.Set;
 
 public class PredicateSearchKeyTest {
     private static PredicateSearchKey key(boolean enableColumnStats, Set<String> statsColumnNames) {
+        return key(enableColumnStats, statsColumnNames, false);
+    }
+
+    private static PredicateSearchKey key(boolean enableColumnStats, Set<String> statsColumnNames,
+                                          boolean optionalColumnStats) {
         return PredicateSearchKey.of("db", "t1", GetRemoteFilesParams.newBuilder()
                 .setPredicate(ConstantOperator.TRUE)
                 .setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)))
                 .setEnableColumnStats(enableColumnStats)
                 .setFieldNames(List.of("c1", "c2", "c3"))
                 .setStatsColumnNames(statsColumnNames)
+                .setOptionalColumnStats(optionalColumnStats)
                 .build());
     }
 
@@ -49,5 +55,15 @@ public class PredicateSearchKeyTest {
         Assertions.assertEquals(key(false, Set.of("c1")), key(false, Set.of("c2")));
         Assertions.assertEquals(key(false, Set.of("c1")).hashCode(), key(false, null).hashCode());
         Assertions.assertNotEquals(key(false, null), allStats);
+    }
+
+    @Test
+    public void testOptionalStatsSeparateKeys() {
+        // optional statistics may be missing from the planned files, so they never serve a scan that needs them
+        Assertions.assertNotEquals(key(true, Set.of("c1")), key(true, Set.of("c1"), true));
+        Assertions.assertEquals(key(true, Set.of("c1"), true), key(true, Set.of("c1"), true));
+        Assertions.assertEquals(key(true, Set.of("c1"), true).hashCode(), key(true, Set.of("c1"), true).hashCode());
+        // without statistics the flag does not matter
+        Assertions.assertEquals(key(false, null), key(false, null, true));
     }
 }

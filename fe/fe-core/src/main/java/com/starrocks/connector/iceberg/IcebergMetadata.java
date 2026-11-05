@@ -1429,7 +1429,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         GetRemoteFilesParams params = key.getParams();
-        boolean enableCollectColumnStatistics = params.isEnableColumnStats();
+        // Optional statistics are for the scan ranges only: keep them on the tasks, and collect no table statistics.
+        boolean enableCollectColumnStatistics = params.isEnableColumnStats() && !params.isOptionalColumnStats();
 
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
@@ -1783,6 +1784,13 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     // A table scan of `snapshotId` with the catalog's planning settings, not yet planned.
     private TableScan newSnapshotTableScan(IcebergTable icebergTable, long snapshotId, ConnectContext connectContext) {
+        return newSnapshotTableScan(icebergTable, snapshotId, connectContext, false);
+    }
+
+    // `optionalColumnStats`: the requested column statistics may be left out where serving them would bypass the
+    // manifest cache or force local planning.
+    private TableScan newSnapshotTableScan(IcebergTable icebergTable, long snapshotId, ConnectContext connectContext,
+                                          boolean optionalColumnStats) {
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         // Force local planning for time-travel reads: the remote metadata-collection scanner
         // (IcebergMetadataScanner) binds the pushed-down predicate against the current table specs, so a
@@ -1794,6 +1802,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                 catalogName, icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), planMode,
                 connectContext);
         scanContext.setLocalParallelism(catalogProperties.getIcebergJobPlanningThreadNum());
+        scanContext.setOptionalColumnStats(optionalColumnStats);
         scanContext.setLocalPlanningMaxSlotSize(catalogProperties.getLocalPlanningMaxSlotBytes());
 
         // Bind the scan to the query's read schema so scan planning matches the predicate/descriptor:
@@ -1919,7 +1928,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                     .metricsReporter(metricsReporter)
                     .planWith(jobPlanningExecutor);
         } else {
-            scan = newSnapshotTableScan(icebergTable, snapshotId, connectContext)
+            scan = newSnapshotTableScan(icebergTable, snapshotId, connectContext,
+                    enableCollectColumnStats && params.isOptionalColumnStats())
                     .metricsReporter(metricsReporter)
                     .planWith(jobPlanningExecutor);
         }
