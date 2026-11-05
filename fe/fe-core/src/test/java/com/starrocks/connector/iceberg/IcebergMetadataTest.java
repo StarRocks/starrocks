@@ -1941,6 +1941,46 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testFinishSinkDeletesFilesWhenBuildingDataFileFails() throws IOException {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        File fakeFile = File.createTempFile("junit", null, temp);
+        Assertions.assertTrue(fakeFile.exists());
+        TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
+        tIcebergDataFile.setPath(fakeFile.getPath());
+        tIcebergDataFile.setFormat("parquet");
+        tIcebergDataFile.setRecord_count(10);
+        tIcebergDataFile.setSplit_offsets(Lists.newArrayList(4L));
+        // A bucket value that is not an integer: building the DataFile fails before the commit.
+        tIcebergDataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=not_a_number/");
+        tIcebergDataFile.setFile_size_in_bytes(2000);
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        long snapshotId = mockedNativeTableA.currentSnapshot() == null ? -1 :
+                mockedNativeTableA.currentSnapshot().snapshotId();
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null));
+        // The BE-written file is not left behind as an orphan, and nothing was committed.
+        Assertions.assertFalse(fakeFile.exists());
+        mockedNativeTableA.refresh();
+        Assertions.assertEquals(snapshotId, mockedNativeTableA.currentSnapshot() == null ? -1 :
+                mockedNativeTableA.currentSnapshot().snapshotId());
+    }
+
+    @Test
     public void testGetRemoteFile() throws IOException {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
