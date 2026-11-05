@@ -242,6 +242,34 @@ inline void gather_avx2(T* __restrict__ dest, const T* __restrict__ src, const u
 #endif
 }
 
+// Verbatim copy of the original buffered 4-arg SIMDGather::gather loop (commit 04e367835f4), kept as the
+// old-vs-new reference now that the header no longer contains it. Intentionally no __restrict__, like the original.
+template <typename T>
+inline void legacy_buffered_gather(T* dest, const T* src, const uint32_t* indexes, size_t num_rows) {
+#ifdef __AVX2__
+    static constexpr uint32_t SIMD_WIDTH = 256;
+#else
+    static constexpr uint32_t SIMD_WIDTH = 128;
+#endif
+    static constexpr uint32_t NUM_BATCH_VALUES = SIMD_WIDTH / (8 * sizeof(T));
+
+    size_t i = 0;
+    if constexpr (NUM_BATCH_VALUES > 0) {
+        T buffer[NUM_BATCH_VALUES];
+        for (; i + NUM_BATCH_VALUES <= num_rows; i += NUM_BATCH_VALUES) {
+            for (uint32_t j = 0; j < NUM_BATCH_VALUES; j++) {
+                buffer[j] = src[indexes[i + j]];
+            }
+            for (uint32_t j = 0; j < NUM_BATCH_VALUES; j++) {
+                dest[i + j] = buffer[j];
+            }
+        }
+    }
+    for (; i < num_rows; i++) {
+        dest[i] = src[indexes[i]];
+    }
+}
+
 template <typename T, typename GatherFn>
 void run_gather_fn(benchmark::State& state, const std::vector<T>& src, const std::vector<uint32_t>& index_ring,
                    size_t num_rows, GatherFn&& gather_fn) {
@@ -410,9 +438,37 @@ static void BM_Gather_CallerInformed(benchmark::State& state) {
     });
 }
 
+// Reference: the original buffered loop, for old-vs-new comparison in a single binary.
+template <typename T>
+static void BM_Gather_LegacyBuffered(benchmark::State& state) {
+    const size_t num_rows = state.range(0);
+    const size_t pool_size = state.range(1);
+    if (num_rows == 0 || pool_size == 0 || pool_size - 1 > std::numeric_limits<uint32_t>::max()) {
+        state.SkipWithError("benchmark arguments out of range for uint32 indexes");
+        return;
+    }
+    const std::vector<T>* src;
+    const std::vector<uint32_t>* index_ring;
+    try {
+        src = &cached_source<T>(pool_size);
+        index_ring = &cached_random_indexes(pool_size, num_rows);
+    } catch (const std::bad_alloc&) {
+        state.SkipWithError("out of memory building benchmark pools");
+        return;
+    }
+
+    run_gather_fn(state, *src, *index_ring, num_rows, legacy_buffered_gather<T>);
+}
+
 // Args are {num_rows, pool_size}.
 #define STARROCKS_GATHER_SIZES \
     ArgsProduct({{1024, 4096, 8192, 65536}, {kSmallPool, kBigPool}})->ArgNames({"rows", "pool"})
+
+// Wide matrix: sub-chunk row counts x pool sizes (in elements) from L1/L2-resident up to DRAM-bound.
+#define STARROCKS_GATHER_WIDE_SIZES                                                                               \
+    ArgsProduct({{512, 1024, 2048, 4096, 8192},                                                                   \
+                 {4096, 16 * 1024, 256 * 1024, 1024 * 1024, 2 * 1024 * 1024, 4 * 1024 * 1024, 64 * 1024 * 1024}}) \
+            ->ArgNames({"rows", "pool"})
 
 BENCHMARK_TEMPLATE(BM_Gather_Baseline, int32_t)->STARROCKS_GATHER_SIZES;
 BENCHMARK_TEMPLATE(BM_Gather_Baseline, int64_t)->STARROCKS_GATHER_SIZES;
@@ -436,6 +492,20 @@ BENCHMARK_TEMPLATE(BM_Gather_Strided, int64_t)->STARROCKS_GATHER_SIZES;
 
 BENCHMARK_TEMPLATE(BM_Gather_CallerInformed, int32_t)->STARROCKS_GATHER_SIZES;
 BENCHMARK_TEMPLATE(BM_Gather_CallerInformed, int64_t)->STARROCKS_GATHER_SIZES;
+
+// Wide matrix (int32/int64 only): old buffered loop, current default 4-arg gather, pool-hint overload, and one
+// prefetch ablation point. Other lookahead/AVX2/strided variants are intentionally not registered here.
+BENCHMARK_TEMPLATE(BM_Gather_LegacyBuffered, int32_t)->STARROCKS_GATHER_WIDE_SIZES;
+BENCHMARK_TEMPLATE(BM_Gather_LegacyBuffered, int64_t)->STARROCKS_GATHER_WIDE_SIZES;
+
+BENCHMARK_TEMPLATE(BM_Gather_Baseline, int32_t)->STARROCKS_GATHER_WIDE_SIZES;
+BENCHMARK_TEMPLATE(BM_Gather_Baseline, int64_t)->STARROCKS_GATHER_WIDE_SIZES;
+
+BENCHMARK_TEMPLATE(BM_Gather_CallerInformed, int32_t)->STARROCKS_GATHER_WIDE_SIZES;
+BENCHMARK_TEMPLATE(BM_Gather_CallerInformed, int64_t)->STARROCKS_GATHER_WIDE_SIZES;
+
+BENCHMARK_TEMPLATE(BM_Gather_Prefetch, int32_t, 8)->STARROCKS_GATHER_WIDE_SIZES;
+BENCHMARK_TEMPLATE(BM_Gather_Prefetch, int64_t, 8)->STARROCKS_GATHER_WIDE_SIZES;
 
 } // namespace starrocks
 
