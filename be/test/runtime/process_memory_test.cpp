@@ -24,18 +24,28 @@ class ProcessMemoryTest : public testing::Test {
 protected:
     void SetUp() override {
         auto* env = RuntimeEnv::GetInstance();
+        CurrentThread::get_mem_tracker_source_for_test(_previous_initialized_fn, _previous_tracker_fn);
+        _previous_tls_tracker = tls_mem_tracker;
+        tls_mem_tracker = nullptr;
         _was_initialized = RuntimeEnv::is_init();
         _previous_tracker = env->swap_process_mem_tracker_for_test(std::make_shared<MemTracker>());
         env->_is_init = true;
+        CurrentThread::set_mem_tracker_source(&RuntimeEnv::is_init,
+                                              [] { return RuntimeEnv::GetInstance()->process_mem_tracker(); });
     }
     void TearDown() override {
         auto* env = RuntimeEnv::GetInstance();
+        tls_mem_tracker = _previous_tls_tracker;
+        CurrentThread::set_mem_tracker_source(_previous_initialized_fn, _previous_tracker_fn);
         env->_is_init = _was_initialized;
         env->swap_process_mem_tracker_for_test(std::move(_previous_tracker));
     }
 
 private:
     bool _was_initialized;
+    MemTracker* _previous_tls_tracker;
+    CurrentThread::IsEnvInitializedFn _previous_initialized_fn;
+    CurrentThread::ProcessMemTrackerFn _previous_tracker_fn;
     std::shared_ptr<MemTracker> _previous_tracker;
 };
 

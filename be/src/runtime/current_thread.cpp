@@ -81,6 +81,14 @@ void CurrentThread::set_mem_tracker_source(IsEnvInitializedFn is_env_initialized
                                 std::memory_order_release);
 }
 
+#ifdef BE_TEST
+void CurrentThread::get_mem_tracker_source_for_test(IsEnvInitializedFn& is_env_initialized,
+                                                   ProcessMemTrackerFn& process_mem_tracker) {
+    is_env_initialized = s_is_env_initialized.load(std::memory_order_acquire);
+    process_mem_tracker = s_process_mem_tracker.load(std::memory_order_acquire);
+}
+#endif
+
 size_t CurrentThread::query_id_offset() {
     return tls_member_offset(&CurrentThread::_query_id);
 }
