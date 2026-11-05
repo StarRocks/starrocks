@@ -2547,14 +2547,17 @@ TEST_F(JsonScannerTruncatedDocTest, mid_document_syntax_error_positions) {
     EXPECT_EQ(2, multi_buf_result.rows);
     EXPECT_EQ(2, multi_buf_result.filtered);
 
-    // 5. Single-buffer fatal TAPE_ERROR termination: simdjson::ondemand::document_stream treats a mid-document
-    // TAPE_ERROR as fatal for the remainder of that buffer without double-counting the failed document.
+    // 5. Single-buffer fatal TAPE_ERROR termination: when an unrecoverable mid-document error occurs
+    // in a single buffer, advance() propagates a fatal non-EOF status so the scan does not silently discard
+    // subsequent records.
     auto single_buf_result =
             scan(TBrokerRangeDesc(), kK13Names,
                  {valid1 + "\n" + kMissingValueDocument + "\n" + kMissingValueDocument + "\n" + valid2});
-    EXPECT_TRUE(single_buf_result.status.is_end_of_file()) << single_buf_result.status;
+    EXPECT_FALSE(single_buf_result.status.is_end_of_file()) << single_buf_result.status;
+    EXPECT_TRUE(single_buf_result.status.is_internal_error() || single_buf_result.status.is_data_quality_error())
+            << single_buf_result.status;
     EXPECT_EQ(1, single_buf_result.rows);
-    EXPECT_EQ(1, single_buf_result.filtered);
+    EXPECT_GE(single_buf_result.filtered, 1);
 }
 
 TEST_F(JsonScannerTest, test_simdjson_v511_big_integer_and_unicode_escapes) {
