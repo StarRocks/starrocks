@@ -88,17 +88,20 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           PR_NUMBER=`echo ${PR_NUMBER}`
-          pr_info=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName,headRefName,state,title`
+          pr_info=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName,headRefName,state,title,labels`
           base_ref=$(echo ${pr_info} | jq -r .baseRefName)
           head_ref=$(echo ${pr_info} | jq -r .headRefName)
           pr_state=$(echo ${pr_info} | jq -r .state)
           pr_title=$(echo ${pr_info} | jq -r .title)
+          synced_from_cd=$(echo ${pr_info} | jq -r '[.labels[].name] | index("PAI-contributed") != null')
           echo "BASE_REF=${base_ref}" >> $GITHUB_OUTPUT
           echo "HEAD_REF=${head_ref}" >> $GITHUB_OUTPUT
           echo "PR_STATE=${pr_state}" >> $GITHUB_OUTPUT
           echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_OUTPUT
 
-          if [[ "${pr_title}" == *"[UT]"* || "${pr_title}" == *"[Doc]"* ]]; then
+          # A PR synced from CelerData (label PAI-contributed) already passed coverage there;
+          # its code is not new here.
+          if [[ "${pr_title}" == *"[UT]"* || "${pr_title}" == *"[Doc]"* || "${synced_from_cd}" == "true" ]]; then
             echo "SKIP_COV=true" >> $GITHUB_OUTPUT
           else
             echo "SKIP_COV=false" >> $GITHUB_OUTPUT
@@ -496,6 +499,7 @@ jobs:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
       bucket_prefix: ${{ needs.INFO.outputs.BUCKET_PREFIX }}
+      SKIP_COV: ${{ needs.INFO.outputs.SKIP_COV }}
       # Scratch dir, deliberately not the tracked `java-extensions/`. See FE_UT_UNPACK_DIR.
       JAVA_EXT_UT_UNPACK_DIR: java-extensions-ut-report
     steps:
@@ -516,7 +520,10 @@ jobs:
             rm -rf ${JAVA_EXT_UT_UNPACK_DIR} && mkdir ${JAVA_EXT_UT_UNPACK_DIR} && cd ${JAVA_EXT_UT_UNPACK_DIR}
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/java_extension_ut_report.tar.gz . --recursive
             tar zxf java_extension_ut_report.tar.gz
-          elif [[ "${BASE_REF}" == "main" ]]; then
+          fi
+          # Same as the FE report: no report, or SKIP_COV, publishes the empty result.
+          if [[ "${BASE_REF}" == "main" ]] && [[ "$size" == 0 || "${SKIP_COV}" == "true" ]]; then
+            cd ${GITHUB_WORKSPACE}
             rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
             export JAVA_HOME=/var/local/env/jdk1.8.0_202;
             export PATH=$JAVA_HOME/bin:$PATH;
@@ -542,7 +549,7 @@ jobs:
 
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
-        if: steps.publish_report.outcome == 'success' && env.BASE_REF == 'main'
+        if: steps.publish_report.outcome == 'success' && env.BASE_REF == 'main' && env.SKIP_COV != 'true'
         env:
           code_path: ${{ github.workspace }}/${{ env.JAVA_EXT_UT_UNPACK_DIR }}
         run: |
