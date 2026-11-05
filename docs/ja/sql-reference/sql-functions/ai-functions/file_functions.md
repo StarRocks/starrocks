@@ -30,7 +30,7 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 ## to_file
 
-`named_struct(...)` や STRUCT カラムなどの STRUCT 式から一時的な FILE 値を構築します。ストレージへのアクセスやメタデータの推論は行いません。
+`named_struct(...)` や STRUCT カラムなどの STRUCT 式から一時的な FILE 値を構築します。
 
 ### 構文
 
@@ -40,7 +40,7 @@ TO_FILE(struct_expr)
 
 ### フィールド
 
-| フィールド | 使用できる入力型 | FILE |
+| フィールド | 使用できる入力型 | FILE フィールドの型 |
 |---|---|---|
 | `uri`, `content_type`, `checksum` | CHAR, VARCHAR | VARCHAR |
 | `offset`, `size` | TINYINT, SMALLINT, INT, BIGINT | BIGINT |
@@ -60,16 +60,21 @@ TO_FILE(struct_expr)
 
 ```sql
 SELECT TO_FILE(named_struct('uri', 'https://example.com/a.jpg', 'content_type', 'image/jpeg'));
+-- {"uri":"https://example.com/a.jpg","offset":null,"size":null,"content_type":"image/jpeg","checksum":null,"inline":null}
 
 SELECT TO_FILE(named_struct('inline', to_binary('610062', 'hex')));
+-- {"uri":null,"offset":null,"size":null,"content_type":null,"checksum":null,"inline":"610062"}
 
 SELECT TO_FILE(named_struct('uri', '', 'offset', 0, 'size', NULL));
-SELECT TO_FILE(NULL) IS NULL; -- 1
+-- {"uri":"","offset":0,"size":null,"content_type":null,"checksum":null,"inline":null}
+
+SELECT TO_FILE(NULL) IS NULL;
+-- 1
 ```
 
 ## try_to_file
 
-[TO_FILE](#to_file) と同じフィールド、型、検証ルールを使用して一時的な FILE を構築します。フィールド値が無効な行だけが NULL になり、同じバッチ内の有効な行は保持されます。
+[TO_FILE](#to_file) と同じフィールド、型、検証ルールを使用して一時的な FILE を構築します。フィールド値が無効な行だけが NULL になり、他の行には影響しません。
 
 ### 構文
 
@@ -116,9 +121,6 @@ FL_GET_URI(file_expr)
 ```sql
 SELECT FL_GET_URI(TO_FILE(named_struct('uri', 'https://example.com/a.jpg')));
 -- https://example.com/a.jpg
-
-SELECT FL_GET_URI(NULL) IS NULL;
--- 1
 ```
 
 ## fl_get_offset
@@ -136,9 +138,6 @@ FL_GET_OFFSET(file_expr)
 ```sql
 SELECT FL_GET_OFFSET(TO_FILE(named_struct('uri', 'a.jpg', 'offset', 0)));
 -- 0
-
-SELECT FL_GET_OFFSET(NULL) IS NULL;
--- 1
 ```
 
 ## fl_get_size
@@ -156,9 +155,6 @@ FL_GET_SIZE(file_expr)
 ```sql
 SELECT FL_GET_SIZE(TO_FILE(named_struct('uri', 'a.jpg', 'size', 12)));
 -- 12
-
-SELECT FL_GET_SIZE(NULL) IS NULL;
--- 1
 ```
 
 ## fl_get_content_type
@@ -176,9 +172,6 @@ FL_GET_CONTENT_TYPE(file_expr)
 ```sql
 SELECT FL_GET_CONTENT_TYPE(TO_FILE(named_struct('uri', 'a.jpg', 'content_type', 'image/jpeg')));
 -- image/jpeg
-
-SELECT FL_GET_CONTENT_TYPE(NULL) IS NULL;
--- 1
 ```
 
 ## fl_get_checksum
@@ -196,9 +189,6 @@ FL_GET_CHECKSUM(file_expr)
 ```sql
 SELECT FL_GET_CHECKSUM(TO_FILE(named_struct('uri', 'a.jpg', 'checksum', 'opaque')));
 -- opaque
-
-SELECT FL_GET_CHECKSUM(NULL) IS NULL;
--- 1
 ```
 
 ## fl_get_inline
@@ -216,7 +206,4 @@ FL_GET_INLINE(file_expr)
 ```sql
 SELECT HEX(FL_GET_INLINE(TO_FILE(named_struct('inline', to_binary('610062', 'hex')))));
 -- 610062
-
-SELECT FL_GET_INLINE(NULL) IS NULL;
--- 1
 ```

@@ -55,7 +55,7 @@ FileColumn::FileColumn(const size_t size) : FileColumn() {
 }
 
 FileColumn::FileColumn(std::array<ColumnPtr, NUM_FIELDS>&& fields)
-        : _fields{std::move(fields[URI]), std::move(fields[OFFSET]), std::move(fields[SIZE]),
+        : _fields{std::move(fields[URI]),          std::move(fields[OFFSET]),   std::move(fields[SIZE]),
                   std::move(fields[CONTENT_TYPE]), std::move(fields[CHECKSUM]), std::move(fields[INLINE])} {
     check_or_die();
 }

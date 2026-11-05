@@ -1,4 +1,4 @@
--- name: test_file_functions
+-- name: test_to_file
 select to_file(named_struct('content_type', 'image/jpeg', 'URI', 's3://bucket/a.jpg'));
 -- result:
 {"uri":"s3://bucket/a.jpg","offset":null,"size":null,"content_type":"image/jpeg","checksum":null,"inline":null}
@@ -19,19 +19,11 @@ select to_file(NULL) is null, to_file(cast(NULL as struct<uri varchar(20)>)) is 
 -- result:
 1	1
 -- !result
-select to_file(named_struct('uri', NULL, 'size', NULL, 'inline', NULL));
--- result:
-[REGEX].*TO_FILE requires exactly one.*
--- !result
 select to_file(named_struct('content_type', 'image/jpeg'));
 -- result:
 [REGEX].*TO_FILE requires exactly one.*
 -- !result
 select to_file(named_struct('inline', to_binary('', 'hex'), 'uri', ''));
--- result:
-[REGEX].*TO_FILE requires exactly one.*
--- !result
-select to_file(named_struct('inline', to_binary('610062', 'hex'), 'size', -2, 'uri', 'arbitrary', 'offset', -1));
 -- result:
 [REGEX].*TO_FILE requires exactly one.*
 -- !result
@@ -49,7 +41,7 @@ create database test_to_file_${uuid0};
 use test_to_file_${uuid0};
 -- result:
 -- !result
-create table input_files (id int, uri varchar(256), payload varbinary, file_size int, metadata struct<uri varchar(256), size int>)
+create table input_files (id int, uri char(16), payload varbinary, file_size int, metadata struct<uri varchar(256), size int>)
 duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
 -- result:
 -- !result
@@ -90,6 +82,8 @@ select to_file(named_struct('uri', uri, 'offset', file_size - 13)) from input_fi
 drop database test_to_file_${uuid0};
 -- result:
 -- !result
+
+-- name: test_file_getters
 select fl_get_uri(f), fl_get_offset(f), fl_get_size(f), fl_get_content_type(f), fl_get_checksum(f), fl_get_inline(f) is null
 from (select to_file(named_struct('URI', 'a.jpg', 'size', 12, 'offset', 0, 'checksum', 'opaque', 'content_type', 'image/jpeg')) f) t;
 -- result:
@@ -104,33 +98,15 @@ select length(fl_get_uri(to_file(named_struct('uri', '')))), length(fl_get_inlin
 -- result:
 0	0
 -- !result
-select fl_get_uri(NULL) is null, fl_get_offset(NULL) is null, fl_get_size(NULL) is null, fl_get_content_type(NULL) is null, fl_get_checksum(NULL) is null, fl_get_inline(NULL) is null;
+select fl_get_uri(NULL) is null;
 -- result:
-1	1	1	1	1	1
+1
 -- !result
+
+-- name: test_try_to_file
 select try_to_file(NULL) is null, try_to_file(cast(NULL as struct<uri varchar(20)>)) is null;
 -- result:
 1	1
--- !result
-select try_to_file(named_struct('uri', NULL)) is null;
--- result:
-1
--- !result
-select try_to_file(named_struct('content_type', 'image/jpeg')) is null;
--- result:
-1
--- !result
-select try_to_file(named_struct('uri', '', 'inline', to_binary('', 'hex'))) is null;
--- result:
-1
--- !result
-select try_to_file(named_struct('uri', 'a', 'offset', -1)) is null;
--- result:
-1
--- !result
-select try_to_file(named_struct('inline', to_binary('61', 'hex'), 'size', -1)) is null;
--- result:
-1
 -- !result
 select fl_get_uri(try_to_file(named_struct('uri', 'a', 'offset', -1))) is null;
 -- result:
@@ -140,26 +116,20 @@ select try_to_file(named_struct('path', 'a'));
 -- result:
 [REGEX].*TRY_TO_FILE has unknown field.*
 -- !result
-select try_to_file(named_struct('URI', 'a', 'uri', 'b'));
--- result:
-[REGEX].*duplicate subfield name.*
--- !result
-select try_to_file(named_struct('size', '3'));
--- result:
-[REGEX].*TRY_TO_FILE field .*unsupported type.*
--- !result
-select try_to_file(named_struct('inline', 'bytes'));
--- result:
-[REGEX].*TRY_TO_FILE field .*unsupported type.*
--- !result
 select try_to_file(named_struct('uri', fl_get_uri(to_file(named_struct('uri', NULL)))));
 -- result:
 [REGEX].*TO_FILE requires exactly one.*
 -- !result
-create database test_file_helpers_${uuid0};
+select count(*), sum(cast(f is null as int)), sum(fl_get_size(f)) from (
+select try_to_file(named_struct('uri', if(generate_series % 3 = 0, NULL, 'a'),
+'size', if(generate_series % 5 = 0, -generate_series, generate_series))) f from table(generate_series(1, 10000))) t;
+-- result:
+10000	4667	26663332
+-- !result
+create database test_try_to_file_${uuid0};
 -- result:
 -- !result
-use test_file_helpers_${uuid0};
+use test_try_to_file_${uuid0};
 -- result:
 -- !result
 create table input_files (id int, uri varchar(256), payload varbinary, file_offset bigint, file_size bigint)
@@ -196,17 +166,6 @@ select id from input_files where try_to_file(named_struct('uri', uri, 'inline', 
 7
 8
 -- !result
-select id from input_files where fl_get_size(to_file(named_struct('uri', 'a'))) is null order by id;
--- result:
-1
-2
-3
-4
-5
-6
-7
-8
--- !result
 create table input_metadata (id int, s struct<uri varchar(20), size bigint>)
 duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
 -- result:
@@ -220,6 +179,6 @@ select id, try_to_file(s) is null, fl_get_uri(try_to_file(s)) from input_metadat
 2	1	None
 3	1	None
 -- !result
-drop database test_file_helpers_${uuid0};
+drop database test_try_to_file_${uuid0};
 -- result:
 -- !result

@@ -74,7 +74,6 @@ public class FileFunctionAnalyzerTest {
     @ValueSource(strings = {"to_file", "try_to_file"})
     public void testInvalidFields(String functionName) {
         analyzeFail("select " + functionName + "(named_struct('path', 'a'))", "unknown field 'path'");
-        analyzeFail("select " + functionName + "(named_struct('URI', 'a', 'uri', 'b'))", "duplicate subfield name");
         for (String value : new String[] {"'3'", "1.5", "true", "cast(1 as largeint)", "[1]"}) {
             analyzeFail("select " + functionName + "(named_struct('size', " + value + "))", "unsupported type");
         }

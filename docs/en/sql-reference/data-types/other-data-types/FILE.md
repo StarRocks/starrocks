@@ -29,7 +29,7 @@ Every FILE value carries the same fields, in this order. Each field can be NULL.
 A FILE value is one of the following:
 
 - A **reference**: `uri` is set, usually together with `offset` and `size`, and `inline` is NULL.
-- **Inline content**: `inline` holds the bytes and `uri` is NULL. When using the constructor functions, `offset` and `size` can be omitted, NULL, or non-negative.
+- **Inline content**: `inline` holds the bytes and `uri` is NULL. `offset` and `size` are optional.
 
 ## Output format
 
