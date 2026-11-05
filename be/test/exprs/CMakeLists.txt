@@ -101,6 +101,7 @@ set(EXPR_TEST_FILES
     string_fn_test.cpp
     string_fn_trim_test.cpp
     string_fn_url_extract_parameter_test.cpp
+    file_functions_test.cpp
     struct_functions_test.cpp
     subfield_expr_test.cpp
     table_function/multi_unnest_core_test.cpp
