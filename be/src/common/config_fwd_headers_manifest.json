@@ -522,6 +522,7 @@
       "configs": [
         "scanner_row_num",
         "max_hdfs_scanner_num",
+        "scan_credential_refresh_rpc_timeout_ms",
         "max_scan_key_num",
         "max_pushdown_conditions_per_column",
         "enable_check_string_lengths",
@@ -767,6 +768,7 @@
         "lake_enable_compaction_async_write",
         "lake_pk_compaction_max_input_rowsets",
         "lake_pk_compaction_min_input_segments",
+        "lake_pk_compaction_max_rowsets_per_level",
         "lake_pk_compaction_base_enable_delete_trigger",
         "lake_pk_compaction_base_delete_ratio_threshold",
         "lake_pk_compaction_base_delete_rows_threshold",

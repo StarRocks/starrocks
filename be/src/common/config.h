@@ -361,6 +361,10 @@ CONF_mInt32(scanner_row_num, "16384");
 CONF_mInt32(shared_scan_output_chunk_batch_size, "8");
 // Number of max hdfs scanners.
 CONF_Int32(max_hdfs_scanner_num, "50");
+// Timeout of the RPC with which a scan asks its coordinator for renewed vended credentials (Iceberg REST)
+// once they are due. Not retried: on failure the scan keeps its current credentials and asks
+// again a minute later. A value <= 0 turns the refresh off for scans that start afterwards.
+CONF_mInt32(scan_credential_refresh_rpc_timeout_ms, "10000");
 // Number of max scan keys.
 CONF_mInt32(max_scan_key_num, "1024");
 // The max number of push down values of a single column.
@@ -1760,6 +1764,14 @@ CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+// Lake primary-key size-tiered compaction picks the size level with the highest score, and the level of the
+// newest, smallest rowsets wins every round while loads keep arriving. A level of larger rowsets (outputs of
+// earlier rounds, medium-sized loads) then keeps growing, adding one segment to open per rowset for readers and
+// showing up as a compaction-score spike whenever a compaction leaves the small level empty. Once a level that
+// is not picked holds this many rowsets that still need compaction, and they fit in the compaction next to the
+// rowsets already picked (update_compaction_result_bytes, lake_pk_compaction_max_input_rowsets), it is merged into
+// the compaction as well. Set to 0 to disable.
+CONF_mInt64(lake_pk_compaction_max_rowsets_per_level, "20");
 // Whether a scheduled lake primary-key compaction switches to base compaction on its own once the
 // tablet's deletes reach one of the two thresholds below. Off by default: the rows threshold is an
 // absolute count, so on a large tablet whose existing keys keep being updated or deleted it is

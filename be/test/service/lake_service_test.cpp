@@ -623,6 +623,34 @@ TEST_F(LakeServiceTest, test_publish_version_thread_pool_full) {
     ASSERT_EQ(_tablet_id, response.failed_tablets(0));
 }
 
+// A task that starts after the request deadline fails its tablet with TimedOut instead of publishing.
+TEST_F(LakeServiceTest, test_publish_version_task_starts_after_deadline) {
+    // Fires inside the task, before the deadline check.
+    SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::publish_version:before_publish",
+                                          [](void*) { std::this_thread::sleep_for(std::chrono::milliseconds(200)); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::publish_version:before_publish");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    brpc::Controller cntl;
+    PublishVersionRequest request;
+    PublishVersionResponse response;
+    request.set_base_version(1);
+    request.set_new_version(2);
+    request.add_tablet_ids(_tablet_id);
+    request.add_txn_ids(1000);
+    request.set_timeout_ms(100);
+    _lake_service.publish_version(&cntl, &request, &response, nullptr);
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    ASSERT_EQ(1, response.failed_tablets_size());
+    ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+    ASSERT_EQ(TStatusCode::TIMEOUT, response.status().status_code()) << response.status().error_msgs(0);
+    ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "reached deadline=*/timeout=100"))
+            << response.status().error_msgs(0);
+}
+
 TEST_F(LakeServiceTest, test_publish_version_for_write) {
     std::vector<TxnLog> logs;
     // Empty TxnLog
@@ -5507,6 +5535,29 @@ TEST_F(LakeServiceTest, test_task_cleared_in_thread_pool_queue) {
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id, response.failed_tablets(0));
         ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*has been cancelled*"));
+    }
+
+    // The resharding task's text must not name a split when it publishes a merge.
+    {
+        auto other_tablet_id = next_id();
+        PublishVersionRequest request;
+        PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        auto* txn_info = request.add_txn_infos();
+        txn_info->set_txn_id(next_id());
+        txn_info->set_txn_type(TXN_TABLET_RESHARD);
+        auto* merging = request.add_resharding_tablet_infos()->mutable_merging_tablet_info();
+        merging->add_old_tablet_ids(_tablet_id);
+        merging->add_old_tablet_ids(other_tablet_id);
+        merging->set_new_tablet_id(next_id());
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(2, response.failed_tablets_size());
+        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        ASSERT_EQ(other_tablet_id, response.failed_tablets(1));
+        ASSERT_TRUE(
+                MatchPattern(response.status().error_msgs(0), "*publish resharding tablet task has been cancelled*"))
+                << response.status().error_msgs(0);
     }
 
     {

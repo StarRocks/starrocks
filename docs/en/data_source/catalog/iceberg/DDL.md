@@ -172,6 +172,9 @@ Key table properties:
 - `location`: File path for the table. Required when using AWS Glue without database-level location.
 - `file_format`: File format. Only `parquet` (Default) is supported.
 - `compression_codec`: Compression algorithm. Options: SNAPPY, GZIP, ZSTD, LZ4 (Default: `zstd`).
+- `write.metadata.metrics.default`: Default metrics mode for the column statistics StarRocks writes into data files. Options: `none`, `counts`, `truncate(N)`, `full` (Default: `truncate(16)`). `none` writes no statistics, `counts` writes only value and null counts, `truncate(N)` also writes lower and upper bounds with STRING and BINARY bounds truncated to N characters (bytes), and `full` writes untruncated bounds.
+- `write.metadata.metrics.column.<col>`: Metrics mode for column `<col>`, overriding the default. Options are the same as `write.metadata.metrics.default`.
+- `write.metadata.metrics.max-inferred-column-defaults`: When `write.metadata.metrics.default` is not set, only the first N columns get the default `truncate(16)` and the remaining columns get `none` (Default: `100`).
 
 ### Examples
 

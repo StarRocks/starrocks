@@ -701,9 +701,8 @@ Values recorded by the derived tier, which refreshes a range-distributed increme
 
 | `reason` | Recorded when |
 | --- | --- |
-| `materialized_view_target` | The derived tier does not support this materialized view, for example because it is not incremental or its sort key is not the hidden row-id column. |
-| `row_id_span_too_small` | The estimated output is too small to split the row-id range evenly. |
-| `row_id_space_not_pristine` | The auto-increment counter has already handed out ids, so the split points cannot be derived safely. |
+| `materialized_view_target` | The view is incremental and the derived tier cannot key it: it has more than one visible index, its sort key is not the hidden row-id column alone, or its row id is encoded from the key values in order rather than as a fingerprint. Also recorded when a load into a materialized view is not that view's own refresh. |
+| `row_id_span_too_small` | The estimated output is too small to split the row-id range evenly, or too small to fill two tablets of `tablet_reshard_min_split_size`. |
 | `estimate_unavailable` | No output-size estimate is available, so the tablet count cannot be chosen. An INSERT from an external-catalog table without table statistics also records it. |
 | `multiple_temporary_partitions` | The refresh writes more than one replacement partition, so most tablets would stay empty. Enabling the feature does not change this. |
 | `derivation_failed` | Deriving the split points failed, or the derived split points are invalid. |

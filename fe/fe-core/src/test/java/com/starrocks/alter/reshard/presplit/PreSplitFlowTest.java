@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -288,6 +289,53 @@ public class PreSplitFlowTest {
                     eq(database), eq(table), anyList(), anyInt(), any(), any(), any()), times(1));
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any(), any(), any()), never());
+        }
+    }
+
+    @Test
+    public void staticOverwriteOfManualRangeTargetRoutesThroughExistingTemporaryPartitionFlow() {
+        runStaticOverwriteOfNonAutomaticTarget(PartitionType.RANGE, 1, 0);
+    }
+
+    @Test
+    public void staticOverwriteOfListTargetIsStillSkipped() {
+        runStaticOverwriteOfNonAutomaticTarget(PartitionType.LIST, 0, 0);
+    }
+
+    private void runStaticOverwriteOfNonAutomaticTarget(PartitionType type, int expectedExisting,
+                                                        int expectedPreCreating) {
+        Database database = mock(Database.class);
+        when(database.getId()).thenReturn(7L);
+        OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ false);
+        when(table.getPartitionInfo().getType()).thenReturn(type);
+        PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
+        SampleSet samples = new SampleSet(List.of(), List.of(), new Estimates(1234L, 0L));
+        PreSplitPartitionScope scope = PreSplitPartitionScope.staticOverwrite(
+                List.of("p1"), List.of("p1_job"));
+
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
+                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
+                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(samples))) {
+            grouper.when(() -> PartitionSampleGrouper.isManualRangePartitioned(any(OlapTable.class)))
+                    .thenCallRealMethod();
+            grouper.when(() -> PartitionSampleGrouper.groupSpecified(
+                            any(SampleSet.class), any(OlapTable.class), any(ConnectContext.class),
+                            anyLong(), eq(1234L), any(), eq(scope)))
+                    .thenReturn(List.of(mock(PartitionSamples.class)));
+            coordinator.when(() -> TabletPreSplitCoordinator.submitForExistingTemporaryPartitionsCombined(
+                            any(), any(), anyList(), anyInt(), any(), any(), any()))
+                    .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
+
+            PreSplitFlow.runStaticOverwriteFlow(database, table, prepared, LoadKind.INSERT_FROM_TABLE,
+                    () -> false, mock(ConnectContext.class), scope);
+
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitForExistingTemporaryPartitionsCombined(
+                    any(), any(), anyList(), anyInt(), any(), any(), any()), times(expectedExisting));
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    any(), any(), anyList(), anyInt(), any(), any(), any()), times(expectedPreCreating));
         }
     }
 
