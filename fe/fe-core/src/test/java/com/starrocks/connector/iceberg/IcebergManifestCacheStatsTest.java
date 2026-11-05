@@ -592,10 +592,10 @@ public class IcebergManifestCacheStatsTest extends TableTestBase {
         }
         List<Object> all = expected.get(0);
         Assertions.assertEquals(80.0, all.get(0));
-        // a: [0, 12]; b: no min once a file lacks its bounds (the provider keeps the max seen before it); s: string
-        // bounds; d: no statistics in any file
+        // a: [0, 12]; b: neither min nor max once a file lacks both its bounds (the max of the other files is not an
+        // upper bound of that file); s: string bounds; d: no statistics in any file
         Assertions.assertEquals(List.of("a", 0.0, 12.0), ((List<?>) all.get(1)).subList(0, 3));
-        Assertions.assertEquals(List.of("b", Double.NEGATIVE_INFINITY, 200.0, 0.2),
+        Assertions.assertEquals(List.of("b", Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0.2),
                 List.of(((List<?>) all.get(2)).get(0), ((List<?>) all.get(2)).get(1), ((List<?>) all.get(2)).get(2),
                         ((List<?>) all.get(2)).get(5)));
         Assertions.assertEquals(List.of("s0", "s7z"), ((List<?>) all.get(5)).subList(3, 5));

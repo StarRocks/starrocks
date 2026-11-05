@@ -661,6 +661,43 @@ TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnForDatetimeSupportsNegativeMi
     ASSERT_EQ("[1969-12-31 23:59:59.999999, 1970-01-01 00:00:00]", col->debug_string());
 }
 
+// Batches smaller than [null, min, max] (chunk_size <= 2) still emit every value across consecutive batches,
+// so MIN/MAX over a file whose other columns are read see the max too.
+TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnSpreadsValuesOverSmallBatches) {
+    SlotDesc descs[] = {{"c1", TYPE_INT_DESC}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    SlotDescriptor* slot = tuple_desc->slots()[0];
+
+    TExprMinMaxValue min_max_value;
+    min_max_value.__set_type(TExprNodeType::INT_LITERAL);
+    min_max_value.__set_has_null(true);
+    min_max_value.__set_all_null(false);
+    min_max_value.__set_min_int_value(1);
+    min_max_value.__set_max_int_value(9);
+
+    HdfsScannerContext ctx;
+    ctx.format_scan_context.is_first_split = true;
+    auto& fsc = ctx.format_scan_context;
+    // The file-open probe on the not-existed slots builds a 1-row chunk it throws away: it consumes no value.
+    FormatScannerStats stats;
+    fsc.stats = &stats;
+    fsc.options.use_min_max_opt = true;
+    fsc.not_existed_slots.push_back(slot);
+    fsc.min_max_values[slot->id()] = min_max_value;
+    ASSERT_FALSE(fsc.should_skip_by_evaluating_not_existed_slots().value());
+    ASSERT_EQ("[NULL]", fsc.create_min_max_value_column(slot, min_max_value, 1)->debug_string());
+    ASSERT_EQ("[1]", fsc.create_min_max_value_column(slot, min_max_value, 1)->debug_string());
+    ASSERT_EQ("[9]", fsc.create_min_max_value_column(slot, min_max_value, 1)->debug_string());
+
+    HdfsScannerContext ctx2;
+    ctx2.format_scan_context.is_first_split = true;
+    auto& fsc2 = ctx2.format_scan_context;
+    ASSERT_EQ("[NULL, 1]", fsc2.create_min_max_value_column(slot, min_max_value, 2)->debug_string());
+    ASSERT_EQ("[9, NULL]", fsc2.create_min_max_value_column(slot, min_max_value, 2)->debug_string());
+    // A batch that holds every value is unchanged: null/min/max first, then the min.
+    ASSERT_EQ("[NULL, 1, 9, 1]", fsc2.create_min_max_value_column(slot, min_max_value, 4)->debug_string());
+}
+
 // ========================= ORC SCANNER ============================
 
 static TTypeDesc create_primitive_type_desc(TPrimitiveType::type type) {

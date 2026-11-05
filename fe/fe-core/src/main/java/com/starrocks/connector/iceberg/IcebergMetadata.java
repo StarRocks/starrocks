@@ -3356,11 +3356,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             batchWrite.toBranch(branch);
         }
 
-        PartitionSpec partitionSpec = nativeTbl.spec();
-        for (TIcebergDataFile dataFile : dataFiles) {
-            batchWrite.addFile(buildDataFile(dataFile, partitionSpec, nativeTbl));
-        }
-
         if (isRewrite && extra != null) {
             ((IcebergSinkExtra) extra).getScannedDataFiles().forEach(batchWrite::deleteFile);
             ((IcebergSinkExtra) extra).getAppliedDeleteFiles().forEach(batchWrite::deleteFile);
@@ -3390,7 +3385,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         try {
+            // Build the files inside commitWithCleanup so a rejected entry deletes the BE-written files.
             commitWithCleanup(() -> {
+                PartitionSpec partitionSpec = nativeTbl.spec();
+                for (TIcebergDataFile dataFile : dataFiles) {
+                    batchWrite.addFile(buildDataFile(dataFile, partitionSpec, nativeTbl));
+                }
                 batchWrite.commit();
                 transaction.commitTransaction();
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
