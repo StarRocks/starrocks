@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <set>
@@ -323,7 +324,10 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
             // FLT_MAX) aborts the BE. Parse without throwing and reject the query cleanly instead.
             StringParser::ParseResult parse_result;
             float value = StringParser::string_to_float<float>(str.data(), str.size(), &parse_result);
-            if (parse_result != StringParser::PARSE_SUCCESS) {
+            // A successful parse can still leave a non-finite float: "inf" and "nan" parse as such, and a
+            // string_to_float that narrows from double reports success for 1e308 (above FLT_MAX) and
+            // returns +inf. A non-finite element makes the ANN search silently return no rows.
+            if (parse_result != StringParser::PARSE_SUCCESS || !std::isfinite(value)) {
                 return Status::InvalidArgument(
                         fmt::format("invalid query vector element for vector search: '{}'", str));
             }
