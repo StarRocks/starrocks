@@ -151,49 +151,14 @@ struct SIMDGather {
         }
     }
 
-    /// Helper: 8-element filtered gather step with condition checks before dereferencing
-    template <typename DataType, typename IndexType, typename CondType>
-    static inline void gather_filtered_8_unrolled(DataType* __restrict__ dest, const DataType* __restrict__ src,
-                                                  const IndexType* __restrict__ indexes,
-                                                  const CondType* __restrict__ is_filtered, size_t i) {
-        if constexpr (std::is_trivially_copyable_v<DataType>) {
-            DataType v0 = (is_filtered[i + 0] == 0) ? src[indexes[i + 0]] : DataType{};
-            DataType v1 = (is_filtered[i + 1] == 0) ? src[indexes[i + 1]] : DataType{};
-            DataType v2 = (is_filtered[i + 2] == 0) ? src[indexes[i + 2]] : DataType{};
-            DataType v3 = (is_filtered[i + 3] == 0) ? src[indexes[i + 3]] : DataType{};
-            DataType v4 = (is_filtered[i + 4] == 0) ? src[indexes[i + 4]] : DataType{};
-            DataType v5 = (is_filtered[i + 5] == 0) ? src[indexes[i + 5]] : DataType{};
-            DataType v6 = (is_filtered[i + 6] == 0) ? src[indexes[i + 6]] : DataType{};
-            DataType v7 = (is_filtered[i + 7] == 0) ? src[indexes[i + 7]] : DataType{};
-
-            dest[i + 0] = v0;
-            dest[i + 1] = v1;
-            dest[i + 2] = v2;
-            dest[i + 3] = v3;
-            dest[i + 4] = v4;
-            dest[i + 5] = v5;
-            dest[i + 6] = v6;
-            dest[i + 7] = v7;
+    /// Default value written for filtered rows (`is_filtered[i] != 0`): prefers `DataType(0)` when
+    /// constructible from `int`, otherwise value-initializes with `DataType{}`.
+    template <typename DataType>
+    static constexpr DataType filtered_default_value() {
+        if constexpr (std::is_constructible_v<DataType, int>) {
+            return DataType(0);
         } else {
-            if constexpr (std::is_constructible_v<DataType, int>) {
-                dest[i + 0] = (is_filtered[i + 0] == 0) ? src[indexes[i + 0]] : DataType(0);
-                dest[i + 1] = (is_filtered[i + 1] == 0) ? src[indexes[i + 1]] : DataType(0);
-                dest[i + 2] = (is_filtered[i + 2] == 0) ? src[indexes[i + 2]] : DataType(0);
-                dest[i + 3] = (is_filtered[i + 3] == 0) ? src[indexes[i + 3]] : DataType(0);
-                dest[i + 4] = (is_filtered[i + 4] == 0) ? src[indexes[i + 4]] : DataType(0);
-                dest[i + 5] = (is_filtered[i + 5] == 0) ? src[indexes[i + 5]] : DataType(0);
-                dest[i + 6] = (is_filtered[i + 6] == 0) ? src[indexes[i + 6]] : DataType(0);
-                dest[i + 7] = (is_filtered[i + 7] == 0) ? src[indexes[i + 7]] : DataType(0);
-            } else {
-                dest[i + 0] = (is_filtered[i + 0] == 0) ? src[indexes[i + 0]] : DataType{};
-                dest[i + 1] = (is_filtered[i + 1] == 0) ? src[indexes[i + 1]] : DataType{};
-                dest[i + 2] = (is_filtered[i + 2] == 0) ? src[indexes[i + 2]] : DataType{};
-                dest[i + 3] = (is_filtered[i + 3] == 0) ? src[indexes[i + 3]] : DataType{};
-                dest[i + 4] = (is_filtered[i + 4] == 0) ? src[indexes[i + 4]] : DataType{};
-                dest[i + 5] = (is_filtered[i + 5] == 0) ? src[indexes[i + 5]] : DataType{};
-                dest[i + 6] = (is_filtered[i + 6] == 0) ? src[indexes[i + 6]] : DataType{};
-                dest[i + 7] = (is_filtered[i + 7] == 0) ? src[indexes[i + 7]] : DataType{};
-            }
+            return DataType{};
         }
     }
 
@@ -205,11 +170,7 @@ struct SIMDGather {
             if (is_filtered[i] == 0) {
                 dest[i] = src[indexes[i]];
             } else {
-                if constexpr (std::is_constructible_v<DataType, int>) {
-                    dest[i] = DataType(0);
-                } else {
-                    dest[i] = DataType{};
-                }
+                dest[i] = filtered_default_value<DataType>();
             }
         }
     }
@@ -280,10 +241,8 @@ struct SIMDGather {
                 for (uint32_t j = 0; j < NUM_BATCH_VALUES; j++) {
                     if (is_filtered[i + j] == 0) {
                         buffer[j] = src[indexes[i + j]];
-                    } else if constexpr (std::is_constructible_v<DataType, int>) {
-                        buffer[j] = DataType(0);
                     } else {
-                        buffer[j] = DataType{};
+                        buffer[j] = filtered_default_value<DataType>();
                     }
                 }
 
@@ -358,62 +317,21 @@ struct SIMDGather {
         gather_buffered(dest, src, indexes, num_rows, i);
     }
 
-    /// Caller-informed filtered gather with DRAM prefetch heuristic.
+    /// Caller-informed filtered gather overload.
     /// Contract: `dest`, `src` and `indexes` must not overlap: the helpers take `__restrict__`
     /// pointers, so overlapping ranges are undefined behaviour.
-    /// `pool_size` is a PERFORMANCE hint only and never affects correctness. Prefetch is issued only
-    /// for rows whose indexes the subsequent loads will read (filtered rows are skipped). Prefetch is
-    /// x86-64 only (measured regression on AArch64); elsewhere this overload degenerates to the plain
-    /// buffered default loop.
+    /// Retains the buffered filtered loop (`gather_filtered_buffered`) on all targets: in
+    /// `BucketChainedJoinHashMap::lookup_init`, 0%-null chunks of a `NullableColumn` have
+    /// `!key_column->has_null()` (`null_array == std::nullopt`) and already take the unfiltered
+    /// `SourcePoolSize` overload above, whereas null-containing chunks regress if `is_filtered` is
+    /// tested twice per row (once for lookahead prefetch and once for the load).
     /// @param pool_size Element count of the source array (`src`), wrapped in SourcePoolSize.
     template <typename DataType, typename IndexType, typename CondType>
     static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes,
                               const CondType* is_filtered, size_t num_rows, SourcePoolSize pool_size) {
         static_assert(std::is_integral_v<IndexType>);
-        size_t i = 0;
-
-#if defined(__x86_64__) || defined(_M_X64)
-        const bool is_large_pool = (pool_size.elements >= kPrefetchPoolBytes / sizeof(DataType));
-
-        if (num_rows >= kPrefetchMinRows && is_large_pool) {
-            for (size_t p = 0; p < kPrefetchLookahead; ++p) {
-                if (is_filtered[p] == 0) {
-                    STARROCKS_PREFETCH(src + indexes[p]);
-                }
-            }
-            for (; i + kPrefetchLookahead + 8 <= num_rows; i += 8) {
-                if (is_filtered[i + kPrefetchLookahead + 0] == 0) {
-                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 0]);
-                }
-                if (is_filtered[i + kPrefetchLookahead + 1] == 0) {
-                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 1]);
-                }
-                if (is_filtered[i + kPrefetchLookahead + 2] == 0) {
-                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 2]);
-                }
-                if (is_filtered[i + kPrefetchLookahead + 3] == 0) {
-                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 3]);
-                }
-                if (is_filtered[i + kPrefetchLookahead + 4] == 0) {
-                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 4]);
-                }
-                if (is_filtered[i + kPrefetchLookahead + 5] == 0) {
-                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 5]);
-                }
-                if (is_filtered[i + kPrefetchLookahead + 6] == 0) {
-                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 6]);
-                }
-                if (is_filtered[i + kPrefetchLookahead + 7] == 0) {
-                    STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 7]);
-                }
-
-                gather_filtered_8_unrolled(dest, src, indexes, is_filtered, i);
-            }
-        }
-#else
         (void)pool_size;
-#endif
-
+        size_t i = 0;
         gather_filtered_buffered(dest, src, indexes, is_filtered, num_rows, i);
     }
 };

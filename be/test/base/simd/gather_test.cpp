@@ -387,6 +387,19 @@ struct TestPOD {
 inline std::ostream& operator<<(std::ostream& os, const TestPOD& p) {
     return os << "{" << p.x << ", " << p.y << "}";
 }
+
+struct NonZeroDefaultIntWrapper {
+    int32_t value{7};
+    constexpr NonZeroDefaultIntWrapper() = default;
+    constexpr explicit NonZeroDefaultIntWrapper(int v) : value(v) {}
+    bool operator==(const NonZeroDefaultIntWrapper& o) const = default;
+};
+static_assert(std::is_trivially_copyable_v<NonZeroDefaultIntWrapper>);
+static_assert(std::is_constructible_v<NonZeroDefaultIntWrapper, int>);
+
+inline std::ostream& operator<<(std::ostream& os, const NonZeroDefaultIntWrapper& w) {
+    return os << "Wrapper(" << w.value << ")";
+}
 } // namespace
 
 static_assert(std::is_trivially_copyable_v<TestPOD>);
@@ -472,6 +485,80 @@ TEST(SIMDGatherTest, test_custom_trivially_copyable_struct) {
         }
     }
     ASSERT_EQ(src_copy, src);
+}
+
+TEST(SIMDGatherTest, test_filtered_int_constructible_nonzero_default_wrapper) {
+    constexpr size_t kWrapperPoolSize = 1024;
+    std::vector<NonZeroDefaultIntWrapper> src(kWrapperPoolSize);
+    for (size_t i = 0; i < kWrapperPoolSize; ++i) {
+        src[i] = NonZeroDefaultIntWrapper(static_cast<int>(i * 5 + 11));
+    }
+
+    const std::vector<size_t> row_counts = {0, 1, 7, 8, 15, 16, 511, 512, 513, 520, 4096};
+    const std::vector<FilterPattern> patterns = {
+            FilterPattern::AllZeros,
+            FilterPattern::AllOnes,
+            FilterPattern::Alternating,
+            FilterPattern::ModuloMix,
+    };
+    const std::vector<size_t> pool_sizes = {0, 4 * 1024 * 1024, 16 * 1024 * 1024};
+    const NonZeroDefaultIntWrapper kSentinel(999983);
+
+    for (size_t n : row_counts) {
+        std::mt19937 rng(67890 + n);
+        std::uniform_int_distribution<uint32_t> dist(0, kWrapperPoolSize - 1);
+        std::vector<uint32_t> base_indexes(n);
+        for (auto& idx : base_indexes) {
+            idx = dist(rng);
+        }
+
+        for (FilterPattern pattern : patterns) {
+            auto is_filtered = make_filter<uint8_t>(n, pattern, 77 + n);
+            for (bool poison_filtered : {false, true}) {
+                std::vector<uint32_t> indexes = base_indexes;
+                if (poison_filtered) {
+                    for (size_t i = 0; i < n; ++i) {
+                        if (is_filtered[i] != 0) {
+                            indexes[i] = 0x3FFFFFFFu;
+                        }
+                    }
+                }
+
+                // 5-arg filtered gather
+                {
+                    std::vector<NonZeroDefaultIntWrapper> dest(n + kGuard, kSentinel);
+                    SIMDGather::gather(dest.data(), src.data(), indexes.data(), is_filtered.data(), n);
+                    for (size_t i = 0; i < n; ++i) {
+                        NonZeroDefaultIntWrapper expected =
+                                (is_filtered[i] == 0) ? src[indexes[i]] : NonZeroDefaultIntWrapper(0);
+                        ASSERT_EQ(expected, dest[i]) << "5-arg filtered gather failed at n=" << n << " i=" << i
+                                                     << " poison=" << poison_filtered;
+                    }
+                    for (size_t g = n; g < n + kGuard; ++g) {
+                        ASSERT_EQ(kSentinel, dest[g]) << "Guard corrupted at n=" << n << " g=" << g;
+                    }
+                }
+
+                // 6-arg filtered gather with SourcePoolSize
+                for (size_t pool_size : pool_sizes) {
+                    std::vector<NonZeroDefaultIntWrapper> dest(n + kGuard, kSentinel);
+                    SIMDGather::gather(dest.data(), src.data(), indexes.data(), is_filtered.data(), n,
+                                       SourcePoolSize{pool_size});
+                    for (size_t i = 0; i < n; ++i) {
+                        NonZeroDefaultIntWrapper expected =
+                                (is_filtered[i] == 0) ? src[indexes[i]] : NonZeroDefaultIntWrapper(0);
+                        ASSERT_EQ(expected, dest[i])
+                                << "6-arg filtered gather failed at n=" << n << " pool_size=" << pool_size << " i=" << i
+                                << " poison=" << poison_filtered;
+                    }
+                    for (size_t g = n; g < n + kGuard; ++g) {
+                        ASSERT_EQ(kSentinel, dest[g])
+                                << "Guard corrupted at n=" << n << " pool_size=" << pool_size << " g=" << g;
+                    }
+                }
+            }
+        }
+    }
 }
 
 namespace {
