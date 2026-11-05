@@ -150,7 +150,16 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
 
 Status JsonDocumentStreamParser::advance() noexcept {
     _curr_ready = false;
-    if (++_doc_stream_itr != _doc_stream.end() ||
+    ++_doc_stream_itr;
+    if (_first_object_parsed && _doc_stream_itr != _doc_stream.end() && _doc_stream_itr.error() != simdjson::SUCCESS &&
+        _doc_stream_offset + _doc_stream_itr.current_index() == _last_begin_offset) {
+        // In simdjson 5.x, when the current document met a fatal error while being consumed by the caller,
+        // next_document() copies doc.iter.error into stream->error and stops without advancing doc_index or
+        // marking the iterator finished until the next increment. Advance once more so the already-reported
+        // document is not surfaced a second time by get_current().
+        ++_doc_stream_itr;
+    }
+    if (_doc_stream_itr != _doc_stream.end() ||
         /*
          * When the iterator reach the end, we should always to reset the
          * batch_size until _len - _last_begin_offset to check if the
