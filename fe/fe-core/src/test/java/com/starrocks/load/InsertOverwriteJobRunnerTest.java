@@ -29,6 +29,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.pseudocluster.PseudoCluster;
+import com.starrocks.pseudocluster.PseudoFrontend;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -47,11 +48,14 @@ import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 
 public class InsertOverwriteJobRunnerTest {
 
@@ -68,6 +72,17 @@ public class InsertOverwriteJobRunnerTest {
         Config.tablet_sched_checker_interval_seconds = 1;
         Config.tablet_sched_repair_delay_factor_second = 1;
         Config.enable_new_publish_mechanism = true;
+        new MockUp<PseudoFrontend>() {
+            @Mock
+            public void init(Invocation invocation, boolean fakeJournal, String runningDir, Map<String, String> config)
+                    throws Exception {
+                // Every FE port must be isolated from real services and parallel test clusters.
+                config.put("edit_log_port", Integer.toString(UtFrameUtils.findValidPort()));
+                config.put("http_port", Integer.toString(UtFrameUtils.findValidPort()));
+                config.put("rpc_port", Integer.toString(UtFrameUtils.findValidPort()));
+                invocation.proceed(fakeJournal, runningDir, config);
+            }
+        };
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
         cluster = PseudoCluster.getInstance();
@@ -426,6 +441,32 @@ public class InsertOverwriteJobRunnerTest {
         Partition partition = Mockito.mock(Partition.class);
         Mockito.when(partition.getName()).thenReturn(name);
         return partition;
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OlapTable.OlapTableState.class, names = {"SCHEMA_CHANGE", "ROLLUP", "TABLET_RESHARD"})
+    public void testInsertOverwriteAbortsWhenTableStateNotNormal(OlapTable.OlapTableState state) throws Exception {
+        // Guards against the race where an overwrite passes analysis while the table is NORMAL,
+        // then the table state flips (e.g. an ALTER submits) before the job's prepare() runs.
+        String sql = "insert overwrite t1 select * from t2";
+        InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        StmtExecutor executor = new StmtExecutor(connectContext, insertStmt);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(301L, insertStmt, database.getId(), olapTable.getId(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob, connectContext, executor);
+
+        olapTable.setState(state);
+        try {
+            Assertions.assertThrows(DmlException.class, runner::run);
+        } finally {
+            olapTable.setState(OlapTable.OlapTableState.NORMAL);
+        }
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
+        Assertions.assertTrue(olapTable.getTempPartitions().isEmpty());
     }
 
     @Test

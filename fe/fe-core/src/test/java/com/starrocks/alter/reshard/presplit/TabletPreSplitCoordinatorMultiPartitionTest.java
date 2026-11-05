@@ -14,6 +14,9 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.UniformReservoir;
+import com.starrocks.alter.reshard.SplitTabletJob;
 import com.starrocks.alter.reshard.SplitTabletJobFactory;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
@@ -29,6 +32,7 @@ import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -45,6 +49,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
@@ -53,6 +59,7 @@ import org.mockito.Mockito;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -150,6 +157,57 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
         Config.tablet_reshard_target_size = savedConfigReshardTargetSize;
         Config.tablet_reshard_max_split_count = savedConfigReshardMaxSplitCount;
         Config.tablet_reshard_min_split_size = savedConfigReshardMinSplitSize;
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"timeout", "cancel", "failure", "missing", "interrupted", "aborting", "aborted"})
+    public void layoutWaitFallbackAlwaysRevokesExclusion(String mode) {
+        TabletReshardJob combinedJob = Mockito.spy(new SplitTabletJob(999L, DB_ID, TABLE_ID, Map.of()));
+        when(combinedJob.isAdmissionLeaderValid()).thenReturn(true);
+        combinedJob.addCleanupExcludedTransactionId(42L);
+        if (mode.equals("aborting") || mode.equals("aborted")) {
+            Deencapsulation.setField(combinedJob, "jobState", mode.equals("aborting")
+                    ? TabletReshardJob.JobState.ABORTING : TabletReshardJob.JobState.ABORTED);
+            Deencapsulation.setField(combinedJob, "layoutReady", true);
+        }
+        long savedTimeout = Config.tablet_pre_split_post_submit_wait_seconds;
+        Config.tablet_pre_split_post_submit_wait_seconds = mode.equals("timeout") ? -1L : 60L;
+        LongCounterMetric savedHardCap = MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP;
+        Histogram savedWait = MetricRepo.HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS;
+        MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP =
+                new LongCounterMetric("test_hard_cap", MetricUnit.REQUESTS, "test");
+        MetricRepo.HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS = new Histogram(new UniformReservoir());
+        MetricRepo.hasInit = true;
+        GlobalStateMgr state = mock(GlobalStateMgr.class);
+        TabletReshardJobMgr jobs = mock(TabletReshardJobMgr.class);
+        when(state.getTabletReshardJobMgr()).thenReturn(jobs);
+        when(jobs.getTabletReshardJob(999L)).thenReturn(mode.equals("missing") ? null : combinedJob);
+        try (MockedStatic<GlobalStateMgr> gsm = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsm.when(GlobalStateMgr::getCurrentState).thenReturn(state);
+            if (mode.equals("interrupted")) {
+                Thread.currentThread().interrupt();
+            }
+            TabletPreSplitCoordinator.awaitCombinedJobLayoutReadyAllowingFallback(LoadKind.INSERT_FROM_TABLE,
+                    table, combinedJob, () -> {
+                        if (mode.equals("failure")) {
+                            throw new IllegalStateException("injected wait failure");
+                        }
+                        return mode.equals("cancel");
+                    });
+            Set<Long> exclusions = Deencapsulation.invoke(combinedJob, "getCleanupExcludedTransactionIds");
+            Assertions.assertTrue(exclusions.isEmpty());
+            if (mode.equals("timeout")) {
+                Assertions.assertEquals(1L, MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP.getValue());
+            }
+            if (mode.equals("interrupted")) {
+                Assertions.assertTrue(Thread.currentThread().isInterrupted());
+            }
+        } finally {
+            Thread.interrupted();
+            Config.tablet_pre_split_post_submit_wait_seconds = savedTimeout;
+            MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP = savedHardCap;
+            MetricRepo.HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS = savedWait;
+        }
     }
 
     // ---------- Tests ----------

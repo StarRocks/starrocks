@@ -44,7 +44,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
@@ -99,6 +98,7 @@ public class SplitTabletJob extends TabletReshardJob {
         this.reshardingPhysicalPartitions = reshardingPhysicalPartitions;
     }
 
+    @Override
     public long getDbId() {
         return dbId;
     }
@@ -108,6 +108,7 @@ public class SplitTabletJob extends TabletReshardJob {
         return tableId;
     }
 
+    @Override
     public Map<Long, ReshardingPhysicalPartition> getReshardingPhysicalPartitions() {
         return reshardingPhysicalPartitions;
     }
@@ -128,12 +129,17 @@ public class SplitTabletJob extends TabletReshardJob {
     @Override
     public void init() throws StarRocksException {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
-            reserveTableForReshard(dbId, lockedTable.get(), reshardingPhysicalPartitions);
+            initLocked(lockedTable.get());
         } catch (TabletReshardException e) {
-            // Surface admission rejection (table not NORMAL / dropped) as a checked exception so
+            // Surface admission rejection (table in another alter state / dropped) as a checked exception so
             // callers' StarRocksException handling (e.g. TabletPreSplitCoordinator) takes effect.
             throw new StarRocksException(e.getMessage(), e);
         }
+    }
+
+    @Override
+    protected void initLocked(OlapTable table) throws StarRocksException {
+        reserveTableForReshard(dbId, table, reshardingPhysicalPartitions);
     }
 
     /*
@@ -356,10 +362,8 @@ public class SplitTabletJob extends TabletReshardJob {
      * 1. Abort in-flight lake compactions, then wait for the remaining previous transactions finished
      * 2. Remove old versions of materialized index
      * 3. Unregister resharding tablets
-     * 4. Set tablet state to NORMAL
-     * 5. Update metrics
-     * 6. Release the new shards' creation-time placement pin
-     * 7. Set job state to FINISHED
+     * 4. Release the new shards' creation-time placement pin
+     * 5. Durably publish FINISHED and update aggregate table state and metrics
      */
     @Override
     protected void runCleaningJob() {
@@ -384,20 +388,11 @@ public class SplitTabletJob extends TabletReshardJob {
         // 3. Unregister resharding tablets
         unregisterReshardingTablets();
 
-        // 4. Set tablet state to NORMAL
-        setTableState(OlapTable.OlapTableState.TABLET_RESHARD, OlapTable.OlapTableState.NORMAL);
-
-        // 5. Update metrics
-        if (MetricRepo.hasInit) {
-            MetricRepo.COUNTER_TABLET_RESHARD_SPLIT_JOB_FINISHED.increase(1L);
-            MetricRepo.HISTO_TABLET_RESHARD_JOB_DURATION.update(System.currentTimeMillis() - createdTimeMs);
-        }
-
-        // 6. Release the child shards' creation-time placement pin so the balancer can spread them
+        // 4. Release the child shards' creation-time placement pin so the balancer can spread them
         //    now, instead of when the parent shards are finally reclaimed tens of minutes later.
         clearPlacementPreference(reshardingPhysicalPartitions);
 
-        // 7. Set job state to FINISHED
+        // 5. Durably publish FINISHED
         setJobState(JobState.FINISHED);
     }
 
@@ -409,9 +404,7 @@ public class SplitTabletJob extends TabletReshardJob {
     /*
      * 1. Unregister resharding tablets
      * 2. Remove new tablets from inverted index
-     * 3. Set table state to NORMAL
-     * 4. Update metrics
-     * 5. Set job state to ABORTED
+     * 3. Durably publish ABORTED and update aggregate table state and metrics
      *
      * Any orphan staros shards from a partial createShardsOnStarOS in runPendingJob are
      * reaped by StarMgrMetaSyncer's diff-and-purge cycle; no explicit deleteShards here.
@@ -424,19 +417,11 @@ public class SplitTabletJob extends TabletReshardJob {
 
             // 2. Remove new tablets from inverted index
             removeTabletsFromInvertedIndex();
-
-            // 3. Set table state to NORMAL
-            setTableState(null, OlapTable.OlapTableState.NORMAL);
         } catch (Exception e) {
             LOG.warn("Ignore exception when aborting tablet reshard job. {}. ", this, e);
         }
 
-        // 4. Update metrics
-        if (MetricRepo.hasInit) {
-            MetricRepo.COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED.increase(1L);
-        }
-
-        // 5. Set job state to ABORTED
+        // 3. Durably publish ABORTED
         setJobState(JobState.ABORTED);
     }
 
@@ -588,7 +573,12 @@ public class SplitTabletJob extends TabletReshardJob {
     private void setTableState(OlapTable.OlapTableState expectedState, OlapTable.OlapTableState newState) {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
             OlapTable olapTable = lockedTable.get();
-            if (expectedState != null && olapTable.getState() != expectedState) {
+            if (newState == OlapTable.OlapTableState.NORMAL) {
+                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().refreshTableStateLocked(olapTable, jobId);
+                return;
+            }
+            if (expectedState != null && olapTable.getState() != expectedState
+                    && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
                 throw new TabletReshardException(
                         "Unexpected table state " + olapTable.getState() + " in table " + olapTable.getName());
             }

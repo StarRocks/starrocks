@@ -91,6 +91,7 @@ public class TabletPreSplitCoordinatorTest {
         connectContext.setThreadLocalInfo();
 
         database = mock(Database.class);
+        when(database.getId()).thenReturn(100L);
         baseIndex = mock(MaterializedIndex.class);
         when(baseIndex.getTablets()).thenReturn(List.of(mock(Tablet.class)));
         when(baseIndex.getRowCount()).thenReturn(0L);
@@ -99,6 +100,7 @@ public class TabletPreSplitCoordinatorTest {
         when(partition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
 
         table = mock(OlapTable.class);
+        when(table.getId()).thenReturn(101L);
         when(table.isRangeDistribution()).thenReturn(true);
         when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
         when(table.getVisibleIndexMetas()).thenReturn(List.of(mock(MaterializedIndexMeta.class)));

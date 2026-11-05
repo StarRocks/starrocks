@@ -112,35 +112,47 @@ public final class TabletPreSplitCoordinator {
         if (gateReason != null) {
             return skipEligibility(gateReason);
         }
-        if (!table.isRangeDistribution()) {
-            return skipEligibility(SkipReason.NOT_RANGE_DISTRIBUTION);
-        }
-        if (table.getState() != OlapTable.OlapTableState.NORMAL) {
-            return skipEligibility(SkipReason.TABLE_NOT_NORMAL);
-        }
-        if (table.getVisibleIndexMetas().size() != 1) {
-            return skipEligibility(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
-        }
-        if (!areSortKeyColumnsSupported(table)) {
-            return skipEligibility(SkipReason.UNSUPPORTED_SORT_KEY);
-        }
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(database.getId(), table.getId(), LockType.READ);
+        try {
+            if (!table.isRangeDistribution()) {
+                return skipEligibility(SkipReason.NOT_RANGE_DISTRIBUTION);
+            }
+            if (table.getState() != OlapTable.OlapTableState.NORMAL
+                    && table.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
+                return skipEligibility(SkipReason.TABLE_NOT_NORMAL);
+            }
+            if (table.getVisibleIndexMetas().size() != 1) {
+                return skipEligibility(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
+            }
+            if (!areSortKeyColumnsSupported(table)) {
+                return skipEligibility(SkipReason.UNSUPPORTED_SORT_KEY);
+            }
 
-        PhysicalPartition partition = table.getPhysicalPartition(physicalPartitionId);
-        if (partition == null) {
-            return skipEligibility(SkipReason.METADATA_NOT_RESOLVED);
-        }
-        MaterializedIndex baseIndex = partition.getIndex(table.getBaseIndexMetaId());
-        if (baseIndex == null) {
-            return skipEligibility(SkipReason.METADATA_NOT_RESOLVED);
-        }
-        if (baseIndex.getTablets().size() != 1) {
-            return skipEligibility(SkipReason.MULTIPLE_BASE_INDEX_TABLETS);
-        }
-        if (!PreSplitTargets.isEmptyPartition(partition, baseIndex)) {
-            return skipEligibility(SkipReason.PARTITION_NOT_EMPTY);
-        }
+            PhysicalPartition partition = table.getPhysicalPartition(physicalPartitionId);
+            if (partition == null) {
+                return skipEligibility(SkipReason.METADATA_NOT_RESOLVED);
+            }
+            if (table.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                    && GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                            .isPhysicalPartitionReshardingLocked(table, partition.getId())) {
+                return skipEligibility(SkipReason.TABLE_NOT_NORMAL);
+            }
+            MaterializedIndex baseIndex = partition.getIndex(table.getBaseIndexMetaId());
+            if (baseIndex == null) {
+                return skipEligibility(SkipReason.METADATA_NOT_RESOLVED);
+            }
+            if (baseIndex.getTablets().size() != 1) {
+                return skipEligibility(SkipReason.MULTIPLE_BASE_INDEX_TABLETS);
+            }
+            if (!PreSplitTargets.isEmptyPartition(partition, baseIndex)) {
+                return skipEligibility(SkipReason.PARTITION_NOT_EMPTY);
+            }
 
-        return new PreSplitOutcome.Eligible();
+            return new PreSplitOutcome.Eligible();
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(database.getId(), table.getId(), LockType.READ);
+        }
     }
 
     /** Build a {@code Skipped} outcome and record the eligibility-skipped counter for the given reason. */
@@ -428,15 +440,45 @@ public final class TabletPreSplitCoordinator {
     public static void awaitCombinedJobAllowingFallback(
             LoadKind loadKind, OlapTable olapTable, TabletReshardJob combinedJob,
             BooleanSupplier shouldAbort) {
+        awaitCombinedJob(loadKind, olapTable, combinedJob, shouldAbort, false);
+    }
+
+    /**
+     * Dynamic overwrite already owns a transaction. Wait only for its durable writable layout,
+     * so callers on disjoint partitions cannot wait for each other's idle transaction in CLEANING.
+     * Checks the original submitted job's admission token, never a token captured at wait start.
+     * Every exit revokes the idle transaction's cleanup exclusion before the caller replans and writes.
+     */
+    public static void awaitCombinedJobLayoutReadyAllowingFallback(
+            LoadKind loadKind, OlapTable olapTable, TabletReshardJob combinedJob,
+            BooleanSupplier shouldAbort) {
+        try {
+            awaitCombinedJob(loadKind, olapTable, combinedJob, shouldAbort, true);
+        } catch (RuntimeException failure) {
+            LOG.warn("Pre-split layout wait failed for {} on table {}, job {}",
+                    loadKind.displayName(), olapTable.getName(), combinedJob.getJobId(), failure);
+        } finally {
+            combinedJob.clearCleanupExcludedTransactionIds();
+        }
+    }
+
+    private static void awaitCombinedJob(
+            LoadKind loadKind, OlapTable olapTable, TabletReshardJob combinedJob,
+            BooleanSupplier shouldAbort, boolean waitForLayoutReady) {
         Duration postSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_post_submit_wait_seconds);
         long jobId = combinedJob.getJobId();
-        TabletReshardJobMgr tabletReshardJobManager =
-                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        GlobalStateMgr globalState = GlobalStateMgr.getCurrentState();
+        TabletReshardJobMgr tabletReshardJobManager = globalState.getTabletReshardJobMgr();
         Instant deadline = Instant.now().plus(postSubmitTimeout);
         long postSubmitStartMillis = System.currentTimeMillis();
         String loadKindLabel = loadKind.displayName();
         try {
             while (true) {
+                if (waitForLayoutReady && !combinedJob.isAdmissionLeaderValid()) {
+                    LOG.warn("Pre-split layout wait lost admission leadership for {} on table {}, job {}",
+                            loadKindLabel, olapTable.getName(), jobId);
+                    return;
+                }
                 if (shouldAbort.getAsBoolean()) {
                     LOG.info("Pre-split combined-job await abandoned for {} on table {} (caller " +
                                     "signalled abort); load will proceed against the currently visible layout",
@@ -451,22 +493,28 @@ public final class TabletPreSplitCoordinator {
                     return;
                 }
                 TabletReshardJob.JobState state = latest.getJobState();
-                if (state == TabletReshardJob.JobState.FINISHED) {
-                    return;
-                }
-                if (state.isFinalState()) {
+                if ((state.isFinalState() && state != TabletReshardJob.JobState.FINISHED)
+                        || (waitForLayoutReady && state == TabletReshardJob.JobState.ABORTING)) {
                     LOG.warn("Pre-split combined job {} aborted for {} on table {}: {}; "
                                     + "load will proceed against the currently visible layout",
                             jobId, loadKindLabel, olapTable.getName(), latest.getErrorMessage());
+                    return;
+                }
+                if (waitForLayoutReady ? latest.isLayoutReady() : state == TabletReshardJob.JobState.FINISHED) {
+                    if (waitForLayoutReady && !combinedJob.isAdmissionLeaderValid()) {
+                        return;
+                    }
+                    LOG.info("Pre-split job {} reached {}", jobId, waitForLayoutReady ? "LAYOUT_READY" : "FINISHED");
                     return;
                 }
                 if (Instant.now().isAfter(deadline)) {
                     if (MetricRepo.hasInit) {
                         MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP.increase(1L);
                     }
-                    LOG.warn("Pre-split combined job {} did not finish in {}s for {} on table {}; "
+                    LOG.warn("Pre-split combined job {} did not {} in {}s for {} on table {}; "
                                     + "load will proceed without abort against the currently visible layout",
-                            jobId, postSubmitTimeout.toSeconds(), loadKindLabel, olapTable.getName());
+                            jobId, waitForLayoutReady ? "reach durable layout readiness" : "finish",
+                            postSubmitTimeout.toSeconds(), loadKindLabel, olapTable.getName());
                     return;
                 }
                 try {
@@ -730,8 +778,19 @@ public final class TabletPreSplitCoordinator {
             if (cleanupExcludedTransactionId > 0) {
                 combinedJob.addCleanupExcludedTransactionId(cleanupExcludedTransactionId);
             }
-            GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addTabletReshardJob(combinedJob);
-            return new PreSplitOutcome.SubmittedCombined(combinedJob, perPartitionResults);
+            boolean handedOff = false;
+            try {
+                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addTabletReshardJob(combinedJob);
+                PreSplitOutcome outcome = new PreSplitOutcome.SubmittedCombined(combinedJob, perPartitionResults);
+                handedOff = true;
+                return outcome;
+            } finally {
+                // Admission can be durable even when a stale-admission check prevents returning the job.
+                // The waiting flow cannot revoke that idle transaction's exclusion on a failed handoff.
+                if (!handedOff) {
+                    combinedJob.clearCleanupExcludedTransactionIds();
+                }
+            }
         } catch (StarRocksException submitFailure) {
             LOG.warn("Pre-split combined submit failed for table {}: {}",
                     table.getName(), submitFailure.getMessage());
@@ -844,6 +903,15 @@ public final class TabletPreSplitCoordinator {
             }
             PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
             if (physicalPartition == null) {
+                return null;
+            }
+            if (table.getState() != OlapTable.OlapTableState.NORMAL
+                    && table.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
+                return null;
+            }
+            if (table.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                    && GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                            .isPhysicalPartitionReshardingLocked(table, physicalPartition.getId())) {
                 return null;
             }
             MaterializedIndex baseIndex = physicalPartition.getIndex(table.getBaseIndexMetaId());

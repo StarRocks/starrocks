@@ -20,6 +20,9 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.Collection;
@@ -42,7 +45,7 @@ import java.util.List;
  * <p><b>Two slices</b>:
  * <ul>
  *   <li>{@link #findEligibleTable} — table-only structural gate (range
- *       distribution, NORMAL state, no MV/rollup, supported sort key) used
+ *       distribution, NORMAL/TABLET_RESHARD state, no MV/rollup, supported sort key) used
  *       by the multi-partition coordinator's defensive re-check. Returns the
  *       failing {@link SkipReason}, or {@code null} when the table is eligible;
  *       the caller records it. The multi-partition coordinator does
@@ -91,7 +94,8 @@ final class PreSplitTargets {
         if (!table.isRangeDistribution()) {
             return SkipReason.NOT_RANGE_DISTRIBUTION;
         }
-        if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (table.getState() != OlapTable.OlapTableState.NORMAL
+                && table.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             return SkipReason.TABLE_NOT_NORMAL;
         }
         if (table.getVisibleIndexMetas().size() != 1) {
@@ -133,12 +137,29 @@ final class PreSplitTargets {
      *         (the common case on a re-load against an already-split partition).
      */
     static EligibleTarget findEligibleTarget(Database database, OlapTable olapTable) {
-        PhysicalPartition uniquePartition = findUniquePhysicalPartition(olapTable);
-        if (uniquePartition == null) {
-            PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(database.getId(), olapTable.getId(), LockType.READ);
+        try {
+            PhysicalPartition uniquePartition = findUniquePhysicalPartition(olapTable);
+            if (uniquePartition == null) {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
+                return null;
+            }
+            return resolveFromPhysicalPartition(database, olapTable, uniquePartition);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(database.getId(), olapTable.getId(), LockType.READ);
+        }
+    }
+
+    private static EligibleTarget resolveFromPhysicalPartition(
+            Database database, OlapTable olapTable, PhysicalPartition partition) {
+        if (olapTable.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                && GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                        .isPhysicalPartitionReshardingLocked(olapTable, partition.getId())) {
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.TABLE_NOT_NORMAL);
             return null;
         }
-        MaterializedIndex baseIndex = uniquePartition.getIndex(olapTable.getBaseIndexMetaId());
+        MaterializedIndex baseIndex = partition.getIndex(olapTable.getBaseIndexMetaId());
         if (baseIndex == null) {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
             return null;
@@ -149,7 +170,7 @@ final class PreSplitTargets {
             return null;
         }
         long baseTabletId = baseTablets.get(0).getId();
-        return new EligibleTarget(database, olapTable, uniquePartition.getId(), baseTabletId);
+        return new EligibleTarget(database, olapTable, partition.getId(), baseTabletId);
     }
 
     /**

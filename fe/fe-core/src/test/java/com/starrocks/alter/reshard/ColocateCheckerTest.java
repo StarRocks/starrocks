@@ -98,6 +98,13 @@ public class ColocateCheckerTest {
 
     @BeforeEach
     public void setUp() throws Exception {
+        // Real alignment admission requires a stable HA epoch, absent from the in-memory test HA.
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public long getEpoch() {
+                return 7L;
+            }
+        };
         // Each test gets a fresh colocate group so prior tests' ColocateRangeMgr mutations do
         // not leak across tests; the cluster shares one ColocateTableIndex instance.
         int seq = NEXT_TABLE_SEQ.incrementAndGet();
