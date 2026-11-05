@@ -237,7 +237,7 @@ All values below report CPU time per iteration (nanoseconds for 4,096 rows) comp
 | Data Type | Working Set Pool | Pre-Opt Baseline Latency | Post-Opt Production Latency | Latency Delta (%) | Effective Throughput Gain | Acceptance Verdict |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **int32_t** | 4M (In-Cache, 16 MiB) | 10,696.5 ns | **10,664.3 ns** | **-0.30%** | Zero regression (Protected from +14.1% `PRFM` penalty) | **PASS** |
-| **int32_t** | 64M (DRAM, 256 MiB) | 26,238.5 ns | **25,871.9 ns** | **-1.40%** | +2.2 MB/s | **PASS** |
+| **int32_t** | 64M (DRAM, 256 MiB) | 26,238.5 ns | **25,871.9 ns** | **-1.40%** | +2.2 M items/s | **PASS** |
 | **int64_t** | 4M (In-Cache, 32 MiB) | 15,130.4 ns | **13,967.4 ns** | **-7.69%** | +23.3 M items/s | **PASS** |
 | **int64_t** | 64M (DRAM, 512 MiB) | 27,586.9 ns | **27,231.4 ns** | **-1.29%** | +1.9 M items/s | **PASS** |
 
