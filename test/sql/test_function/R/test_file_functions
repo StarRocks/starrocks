@@ -1,0 +1,225 @@
+-- name: test_file_functions
+select to_file(named_struct('content_type', 'image/jpeg', 'URI', 's3://bucket/a.jpg'));
+-- result:
+{"uri":"s3://bucket/a.jpg","offset":null,"size":null,"content_type":"image/jpeg","checksum":null,"inline":null}
+-- !result
+select to_file(named_struct('inline', to_binary('610062', 'hex'), 'size', 3, 'uri', NULL, 'offset', 0, 'checksum', 'opaque'));
+-- result:
+{"uri":null,"offset":0,"size":3,"content_type":null,"checksum":"opaque","inline":"610062"}
+-- !result
+select to_file(named_struct('inline', to_binary('', 'hex')));
+-- result:
+{"uri":null,"offset":null,"size":null,"content_type":null,"checksum":null,"inline":""}
+-- !result
+select to_file(named_struct('uri', '', 'offset', 0, 'size', 0));
+-- result:
+{"uri":"","offset":0,"size":0,"content_type":null,"checksum":null,"inline":null}
+-- !result
+select to_file(NULL) is null, to_file(cast(NULL as struct<uri varchar(20)>)) is null;
+-- result:
+1	1
+-- !result
+select to_file(named_struct('uri', NULL, 'size', NULL, 'inline', NULL));
+-- result:
+[REGEX].*TO_FILE requires exactly one.*
+-- !result
+select to_file(named_struct('content_type', 'image/jpeg'));
+-- result:
+[REGEX].*TO_FILE requires exactly one.*
+-- !result
+select to_file(named_struct('inline', to_binary('', 'hex'), 'uri', ''));
+-- result:
+[REGEX].*TO_FILE requires exactly one.*
+-- !result
+select to_file(named_struct('inline', to_binary('610062', 'hex'), 'size', -2, 'uri', 'arbitrary', 'offset', -1));
+-- result:
+[REGEX].*TO_FILE requires exactly one.*
+-- !result
+select to_file(named_struct('uri', 'a', 'offset', -1));
+-- result:
+[REGEX].*TO_FILE field .*offset.*must be >= 0.*
+-- !result
+select to_file(named_struct('inline', to_binary('61', 'hex'), 'size', -1));
+-- result:
+[REGEX].*TO_FILE field .*size.*must be >= 0.*
+-- !result
+create database test_to_file_${uuid0};
+-- result:
+-- !result
+use test_to_file_${uuid0};
+-- result:
+-- !result
+create table input_files (id int, uri varchar(256), payload varbinary, file_size int, metadata struct<uri varchar(256), size int>)
+duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into input_files values
+(1, 'a.jpg', NULL, 12, named_struct('uri', 'a.jpg', 'size', 12)),
+(2, NULL, to_binary('01', 'hex'), NULL, NULL),
+(3, '', NULL, 0, named_struct('uri', '', 'size', 0));
+-- result:
+-- !result
+select id, to_file(metadata), to_file(metadata) is null from input_files order by id;
+-- result:
+1	{"uri":"a.jpg","offset":null,"size":12,"content_type":null,"checksum":null,"inline":null}	0
+2	None	1
+3	{"uri":"","offset":null,"size":0,"content_type":null,"checksum":null,"inline":null}	0
+-- !result
+select id, to_file(named_struct('size', file_size, 'uri', uri, 'inline', payload)) from input_files order by id;
+-- result:
+1	{"uri":"a.jpg","offset":null,"size":12,"content_type":null,"checksum":null,"inline":null}
+2	{"uri":null,"offset":null,"size":null,"content_type":null,"checksum":null,"inline":"01"}
+3	{"uri":"","offset":null,"size":0,"content_type":null,"checksum":null,"inline":null}
+-- !result
+select to_file(named_struct('size', file_size, 'uri', uri)) from input_files;
+-- result:
+[REGEX].*TO_FILE requires exactly one.*
+-- !result
+select to_file(named_struct('uri', 'a', 'inline', payload)) from input_files;
+-- result:
+[REGEX].*TO_FILE requires exactly one.*
+-- !result
+select to_file(named_struct('uri', uri, 'size', file_size - 13)) from input_files where id = 1;
+-- result:
+[REGEX].*TO_FILE field .*size.*must be >= 0.*
+-- !result
+select to_file(named_struct('uri', uri, 'offset', file_size - 13)) from input_files where id = 1;
+-- result:
+[REGEX].*TO_FILE field .*offset.*must be >= 0.*
+-- !result
+drop database test_to_file_${uuid0};
+-- result:
+-- !result
+select fl_get_uri(f), fl_get_offset(f), fl_get_size(f), fl_get_content_type(f), fl_get_checksum(f), fl_get_inline(f) is null
+from (select to_file(named_struct('URI', 'a.jpg', 'size', 12, 'offset', 0, 'checksum', 'opaque', 'content_type', 'image/jpeg')) f) t;
+-- result:
+a.jpg	0	12	image/jpeg	opaque	1
+-- !result
+select fl_get_uri(f) is null, fl_get_offset(f) is null, fl_get_size(f), fl_get_content_type(f) is null, fl_get_checksum(f) is null, hex(fl_get_inline(f))
+from (select to_file(named_struct('inline', to_binary('610062', 'hex'), 'size', 3)) f) t;
+-- result:
+1	1	3	1	1	610062
+-- !result
+select length(fl_get_uri(to_file(named_struct('uri', '')))), length(fl_get_inline(to_file(named_struct('inline', to_binary('', 'hex')))));
+-- result:
+0	0
+-- !result
+select fl_get_uri(NULL) is null, fl_get_offset(NULL) is null, fl_get_size(NULL) is null, fl_get_content_type(NULL) is null, fl_get_checksum(NULL) is null, fl_get_inline(NULL) is null;
+-- result:
+1	1	1	1	1	1
+-- !result
+select try_to_file(NULL) is null, try_to_file(cast(NULL as struct<uri varchar(20)>)) is null;
+-- result:
+1	1
+-- !result
+select try_to_file(named_struct('uri', NULL)) is null;
+-- result:
+1
+-- !result
+select try_to_file(named_struct('content_type', 'image/jpeg')) is null;
+-- result:
+1
+-- !result
+select try_to_file(named_struct('uri', '', 'inline', to_binary('', 'hex'))) is null;
+-- result:
+1
+-- !result
+select try_to_file(named_struct('uri', 'a', 'offset', -1)) is null;
+-- result:
+1
+-- !result
+select try_to_file(named_struct('inline', to_binary('61', 'hex'), 'size', -1)) is null;
+-- result:
+1
+-- !result
+select fl_get_uri(try_to_file(named_struct('uri', 'a', 'offset', -1))) is null;
+-- result:
+1
+-- !result
+select try_to_file(named_struct('path', 'a'));
+-- result:
+[REGEX].*TRY_TO_FILE has unknown field.*
+-- !result
+select try_to_file(named_struct('URI', 'a', 'uri', 'b'));
+-- result:
+[REGEX].*duplicate subfield name.*
+-- !result
+select try_to_file(named_struct('size', '3'));
+-- result:
+[REGEX].*TRY_TO_FILE field .*unsupported type.*
+-- !result
+select try_to_file(named_struct('inline', 'bytes'));
+-- result:
+[REGEX].*TRY_TO_FILE field .*unsupported type.*
+-- !result
+select try_to_file(named_struct('uri', fl_get_uri(to_file(named_struct('uri', NULL)))));
+-- result:
+[REGEX].*TO_FILE requires exactly one.*
+-- !result
+create database test_file_helpers_${uuid0};
+-- result:
+-- !result
+use test_file_helpers_${uuid0};
+-- result:
+-- !result
+create table input_files (id int, uri varchar(256), payload varbinary, file_offset bigint, file_size bigint)
+duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into input_files values
+(1, 'a.jpg', NULL, 0, 12),
+(2, NULL, to_binary('610062', 'hex'), NULL, 3),
+(3, NULL, NULL, 0, 0),
+(4, 'both', to_binary('61', 'hex'), 0, 1),
+(5, 'negative-offset', NULL, -1, 1),
+(6, 'negative-size', NULL, 0, -1),
+(7, '', NULL, NULL, NULL),
+(8, NULL, to_binary('', 'hex'), 0, 0);
+-- result:
+-- !result
+select id, f is null, fl_get_uri(f), hex(fl_get_inline(f)), fl_get_offset(f), fl_get_size(f)
+from (select id, try_to_file(named_struct('uri', uri, 'inline', payload, 'offset', file_offset, 'size', file_size)) f from input_files) t order by id;
+-- result:
+1	0	a.jpg	None	0	12
+2	0	None	610062	None	3
+3	1	None	None	None	None
+4	1	None	None	None	None
+5	1	None	None	None	None
+6	1	None	None	None	None
+7	0		None	None	None
+8	0	None		0	0
+-- !result
+select id from input_files where try_to_file(named_struct('uri', uri, 'inline', payload, 'offset', file_offset, 'size', file_size)) is not null order by id;
+-- result:
+1
+2
+7
+8
+-- !result
+select id from input_files where fl_get_size(to_file(named_struct('uri', 'a'))) is null order by id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+-- !result
+create table input_metadata (id int, s struct<uri varchar(20), size bigint>)
+duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into input_metadata values (1, named_struct('uri', 'a', 'size', 1)), (2, NULL), (3, named_struct('uri', 'b', 'size', -1));
+-- result:
+-- !result
+select id, try_to_file(s) is null, fl_get_uri(try_to_file(s)) from input_metadata order by id;
+-- result:
+1	0	a
+2	1	None
+3	1	None
+-- !result
+drop database test_file_helpers_${uuid0};
+-- result:
+-- !result
