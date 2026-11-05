@@ -11,7 +11,7 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 FILE is a scalar type that describes a file, or a byte range inside a file. A FILE value has a fixed set of fields that can be extracted using the `FL_GET_*` functions.
 
-FILE currently cannot be persisted in StarRocks. FILE values can be obtained from external catalogs or constructed using `TO_FILE` or `TRY_TO_FILE`. For syntax and examples, see [FILE functions](../../sql-functions/ai-functions/file_functions.md).
+FILE currently cannot be persisted in StarRocks. FILE values can be obtained from external catalogs or constructed using `TO_FILE` or `TRY_TO_FILE`. For syntax and examples, see [FILE functions](../../sql-functions/file-functions/file-functions.mdx).
 
 ## Structure
 

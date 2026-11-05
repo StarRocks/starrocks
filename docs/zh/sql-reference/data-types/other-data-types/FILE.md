@@ -11,7 +11,7 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 FILE 是一种标量类型，用于描述一个文件或文件内部的一段字节。FILE 值包含一组固定字段，可通过 `FL_GET_*` 函数提取。
 
-目前 FILE 类型不支持持久化。FILE 值可以从 External Catalog 获取，也可以通过 `TO_FILE` 或 `TRY_TO_FILE` 构造。函数语法和示例参见 [FILE 函数](../../sql-functions/ai-functions/file_functions.md)。
+目前 FILE 类型不支持持久化。FILE 值可以从 External Catalog 获取，也可以通过 `TO_FILE` 或 `TRY_TO_FILE` 构造。函数语法和示例参见 [FILE 函数](../../sql-functions/file-functions/file-functions.mdx)。
 
 ## 结构
 

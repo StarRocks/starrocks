@@ -11,7 +11,7 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 FILE は、ファイルまたはファイル内部のバイト範囲を表すスカラー型です。FILE 値は固定されたフィールドの組を持ち、`FL_GET_*` 関数で各フィールドを取得できます。
 
-現時点では FILE 型は永続化をサポートしていません。FILE 値は External Catalog から取得するほか、`TO_FILE` または `TRY_TO_FILE` で構築できます。構文と例については、[FILE 関数](../../sql-functions/ai-functions/file_functions.md)を参照してください。
+現時点では FILE 型は永続化をサポートしていません。FILE 値は External Catalog から取得するほか、`TO_FILE` または `TRY_TO_FILE` で構築できます。構文と例については、[FILE 関数](../../sql-functions/file-functions/file-functions.mdx)を参照してください。
 
 ## 構造
 
