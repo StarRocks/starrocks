@@ -1912,12 +1912,12 @@ vectorized_functions = [
      }],
 
     # file functions
-    [210000, 'to_file', True, True, 'FILE', ['ANY_STRUCT'], 'FileFunctions::to_file'],
-    [210001, 'try_to_file', True, True, 'FILE', ['ANY_STRUCT'], 'FileFunctions::try_to_file'],
-    [210002, 'fl_get_uri', True, True, 'VARCHAR', ['FILE'], 'FileFunctions::fl_get_uri'],
-    [210003, 'fl_get_offset', True, True, 'BIGINT', ['FILE'], 'FileFunctions::fl_get_offset'],
-    [210004, 'fl_get_size', True, True, 'BIGINT', ['FILE'], 'FileFunctions::fl_get_size'],
-    [210005, 'fl_get_content_type', True, True, 'VARCHAR', ['FILE'], 'FileFunctions::fl_get_content_type'],
-    [210006, 'fl_get_checksum', True, True, 'VARCHAR', ['FILE'], 'FileFunctions::fl_get_checksum'],
-    [210007, 'fl_get_inline', True, True, 'VARBINARY', ['FILE'], 'FileFunctions::fl_get_inline'],
+    [210000, 'to_file', True, False, 'FILE', ['ANY_STRUCT'], 'FileFunctions::to_file'],
+    [210001, 'try_to_file', True, False, 'FILE', ['ANY_STRUCT'], 'FileFunctions::try_to_file'],
+    [210002, 'fl_get_uri', True, False, 'VARCHAR', ['FILE'], 'FileFunctions::fl_get_uri'],
+    [210003, 'fl_get_offset', True, False, 'BIGINT', ['FILE'], 'FileFunctions::fl_get_offset'],
+    [210004, 'fl_get_size', True, False, 'BIGINT', ['FILE'], 'FileFunctions::fl_get_size'],
+    [210005, 'fl_get_content_type', True, False, 'VARCHAR', ['FILE'], 'FileFunctions::fl_get_content_type'],
+    [210006, 'fl_get_checksum', True, False, 'VARCHAR', ['FILE'], 'FileFunctions::fl_get_checksum'],
+    [210007, 'fl_get_inline', True, False, 'VARBINARY', ['FILE'], 'FileFunctions::fl_get_inline'],
 ]

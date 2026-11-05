@@ -5,7 +5,11 @@ sidebar_position: 30
 toc_max_heading_level: 2
 ---
 
+import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
+
 # FILE 函数
+
+<Experimental />
 
 这些函数用于构造 [FILE](../../data-types/other-data-types/FILE.md) 值或提取其中的字段，不访问存储，也不推断元信息。
 
@@ -51,7 +55,6 @@ TO_FILE(struct_expr)
 - `offset`、`size` 可以为 NULL；非 NULL 值必须大于等于 0。任意一行违反此规则或 `uri`/`inline` 二选一规则，查询都会失败。
 - 不校验 URI 格式、MIME 类型、校验和，以及 size 与实际字节长度是否一致。
 - `inline` 保存原始字节。空字符串和零长度二进制值仍算非 NULL，并会被保留。
-- 返回 FILE。此重载不解析 Storage Volume，不发送 HEAD 请求，也不生成预签名 URL。
 
 ### 示例
 

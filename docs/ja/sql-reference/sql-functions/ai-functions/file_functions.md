@@ -5,7 +5,11 @@ sidebar_position: 30
 toc_max_heading_level: 2
 ---
 
+import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
+
 # FILE 関数
+
+<Experimental />
 
 これらの関数は [FILE](../../data-types/other-data-types/FILE.md) 値を構築したり、そのフィールドを取得したりします。ストレージへのアクセスやメタデータの推論は行いません。
 
@@ -51,7 +55,6 @@ TO_FILE(struct_expr)
 - `offset` と `size` は NULL にできますが、非 NULL の値は 0 以上である必要があります。いずれかの行がこのルール、または `uri` と `inline` のルールに違反すると、クエリは失敗します。
 - URI の構文、MIME タイプ、チェックサム、size と実際のバイト長の整合性は検証しません。
 - `inline` は生のバイト列です。空文字列と長さゼロのバイナリ値も非 NULL とみなし、そのまま保持します。
-- 戻り値は FILE です。このオーバーロードは Storage Volume の解決、HEAD リクエスト、署名付き URL の生成を行いません。
 
 ### 例
 

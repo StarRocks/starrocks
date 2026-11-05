@@ -5,7 +5,11 @@ sidebar_position: 30
 toc_max_heading_level: 2
 ---
 
+import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
+
 # FILE functions
+
+<Experimental />
 
 These functions construct [FILE](../../data-types/other-data-types/FILE.md) values or extract their fields. They do not access storage or infer metadata.
 
@@ -51,7 +55,6 @@ TO_FILE(struct_expr)
 - `offset` and `size` can be NULL; non-NULL values must be greater than or equal to zero. A row that violates these rules or the `uri`/`inline` rule causes the query to fail.
 - URI syntax, MIME types, checksums, and consistency between size and payload length are not validated.
 - `inline` contains raw bytes. Empty strings and empty binary values count as non-NULL and are preserved.
-- Returns FILE. This overload does not resolve Storage Volumes, send HEAD requests, or generate presigned URLs.
 
 ### Examples
 

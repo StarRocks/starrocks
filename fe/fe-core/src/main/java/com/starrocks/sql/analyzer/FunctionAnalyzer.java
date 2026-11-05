@@ -269,7 +269,7 @@ public class FunctionAnalyzer {
         } else if (fn instanceof AggStateIf) {
             String argFuncNameWithoutIf = AggStateUtils.getAggFuncNameOfCombinator(fnName);
             FunctionParams params = functionCallExpr.getParams();
-
+            
             // Validate that the condition parameter (last parameter) is boolean type or can be cast to boolean
             if (!params.exprs().isEmpty()) {
                 Expr conditionExpr = params.exprs().get(params.exprs().size() - 1);
@@ -279,7 +279,7 @@ public class FunctionAnalyzer {
                         fnName, conditionExpr.getType().toSql()), functionCallExpr.getPos());
                 }
             }
-
+            
             FunctionParams functionParamsWithOutIf =
                     new FunctionParams(params.isStar(), params.exprs().subList(0, params.exprs().size() - 1),
                             params.getExprsNames() == null ? null :
@@ -564,14 +564,14 @@ public class FunctionAnalyzer {
                         "requires two or three parameters", functionCallExpr.getPos());
             }
             // Validate first parameter (value expression) is numeric type
-            validateNumericParameter(functionCallExpr.getChild(0), "first", "value",
+            validateNumericParameter(functionCallExpr.getChild(0), "first", "value", 
                     "percentile_approx", functionCallExpr.getPos());
             // Validate second parameter (percentile) is numeric or array type
-            validatePercentileParameter(functionCallExpr.getChild(1), "second",
+            validatePercentileParameter(functionCallExpr.getChild(1), "second", 
                     "percentile_approx", functionCallExpr.getPos());
             // Validate optional third parameter (compression) is numeric type
             if (children.size() == 3) {
-                validateNumericParameter(functionCallExpr.getChild(2), "third", "compression",
+                validateNumericParameter(functionCallExpr.getChild(2), "third", "compression", 
                         "percentile_approx", functionCallExpr.getPos());
             }
         }
@@ -585,17 +585,17 @@ public class FunctionAnalyzer {
                         "[, DOUBLE compression]) requires three or four parameters", functionCallExpr.getPos());
             }
             // Validate first parameter (value expression) is numeric type
-            validateNumericParameter(functionCallExpr.getChild(0), "first", "value",
+            validateNumericParameter(functionCallExpr.getChild(0), "first", "value", 
                     "percentile_approx_weighted", functionCallExpr.getPos());
             // Validate second parameter (weight) is numeric type
-            validateNumericParameter(functionCallExpr.getChild(1), "second", "weight",
+            validateNumericParameter(functionCallExpr.getChild(1), "second", "weight", 
                     "percentile_approx_weighted", functionCallExpr.getPos());
             // Validate third parameter (percentile) is numeric or array type
-            validatePercentileParameter(functionCallExpr.getChild(2), "third",
+            validatePercentileParameter(functionCallExpr.getChild(2), "third", 
                     "percentile_approx_weighted", functionCallExpr.getPos());
             // Validate optional fourth parameter (compression) is numeric type
             if (children.size() == 4) {
-                validateNumericParameter(functionCallExpr.getChild(3), "fourth", "compression",
+                validateNumericParameter(functionCallExpr.getChild(3), "fourth", "compression", 
                         "percentile_approx_weighted", functionCallExpr.getPos());
             }
         }
@@ -821,7 +821,7 @@ public class FunctionAnalyzer {
 
     /**
      * Validate that a function parameter is of numeric type.
-     *
+     * 
      * @param paramExpr The parameter expression to validate
      * @param paramPosition The position description (e.g., "first", "second")
      * @param paramName The parameter name (e.g., "value", "weight", "compression")
@@ -829,8 +829,8 @@ public class FunctionAnalyzer {
      * @param pos The position in the source code for error reporting
      * @throws SemanticException if the parameter is not numeric type
      */
-    private static void validateNumericParameter(Expr paramExpr, String paramPosition,
-                                                  String paramName, String functionName,
+    private static void validateNumericParameter(Expr paramExpr, String paramPosition, 
+                                                  String paramName, String functionName, 
                                                   NodePosition pos) {
         if (!paramExpr.getType().isNumericType()) {
             throw new SemanticException(
@@ -849,17 +849,17 @@ public class FunctionAnalyzer {
      * <p>
      * Note: This method only validates the type. Constant validation and value range checks
      * (ensuring values are between 0 and 1) are performed in TypeChecker during the optimization phase.
-     *
+     * 
      * @param percentileExpr The percentile parameter expression to validate
      * @param paramPosition The position description (e.g., "second", "third")
      * @param functionName The function name for error messages
      * @param pos The position in the source code for error reporting
      * @throws SemanticException if the parameter is not numeric or array type, or if array elements are not numeric
      */
-    private static void validatePercentileParameter(Expr percentileExpr, String paramPosition,
+    private static void validatePercentileParameter(Expr percentileExpr, String paramPosition, 
                                                      String functionName, NodePosition pos) {
         Type percentileType = percentileExpr.getType();
-
+        
         // Check if parameter is numeric or array type
         if (!percentileType.isNumericType() && !percentileType.isArrayType()) {
             throw new SemanticException(
@@ -867,7 +867,7 @@ public class FunctionAnalyzer {
                             functionName, paramPosition, percentileType.toSql()),
                     pos);
         }
-
+        
         // If it's an array, validate that array elements are numeric type
         if (percentileType.isArrayType()) {
             ArrayType arrayType = (ArrayType) percentileType;
@@ -1368,7 +1368,7 @@ public class FunctionAnalyzer {
         StructType targetType;
         if (inputType.isNull()) {
             // Give a bare NULL a concrete STRUCT type; the value remains NULL.
-            targetType = new StructType(Lists.newArrayList(new StructField("uri", VarcharType.VARCHAR)));
+            targetType = new StructType(Lists.newArrayList(new StructField(FileType.URI, VarcharType.VARCHAR)));
         } else {
             ArrayList<StructField> fields = new ArrayList<>();
             for (StructField field : ((StructType) inputType).getFields()) {
@@ -1411,7 +1411,7 @@ public class FunctionAnalyzer {
             throw new SemanticException(
                 "regexp_position requires 2, 3, or 4 arguments: " +
                 "regexp_position(str, pattern[, start_pos[, occurrence]])",
-                node.getPos());
+                node.getPos());      
         }
 
         if (argCount == 2) {

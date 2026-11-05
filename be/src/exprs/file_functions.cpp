@@ -14,6 +14,8 @@
 
 #include "exprs/file_functions.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <array>
 #include <string>
@@ -68,7 +70,7 @@ ColumnPtr normalize_file_field(const ColumnPtr& field, LogicalType type, size_t 
 // Skip outer NULL rows during validation, then merge them with the invalid-row bitmap.
 template <bool NullOnInvalid>
 StatusOr<NullColumnPtr> validate_file_fields(const std::array<ColumnPtr, FileColumn::NUM_FIELDS>& fields,
-                                           const NullableColumn* outer_nullable, size_t num_rows) {
+                                             const NullableColumn* outer_nullable, size_t num_rows) {
     const ColumnViewer<TYPE_BIGINT> offset(fields[FileColumn::OFFSET]);
     const ColumnViewer<TYPE_BIGINT> size(fields[FileColumn::SIZE]);
     NullColumn::MutablePtr invalid_nulls;
@@ -109,7 +111,7 @@ StatusOr<NullColumnPtr> validate_file_fields(const std::array<ColumnPtr, FileCol
 
 template <bool NullOnInvalid>
 StatusOr<ColumnPtr> to_file_impl(FunctionContext* context, const Columns& columns) {
-    const std::string function_name = NullOnInvalid ? "TRY_TO_FILE" : "TO_FILE";
+    constexpr const char* function_name = NullOnInvalid ? "TRY_TO_FILE" : "TO_FILE";
     const auto& input = columns[0];
     if (input->only_null()) {
         return ColumnHelper::create_const_null_column(input->size());
@@ -126,12 +128,12 @@ StatusOr<ColumnPtr> to_file_impl(FunctionContext* context, const Columns& column
     }
     const auto* type = context->get_arg_type(0);
     if (!input_data->is_struct() || type->type != TYPE_STRUCT) {
-        return Status::InvalidArgument(function_name + " requires a STRUCT argument");
+        return Status::InvalidArgument(fmt::format("{} requires a STRUCT argument", function_name));
     }
     const auto* source = down_cast<const StructColumn*>(input_data);
     const auto source_fields = source->fields();
     if (type->field_names.size() != source_fields.size() || type->children.size() != type->field_names.size()) {
-        return Status::InvalidArgument(function_name + " requires matching STRUCT fields and types");
+        return Status::InvalidArgument(fmt::format("{} requires matching STRUCT fields and types", function_name));
     }
     std::array<int, FileColumn::NUM_FIELDS> mapping;
     mapping.fill(-1);
@@ -140,11 +142,11 @@ StatusOr<ColumnPtr> to_file_impl(FunctionContext* context, const Columns& column
         std::ranges::transform(name, name.begin(), [](unsigned char c) { return ascii_tolower(c); });
         const auto it = std::ranges::find(FileColumn::kFieldNames, name);
         if (it == FileColumn::kFieldNames.end()) {
-            return Status::InvalidArgument(function_name + " has unknown field '" + name + "'");
+            return Status::InvalidArgument(fmt::format("{} has unknown field '{}'", function_name, name));
         }
         const size_t index = it - FileColumn::kFieldNames.begin();
         if (mapping[index] != -1) {
-            return Status::InvalidArgument(function_name + " has duplicate field '" + name + "'");
+            return Status::InvalidArgument(fmt::format("{} has duplicate field '{}'", function_name, name));
         }
         mapping[index] = i;
     }
@@ -158,8 +160,8 @@ StatusOr<ColumnPtr> to_file_impl(FunctionContext* context, const Columns& column
             // CHAR and VARCHAR match in FE without an explicit cast and share BinaryColumn storage.
             const auto source_type = type->children[mapping[i]].type;
             if (source_type != field_type && !(field_type == TYPE_VARCHAR && source_type == TYPE_CHAR)) {
-                return Status::InvalidArgument(function_name + " field '" + std::string(FileColumn::kFieldNames[i]) +
-                                               "' has an unexpected type");
+                return Status::InvalidArgument(
+                        fmt::format("{} field '{}' has an unexpected type", function_name, FileColumn::kFieldNames[i]));
             }
             fields[i] = normalize_file_field(source_fields[mapping[i]], field_type, input_data->size());
         }

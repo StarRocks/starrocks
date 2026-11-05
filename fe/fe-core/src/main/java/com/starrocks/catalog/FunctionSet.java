@@ -691,12 +691,6 @@ public class FunctionSet {
     // file function
     public static final String TO_FILE = "to_file";
     public static final String TRY_TO_FILE = "try_to_file";
-    public static final String FL_GET_URI = "fl_get_uri";
-    public static final String FL_GET_OFFSET = "fl_get_offset";
-    public static final String FL_GET_SIZE = "fl_get_size";
-    public static final String FL_GET_CONTENT_TYPE = "fl_get_content_type";
-    public static final String FL_GET_CHECKSUM = "fl_get_checksum";
-    public static final String FL_GET_INLINE = "fl_get_inline";
 
     public static final ImmutableList<ScalarType> NUMERIC_TYPES = ImmutableList.<ScalarType>builder()
             .addAll(IntegerType.INTEGER_TYPES)
