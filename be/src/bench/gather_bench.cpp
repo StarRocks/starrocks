@@ -17,8 +17,10 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
 #include <map>
+#include <memory>
 #include <new>
 #include <random>
 #include <utility>
@@ -105,9 +107,40 @@ const std::vector<uint32_t>& cached_strided_indexes(size_t pool_size, size_t num
     return it->second;
 }
 
+// One page-aligned destination buffer per (element type, num_rows), shared by every benchmark variant.
+// A per-run std::vector<T> gives each benchmark a different dest address while src and the index ring are
+// cached and shared, so variants differ in 4K-aliasing / cache-set layout of the store stream. That showed
+// up as +2..+13% between Baseline and LegacyBuffered on x86 even though they compile to byte-identical asm
+// (the built-in null control). A fixed address removes that variable.
+struct AlignedFree {
+    void operator()(void* p) const { std::free(p); }
+};
+
+template <typename T>
+struct AlignedBuffer {
+    static constexpr size_t kAlign = 4096;
+    explicit AlignedBuffer(size_t n) {
+        const size_t bytes = (n * sizeof(T) + kAlign + kAlign - 1) / kAlign * kAlign;
+        data.reset(static_cast<T*>(std::aligned_alloc(kAlign, bytes)));
+        count = data ? n : 0;
+    }
+    std::unique_ptr<T, AlignedFree> data;
+    size_t count = 0;
+};
+
+template <typename T>
+T* shared_dest(size_t num_rows) {
+    static std::map<size_t, AlignedBuffer<T>> cache;
+    auto it = cache.find(num_rows);
+    if (it == cache.end()) {
+        it = cache.emplace(num_rows, AlignedBuffer<T>(num_rows)).first;
+    }
+    return it->second.data.get();
+}
+
 // Verifies dest[i] == src[indexes[i]] once, outside the timed loop.
 template <typename T>
-bool self_check(const std::vector<T>& dest, const std::vector<T>& src, const uint32_t* indexes, size_t num_rows) {
+bool self_check(const T* dest, const std::vector<T>& src, const uint32_t* indexes, size_t num_rows) {
     for (size_t i = 0; i < num_rows; ++i) {
         if (dest[i] != src[indexes[i]]) {
             return false;
@@ -277,9 +310,21 @@ void run_gather_fn(benchmark::State& state, const std::vector<T>& src, const std
         state.SkipWithError("invalid index ring size for num_rows");
         return;
     }
-    std::vector<T> dest(num_rows);
+    T* dest = shared_dest<T>(num_rows);
+    if (dest == nullptr) {
+        state.SkipWithError("destination allocation failed");
+        return;
+    }
+    // Poison with a sentinel so a variant that writes nothing cannot pass on a previous variant's output.
+    std::fill(dest, dest + num_rows, static_cast<T>(-1));
+    for (size_t i = 0; i < num_rows; ++i) {
+        // Guard: the sentinel must not coincide with the expected value anywhere.
+        if (src[index_ring[i]] == static_cast<T>(-1)) {
+            dest[i] = static_cast<T>(0);
+        }
+    }
 
-    gather_fn(dest.data(), src.data(), index_ring.data(), num_rows);
+    gather_fn(dest, src.data(), index_ring.data(), num_rows);
     if (!self_check(dest, src, index_ring.data(), num_rows)) {
         state.SkipWithError("gathered value mismatch");
         return;
@@ -289,8 +334,8 @@ void run_gather_fn(benchmark::State& state, const std::vector<T>& src, const std
     size_t offset = (num_rows < ring_size) ? num_rows : 0;
     for (auto _ : state) {
         const uint32_t* indexes = index_ring.data() + offset;
-        gather_fn(dest.data(), src.data(), indexes, num_rows);
-        benchmark::DoNotOptimize(dest.data());
+        gather_fn(dest, src.data(), indexes, num_rows);
+        benchmark::DoNotOptimize(dest);
         benchmark::ClobberMemory();
         offset += num_rows;
         if (offset + num_rows > ring_size) {
