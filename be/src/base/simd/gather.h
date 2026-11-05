@@ -147,5 +147,19 @@ struct SIMDGather {
             }
         }
     }
+
+    /// Caller-informed gather forwarding to gather(dest, src, indexes, num_rows)
+    template <typename DataType, typename IndexType>
+    static void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows,
+                       size_t pool_size) {
+        gather(dest, src, indexes, num_rows);
+    }
+
+    /// Caller-informed filtered gather forwarding to gather(dest, src, indexes, is_filtered, num_rows)
+    template <typename DataType, typename IndexType, typename CondType>
+    static void gather(DataType* dest, const DataType* src, const IndexType* indexes, const CondType* is_filtered,
+                       size_t num_rows, size_t pool_size) {
+        gather(dest, src, indexes, is_filtered, num_rows);
+    }
 };
 } // namespace starrocks

@@ -245,4 +245,131 @@ PARALLEL_TEST(GatherTest, string_gather) {
     ASSERT_EQ(src_copy, src);
 }
 
+template <typename T, typename IndexType>
+void check_caller_informed_gather(size_t num_rows, size_t pool_size) {
+    const std::vector<T> src = make_source<T>();
+    const std::vector<IndexType> indexes = make_indexes<IndexType>(num_rows, 12345 + num_rows);
+    const T sentinel = make_value<T>(999983);
+
+    std::vector<T> dest(num_rows + kGuard, sentinel);
+    SIMDGather::gather(dest.data(), src.data(), indexes.data(), num_rows, pool_size);
+
+    for (size_t i = 0; i < num_rows; ++i) {
+        ASSERT_EQ(src[indexes[i]], dest[i]) << "num_rows=" << num_rows << " pool_size=" << pool_size << " i=" << i;
+    }
+    for (size_t i = num_rows; i < dest.size(); ++i) {
+        ASSERT_EQ(sentinel, dest[i]) << "write past the end, num_rows=" << num_rows << " pool_size=" << pool_size
+                                     << " i=" << i;
+    }
+}
+
+template <typename T, typename IndexType, typename CondType = uint8_t>
+void check_caller_informed_filtered(size_t num_rows, size_t pool_size, FilterPattern pattern = FilterPattern::ModuloMix,
+                                    bool poison_filtered_indices = false) {
+    const std::vector<T> src = make_source<T>();
+    std::vector<IndexType> indexes = make_indexes<IndexType>(num_rows, 777 + num_rows);
+    const std::vector<CondType> is_filtered = make_filter<CondType>(num_rows, pattern, 777 + num_rows);
+    const T sentinel = make_value<T>(999983);
+
+    if (poison_filtered_indices) {
+        for (size_t i = 0; i < num_rows; ++i) {
+            if (is_filtered[i] != 0) {
+                // Out-of-bounds index: accessing src[indexes[i]] would be an invalid read or segfault
+                indexes[i] = static_cast<IndexType>(kPoolSize + 50000 + i);
+            }
+        }
+    }
+
+    std::vector<T> dest(num_rows + kGuard, sentinel);
+    SIMDGather::gather(dest.data(), src.data(), indexes.data(), is_filtered.data(), num_rows, pool_size);
+
+    for (size_t i = 0; i < num_rows; ++i) {
+        const T expected = is_filtered[i] == 0 ? src[indexes[i]] : T(0);
+        ASSERT_EQ(expected, dest[i]) << "num_rows=" << num_rows << " pool_size=" << pool_size << " i=" << i
+                                     << " pattern=" << static_cast<int>(pattern);
+    }
+    for (size_t i = num_rows; i < dest.size(); ++i) {
+        ASSERT_EQ(sentinel, dest[i]) << "write past the end, num_rows=" << num_rows << " pool_size=" << pool_size
+                                     << " i=" << i;
+    }
+}
+
+TEST(SIMDGatherTest, test_caller_informed_pool_size) {
+    const std::vector<size_t> row_counts = {0,  1,   7,    8,    15,   16,   31,   32,  63,
+                                            64, 100, 4088, 4095, 4096, 4097, 4104, 8192};
+    const std::vector<size_t> pool_sizes = {0, 1024, 4 * 1024 * 1024, 16 * 1024 * 1024, 64 * 1024 * 1024};
+
+    for (size_t pool_size : pool_sizes) {
+        for (size_t n : row_counts) {
+            check_caller_informed_gather<uint32_t, uint32_t>(n, pool_size);
+            check_caller_informed_gather<int32_t, uint32_t>(n, pool_size);
+            check_caller_informed_gather<int32_t, int32_t>(n, pool_size);
+            check_caller_informed_gather<uint64_t, uint32_t>(n, pool_size);
+            check_caller_informed_gather<int64_t, uint32_t>(n, pool_size);
+            check_caller_informed_gather<int64_t, int32_t>(n, pool_size);
+            check_caller_informed_gather<int16_t, uint32_t>(n, pool_size);
+            check_caller_informed_gather<int8_t, int32_t>(n, pool_size);
+        }
+    }
+
+    // String gather with caller-informed pool size
+    std::vector<std::string> src(2000);
+    for (size_t i = 0; i < src.size(); ++i) {
+        src[i] = std::string(i % 30, 'a' + (i % 26)) + std::to_string(i);
+    }
+    const std::vector<std::string> src_copy = src;
+    for (size_t pool_size : {size_t(0), size_t(4 * 1024 * 1024), size_t(64 * 1024 * 1024)}) {
+        for (size_t n : {size_t(0), size_t(1), size_t(4095), size_t(4096), size_t(4097), size_t(8192)}) {
+            std::mt19937 rng(42 + n);
+            std::uniform_int_distribution<uint32_t> dist(0, src.size() - 1);
+            std::vector<uint32_t> indexes(n);
+            for (auto& index : indexes) {
+                index = dist(rng);
+            }
+            std::vector<std::string> dest(n);
+            SIMDGather::gather(dest.data(), src.data(), indexes.data(), n, pool_size);
+            for (size_t i = 0; i < n; ++i) {
+                ASSERT_EQ(src_copy[indexes[i]], dest[i]) << "n=" << n << " i=" << i;
+            }
+        }
+    }
+    ASSERT_EQ(src_copy, src);
+}
+
+TEST(SIMDGatherTest, test_caller_informed_filtered_pool_size) {
+    const std::vector<size_t> row_counts = {0,  1,   7,    8,    15,   16,   31,   32,  63,
+                                            64, 100, 4088, 4095, 4096, 4097, 4104, 8192};
+    const std::vector<size_t> pool_sizes = {0, 1024, 4 * 1024 * 1024, 16 * 1024 * 1024, 64 * 1024 * 1024};
+    const std::vector<FilterPattern> patterns = {
+            FilterPattern::AllZeros, FilterPattern::AllOnes,   FilterPattern::Alternating,
+            FilterPattern::Random,   FilterPattern::ModuloMix,
+    };
+
+    // Standard filter patterns with small and large DRAM pools
+    for (size_t pool_size : pool_sizes) {
+        for (FilterPattern pattern : patterns) {
+            for (size_t n : row_counts) {
+                check_caller_informed_filtered<uint32_t, uint32_t, uint8_t>(n, pool_size, pattern, false);
+                check_caller_informed_filtered<int32_t, uint32_t, uint8_t>(n, pool_size, pattern, false);
+                check_caller_informed_filtered<int64_t, uint32_t, uint8_t>(n, pool_size, pattern, false);
+                check_caller_informed_filtered<uint64_t, int32_t, uint8_t>(n, pool_size, pattern, false);
+            }
+        }
+    }
+
+    // Critical edge case: invalid filtered indices that should NOT be accessed
+    // Filtered entries have indices pointing far out of bounds (would crash/segfault if accessed)
+    for (size_t pool_size : {size_t(0), size_t(4 * 1024 * 1024), size_t(16 * 1024 * 1024), size_t(64 * 1024 * 1024)}) {
+        for (FilterPattern pattern : {FilterPattern::Alternating, FilterPattern::ModuloMix, FilterPattern::AllOnes}) {
+            for (size_t n : {size_t(1), size_t(8), size_t(16), size_t(4088), size_t(4095), size_t(4096), size_t(4097),
+                             size_t(4104), size_t(8192)}) {
+                check_caller_informed_filtered<uint32_t, uint32_t, uint8_t>(n, pool_size, pattern, true);
+                check_caller_informed_filtered<int32_t, int32_t, uint8_t>(n, pool_size, pattern, true);
+                check_caller_informed_filtered<uint64_t, uint32_t, uint8_t>(n, pool_size, pattern, true);
+                check_caller_informed_filtered<int64_t, int32_t, uint8_t>(n, pool_size, pattern, true);
+            }
+        }
+    }
+}
+
 } // namespace starrocks
