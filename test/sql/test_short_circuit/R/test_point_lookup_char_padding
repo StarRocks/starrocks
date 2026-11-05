@@ -1,4 +1,4 @@
--- name: test_point_lookup_char_padding @no_arrow_flight_sql
+-- name: test_point_lookup_char_padding @no_arrow_flight_sql @native
 create database db_${uuid0};
 -- result:
 -- !result

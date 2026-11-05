@@ -1,4 +1,4 @@
--- name: test_point_lookup_char_padding @no_arrow_flight_sql
+-- name: test_point_lookup_char_padding @no_arrow_flight_sql @native
 -- A primary-key point lookup -- a short-circuit query, or dict_mapping -- reads values through
 -- TabletUpdates::get_column_values, which pads CHAR back to its declared width with '\0' because a partial
 -- update writes those values back to storage. The lookup returned them as they were: 'a' in a CHAR(18) came
