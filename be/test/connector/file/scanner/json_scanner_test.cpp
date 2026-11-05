@@ -2509,6 +2509,10 @@ TEST_F(JsonScannerTruncatedDocTest, rejected_record) {
 }
 
 TEST_F(JsonScannerTruncatedDocTest, mid_document_syntax_error_positions) {
+    static_assert(simdjson::SIMDJSON_VERSION_MAJOR == 5,
+                  "Re-validate mid_document_syntax_error_positions on simdjson major version upgrade");
+    EXPECT_EQ(5, int(simdjson::SIMDJSON_VERSION_MAJOR));
+
     // 1. First-only malformed document (with and without trailing newline)
     for (const std::string& doc : {kMissingValueDocument, kMissingValueDocument + "\n"}) {
         auto result = scan(TBrokerRangeDesc(), kK13Names, {doc});
@@ -2533,6 +2537,24 @@ TEST_F(JsonScannerTruncatedDocTest, mid_document_syntax_error_positions) {
         EXPECT_EQ(1, result.rows);
         EXPECT_EQ(1, result.filtered);
     }
+
+    // 4. Consecutive mid-document syntax errors flanked by valid rows across separate stream buffers
+    const std::string valid1 = R"({"k1":"a","k2":"1"})";
+    const std::string valid2 = R"({"k1":"b","k2":"2"})";
+    auto multi_buf_result =
+            scan(TBrokerRangeDesc(), kK13Names, {valid1, kMissingValueDocument, kMissingValueDocument, valid2});
+    EXPECT_TRUE(multi_buf_result.status.is_end_of_file()) << multi_buf_result.status;
+    EXPECT_EQ(2, multi_buf_result.rows);
+    EXPECT_EQ(2, multi_buf_result.filtered);
+
+    // 5. Single-buffer fatal TAPE_ERROR termination: simdjson::ondemand::document_stream treats a mid-document
+    // TAPE_ERROR as fatal for the remainder of that buffer without double-counting the failed document.
+    auto single_buf_result =
+            scan(TBrokerRangeDesc(), kK13Names,
+                 {valid1 + "\n" + kMissingValueDocument + "\n" + kMissingValueDocument + "\n" + valid2});
+    EXPECT_TRUE(single_buf_result.status.is_end_of_file()) << single_buf_result.status;
+    EXPECT_EQ(1, single_buf_result.rows);
+    EXPECT_EQ(1, single_buf_result.filtered);
 }
 
 TEST_F(JsonScannerTest, test_simdjson_v511_big_integer_and_unicode_escapes) {
