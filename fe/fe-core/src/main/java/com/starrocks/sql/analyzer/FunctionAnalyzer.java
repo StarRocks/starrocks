@@ -1224,8 +1224,8 @@ public class FunctionAnalyzer {
                 sf.add(new StructField(literal.getStringValue(), node.getChild(i + 1).getType()));
             }
             fn.setRetType(new StructType(sf));
-        } else if (FunctionSet.TO_FILE.equalsIgnoreCase(fnName)) {
-            fn = getToFileFunction(argumentTypes);
+        } else if (FunctionSet.TO_FILE.equalsIgnoreCase(fnName) || FunctionSet.TRY_TO_FILE.equalsIgnoreCase(fnName)) {
+            fn = getToFileFunction(fnName, argumentTypes);
         } else if (FunctionSet.STR_TO_DATE.equals(fnName)) {
             fn = getStrToDateFunction(node, argumentTypes);
         } else if (FunctionSet.ARRAY_GENERATE.equals(fnName)) {
@@ -1356,11 +1356,11 @@ public class FunctionAnalyzer {
     }
 
     /**
-     * Resolves the to_file overloads that need more than the regular builtin lookup, and returns null for the others
-     * so that lookup handles them. For the STRUCT overload, each field is widened to its FILE field type so the
+     * Resolves the to_file and try_to_file overloads that need more than the regular builtin lookup, returning null
+     * for other overloads. For the STRUCT overload, each field is widened to its FILE field type so the
      * planner casts the argument, and an untyped NULL field takes that type instead of the generic BOOLEAN.
      */
-    private static Function getToFileFunction(Type[] argumentTypes) {
+    private static Function getToFileFunction(String functionName, Type[] argumentTypes) {
         if (argumentTypes.length != 1 || !(argumentTypes[0].isStructType() || argumentTypes[0].isNull())) {
             return null;
         }
@@ -1387,18 +1387,19 @@ public class FunctionAnalyzer {
                         target = VarbinaryType.VARBINARY;
                         yield source.isBinaryType();
                     }
-                    default -> throw new SemanticException("TO_FILE has unknown field '%s'", field.getName());
+                    default -> throw new SemanticException("%s has unknown field '%s'",
+                            functionName.toUpperCase(Locale.ROOT), field.getName());
                 };
                 if (!source.isNull() && !valid) {
-                    throw new SemanticException("TO_FILE field '%s' has unsupported type %s; expected %s",
-                            field.getName(), source.toSql(), target.toSql());
+                    throw new SemanticException("%s field '%s' has unsupported type %s; expected %s",
+                            functionName.toUpperCase(Locale.ROOT), field.getName(), source.toSql(), target.toSql());
                 }
                 fields.add(new StructField(field.getName(), target));
             }
             // StructType also enforces case-insensitive field-name uniqueness.
             targetType = new StructType(fields);
         }
-        return ExprUtils.getBuiltinFunction(FunctionSet.TO_FILE, new Type[] {targetType},
+        return ExprUtils.getBuiltinFunction(functionName, new Type[] {targetType},
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
     }
 

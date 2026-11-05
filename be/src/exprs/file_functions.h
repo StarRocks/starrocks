@@ -21,6 +21,13 @@ namespace starrocks {
 class FileFunctions {
 public:
     DEFINE_VECTORIZED_FN(to_file);
+    DEFINE_VECTORIZED_FN(try_to_file);
+    DEFINE_VECTORIZED_FN(fl_get_uri);
+    DEFINE_VECTORIZED_FN(fl_get_offset);
+    DEFINE_VECTORIZED_FN(fl_get_size);
+    DEFINE_VECTORIZED_FN(fl_get_content_type);
+    DEFINE_VECTORIZED_FN(fl_get_checksum);
+    DEFINE_VECTORIZED_FN(fl_get_inline);
 };
 
 } // namespace starrocks

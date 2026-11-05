@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <limits>
 #include <memory>
 #include <string>
@@ -42,6 +43,13 @@ TypeDescriptor struct_type(std::vector<std::string> names, std::vector<TypeDescr
     type.children = std::move(types);
     return type;
 }
+
+using FileFunction = StatusOr<ColumnPtr> (*)(FunctionContext*, const Columns&);
+constexpr std::array<FileFunction, FileColumn::NUM_FIELDS> kGetters = {
+        FileFunctions::fl_get_uri,          FileFunctions::fl_get_offset,   FileFunctions::fl_get_size,
+        FileFunctions::fl_get_content_type, FileFunctions::fl_get_checksum, FileFunctions::fl_get_inline};
+constexpr std::array<LogicalType, FileColumn::NUM_FIELDS> kFieldTypes = {
+        TYPE_VARCHAR, TYPE_BIGINT, TYPE_BIGINT, TYPE_VARCHAR, TYPE_VARCHAR, TYPE_VARBINARY};
 
 } // namespace
 
@@ -197,6 +205,18 @@ TEST(FileFunctionsTest, RejectInvalidValues) {
             EXPECT_TRUE(result.status().is_invalid_argument());
             EXPECT_NE(std::string::npos, result.status().message().find(test.message));
             EXPECT_EQ(std::string::npos, result.status().message().find("private-"));
+            auto tolerant = FileFunctions::try_to_file(context.get(), {column});
+            ASSERT_TRUE(tolerant.ok()) << tolerant.status();
+            EXPECT_EQ(column->size(), tolerant.value()->size());
+            if (constant) {
+                EXPECT_TRUE(tolerant.value()->is_constant());
+                EXPECT_TRUE(tolerant.value()->is_null(6));
+                EXPECT_EQ(1, down_cast<const ConstColumn*>(tolerant.value().get())->data_column()->size());
+            } else {
+                EXPECT_FALSE(tolerant.value()->is_null(0));
+                EXPECT_TRUE(tolerant.value()->is_null(1));
+                EXPECT_EQ("a", tolerant.value()->get(0).get_struct()[FileColumn::URI].get_slice().to_string());
+            }
         }
     }
 
@@ -209,7 +229,9 @@ TEST(FileFunctionsTest, RejectInvalidValues) {
     EXPECT_TRUE(result.status().is_invalid_argument());
 }
 
-TEST(FileFunctionsTest, CopyOnWriteIsolation) {
+class FileConstructorCowTest : public testing::TestWithParam<FileFunction> {};
+
+TEST_P(FileConstructorCowTest, CopyOnWriteIsolation) {
     auto type = struct_type({"uri", "size"}, {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_BIGINT)});
     auto context = make_context(type);
     for (bool nullable : {false, true}) {
@@ -218,7 +240,7 @@ TEST(FileFunctionsTest, CopyOnWriteIsolation) {
             source->append_datum(Datum(DatumStruct{Datum(Slice("a")), Datum(int64_t(1))}));
             source->append_datum(Datum(DatumStruct{Datum(Slice("b")), Datum(int64_t(2))}));
             ColumnPtr input = std::move(source);
-            auto result = FileFunctions::to_file(context.get(), {input});
+            auto result = GetParam()(context.get(), {input});
             ASSERT_TRUE(result.ok()) << result.status();
             ColumnPtr output = std::move(result).value();
             const auto* input_data = down_cast<const StructColumn*>(ColumnHelper::get_data_column(input.get()));
@@ -259,12 +281,242 @@ TEST(FileFunctionsTest, CopyOnWriteIsolation) {
     }
 }
 
+INSTANTIATE_TEST_SUITE_P(FileFunctions, FileConstructorCowTest,
+                        testing::Values(FileFunctions::to_file, FileFunctions::try_to_file));
+
 TEST(FileFunctionsTest, EmptyBatch) {
     auto type = struct_type({"uri"}, {TypeDescriptor(TYPE_VARCHAR)});
     auto context = make_context(type);
     auto result = FileFunctions::to_file(context.get(), {ColumnHelper::create_column(type, true)});
     ASSERT_TRUE(result.ok()) << result.status();
     EXPECT_EQ(0, result.value()->size());
+}
+
+TEST(FileFunctionsTest, GettersShareFieldsAndMergeOuterNulls) {
+    const std::string bytes("a\0b", 3);
+    for (bool outer_null : {false, true}) {
+        auto file = FileColumn::create();
+        // A FILE from another producer need not obey TO_FILE's construction rules.
+        file->append_datum(Datum(DatumStruct{Datum(Slice("uri")), Datum(int64_t(7)), Datum(int64_t(3)),
+                                           Datum(Slice("image/jpeg")), Datum(Slice("opaque")), Datum(Slice(bytes))}));
+        file->append_default();
+        file->append_datum(Datum(DatumStruct{Datum(Slice("")), Datum(int64_t(0)), Datum(int64_t(0)),
+                                           Datum(Slice("")), Datum(Slice("")), Datum(Slice(""))}));
+        const auto fields = file->fields();
+        ColumnPtr input = std::move(file);
+        if (outer_null) {
+            auto nulls = NullColumn::create(3, 0);
+            nulls->get_data()[0] = 1;
+            input = NullableColumn::create(input, std::move(nulls));
+        }
+        for (size_t i = 0; i < kGetters.size(); ++i) {
+            SCOPED_TRACE(i);
+            auto context = std::unique_ptr<FunctionContext>(FunctionContext::create_context(
+                    nullptr, nullptr, TypeDescriptor(kFieldTypes[i]), {TypeDescriptor(TYPE_FILE)}));
+            auto result = kGetters[i](context.get(), {input});
+            ASSERT_TRUE(result.ok()) << result.status();
+            EXPECT_EQ(3, result.value()->size());
+            const auto* projected = down_cast<const NullableColumn*>(result.value().get());
+            const auto* field = down_cast<const NullableColumn*>(fields[i].get());
+            EXPECT_EQ(field->data_column().get(), projected->data_column().get());
+            if (outer_null) {
+                EXPECT_TRUE(result.value()->is_null(0));
+                EXPECT_FALSE(fields[i]->is_null(0));
+                EXPECT_NE(field->null_column().get(), projected->null_column().get());
+            } else {
+                EXPECT_EQ(fields[i].get(), result.value().get());
+                if (kFieldTypes[i] == TYPE_BIGINT) {
+                    EXPECT_EQ(i == FileColumn::OFFSET ? 7 : 3, result.value()->get(0).get_int64());
+                } else {
+                    EXPECT_EQ(fields[i]->get(0).get_slice().to_string(), result.value()->get(0).get_slice().to_string());
+                }
+            }
+            EXPECT_TRUE(result.value()->is_null(1));
+            EXPECT_FALSE(result.value()->is_null(2));
+            if (kFieldTypes[i] == TYPE_BIGINT) {
+                EXPECT_EQ(0, result.value()->get(2).get_int64());
+            } else {
+                EXPECT_EQ("", result.value()->get(2).get_slice().to_string());
+            }
+        }
+    }
+}
+
+TEST(FileFunctionsTest, GettersConstantNullAndEmptyInputs) {
+    for (size_t i = 0; i < kGetters.size(); ++i) {
+        auto context = std::unique_ptr<FunctionContext>(FunctionContext::create_context(
+                nullptr, nullptr, TypeDescriptor(kFieldTypes[i]), {TypeDescriptor(TYPE_FILE)}));
+        auto file = FileColumn::create();
+        file->append_datum(Datum(DatumStruct{Datum(Slice("a")), Datum(int64_t(0)), Datum(int64_t(2)),
+                                           Datum(), Datum(), Datum(Slice("ab"))}));
+        ColumnPtr constant = ConstColumn::create(std::move(file), 7);
+        auto result = kGetters[i](context.get(), {constant});
+        ASSERT_TRUE(result.ok()) << result.status();
+        EXPECT_TRUE(result.value()->is_constant());
+        EXPECT_EQ(7, result.value()->size());
+        EXPECT_EQ(1, down_cast<const ConstColumn*>(result.value().get())->data_column()->size());
+        EXPECT_EQ(i == FileColumn::CONTENT_TYPE || i == FileColumn::CHECKSUM, result.value()->is_null(6));
+
+        auto null_result = kGetters[i](context.get(), {ColumnHelper::create_const_null_column(7)});
+        ASSERT_TRUE(null_result.ok()) << null_result.status();
+        EXPECT_EQ(7, null_result.value()->size());
+        EXPECT_EQ(7, ColumnHelper::count_nulls(null_result.value()));
+        for (bool nullable : {false, true}) {
+            auto empty = kGetters[i](context.get(), {ColumnHelper::create_column(TypeDescriptor(TYPE_FILE), nullable)});
+            ASSERT_TRUE(empty.ok()) << empty.status();
+            EXPECT_EQ(0, empty.value()->size());
+        }
+        auto typed_null = ColumnHelper::create_column(TypeDescriptor(TYPE_FILE), true);
+        typed_null->append_nulls(3);
+        auto all_null = kGetters[i](context.get(), {std::move(typed_null)});
+        ASSERT_TRUE(all_null.ok()) << all_null.status();
+        EXPECT_EQ(3, ColumnHelper::count_nulls(all_null.value()));
+    }
+}
+
+TEST(FileFunctionsTest, TryToFileMixedRowsAndOuterNulls) {
+    auto type = struct_type({"SIZE", "inline", "uri", "offset"},
+                            {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARBINARY), TypeDescriptor(TYPE_VARCHAR),
+                             TypeDescriptor(TYPE_BIGINT)});
+    auto source = ColumnHelper::create_column(type, false);
+    const std::vector<DatumStruct> rows = {
+            {Datum(int64_t(0)), Datum(), Datum(Slice("")), Datum(int64_t(0))},
+            {Datum(), Datum(Slice("")), Datum(), Datum()},
+            {Datum(), Datum(), Datum(), Datum()},
+            {Datum(), Datum(Slice("bytes")), Datum(Slice("uri")), Datum()},
+            {Datum(int64_t(-1)), Datum(), Datum(Slice("uri")), Datum()},
+            {Datum(), Datum(), Datum(Slice("uri")), Datum(int64_t(-1))},
+            {Datum(), Datum(), Datum(Slice("hidden")), Datum()}};
+    for (const auto& row : rows) {
+        source->append_datum(Datum(row));
+    }
+    auto nulls = NullColumn::create(rows.size(), 0);
+    nulls->get_data()[6] = 1;
+    ColumnPtr input = NullableColumn::create(std::move(source), std::move(nulls));
+    auto context = make_context(type);
+    auto result = FileFunctions::try_to_file(context.get(), {input});
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(rows.size(), result.value()->size());
+    const auto* output = down_cast<const NullableColumn*>(result.value().get());
+    const auto* original = down_cast<const NullableColumn*>(input.get());
+    EXPECT_NE(original->null_column().get(), output->null_column().get());
+    const auto file_fields = down_cast<const FileColumn*>(output->data_column_raw_ptr())->fields();
+    const auto source_fields = down_cast<const StructColumn*>(original->data_column_raw_ptr())->fields();
+    EXPECT_EQ(source_fields[0].get(), file_fields[FileColumn::SIZE].get());
+    EXPECT_EQ(source_fields[2].get(), file_fields[FileColumn::URI].get());
+    for (size_t row = 0; row < rows.size(); ++row) {
+        EXPECT_EQ(row >= 2, result.value()->is_null(row));
+        EXPECT_EQ(row == 6, input->is_null(row));
+        if (row < 2) {
+            auto valid = ColumnHelper::create_column(type, false);
+            valid->append_datum(Datum(rows[row]));
+            auto strict = FileFunctions::to_file(context.get(), {std::move(valid)});
+            ASSERT_TRUE(strict.ok()) << strict.status();
+            EXPECT_EQ(strict.value()->debug_item(0), result.value()->debug_item(row));
+        }
+    }
+    // Getter must respect the NULL introduced by TRY, even when the field itself has a value.
+    auto uris = FileFunctions::fl_get_uri(nullptr, {result.value()});
+    ASSERT_TRUE(uris.ok()) << uris.status();
+    EXPECT_TRUE(uris.value()->is_null(4));
+    EXPECT_TRUE(uris.value()->is_null(5));
+    EXPECT_TRUE(uris.value()->is_null(6));
+    ColumnPtr output_column = std::move(result).value();
+    auto writable_output = Column::mutate(std::move(output_column));
+    auto* output_nullable = down_cast<NullableColumn*>(writable_output.get());
+    output_nullable->null_column_data()[0] = 1;
+    output_nullable->update_has_null();
+    EXPECT_FALSE(input->is_null(0));
+    auto writable_input = Column::mutate(std::move(input));
+    writable_input->append_datum(Datum(rows[0]));
+    EXPECT_EQ(rows.size(), writable_output->size());
+    EXPECT_EQ(rows.size(), uris.value()->size());
+}
+
+TEST(FileFunctionsTest, TryToFileSharesUnchangedNullBitmap) {
+    auto type = struct_type({"uri"}, {TypeDescriptor(TYPE_VARCHAR)});
+    auto source = ColumnHelper::create_column(type, true);
+    source->append_datum(Datum(DatumStruct{Datum(Slice("a"))}));
+    source->append_nulls(1);
+    ColumnPtr input = std::move(source);
+    auto context = make_context(type);
+    auto result = FileFunctions::try_to_file(context.get(), {input});
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_FALSE(result.value()->is_null(0));
+    EXPECT_TRUE(result.value()->is_null(1));
+    EXPECT_EQ(down_cast<const NullableColumn*>(input.get())->null_column().get(),
+              down_cast<const NullableColumn*>(result.value().get())->null_column().get());
+    auto null_result = FileFunctions::try_to_file(context.get(), {ColumnHelper::create_const_null_column(7)});
+    ASSERT_TRUE(null_result.ok()) << null_result.status();
+    EXPECT_EQ(7, ColumnHelper::count_nulls(null_result.value()));
+    auto one_row = ColumnHelper::create_column(type, false);
+    one_row->append_datum(Datum(DatumStruct{Datum(Slice("a"))}));
+    ColumnPtr constant = ConstColumn::create(std::move(one_row), 7);
+    auto constant_result = FileFunctions::try_to_file(context.get(), {constant});
+    ASSERT_TRUE(constant_result.ok()) << constant_result.status();
+    EXPECT_TRUE(constant_result.value()->is_constant());
+    EXPECT_EQ(7, constant_result.value()->size());
+    EXPECT_EQ("a", constant_result.value()->get(6).get_struct()[FileColumn::URI].get_slice().to_string());
+    auto typed_null = ColumnHelper::create_column(type, true);
+    typed_null->append_nulls(3);
+    auto all_null = FileFunctions::try_to_file(context.get(), {std::move(typed_null)});
+    ASSERT_TRUE(all_null.ok()) << all_null.status();
+    EXPECT_EQ(3, ColumnHelper::count_nulls(all_null.value()));
+    auto empty = FileFunctions::try_to_file(context.get(), {ColumnHelper::create_column(type, true)});
+    ASSERT_TRUE(empty.ok()) << empty.status();
+    EXPECT_EQ(0, empty.value()->size());
+}
+
+TEST(FileFunctionsTest, GettersCopyOnWriteIsolation) {
+    for (bool outer_null : {false, true}) {
+        for (bool mutate_input : {false, true}) {
+            auto file = FileColumn::create();
+            file->append_datum(Datum(DatumStruct{Datum(Slice("a")), Datum(), Datum(), Datum(), Datum(), Datum()}));
+            file->append_datum(Datum(DatumStruct{Datum(Slice("b")), Datum(), Datum(), Datum(), Datum(), Datum()}));
+            ColumnPtr input = std::move(file);
+            if (outer_null) {
+                auto nulls = NullColumn::create(2, 0);
+                nulls->get_data()[1] = 1;
+                input = NullableColumn::create(input, std::move(nulls));
+            }
+            auto result = FileFunctions::fl_get_uri(nullptr, {input});
+            ASSERT_TRUE(result.ok()) << result.status();
+            ColumnPtr output = std::move(result).value();
+            if (mutate_input) {
+                auto writable = Column::mutate(std::move(input));
+                writable->append_datum(Datum(DatumStruct{Datum(Slice("c")), Datum(), Datum(),
+                                                       Datum(), Datum(), Datum()}));
+                if (outer_null) {
+                    auto* nullable = down_cast<NullableColumn*>(writable.get());
+                    nullable->null_column_data()[0] = 1;
+                    nullable->update_has_null();
+                }
+                EXPECT_EQ(2, output->size());
+                EXPECT_EQ("a", output->get(0).get_slice().to_string());
+                EXPECT_EQ(outer_null, output->is_null(1));
+            } else {
+                auto writable = Column::mutate(std::move(output));
+                writable->append_datum(Datum(Slice("c")));
+                auto* nullable = down_cast<NullableColumn*>(writable.get());
+                nullable->null_column_data()[0] = 1;
+                nullable->update_has_null();
+                EXPECT_EQ(2, input->size());
+                EXPECT_FALSE(input->is_null(0));
+                EXPECT_EQ("a", input->get(0).get_struct()[FileColumn::URI].get_slice().to_string());
+                EXPECT_EQ(outer_null, input->is_null(1));
+            }
+        }
+    }
+}
+
+TEST(FileFunctionsTest, TryToFileDoesNotHideStructuralErrors) {
+    auto type = struct_type({"path"}, {TypeDescriptor(TYPE_VARCHAR)});
+    auto source = ColumnHelper::create_column(type, false);
+    source->append_datum(Datum(DatumStruct{Datum(Slice("a"))}));
+    auto context = make_context(type);
+    auto result = FileFunctions::try_to_file(context.get(), {std::move(source)});
+    ASSERT_FALSE(result.ok());
+    EXPECT_NE(std::string::npos, result.status().message().find("TRY_TO_FILE has unknown field"));
 }
 
 } // namespace starrocks

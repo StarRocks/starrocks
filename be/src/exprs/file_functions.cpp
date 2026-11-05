@@ -65,30 +65,51 @@ ColumnPtr normalize_file_field(const ColumnPtr& field, LogicalType type, size_t 
     return NullableColumn::wrap_if_necessary(field);
 }
 
-Status validate_file_fields(const std::array<ColumnPtr, FileColumn::NUM_FIELDS>& fields,
-                            const NullableColumn* outer_nullable, size_t num_rows) {
+// Skip outer NULL rows during validation, then merge them with the invalid-row bitmap.
+template <bool NullOnInvalid>
+StatusOr<NullColumnPtr> validate_file_fields(const std::array<ColumnPtr, FileColumn::NUM_FIELDS>& fields,
+                                           const NullableColumn* outer_nullable, size_t num_rows) {
     const ColumnViewer<TYPE_BIGINT> offset(fields[FileColumn::OFFSET]);
     const ColumnViewer<TYPE_BIGINT> size(fields[FileColumn::SIZE]);
+    NullColumn::MutablePtr invalid_nulls;
     for (size_t row = 0; row < num_rows; ++row) {
         if (outer_nullable != nullptr && outer_nullable->is_null(row)) {
             continue;
         }
+        const char* error = nullptr;
         if (fields[FileColumn::URI]->is_null(row) == fields[FileColumn::INLINE]->is_null(row)) {
-            return Status::InvalidArgument("TO_FILE requires exactly one of 'uri' and 'inline' to be non-NULL");
+            error = "TO_FILE requires exactly one of 'uri' and 'inline' to be non-NULL";
+        } else if (!offset.is_null(row) && offset.value(row) < 0) {
+            error = "TO_FILE field 'offset' must be >= 0";
+        } else if (!size.is_null(row) && size.value(row) < 0) {
+            error = "TO_FILE field 'size' must be >= 0";
         }
-        if (!offset.is_null(row) && offset.value(row) < 0) {
-            return Status::InvalidArgument("TO_FILE field 'offset' must be >= 0");
+        if (error == nullptr) {
+            continue;
         }
-        if (!size.is_null(row) && size.value(row) < 0) {
-            return Status::InvalidArgument("TO_FILE field 'size' must be >= 0");
+        if constexpr (!NullOnInvalid) {
+            return Status::InvalidArgument(error);
+        } else {
+            if (invalid_nulls == nullptr) {
+                invalid_nulls = NullColumn::create(num_rows, 0);
+            }
+            invalid_nulls->get_data()[row] = 1;
         }
     }
-    return Status::OK();
+    NullColumnPtr nulls = std::move(invalid_nulls);
+    if (outer_nullable != nullptr) {
+        if (nulls != nullptr) {
+            nulls = FunctionHelper::union_null_column(nulls, outer_nullable->null_column());
+        } else {
+            nulls = outer_nullable->null_column();
+        }
+    }
+    return nulls;
 }
 
-} // namespace
-
-StatusOr<ColumnPtr> FileFunctions::to_file(FunctionContext* context, const Columns& columns) {
+template <bool NullOnInvalid>
+StatusOr<ColumnPtr> to_file_impl(FunctionContext* context, const Columns& columns) {
+    const std::string function_name = NullOnInvalid ? "TRY_TO_FILE" : "TO_FILE";
     const auto& input = columns[0];
     if (input->only_null()) {
         return ColumnHelper::create_const_null_column(input->size());
@@ -105,12 +126,12 @@ StatusOr<ColumnPtr> FileFunctions::to_file(FunctionContext* context, const Colum
     }
     const auto* type = context->get_arg_type(0);
     if (!input_data->is_struct() || type->type != TYPE_STRUCT) {
-        return Status::InvalidArgument("TO_FILE requires a STRUCT argument");
+        return Status::InvalidArgument(function_name + " requires a STRUCT argument");
     }
     const auto* source = down_cast<const StructColumn*>(input_data);
     const auto source_fields = source->fields();
     if (type->field_names.size() != source_fields.size() || type->children.size() != type->field_names.size()) {
-        return Status::InvalidArgument("TO_FILE requires matching STRUCT fields and types");
+        return Status::InvalidArgument(function_name + " requires matching STRUCT fields and types");
     }
     std::array<int, FileColumn::NUM_FIELDS> mapping;
     mapping.fill(-1);
@@ -119,11 +140,11 @@ StatusOr<ColumnPtr> FileFunctions::to_file(FunctionContext* context, const Colum
         std::ranges::transform(name, name.begin(), [](unsigned char c) { return ascii_tolower(c); });
         const auto it = std::ranges::find(FileColumn::kFieldNames, name);
         if (it == FileColumn::kFieldNames.end()) {
-            return Status::InvalidArgument("TO_FILE has unknown field '" + name + "'");
+            return Status::InvalidArgument(function_name + " has unknown field '" + name + "'");
         }
         const size_t index = it - FileColumn::kFieldNames.begin();
         if (mapping[index] != -1) {
-            return Status::InvalidArgument("TO_FILE has duplicate field '" + name + "'");
+            return Status::InvalidArgument(function_name + " has duplicate field '" + name + "'");
         }
         mapping[index] = i;
     }
@@ -137,22 +158,79 @@ StatusOr<ColumnPtr> FileFunctions::to_file(FunctionContext* context, const Colum
             // CHAR and VARCHAR match in FE without an explicit cast and share BinaryColumn storage.
             const auto source_type = type->children[mapping[i]].type;
             if (source_type != field_type && !(field_type == TYPE_VARCHAR && source_type == TYPE_CHAR)) {
-                return Status::InvalidArgument("TO_FILE field '" + std::string(FileColumn::kFieldNames[i]) +
+                return Status::InvalidArgument(function_name + " field '" + std::string(FileColumn::kFieldNames[i]) +
                                                "' has an unexpected type");
             }
             fields[i] = normalize_file_field(source_fields[mapping[i]], field_type, input_data->size());
         }
     }
 
-    RETURN_IF_ERROR(validate_file_fields(fields, nullable, input_data->size()));
+    ASSIGN_OR_RETURN(auto nulls, validate_file_fields<NullOnInvalid>(fields, nullable, input_data->size()));
     ColumnPtr result = FileColumn::create(std::move(fields));
-    if (nullable != nullptr) {
-        result = NullableColumn::create(result, nullable->null_column());
+    if (nulls != nullptr) {
+        result = NullableColumn::create(result, nulls);
     }
     if (input->is_constant()) {
         result = ConstColumn::create(std::move(result), input->size());
     }
     return result;
+}
+
+// Project the field through the FILE's outer NULLs without copying its data.
+template <FileColumn::FileField Field>
+StatusOr<ColumnPtr> get_file_field(const Columns& columns) {
+    const auto& input = columns[0];
+    if (input->only_null()) {
+        return ColumnHelper::create_const_null_column(input->size());
+    }
+    const auto physical = FunctionHelper::get_data_column_of_const(input);
+    const auto* data = ColumnHelper::get_data_column(physical);
+    if (!data->is_file()) {
+        return Status::InvalidArgument("FILE getter requires a FILE argument");
+    }
+    ColumnPtr result = down_cast<const FileColumn*>(data)->fields()[Field];
+    if (physical->has_null()) {
+        auto nulls = FunctionHelper::union_nullable_column(physical, result);
+        result = NullableColumn::create(FunctionHelper::get_data_column_of_nullable(result), std::move(nulls));
+    }
+    if (input->is_constant()) {
+        result = ConstColumn::create(std::move(result), input->size());
+    }
+    return result;
+}
+
+} // namespace
+
+StatusOr<ColumnPtr> FileFunctions::to_file(FunctionContext* context, const Columns& columns) {
+    return to_file_impl<false>(context, columns);
+}
+
+StatusOr<ColumnPtr> FileFunctions::try_to_file(FunctionContext* context, const Columns& columns) {
+    return to_file_impl<true>(context, columns);
+}
+
+StatusOr<ColumnPtr> FileFunctions::fl_get_uri(FunctionContext* context, const Columns& columns) {
+    return get_file_field<FileColumn::URI>(columns);
+}
+
+StatusOr<ColumnPtr> FileFunctions::fl_get_offset(FunctionContext* context, const Columns& columns) {
+    return get_file_field<FileColumn::OFFSET>(columns);
+}
+
+StatusOr<ColumnPtr> FileFunctions::fl_get_size(FunctionContext* context, const Columns& columns) {
+    return get_file_field<FileColumn::SIZE>(columns);
+}
+
+StatusOr<ColumnPtr> FileFunctions::fl_get_content_type(FunctionContext* context, const Columns& columns) {
+    return get_file_field<FileColumn::CONTENT_TYPE>(columns);
+}
+
+StatusOr<ColumnPtr> FileFunctions::fl_get_checksum(FunctionContext* context, const Columns& columns) {
+    return get_file_field<FileColumn::CHECKSUM>(columns);
+}
+
+StatusOr<ColumnPtr> FileFunctions::fl_get_inline(FunctionContext* context, const Columns& columns) {
+    return get_file_field<FileColumn::INLINE>(columns);
 }
 
 } // namespace starrocks
