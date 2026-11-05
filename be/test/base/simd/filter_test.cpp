@@ -1035,6 +1035,38 @@ PARALLEL_TEST(SimdFilterTest, randomized_differential_fuzz_avx2) {
                             << "filter_range<uint32_t> in-place mismatch at i=" << i << " iter=" << iter;
                 }
             }
+
+            // 5. Direct AVX2 dispatch entrypoint filter_range_avx2 (4B): out-of-place
+            {
+                std::vector<uint32_t> dst(buf_size, 0xBAADF00D);
+                size_t out_sz = SIMD::Filter::detail::filter_range_avx2(dst.data(), src.data(), sizeof(uint32_t),
+                                                                        selector.data(), from, to);
+                ASSERT_EQ(from + expected.size(), out_sz) << "filter_range_avx2(4B) out-of-place iter=" << iter;
+                for (size_t i = 0; i < from; ++i) {
+                    ASSERT_EQ(0xBAADF00Du, dst[i])
+                            << "filter_range_avx2(4B) prefix clobbered at i=" << i << " iter=" << iter;
+                }
+                for (size_t i = 0; i < expected.size(); ++i) {
+                    ASSERT_EQ(expected[i], dst[from + i])
+                            << "filter_range_avx2(4B) mismatch at i=" << i << " iter=" << iter;
+                }
+            }
+
+            // 6. Direct AVX2 dispatch entrypoint filter_range_avx2 (4B): in-place
+            {
+                std::vector<uint32_t> in_place = src;
+                size_t ip_sz = SIMD::Filter::detail::filter_range_avx2(in_place.data(), in_place.data(),
+                                                                       sizeof(uint32_t), selector.data(), from, to);
+                ASSERT_EQ(from + expected.size(), ip_sz) << "filter_range_avx2(4B) in-place iter=" << iter;
+                for (size_t i = 0; i < from; ++i) {
+                    ASSERT_EQ(src[i], in_place[i])
+                            << "filter_range_avx2(4B) in-place prefix clobbered at i=" << i << " iter=" << iter;
+                }
+                for (size_t i = 0; i < expected.size(); ++i) {
+                    ASSERT_EQ(expected[i], in_place[from + i])
+                            << "filter_range_avx2(4B) in-place mismatch at i=" << i << " iter=" << iter;
+                }
+            }
         }
 
         // Test uint64_t (8-byte)
@@ -1110,8 +1142,140 @@ PARALLEL_TEST(SimdFilterTest, randomized_differential_fuzz_avx2) {
                             << "filter_range<uint64_t> in-place mismatch at i=" << i << " iter=" << iter;
                 }
             }
+
+            // 5. Direct AVX2 dispatch entrypoint filter_range_avx2 (8B): out-of-place
+            {
+                std::vector<uint64_t> dst(buf_size, 0xBAADF00DDEADBEEFULL);
+                size_t out_sz = SIMD::Filter::detail::filter_range_avx2(dst.data(), src.data(), sizeof(uint64_t),
+                                                                        selector.data(), from, to);
+                ASSERT_EQ(from + expected.size(), out_sz) << "filter_range_avx2(8B) out-of-place iter=" << iter;
+                for (size_t i = 0; i < from; ++i) {
+                    ASSERT_EQ(0xBAADF00DDEADBEEFULL, dst[i])
+                            << "filter_range_avx2(8B) prefix clobbered at i=" << i << " iter=" << iter;
+                }
+                for (size_t i = 0; i < expected.size(); ++i) {
+                    ASSERT_EQ(expected[i], dst[from + i])
+                            << "filter_range_avx2(8B) mismatch at i=" << i << " iter=" << iter;
+                }
+            }
+
+            // 6. Direct AVX2 dispatch entrypoint filter_range_avx2 (8B): in-place
+            {
+                std::vector<uint64_t> in_place = src;
+                size_t ip_sz = SIMD::Filter::detail::filter_range_avx2(in_place.data(), in_place.data(),
+                                                                       sizeof(uint64_t), selector.data(), from, to);
+                ASSERT_EQ(from + expected.size(), ip_sz) << "filter_range_avx2(8B) in-place iter=" << iter;
+                for (size_t i = 0; i < from; ++i) {
+                    ASSERT_EQ(src[i], in_place[i])
+                            << "filter_range_avx2(8B) in-place prefix clobbered at i=" << i << " iter=" << iter;
+                }
+                for (size_t i = 0; i < expected.size(); ++i) {
+                    ASSERT_EQ(expected[i], in_place[from + i])
+                            << "filter_range_avx2(8B) in-place mismatch at i=" << i << " iter=" << iter;
+                }
+            }
         }
     }
+}
+
+PARALLEL_TEST(SimdFilterTest, x86_64_avx2_dispatch_entrypoint) {
+    const std::vector<size_t> from_offsets = {0, 1, 7, 16, 32};
+    const std::vector<size_t> lengths = {0, 1, 15, 31, 32, 33, 64, 129};
+    const uint8_t non_canonical_palette[] = {0x80, 0x00, 0x7F, 0x00, 0xFF, 0x01, 0x00, 0x02};
+
+    auto run_for_type = [&](auto gen_fn, auto canary_val) {
+        using T = decltype(canary_val);
+        for (size_t from : from_offsets) {
+            for (size_t len : lengths) {
+                size_t to = from + len;
+                size_t buf_size = to + 16;
+                for (int mode = 0; mode < 5; ++mode) {
+                    std::vector<T> src(buf_size);
+                    std::vector<uint8_t> selector(buf_size, 0);
+                    std::vector<T> expected;
+
+                    for (size_t i = 0; i < buf_size; ++i) {
+                        src[i] = gen_fn(i);
+                    }
+
+                    for (size_t i = 0; i < to; ++i) {
+                        uint8_t sel_byte = 0;
+                        switch (mode) {
+                        case 0:
+                            sel_byte = 0;
+                            break;
+                        case 1:
+                            sel_byte = 1;
+                            break;
+                        case 2:
+                            sel_byte = (i % 2 == 0) ? 1 : 0;
+                            break;
+                        case 3:
+                            sel_byte = ((i * 7 + 3) % 8 < 3) ? 1 : 0;
+                            break;
+                        case 4:
+                            sel_byte = non_canonical_palette[i % std::size(non_canonical_palette)];
+                            break;
+                        }
+                        selector[i] = sel_byte;
+                        if (i >= from && sel_byte != 0) {
+                            expected.push_back(src[i]);
+                        }
+                    }
+
+                    // 1. Separate destination buffer
+                    {
+                        std::vector<T> dst(buf_size, canary_val);
+                        size_t out_sz = SIMD::Filter::detail::filter_range_avx2(dst.data(), src.data(), sizeof(T),
+                                                                                selector.data(), from, to);
+                        ASSERT_EQ(from + expected.size(), out_sz)
+                                << "elem_size=" << sizeof(T) << " from=" << from << " to=" << to << " mode=" << mode;
+                        for (size_t i = 0; i < from; ++i) {
+                            ASSERT_TRUE(dst[i] == canary_val)
+                                    << "Untouched prefix clobbered at i=" << i << " from=" << from;
+                        }
+                        for (size_t i = 0; i < expected.size(); ++i) {
+                            ASSERT_TRUE(dst[from + i] == expected[i])
+                                    << "Mismatch at i=" << i << " elem_size=" << sizeof(T) << " from=" << from
+                                    << " to=" << to << " mode=" << mode;
+                        }
+                    }
+
+                    // 2. In-place compaction (dst == src)
+                    {
+                        std::vector<T> in_place = src;
+                        size_t ip_sz = SIMD::Filter::detail::filter_range_avx2(in_place.data(), in_place.data(),
+                                                                               sizeof(T), selector.data(), from, to);
+                        ASSERT_EQ(from + expected.size(), ip_sz)
+                                << "In-place elem_size=" << sizeof(T) << " from=" << from << " to=" << to
+                                << " mode=" << mode;
+                        for (size_t i = 0; i < from; ++i) {
+                            ASSERT_TRUE(in_place[i] == src[i])
+                                    << "In-place prefix clobbered at i=" << i << " from=" << from;
+                        }
+                        for (size_t i = 0; i < expected.size(); ++i) {
+                            ASSERT_TRUE(in_place[from + i] == expected[i])
+                                    << "In-place mismatch at i=" << i << " elem_size=" << sizeof(T) << " from=" << from
+                                    << " to=" << to << " mode=" << mode;
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    run_for_type([](size_t i) -> uint8_t { return static_cast<uint8_t>(i * 17 + 3); }, uint8_t{0xA5});
+    run_for_type([](size_t i) -> uint16_t { return static_cast<uint16_t>(i * 1337 + 5); }, uint16_t{0xBEEF});
+    run_for_type([](size_t i) -> uint32_t { return static_cast<uint32_t>(i * 2654435761u + 7); },
+                 uint32_t{0xBAADF00Du});
+    run_for_type([](size_t i) -> uint64_t { return static_cast<uint64_t>(i * 6364136223846793005ull + 11); },
+                 uint64_t{0xBAADF00DDEADBEEFull});
+    run_for_type(
+            [](size_t i) -> Elem16B {
+                return Elem16B{static_cast<uint64_t>(i * 2654435761ull),
+                               static_cast<uint64_t>(i ^ 0xdeadbeefcafebabeull)};
+            },
+            Elem16B{0xCAFEBABE12345678ull, 0x87654321FEEDC0DEull});
 }
 
 #endif // __x86_64__

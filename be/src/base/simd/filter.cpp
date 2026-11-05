@@ -301,7 +301,9 @@ size_t scan_neon(Elem* dst, const Elem* src, const uint8_t* selector, size_t fro
 // Scalar dispatch shared by the default clone (x86) and non-SIMD targets.
 // [[maybe_unused]]: on aarch64 the NEON path is used instead.
 [[maybe_unused]] size_t scan_scalar_any(void* dst, const void* src, size_t element_size, const uint8_t* selector,
-                                        size_t from, size_t to){FILTER_WIDTH_DISPATCH(scan_scalar)}
+                                        size_t from, size_t to) {
+    FILTER_WIDTH_DISPATCH(scan_scalar)
+}
 
 #if defined(__x86_64__)
 
@@ -339,6 +341,16 @@ size_t detail::filter_range(void* dst, const void* src, size_t element_size, con
 }
 
 #if defined(__x86_64__)
+__attribute__((target("avx2"))) size_t detail::filter_range_avx2(void* dst, const void* src, size_t element_size,
+                                                                 const uint8_t* selector, size_t from, size_t to) {
+    (void)dst;
+    (void)src;
+    (void)element_size;
+    (void)selector;
+    (void)to;
+    return from;
+}
+
 __attribute__((target("avx2"))) size_t detail::compress_avx2_w4(uint32_t* dst, const uint32_t* src,
                                                                 const uint8_t* selector, size_t from, size_t to) {
     size_t start = from;
