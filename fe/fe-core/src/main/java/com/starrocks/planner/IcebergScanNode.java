@@ -231,6 +231,9 @@ public class IcebergScanNode extends ScanNode {
                         .setTableVersionRange(tvrVersionRange)
                         .setPredicate(icebergJobPlanningPredicate)
                         .setEnableColumnStats(scanOptimizeOption.getCanUseMinMaxOpt())
+                        // the min/max optimization reads the file statistics of the scanned columns only
+                        .setStatsColumnNames(scanOptimizeOption.getCanUseMinMaxOpt() ?
+                                Set.copyOf(requiredColumnNames) : null)
                         .setUsedForDelete(usedForDelete)
                         .setFieldNames(requiredColumnNames)
                         .setScanBytesCap(scanBytesCap)

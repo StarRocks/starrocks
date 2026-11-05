@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public class GetRemoteFilesParams {
     private List<PartitionKey> partitionKeys;
@@ -33,6 +34,8 @@ public class GetRemoteFilesParams {
     private boolean useCache = true;
     private boolean checkPartitionExistence = true;
     private boolean enableColumnStats = false;
+    // With enableColumnStats, the columns whose file statistics the planned files must carry; null means all.
+    private Set<String> statsColumnNames;
     private Optional<Boolean> isRecursive = Optional.empty();
     private boolean usedForDelete = false;
     // Bounded-cost statistics-scan budgets. Each cap <= 0 means that dimension is unlimited; all three
@@ -54,6 +57,7 @@ public class GetRemoteFilesParams {
         this.useCache = builder.useCache;
         this.checkPartitionExistence = builder.checkPartitionExistence;
         this.enableColumnStats = builder.enableColumnStats;
+        this.statsColumnNames = builder.statsColumnNames;
         this.isRecursive = builder.isRecursive;
         this.usedForDelete = builder.usedForDelete;
         this.scanBytesCap = builder.scanBytesCap;
@@ -83,6 +87,7 @@ public class GetRemoteFilesParams {
                 .setUseCache(useCache)
                 .setCheckPartitionExistence(checkPartitionExistence)
                 .setEnableColumnStats(enableColumnStats)
+                .setStatsColumnNames(statsColumnNames)
                 .setUsedForDelete(usedForDelete)
                 .setScanBytesCap(scanBytesCap)
                 .setScanFilesCap(scanFilesCap)
@@ -165,6 +170,10 @@ public class GetRemoteFilesParams {
         return enableColumnStats;
     }
 
+    public Set<String> getStatsColumnNames() {
+        return statsColumnNames;
+    }
+
     public Optional<Boolean> getIsRecursive() {
         return isRecursive;
     }
@@ -202,6 +211,7 @@ public class GetRemoteFilesParams {
         private boolean useCache = true;
         private boolean checkPartitionExistence = true;
         private boolean enableColumnStats = false;
+        private Set<String> statsColumnNames;
         private Optional<Boolean> isRecursive = Optional.empty();
         private boolean usedForDelete = false;
         private long scanBytesCap = -1;
@@ -255,6 +265,11 @@ public class GetRemoteFilesParams {
 
         public Builder setEnableColumnStats(boolean enableColumnStats) {
             this.enableColumnStats = enableColumnStats;
+            return this;
+        }
+
+        public Builder setStatsColumnNames(Set<String> statsColumnNames) {
+            this.statsColumnNames = statsColumnNames == null ? null : Set.copyOf(statsColumnNames);
             return this;
         }
 
