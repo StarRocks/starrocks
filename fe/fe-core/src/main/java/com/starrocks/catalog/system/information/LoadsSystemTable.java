@@ -22,11 +22,16 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.LoadJobRedaction;
+import com.starrocks.load.LoadJobVisibility;
+import com.starrocks.load.LoadJobVisibility.Access;
+import com.starrocks.load.LoadJobVisibility.VisibleTask;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadMultiStmtTask;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TGetLoadsResult;
@@ -39,6 +44,7 @@ import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Supplier;
@@ -170,7 +176,13 @@ public class LoadsSystemTable {
         if (loadJob == null || loadJob.getId() < startJobIdOffset || !matchFilter(loadJob, filter)) {
             return;
         }
-        candidates.add(new Candidate(loadJob.getId(), () -> Lists.newArrayList(loadJob.toThrift())));
+        // With the rule off the view checks nothing, as before it.
+        Access access = LoadJobVisibility.isEnabled() ? LoadJobVisibility.accessOf(filter.caller, loadJob) : Access.FULL;
+        if (access == Access.NONE) {
+            return;
+        }
+        candidates.add(new Candidate(loadJob.getId(), () -> Lists.newArrayList(access == Access.FULL
+                ? loadJob.toThrift() : LoadJobRedaction.redact(loadJob.toThrift(), loadJob.getFailMsg()))));
     }
 
     private static void collectStreamLoadTasks(List<Candidate> candidates, TGetLoadsParams request,
@@ -194,19 +206,16 @@ public class LoadsSystemTable {
         if (task == null || task.getId() < startJobIdOffset) {
             return;
         }
-        if (!(task instanceof StreamLoadMultiStmtTask multiTask)) {
-            if (matchFilter(task, filter)) {
-                candidates.add(new Candidate(task.getId(), task::toThrift));
-            }
-            return;
-        }
-        // Children are still filtered one by one, but the multi-statement task is a single
+        // The children of a multi-statement task are still filtered one by one, but the task is a single
         // page unit keyed by the parent id. Children are allocated after their parent, so
         // resuming at parentId + 1 clears the parent and every child it owns.
-        List<AbstractStreamLoadTask> matched = Lists.newArrayList();
-        for (AbstractStreamLoadTask childTask : multiTask.getTasks()) {
-            if (matchFilter(childTask, filter)) {
-                matched.add(childTask);
+        Collection<? extends AbstractStreamLoadTask> tasks =
+                task instanceof StreamLoadMultiStmtTask multiTask ? multiTask.getTasks() : List.of(task);
+        List<VisibleTask> matched = Lists.newArrayList();
+        for (AbstractStreamLoadTask oneTask : tasks) {
+            if (matchFilter(oneTask, filter)) {
+                matched.addAll(LoadJobVisibility.isEnabled() ? LoadJobVisibility.visibleTasks(filter.caller, oneTask)
+                        : LoadJobVisibility.allTasksInFull(oneTask));
             }
         }
         if (matched.isEmpty()) {
@@ -214,8 +223,10 @@ public class LoadsSystemTable {
         }
         candidates.add(new Candidate(task.getId(), () -> {
             List<TLoadInfo> rows = Lists.newArrayList();
-            for (AbstractStreamLoadTask childTask : matched) {
-                rows.addAll(childTask.toThrift());
+            for (VisibleTask visibleTask : matched) {
+                for (TLoadInfo info : visibleTask.task().toThrift()) {
+                    rows.add(visibleTask.access() == Access.FULL ? info : LoadJobRedaction.redact(info, null));
+                }
             }
             return rows;
         }));
@@ -261,6 +272,8 @@ public class LoadsSystemTable {
 
     @VisibleForTesting
     static class LoadRequestFilter {
+        // The querying user. Only the jobs this user may see are returned.
+        ConnectContext caller;
         Long dbId;
         String tableName;
         String user;
@@ -275,6 +288,7 @@ public class LoadsSystemTable {
         @VisibleForTesting
         static LoadRequestFilter from(TGetLoadsParams request) {
             LoadRequestFilter filter = new LoadRequestFilter();
+            filter.caller = LoadJobVisibility.callerOf(request);
 
             if (request.isSetDb() && !Strings.isNullOrEmpty(request.getDb())) {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(request.getDb());
