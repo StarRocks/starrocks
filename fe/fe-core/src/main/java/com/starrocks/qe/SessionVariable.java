@@ -5075,6 +5075,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableTopNRuntimeFilter;
     }
 
+    public void setEnableTopNRuntimeFilter(boolean enableTopNRuntimeFilter) {
+        this.enableTopNRuntimeFilter = enableTopNRuntimeFilter;
+    }
+
     public int getAggInFilterLimit() {
         return aggInFilterLimit;
     }
@@ -7325,5 +7329,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public boolean isEnableDynamicPruneScanRange() {
+        return enableDynamicPruneScanRange;
     }
 }

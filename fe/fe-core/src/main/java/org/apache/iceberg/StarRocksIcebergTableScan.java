@@ -198,7 +198,9 @@ public class StarRocksIcebergTableScan
         List<ManifestFile> deleteManifests = findMatchingDeleteManifests(snapshot());
 
         boolean mayHaveEqualityDeletes = !deleteManifests.isEmpty() && mayHaveEqualityDeletes(snapshot());
-        boolean loadColumnStats = mayHaveEqualityDeletes || shouldReturnColumnStats();
+        // optional statistics are served by the local (cached) planning when it runs, but never force it
+        boolean loadColumnStats = mayHaveEqualityDeletes ||
+                (shouldReturnColumnStats() && !scanContext.isOptionalColumnStats());
 
         if (shouldPlanLocally(dataManifests, loadColumnStats)) {
             return planFileTasksLocally(dataManifests, deleteManifests);
@@ -327,22 +329,31 @@ public class StarRocksIcebergTableScan
         if (columnIds == null || columnIds.isEmpty() || !scanContext.isDataFileCacheWithMetrics()) {
             return false;
         }
-        Set<Integer> keepColumnIds = statsKeepColumnIds(table(), tableSchema());
+        return statsColumnIdsKeptByCache(table(), tableSchema(), cacheStatsColumnLimit, columnIds).size() ==
+                columnIds.size();
+    }
+
+    // The columns of `columnIds` whose statistics every manifest cache entry keeps, for a cache that keeps the
+    // statistics of `cacheStatsColumnLimit` columns (see cacheKeepsStatsColumns).
+    public static Set<Integer> statsColumnIdsKeptByCache(Table table, Schema schema, int cacheStatsColumnLimit,
+                                                         Set<Integer> columnIds) {
+        Set<Integer> keepColumnIds = statsKeepColumnIds(table, schema);
         Set<Integer> topRankedColumnIds = null;
+        Set<Integer> kept = new HashSet<>();
         for (Integer id : columnIds) {
-            if (keepColumnIds.contains(id)) {
-                continue;
+            if (!keepColumnIds.contains(id)) {
+                if (topRankedColumnIds == null) {
+                    int budget = cacheStatsColumnLimit - keepColumnIds.size();
+                    topRankedColumnIds = budget > 0 ?
+                            topRankedStatsColumnIds(statsCandidateRanks(table), keepColumnIds, budget) : Set.of();
+                }
+                if (!topRankedColumnIds.contains(id)) {
+                    continue;
+                }
             }
-            if (topRankedColumnIds == null) {
-                int budget = cacheStatsColumnLimit - keepColumnIds.size();
-                topRankedColumnIds = budget > 0 ?
-                        topRankedStatsColumnIds(statsCandidateRanks(table()), keepColumnIds, budget) : Set.of();
-            }
-            if (!topRankedColumnIds.contains(id)) {
-                return false;
-            }
+            kept.add(id);
         }
-        return true;
+        return kept;
     }
 
     // The `limit` lowest ranked columns outside the keep-set.

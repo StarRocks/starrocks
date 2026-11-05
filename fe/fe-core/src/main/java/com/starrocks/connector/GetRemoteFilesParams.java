@@ -36,6 +36,9 @@ public class GetRemoteFilesParams {
     private boolean enableColumnStats = false;
     // With enableColumnStats, the columns whose file statistics the planned files must carry; null means all.
     private Set<String> statsColumnNames;
+    // With enableColumnStats, the statistics are only wanted when they come cheap (e.g. from a cache): the scan
+    // must not change how it plans to get them, and may return files without them.
+    private boolean optionalColumnStats = false;
     private Optional<Boolean> isRecursive = Optional.empty();
     private boolean usedForDelete = false;
     // Bounded-cost statistics-scan budgets. Each cap <= 0 means that dimension is unlimited; all three
@@ -58,6 +61,7 @@ public class GetRemoteFilesParams {
         this.checkPartitionExistence = builder.checkPartitionExistence;
         this.enableColumnStats = builder.enableColumnStats;
         this.statsColumnNames = builder.statsColumnNames;
+        this.optionalColumnStats = builder.optionalColumnStats;
         this.isRecursive = builder.isRecursive;
         this.usedForDelete = builder.usedForDelete;
         this.scanBytesCap = builder.scanBytesCap;
@@ -88,6 +92,7 @@ public class GetRemoteFilesParams {
                 .setCheckPartitionExistence(checkPartitionExistence)
                 .setEnableColumnStats(enableColumnStats)
                 .setStatsColumnNames(statsColumnNames)
+                .setOptionalColumnStats(optionalColumnStats)
                 .setUsedForDelete(usedForDelete)
                 .setScanBytesCap(scanBytesCap)
                 .setScanFilesCap(scanFilesCap)
@@ -174,6 +179,10 @@ public class GetRemoteFilesParams {
         return statsColumnNames;
     }
 
+    public boolean isOptionalColumnStats() {
+        return optionalColumnStats;
+    }
+
     public Optional<Boolean> getIsRecursive() {
         return isRecursive;
     }
@@ -212,6 +221,7 @@ public class GetRemoteFilesParams {
         private boolean checkPartitionExistence = true;
         private boolean enableColumnStats = false;
         private Set<String> statsColumnNames;
+        private boolean optionalColumnStats = false;
         private Optional<Boolean> isRecursive = Optional.empty();
         private boolean usedForDelete = false;
         private long scanBytesCap = -1;
@@ -270,6 +280,11 @@ public class GetRemoteFilesParams {
 
         public Builder setStatsColumnNames(Set<String> statsColumnNames) {
             this.statsColumnNames = statsColumnNames == null ? null : Set.copyOf(statsColumnNames);
+            return this;
+        }
+
+        public Builder setOptionalColumnStats(boolean optionalColumnStats) {
+            this.optionalColumnStats = optionalColumnStats;
             return this;
         }
 
