@@ -594,6 +594,16 @@ public class Config extends ConfigBase {
     public static int label_keep_max_second = 3 * 24 * 3600; // 3 days
 
     /**
+     * Whether the load job views (information_schema loads, load_tracking_logs, routine_load_jobs, stream_loads,
+     * SHOW LOAD / STREAM LOAD / ROUTINE LOAD, their SHOW PROC nodes and /api/{db}/_load_info) show a job only to
+     * callers with a privilege on its target tables or OPERATE, and its rejected rows and the fields leading to them
+     * only to callers with SELECT on them. Setting it to false returns every view to its earlier checks, and exposes
+     * the rejected rows and error-log URLs to the users those checks let through.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_new_load_job_privilege_check = true;
+
+    /**
      * for load job managed by LoadManager, such as Insert, Broker load and Spark load.
      */
     @ConfField(mutable = true)

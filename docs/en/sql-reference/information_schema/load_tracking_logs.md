@@ -7,6 +7,8 @@ description: "load_tracking_logs provides error logs of load jobs."
 
 `load_tracking_logs` provides error logs of load jobs. This view is supported from StarRocks v3.0 onwards.
 
+The error log of a load job can contain the rows that the job rejected, so `load_tracking_logs` returns it only to users who hold the SELECT privilege on each table that the job loads data into. Users who hold another privilege on each of those tables, or the OPERATE privilege, see the job with `TRACKING_LOG` set to NULL. The `root` user can see all error logs. The error log of a load job whose target table has been dropped is visible only to the `root` user.
+
 The following fields are provided in `load_tracking_logs`:
 
 | **Field**     | **Description**                            |
