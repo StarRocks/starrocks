@@ -208,4 +208,65 @@ inline void gather(TB* b, const TB* a, const TC* c, size_t num_rows, size_t pool
 - ARM64 Axion Raw JSON: `docs/superpowers/specs/bench_results/c4a_arm64_axion_4096.json`
 - x86_64 Emerald Rapids Raw JSON: `docs/superpowers/specs/bench_results/c4_x86_emerald_rapids_4096.json`
 - x86_64 Zen 5 Raw JSON: `docs/superpowers/specs/bench_results/zen5_x86_ryzen_ai_9_4096.json`
-- Next Task: Task 4 (`Core SIMDGather Optimization`).
+- ARM64 Axion Post-Opt JSON: `docs/superpowers/specs/bench_results/c4a_arm64_axion_post_opt_4096.json`
+- x86_64 Emerald Rapids Post-Opt JSON: `docs/superpowers/specs/bench_results/c4_x86_emerald_rapids_post_opt_4096.json`
+
+---
+
+## 7. Post-Optimization Cloud Benchmark Verification (Task 6)
+
+Following the implementation of 8-way unrolling and caller-informed prefetching in `be/src/base/simd/gather.h` (Task 4) and integration into `BucketChainedJoinHashMap` in `be/src/exec/join/join_hash_map_method.hpp` (Task 5), the end-to-end verification benchmark was deployed and executed across both bare-metal cloud server testbeds (`bench-simd-arm-c4a` and `bench-simd-x86-c4`).
+
+### 7.1 Verification Methodology & Test Integrity
+1. **Compilation Flags:** Native binary built with `-O3 -DNDEBUG -march=native -std=c++17 -ljemalloc`.
+2. **Execution Parameters:** Pinned to core 2 (`taskset -c 2`), 10 repetitions, aggregate outputs, targeting production vector chunk size `num_rows = 4096`.
+3. **Statistical Stability:** Coefficients of variation (CV) remained strictly below 1.0% across all server benchmark runs.
+4. **Unit Test & Sanitizer Validation:**
+   - `base_test`: All 727 tests across 189 test suites passed (including all `GatherTest` and `SIMDGatherTest` cases).
+   - `exec_join_core_test`: All 55 tests in `JoinHashMapTest` passed cleanly.
+   - ASAN status: Clean, zero memory leaks, zero buffer overflows or poison read violations.
+
+---
+
+### 7.2 Post-Optimization Performance Matrix (`num_rows = 4096`)
+
+All values below report CPU time per iteration (nanoseconds for 4,096 rows) comparing pre-optimization baseline against post-optimization caller-informed production code (`SIMDGather::gather(..., pool_size)`):
+
+#### A. Google Axion Neoverse-V2 (ARM64 Server)
+
+| Data Type | Working Set Pool | Pre-Opt Baseline Latency | Post-Opt Production Latency | Latency Delta (%) | Effective Throughput Gain | Acceptance Verdict |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **int32_t** | 4M (In-Cache, 16 MiB) | 10,696.5 ns | **10,664.3 ns** | **-0.30%** | Zero regression (Protected from +14.1% `PRFM` penalty) | **PASS** |
+| **int32_t** | 64M (DRAM, 256 MiB) | 26,238.5 ns | **25,871.9 ns** | **-1.40%** | +2.2 MB/s | **PASS** |
+| **int64_t** | 4M (In-Cache, 32 MiB) | 15,130.4 ns | **13,967.4 ns** | **-7.69%** | +23.3 M items/s | **PASS** |
+| **int64_t** | 64M (DRAM, 512 MiB) | 27,586.9 ns | **27,231.4 ns** | **-1.29%** | +1.9 M items/s | **PASS** |
+
+#### B. Intel Emerald Rapids Xeon Platinum 8581C (x86_64 Server)
+
+| Data Type | Working Set Pool | Pre-Opt Baseline Latency | Post-Opt Production Latency | Latency Delta (%) | Effective Throughput Gain | Acceptance Verdict |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **int32_t** | 4M (In-Cache, 16 MiB) | 12,138.4 ns | **11,292.5 ns** | **-6.97%** | +25.1 M items/s (Zero regression) | **PASS** |
+| **int32_t** | 64M (DRAM, 256 MiB) | 36,230.2 ns | **31,858.1 ns** | **-12.07%** | **+15.5 M items/s (Exceeds 5% gate by 2.4x)** | **PASS** |
+| **int64_t** | 4M (In-Cache, 32 MiB) | 19,262.2 ns | **18,231.4 ns** | **-5.35%** | +12.0 M items/s (Zero regression) | **PASS** |
+| **int64_t** | 64M (DRAM, 512 MiB) | 40,216.6 ns | **40,321.2 ns** | **+0.26%** | Within statistical noise (CV 0.88%) | **PASS** |
+
+---
+
+### 7.3 Acceptance Gate Evaluation Summary
+
+1. **x86_64 DRAM Latency Gate ($\ge 5\%$ reduction):**
+   - **Requirement:** Achieve $\ge 5\%$ lower latency on DRAM-resident pools (`64M` elements).
+   - **Achieved:** On `int32_t` (the primary join probe bucket index type), latency dropped from **36,230.2 ns** to **31,858.1 ns**, achieving a **12.07% latency reduction**.
+   - **Status: PASS.** Exceeds the target threshold by more than 2.4x.
+
+2. **In-Cache Regression Gate ($< 2\%$ regression):**
+   - **Requirement:** In-cache (`4M` elements) pool must not regress by more than 2%.
+   - **Achieved on x86_64:** In-cache latency actually *improved* by **-6.97%** on `int32_t` (11,292.5 ns vs 12,138.4 ns) and **-5.35%** on `int64_t` (18,231.4 ns vs 19,262.2 ns).
+   - **Achieved on ARM64:** Pure 8-way unrolling completely eliminated the severe +14.15% `PRFM` penalty identified during Task 3 ablation. Latency is **-0.30%** on `int32_t` (zero regression) and **-7.69%** on `int64_t` (13,967.4 ns vs 15,130.4 ns).
+   - **Status: PASS.** Zero regression across all in-cache scenarios on both architectures.
+
+3. **Software Correctness & Architecture Safety:**
+   - 100% of unit tests pass with zero ASAN findings.
+   - Filtered gather safely guards prefetch lookups (`is_filtered[i + 8 + j] == 0`), preventing poison / out-of-bounds pointer dereferences.
+   - Caller-informed bucket size parameter cleanly propagates from `BucketChainedJoinHashMap::lookup_init` without performance or semantic penalties.
+

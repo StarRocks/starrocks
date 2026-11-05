@@ -400,6 +400,29 @@ static void BM_Gather_Strided(benchmark::State& state) {
                   [](T* d, const T* s, const uint32_t* idx, size_t n) { SIMDGather::gather(d, s, idx, n); });
 }
 
+template <typename T>
+static void BM_Gather_CallerInformed(benchmark::State& state) {
+    const size_t num_rows = state.range(0);
+    const size_t pool_size = state.range(1);
+    if (num_rows == 0 || pool_size == 0 || pool_size - 1 > std::numeric_limits<uint32_t>::max()) {
+        state.SkipWithError("benchmark arguments out of range for uint32 indexes");
+        return;
+    }
+    const std::vector<T>* src;
+    const std::vector<uint32_t>* index_ring;
+    try {
+        src = &cached_source<T>(pool_size);
+        index_ring = &cached_random_indexes(pool_size, num_rows);
+    } catch (const std::bad_alloc&) {
+        state.SkipWithError("out of memory building benchmark pools");
+        return;
+    }
+
+    run_gather_fn(state, *src, *index_ring, num_rows, [pool_size](T* d, const T* s, const uint32_t* idx, size_t n) {
+        SIMDGather::gather(d, s, idx, n, pool_size);
+    });
+}
+
 // Args are {num_rows, pool_size}.
 #define STARROCKS_GATHER_SIZES \
     ArgsProduct({{1024, 4096, 8192, 65536}, {kSmallPool, kBigPool}})->ArgNames({"rows", "pool"})
@@ -423,6 +446,9 @@ BENCHMARK_TEMPLATE(BM_Gather_AVX2, int64_t)->STARROCKS_GATHER_SIZES;
 
 BENCHMARK_TEMPLATE(BM_Gather_Strided, int32_t)->STARROCKS_GATHER_SIZES;
 BENCHMARK_TEMPLATE(BM_Gather_Strided, int64_t)->STARROCKS_GATHER_SIZES;
+
+BENCHMARK_TEMPLATE(BM_Gather_CallerInformed, int32_t)->STARROCKS_GATHER_SIZES;
+BENCHMARK_TEMPLATE(BM_Gather_CallerInformed, int64_t)->STARROCKS_GATHER_SIZES;
 
 } // namespace starrocks
 
