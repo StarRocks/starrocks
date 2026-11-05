@@ -1445,8 +1445,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
         try (CloseableIterator<FileScanTask> iterator =
                      maybeApplyScanBudget(
-                             buildFileScanTaskIterator(icebergTable, icebergPredicate, tvrVersionRange,
-                                     connectContext, enableCollectColumnStatistics, params.getFieldNames()),
+                             buildFileScanTaskIterator(icebergTable, icebergPredicate, key, connectContext),
                              applyScanBudget ? params : null)) {
             while (iterator.hasNext()) {
                 FileScanTask scanTask = iterator.next();
@@ -1596,7 +1595,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
                     scalarOperators, identityStringPartitionColumns(icebergTable));
             Expression icebergPredicate = convertPredicate(icebergTable, residual.pushable);
-            baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, tvrVersionRange, params);
+            baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, predicateSearchKey);
             if (residual.hasResidual()) {
                 baseSource = filterByPartitionResidual(baseSource, residual.residual, icebergTable,
                         icebergTable.hasPartitionTransformedEvolution());
@@ -1637,12 +1636,11 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private RemoteFileInfoSource buildRemoteInfoSource(IcebergTable table,
                                                        Expression icebergPredicate,
-                                                       TvrVersionRange tvrVersionRange,
-                                                       GetRemoteFilesParams params) {
+                                                       PredicateSearchKey key) {
+        GetRemoteFilesParams params = key.getParams();
         CloseableIterator<FileScanTask> iterator =
                 maybeApplyScanBudget(
-                        buildFileScanTaskIterator(table, icebergPredicate, tvrVersionRange, ConnectContext.get(),
-                                params.isEnableColumnStats(), params.getFieldNames()),
+                        buildFileScanTaskIterator(table, icebergPredicate, key, ConnectContext.get()),
                         params);
         return new RemoteFileInfoSource() {
             @Override
@@ -1784,12 +1782,17 @@ public class IcebergMetadata implements ConnectorMetadata {
         };
     }
 
+    // Plans the files of `key`: its version, column statistics (the stats columns) and projected field names.
+    // `icebergPredicate` is the key's predicate converted for Iceberg, which callers may have narrowed.
     private CloseableIterator<FileScanTask> buildFileScanTaskIterator(IcebergTable icebergTable,
                                                                       Expression icebergPredicate,
-                                                                      TvrVersionRange tvrVersionRange,
-                                                                      ConnectContext connectContext,
-                                                                      boolean enableCollectColumnStats,
-                                                                      List<String> fieldNames) {
+                                                                      PredicateSearchKey key,
+                                                                      ConnectContext connectContext) {
+        GetRemoteFilesParams params = key.getParams();
+        TvrVersionRange tvrVersionRange = key.getVersion();
+        boolean enableCollectColumnStats = params.isEnableColumnStats();
+        Set<String> statsColumnNames = params.getStatsColumnNames();
+        List<String> fieldNames = params.getFieldNames();
         if (tvrVersionRange.isEmpty()) {
             return new CloseableIterator<>() {
                 @Override
@@ -1864,7 +1867,16 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         if (enableCollectColumnStats) {
-            scan = (Scan) scan.includeColumnStats();
+            // Request the statistics of the given columns only (e.g. the min/max optimization), so the scan can be
+            // served from the manifest cache when it keeps them. Without stats columns (the column-statistics path),
+            // or when a name does not resolve against the scan schema, request all.
+            Schema scanSchema = scan.schema();
+            if (statsColumnNames != null && !statsColumnNames.isEmpty() &&
+                    statsColumnNames.stream().allMatch(name -> scanSchema.findField(name) != null)) {
+                scan = (Scan) scan.includeColumnStats(statsColumnNames);
+            } else {
+                scan = (Scan) scan.includeColumnStats();
+            }
         }
 
         if (icebergPredicate.op() != Expression.Operation.TRUE) {

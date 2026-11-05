@@ -1973,7 +1973,8 @@ public class IcebergMetadataTest extends TableTestBase {
 
         PredicateSearchKey filter = PredicateSearchKey.of("db", "table", emptyParams);
         Assertions.assertEquals(
-                "Filter{databaseName='db', tableName='table', version=Snapshot@(1), predicate=true, enableColumnStats=false}",
+                "Filter{databaseName='db', tableName='table', version=Snapshot@(1), predicate=true, " +
+                        "enableColumnStats=false, statsColumns=null}",
                 filter.toString());
     }
 
