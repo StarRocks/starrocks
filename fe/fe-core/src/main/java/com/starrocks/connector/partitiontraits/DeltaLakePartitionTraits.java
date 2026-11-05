@@ -17,13 +17,27 @@ package com.starrocks.connector.partitiontraits;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.DeltaLakePartitionKey;
+import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.catalog.LightWeightDeltaLakeTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Table;
+import com.starrocks.connector.PartitionInfo;
+import io.delta.kernel.Snapshot;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
+/**
+ * MV freshness of a Delta table is tracked by its table version, recorded for every partition an MV refresh read.
+ */
 public class DeltaLakePartitionTraits extends DefaultTraits {
+    private static final Logger LOG = LogManager.getLogger(DeltaLakePartitionTraits.class);
 
     @Override
     public PartitionKey createEmptyKey() {
@@ -40,14 +54,100 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
         return false;
     }
 
+    public static boolean isTableVersionTracked(Table table) {
+        return versionOf(table) >= 0;
+    }
+
+    private static long versionOf(Table table) {
+        if (!(table instanceof DeltaLakeTable) || table instanceof LightWeightDeltaLakeTable) {
+            return -1;
+        }
+        Snapshot snapshot = ((DeltaLakeTable) table).getDeltaSnapshot();
+        return snapshot == null ? -1 : snapshot.getVersion();
+    }
+
+    @Override
+    protected Object partitionInfoSnapshot() {
+        // the partition infos carry the table version, which DeltaLakeTable#equals ignores
+        return pinnedVersionRange != null ? pinnedVersionRange : versionOf(table);
+    }
+
+    @Override
+    Map<String, PartitionInfo> fetchPartitionNameWithPartitionInfo() {
+        // listing the partitions of a partitioned Delta table scans all its data files
+        if (!table.isUnPartitioned()) {
+            throw new UnsupportedOperationException(
+                    "Listing the partitions of partitioned Delta table " + table.getName() + " is not supported");
+        }
+        return super.fetchPartitionNameWithPartitionInfo();
+    }
+
+    @Override
+    public List<PartitionInfo> getPartitions(List<String> partitionNames) {
+        if (pinnedVersionRange != null || !isTableVersionTracked(table)) {
+            return super.getPartitions(partitionNames);
+        }
+        PartitionInfo tableVersion = new DeltaLakeTableVersion((DeltaLakeTable) table);
+        return partitionNames.stream().map(name -> tableVersion).collect(Collectors.toList());
+    }
+
     @Override
     public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                 MaterializedView.AsyncRefreshContext context) {
-        // TODO: Implement Delta Lake partition update tracking. Until then, return an empty set (meaning
-        //  "no updated partitions detected") rather than null. Returning null is interpreted as "update info
-        //  unknown", which forces the timeliness arbiter to treat the MV as stale (full refresh) and disables
-        //  query rewrite entirely in the default CHECKED consistency mode. Empty set keeps the MV eligible for
-        //  rewrite, matching the behavior of the other not-yet-implemented connectors (e.g. Hudi).
-        return Sets.newHashSet();
+        long currentVersion = versionOf(table);
+        if (currentVersion < 0) {
+            return null;
+        }
+        for (BaseTableInfo baseTableInfo : baseTables) {
+            if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(table.getTableIdentifier())) {
+                continue;
+            }
+            // never report a change as null: CachedPartitionTraits turns null into {}
+            Map<String, MaterializedView.BasePartitionInfo> versionMap = context.getBaseTableRefreshInfo(baseTableInfo);
+            if (versionMap.isEmpty()) {
+                return Sets.newHashSet(table.getName());
+            }
+            boolean changed = versionMap.values().stream()
+                    .anyMatch(refreshed -> refreshed == null || refreshed.getVersion() != currentVersion);
+            return changed ? Sets.newHashSet(versionMap.keySet()) : Sets.newHashSet();
+        }
+        return null;
+    }
+
+    private static final class DeltaLakeTableVersion implements PartitionInfo {
+        private final DeltaLakeTable table;
+        private Long commitTime;
+
+        DeltaLakeTableVersion(DeltaLakeTable table) {
+            this.table = table;
+        }
+
+        @Override
+        public long getModifiedTime() {
+            if (commitTime == null) {
+                commitTime = readCommitTime();
+            }
+            return commitTime;
+        }
+
+        private long readCommitTime() {
+            try {
+                return table.getDeltaSnapshot().getTimestamp(table.getDeltaEngine());
+            } catch (Exception e) {
+                LOG.warn("Failed to get the commit time of version {} of Delta table {}.{}", getVersion(),
+                        table.getCatalogDBName(), table.getCatalogTableName(), e);
+                return System.currentTimeMillis();
+            }
+        }
+
+        @Override
+        public TimeUnit getModifiedTimeUnit() {
+            return TimeUnit.MILLISECONDS;
+        }
+
+        @Override
+        public long getVersion() {
+            return versionOf(table);
+        }
     }
 }
