@@ -54,6 +54,12 @@ authentication_ldap_simple_bind_dn_pattern =
 
 例如：`uid=${USER},ou=People,dc=example,dc=com`
 
+:::note
+
+FE 启动时会将 `fe.conf` 中的 `${NAME}` 替换为环境变量 `NAME` 的值。如需保留占位符，请在 `fe.conf` 中写为 `$${USER}`，例如 `authentication_ldap_simple_bind_dn_pattern = uid=$${USER},ou=People,dc=example,dc=com`。在 Security Integration 的属性以及 `ADMIN SET FRONTEND CONFIG` 中无需转义，持久化的值会以转义后的形式写回 `fe.conf`。
+
+:::
+
 如果用户分布在多个 OU 中，可以指定多个模式，用分号分隔：
 
 `uid=${USER},ou=Engineering,dc=example,dc=com;uid=${USER},ou=Marketing,dc=example,dc=com`
