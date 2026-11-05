@@ -641,6 +641,8 @@ struct TGetLoadsParams {
     // declares it understands TGetLoadsResult.next_job_id_offset; FE returns the whole
     // result set unpaged when it is absent, so an old BE keeps its previous behavior.
     21: optional i64 start_job_id_offset
+    // The querying user. FE returns only the load jobs this user may see, and none when it is unset.
+    22: optional Types.TUserIdentity current_user_ident
 }
 
 struct TTrackingLoadInfo {

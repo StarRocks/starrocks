@@ -1565,6 +1565,10 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         return dbId;
     }
 
+    public long getTableId() {
+        return tableId;
+    }
+
     @Override
     public Long getLoadStartTimeMs() {
         return startLoadingTimeMs;
