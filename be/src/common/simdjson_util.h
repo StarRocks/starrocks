@@ -28,7 +28,7 @@ class SimdjsonParser {
 public:
     static simdjson::simdjson_result<std::string_view> unescape(simdjson::ondemand::raw_json_string in, uint8_t*& dst,
                                                                 bool allow_replacement = false) noexcept {
-        static SimdjsonParser s_wrapper;
+        static thread_local SimdjsonParser s_wrapper;
         return s_wrapper._parser.unescape(in, dst, allow_replacement);
     }
 
