@@ -445,6 +445,10 @@ BENCHMARK_TEMPLATE(BM_SimdFilterKernel, uint64_t, SIMD::Filter::detail::scan_avx
         ->Name("BM_SimdFilterKernel_scan_avx2_baseline_w8")
         ->Apply(SimdFilterKernelArgs);
 
+BENCHMARK_TEMPLATE(BM_SimdFilterKernel, uint64_t, SIMD::Filter::detail::compress_avx2_w8)
+        ->Name("BM_SimdFilterKernel_compress_avx2_w8")
+        ->Apply(SimdFilterKernelArgs);
+
 #endif // __x86_64__
 
 } // namespace starrocks

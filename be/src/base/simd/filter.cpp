@@ -57,6 +57,26 @@ constexpr auto make_permute_table_8x32() {
 }
 
 alignas(64) inline constexpr auto kPermuteTable8x32 = make_permute_table_8x32();
+
+constexpr auto make_permute_table_4x64() {
+    std::array<std::array<int32_t, 8>, 16> table{};
+    for (int mask = 0; mask < 16; ++mask) {
+        int out_lane = 0;
+        for (int lane = 0; lane < 4; ++lane) {
+            if (mask & (1 << lane)) {
+                table[mask][out_lane * 2] = lane * 2;
+                table[mask][out_lane * 2 + 1] = lane * 2 + 1;
+                out_lane++;
+            }
+        }
+        for (int i = out_lane * 2; i < 8; ++i) {
+            table[mask][i] = 0;
+        }
+    }
+    return table;
+}
+
+alignas(64) inline constexpr auto kPermuteTable4x64 = make_permute_table_4x64();
 #endif
 
 // Trivially-copyable stand-in for element widths without a native integer type
@@ -344,6 +364,55 @@ __attribute__((target("avx2"))) size_t detail::compress_avx2_w4(uint32_t* dst, c
                     __m256i v_src = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + start + g * 8));
                     __m256i v_perm =
                             _mm256_load_si256(reinterpret_cast<const __m256i*>(kPermuteTable8x32[sub_mask].data()));
+                    __m256i v_compact = _mm256_permutevar8x32_epi32(v_src, v_perm);
+                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + result), v_compact);
+                    result += _mm_popcnt_u32(sub_mask);
+                }
+            }
+        }
+        start += kBatchNums;
+    }
+    for (; start < to; ++start) {
+        if (selector[start]) {
+            dst[result++] = src[start];
+        }
+    }
+    return result;
+}
+
+__attribute__((target("avx2"))) size_t detail::compress_avx2_w8(uint64_t* dst, const uint64_t* src,
+                                                                const uint8_t* selector, size_t from, size_t to) {
+    size_t start = from;
+    size_t result = from;
+    const __m256i all0 = _mm256_setzero_si256();
+    while (start + kBatchNums <= to) {
+        __m256i sel = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(selector + start));
+        uint32_t mask = ~_mm256_movemask_epi8(_mm256_cmpeq_epi8(sel, all0));
+        if (mask == 0) {
+            // whole batch dropped
+        } else if (mask == 0xffffffff) {
+            if (dst + result != src + start) {
+                std::memmove(dst + result, src + start, kBatchNums * sizeof(uint64_t));
+            }
+            result += kBatchNums;
+        } else if (_mm_popcnt_u32(mask) < 4) {
+            for (uint32_t m = mask; m != 0; m &= m - 1) {
+                dst[result++] = src[start + __builtin_ctz(m)];
+            }
+        } else {
+            for (int g = 0; g < 8; ++g) {
+                uint32_t sub_mask = (mask >> (g * 4)) & 0x0fu;
+                if (sub_mask == 0) {
+                    continue;
+                }
+                if (sub_mask == 0x0fu) {
+                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + result),
+                                        _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + start + g * 4)));
+                    result += 4;
+                } else {
+                    __m256i v_src = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + start + g * 4));
+                    __m256i v_perm =
+                            _mm256_load_si256(reinterpret_cast<const __m256i*>(kPermuteTable4x64[sub_mask].data()));
                     __m256i v_compact = _mm256_permutevar8x32_epi32(v_src, v_perm);
                     _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + result), v_compact);
                     result += _mm_popcnt_u32(sub_mask);
