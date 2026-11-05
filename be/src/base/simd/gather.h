@@ -276,7 +276,7 @@ struct SIMDGather {
         gather_filtered_buffered(dest, src, indexes, is_filtered, num_rows, i);
     }
 
-    /// Caller-informed gather with DRAM prefetch heuristic.
+    /// Caller-informed gather with large-pool software prefetch heuristic (for source pools >= 16 MiB that exceed L1/L2 cache).
     /// Contract: `dest`, `src` and `indexes` must not overlap: the helpers take `__restrict__`
     /// pointers, so overlapping ranges are undefined behaviour.
     /// `pool_size` is a PERFORMANCE hint only and never affects correctness. Prefetch is issued only
