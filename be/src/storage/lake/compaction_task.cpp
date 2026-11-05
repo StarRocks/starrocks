@@ -118,26 +118,21 @@ int32_t CompactionTask::chunk_size_with_held_segments(int64_t held_segments_byte
 Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
     if (_tablet.get_schema()->keys_type() == KeysType::PRIMARY_KEYS) {
         SCOPED_RAW_TIMER(&_context->stats->pk_sst_merge_ns);
-        auto metadata = _tablet.metadata();
-        if (metadata->enable_persistent_index() &&
-            metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE) {
-            // For parallel compaction subtasks, skip SST compaction here.
-            // SST compaction will be executed once after all subtasks complete,
-            // in TabletParallelCompactionManager::get_merged_txn_log.
-            // This avoids multiple subtasks competing to compact the same SST files.
-            if (_context->subtask_id >= 0) {
-                return Status::OK();
-            }
-            RETURN_IF_ERROR(_tablet.tablet_manager()->primary_key_mgr()->execute_index_major_compaction(
-                    metadata, txn_log, _context->is_unshare));
-            if (txn_log->has_op_compaction() && !txn_log->op_compaction().input_sstables().empty()) {
-                size_t total_input_sstable_file_size = 0;
-                for (const auto& input_sstable : txn_log->op_compaction().input_sstables()) {
-                    total_input_sstable_file_size += input_sstable.filesize();
-                }
-                _context->stats->input_file_size += total_input_sstable_file_size;
-            }
+        // For parallel compaction subtasks, skip SST compaction here.
+        // SST compaction will be executed once after all subtasks complete,
+        // in TabletParallelCompactionManager::get_merged_txn_log.
+        // This avoids multiple subtasks competing to compact the same SST files.
+        if (_context->subtask_id >= 0) {
             return Status::OK();
+        }
+        RETURN_IF_ERROR(_tablet.tablet_manager()->primary_key_mgr()->execute_index_major_compaction(
+                _tablet.metadata(), txn_log, _context->is_unshare));
+        if (txn_log->has_op_compaction() && !txn_log->op_compaction().input_sstables().empty()) {
+            size_t total_input_sstable_file_size = 0;
+            for (const auto& input_sstable : txn_log->op_compaction().input_sstables()) {
+                total_input_sstable_file_size += input_sstable.filesize();
+            }
+            _context->stats->input_file_size += total_input_sstable_file_size;
         }
     }
     return Status::OK();
@@ -237,13 +232,9 @@ bool CompactionTask::should_enable_pk_index_eager_build(int64_t input_bytes) {
     if (_tablet.get_schema()->keys_type() != KeysType::PRIMARY_KEYS) {
         return false;
     }
-    // Eager PK index build only works when all conditions are met:
-    // 1. whether use cloud native index
-    // 2. whether input_bytes is large enough
-    auto metadata = _tablet.metadata();
-    bool use_cloud_native_index = metadata->enable_persistent_index() &&
-                                  metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE;
-    return use_cloud_native_index && input_bytes >= config::pk_index_eager_build_threshold_bytes;
+    // Every shared-data primary key tablet uses the cloud-native persistent index, so eager PK index build only
+    // depends on whether the input is large enough.
+    return input_bytes >= config::pk_index_eager_build_threshold_bytes;
 }
 
 } // namespace starrocks::lake

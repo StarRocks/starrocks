@@ -1958,13 +1958,8 @@ Status TabletParallelCompactionManager::execute_sst_compaction_for_parallel(int6
     const auto& tablet = tablet_or.value();
     const auto& metadata = tablet.metadata();
 
-    // Check if this is a primary key table with cloud native persistent index
+    // Only a primary key tablet has an index to compact. Its index is always cloud native.
     if (!metadata || metadata->schema().keys_type() != KeysType::PRIMARY_KEYS) {
-        return Status::OK();
-    }
-
-    if (!metadata->enable_persistent_index() ||
-        metadata->persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE) {
         return Status::OK();
     }
 
