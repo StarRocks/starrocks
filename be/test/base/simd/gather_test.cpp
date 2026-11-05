@@ -554,6 +554,10 @@ void check_prefetch_gate_boundaries() {
 TEST(SIMDGatherTest, prefetch_gate_boundaries) {
     check_prefetch_gate_boundaries<int32_t>();
     check_prefetch_gate_boundaries<int64_t>();
+    // Narrow types: the prefetch loop advances in steps of 8, so the buffered default loop then
+    // starts at an index that is not a multiple of NUM_BATCH_VALUES (16 for int16, 32 for int8 under AVX2).
+    check_prefetch_gate_boundaries<int16_t>();
+    check_prefetch_gate_boundaries<int8_t>();
 }
 
 } // namespace starrocks
