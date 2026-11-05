@@ -347,6 +347,7 @@ size_t detail::filter_range(void* dst, const void* src, size_t element_size, con
 __attribute__((target("avx2"))) size_t detail::filter_range_avx2(void* dst, const void* src, size_t element_size,
                                                                  const uint8_t* selector, size_t from, size_t to) {
     if (element_size == 4) return FILTER_CALL(detail::compress_avx2_w4, uint32_t);
+    if (element_size == 8) return FILTER_CALL(detail::compress_avx2_w8, uint64_t);
     return scan_avx2_any(dst, src, element_size, selector, from, to);
 }
 

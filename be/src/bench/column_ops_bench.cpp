@@ -483,6 +483,38 @@ BENCHMARK_TEMPLATE(BM_SimdFilterRange, uint32_t)->Name("BM_SimdFilterRange_w4")-
 
 BENCHMARK_TEMPLATE(BM_SimdFilterRange, uint64_t)->Name("BM_SimdFilterRange_w8")->Apply(SimdFilterKernelArgs);
 
+template <typename T>
+static void BM_SimdFilterRangeAvx2(benchmark::State& state) {
+    const int selectivity = state.range(0);
+    const int cluster = state.range(1);
+
+    auto ring = make_filter_selector_ring(kChunk, selectivity, cluster, 0x12345678ULL);
+
+    std::vector<T> src(kChunk);
+    for (size_t i = 0; i < kChunk; ++i) {
+        src[i] = static_cast<T>(i * 31 + 7);
+    }
+    std::vector<T> dst(kChunk, 0);
+
+    size_t ring_idx = 0;
+    size_t total_retained = 0;
+    for (auto _ : state) {
+        const uint8_t* selector = ring[ring_idx].data();
+        size_t retained =
+                SIMD::Filter::detail::filter_range_avx2(dst.data(), src.data(), sizeof(T), selector, 0, kChunk);
+        total_retained += retained;
+        benchmark::DoNotOptimize(dst.data());
+        ring_idx = (ring_idx + 1) & 15;
+    }
+    benchmark::DoNotOptimize(total_retained);
+    state.SetBytesProcessed(int64_t(state.iterations()) * int64_t(kChunk * sizeof(T)));
+    state.SetItemsProcessed(int64_t(state.iterations()) * int64_t(kChunk));
+}
+
+BENCHMARK_TEMPLATE(BM_SimdFilterRangeAvx2, uint32_t)->Name("BM_SimdFilterRangeAvx2_w4")->Apply(SimdFilterKernelArgs);
+
+BENCHMARK_TEMPLATE(BM_SimdFilterRangeAvx2, uint64_t)->Name("BM_SimdFilterRangeAvx2_w8")->Apply(SimdFilterKernelArgs);
+
 #endif // __x86_64__
 
 } // namespace starrocks
