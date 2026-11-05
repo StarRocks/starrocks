@@ -21,6 +21,8 @@
 #include <cstdint>
 #include <random>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "base/testutil/parallel_test.h"
@@ -252,7 +254,7 @@ void check_caller_informed_gather(size_t num_rows, size_t pool_size) {
     const T sentinel = make_value<T>(999983);
 
     std::vector<T> dest(num_rows + kGuard, sentinel);
-    SIMDGather::gather(dest.data(), src.data(), indexes.data(), num_rows, pool_size);
+    SIMDGather::gather(dest.data(), src.data(), indexes.data(), num_rows, SourcePoolSize{pool_size});
 
     for (size_t i = 0; i < num_rows; ++i) {
         ASSERT_EQ(src[indexes[i]], dest[i]) << "num_rows=" << num_rows << " pool_size=" << pool_size << " i=" << i;
@@ -281,7 +283,8 @@ void check_caller_informed_filtered(size_t num_rows, size_t pool_size, FilterPat
     }
 
     std::vector<T> dest(num_rows + kGuard, sentinel);
-    SIMDGather::gather(dest.data(), src.data(), indexes.data(), is_filtered.data(), num_rows, pool_size);
+    SIMDGather::gather(dest.data(), src.data(), indexes.data(), is_filtered.data(), num_rows,
+                       SourcePoolSize{pool_size});
 
     for (size_t i = 0; i < num_rows; ++i) {
         const T expected = is_filtered[i] == 0 ? src[indexes[i]] : T(0);
@@ -327,7 +330,7 @@ TEST(SIMDGatherTest, test_caller_informed_pool_size) {
                 index = dist(rng);
             }
             std::vector<std::string> dest(n);
-            SIMDGather::gather(dest.data(), src.data(), indexes.data(), n, pool_size);
+            SIMDGather::gather(dest.data(), src.data(), indexes.data(), n, SourcePoolSize{pool_size});
             for (size_t i = 0; i < n; ++i) {
                 ASSERT_EQ(src_copy[indexes[i]], dest[i]) << "n=" << n << " i=" << i;
             }
@@ -426,7 +429,7 @@ TEST(SIMDGatherTest, test_custom_trivially_copyable_struct) {
         // 2. Caller-informed gather (5-arg)
         for (size_t pool_size : {size_t(0), size_t(1000), size_t(16 * 1024 * 1024), size_t(64 * 1024 * 1024)}) {
             std::vector<TestPOD> dest(n + kGuard, TestPOD{-1, -1});
-            SIMDGather::gather(dest.data(), src.data(), indexes.data(), n, pool_size);
+            SIMDGather::gather(dest.data(), src.data(), indexes.data(), n, SourcePoolSize{pool_size});
             for (size_t i = 0; i < n; ++i) {
                 ASSERT_EQ(src[indexes[i]], dest[i])
                         << "Caller-informed gather failed at n=" << n << " pool=" << pool_size;
@@ -455,7 +458,8 @@ TEST(SIMDGatherTest, test_custom_trivially_copyable_struct) {
             // 6-arg caller-informed gather_filtered
             for (size_t pool_size : {size_t(0), size_t(1000), size_t(16 * 1024 * 1024), size_t(64 * 1024 * 1024)}) {
                 std::vector<TestPOD> dest(n + kGuard, TestPOD{-1, -1});
-                SIMDGather::gather(dest.data(), src.data(), indexes.data(), is_filtered.data(), n, pool_size);
+                SIMDGather::gather(dest.data(), src.data(), indexes.data(), is_filtered.data(), n,
+                                   SourcePoolSize{pool_size});
                 for (size_t i = 0; i < n; ++i) {
                     TestPOD expected = (is_filtered[i] == 0) ? src[indexes[i]] : TestPOD{};
                     ASSERT_EQ(expected, dest[i])
@@ -468,6 +472,38 @@ TEST(SIMDGatherTest, test_custom_trivially_copyable_struct) {
         }
     }
     ASSERT_EQ(src_copy, src);
+}
+
+namespace {
+
+template <typename... Args>
+using gather_call_t = decltype(SIMDGather::gather(std::declval<Args>()...));
+
+template <typename Void, typename... Args>
+struct IsGatherCallable : std::false_type {};
+
+template <typename... Args>
+struct IsGatherCallable<std::void_t<gather_call_t<Args...>>, Args...> : std::true_type {};
+
+template <typename... Args>
+constexpr bool is_gather_callable_v = IsGatherCallable<void, Args...>::value;
+
+} // namespace
+
+TEST(SIMDGatherTest, pool_size_hint_rejects_raw_size_t) {
+    // A raw (size_t, size_t) tail must never be accepted: it would silently swap the
+    // legacy (buckets, num_rows) arguments into the pool-size hint overload.
+    static_assert(!is_gather_callable_v<int16_t*, const int16_t*, const uint32_t*, size_t, size_t>);
+    static_assert(!is_gather_callable_v<int16_t*, const int16_t*, const uint32_t*, const uint8_t*, size_t, size_t>);
+
+    // The strongly typed hint is accepted by both hint overloads.
+    static_assert(is_gather_callable_v<int16_t*, const int16_t*, const uint32_t*, size_t, SourcePoolSize>);
+    static_assert(
+            is_gather_callable_v<int16_t*, const int16_t*, const uint32_t*, const uint8_t*, size_t, SourcePoolSize>);
+    // The legacy overload is still selected for supported 4-byte destinations.
+    static_assert(is_gather_callable_v<int32_t*, const int16_t*, const uint32_t*, size_t, int>);
+    static_assert(!std::is_convertible_v<size_t, SourcePoolSize>);
+    static_assert(SourcePoolSize{7}.elements == 7);
 }
 
 } // namespace starrocks

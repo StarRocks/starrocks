@@ -406,7 +406,7 @@ static void BM_Gather_CallerInformed(benchmark::State& state) {
     }
 
     run_gather_fn(state, *src, *index_ring, num_rows, [pool_size](T* d, const T* s, const uint32_t* idx, size_t n) {
-        SIMDGather::gather(d, s, idx, n, pool_size);
+        SIMDGather::gather(d, s, idx, n, SourcePoolSize{pool_size});
     });
 }
 

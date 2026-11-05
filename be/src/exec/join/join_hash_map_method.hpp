@@ -99,7 +99,7 @@ void BucketChainedJoinHashMap<LT>::lookup_init(const JoinHashTableItems& table_i
             probe_state->buckets[i] = JoinHashMapHelper::calc_bucket_num<CppType>(
                     probe_keys[i], table_items.bucket_size, table_items.log_bucket_size);
         }
-        SIMDGather::gather(nexts, firsts, buckets, row_count, table_items.bucket_size);
+        SIMDGather::gather(nexts, firsts, buckets, row_count, SourcePoolSize{table_items.bucket_size});
     } else {
         const auto* is_nulls_data = is_nulls->data();
         auto need_calc_bucket_num = [&](const uint32_t index) {
@@ -115,7 +115,7 @@ void BucketChainedJoinHashMap<LT>::lookup_init(const JoinHashTableItems& table_i
                         probe_keys[i], table_items.bucket_size, table_items.log_bucket_size);
             }
         }
-        SIMDGather::gather(nexts, firsts, buckets, is_nulls_data, row_count, table_items.bucket_size);
+        SIMDGather::gather(nexts, firsts, buckets, is_nulls_data, row_count, SourcePoolSize{table_items.bucket_size});
     }
 }
 

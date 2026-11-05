@@ -42,18 +42,27 @@
 
 namespace starrocks {
 
+/// Strongly typed pool-size hint for the caller-informed SIMDGather overloads.
+/// `elements` is the ELEMENT count of the source array (not bytes). Wrapping it in a
+/// type prevents a raw `(size_t, size_t)` tail from silently binding to the hint
+/// overloads when the legacy `(buckets, num_rows)` overload was intended.
+struct SourcePoolSize {
+    explicit constexpr SourcePoolSize(size_t n) : elements(n) {}
+    size_t elements;
+};
+
 struct SIMDGather {
     // https://johnysswlab.com/when-vectorization-hits-the-memory-wall-investigating-the-avx2-memory-gather-instruction
     // 512K
     static constexpr const int max_process_size = 512 * 1024;
     // b[i] = a[c[i]];
     // T was int32_t or uint32_t
-    template <class TB, class TC>
+    // Constrained via SFINAE so unsupported types are rejected at overload resolution instead of
+    // being accepted by a decltype-only check.
+    template <class TB, class TC,
+              std::enable_if_t<sizeof(TB) == 4 && std::is_integral_v<TB> && sizeof(TC) == 4 && std::is_integral_v<TC>,
+                               int> = 0>
     static void gather(TB* b, const int16_t* a, const TC* c, size_t buckets, int num_rows) {
-        static_assert(sizeof(TB) == 4);
-        static_assert(std::is_integral_v<TB>);
-        static_assert(sizeof(TC) == 4);
-        static_assert(std::is_integral_v<TC>);
         int i = 0;
 #ifdef __AVX2__
         if (buckets < max_process_size) {
@@ -239,10 +248,10 @@ struct SIMDGather {
     }
 
     /// Caller-informed gather with DRAM prefetch heuristic.
-    /// @param pool_size Element count of the source array (`src`).
+    /// @param pool_size Element count of the source array (`src`), wrapped in SourcePoolSize.
     template <typename DataType, typename IndexType>
     static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows,
-                              size_t pool_size) {
+                              SourcePoolSize pool_size) {
         static_assert(std::is_integral_v<IndexType>);
         size_t i = 0;
 
@@ -250,7 +259,7 @@ struct SIMDGather {
         constexpr size_t kDRAMByteThreshold = 16 * 1024 * 1024;
         constexpr size_t kBatchThreshold = 4096;
         constexpr size_t kPrefetchLookahead = 8;
-        const bool is_large_pool = (pool_size >= kDRAMByteThreshold / sizeof(DataType));
+        const bool is_large_pool = (pool_size.elements >= kDRAMByteThreshold / sizeof(DataType));
 
         if (num_rows >= kBatchThreshold && is_large_pool) {
             for (size_t p = 0; p < kPrefetchLookahead; ++p) {
@@ -278,10 +287,10 @@ struct SIMDGather {
     }
 
     /// Caller-informed filtered gather with DRAM prefetch heuristic.
-    /// @param pool_size Element count of the source array (`src`).
+    /// @param pool_size Element count of the source array (`src`), wrapped in SourcePoolSize.
     template <typename DataType, typename IndexType, typename CondType>
     static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes,
-                              const CondType* is_filtered, size_t num_rows, size_t pool_size) {
+                              const CondType* is_filtered, size_t num_rows, SourcePoolSize pool_size) {
         static_assert(std::is_integral_v<IndexType>);
         size_t i = 0;
 
@@ -289,7 +298,7 @@ struct SIMDGather {
         constexpr size_t kDRAMByteThreshold = 16 * 1024 * 1024;
         constexpr size_t kBatchThreshold = 4096;
         constexpr size_t kPrefetchLookahead = 8;
-        const bool is_large_pool = (pool_size >= kDRAMByteThreshold / sizeof(DataType));
+        const bool is_large_pool = (pool_size.elements >= kDRAMByteThreshold / sizeof(DataType));
 
         if (num_rows >= kBatchThreshold && is_large_pool) {
             for (size_t p = 0; p < kPrefetchLookahead; ++p) {
