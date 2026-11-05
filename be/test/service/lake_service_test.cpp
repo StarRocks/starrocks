@@ -2969,17 +2969,8 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids_partial) {
 
         brpc::Controller cntl;
         _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
-<<<<<<< HEAD
-        ASSERT_FALSE(cntl.Failed());
-        ASSERT_EQ(1, response.failed_tablets_size());
-        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
-        EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version)));
-        // The single source .log must remain so the operator can recover.
-        EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
-=======
         EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
-        StorageEngine::instance()->wait_storage_cleanup_tasks();
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
         return response.failed_tablets_size();
     };
     auto read_vlog = [&](int64_t version) {
@@ -3005,7 +2996,6 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids_partial) {
         ASSERT_EQ(0, publish(txn_id, version));
         ASSIGN_OR_ABORT(auto vlog_after_retry, read_vlog(version));
         EXPECT_EQ(7, vlog_after_retry->op_write().rowset().num_rows());
->>>>>>> 03ad978 ([BugFix][RB-435] Publish the log version of a multi-statement txn from the logs the tablet has (#82221))
     }
 
     // Both statements loaded this tablet and a previous attempt wrote the .vlog, but deleted only the log of the
@@ -3023,30 +3013,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids_partial) {
         vlog->mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("stmt2.dat");
         ASSERT_OK(_tablet_mgr->put_txn_vlog(vlog, version));
 
-<<<<<<< HEAD
-        PublishLogVersionRequest request;
-        PublishLogVersionResponse response;
-        request.add_tablet_ids(_tablet_id);
-        request.set_version(version);
-        auto* txn_info = request.mutable_txn_info();
-        txn_info->set_txn_id(txn_id);
-        txn_info->set_combined_txn_log(false);
-        txn_info->set_txn_type(TXN_NORMAL);
-        txn_info->set_commit_time(::time(nullptr));
-        txn_info->add_load_ids()->CopyFrom(load_id_1);
-        txn_info->add_load_ids()->CopyFrom(load_id_2);
-
-        brpc::Controller cntl;
-        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
-        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
-        ASSERT_EQ(0, response.failed_tablets_size());
-
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
-        // The pre-existing .vlog stays intact and the stale .log is cleaned.
-        EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version)));
-=======
         ASSERT_EQ(0, publish(txn_id, version));
->>>>>>> 03ad978 ([BugFix][RB-435] Publish the log version of a multi-statement txn from the logs the tablet has (#82221))
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
         ASSIGN_OR_ABORT(auto vlog_after_retry, read_vlog(version));
         EXPECT_EQ(18, vlog_after_retry->op_write().rowset().num_rows());
