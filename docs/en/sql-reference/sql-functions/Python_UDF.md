@@ -150,10 +150,10 @@ symbol = "main.echo"
 | VARCHAR                              | STRING                  |
 | DATE                                 | DATETIME.DATE           |
 | DECIMAL                              | DECIMAL.DECIMAL         |
-| ARRAY                                | List                    |
-| MAP                                  | Dict                    |
-| STRUCT                               | COLLECTIONS.NAMEDTUPLE  |
-| JSON                                 | dict                    |
+| ARRAY                                | list                    |
+| MAP                                  | dict                    |
+| STRUCT                               | dict (keyed by field name) |
+| JSON                                 | str (use `json.loads` to parse) |
 | **VECTORIZED**                       |                         |
 | TYPE_BOOLEAN                         | pyarrow.lib.BoolArray   |
 | TYPE_TINYINT                         | pyarrow.lib.Int8Array   |
@@ -167,6 +167,15 @@ symbol = "main.echo"
 | DATE                                 | pyarrow.Date32Array     |
 | TYPE_TIME                            | pyarrow.TimeArray       |
 | ARRAY                                | pyarrow.ListArray       |
+| MAP                                  | pyarrow.MapArray        |
+| STRUCT                               | pyarrow.StructArray     |
+
+Nested types (`ARRAY`, `MAP`, `STRUCT`) may be composed arbitrarily — for example,
+`array<map<string,int>>`, `map<string,array<int>>`, `struct<a array<int>, b map<string,int>>`,
+or `array<struct<...>>`. In `scalar` mode each row is delivered as plain Python `list` /
+`dict` values recursively. To return a nested type, return matching Python `list` / `dict`
+values (with `dict` keys equal to struct field names); `pyarrow` performs the
+recursive conversion automatically.
 
 ### Compile Python
 
