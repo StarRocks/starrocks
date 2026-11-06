@@ -20,6 +20,7 @@
 
 #include "common/config_exec_fwd.h"
 #include "exprs/agg/base_aggregate_test.h"
+#include "exprs/agg/window_funnel.h"
 #include "testutil/column_test_helper.h"
 
 namespace starrocks {
@@ -912,6 +913,237 @@ TEST_F(AggregateTest, test_window_funnel) {
     // args: (1800, timestamp, 0, [true, true])
     // only have one row, but condition is all true, so result is 2.
     ASSERT_EQ(2, result_column->get_data()[0]);
+}
+
+TEST_F(AggregateTest, test_window_funnel_repeated_steps) {
+    auto check = [](int64_t window, int32_t mode, uint8_t steps, const std::vector<std::pair<int64_t, uint8_t>>& events,
+                    int32_t expected) {
+        WindowFunnelState<TYPE_BIGINT> state;
+        state.window_size = window;
+        state.mode = mode;
+        state.events_size = steps;
+        for (auto [timestamp, level] : events) {
+            state.update(timestamp, level);
+        }
+        EXPECT_EQ(expected, state.get_event_level());
+        // Finalizing again must retain the strict timestamp flag.
+        EXPECT_EQ(expected, state.get_event_level());
+    };
+    check(1000, INCREASE, 2, {{0, 1}, {0, 2}, {100, 1}, {100, 2}}, 2);             // A -> A
+    check(1000, INCREASE, 3, {{0, 1}, {100, 2}, {100, 3}, {200, 2}, {200, 3}}, 3); // A -> B -> B
+    check(1000, INCREASE, 3, {{0, 1}, {0, 3}, {100, 2}, {200, 1}, {200, 3}}, 3);   // A -> B -> A
+    check(1000, INCREASE, 3, {{0, 1}, {0, 2}, {0, 3}, {100, 1}, {100, 2}, {100, 3}}, 2);
+    check(1000, INCREASE, 2, {{0, 1}, {0, 2}, {0, 1}, {0, 2}}, 1);
+    // Unordered inputs and a later first event must still find the longest prefix.
+    check(100, INCREASE, 3, {{200, 3}, {100, 2}, {50, 1}, {0, 1}, {100, 3}, {200, 2}}, 2);
+    check(100, INCREASE, 2, {{0, 1}, {100, 2}}, 2); // Inclusive upper bound.
+    check(100, INCREASE, 2, {{0, 1}, {101, 2}}, 1);
+    check(0, 0, 2, {{0, 1}, {0, 2}}, 2); // Preserve non-strict zero-window behavior.
+    check(0, INCREASE, 2, {{0, 1}, {0, 2}}, 1);
+    check(1000, INCREASE, 2, {{0, 0}, {100, 2}}, 0);
+}
+
+TEST_F(AggregateTest, test_window_funnel_same_day) {
+    WindowFunnelState<TYPE_DATETIME> datetime_state;
+    datetime_state.window_size = -1;
+    EXPECT_TRUE(datetime_state.within_window(86398, 86399));
+    EXPECT_FALSE(datetime_state.within_window(86399, 86400));
+    EXPECT_FALSE(datetime_state.within_window(0, 86400));
+    EXPECT_TRUE(datetime_state.within_window(-2, -1));
+    EXPECT_FALSE(datetime_state.within_window(-1, 0));
+
+    WindowFunnelState<TYPE_DATE> date_state;
+    date_state.window_size = -1;
+    EXPECT_TRUE(date_state.within_window(2460000, 2460000));
+    EXPECT_FALSE(date_state.within_window(2460000, 2460001));
+    date_state.events_size = 2;
+    date_state.update(2460000, 1);
+    date_state.update(2460000, 2);
+    EXPECT_EQ(2, date_state.get_event_level());
+
+    WindowFunnelState<TYPE_INT> int_state;
+    int_state.window_size = -1;
+    EXPECT_TRUE(int_state.within_window(86399800, 86399900));
+    EXPECT_FALSE(int_state.within_window(86399900, 86400000));
+
+    // Exercise the shared window predicate in all existing mode branches.
+    for (int32_t mode = 0; mode <= 7; ++mode) {
+        WindowFunnelState<TYPE_BIGINT> state;
+        state.window_size = -1;
+        state.mode = mode;
+        state.events_size = 2;
+        state.update(86399800, 1);
+        state.update(86399900, 2);
+        EXPECT_EQ(2, state.get_event_level()) << mode;
+        WindowFunnelState<TYPE_BIGINT> crossing;
+        crossing.window_size = -1;
+        crossing.mode = mode;
+        crossing.events_size = 2;
+        crossing.update(86399900, 1);
+        crossing.update(86400000, 2);
+        EXPECT_EQ(1, crossing.get_event_level()) << mode;
+    }
+    // A chain starting on a later day can succeed even when the previous day's chain expired.
+    datetime_state.mode = INCREASE;
+    datetime_state.events_size = 3;
+    datetime_state.update(86398, 1);
+    datetime_state.update(86399, 2);
+    datetime_state.update(86400, 3);
+    datetime_state.update(86401, 1);
+    datetime_state.update(86402, 2);
+    datetime_state.update(86403, 3);
+    EXPECT_EQ(3, datetime_state.get_event_level());
+}
+
+TEST_F(AggregateTest, test_window_funnel_same_day_datetime_paths) {
+    for (bool crossing_midnight : {false, true}) {
+        std::vector<TypeDescriptor> args = {TYPE_BIGINT_DESC, TYPE_DATETIME_DESC, TYPE_INT_DESC,
+                                            TypeDescriptor::from_logical_type(TYPE_ARRAY)};
+        std::unique_ptr<FunctionContext> local_ctx(
+                FunctionContext::create_test_context(std::move(args), TYPE_INT_DESC));
+        auto window = ColumnHelper::create_const_column<TYPE_BIGINT>(-1, 2);
+        auto mode = ColumnHelper::create_const_column<TYPE_INT>(INCREASE, 2);
+        local_ctx->set_constant_columns({window, nullptr, mode, nullptr});
+        auto times = TimestampColumn::create();
+        times->append(TimestampValue::create(2026, 11, 4, 23, 59, 58));
+        times->append(crossing_midnight ? TimestampValue::create(2026, 11, 5, 0, 0, 0)
+                                        : TimestampValue::create(2026, 11, 4, 23, 59, 59));
+        auto values = BooleanColumn::create();
+        for (bool value : {true, false, false, true}) {
+            values->append(value);
+        }
+        auto offsets = UInt32Column::create();
+        offsets->append(0);
+        offsets->append(2);
+        offsets->append(4);
+        auto conditions = ArrayColumn::create(NullableColumn::create(values, NullColumn::create(4, 0)), offsets);
+        WindowFunnelAggregateFunction<TYPE_DATETIME> func;
+        auto direct = ManagedAggrState::create(local_ctx.get(), &func);
+        const Column* raw_columns[] = {window.get(), times.get(), mode.get(), conditions.get()};
+        func.update(local_ctx.get(), raw_columns, direct->state(), 0);
+        func.update(local_ctx.get(), raw_columns, direct->state(), 1);
+        auto result = Int32Column::create();
+        func.finalize_to_column(local_ctx.get(), direct->state(), result.get());
+        EXPECT_EQ(crossing_midnight ? 1 : 2, result->get_data()[0]);
+
+        Columns columns = {window, times, mode, conditions};
+        MutableColumnPtr converted = ArrayColumn::create(
+                NullableColumn::create(Int64Column::create(), NullColumn::create()), UInt32Column::create());
+        func.convert_to_serialize_format(local_ctx.get(), columns, 2, converted);
+        auto merged = ManagedAggrState::create(local_ctx.get(), &func);
+        func.merge(local_ctx.get(), converted.get(), merged->state(), 1);
+        func.merge(local_ctx.get(), converted.get(), merged->state(), 0);
+        func.finalize_to_column(local_ctx.get(), merged->state(), result.get());
+        EXPECT_EQ(crossing_midnight ? 1 : 2, result->get_data()[1]);
+    }
+}
+
+TEST_F(AggregateTest, test_window_funnel_same_day_init_once) {
+    std::unique_ptr<FunctionContext> local_ctx(
+            FunctionContext::create_test_context({TYPE_BIGINT_DESC, TYPE_BIGINT_DESC, TYPE_INT_DESC}, TYPE_INT_DESC));
+    auto window = ColumnHelper::create_const_column<TYPE_BIGINT>(-1, 1);
+    auto mode = ColumnHelper::create_const_column<TYPE_INT>(INCREASE, 1);
+    local_ctx->set_constant_columns({window, nullptr, mode, nullptr});
+    WindowFunnelState<TYPE_BIGINT> state;
+    state.init_once(local_ctx.get());
+    local_ctx->set_constant_columns({ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1), nullptr,
+                                     ColumnHelper::create_const_column<TYPE_INT>(0, 1), nullptr});
+    state.init_once(local_ctx.get());
+    EXPECT_EQ(-1, state.window_size);
+    EXPECT_EQ(INCREASE, state.mode);
+
+    local_ctx->set_constant_columns({nullptr, window, mode});
+    WindowFunnelState<TYPE_BIGINT> merge_state;
+    merge_state.init_once(local_ctx.get());
+    EXPECT_EQ(-1, merge_state.window_size);
+    EXPECT_EQ(INCREASE, merge_state.mode);
+}
+
+TEST_F(AggregateTest, test_window_funnel_aggregation_paths) {
+    auto check = [](int64_t window_size, int32_t mode_value, const std::vector<int64_t>& times,
+                    const std::vector<std::vector<int8_t>>& predicates, int32_t expected) {
+        for (bool nullable : {false, true}) {
+            std::vector<TypeDescriptor> args = {TYPE_BIGINT_DESC, TYPE_BIGINT_DESC, TYPE_INT_DESC,
+                                                TypeDescriptor::from_logical_type(TYPE_ARRAY)};
+            std::unique_ptr<FunctionContext> local_ctx(
+                    FunctionContext::create_test_context(std::move(args), TYPE_INT_DESC));
+            auto window = ColumnHelper::create_const_column<TYPE_BIGINT>(window_size, times.size());
+            auto mode = ColumnHelper::create_const_column<TYPE_INT>(mode_value, times.size());
+            local_ctx->set_constant_columns({window, nullptr, mode, nullptr});
+            auto timestamps = Int64Column::create();
+            auto values = BooleanColumn::create();
+            auto nulls = NullColumn::create();
+            auto offsets = UInt32Column::create();
+            offsets->append(0);
+            for (size_t row = 0; row < times.size(); ++row) {
+                timestamps->append(times[row]);
+                for (int8_t predicate : predicates[row]) {
+                    values->append(predicate > 0);
+                    nulls->append(predicate < 0);
+                }
+                offsets->append(values->size());
+            }
+            MutableColumnPtr elements = NullableColumn::create(values, nulls);
+            auto conditions = ArrayColumn::create(elements, offsets);
+            if (!nullable) {
+                // The constructor expects nullable elements; exercise the aggregate's plain
+                // BooleanColumn path after construction as well.
+                conditions->elements_column() = values;
+            }
+            Columns columns = {window, timestamps, mode, conditions};
+            const Column* raw_columns[] = {window.get(), timestamps.get(), mode.get(), conditions.get()};
+            WindowFunnelAggregateFunction<TYPE_BIGINT> func;
+            auto direct = ManagedAggrState::create(local_ctx.get(), &func);
+            auto partial = ManagedAggrState::create(local_ctx.get(), &func);
+            for (size_t row = 0; row < times.size(); ++row) {
+                func.update(local_ctx.get(), raw_columns, direct->state(), row);
+                if (row < times.size() / 2) {
+                    func.update(local_ctx.get(), raw_columns, partial->state(), row);
+                }
+            }
+            auto result = Int32Column::create();
+            func.finalize_to_column(local_ctx.get(), direct->state(), result.get());
+            EXPECT_EQ(expected, result->get_data()[0]);
+
+            auto make_serialized_column = [] {
+                return ArrayColumn::create(NullableColumn::create(Int64Column::create(), NullColumn::create()),
+                                           UInt32Column::create());
+            };
+            auto serialized = make_serialized_column();
+            func.serialize_to_column(local_ctx.get(), direct->state(), serialized.get());
+            auto merged = ManagedAggrState::create(local_ctx.get(), &func);
+            func.merge(local_ctx.get(), serialized.get(), merged->state(), 0);
+            func.finalize_to_column(local_ctx.get(), merged->state(), result.get());
+            EXPECT_EQ(expected, result->get_data()[1]);
+
+            MutableColumnPtr converted = make_serialized_column();
+            func.convert_to_serialize_format(local_ctx.get(), columns, times.size(), converted);
+            auto converted_state = ManagedAggrState::create(local_ctx.get(), &func);
+            auto mixed_state = ManagedAggrState::create(local_ctx.get(), &func);
+            auto partial_column = make_serialized_column();
+            func.serialize_to_column(local_ctx.get(), partial->state(), partial_column.get());
+            func.merge(local_ctx.get(), partial_column.get(), mixed_state->state(), 0);
+            // Merge row states in reverse order, including rows matching no predicate.
+            for (size_t row = times.size(); row > 0; --row) {
+                func.merge(local_ctx.get(), converted.get(), converted_state->state(), row - 1);
+                if (row - 1 >= times.size() / 2) {
+                    func.merge(local_ctx.get(), converted.get(), mixed_state->state(), row - 1);
+                }
+            }
+            func.finalize_to_column(local_ctx.get(), converted_state->state(), result.get());
+            func.finalize_to_column(local_ctx.get(), mixed_state->state(), result.get());
+            EXPECT_EQ(expected, result->get_data()[2]);
+            EXPECT_EQ(expected, result->get_data()[3]);
+        }
+    };
+    check(1000, INCREASE, {0, 100, 200}, {{1, 1}, {1, 1}, {0, -1}}, 2);
+    check(1000, INCREASE, {0, 100, 200}, {{1, 0, 0}, {0, 1, 1}, {0, 1, 1}}, 3);
+    check(1000, INCREASE, {200, 0, 100, 300}, {{1, 0, 1}, {1, 0, 1}, {0, 1, 0}, {0, -1, 0}}, 3);
+    check(1000, INCREASE, {0, 0}, {{1, 1}, {1, 1}}, 1);
+    check(0, 0, {0}, {{1, 1}}, 2);
+    check(-1, INCREASE, {86399800, 86399900}, {{1, 1}, {1, 1}}, 2);
+    check(-1, INCREASE, {86399900, 86400000}, {{1, 1}, {1, 1}}, 1);
+    check(1000, INCREASE, {0, 100}, {{0, -1}, {0, 0}}, 0);
 }
 
 TEST_F(AggregateTest, test_dict_merge) {
