@@ -1309,10 +1309,8 @@ TEST_F(JoinHashMapTest, BucketChainedLookupInitLargePoolPrefetch) {
     constexpr size_t kProbeRows = 512; // meets kPrefetchMinRows
 
     table_items.first.assign(kBucketSize, 0);
-    // Populate distinct sentinel values across the buckets
-    for (size_t b = 0; b < kBucketSize; b += 1024) {
-        table_items.first[b] = static_cast<uint32_t>(b + 1);
-    }
+    // Mark bucket 0 with build row 1, rest empty
+    table_items.first[0] = 1;
     table_items.bucket_size = kBucketSize;
     table_items.log_bucket_size = 22; // 2^22 = 4M
 
@@ -1370,6 +1368,52 @@ TEST_F(JoinHashMapTest, BucketChainedLookupInitLargePoolPrefetch) {
             ASSERT_EQ(probe_state.next[i], table_items.first[bucket]);
         }
     }
+
+    // Also exercise the end-to-end JoinHashMap::probe() path in libExecJoinCore
+    // for both non-null and nullable probe chunks
+    table_items.join_type = TJoinOp::INNER_JOIN;
+    table_items.row_count = 1;
+    table_items.next.resize(2, 0);
+    auto build_col = ColumnHelper::create_column(int_type, false);
+    build_col->append_default();
+    build_col->append_datum(static_cast<int32_t>(0));
+    table_items.key_columns.clear();
+    table_items.key_columns.emplace_back(std::move(build_col));
+    table_items.build_chunk = std::make_shared<Chunk>();
+    table_items.build_chunk->append_column(table_items.key_columns[0], 0);
+    table_items.build_column_count = 1;
+
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 1);
+    auto record_desc = create_probe_desc(&row_desc_builder);
+
+    std::vector<HashTableSlotDescriptor> hash_table_slot_vec;
+    for (auto* slot : record_desc->slots()) {
+        HashTableSlotDescriptor hash_table_slot{};
+        hash_table_slot.slot = slot;
+        hash_table_slot.need_output = true;
+        hash_table_slot_vec.emplace_back(hash_table_slot);
+    }
+    table_items.build_slots = hash_table_slot_vec;
+    table_items.probe_slots = hash_table_slot_vec;
+
+    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
+    join_hash_map->probe_prepare(_runtime_state.get());
+
+    // Non-null probe chunk exercising line 102 and prefetch loop through libExecJoinCore
+    auto non_null_chunk = std::make_shared<Chunk>();
+    non_null_chunk->append_column(const_probe_col, 0);
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
+    bool has_remain = false;
+    join_hash_map->probe(_runtime_state.get(), probe_columns, &non_null_chunk, &result_chunk, &has_remain);
+
+    // Nullable probe chunk exercising line 118 through libExecJoinCore
+    auto nullable_chunk = std::make_shared<Chunk>();
+    nullable_chunk->append_column(nullable_probe_col, 0);
+    ChunkPtr null_result_chunk = std::make_shared<Chunk>();
+    bool null_has_remain = false;
+    join_hash_map->probe(_runtime_state.get(), nullable_probe_columns, &nullable_chunk, &null_result_chunk,
+                         &null_has_remain);
 }
 
 // NOLINTNEXTLINE
