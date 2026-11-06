@@ -277,6 +277,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
                 .add("array_contains_seq")
                 .add("all_match")
                 .add("any_match")
+                .add("none_match")
                 .add("array_generate")
                 .add("array_repeat")
                 .add("array_flatten")
