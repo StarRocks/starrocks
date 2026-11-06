@@ -325,7 +325,7 @@ inline size_t find_nonzero(const Container& list, size_t start, size_t count) {
 
 template <Integer8BitType T>
 inline bool contain_zero(const T* data, size_t size) {
-    return std::memchr(data, 0, size) != nullptr;
+    return size > 0 && std::memchr(data, 0, size) != nullptr;
 }
 
 template <typename Container, typename T = typename Container::value_type>
@@ -413,7 +413,7 @@ inline bool all_zeros(const Container& data) {
 template <Integer8BitType T>
 inline bool all_ones(const T* data, size_t size) {
     // memchr is extremely fast for finding a byte - uses SIMD internally in glibc/musl.
-    return std::memchr(data, 0, size) == nullptr;
+    return size == 0 || std::memchr(data, 0, size) == nullptr;
 }
 
 template <typename Container, typename T = typename Container::value_type>
