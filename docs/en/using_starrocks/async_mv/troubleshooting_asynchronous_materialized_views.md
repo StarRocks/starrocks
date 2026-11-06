@@ -316,6 +316,16 @@ If the materialized view cannot rewrite queries or refresh, and the state of the
 ALTER MATERIALIZED VIEW mv1 ACTIVE;
 ```
 
+When a load-triggered materialized view (`REFRESH ASYNC` without an interval) is inactive for a reason that never self-heals, StarRocks no longer resubmits an automatic refresh after every write to a base table. Those writes used to keep creating failed TaskRuns. Reasons that never self-heal include:
+
+- Manual inactivation (`ALTER MATERIALIZED VIEW ... INACTIVE`)
+- The materialized view is in backup
+- A base table was optimized
+- Consecutive refresh failures
+- Incremental refresh broken by a non-append-only change to a base table
+
+Manual `REFRESH MATERIALIZED VIEW` and interval-based refresh are not affected. Inactive views with other, transient reasons still retry after writes.
+
 If setting the materialized view state to active does not take effect, you need to drop the materialized view and create it again.
 
 ### Materialized view refresh task uses excessive resources
