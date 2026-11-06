@@ -30,9 +30,11 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -183,7 +185,11 @@ public class JsonPathRewriteRule extends TransformationRule {
 
             ColumnRefOperator existingColumn = pathMap.get(fullPath);
             if (existingColumn != null) {
-                if (jsonPath.getValueType().equals(existingColumn.getType())) {
+                Type valueType = jsonPath.getValueType();
+                Type existingType = existingColumn.getType();
+                // Length is metadata only for extended JSON columns, so strings differing only by length share one column
+                if (valueType.equals(existingType)
+                        || (valueType.isStringType() && valueType.getPrimitiveType() == existingType.getPrimitiveType())) {
                     // If the existing column matches the type, return it
                     return Pair.create(true, existingColumn);
                 } else {
@@ -372,16 +378,20 @@ public class JsonPathRewriteRule extends TransformationRule {
             }
 
             if (scanOperator.getProjection() != null) {
-                Map<ColumnRefOperator, ScalarOperator> mapping = Maps.newHashMap();
-                for (var entry : scanOperator.getProjection().getColumnRefMap().entrySet()) {
+                Projection projection = scanOperator.getProjection();
+                Map<ColumnRefOperator, ScalarOperator> mapping = Maps.newLinkedHashMap();
+                for (var entry : projection.getColumnRefMap().entrySet()) {
                     mapping.put(entry.getKey(), rewriteScalar(entry.getValue(), context, rewriter));
                 }
-                builder.getProjection().getColumnRefMap().putAll(mapping);
+                // The builder shares the original projection; build a new one so a failed rewrite leaves it intact
+                builder.setProjection(new Projection(mapping, projection.getCommonSubOperatorMap(),
+                        projection.needReuseLambdaDependentExpr()));
                 mapping.values().forEach(x -> requiredColumnSet.union(x.getUsedColumns()));
             } else {
                 scanOperator.getOutputColumns().forEach(requiredColumnSet::union);
             }
 
+            LogicalProperty property = optExpr.getLogicalProperty();
             if (MapUtils.isNotEmpty(rewriter.getExtendedColumns())) {
                 // Add extended columns to scan operator
                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap = Maps.newHashMap();
@@ -392,8 +402,10 @@ public class JsonPathRewriteRule extends TransformationRule {
                     }
                 }
                 builder.setColRefToColumnMetaMap(colRefToColumnMetaMap);
+                // Copy the property (its output columns are cloned) instead of mutating the original one
+                property = new LogicalProperty(property);
                 for (ColumnRefOperator col : rewriter.getExtendedColumns().keySet()) {
-                    optExpr.getOutputColumns().union(col);
+                    property.getOutputColumns().union(col);
                 }
 
                 // Add access paths
@@ -406,7 +418,7 @@ public class JsonPathRewriteRule extends TransformationRule {
             }
 
             Operator newOp = builder.build();
-            return OptExpression.builder().with(optExpr).setOp(newOp).build();
+            return OptExpression.builder().with(optExpr).setOp(newOp).setLogicalProperty(property).build();
         }
     }
 
@@ -488,7 +500,8 @@ public class JsonPathRewriteRule extends TransformationRule {
             return null;
         }
         ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
-        return scalarOperatorRewriter.rewrite(scalar, Arrays.asList(rewriter));
+        // The rewriter replaces children in place; work on a copy so a failed rewrite can fall back to the original
+        return scalarOperatorRewriter.rewrite(scalar.clone(), Arrays.asList(rewriter));
     }
 
     /**
