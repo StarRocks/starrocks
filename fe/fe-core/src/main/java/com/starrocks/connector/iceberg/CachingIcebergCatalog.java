@@ -105,6 +105,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final Map<IcebergTableName, Set<String>> metaFileCacheMap = new ConcurrentHashMap<>(); // table -> metadata file paths
     private final Map<IcebergTableName, Long> tableLatestAccessTime = new ConcurrentHashMap<>();
     private final Map<IcebergTableName, Long> tableLatestRefreshTime = new ConcurrentHashMap<>();
+    // The snapshot each table was dropped at for another FE's commit, for the refresh that follows to warm from
+    private final Map<IcebergTableName, DroppedSnapshot> droppedForPeerCommit = new ConcurrentHashMap<>();
     // Per-table lock strings: avoids catalog-wide serialization during concurrent refresh of different tables.
     private final ConcurrentHashMap<String, String> tableRefreshLockMap = new ConcurrentHashMap<>();
 
@@ -300,6 +302,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 return tables.get(icebergTableName);
             }
         } catch (NoSuchTableException e) {
+            // Nothing cached for a table the catalog no longer has stays valid, e.g. one dropped on another FE
+            invalidateCache(icebergTableName);
             throw e;
         } catch (Exception e) {
             throw new StarRocksConnectorException(
@@ -500,6 +504,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 return;
             }
 
+            DroppedSnapshot dropped = droppedForPeerCommit.remove(icebergTableName);
             if (!currentLocation.equals(updateLocation)) {
                 LOG.info("Refresh iceberg caching catalog table {}.{} from {} to {}",
                         dbName, tableName, currentLocation, updateLocation);
@@ -509,7 +514,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             } else {
                 // Metadata unchanged keeps the partition/file caches valid; still swap in the reloaded
                 // table so the cache stops serving the old (expiring) vended FileIO token.
-                replaceCachedTable(icebergTableName, currentTable, updateTable);
+                boolean replaced = replaceCachedTable(icebergTableName, currentTable, updateTable);
+                if (replaced && dropped != null) {
+                    // Dropped for another FE's commit and reloaded already current: warm from the replaced snapshot
+                    warmCaches(dbName, tableName, dropped.snapshotId(), dropped.timestampMillis(), updateTable,
+                            executorService);
+                }
             }
         }
     }
@@ -535,9 +545,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private boolean refreshTable(BaseTable currentTable, BaseTable updatedTable,
                                  String dbName, String tableName, ConnectContext ctx, ExecutorService executorService) {
         long baseSnapshotId = currentTable.currentSnapshot().snapshotId();
-        long updatedSnapshotId = updatedTable.currentSnapshot().snapshotId();
-        IcebergTableName baseIcebergTableName = new IcebergTableName(dbName, tableName, baseSnapshotId);
-        IcebergTableName updatedIcebergTableName = new IcebergTableName(dbName, tableName, updatedSnapshotId);
         IcebergTableName keyWithoutSnap = new IcebergTableName(dbName, tableName);
         long latestRefreshTime = tableLatestRefreshTime.computeIfAbsent(new IcebergTableName(dbName, tableName), ignore -> -1L);
 
@@ -547,14 +554,24 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         if (!replaceCachedTable(keyWithoutSnap, currentTable, updatedTable)) {
             return false;
         }
+        warmCaches(dbName, tableName, baseSnapshotId, latestRefreshTime, updatedTable, executorService);
+        return true;
+    }
 
-        partitionCache.invalidate(baseIcebergTableName);
-        partitionCache.get(updatedIcebergTableName);
+    /**
+     * Move the partition cache from the base snapshot to the updated table's, and load the data manifests
+     * committed after {@code committedAfterMillis} that are not cached yet.
+     */
+    private void warmCaches(String dbName, String tableName, long baseSnapshotId, long committedAfterMillis,
+                            BaseTable updatedTable, ExecutorService executorService) {
+        long updatedSnapshotId = updatedTable.currentSnapshot().snapshotId();
+        partitionCache.invalidate(new IcebergTableName(dbName, tableName, baseSnapshotId));
+        partitionCache.get(new IcebergTableName(dbName, tableName, updatedSnapshotId));
 
         TableMetadata updatedTableMetadata = updatedTable.operations().current();
         List<ManifestFile> manifestFiles = updatedTable.currentSnapshot().dataManifests(updatedTable.io()).stream()
                 .filter(f -> updatedTableMetadata.snapshot(f.snapshotId()) != null)
-                .filter(f -> updatedTableMetadata.snapshot(f.snapshotId()).timestampMillis() > latestRefreshTime)
+                .filter(f -> updatedTableMetadata.snapshot(f.snapshotId()).timestampMillis() > committedAfterMillis)
                 .filter(f -> dataFileCache.getIfPresent(f.path()) == null)
                 .filter(f -> f.hasAddedFiles() || f.hasExistingFiles())
                 .filter(f -> f.length() >= icebergProperties.getRefreshIcebergManifestMinLength())
@@ -562,7 +579,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
         if (manifestFiles.isEmpty()) {
             tableLatestRefreshTime.put(new IcebergTableName(dbName, tableName), System.currentTimeMillis());
-            return true;
+            return;
         }
 
         StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
@@ -574,7 +591,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
         tableLatestRefreshTime.put(new IcebergTableName(dbName, tableName), System.currentTimeMillis());
         LOG.info("Refreshed {} iceberg manifests on the table [{}.{}]", manifestFiles.size(), dbName, tableName);
-        return true;
     }
 
     public void refreshCatalog() {
@@ -611,6 +627,20 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+    public void invalidateTableCacheAfterPeerCommit(String dbName, String tableName) {
+        IcebergTableName key = new IcebergTableName(dbName, tableName);
+        Table dropped = tables.getIfPresent(key);
+        tables.invalidate(key);
+        Snapshot snapshot = dropped == null ? null : dropped.currentSnapshot();
+        if (snapshot != null) {
+            droppedForPeerCommit.put(key, new DroppedSnapshot(snapshot.snapshotId(), snapshot.timestampMillis()));
+        }
+    }
+
+    private record DroppedSnapshot(long snapshotId, long timestampMillis) {
+    }
+
+    @Override
     public void shutdown() {
         delegate.shutdown();
     }
@@ -627,6 +657,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         partitionCache.invalidate(key);
         tableLatestAccessTime.remove(key);
         tableLatestRefreshTime.remove(key);
+        droppedForPeerCommit.remove(key);
 
         Set<String> paths = metaFileCacheMap.remove(key);
         if (paths != null && !paths.isEmpty()) {

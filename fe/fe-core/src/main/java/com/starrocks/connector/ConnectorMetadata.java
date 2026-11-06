@@ -305,6 +305,12 @@ public interface ConnectorMetadata {
         refreshTable(srDbName, table, new ArrayList<>(), false);
     }
 
+    /**
+     * Drop the cached table without any remote I/O, after another FE committed to it.
+     */
+    default void invalidateCachedTable(String dbName, String tableName) {
+    }
+
     default boolean dbExists(ConnectContext context, String dbName) {
         return listDbNames(context).contains(dbName.toLowerCase(Locale.ROOT));
     }

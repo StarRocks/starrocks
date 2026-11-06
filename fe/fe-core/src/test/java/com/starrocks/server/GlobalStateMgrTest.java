@@ -63,7 +63,9 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Frontend;
+import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -74,6 +76,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.commons.io.FileUtils;
+import org.apache.thrift.TException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -88,6 +91,8 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -925,6 +930,208 @@ public class GlobalStateMgrTest {
         }
     }
 
+    @Test
+    public void testInvalidateOthersFeTableAsksEveryOtherAliveFeToInvalidateOnly() throws Exception {
+        int originalTimeout = Config.iceberg_commit_invalidate_other_fe_timeout_ms;
+        Config.iceberg_commit_invalidate_other_fe_timeout_ms = 3000;
+        GlobalStateMgr globalStateMgr = createRefreshTestGlobalStateMgr(2, 1);
+        setFrontendsAlive(globalStateMgr, "127.0.0.1", "127.0.0.2", "127.0.0.3");
+        Map<String, TRefreshTableRequest> requests = new ConcurrentHashMap<>();
+        answerFeRpcs(requests, null, new CountDownLatch(0));
+        try {
+            globalStateMgr.invalidateOthersFeTable(new TableName("c", "d", "t"));
+
+            Assertions.assertAll(
+                    () -> Assertions.assertEquals(Set.of("127.0.0.2", "127.0.0.3"), requests.keySet()),
+                    () -> Assertions.assertTrue(
+                            requests.values().stream().allMatch(TRefreshTableRequest::isInvalidate_only)),
+                    () -> Assertions.assertEquals("c", requests.get("127.0.0.2").getCatalog_name()),
+                    () -> Assertions.assertEquals("d", requests.get("127.0.0.2").getDb_name()),
+                    () -> Assertions.assertEquals("t", requests.get("127.0.0.2").getTable_name()));
+        } finally {
+            Config.iceberg_commit_invalidate_other_fe_timeout_ms = originalTimeout;
+            shutdownRefreshOtherFeExecutors(globalStateMgr);
+        }
+    }
+
+    @Test
+    public void testInvalidateOthersFeTableSkipsAnFeThatIsNotAlive() throws Exception {
+        int originalTimeout = Config.iceberg_commit_invalidate_other_fe_timeout_ms;
+        Config.iceberg_commit_invalidate_other_fe_timeout_ms = 3000;
+        GlobalStateMgr globalStateMgr = createRefreshTestGlobalStateMgr(2, 1);
+        setFrontendsAlive(globalStateMgr, "127.0.0.1", "127.0.0.2");
+        Map<String, TRefreshTableRequest> requests = new ConcurrentHashMap<>();
+        answerFeRpcs(requests, null, new CountDownLatch(0));
+        try {
+            globalStateMgr.invalidateOthersFeTable(new TableName("c", "d", "t"));
+
+            Assertions.assertEquals(Set.of("127.0.0.2"), requests.keySet());
+        } finally {
+            Config.iceberg_commit_invalidate_other_fe_timeout_ms = originalTimeout;
+            shutdownRefreshOtherFeExecutors(globalStateMgr);
+        }
+    }
+
+    @Test
+    public void testInvalidateOthersFeTableStopsWaitingForAnFeThatNeverAnswers() throws Exception {
+        int originalTimeout = Config.iceberg_commit_invalidate_other_fe_timeout_ms;
+        Config.iceberg_commit_invalidate_other_fe_timeout_ms = 200;
+        GlobalStateMgr globalStateMgr = createRefreshTestGlobalStateMgr(2, 1);
+        setFrontendsAlive(globalStateMgr, "127.0.0.1", "127.0.0.2", "127.0.0.3");
+        CountDownLatch neverAnswers = new CountDownLatch(1);
+        answerFeRpcs(new ConcurrentHashMap<>(), "127.0.0.2", neverAnswers);
+        try {
+            long start = System.nanoTime();
+            globalStateMgr.invalidateOthersFeTable(new TableName("c", "d", "t"));
+            long waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+
+            Assertions.assertTrue(waitedMs < 2000, "waited " + waitedMs + " ms on an FE that never answers");
+        } finally {
+            neverAnswers.countDown();
+            Config.iceberg_commit_invalidate_other_fe_timeout_ms = originalTimeout;
+            shutdownRefreshOtherFeExecutors(globalStateMgr);
+        }
+    }
+
+    @Test
+    public void testInvalidateOthersFeTableSendsNothingWhenTheTimeoutIsZero() throws Exception {
+        int originalTimeout = Config.iceberg_commit_invalidate_other_fe_timeout_ms;
+        Config.iceberg_commit_invalidate_other_fe_timeout_ms = 0;
+        GlobalStateMgr globalStateMgr = createRefreshTestGlobalStateMgr(2, 1);
+        setFrontendsAlive(globalStateMgr, "127.0.0.1", "127.0.0.2", "127.0.0.3");
+        Map<String, TRefreshTableRequest> requests = new ConcurrentHashMap<>();
+        answerFeRpcs(requests, null, new CountDownLatch(0));
+        try {
+            globalStateMgr.invalidateOthersFeTable(new TableName("c", "d", "t"));
+
+            Assertions.assertTrue(requests.isEmpty());
+        } finally {
+            Config.iceberg_commit_invalidate_other_fe_timeout_ms = originalTimeout;
+            shutdownRefreshOtherFeExecutors(globalStateMgr);
+        }
+    }
+
+    @Test
+    public void testInvalidateOthersFeTableDoesNotWaitOnAFullPool() throws Exception {
+        int originalTimeout = Config.iceberg_commit_invalidate_other_fe_timeout_ms;
+        Config.iceberg_commit_invalidate_other_fe_timeout_ms = 100;
+        GlobalStateMgr globalStateMgr = createRefreshTestGlobalStateMgr(2, 1);
+        setFrontendsAlive(globalStateMgr, "127.0.0.1", "127.0.0.2");
+        CountDownLatch neverAnswers = new CountDownLatch(1);
+        answerFeRpcs(new ConcurrentHashMap<>(), "127.0.0.2", neverAnswers);
+        try {
+            // 2 threads and a queue of 16 hold 18 invalidations, so the last commits find the pool full
+            long start = System.nanoTime();
+            for (int commit = 0; commit < 20; commit++) {
+                globalStateMgr.invalidateOthersFeTable(new TableName("c", "d", "t"));
+            }
+            long waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+
+            Assertions.assertTrue(waitedMs < 10000, "20 commits waited " + waitedMs + " ms");
+        } finally {
+            neverAnswers.countDown();
+            Config.iceberg_commit_invalidate_other_fe_timeout_ms = originalTimeout;
+            shutdownRefreshOtherFeExecutors(globalStateMgr);
+        }
+    }
+
+    @Test
+    public void testInvalidateOthersFeTableNeverFailsTheCommit() throws Exception {
+        int originalTimeout = Config.iceberg_commit_invalidate_other_fe_timeout_ms;
+        Config.iceberg_commit_invalidate_other_fe_timeout_ms = 3000;
+        GlobalStateMgr globalStateMgr = createRefreshTestGlobalStateMgr(2, 1);
+        new MockUp<NodeMgr>() {
+            @Mock
+            public List<Frontend> getFrontends(FrontendNodeType nodeType) {
+                throw new IllegalStateException("frontends unavailable");
+            }
+        };
+        try {
+            Assertions.assertDoesNotThrow(() -> globalStateMgr.invalidateOthersFeTable(new TableName("c", "d", "t")));
+        } finally {
+            Config.iceberg_commit_invalidate_other_fe_timeout_ms = originalTimeout;
+            shutdownRefreshOtherFeExecutors(globalStateMgr);
+        }
+    }
+
+    @Test
+    public void testInvalidateOthersFeTableOnlyLogsAnFeItCannotReach() throws Exception {
+        int originalTimeout = Config.iceberg_commit_invalidate_other_fe_timeout_ms;
+        Config.iceberg_commit_invalidate_other_fe_timeout_ms = 3000;
+        GlobalStateMgr globalStateMgr = createRefreshTestGlobalStateMgr(2, 1);
+        setFrontendsAlive(globalStateMgr, "127.0.0.1", "127.0.0.2", "127.0.0.3");
+        Set<String> attempted = ConcurrentHashMap.newKeySet();
+        new MockUp<ThriftRPCRequestExecutor>() {
+            @Mock
+            public <R, C extends org.apache.thrift.TServiceClient> R call(
+                    com.starrocks.rpc.ThriftConnectionPool<C> genericPool,
+                    TNetworkAddress address,
+                    int timeoutMs,
+                    int tryTimes,
+                    ThriftRPCRequestExecutor.MethodCallable<C, R> callable) throws TException {
+                attempted.add(address.getHostname());
+                throw new TException("connection refused");
+            }
+        };
+        try {
+            Assertions.assertDoesNotThrow(() -> globalStateMgr.invalidateOthersFeTable(new TableName("c", "d", "t")));
+            Assertions.assertEquals(Set.of("127.0.0.2", "127.0.0.3"), attempted);
+        } finally {
+            Config.iceberg_commit_invalidate_other_fe_timeout_ms = originalTimeout;
+            shutdownRefreshOtherFeExecutors(globalStateMgr);
+        }
+    }
+
+    @Test
+    public void testInvalidateOthersFeTableKeepsAnInterruptedCommitInterrupted() throws Exception {
+        int originalTimeout = Config.iceberg_commit_invalidate_other_fe_timeout_ms;
+        Config.iceberg_commit_invalidate_other_fe_timeout_ms = 3000;
+        GlobalStateMgr globalStateMgr = createRefreshTestGlobalStateMgr(2, 1);
+        setFrontendsAlive(globalStateMgr, "127.0.0.1", "127.0.0.2");
+        CountDownLatch neverAnswers = new CountDownLatch(1);
+        answerFeRpcs(new ConcurrentHashMap<>(), "127.0.0.2", neverAnswers);
+        try {
+            Thread.currentThread().interrupt();
+            globalStateMgr.invalidateOthersFeTable(new TableName("c", "d", "t"));
+
+            Assertions.assertTrue(Thread.interrupted());
+        } finally {
+            Thread.interrupted();
+            neverAnswers.countDown();
+            Config.iceberg_commit_invalidate_other_fe_timeout_ms = originalTimeout;
+            shutdownRefreshOtherFeExecutors(globalStateMgr);
+        }
+    }
+
+    // Records each FE's request and answers OK; heldHost answers only once hold is released
+    private void answerFeRpcs(Map<String, TRefreshTableRequest> requests, String heldHost, CountDownLatch hold) {
+        new MockUp<ThriftRPCRequestExecutor>() {
+            @Mock
+            @SuppressWarnings("unchecked")
+            public <R, C extends org.apache.thrift.TServiceClient> R call(
+                    com.starrocks.rpc.ThriftConnectionPool<C> genericPool,
+                    TNetworkAddress address,
+                    int timeoutMs,
+                    int tryTimes,
+                    ThriftRPCRequestExecutor.MethodCallable<C, R> callable) throws TException {
+                FrontendService.Client client = Mockito.mock(FrontendService.Client.class);
+                Mockito.when(client.refreshTable(Mockito.any())).thenAnswer(invocation -> {
+                    requests.put(address.getHostname(), invocation.getArgument(0));
+                    if (address.getHostname().equals(heldHost)) {
+                        hold.await();
+                    }
+                    return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
+                });
+                return callable.apply((C) client);
+            }
+        };
+    }
+
+    private void setFrontendsAlive(GlobalStateMgr globalStateMgr, String... aliveHosts) {
+        Set<String> alive = Set.of(aliveHosts);
+        globalStateMgr.getNodeMgr().getFrontends(null).forEach(fe -> fe.setAlive(alive.contains(fe.getHost())));
+    }
+
     private GlobalStateMgr createRefreshTestGlobalStateMgr(int refreshThreadNum) throws Exception {
         int originalThreadNum = Config.refresh_other_fe_rpc_executor_thread_num;
         int originalAsyncThreadNum = Config.refresh_other_fe_dispatch_executor_thread_num;
@@ -1002,6 +1209,7 @@ public class GlobalStateMgrTest {
     private void shutdownRefreshOtherFeExecutors(GlobalStateMgr globalStateMgr) throws Exception {
         shutdownExecutor(globalStateMgr, "refreshOtherFeRpcExecutor");
         shutdownExecutor(globalStateMgr, "refreshOtherFeDispatchExecutor");
+        shutdownExecutor(globalStateMgr, "invalidateOtherFeRpcExecutor");
     }
 
     private void shutdownExecutor(GlobalStateMgr globalStateMgr, String fieldName) throws Exception {

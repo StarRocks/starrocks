@@ -3691,6 +3691,13 @@ public class Config extends ConfigBase {
     public static int iceberg_commit_queue_max_size = 1000;
 
     /**
+     * Max time a commit to an Iceberg table waits for other FEs to invalidate their cached table.
+     * 0 or less disables the wait.
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_commit_invalidate_other_fe_timeout_ms = 3000;
+
+    /**
      * `remove_orphan_files` only accepts an `older_than` earlier than `current time - this value` (in
      * seconds). A later `older_than` is rejected, because deleting files that recent can remove data a
      * concurrent write has not committed yet and leave the table unreadable.

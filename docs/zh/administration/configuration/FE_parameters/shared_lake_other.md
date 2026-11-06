@@ -938,6 +938,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 每个 Iceberg 表待处理提交操作的最大数量。当使用提交队列 (`enable_iceberg_commit_queue=true`) 时，这限制了可以为一个表排队的提交操作的数量。当达到限制时，额外的提交操作将在调用者线程中执行（阻塞直到容量可用）。此配置在 FE 启动时读取，并应用于新创建的表执行器。需要重启 FE 才能生效。如果您预期对同一表有许多并发提交，请增加此值。如果此值过低，在高并发期间提交可能会在调用者线程中阻塞。
 - 引入版本: v4.1.0
 
+### `iceberg_commit_invalidate_other_fe_timeout_ms`
+
+- 默认值: 3000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 向 Iceberg 表提交后，等待其他 FE 使该表缓存失效的最长时间，以保证语句返回后任意 FE 上的查询都能看到此次提交。未及时响应的 FE 由后台刷新更新。滚动升级期间，旧版本的 FE 会改为刷新该表，因此提交最多可能等待这么长时间。设置为 0 或更小表示不等待。
+- 引入版本: -
+
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
 - 默认值: 86400

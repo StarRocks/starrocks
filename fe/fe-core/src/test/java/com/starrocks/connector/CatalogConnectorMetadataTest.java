@@ -183,6 +183,7 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.dropTable(ctx, null);
                 connectorMetadata.refreshTable("test_db", null, null, false);
                 connectorMetadata.invalidateTableForRead("test_db", null);
+                connectorMetadata.invalidateCachedTable("test_db", "test_tbl");
                 connectorMetadata.alterMaterializedView(null);
                 connectorMetadata.addPartitions(ctx, null, null, null);
                 connectorMetadata.dropPartition(null, null, null);
@@ -221,6 +222,7 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.dropTable(ctx, null);
         catalogConnectorMetadata.refreshTable("test_db", null, null, false);
         catalogConnectorMetadata.invalidateTableForRead("test_db", null);
+        catalogConnectorMetadata.invalidateCachedTable("test_db", "test_tbl");
         catalogConnectorMetadata.alterMaterializedView(null);
         catalogConnectorMetadata.addPartitions(com.starrocks.common.util.Util.getOrCreateInnerContext(), null, null, null);
         catalogConnectorMetadata.dropPartition(null, null, null);
