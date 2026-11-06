@@ -41,7 +41,7 @@ jobs:
           echo "## Feedback from readers" >> feedback.md
           echo "Three sections: feedback, top working searches, and top failed searches." >> feedback.md
           echo "Please check off the feedback and failed searches as you fix them and" >> feedback.md
-          echo "please add the `doc-feedback` label to your PRs related to this issue." >> feedback.md
+          echo 'please add the `doc-feedback` label to your PRs related to this issue.' >> feedback.md
           echo " " >> feedback.md
           echo "You do not need to edit this issue with PR numbers, as everything with" >> feedback.md
           echo "the label will show in the GitHub project." >> feedback.md
