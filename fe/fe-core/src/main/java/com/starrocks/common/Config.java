@@ -4883,6 +4883,14 @@ public class Config extends ConfigBase {
     public static boolean enable_external_catalog_information_schema_tables_access_full_metadata = false;
 
     /**
+     * Whether an external catalog that sets hadoop.security.authentication=kerberos together with
+     * hadoop.kerberos.principal and hadoop.kerberos.keytab accesses its Hive metastore and HDFS as that principal.
+     * When false, every catalog uses the Kerberos identity of the FE/BE process, as before.
+     */
+    @ConfField
+    public static boolean enable_catalog_kerberos_credentials = true;
+
+    /**
      * Loading or compaction must be stopped for primary_key_disk_schedule_time
      * seconds before it can be scheduled
      */

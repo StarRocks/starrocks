@@ -109,6 +109,21 @@ HDFS クラスターまたは Hive metastore に Kerberos 認証が有効にな�
 
 </Tabs>
 
+##### Catalog レベルの Kerberos 認証情報
+
+すべてのノードで 1 つのプリンシパルに対して `kinit` を実行する代わりに、Catalog のプロパティでその Catalog 専用のプリンシパルと keytab を指定できます。StarRocks はそのプリンシパルとして Catalog の Hive メタストアと HDFS にアクセスするため、同じクラスタ内の Catalog ごとに異なるプリンシパルを使用できます。
+
+```SQL
+"hadoop.security.authentication" = "kerberos",
+"hadoop.kerberos.principal" = "user_a@EXAMPLE.COM",
+"hadoop.kerberos.keytab" = "/path/to/user_a.keytab"
+```
+
+- keytab ファイルは、すべての FE とすべての BE または CN の同じパスに存在する必要があります。
+- FE および BE（または CN）プロセスの Hadoop 設定では引き続き `hadoop.security.authentication` を `kerberos` に設定する必要があり、**krb5.conf** ファイルはすべてのプリンシパルの realm を含む必要があります。
+- Catalog の読み取りと書き込み（INSERT で書き込まれるファイルを含む）は、その Catalog のプリンシパルとして実行されます。
+- すべての Catalog でプロセスの Kerberos ID を再び使用するには、FE パラメータ `enable_catalog_kerberos_credentials` を `false` に設定して FE を再起動してください。
+
 ---
 
 ## Iceberg catalog の作成

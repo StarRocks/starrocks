@@ -599,7 +599,9 @@ public abstract class FileSystem extends Configured
             LOGGER.debug("Bypassing cache to create filesystem {}", uri);
             return createFileSystem(uri, conf);
         }
-        return CACHE.get(uri, conf);
+        // The cache key holds the current UGI, so look it up as the catalog's Kerberos user (if any).
+        HadoopExt ext = HadoopExt.getInstance();
+        return ext.doAs(ext.getHDFSUGI(conf), () -> CACHE.get(uri, conf));
     }
 
     /**

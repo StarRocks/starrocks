@@ -91,6 +91,21 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
 - 在每个 FE 和 每个 BE（或 CN）上执行 `kinit -kt keytab_path principal` 命令，从 Key Distribution Center (KDC) 获取到 Ticket Granting Ticket (TGT)。执行命令的用户必须拥有访问 HMS 和 HDFS 的权限。注意，使用该命令访问 KDC 具有时效性，因此需要使用 cron 定期执行该命令。
 - 在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件（或每个 CN 的 **$CN_HOME/conf/cn.conf** 文件）中添加 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中，`/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可以根据文件的实际路径进行修改。
 
+#### Catalog 级别 Kerberos 凭证
+
+除了在每个节点上为同一个 principal 执行 `kinit` 外，您还可以在 Catalog 属性中为该 Catalog 指定独立的 principal 和 keytab。StarRocks 将以该 principal 访问该 Catalog 的 Hive metastore 和 HDFS，因此同一集群中的不同 Catalog 可以使用不同的 principal。
+
+```SQL
+"hadoop.security.authentication" = "kerberos",
+"hadoop.kerberos.principal" = "user_a@EXAMPLE.COM",
+"hadoop.kerberos.keytab" = "/path/to/user_a.keytab"
+```
+
+- keytab 文件必须存在于每个 FE 以及每个 BE 或 CN 的相同路径下。
+- FE 和 BE（或 CN）进程的 Hadoop 配置仍需将 `hadoop.security.authentication` 设置为 `kerberos`，并且 **krb5.conf** 文件必须包含所有 principal 所属的 realm。
+- 该 Catalog 的读写操作（包括 INSERT 写入的文件）均以该 Catalog 的 principal 执行。
+- 如需让所有 Catalog 重新使用进程的 Kerberos 身份，请将 FE 参数 `enable_catalog_kerberos_credentials` 设置为 `false` 并重启 FE。
+
 ## 创建 Hive Catalog
 
 ### 语法

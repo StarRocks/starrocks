@@ -18,11 +18,13 @@ import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.HDFSFileStoreInfo;
+import com.starrocks.common.Config;
 import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class HDFSCloudCredential implements CloudCredential {
@@ -71,6 +73,22 @@ public class HDFSCloudCredential implements CloudCredential {
                 }
             }
         }
+        catalogKerberosProperties().forEach(configuration::set);
+    }
+
+    /**
+     * The principal and keytab HadoopExt logs in with for this catalog. They are stripped from the generic Hadoop
+     * properties, so they are handed over under StarRocks-only keys, and only when catalog-level credentials are on.
+     */
+    private Map<String, String> catalogKerberosProperties() {
+        Map<String, String> props = new HashMap<>();
+        if (Config.enable_catalog_kerberos_credentials && KERBEROS_AUTH.equals(authentication)
+                && krbPrincipal != null && !krbPrincipal.isEmpty()
+                && krbKeyTabFile != null && !krbKeyTabFile.isEmpty()) {
+            props.put(HadoopExt.CATALOG_KERBEROS_PRINCIPAL, krbPrincipal);
+            props.put(HadoopExt.CATALOG_KERBEROS_KEYTAB, krbKeyTabFile);
+        }
+        return props;
     }
 
     @Override
@@ -97,6 +115,7 @@ public class HDFSCloudCredential implements CloudCredential {
                 }
             }
         }
+        properties.putAll(catalogKerberosProperties());
     }
 
     @Override
@@ -128,6 +147,10 @@ public class HDFSCloudCredential implements CloudCredential {
     }
 
     private boolean isReservedHadoopExtProperty(String key) {
-        return HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING.equals(key);
+        // The catalog Kerberos keys are set only from the credential itself (see catalogKerberosProperties), so a
+        // catalog cannot pick its identity through them and enable_catalog_kerberos_credentials stays effective.
+        return HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING.equals(key)
+                || HadoopExt.CATALOG_KERBEROS_PRINCIPAL.equals(key)
+                || HadoopExt.CATALOG_KERBEROS_KEYTAB.equals(key);
     }
 }
