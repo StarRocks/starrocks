@@ -28,15 +28,15 @@ public class PlanTuningCacheKey {
 
     private final List<SkeletonNode> skeletonNodes = Lists.newArrayList();
 
-    private List<Integer> cachedHashCodes = Lists.newArrayList();
-
-    private boolean isParameterizedMode = false;
-
+    // The key lives in hash containers, so its hash code is computed once and never changes. It does not depend on
+    // the scan predicate ranges, which are widened in place when tuning guides are merged.
+    private final int hashCode;
 
     public PlanTuningCacheKey(String sql, SkeletonNode root) {
         this.sql = sql;
         this.root = root;
         extractSkeletonNodes(root);
+        this.hashCode = skeletonNodes.hashCode();
     }
 
     public List<SkeletonNode> getSkeletonNodes() {
@@ -47,40 +47,27 @@ public class PlanTuningCacheKey {
         return sql;
     }
 
-    public void enableParameterizedMode() {
-        if (isParameterizedMode) {
-            return;
+    /**
+     * Whether this key equals {@code other} and the predicate ranges of all its scan nodes are enclosed by the ones
+     * of {@code other}, i.e. the tuning guides collected for {@code other} also apply to this key.
+     */
+    public boolean isCoveredBy(PlanTuningCacheKey other) {
+        if (!equals(other)) {
+            return false;
         }
 
-        isParameterizedMode = true;
-        skeletonNodes.stream()
-                .filter(node -> node instanceof ScanNode)
-                .map(node -> (ScanNode) node)
-                .forEach(ScanNode::enableParameterizedMode);
-    }
-
-    public void disableParameterizedMode() {
-        if (!isParameterizedMode) {
-            return;
+        for (int i = 0; i < skeletonNodes.size(); i++) {
+            if (skeletonNodes.get(i) instanceof ScanNode scanNode &&
+                    !scanNode.isCoveredBy((ScanNode) other.skeletonNodes.get(i))) {
+                return false;
+            }
         }
-
-        isParameterizedMode = false;
-        skeletonNodes.stream()
-                .filter(node -> node instanceof ScanNode)
-                .map(node -> (ScanNode) node)
-                .forEach(ScanNode::disableParameterizedMode);
+        return true;
     }
-
 
     @Override
     public int hashCode() {
-        if (cachedHashCodes.isEmpty()) {
-            for (SkeletonNode node : skeletonNodes) {
-                cachedHashCodes.add(node.hashCode());
-            }
-        }
-
-        return cachedHashCodes.hashCode();
+        return hashCode;
     }
 
     @Override

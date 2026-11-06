@@ -16,8 +16,9 @@ package com.starrocks.qe.feedback;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.feedback.skeleton.ScanNode;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
@@ -26,29 +27,46 @@ import com.starrocks.server.GlobalStateMgr;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 
 public class PlanTuningAdvisor {
 
-    private static final PlanTuningAdvisor INSTANCE = new PlanTuningAdvisor();
+    private static final int CAPACITY = 300;
 
-    private final Cache<PlanTuningCacheKey, OperatorTuningGuides> cache;
+    // StmtExecutor removes the record of a query when the statement ends. Queries planned outside StmtExecutor.execute
+    // never remove theirs, so the records are also bounded. The TTL only has to outlive the queries that still run.
+    private static final int MAX_OPTIMIZED_RECORDS = 10_000;
+    private static final long OPTIMIZED_RECORD_TTL_HOURS = 24;
 
-    // Record and permanently disable tuning guide usage for patterns with poor performance
-    private final Cache<PlanTuningCacheKey, Boolean> tuningGuideBlacklist;
+    private static final PlanTuningAdvisor INSTANCE = new PlanTuningAdvisor(CAPACITY);
 
-    private final Map<UUID, OperatorTuningGuides.OptimizedRecord> optimizedQueryRecords;
-    private PlanTuningAdvisor() {
+    // Keys are equal when plans have the same shape, regardless of the scan predicate constants. The stored key
+    // carries the merged predicate ranges its guides apply to, so it is kept in the value to check coverage.
+    private final Cache<PlanTuningCacheKey, CacheEntry> cache;
+
+    // Record and permanently disable tuning guide usage for patterns with poor performance.
+    // All blacklisted keys of a shape are kept, since each of them only covers its own predicate ranges.
+    private final Cache<PlanTuningCacheKey, List<PlanTuningCacheKey>> tuningGuideBlacklist;
+
+    // The tuning guides each running query was planned with, keyed by query id
+    private final Cache<UUID, OperatorTuningGuides.OptimizedRecord> optimizedQueryRecords;
+
+    @VisibleForTesting
+    PlanTuningAdvisor(int capacity) {
         this.cache = Caffeine.newBuilder()
-                .maximumSize(300)
+                .maximumSize(capacity)
                 .build();
 
 
         this.tuningGuideBlacklist = Caffeine.newBuilder()
-                .maximumSize(300)
+                .maximumSize(capacity)
                 .build();
 
-        this.optimizedQueryRecords = Maps.newConcurrentMap();
+        this.optimizedQueryRecords = Caffeine.newBuilder()
+                .maximumSize(MAX_OPTIMIZED_RECORDS)
+                .expireAfterWrite(OPTIMIZED_RECORD_TTL_HOURS, TimeUnit.HOURS)
+                .build();
     }
 
     public static PlanTuningAdvisor getInstance() {
@@ -58,11 +76,12 @@ public class PlanTuningAdvisor {
 
     public OperatorTuningGuides getTuningGuides(String sql, SkeletonNode skeletonNode) {
         PlanTuningCacheKey key = new PlanTuningCacheKey(sql, skeletonNode);
-        return cache.getIfPresent(key);
+        CacheEntry entry = cache.getIfPresent(key);
+        return entry != null && key.isCoveredBy(entry.key()) ? entry.tuningGuides() : null;
     }
 
     public OperatorTuningGuides getOperatorTuningGuides(UUID queryId) {
-        OperatorTuningGuides.OptimizedRecord record = optimizedQueryRecords.get(queryId);
+        OperatorTuningGuides.OptimizedRecord record = getOptimizedRecord(queryId);
         if (record == null) {
             return null;
         }
@@ -73,7 +92,7 @@ public class PlanTuningAdvisor {
         if (queryId == null) {
             return null;
         }
-        return optimizedQueryRecords.get(queryId);
+        return optimizedQueryRecords.getIfPresent(queryId);
     }
 
     public void putTuningGuides(String sql, SkeletonNode skeletonNode, OperatorTuningGuides tuningGuides) {
@@ -82,34 +101,29 @@ public class PlanTuningAdvisor {
         }
 
         PlanTuningCacheKey key = new PlanTuningCacheKey(sql, skeletonNode);
-        if (tuningGuideBlacklist.getIfPresent(key) != null) {
+        if (isBlacklisted(key)) {
             Tracers.record(Tracers.Module.BASE, "IgnoreBlacklistTuningGuide",
                     "Pattern previously marked as ineffective, ignoring new analyzed tuning guide");
             return;
         }
 
-        List<PlanTuningCacheKey> matchingKeys = findMatchingKeys(key, true);
-
-        if (matchingKeys.isEmpty()) {
-            cache.put(key, tuningGuides);
-            tuningGuides.getAllTuningGuides().forEach(PlanAdvisorMetrics::increaseGuideGenerated);
-        } else {
-            for (PlanTuningCacheKey matchingKey : matchingKeys) {
-                OperatorTuningGuides existingGuides = cache.getIfPresent(matchingKey);
-                if (existingGuides != null && existingGuides.equals(tuningGuides)) {
-                    mergeRangesForScanNodes(matchingKey, key);
-                }
+        // A pattern keeps its first guides; the same guides found again extend the ranges they apply to. Both happen
+        // in one compute, so concurrent puts of a pattern neither add a second entry nor lose a merge.
+        cache.asMap().compute(key, (k, existing) -> {
+            if (existing == null) {
+                tuningGuides.getAllTuningGuides().forEach(PlanAdvisorMetrics::increaseGuideGenerated);
+                return new CacheEntry(key, tuningGuides);
             }
-        }
-
+            if (existing.tuningGuides().equals(tuningGuides)) {
+                mergeRangesForScanNodes(existing.key(), key);
+            }
+            return existing;
+        });
     }
 
-    private List<PlanTuningCacheKey> findMatchingKeys(PlanTuningCacheKey key, boolean useParameterizedMode) {
-        try (ParameterizedModeContext context = new ParameterizedModeContext(key, useParameterizedMode)) {
-            return cache.asMap().keySet().stream()
-                    .filter(key::equals)
-                    .collect(Collectors.toList());
-        }
+    private boolean isBlacklisted(PlanTuningCacheKey key) {
+        List<PlanTuningCacheKey> blacklistedKeys = tuningGuideBlacklist.getIfPresent(key);
+        return blacklistedKeys != null && blacklistedKeys.stream().anyMatch(key::isCoveredBy);
     }
 
     private void mergeRangesForScanNodes(PlanTuningCacheKey targetKey, PlanTuningCacheKey sourceKey) {
@@ -130,26 +144,76 @@ public class PlanTuningAdvisor {
 
     public void clearAllAdvisor() {
         cache.invalidateAll();
-        optimizedQueryRecords.clear();
+        optimizedQueryRecords.invalidateAll();
         tuningGuideBlacklist.invalidateAll();
     }
 
     public void deleteTuningGuides(UUID queryId, boolean preventFutureTuning) {
-        for (Map.Entry<PlanTuningCacheKey, OperatorTuningGuides> entry : cache.asMap().entrySet()) {
-            if (entry.getValue().getOriginalQueryId().equals(queryId)) {
+        for (Map.Entry<PlanTuningCacheKey, CacheEntry> entry : cache.asMap().entrySet()) {
+            if (entry.getValue().tuningGuides().getOriginalQueryId().equals(queryId)) {
                 cache.invalidate(entry.getKey());
                 if (preventFutureTuning) {
-                    tuningGuideBlacklist.put(entry.getKey(), Boolean.TRUE);
+                    tuningGuideBlacklist.asMap().compute(entry.getKey(), (k, keys) -> {
+                        List<PlanTuningCacheKey> blacklistedKeys = keys != null ? keys : new CopyOnWriteArrayList<>();
+                        blacklistedKeys.add(entry.getValue().key());
+                        return blacklistedKeys;
+                    });
                     Tracers.record(Tracers.Module.BASE, "AddBlacklistTuningGuide", "The tuning guides for the current " +
                             "query pattern are ineffective and will be removed and permanently disabled.");
                 }
             }
         }
-        optimizedQueryRecords.remove(queryId);
+        optimizedQueryRecords.invalidate(queryId);
     }
 
     public long getAdvisorSize() {
         return cache.estimatedSize();
+    }
+
+    @VisibleForTesting
+    long blacklistSize() {
+        return tuningGuideBlacklist.asMap().values().stream().mapToLong(List::size).sum();
+    }
+
+    /**
+     * Runs the pending cache maintenance, then checks that the caches are consistent: the size matches the live
+     * entries, which a mapping left behind by an eviction breaks, every entry is reachable by its own key, and no two
+     * keys of a cache are equal.
+     */
+    @VisibleForTesting
+    void checkInvariants() {
+        cache.cleanUp();
+        tuningGuideBlacklist.cleanUp();
+
+        List<PlanTuningCacheKey> keys = Lists.newArrayList(cache.asMap().keySet());
+        Preconditions.checkState(keys.size() == cache.estimatedSize(),
+                "%s live entries, but the cache size is %s", keys.size(), cache.estimatedSize());
+        for (PlanTuningCacheKey key : keys) {
+            CacheEntry entry = cache.asMap().get(key);
+            Preconditions.checkState(entry != null && entry.key() == key,
+                    "the entry of %s is not reachable by its key", key.getSql());
+        }
+        checkNoEqualKeys(keys);
+
+        List<PlanTuningCacheKey> blacklistKeys = Lists.newArrayList(tuningGuideBlacklist.asMap().keySet());
+        Preconditions.checkState(blacklistKeys.size() == tuningGuideBlacklist.estimatedSize(),
+                "%s live blacklist entries, but the blacklist size is %s",
+                blacklistKeys.size(), tuningGuideBlacklist.estimatedSize());
+        for (PlanTuningCacheKey key : blacklistKeys) {
+            List<PlanTuningCacheKey> blacklistedKeys = tuningGuideBlacklist.asMap().get(key);
+            Preconditions.checkState(blacklistedKeys != null && !blacklistedKeys.isEmpty() &&
+                    blacklistedKeys.stream().allMatch(key::equals), "bad blacklist entry of %s", key.getSql());
+        }
+        checkNoEqualKeys(blacklistKeys);
+    }
+
+    private static void checkNoEqualKeys(List<PlanTuningCacheKey> keys) {
+        for (int i = 0; i < keys.size(); i++) {
+            for (int j = i + 1; j < keys.size(); j++) {
+                Preconditions.checkState(!keys.get(i).equals(keys.get(j)) && !keys.get(j).equals(keys.get(i)),
+                        "two keys are equal: %s / %s", keys.get(i).getSql(), keys.get(j).getSql());
+            }
+        }
     }
 
     public void addOptimizedQueryRecord(UUID queryId, OperatorTuningGuides.OptimizedRecord optimizedRecord) {
@@ -157,21 +221,30 @@ public class PlanTuningAdvisor {
     }
 
     public void removeOptimizedQueryRecord(UUID queryId) {
-        optimizedQueryRecords.remove(queryId);
+        if (queryId != null) {
+            optimizedQueryRecords.invalidate(queryId);
+        }
+    }
+
+    @VisibleForTesting
+    long optimizedQueryRecordCount() {
+        optimizedQueryRecords.cleanUp();
+        return optimizedQueryRecords.estimatedSize();
     }
 
     public List<List<String>> getShowResult() {
         List<List<String>> result = Lists.newArrayList();
         String nodeName = GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName();
-        for (Map.Entry<PlanTuningCacheKey, OperatorTuningGuides> entry : cache.asMap().entrySet()) {
+        for (Map.Entry<PlanTuningCacheKey, CacheEntry> entry : cache.asMap().entrySet()) {
+            OperatorTuningGuides tuningGuides = entry.getValue().tuningGuides();
             List<String> row = Lists.newArrayList();
-            row.add(entry.getValue().getOriginalQueryId().toString());
+            row.add(tuningGuides.getOriginalQueryId().toString());
             row.add(entry.getKey().getSql());
-            row.add(String.valueOf(entry.getValue().getOriginalTimeCost()));
-            row.add(entry.getValue().getTuneGuidesInfo(false));
-            row.add(String.valueOf(entry.getValue().getAvgTunedTimeCost()));
-            row.add(String.valueOf(entry.getValue().optimizedQueryCount()));
-            row.add(String.valueOf(entry.getValue().isUseful()));
+            row.add(String.valueOf(tuningGuides.getOriginalTimeCost()));
+            row.add(tuningGuides.getTuneGuidesInfo(false));
+            row.add(String.valueOf(tuningGuides.getAvgTunedTimeCost()));
+            row.add(String.valueOf(tuningGuides.optimizedQueryCount()));
+            row.add(String.valueOf(tuningGuides.isUseful()));
             row.add(nodeName);
             result.add(row);
         }
@@ -179,39 +252,7 @@ public class PlanTuningAdvisor {
 
     }
 
-    private static class ParameterizedModeContext implements AutoCloseable {
-        private final PlanTuningCacheKey key;
-        private final boolean originalMode;
-
-        public ParameterizedModeContext(PlanTuningCacheKey key, boolean enableParameterized) {
-            this.key = key;
-
-            ScanNode scanNode = findFirstScanNode(key);
-            this.originalMode = scanNode != null && scanNode.isEnableParameterizedMode();
-
-            if (enableParameterized) {
-                key.enableParameterizedMode();
-            } else {
-                key.disableParameterizedMode();
-            }
-        }
-
-        @Override
-        public void close() {
-            if (originalMode) {
-                key.enableParameterizedMode();
-            } else {
-                key.disableParameterizedMode();
-            }
-        }
-
-        private ScanNode findFirstScanNode(PlanTuningCacheKey key) {
-            return key.getSkeletonNodes().stream()
-                    .filter(node -> node instanceof ScanNode)
-                    .map(node -> (ScanNode) node)
-                    .findFirst()
-                    .orElse(null);
-        }
+    private record CacheEntry(PlanTuningCacheKey key, OperatorTuningGuides tuningGuides) {
     }
 
 }
