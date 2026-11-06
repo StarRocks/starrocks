@@ -1146,6 +1146,8 @@ RuntimeProfile::MergedInfo RuntimeProfile::merge_isomorphic_counters(std::vector
 
     if (counters[0]->is_avg()) {
         merged_value /= counters.size();
+    } else if (counters[0]->is_max()) {
+        merged_value = max_value;
     }
 
     return std::make_tuple(merged_value, min_value, max_value);
