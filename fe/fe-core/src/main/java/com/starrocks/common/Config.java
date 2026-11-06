@@ -3315,6 +3315,16 @@ public class Config extends ConfigBase {
             "column is left to the connector's own table metadata. <= 0 records whatever was collected.")
     public static double connector_table_analyze_min_column_coverage_ratio = 0.5;
 
+    // An external-table analyze deletes the statistics of partitions that are no longer in the table's partition
+    // list, since the read path aggregates every partition's rows and a dropped partition's would otherwise keep
+    // skewing NDV, row count and min/max. A partition's rows are deleted only once none of them has been written
+    // for this long: the partition list a job holds can lag the table, and a concurrent job that saw a newer
+    // snapshot may just have collected a partition this job does not know about yet.
+    @ConfField(mutable = true, comment = "External-table analyze deletes the column statistics of partitions " +
+            "that no longer exist once none of their rows has been written for this many seconds; " +
+            "<= 0 disables the cleanup.")
+    public static long connector_table_analyze_dropped_partition_stats_grace_second = 86400; // default 1 day
+
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
      * This may reduce network transmission in following case:
