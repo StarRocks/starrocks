@@ -33,6 +33,13 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
     protected long tableId;
     @SerializedName(value = "partition")
     protected Partition partition;
+    // Retained identity for compact descriptors that do not keep the Partition object graph.
+    // For entries with a non-null `partition` these mirror partition.getId()/getName(); for a
+    // RecycleLakeDeletedPartitionInfo they are the only source of that identity.
+    @SerializedName(value = "partitionId")
+    protected long partitionId = -1;
+    @SerializedName(value = "partitionName")
+    protected String partitionName;
     @SerializedName(value = "dataProperty")
     protected DataProperty dataProperty;
     @SerializedName(value = "replicationNum")
@@ -71,10 +78,32 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partition = partition;
+        if (partition != null) {
+            this.partitionId = partition.getId();
+            this.partitionName = partition.getName();
+        }
         this.dataProperty = dataProperty;
         this.replicationNum = replicationNum;
         this.recoverable = true;
         this.retentionPeriod = 0L;
+    }
+
+    /** Retained partition identity, valid even when the Partition graph is not held. */
+    public long getPartitionId() {
+        return partition != null ? partition.getId() : partitionId;
+    }
+
+    /** Retained partition name, valid even when the Partition graph is not held. */
+    public String getPartitionName() {
+        return partition != null ? partition.getName() : partitionName;
+    }
+
+    /**
+     * Record partition identity explicitly for compact descriptors whose {@code partition} is null.
+     */
+    protected void setPartitionIdentity(long partitionId, String partitionName) {
+        this.partitionId = partitionId;
+        this.partitionName = partitionName;
     }
 
     public long getDbId() {
@@ -138,7 +167,7 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
 
     abstract Range<PartitionKey> getRange();
 
-    abstract DataCacheInfo getDataCacheInfo();
+    public abstract DataCacheInfo getDataCacheInfo();
 
     abstract void checkRecoverable(OlapTable table) throws DdlException;
 
