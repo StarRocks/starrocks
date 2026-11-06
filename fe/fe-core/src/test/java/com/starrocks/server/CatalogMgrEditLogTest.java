@@ -27,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -290,6 +291,49 @@ public class CatalogMgrEditLogTest {
         Catalog followerCatalog = followerCatalogMgr.getCatalogByName(catalogName);
         Assertions.assertNotNull(followerCatalog);
         Assertions.assertEquals("thrift://127.0.0.1:9084", followerCatalog.getConfig().get("hive.metastore.uris"));
+    }
+
+    @Test
+    public void testUnsetCatalogNormalCase() throws Exception {
+        String catalogName = "test_unset_catalog";
+        String type = "hive";
+        Map<String, String> properties = createTestCatalogProperties();
+        masterCatalogMgr.createCatalog(type, catalogName, "comment", properties);
+
+        Map<String, String> alterProperties = new HashMap<>();
+        alterProperties.put("enable_cache_list_names", "true");
+        masterCatalogMgr.alterCatalog(new com.starrocks.sql.ast.AlterCatalogStmt(
+                catalogName, new com.starrocks.sql.ast.ModifyTablePropertiesClause(alterProperties), null));
+
+        List<String> unsetProperties = List.of("enable_cache_list_names");
+        masterCatalogMgr.alterCatalog(new com.starrocks.sql.ast.AlterCatalogStmt(
+                catalogName, new com.starrocks.sql.ast.UnsetCatalogPropertiesClause(unsetProperties, null), null));
+
+        Catalog catalog = masterCatalogMgr.getCatalogByName(catalogName);
+        Assertions.assertNotNull(catalog);
+        Assertions.assertFalse(catalog.getConfig().containsKey("enable_cache_list_names"));
+        Assertions.assertEquals("thrift://127.0.0.1:9083", catalog.getConfig().get("hive.metastore.uris"));
+
+        ConnectorMgr followerConnectorMgr = new ConnectorMgr();
+        CatalogMgr followerCatalogMgr = new CatalogMgr(followerConnectorMgr);
+
+        Catalog createReplayCatalog = (Catalog) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_CATALOG);
+        followerCatalogMgr.replayCreateCatalog(createReplayCatalog);
+
+        AlterCatalogLog setLog = (AlterCatalogLog) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_CATALOG);
+        followerCatalogMgr.replayAlterCatalog(setLog);
+
+        AlterCatalogLog unsetLog = (AlterCatalogLog) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_CATALOG);
+        Assertions.assertEquals(unsetProperties, unsetLog.getUnsetProperties());
+        followerCatalogMgr.replayAlterCatalog(unsetLog);
+
+        Catalog followerCatalog = followerCatalogMgr.getCatalogByName(catalogName);
+        Assertions.assertNotNull(followerCatalog);
+        Assertions.assertFalse(followerCatalog.getConfig().containsKey("enable_cache_list_names"));
+        Assertions.assertEquals("thrift://127.0.0.1:9083", followerCatalog.getConfig().get("hive.metastore.uris"));
     }
 
     @Test

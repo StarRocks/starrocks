@@ -129,6 +129,64 @@ public class AlterCatalogTest {
     }
 
     @Test
+    public void testUnset(@Mocked RangerBasePlugin rangerPlugin) throws Exception {
+        new Expectations() {
+            {
+                rangerPlugin.init();
+                minTimes = 0;
+            }
+        };
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "alter catalog hive0 set (\"enable_cache_list_names\" = \"true\");",
+                connectContext), connectContext);
+
+        try {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "alter catalog hive0 unset (\"type\");",
+                    connectContext), connectContext);
+            Assertions.fail();
+        } catch (AnalysisException e) {
+            Assertions.assertTrue(e.getMessage().contains("Not support alter catalog property type"));
+        }
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "alter catalog hive0 unset (\"enable_cache_list_names\", \"not_a_real_property\");",
+                connectContext), connectContext);
+
+        Catalog catalog = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogs().get("hive0");
+        Assertions.assertFalse(catalog.getConfig().containsKey("enable_cache_list_names"));
+        Assertions.assertFalse(catalog.getConfig().containsKey("not_a_real_property"));
+
+        // Unsetting a key that is already absent does not recreate the connector.
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "alter catalog hive0 unset (\"enable_cache_list_names\");",
+                connectContext), connectContext);
+        Assertions.assertFalse(catalog.getConfig().containsKey("enable_cache_list_names"));
+    }
+
+    @Test
+    public void testUnsetReplay(@Mocked RangerBasePlugin rangerPlugin) throws Exception {
+        new Expectations() {
+            {
+                rangerPlugin.init();
+                minTimes = 0;
+            }
+        };
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put("enable_cache_list_names", "true");
+        GlobalStateMgr.getCurrentState().getCatalogMgr().replayAlterCatalog(new AlterCatalogLog("hive0", properties));
+
+        AlterCatalogLog unsetLog = new AlterCatalogLog("hive0", new HashMap<>(),
+                List.of("enable_cache_list_names"));
+        GlobalStateMgr.getCurrentState().getCatalogMgr().replayAlterCatalog(unsetLog);
+
+        Catalog catalog = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogs().get("hive0");
+        Assertions.assertFalse(catalog.getConfig().containsKey("enable_cache_list_names"));
+    }
+
+    @Test
     public void testPriv() throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(
                 "alter catalog hive0 set (\"ranger.plugin.hive.service.name\"  =  \"hive0\");",

@@ -135,6 +135,18 @@ PROPERTIES(
 );
 ```
 
+## 修改属性
+
+`ALTER CATALOG ... SET` 用于为已有的 External Catalog 新增或覆盖属性。`ALTER CATALOG ... UNSET` 用于删除属性。属性被删除后，该 Catalog 使用该属性的默认值。
+
+不能设置或删除 `type` 属性。同一条语句中不能同时使用 `SET` 和 `UNSET`。删除一个尚未设置的属性会执行成功，且不会改变该 Catalog。被删除的属性不再出现在 [SHOW CREATE CATALOG](SHOW_CREATE_CATALOG.md) 的结果中。
+
+```SQL
+ALTER CATALOG <catalog_name> SET ("key" = "value" [, ...])
+
+ALTER CATALOG <catalog_name> UNSET ("key" [, ...])
+```
+
 ## 相关操作
 
 - 如要查看所有 Catalog，参见 [SHOW CATALOGS](SHOW_CATALOGS.md)。

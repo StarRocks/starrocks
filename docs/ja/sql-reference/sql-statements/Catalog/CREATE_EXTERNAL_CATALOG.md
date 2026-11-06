@@ -143,6 +143,18 @@ PROPERTIES(
 );
 ```
 
+## プロパティの変更
+
+`ALTER CATALOG ... SET` は、既存の external catalog のプロパティを追加または上書きします。`ALTER CATALOG ... UNSET` はプロパティを削除します。プロパティを削除すると、その catalog はそのプロパティのデフォルト値を使用します。
+
+`type` プロパティは設定も削除もできません。同じステートメントで `SET` と `UNSET` を同時に使うことはできません。設定されていないプロパティを `UNSET` しても成功し、catalog は変わりません。削除したキーは [SHOW CREATE CATALOG](SHOW_CREATE_CATALOG.md) の結果に表示されなくなります。
+
+```SQL
+ALTER CATALOG <catalog_name> SET ("key" = "value" [, ...])
+
+ALTER CATALOG <catalog_name> UNSET ("key" [, ...])
+```
+
 ## 参考文献
 
 - StarRocks クラスター内のすべてのカタログを表示するには、[SHOW CATALOGS](SHOW_CATALOGS.md) を参照してください。
