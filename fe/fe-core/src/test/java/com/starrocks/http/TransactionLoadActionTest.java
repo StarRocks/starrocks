@@ -147,6 +147,19 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 writeResponse(request, response);
             }
 
+            @Mock
+            public void redirectTo(BaseRequest request,
+                                   BaseResponse response,
+                                   TNetworkAddress addr,
+                                   String scheme,
+                                   int port) throws DdlException {
+                TransactionResult result = new TransactionResult();
+                result.setOKMsg("mock redirect to BE");
+                response.setContentType(JSON.toString());
+                response.appendContent(result.toJson());
+                writeResponse(request, response);
+            }
+
         };
     }
 
