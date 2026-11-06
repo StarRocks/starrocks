@@ -23,6 +23,7 @@
 #include <memory>
 #include <new>
 #include <random>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -105,6 +106,29 @@ const std::vector<uint32_t>& cached_strided_indexes(size_t pool_size, size_t num
         std::vector<uint32_t> indexes(ring_size);
         for (size_t i = 0; i < ring_size; ++i) {
             indexes[i] = static_cast<uint32_t>((i * 13) % pool_size);
+        }
+        it = cache.emplace(key, std::move(indexes)).first;
+    }
+    return it->second;
+}
+
+const std::vector<uint32_t>& cached_low_cardinality_indexes(size_t pool_size, size_t num_rows, size_t unique_keys) {
+    const size_t ring_size = index_ring_size(num_rows);
+    static std::map<std::tuple<size_t, size_t, size_t>, std::vector<uint32_t>> cache;
+    auto key = std::make_tuple(pool_size, ring_size, unique_keys);
+    auto it = cache.find(key);
+    if (it == cache.end()) {
+        std::mt19937 palette_rng(67890 + unique_keys);
+        std::uniform_int_distribution<uint32_t> pool_dist(0, static_cast<uint32_t>(pool_size - 1));
+        std::vector<uint32_t> palette(unique_keys);
+        for (size_t k = 0; k < unique_keys; ++k) {
+            palette[k] = pool_dist(palette_rng);
+        }
+        std::mt19937 ring_rng(12345 + unique_keys);
+        std::uniform_int_distribution<size_t> key_dist(0, unique_keys - 1);
+        std::vector<uint32_t> indexes(ring_size);
+        for (size_t i = 0; i < ring_size; ++i) {
+            indexes[i] = palette[key_dist(ring_rng)];
         }
         it = cache.emplace(key, std::move(indexes)).first;
     }
@@ -642,6 +666,53 @@ static void BM_Gather_Filtered_CallerInformed(benchmark::State& state) {
                            });
 }
 
+template <typename T>
+static void BM_Gather_LowCardinality_Baseline(benchmark::State& state) {
+    const size_t num_rows = state.range(0);
+    const size_t pool_size = state.range(1);
+    const size_t unique_keys = state.range(2);
+    if (num_rows == 0 || pool_size == 0 || unique_keys == 0 || pool_size - 1 > std::numeric_limits<uint32_t>::max()) {
+        state.SkipWithError("benchmark arguments out of range for uint32 indexes");
+        return;
+    }
+    const std::vector<T>* src;
+    const std::vector<uint32_t>* index_ring;
+    try {
+        src = &cached_source<T>(pool_size);
+        index_ring = &cached_low_cardinality_indexes(pool_size, num_rows, unique_keys);
+    } catch (const std::bad_alloc&) {
+        state.SkipWithError("out of memory building benchmark pools");
+        return;
+    }
+
+    run_gather_fn(state, *src, *index_ring, num_rows,
+                  [](T* d, const T* s, const uint32_t* idx, size_t n) { SIMDGather::gather(d, s, idx, n); });
+}
+
+template <typename T>
+static void BM_Gather_LowCardinality_CallerInformed(benchmark::State& state) {
+    const size_t num_rows = state.range(0);
+    const size_t pool_size = state.range(1);
+    const size_t unique_keys = state.range(2);
+    if (num_rows == 0 || pool_size == 0 || unique_keys == 0 || pool_size - 1 > std::numeric_limits<uint32_t>::max()) {
+        state.SkipWithError("benchmark arguments out of range for uint32 indexes");
+        return;
+    }
+    const std::vector<T>* src;
+    const std::vector<uint32_t>* index_ring;
+    try {
+        src = &cached_source<T>(pool_size);
+        index_ring = &cached_low_cardinality_indexes(pool_size, num_rows, unique_keys);
+    } catch (const std::bad_alloc&) {
+        state.SkipWithError("out of memory building benchmark pools");
+        return;
+    }
+
+    run_gather_fn(state, *src, *index_ring, num_rows, [pool_size](T* d, const T* s, const uint32_t* idx, size_t n) {
+        SIMDGather::gather(d, s, idx, n, SourcePoolSize{pool_size});
+    });
+}
+
 // Args are {num_rows, pool_size}.
 #define STARROCKS_GATHER_SIZES \
     ArgsProduct({{1024, 4096, 8192, 65536}, {kSmallPool, kBigPool}})->ArgNames({"rows", "pool"})
@@ -655,6 +726,10 @@ static void BM_Gather_Filtered_CallerInformed(benchmark::State& state) {
 
 #define STARROCKS_GATHER_FILTERED_SIZES \
     ArgsProduct({{512, 4096}, {kSmallPool, kBigPool}, {0, 50, 100}})->ArgNames({"rows", "pool", "null_pct"})
+
+#define STARROCKS_GATHER_LOCALITY_SIZES                                                 \
+    ArgsProduct({{512, 4096}, {kSmallPool, 16 * 1024 * 1024, kBigPool}, {1, 64, 4096}}) \
+            ->ArgNames({"rows", "pool", "unique_keys"})
 
 BENCHMARK_TEMPLATE(BM_Gather_Baseline, int32_t)->STARROCKS_GATHER_SIZES;
 BENCHMARK_TEMPLATE(BM_Gather_Baseline, int64_t)->STARROCKS_GATHER_SIZES;
@@ -710,6 +785,12 @@ BENCHMARK_TEMPLATE(BM_Gather_Filtered_Baseline, int64_t)->STARROCKS_GATHER_FILTE
 
 BENCHMARK_TEMPLATE(BM_Gather_Filtered_CallerInformed, int32_t)->STARROCKS_GATHER_FILTERED_SIZES;
 BENCHMARK_TEMPLATE(BM_Gather_Filtered_CallerInformed, int64_t)->STARROCKS_GATHER_FILTERED_SIZES;
+
+BENCHMARK_TEMPLATE(BM_Gather_LowCardinality_Baseline, int32_t)->STARROCKS_GATHER_LOCALITY_SIZES;
+BENCHMARK_TEMPLATE(BM_Gather_LowCardinality_Baseline, int64_t)->STARROCKS_GATHER_LOCALITY_SIZES;
+
+BENCHMARK_TEMPLATE(BM_Gather_LowCardinality_CallerInformed, int32_t)->STARROCKS_GATHER_LOCALITY_SIZES;
+BENCHMARK_TEMPLATE(BM_Gather_LowCardinality_CallerInformed, int64_t)->STARROCKS_GATHER_LOCALITY_SIZES;
 
 } // namespace starrocks
 
