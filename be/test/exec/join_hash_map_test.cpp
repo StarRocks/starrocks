@@ -1247,6 +1247,59 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, BucketChainedLookupInitNullableWithNulls) {
+    JoinHashTableItems table_items;
+    HashTableProbeState probe_state;
+
+    auto type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    auto build_column = ColumnHelper::create_column(type, true);
+    build_column->append_default();
+    build_column->append(*JoinHashMapTest::create_int32_nullable_column(20, 0), 0, 20);
+
+    auto probe_column = JoinHashMapTest::create_int32_nullable_column(20, 0);
+    table_items.first.resize(32, 0);
+    table_items.key_columns.emplace_back(std::move(build_column));
+    table_items.bucket_size = 32;
+    table_items.row_count = 20;
+    table_items.next.resize(21);
+    probe_state.probe_row_count = 20;
+    probe_state.buckets.resize(config::vector_chunk_size);
+    probe_state.next.resize(config::vector_chunk_size, 0);
+    Columns probe_columns{probe_column};
+    probe_state.key_columns = &probe_columns;
+
+    using BuildKeyConstructor = BuildKeyConstructorForOneKey<LogicalType::TYPE_INT>;
+    using ProbeKeyConstructor = ProbeKeyConstructorForOneKey<LogicalType::TYPE_INT>;
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_INT>;
+
+    BuildKeyConstructor::prepare(nullptr, &table_items);
+    BuildKeyConstructor::build_key(nullptr, &table_items);
+    JoinHashMapMethod::build_prepare(nullptr, &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor().get_key_data(table_items),
+                                            BuildKeyConstructor().get_is_nulls(table_items));
+
+    ProbeKeyConstructor::prepare(nullptr, &probe_state);
+    ProbeKeyConstructor::build_key(table_items, &probe_state);
+    ASSERT_TRUE(probe_state.null_array.has_value());
+
+    // Directly test lookup_init with nulls present, verifying line 118 in join_hash_map_method.hpp
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, BuildKeyConstructor().get_key_data(table_items),
+                                   ProbeKeyConstructor().get_key_data(probe_state), probe_state.null_array);
+
+    const auto* is_nulls_data = probe_state.null_array->data();
+    for (size_t i = 0; i < probe_state.probe_row_count; i++) {
+        if (is_nulls_data[i] != 0) {
+            // Filtered null row must be zero-initialized
+            ASSERT_EQ(probe_state.next[i], 0);
+        } else {
+            // Non-null row must gather from table_items.first[bucket]
+            uint32_t bucket = probe_state.buckets[i];
+            ASSERT_EQ(probe_state.next[i], table_items.first[bucket]);
+        }
+    }
+}
+
+// NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
     TDescriptorTableBuilder row_desc_builder;
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, false, 1);
