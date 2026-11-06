@@ -36,7 +36,7 @@ public class OdpsConnector implements Connector {
     private final OdpsProperties properties;
     private final AliyunCloudCredential aliyunCloudCredential;
 
-    private ConnectorMetadata metadata;
+    private volatile ConnectorMetadata metadata;
 
     public OdpsConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
@@ -73,11 +73,15 @@ public class OdpsConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() {
         if (metadata == null) {
-            try {
-                metadata = new OdpsMetadata(odps, catalogName, aliyunCloudCredential, properties);
-            } catch (StarRocksConnectorException e) {
-                LOG.error("Failed to create jdbc metadata on [catalog : {}]", catalogName, e);
-                throw e;
+            synchronized (this) {
+                if (metadata == null) {
+                    try {
+                        metadata = new OdpsMetadata(odps, catalogName, aliyunCloudCredential, properties);
+                    } catch (StarRocksConnectorException e) {
+                        LOG.error("Failed to create jdbc metadata on [catalog : {}]", catalogName, e);
+                        throw e;
+                    }
+                }
             }
         }
         return metadata;
