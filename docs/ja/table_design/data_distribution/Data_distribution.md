@@ -878,6 +878,7 @@ PRIMARY KEY (tenant_id, created_time, id);
 - テーブル作成後も、ソートキーをオンラインで変更できます（`ALTER TABLE ... ORDER BY`、キー列の追加または削除、整数型のソートキー列の拡張）。ただし、新しいソートキーは、コロケーション対象の列を同じ順序・同じ型のまま先頭に含む必要があります。コロケーション対象の列の削除、順序の入れ替え、型の変更を伴う変更は拒否されます。変更後もテーブルは同じコロケーショングループに属し、Colocate Join を引き続き利用できます。
 - デフォルトのコロケーション対象の列は、ソート列です。
 - `colocate_with` でコロケーショングループのみを指定している場合、ソートキーの変更によってソートキーの列数がコロケーション対象の列数より多くなると、StarRocks はこのプロパティをコロケーション対象の列を明示する形式 `<colocation_group>:<colocated_column>[,<colocated_column>]` に書き換えます。以後、`SHOW CREATE TABLE` にはこの形式が表示されます。
+- Rollup と同期マテリアライズドビューを作成できます。ただし、そのソートキーは、コロケーション対象の列を同じ順序・同じ型のまま先頭に含む必要があります。`CREATE TABLE ... ROLLUP (...)` で定義した Rollup はキー列でソートされ、その中に記述した `ORDER BY` は使用されません。そのため、この Rollup のキー列は、コロケーション対象の列を同じ順序・同じ型のまま先頭に含む必要があります。同期マテリアライズドビューのソートキーは、`SELECT` リストの先頭にある集計されていない列で、順序は `SELECT` での順序に従います。`GROUP BY`、集計、`DISTINCT` のいずれも含まないビューでは、ソートキーは `SELECT` リストのプレフィックス（最大 3 列かつ 36 バイト以内。VARCHAR 列があればその列まで、キーにできない型（FLOAT、DOUBLE など）の列があればその直前まで）となり、`ORDER BY` では変更できません。このようなビューのソートキーを指定するには、代わりに `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` を使用してください。Rollup または同期マテリアライズドビューを持つテーブルでは、上記のソートキーの変更はサポートされません。
 :::
 
 ```SQL
@@ -920,10 +921,10 @@ PROPERTIES (
 | DDL | 理由 |
 | --- | --- |
 | `ORDER BY` 句を持たない `ALTER TABLE ... ADD ROLLUP ...` | 普通の同期 Rollup は、ベーステーブルと Rollup テーブルの tablet が 1 対 1 で対応し行順序が一致していることを前提としますが、レンジ分散ではこれを満たせません。代わりに `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` を使用してください。共有データのレンジ分散テーブルでは（v4.2 以降）独立したソートキーを持つ Rollup を作成でき、この種の Rollup は複数追加できます（`ALTER TABLE` 文ごとに 1 つ）。 |
-| `CREATE MATERIALIZED VIEW ... AS ...`（`REFRESH` および `DISTRIBUTED BY` 句を持たない同期型） | 同期マテリアライズドビューは本質的に普通の同期 Rollup であり、同じ制限を受けます。 |
+| `CREATE MATERIALIZED VIEW ... AS ...`（`REFRESH` および `DISTRIBUTED BY` 句を持たない同期型） | 共有データクラスタの重複キーテーブル、集計テーブル、ユニークキーテーブルでは、同期マテリアライズドビューを作成できます。詳しくは [CREATE MATERIALIZED VIEW](../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md) を参照してください。それ以外の場合、同期マテリアライズドビューは本質的に普通の同期 Rollup であり、同じ制限を受けます。 |
 | `ALTER TABLE ... MERGE TABLETS`（`ORDER BY` が主キーと異なる主キーテーブル。サイズに基づく自動マージも同じ形態をスキップします） | この種のテーブルは主キー空間のレンジで行をルーティングする一方、Segment はソートキー順に配置されるため、マージ時に、複数のソースが共有する Segment 内のある行がどのソース Tablet に属しているかを判定できません。SPLIT は影響を受けません。また `ORDER BY` が主キーと同じ主キーテーブルは、これまでどおり MERGE できます。 |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE はパーティション内のデータを再分散・再バケット化するため、レンジ tablet の境界と互換性がありません。 |
-| `colocate_with` を設定したテーブルでの `CREATE TABLE ... ROLLUP (...)` | Rollup の tablet はベーステーブルのソートキーで分割される一方、行は Rollup 自身のソートキーで配置されるため、その Rollup を読む Colocate Join が誤った結果を返す可能性があります。このようなテーブルでは `ALTER TABLE ... ADD ROLLUP` もサポートされません。 |
+| `colocate_with` を設定したテーブルでの `CREATE TABLE ... ROLLUP (...)`、`ALTER TABLE ... ADD ROLLUP ...`、`CREATE MATERIALIZED VIEW` のうち、Rollup または同期マテリアライズドビューのソートキーがコロケーション対象の列で始まらないもの | Rollup と同期マテリアライズドビューの tablet はコロケーショングループと揃っている必要があり、ソートキーがコロケーション対象の列で始まることで、テーブルのすべてのインデックスが揃った状態に保たれます。`GROUP BY`、集計、`DISTINCT` のいずれも含まない同期マテリアライズドビューはソートキーを指定できないため、代わりに `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` を使用してください。 |
 
 Rollup のような集計ユースケースには、明示的な `REFRESH` 句または `DISTRIBUTED BY` 句を伴う**非同期マテリアライズドビュー**を使用してください。例：
 

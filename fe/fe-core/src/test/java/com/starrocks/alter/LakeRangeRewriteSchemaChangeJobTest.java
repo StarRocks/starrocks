@@ -2461,6 +2461,25 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         protected String shadowKindLabel() {
             return "optimize";
         }
+
+        @Override
+        protected List<Column> getShadowRangeColumns() {
+            return List.of();
+        }
+
+        @Override
+        protected SampleSet sampleShadowSortKey(OlapTable table, String dbName, PendingPartitionPlan plan) {
+            return SampleSet.EMPTY;
+        }
+
+        @Override
+        protected void checkShadowColocatePrefix(OlapTable table) {
+        }
+
+        @Override
+        protected String rangeJobLogPrefix() {
+            return "seam stub job";
+        }
     }
 
     @Test
