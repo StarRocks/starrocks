@@ -47,6 +47,7 @@
 
 #include "base/coding.h"
 #include "base/failpoint/fail_point.h"
+#include "base/testutil/sync_point.h"
 #include "base/url_coding.h"
 #include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
@@ -1777,6 +1778,7 @@ Status TabletMetaManager::put_pending_rowset_meta(DataDir* store, WriteBatch* ba
 // methods for operating pending commits
 Status TabletMetaManager::pending_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t version,
                                                 const RowsetMetaPB& rowset, const string& rowset_meta_key) {
+    TEST_ERROR_POINT("TabletMetaManager::pending_rowset_commit");
     // remove rowset_meta_key, add pending rowset
     WriteBatch batch;
     auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
