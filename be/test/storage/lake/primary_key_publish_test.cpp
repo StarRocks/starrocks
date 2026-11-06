@@ -4168,12 +4168,14 @@ TEST_P(LakePrimaryKeyPublishTest, test_multi_chunk_upsert) {
 }
 
 // experimental_lake_ignore_lost_segment: a PK compaction whose output segment file is lost before the
-// compaction txn is published must not crash and must not fail the publish. This covers all three
-// publish shapes with an error-injected (physically deleted) lost output segment:
+// compaction txn is published must not crash and must not fail the publish. This covers each
+// publish shape with an error-injected (physically deleted) lost output segment:
 //   1. light publish, NO loss    -> normal SST ingest + conflict resolver
 //   2. light publish, lost seg   -> conflict-resolver lost branch + SST-ingest skip
-//   3. non-light publish, lost   -> PrimaryKeyCompactionState empty PK column
-// and runs under both LOCAL (resolver execute()) and CLOUD_NATIVE (resolver execute_without_update_index
+//   3. non-light publish, NO loss -> full publish of a txn log without a rows mapper
+//   4. non-light publish, lost   -> PrimaryKeyCompactionState empty PK column
+// Compaction always records a rows mapper (.lcrm), so 3 and 4 drop it from the txn log to publish it the way an
+// older release (4.0/4.1) may have written it. The test runs under both LOCAL (resolver execute()) and CLOUD_NATIVE (resolver execute_without_update_index
 // + SST ingest) persistent index via the param list.
 TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_segment) {
     auto tablet_id = _tablet_metadata->id();
@@ -4203,8 +4205,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_
         }
     };
 
-    // Compact, optionally delete an output segment (error injection), then publish.
-    auto compact_and_publish = [&](bool lose_output_segment) -> Status {
+    // Compact, optionally drop the rows mapper from the txn log and delete an output segment (error injection), then
+    // publish.
+    auto compact_and_publish = [&](bool lose_output_segment, bool drop_rows_mapper = false) -> Status {
         int64_t txn_id = next_id();
         auto old_min = config::lake_pk_compaction_min_input_segments;
         config::lake_pk_compaction_min_input_segments = 1;
@@ -4212,6 +4215,13 @@ TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_
         auto ctx = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(ctx.get()));
         RETURN_IF_ERROR(task->execute(CompactionTask::kNoCancelFn));
+        if (drop_rows_mapper) {
+            ASSIGN_OR_ABORT(auto txnlog, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+            EXPECT_TRUE(txnlog->op_compaction().has_lcrm_file());
+            auto legacy_txnlog = std::make_shared<TxnLog>(*txnlog);
+            legacy_txnlog->mutable_op_compaction()->clear_lcrm_file();
+            RETURN_IF_ERROR(_tablet_mgr->put_txn_log(legacy_txnlog));
+        }
         if (lose_output_segment) {
             ASSIGN_OR_ABORT(auto txnlog, _tablet_mgr->get_txn_log(tablet_id, txn_id));
             const auto& out = txnlog->op_compaction().output_rowset();
@@ -4226,7 +4236,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_
         return st;
     };
 
-    // 1. Light publish (default enable_light_pk_compaction_publish=true), no loss: normal ingest path.
+    // 1. Light publish, no loss: normal ingest path.
     write_rowsets(3);
     ASSERT_OK(compact_and_publish(/*lose_output_segment=*/false));
 
@@ -4236,11 +4246,13 @@ TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_
     write_rowsets(3);
     ASSERT_OK(compact_and_publish(/*lose_output_segment=*/true));
 
-    // 3. Non-light publish, lost output segment: PrimaryKeyCompactionState empty PK column path.
-    config::enable_light_pk_compaction_publish = false;
-    DeferOp reset_light([] { config::enable_light_pk_compaction_publish = true; });
+    // 3. Non-light publish, no loss: a txn log without a rows mapper re-reads the output segments.
     write_rowsets(3);
-    ASSERT_OK(compact_and_publish(/*lose_output_segment=*/true));
+    ASSERT_OK(compact_and_publish(/*lose_output_segment=*/false, /*drop_rows_mapper=*/true));
+
+    // 4. Non-light publish, lost output segment: PrimaryKeyCompactionState empty PK column path.
+    write_rowsets(3);
+    ASSERT_OK(compact_and_publish(/*lose_output_segment=*/true, /*drop_rows_mapper=*/true));
 
     // The tablet stays readable afterwards (a lost segment's rows are simply gone).
     ASSIGN_OR_ABORT(auto chunk, read(tablet_id, version));
