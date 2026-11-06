@@ -214,12 +214,19 @@ void compare_integral_simd<int64_t>(int8_t* cmp_vector, const int64_t* lhs, int6
         for (size_t k = 0; k < kBlock; ++k) cmp_vector[i + k] = static_cast<int8_t>(tmp[k]);
     }
 #elif defined(__ARM_NEON) && defined(__aarch64__)
-    constexpr size_t kBlock = 2;
-    const int64x2_t rhs_vec = vdupq_n_s64(rhs);
-    const int64x2_t ones = vdupq_n_s64(1);
-    alignas(16) int64_t tmp[2];
+    constexpr size_t kBlock = 8;
+    // vcgtq_s64 produces all-ones (0xFFFFFFFFFFFFFFFF) for true and 0 for false.
+    // Narrowing to int8x8_t yields 0xFF (-1 in two's complement) for true and 0 for false.
+    auto narrow_mask_64_to_8 = [](uint64x2_t m0, uint64x2_t m1, uint64x2_t m2, uint64x2_t m3) -> int8x8_t {
+        uint32x4_t u01 = vuzp1q_u32(vreinterpretq_u32_u64(m0), vreinterpretq_u32_u64(m1));
+        uint32x4_t u23 = vuzp1q_u32(vreinterpretq_u32_u64(m2), vreinterpretq_u32_u64(m3));
+        uint16x8_t u0123 = vuzp1q_u16(vreinterpretq_u16_u32(u01), vreinterpretq_u16_u32(u23));
+        return vreinterpret_s8_u8(vmovn_u16(u0123));
+    };
+
+    const int64x2_t rhs_s = vdupq_n_s64(rhs);
     for (; i + kBlock <= n; i += kBlock) {
-        uint16_t block_mask = 0;
+        uint64_t block_mask = 0;
         std::memcpy(&block_mask, cmp_vector + i, sizeof(block_mask));
         if (block_mask != 0) {
             for (size_t j = i; j < i + kBlock; ++j) {
@@ -227,13 +234,24 @@ void compare_integral_simd<int64_t>(int8_t* cmp_vector, const int64_t* lhs, int6
             }
             continue;
         }
-        int64x2_t lhs_v = vld1q_s64(lhs + i);
-        int64x2_t gt = vreinterpretq_s64_u64(vcgtq_s64(lhs_v, rhs_vec));
-        int64x2_t lt = vreinterpretq_s64_u64(vcltq_s64(lhs_v, rhs_vec));
-        int64x2_t gt01 = vandq_s64(gt, ones);
-        int64x2_t lt01 = vandq_s64(lt, ones);
-        vst1q_s64(tmp, vsubq_s64(gt01, lt01));
-        for (size_t k = 0; k < kBlock; ++k) cmp_vector[i + k] = static_cast<int8_t>(tmp[k]);
+        int64x2_t l0 = vld1q_s64(lhs + i);
+        int64x2_t l1 = vld1q_s64(lhs + i + 2);
+        int64x2_t l2 = vld1q_s64(lhs + i + 4);
+        int64x2_t l3 = vld1q_s64(lhs + i + 6);
+        uint64x2_t gt0 = vcgtq_s64(l0, rhs_s);
+        uint64x2_t gt1 = vcgtq_s64(l1, rhs_s);
+        uint64x2_t gt2 = vcgtq_s64(l2, rhs_s);
+        uint64x2_t gt3 = vcgtq_s64(l3, rhs_s);
+        uint64x2_t lt0 = vcgtq_s64(rhs_s, l0);
+        uint64x2_t lt1 = vcgtq_s64(rhs_s, l1);
+        uint64x2_t lt2 = vcgtq_s64(rhs_s, l2);
+        uint64x2_t lt3 = vcgtq_s64(rhs_s, l3);
+
+        int8x8_t gt_mask = narrow_mask_64_to_8(gt0, gt1, gt2, gt3);
+        int8x8_t lt_mask = narrow_mask_64_to_8(lt0, lt1, lt2, lt3);
+        // True masks are -1 (0xFF) in int8_t, so lt_mask - gt_mask yields -1 (<), +1 (>), or 0 (==).
+        int8x8_t cmp = vsub_s8(lt_mask, gt_mask);
+        vst1_s8(cmp_vector + i, cmp);
     }
 #endif
     for (; i < n; ++i) {
@@ -254,29 +272,29 @@ static void prepare_compare(std::vector<int8_t>& cmp, std::vector<T>& lhs, int z
     }
 }
 
-#define DEFINE_COMPARE_BENCH(TYPE, NAME)                                               \
-    static void BM_Compare##NAME##_Scalar(benchmark::State& state) {                   \
-        std::vector<int8_t> cmp_init;                                                  \
-        std::vector<TYPE> lhs;                                                         \
-        prepare_compare<TYPE>(cmp_init, lhs, static_cast<int>(state.range(0)));        \
-        for (auto _ : state) {                                                         \
-            std::vector<int8_t> cmp = cmp_init;                                        \
-            compare_integral_scalar<TYPE>(cmp.data(), lhs.data(), TYPE{0}, kChunk);    \
-            benchmark::DoNotOptimize(cmp.data());                                      \
-        }                                                                              \
-    }                                                                                  \
-    static void BM_Compare##NAME##_SIMD(benchmark::State& state) {                     \
-        std::vector<int8_t> cmp_init;                                                  \
-        std::vector<TYPE> lhs;                                                         \
-        prepare_compare<TYPE>(cmp_init, lhs, static_cast<int>(state.range(0)));        \
-        for (auto _ : state) {                                                         \
-            std::vector<int8_t> cmp = cmp_init;                                        \
-            compare_integral_simd<TYPE>(cmp.data(), lhs.data(), TYPE{0}, kChunk);      \
-            benchmark::DoNotOptimize(cmp.data());                                      \
-        }                                                                              \
-    }                                                                                  \
-    BENCHMARK(BM_Compare##NAME##_Scalar)->Arg(0)->Arg(50)->Arg(90)->Arg(99)->Arg(100); \
-    BENCHMARK(BM_Compare##NAME##_SIMD)->Arg(0)->Arg(50)->Arg(90)->Arg(99)->Arg(100);
+#define DEFINE_COMPARE_BENCH(TYPE, NAME)                                                                \
+    static void BM_Compare##NAME##_Scalar(benchmark::State& state) {                                    \
+        std::vector<int8_t> cmp_init;                                                                   \
+        std::vector<TYPE> lhs;                                                                          \
+        prepare_compare<TYPE>(cmp_init, lhs, static_cast<int>(state.range(0)));                         \
+        for (auto _ : state) {                                                                          \
+            std::vector<int8_t> cmp = cmp_init;                                                         \
+            compare_integral_scalar<TYPE>(cmp.data(), lhs.data(), TYPE{0}, kChunk);                     \
+            benchmark::DoNotOptimize(cmp.data());                                                       \
+        }                                                                                               \
+    }                                                                                                   \
+    static void BM_Compare##NAME##_SIMD(benchmark::State& state) {                                      \
+        std::vector<int8_t> cmp_init;                                                                   \
+        std::vector<TYPE> lhs;                                                                          \
+        prepare_compare<TYPE>(cmp_init, lhs, static_cast<int>(state.range(0)));                         \
+        for (auto _ : state) {                                                                          \
+            std::vector<int8_t> cmp = cmp_init;                                                         \
+            compare_integral_simd<TYPE>(cmp.data(), lhs.data(), TYPE{0}, kChunk);                       \
+            benchmark::DoNotOptimize(cmp.data());                                                       \
+        }                                                                                               \
+    }                                                                                                   \
+    BENCHMARK(BM_Compare##NAME##_Scalar)->Arg(0)->Arg(1)->Arg(12)->Arg(50)->Arg(90)->Arg(99)->Arg(100); \
+    BENCHMARK(BM_Compare##NAME##_SIMD)->Arg(0)->Arg(1)->Arg(12)->Arg(50)->Arg(90)->Arg(99)->Arg(100);
 
 DEFINE_COMPARE_BENCH(int8_t, Int8)
 DEFINE_COMPARE_BENCH(int32_t, Int32)
