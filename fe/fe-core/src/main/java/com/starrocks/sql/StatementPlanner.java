@@ -20,6 +20,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
@@ -141,7 +142,8 @@ public class StatementPlanner {
         PlannerMetaLocker plannerMetaLocker = null;
         // 1. For all queries, we need db lock when analyze phase
         try (var guard = session.bindScope();
-                var ignoredBudget = StatisticsLoadBudget.openScope(session)) {
+                var ignoredBudget = StatisticsLoadBudget.openScope(session);
+                var ignoredStability = ColocateTableIndex.openStabilityScope(session)) {
             SPMPlanner spmPlanner = new SPMPlanner(session);
             stmt = spmPlanner.plan(stmt);
 

@@ -51,6 +51,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -275,6 +276,9 @@ public class ConnectContext {
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
     private StatisticsLoadBudget statisticsLoadBudget;
+    // StarMgr's answers on whether shared-data colocate groups are stable, kept for the statement being planned.
+    // Scoped to one statement by ColocateTableIndex.StabilityScope.
+    private Map<ColocateTableIndex.GroupId, Boolean> colocateGroupStability;
 
     // What the unlocked pre-pass resolved for the statement being planned, handed to the locked analyzer.
     // Scoped to one statement: StatementPlanner clears it.
@@ -1450,6 +1454,14 @@ public class ConnectContext {
 
     public void setStatisticsLoadBudget(StatisticsLoadBudget statisticsLoadBudget) {
         this.statisticsLoadBudget = statisticsLoadBudget;
+    }
+
+    public Map<ColocateTableIndex.GroupId, Boolean> getColocateGroupStability() {
+        return colocateGroupStability;
+    }
+
+    public void setColocateGroupStability(Map<ColocateTableIndex.GroupId, Boolean> colocateGroupStability) {
+        this.colocateGroupStability = colocateGroupStability;
     }
 
     public QuerySource getQuerySource() {
