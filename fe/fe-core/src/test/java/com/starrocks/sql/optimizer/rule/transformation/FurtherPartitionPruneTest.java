@@ -152,6 +152,16 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         assertTrue(plan.contains("partitions=1/4"), plan);
     }
 
+    // a value/range constraint AND an IS NULL constraint on the same column can never be TRUE
+    // at the same time; the OR range derivation folds such predicates to an empty scan
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("emptySetSqlList")
+    @Order(2)
+    void testEmptySetSql(String sql) throws Exception {
+        String plan = getFragmentPlan(sql);
+        assertTrue(plan.contains("0:EMPTYSET"), plan);
+    }
+
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("twoPartitionsSqlList")
     @Order(3)
@@ -245,8 +255,6 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from ptest where d2 not in (null, null) and s1 like '%1'");
         sqlList.add(
                 "select * from ptest where (d2 < '1000-01-01' or s1 >= '2020-12-01') and d2 not in ('2020-01-01', null)");
-        sqlList.add(
-                "select * from ptest where (d2 < '1900-01-01' or d2 in ('2020-01-01') or d2 is null) and d2 > '2020-07-01'");
         sqlList.add("select * from tbl_int where not (k1 in (null, 1) or k1 not in (1,2,3))");
         sqlList.add("select * from tbl_int where not (k1 >= 0 and k1 < 400)");
         sqlList.add("select * from tbl_int where not (k1 >= 0 and k1 < 400 or s1 > s2)");
@@ -258,14 +266,22 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
+    private static Stream<Arguments> emptySetSqlList() {
+        List<String> sqlList = Lists.newArrayList();
+        sqlList.add("select * from less_than_tbl where k1 = '2020-06-30' and k1 is null");
+        sqlList.add("select * from less_than_tbl where k1 > '2020-06-30' and k1 is null");
+        sqlList.add("select * from less_than_tbl where k1 < '2020-08-01' and k1 is null");
+        sqlList.add(
+                "select * from ptest where (d2 < '1900-01-01' or d2 in ('2020-01-01') or d2 is null) and d2 > '2020-07-01'");
+        return sqlList.stream().map(e -> Arguments.of(e));
+    }
+
     private static Stream<Arguments> onePartitionSqlList() {
         List<String> sqlList = Lists.newArrayList();
         sqlList.add("select * from tbl_int where k1 = 1 = true");
         sqlList.add("select * from less_than_tbl where k1 is null");
         sqlList.add("select * from less_than_tbl where k1 is null or k1 <=> null");
         sqlList.add("select * from less_than_tbl where k1 = 1 and k1 is null");
-        sqlList.add("select * from less_than_tbl where k1 = '2020-06-30' and k1 is null");
-        sqlList.add("select * from less_than_tbl where k1 > '2020-06-30' and k1 is null");
         sqlList.add("select * from less_than_tbl where k1 != '2020-06-30' and k1 is null");
 
         sqlList.add(
@@ -448,7 +464,6 @@ class FurtherPartitionPruneTest extends PlanTestBase {
                 "d2 < str_to_date('2020-04-01 12:34:56', '%Y-%m-%d')");
         sqlList.add("select * from less_than_tbl where k1 < str_to_date('20200801', '%Y%m%d')");
         sqlList.add("select * from less_than_tbl where k1 < '2020-08-01' and k1 is not null");
-        sqlList.add("select * from less_than_tbl where k1 < '2020-08-01' and k1 is null");
         sqlList.add("select * from ptest where date_trunc('year', d2) = '2020-01-01'");
         sqlList.add("select * from less_than_tbl where date_trunc('year', k1) < '2020-08-01'");
         sqlList.add("select * from less_than_tbl where datediff('2020-08-01', k1) = 1");
