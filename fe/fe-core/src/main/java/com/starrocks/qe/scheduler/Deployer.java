@@ -511,8 +511,16 @@ public class Deployer {
         TExecBatchPlanFragmentsParams tRequest = new TExecBatchPlanFragmentsParams();
         tRequest.setUnique_param_per_instance(requestsToDeploy);
 
-        // 1. create a common param with desc table, it will prepare first to create query context and desc table
-        TExecPlanFragmentParams commonParam = requestsToDeploy.get(0).deepCopy();
+        // 1. create a common param with desc table, it will prepare first to create query context and desc table.
+        // Copy the fields of the first request by reference: deepCopy() would rebuild its whole fragment, including
+        // a TTypeDesc for every expr node, while the fragment shares one TTypeDesc per type.
+        TExecPlanFragmentParams firstRequest = requestsToDeploy.get(0);
+        TExecPlanFragmentParams commonParam = new TExecPlanFragmentParams();
+        for (TExecPlanFragmentParams._Fields field : TExecPlanFragmentParams._Fields.values()) {
+            if (firstRequest.isSet(field)) {
+                commonParam.setFieldValue(field, firstRequest.getFieldValue(field));
+            }
+        }
         commonParam.setDesc_tbl(jobSpec.getDescTable());
         tRequest.setCommon_param(commonParam);
 

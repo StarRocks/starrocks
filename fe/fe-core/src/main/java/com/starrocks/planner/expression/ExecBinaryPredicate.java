@@ -66,7 +66,7 @@ public class ExecBinaryPredicate extends ExecExpr {
         node.setVector_opcode(TExprOpcode.INVALID_OPCODE);
         Type childType = children.get(0).getType();
         if (childType.isComplexType()) {
-            node.setChild_type_desc(TypeSerializer.toThrift(childType));
+            node.setChild_type_desc(TypeDescSharingScope.toThrift(childType));
         } else {
             node.setChild_type(TypeSerializer.toThrift(childType.getPrimitiveType()));
         }
