@@ -2375,7 +2375,8 @@ CONF_mBool(enable_profile_for_external_plan, "false");
 // the max length supported for varchar type
 CONF_mInt32(olap_string_max_length, "1048576");
 
-// Skip get from pk index when light pk compaction publish is enabled
+// Skip get from pk index when light pk compaction publish is enabled.
+// Only for shared-nothing primary key tables: shared-data primary key tables always use light compaction publish.
 CONF_mBool(enable_light_pk_compaction_publish, "true");
 
 // jit LRU object cache size for total 32 shards, it will be an auto value if it < 0

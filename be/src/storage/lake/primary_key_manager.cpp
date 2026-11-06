@@ -2243,11 +2243,11 @@ size_t PrimaryKeyManager::get_rowset_num_deletes(const TabletMetadata& metadata,
 }
 
 bool PrimaryKeyManager::_use_light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction) {
-    // Is config enable ?
-    if (!config::enable_light_pk_compaction_publish) {
-        return false;
-    }
-
+    // Shared-data compaction always writes the rows mapper (.lcrm) and records it in the txn log, so light publish is
+    // used whenever the txn log has one. A txn log without it comes from a compaction with no output rows, or from an
+    // older release (4.0 kept the mapper on the compacting node's local disk, 4.1 could compact without light
+    // publish); publish_primary_compaction handles it with the full publish path.
+    //
     // WHY: Light publish optimization uses the pre-computed rows mapper to avoid re-reading
     // and re-processing compaction input/output rowsets during publish phase. This can reduce
     // publish time from minutes to seconds for large compactions.
@@ -2590,56 +2590,6 @@ void PrimaryKeyManager::try_remove_cache(uint32_t tablet_id, int64_t txn_id) {
     auto key = cache_key(tablet_id, txn_id);
     _update_state_cache.try_remove_by_key(key);
     _compaction_cache.try_remove_by_key(key);
-}
-
-void PrimaryKeyManager::preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet,
-                                                 const TabletSchemaCSPtr& tablet_schema) {
-    // use process mem tracker instread of load mem tracker here.
-    SCOPED_THREAD_LOCAL_MEM_SETTER(RuntimeEnv::GetInstance()->process_mem_tracker(), true);
-    SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _primary_key_mem_tracker
-                                                                                             : nullptr);
-    // no need to preload if using light compaction publish
-    if (StorageEngine::instance()->enable_light_pk_compaction_publish()) {
-        return;
-    }
-    // no need to preload if output rowset is empty.
-    const int segments_size = txnlog.op_compaction().output_rowset().segment_metas_size();
-    if (segments_size <= 0) return;
-    scoped_refptr<Trace> trace_guard(new Trace);
-    ADOPT_TRACE(trace_guard.get());
-    TRACE("start preload_compaction_state tablet_id=$0 txn_id=$1", tablet.id(), txnlog.txn_id());
-    auto start_ts = MonotonicMillis();
-    Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &txnlog.op_compaction().output_rowset(), -1 /*unused*/,
-                         tablet_schema);
-    // use tabletid-txnid as compaction state cache's key, so it can retry safe.
-    auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txnlog.txn_id()));
-    compaction_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
-    auto& compaction_state = compaction_entry->value();
-    // preload compaction state, only load first output segment, to avoid too much memory cost
-    auto st = Status::OK();
-    // skip preload if memory limit exceed
-    for (int i = 0; i < segments_size && !_compaction_state_mem_tracker->any_limit_exceeded(); i++) {
-        st = compaction_state.load_segments(&output_rowset, this, tablet_schema, i);
-        if (!st.ok()) {
-            break;
-        }
-    }
-    if (!st.ok()) {
-        _compaction_cache.remove(compaction_entry);
-        LOG(ERROR) << strings::Substitute("lake primary table preload_compaction_state id:$0 error:$1", tablet.id(),
-                                          st.to_string());
-        // not return error even it fail, because we can load compaction state in publish again.
-    } else {
-        // just release it, will use it again in publish
-        _compaction_cache.release(compaction_entry);
-    }
-    auto cost_ms = MonotonicMillis() - start_ts;
-    if (cost_ms >= config::lake_publish_version_slow_log_ms) {
-        LOG(INFO) << "Slow preload_compaction_state tablet_id=" << tablet.id() << " txn_id=" << txnlog.txn_id()
-                  << " segments=" << segments_size << " cost=" << cost_ms
-                  << "ms, trace: " << trace_guard->MetricsAsJSON();
-    }
-    TEST_SYNC_POINT("PrimaryKeyManager::preload_compaction_state:return");
 }
 
 DEFINE_FAIL_POINT(fail_execute_index_major_compaction);
