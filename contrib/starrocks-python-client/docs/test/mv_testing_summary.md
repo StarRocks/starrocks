@@ -122,7 +122,7 @@
 
 **Simple Cases**:
 
-- Definition change (NotImplementedError)
+- Definition change (DROP and CREATE, with a warning)
 
 **Coverage Cases** (Detecting attribute changes):
 
@@ -132,7 +132,7 @@
   - Partition by change
   - Distributed by change
   - Order by change
-- Comment change (NotImplementedError, as StarRocks does not support `ALTER MV ... COMMENT`)
+- Comment change (DROP and CREATE, as StarRocks does not support `ALTER MV ... COMMENT`)
 
 ### No Change
 
@@ -203,7 +203,7 @@
 
 ## 4. Reflection Tests
 
-**File**: `test/integration/test_reflection_mvs.py`
+**File**: `test/integration/test_reflection_mv.py`
 
 ### Reflection API
 

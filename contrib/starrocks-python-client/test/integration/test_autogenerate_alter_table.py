@@ -28,35 +28,78 @@ TEST SCOPE:
 - Verify reflection + comparison accuracy
 - NOT testing actual ALTER execution (some operations aren't supported)
 
-These tests require a real StarRocks database connection.
-Set STARROCKS_URL environment variable to run these tests.
-
-Example: STARROCKS_URL=starrocks://user:pass@localhost:9030/test_db
+These tests run against the plugin's StarRocks database.
 """
 
 import logging
 import textwrap
-from typing import Optional
-from unittest.mock import Mock
+from typing import Callable, Optional
+from unittest.mock import Mock, patch
 
-from alembic.autogenerate import comparators
+from alembic.autogenerate import api, comparators
+from alembic.autogenerate.api import AutogenContext
 from alembic.operations.ops import ModifyTableOps, UpgradeOps
-import pytest
-from sqlalchemy import Column, Integer, MetaData, String, Table
-from sqlalchemy.engine import Engine
+from alembic.runtime.migration import MigrationContext
+from sqlalchemy import Column, Integer, MetaData, String, Table, testing
+from sqlalchemy.engine import Connection
+from sqlalchemy.testing import config, fixtures
 
 from starrocks.alembic.compare import compare_starrocks_table
 from starrocks.common.params import AlterTableEnablement, TableInfoKeyWithPrefix
 from starrocks.common.types import PartitionType, SystemRunMode
 from starrocks.engine.interfaces import ReflectedPartitionInfo
-from test.conftest_sr import create_test_engine, test_default_schema
-from test import test_utils
+from starrocks.requirements import IS_SQLALCHEMY_2
+from test.util import STATISTIC_COLLECT_PROPERTY_MISSING, normalize_sql
+
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.integration
-class TestAlterTableIntegration:
+class AutogenerateOnEitherSqlalchemyTest(fixtures.TestBase):
+    """Autogenerate compares tables on SQLAlchemy 1.4 too, whose inspector lists no materialized views itself."""
+
+    __backend__ = True
+    __only_on__ = "starrocks"
+
+    def test_a_new_table_is_created(self, connection):
+        metadata = MetaData()
+        Table("autogen_either_sqla", metadata, Column("id", Integer), starrocks_properties={"replication_num": "1"})
+
+        def only_this_table(name, type_, parent_names):
+            return type_ != "table" or name == "autogen_either_sqla"
+
+        context = MigrationContext.configure(connection, opts={"include_name": only_this_table})
+        upgrade_ops = api.produce_migrations(context, metadata).upgrade_ops.ops
+        assert [(type(op).__name__, op.table_name) for op in upgrade_ops] == [("CreateTableOp", "autogen_either_sqla")]
+
+    @testing.only_if(lambda: not IS_SQLALCHEMY_2, "SQLAlchemy 2.0 compares views and materialized views")
+    def test_views_and_mvs_are_left_alone_on_sqlalchemy_1_4(self, connection, caplog):
+        connection.exec_driver_sql(
+            "CREATE TABLE autogen_14_base (id INT) DISTRIBUTED BY HASH(id) PROPERTIES('replication_num' = '1')"
+        )
+        try:
+            connection.exec_driver_sql("CREATE VIEW autogen_14_view AS SELECT id FROM autogen_14_base")
+            connection.exec_driver_sql(
+                "CREATE MATERIALIZED VIEW autogen_14_mv REFRESH MANUAL PROPERTIES('replication_num' = '1') "
+                "AS SELECT id FROM autogen_14_base"
+            )
+            metadata = MetaData()
+            Table("autogen_14_base", metadata, Column("id", Integer), starrocks_properties={"replication_num": "1"})
+
+            def only_this_table(name, type_, parent_names):
+                return type_ != "table" or name == "autogen_14_base"
+
+            context = MigrationContext.configure(connection, opts={"include_name": only_this_table})
+            assert api.produce_migrations(context, metadata).upgrade_ops.ops == []
+            assert "leaves the database's alone: autogen_14_view" in caplog.text
+            assert "leaves the database's alone: autogen_14_mv" in caplog.text
+        finally:
+            connection.exec_driver_sql("DROP MATERIALIZED VIEW IF EXISTS autogen_14_mv")
+            connection.exec_driver_sql("DROP VIEW IF EXISTS autogen_14_view")
+            connection.exec_driver_sql("DROP TABLE IF EXISTS autogen_14_base")
+
+
+class AlterTableIntegrationTest(fixtures.TestBase):
     """
     Integration tests for ALTER TABLE comparison logic.
 
@@ -74,251 +117,221 @@ class TestAlterTableIntegration:
     Uses real reflected table data instead of mocks.
     """
 
-    engine: Engine
-    test_schema: Optional[str]
+    __backend__ = True
+    __only_on__ = "starrocks"
 
     @classmethod
-    def setup_class(cls) -> None:
-        """Set up test class with StarRocks connection."""
-        cls.engine = create_test_engine()
-        cls.test_schema = test_default_schema
-
-        # Create test schema if it doesn't exist
-        with cls.engine.connect() as conn:
-            try:
-                conn.exec_driver_sql(f"CREATE DATABASE IF NOT EXISTS {cls.test_schema}")
-                conn.commit()
-            except Exception as e:
-                pytest.skip(f"Could not create test schema: {e}")
-
-    @classmethod
-    def teardown_class(cls) -> None:
-        """Clean up test resources."""
-        with cls.engine.connect() as conn:
-            try:
-                # Clean up test tables from default database
-                result = conn.exec_driver_sql("SHOW TABLES")
-                for row in result:
-                    table_name = row[0]
-
-                    conn.exec_driver_sql(f"DROP TABLE IF EXISTS {table_name}")
-                conn.commit()
-            except Exception:
-                pass  # Ignore cleanup errors
-        cls.engine.dispose()
+    def setup_test_class(cls):
+        """Tables are named with the worker's database, so parallel workers stay apart."""
+        cls.test_schema = config.db.url.database
 
     def _get_full_table_name(self, table_name: str) -> str:
         return f"{self.test_schema}.{table_name}" if self.test_schema else table_name
 
-    def _setup_autogen_context(self) -> Mock:
+    def _table_comparators(
+        self, connection: Connection, target_metadata: MetaData
+    ) -> tuple[AutogenContext, Callable[..., object]]:
+        """A real AutogenContext and the table comparators autogenerate would run, Alembic's own included.
+
+        Alembic 1.20 registers its built-in comparators, the table comment one among them, on each
+        AutogenContext rather than on the global ``comparators`` registry, which is all a mocked context sees.
+        """
+        autogen_context = AutogenContext(MigrationContext.configure(connection=connection), metadata=target_metadata)
+        return autogen_context, getattr(autogen_context, "comparators", comparators).dispatch("table")
+
+    def _setup_autogen_context(self, connection: Connection) -> Mock:
         """Helper to create AutogenContext for testing."""
         from alembic.autogenerate.api import AutogenContext
         from sqlalchemy import inspect
         autogen_context = Mock(spec=AutogenContext)
-        autogen_context.dialect = self.engine.dialect
-        autogen_context.inspector = inspect(self.engine)
+        autogen_context.dialect = connection.dialect
+        autogen_context.inspector = inspect(connection)
         return autogen_context
 
-    def test_table_comment_change_detection(self) -> None:
+    def test_table_comment_change_detection(self, connection) -> None:
         """
         Test: Table comment change detection from one value to another.
         """
         table_name = "test_comment_change"
-        with self.engine.connect() as conn:
-            conn.exec_driver_sql(
-                f"""CREATE TABLE {self._get_full_table_name(table_name)} (id INT)
-                COMMENT 'old comment'
-                PROPERTIES("replication_num" = "1")"""
+        connection.exec_driver_sql(
+            f"""CREATE TABLE {self._get_full_table_name(table_name)} (id INT)
+            COMMENT 'old comment'
+            PROPERTIES("replication_num" = "1")"""
+        )
+        try:
+            metadata_db = MetaData()
+            reflected_table = Table(table_name, metadata_db, autoload_with=connection, schema=self.test_schema)
+            assert reflected_table.comment == 'old comment'
+
+            metadata_target = MetaData()
+            target_table = Table(
+                table_name, metadata_target,
+                Column('id', Integer),
+                comment='new comment',
+                schema=self.test_schema,
+                starrocks_properties={"replication_num": "1"}
             )
-            conn.commit()
-            try:
-                metadata_db = MetaData()
-                reflected_table = Table(table_name, metadata_db, autoload_with=self.engine, schema=self.test_schema)
-                assert reflected_table.comment == 'old comment'
 
-                metadata_target = MetaData()
-                target_table = Table(
-                    table_name, metadata_target,
-                    Column('id', Integer),
-                    comment='new comment',
-                    schema=self.test_schema,
-                    starrocks_properties={"replication_num": "1"}
-                )
+            autogen_context, compare_table = self._table_comparators(connection, metadata_target)
+            modify_table_ops = ModifyTableOps(table_name, [], schema=self.test_schema)
 
-                autogen_context = self._setup_autogen_context()
-                modify_table_ops = ModifyTableOps(table_name, [], schema=self.test_schema)
+            compare_table(
+                autogen_context,
+                modify_table_ops,
+                self.test_schema,
+                table_name,
+                reflected_table,
+                target_table
+            )
 
-                # Call the table comparator dispatcher which includes comment comparison
-                comparators.dispatch("table")(
-                    autogen_context,
-                    modify_table_ops,
-                    self.test_schema,
-                    table_name,
-                    reflected_table,
-                    target_table
-                )
+            result = modify_table_ops.ops
 
-                result = modify_table_ops.ops
+            assert len(result) == 1
+            op = result[0]
+            # Alembic uses CreateTableCommentOp for comment changes
+            from alembic.operations.ops import CreateTableCommentOp
+            assert isinstance(op, CreateTableCommentOp)
+            logger.debug(f"op of comment change: {op!r}")
+            assert op.table_name == table_name
+            assert op.comment == 'new comment'
+            assert op.existing_comment == 'old comment'
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {self._get_full_table_name(table_name)}")
 
-                assert len(result) == 1
-                op = result[0]
-                # Alembic uses CreateTableCommentOp for comment changes
-                from alembic.operations.ops import CreateTableCommentOp
-                assert isinstance(op, CreateTableCommentOp)
-                logger.debug(f"op of comment change: {op!r}")
-                assert op.table_name == table_name
-                assert op.comment == 'new comment'
-                assert op.existing_comment == 'old comment'
-            finally:
-                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self._get_full_table_name(table_name)}")
-                conn.commit()
-
-    def test_table_comment_addition_detection(self) -> None:
+    def test_table_comment_addition_detection(self, connection) -> None:
         """
         Test: Table comment addition (from no comment to having one).
         """
         table_name = "test_comment_addition"
-        with self.engine.connect() as conn:
-            conn.exec_driver_sql(f"CREATE TABLE {self._get_full_table_name(table_name)} (id INT) PROPERTIES(\"replication_num\" = \"1\")")
-            conn.commit()
-            try:
-                metadata_db = MetaData()
-                reflected_table = Table(table_name, metadata_db, autoload_with=self.engine, schema=self.test_schema)
-                assert reflected_table.comment is None
+        connection.exec_driver_sql(f"CREATE TABLE {self._get_full_table_name(table_name)} (id INT) PROPERTIES(\"replication_num\" = \"1\")")
+        try:
+            metadata_db = MetaData()
+            reflected_table = Table(table_name, metadata_db, autoload_with=connection, schema=self.test_schema)
+            assert reflected_table.comment is None
 
-                metadata_target = MetaData()
-                target_table = Table(
-                    table_name, metadata_target,
-                    Column('id', Integer),
-                    comment='new comment',
-                    schema=self.test_schema,
-                    starrocks_properties={"replication_num": "1"}
-                )
+            metadata_target = MetaData()
+            target_table = Table(
+                table_name, metadata_target,
+                Column('id', Integer),
+                comment='new comment',
+                schema=self.test_schema,
+                starrocks_properties={"replication_num": "1"}
+            )
 
-                autogen_context = self._setup_autogen_context()
-                modify_table_ops = ModifyTableOps(table_name, [], schema=self.test_schema)
+            autogen_context, compare_table = self._table_comparators(connection, metadata_target)
+            modify_table_ops = ModifyTableOps(table_name, [], schema=self.test_schema)
 
-                # Call the table comparator dispatcher which includes comment comparison
-                comparators.dispatch("table")(
-                    autogen_context,
-                    modify_table_ops,
-                    self.test_schema,
-                    table_name,
-                    reflected_table,
-                    target_table
-                )
+            compare_table(
+                autogen_context,
+                modify_table_ops,
+                self.test_schema,
+                table_name,
+                reflected_table,
+                target_table
+            )
 
-                result = modify_table_ops.ops
+            result = modify_table_ops.ops
 
-                assert len(result) == 1
-                op = result[0]
-                from alembic.operations.ops import CreateTableCommentOp
-                assert isinstance(op, CreateTableCommentOp)
-                assert op.table_name == table_name
-                assert op.comment == 'new comment'
-                assert op.existing_comment is None
-            finally:
-                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self._get_full_table_name(table_name)}")
-                conn.commit()
+            assert len(result) == 1
+            op = result[0]
+            from alembic.operations.ops import CreateTableCommentOp
+            assert isinstance(op, CreateTableCommentOp)
+            assert op.table_name == table_name
+            assert op.comment == 'new comment'
+            assert op.existing_comment is None
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {self._get_full_table_name(table_name)}")
 
-    def test_table_comment_removal_detection(self) -> None:
+    def test_table_comment_removal_detection(self, connection) -> None:
         """
         Test: Table comment removal.
         """
         table_name = "test_comment_removal"
-        with self.engine.connect() as conn:
-            conn.exec_driver_sql(
-                f"""CREATE TABLE {self._get_full_table_name(table_name)} (id INT)
-                COMMENT 'old comment'
-                PROPERTIES("replication_num" = "1")"""
+        connection.exec_driver_sql(
+            f"""CREATE TABLE {self._get_full_table_name(table_name)} (id INT)
+            COMMENT 'old comment'
+            PROPERTIES("replication_num" = "1")"""
+        )
+        try:
+            metadata_db = MetaData()
+            reflected_table = Table(table_name, metadata_db, autoload_with=connection, schema=self.test_schema)
+            assert reflected_table.comment == 'old comment'
+
+            metadata_target = MetaData()
+            target_table = Table(
+                table_name, metadata_target,
+                Column('id', Integer),
+                comment=None,
+                schema=self.test_schema,
+                starrocks_properties={"replication_num": "1"}
             )
-            conn.commit()
-            try:
-                metadata_db = MetaData()
-                reflected_table = Table(table_name, metadata_db, autoload_with=self.engine, schema=self.test_schema)
-                assert reflected_table.comment == 'old comment'
 
-                metadata_target = MetaData()
-                target_table = Table(
-                    table_name, metadata_target,
-                    Column('id', Integer),
-                    comment=None,
-                    schema=self.test_schema,
-                    starrocks_properties={"replication_num": "1"}
-                )
+            autogen_context, compare_table = self._table_comparators(connection, metadata_target)
+            modify_table_ops = ModifyTableOps(table_name, [], schema=self.test_schema)
 
-                autogen_context = self._setup_autogen_context()
-                modify_table_ops = ModifyTableOps(table_name, [], schema=self.test_schema)
+            compare_table(
+                autogen_context,
+                modify_table_ops,
+                self.test_schema,
+                table_name,
+                reflected_table,
+                target_table
+            )
 
-                # Call the table comparator dispatcher which includes comment comparison
-                comparators.dispatch("table")(
-                    autogen_context,
-                    modify_table_ops,
-                    self.test_schema,
-                    table_name,
-                    reflected_table,
-                    target_table
-                )
+            result = modify_table_ops.ops
 
-                result = modify_table_ops.ops
+            assert len(result) == 1
+            op = result[0]
+            from alembic.operations.ops import DropTableCommentOp
+            assert isinstance(op, DropTableCommentOp)
+            assert op.table_name == table_name
+            assert op.existing_comment == 'old comment'
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {self._get_full_table_name(table_name)}")
 
-                assert len(result) == 1
-                op = result[0]
-                from alembic.operations.ops import DropTableCommentOp
-                assert isinstance(op, DropTableCommentOp)
-                assert op.table_name == table_name
-                assert op.existing_comment == 'old comment'
-            finally:
-                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self._get_full_table_name(table_name)}")
-                conn.commit()
-
-    def test_table_comment_no_change_detection(self) -> None:
+    def test_table_comment_no_change_detection(self, connection) -> None:
         """
         Test: No change in table comment.
         """
         table_name = "test_comment_no_change"
-        with self.engine.connect() as conn:
-            conn.exec_driver_sql(
-                f"""CREATE TABLE {self._get_full_table_name(table_name)} (id INT)
-                COMMENT 'same comment'
-                PROPERTIES("replication_num" = "1")"""
+        connection.exec_driver_sql(
+            f"""CREATE TABLE {self._get_full_table_name(table_name)} (id INT)
+            COMMENT 'same comment'
+            PROPERTIES("replication_num" = "1")"""
+        )
+        try:
+            metadata_db = MetaData()
+            reflected_table = Table(table_name, metadata_db, autoload_with=connection, schema=self.test_schema)
+            assert reflected_table.comment == 'same comment'
+
+            metadata_target = MetaData()
+            target_table = Table(
+                table_name, metadata_target,
+                Column('id', Integer),
+                comment='same comment',
+                schema=self.test_schema,
+                starrocks_PROPERTIES={"replication_num": "1"}
             )
-            conn.commit()
-            try:
-                metadata_db = MetaData()
-                reflected_table = Table(table_name, metadata_db, autoload_with=self.engine, schema=self.test_schema)
-                assert reflected_table.comment == 'same comment'
 
-                metadata_target = MetaData()
-                target_table = Table(
-                    table_name, metadata_target,
-                    Column('id', Integer),
-                    comment='same comment',
-                    schema=self.test_schema,
-                    starrocks_PROPERTIES={"replication_num": "1"}
-                )
+            autogen_context, compare_table = self._table_comparators(connection, metadata_target)
+            modify_table_ops = ModifyTableOps(table_name, [], schema=self.test_schema)
 
-                autogen_context = self._setup_autogen_context()
-                modify_table_ops = ModifyTableOps(table_name, [], schema=self.test_schema)
+            compare_table(
+                autogen_context,
+                modify_table_ops,
+                self.test_schema,
+                table_name,
+                reflected_table,
+                target_table
+            )
 
-                # Call the table comparator dispatcher which includes comment comparison
-                comparators.dispatch("table")(
-                    autogen_context,
-                    modify_table_ops,
-                    self.test_schema,
-                    table_name,
-                    reflected_table,
-                    target_table
-                )
+            result = modify_table_ops.ops
 
-                result = modify_table_ops.ops
+            assert len(result) == 0
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {self._get_full_table_name(table_name)}")
 
-                assert len(result) == 0
-            finally:
-                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self._get_full_table_name(table_name)}")
-                conn.commit()
-
-    def test_distribution_change_detection(self) -> None:
+    def test_distribution_change_detection(self, connection) -> None:
         """
         Test: Distribution change detection with real reflection.
 
@@ -329,63 +342,60 @@ class TestAlterTableIntegration:
         """
         table_name = "test_distribution_change"
 
-        with self.engine.connect() as conn:
-            # Create table with initial distribution
-            full_table_name = self._get_full_table_name(table_name)
-            conn.exec_driver_sql(f"""
-                CREATE TABLE {full_table_name} (
-                    id INT,
-                    user_id INT
-                )
-                DISTRIBUTED BY HASH(id) BUCKETS 4
-                PROPERTIES ("replication_num" = "1")
-            """)
-            conn.commit()
+        # Create table with initial distribution
+        full_table_name = self._get_full_table_name(table_name)
+        connection.exec_driver_sql(f"""
+            CREATE TABLE {full_table_name} (
+                id INT,
+                user_id INT
+            )
+            DISTRIBUTED BY HASH(id) BUCKETS 4
+            PROPERTIES ("replication_num" = "1")
+        """)
 
-            try:
-                # Reflect actual table
-                metadata_db = MetaData()
-                reflected_table = Table(
-                    table_name, metadata_db,
-                    autoload_with=self.engine,
-                    schema=self.test_schema
-                )
+        try:
+            # Reflect actual table
+            metadata_db = MetaData()
+            reflected_table = Table(
+                table_name, metadata_db,
+                autoload_with=connection,
+                schema=self.test_schema
+            )
 
-                # Target: different distribution
-                metadata_target = MetaData()
-                target_table = Table(
-                    table_name, metadata_target,
-                    Column('id', Integer),
-                    Column('user_id', Integer),
-                    **{
-                        "starrocks_DISTRIBUTED_BY": "HASH(user_id) BUCKETS 8",
-                        "starrocks_PROPERTIES": {"replication_num": "1"}
-                    },
-                    schema=self.test_schema
-                )
+            # Target: different distribution
+            metadata_target = MetaData()
+            target_table = Table(
+                table_name, metadata_target,
+                Column('id', Integer),
+                Column('user_id', Integer),
+                **{
+                    "starrocks_DISTRIBUTED_BY": "HASH(user_id) BUCKETS 8",
+                    "starrocks_PROPERTIES": {"replication_num": "1"}
+                },
+                schema=self.test_schema
+            )
 
-                # Compare
-                autogen_context = self._setup_autogen_context()
-                upgrade_ops = UpgradeOps()
-                compare_starrocks_table(
-                    autogen_context, upgrade_ops, self.test_schema, table_name, reflected_table, target_table
-                )
-                result = upgrade_ops.ops
+            # Compare
+            autogen_context = self._setup_autogen_context(connection)
+            upgrade_ops = UpgradeOps()
+            compare_starrocks_table(
+                autogen_context, upgrade_ops, self.test_schema, table_name, reflected_table, target_table
+            )
+            result = upgrade_ops.ops
 
-                # Should detect distribution change
-                assert len(result) == 1
-                from starrocks.alembic.ops import AlterTableDistributionOp
-                op: AlterTableDistributionOp = result[0]
-                assert isinstance(op, AlterTableDistributionOp)
-                assert op.table_name == table_name
-                assert op.distribution_method == "HASH(user_id)"
-                assert op.buckets == 8
+            # Should detect distribution change
+            assert len(result) == 1
+            from starrocks.alembic.ops import AlterTableDistributionOp
+            op: AlterTableDistributionOp = result[0]
+            assert isinstance(op, AlterTableDistributionOp)
+            assert op.table_name == table_name
+            assert op.distribution_method == "HASH(user_id)"
+            assert op.buckets == 8
 
-            finally:
-                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
-                conn.commit()
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
 
-    def test_partition_change_detection(self) -> None:
+    def test_partition_change_detection(self, connection) -> None:
         """
         Test: Partition change detection with real reflection.
 
@@ -395,72 +405,67 @@ class TestAlterTableIntegration:
         """
         table_name = "test_partition_change"
 
-        with self.engine.connect() as conn:
-            # Create table with no partitioning initially
-            conn.exec_driver_sql(textwrap.dedent(f"""
-                CREATE TABLE {table_name} (
-                    id INT,
-                    dt INT
-                )
-                PARTITION BY RANGE( from_unixtime(dt ) ) (
-                    PARTITION p1 VALUES [('2023-01-01'), ('2023-02-01'))
-                )
-                DISTRIBUTED BY HASH(id) BUCKETS 4
-                PROPERTIES ("replication_num" = "1")
-            """))
-            conn.commit()
+        # Create table with no partitioning initially
+        connection.exec_driver_sql(textwrap.dedent(f"""
+            CREATE TABLE {table_name} (
+                id INT,
+                dt INT
+            )
+            PARTITION BY RANGE( from_unixtime(dt ) ) (
+                PARTITION p1 VALUES [('2023-01-01'), ('2023-02-01'))
+            )
+            DISTRIBUTED BY HASH(id) BUCKETS 4
+            PROPERTIES ("replication_num" = "1")
+        """))
 
-            try:
-                # Reflect actual table
-                metadata_db = MetaData()
-                reflected_table = Table(
-                    table_name, metadata_db,
-                    autoload_with=self.engine,
-                    schema=self.test_schema
-                )
-                partition_info = reflected_table.kwargs.get(TableInfoKeyWithPrefix.PARTITION_BY)
-                assert partition_info is not None and isinstance(partition_info, ReflectedPartitionInfo)
-                assert partition_info.type == PartitionType.RANGE
-                assert test_utils.normalize_sql(partition_info.partition_method) == "RANGE(from_unixtime(dt))"
-                assert test_utils.normalize_sql(partition_info.pre_created_partitions) \
-                    == test_utils.normalize_sql("(PARTITION p1 VALUES [('2023-01-01 00:00:00'), ('2023-02-01 00:00:00')))")
+        try:
+            # Reflect actual table
+            metadata_db = MetaData()
+            reflected_table = Table(
+                table_name, metadata_db,
+                autoload_with=connection,
+                schema=self.test_schema
+            )
+            partition_info = reflected_table.kwargs.get(TableInfoKeyWithPrefix.PARTITION_BY)
+            assert partition_info is not None and isinstance(partition_info, ReflectedPartitionInfo)
+            assert partition_info.type == PartitionType.RANGE
+            assert normalize_sql(partition_info.partition_method) == "RANGE(from_unixtime(dt))"
+            assert normalize_sql(partition_info.pre_created_partitions) \
+                == normalize_sql("(PARTITION p1 VALUES [('2023-01-01 00:00:00'), ('2023-02-01 00:00:00')))")
 
-                # Target: add RANGE partition
-                metadata_target = MetaData()
-                target_table = Table(
-                    table_name, metadata_target,
-                    Column('id', Integer),
-                    Column('dt', Integer), # Use int for date column in metadata for simplicity
-                    **{
-                        "starrocks_partition_by": "RANGE(dt) (PARTITION p1 VALUES [('2025-01-01'), ('2025-02-01')))",
-                        "starrocks_distributed_by": "HASH(id) BUCKETS 4",
-                        "starrocks_properties": {"replication_num": "1"},
-                    },
-                    schema=self.test_schema
-                )
+            # Target: add RANGE partition
+            metadata_target = MetaData()
+            target_table = Table(
+                table_name, metadata_target,
+                Column('id', Integer),
+                Column('dt', Integer), # Use int for date column in metadata for simplicity
+                **{
+                    "starrocks_partition_by": "RANGE(dt) (PARTITION p1 VALUES [('2025-01-01'), ('2025-02-01')))",
+                    "starrocks_distributed_by": "HASH(id) BUCKETS 4",
+                    "starrocks_properties": {"replication_num": "1"},
+                },
+                schema=self.test_schema
+            )
 
-                # Compare
-                AlterTableEnablement.PARTITION_BY = True  # Enable partition comparison
-                autogen_context = self._setup_autogen_context()
-                upgrade_ops = UpgradeOps()
+            autogen_context = self._setup_autogen_context(connection)
+            upgrade_ops = UpgradeOps()
+            with patch.object(AlterTableEnablement, "PARTITION_BY", True):
                 compare_starrocks_table(
                     autogen_context, upgrade_ops, self.test_schema, table_name, reflected_table, target_table
                 )
-                result = upgrade_ops.ops
-                AlterTableEnablement.PARTITION_BY = False  # Disable back to default
+            result = upgrade_ops.ops
 
-                # Should detect partition change
-                assert len(result) == 1
-                from starrocks.alembic.ops import AlterTablePartitionOp
-                op: AlterTablePartitionOp = result[0]
-                assert isinstance(op, AlterTablePartitionOp)
-                assert op.table_name == table_name
-                assert op.partition_method == "RANGE(dt)"
-            finally:
-                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
-                conn.commit()
+            # Should detect partition change
+            assert len(result) == 1
+            from starrocks.alembic.ops import AlterTablePartitionOp
+            op: AlterTablePartitionOp = result[0]
+            assert isinstance(op, AlterTablePartitionOp)
+            assert op.table_name == table_name
+            assert op.partition_method == "RANGE(dt)"
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
 
-    def test_order_by_addition_detection(self) -> None:
+    def test_order_by_addition_detection(self, connection) -> None:
         """
         Test: ORDER BY addition detection with real reflection.
 
@@ -471,61 +476,58 @@ class TestAlterTableIntegration:
         """
         table_name = "test_order_addition"
 
-        with self.engine.connect() as conn:
-            # Create table without ORDER BY
-            conn.exec_driver_sql(f"""
-                CREATE TABLE {self.test_schema}.{table_name} (
-                    id INT,
-                    created_at DATETIME
-                )
-                DISTRIBUTED BY HASH(id)
-                PROPERTIES ("replication_num" = "1")
-            """)
-            conn.commit()
+        # Create table without ORDER BY
+        connection.exec_driver_sql(f"""
+            CREATE TABLE {self.test_schema}.{table_name} (
+                id INT,
+                created_at DATETIME
+            )
+            DISTRIBUTED BY HASH(id)
+            PROPERTIES ("replication_num" = "1")
+        """)
 
-            try:
-                # Reflect actual table
-                metadata_db = MetaData()
-                reflected_table = Table(
-                    table_name, metadata_db,
-                    autoload_with=self.engine,
-                    schema=self.test_schema
-                )
+        try:
+            # Reflect actual table
+            metadata_db = MetaData()
+            reflected_table = Table(
+                table_name, metadata_db,
+                autoload_with=connection,
+                schema=self.test_schema
+            )
 
-                # Target: add ORDER BY
-                metadata_target = MetaData()
-                target_table = Table(
-                    table_name, metadata_target,
-                    Column('id', Integer),
-                    Column('created_at', String),  # Simplified type for test
-                    **{
-                        "starrocks_distributed_by": "HASH(id)",
-                        "starrocks_order_by": "created_at",
-                        "starrocks_properties": {"replication_num": "1"}
-                    },
-                    schema=self.test_schema
-                )
+            # Target: add ORDER BY
+            metadata_target = MetaData()
+            target_table = Table(
+                table_name, metadata_target,
+                Column('id', Integer),
+                Column('created_at', String),  # Simplified type for test
+                **{
+                    "starrocks_distributed_by": "HASH(id)",
+                    "starrocks_order_by": "created_at",
+                    "starrocks_properties": {"replication_num": "1"}
+                },
+                schema=self.test_schema
+            )
 
-                # Compare
-                autogen_context = self._setup_autogen_context()
-                upgrade_ops = UpgradeOps()
-                compare_starrocks_table(
-                    autogen_context, upgrade_ops, self.test_schema, table_name, reflected_table, target_table
-                )
-                result = upgrade_ops.ops
+            # Compare
+            autogen_context = self._setup_autogen_context(connection)
+            upgrade_ops = UpgradeOps()
+            compare_starrocks_table(
+                autogen_context, upgrade_ops, self.test_schema, table_name, reflected_table, target_table
+            )
+            result = upgrade_ops.ops
 
-                # Should detect ORDER BY addition
-                assert len(result) == 1
-                from starrocks.alembic.ops import AlterTableOrderOp
-                op = result[0]
-                assert isinstance(op, AlterTableOrderOp)
-                assert op.order_by == "created_at"
+            # Should detect ORDER BY addition
+            assert len(result) == 1
+            from starrocks.alembic.ops import AlterTableOrderOp
+            op = result[0]
+            assert isinstance(op, AlterTableOrderOp)
+            assert op.order_by == "created_at"
 
-            finally:
-                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
-                conn.commit()
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
 
-    def test_properties_change_detection(self) -> None:
+    def test_properties_change_detection(self, connection) -> None:
         """
         Test: Properties change detection with real reflection.
 
@@ -536,88 +538,85 @@ class TestAlterTableIntegration:
         """
         table_name = "test_properties_change"
 
-        with self.engine.connect() as conn:
-            # Create table with initial properties
+        # Create table with initial properties
+        full_table_name: str = self._get_full_table_name(table_name)
+        connection.exec_driver_sql(f"""
+            CREATE TABLE {full_table_name} (
+                id INT,
+                name VARCHAR(50)
+            )
+            DISTRIBUTED BY HASH(id)
+            PROPERTIES ("replication_num" = "1")
+        """)
+
+        try:
+            # Reflect actual table from database
+            metadata_db = MetaData()
+            reflected_table = Table(
+                table_name, metadata_db,
+                autoload_with=connection,  # the table will directly be reflected from the database
+                schema=self.test_schema
+            )
+
+            # Define target state with different properties
+            metadata_target = MetaData()
+            target_table = Table(
+                table_name, metadata_target,
+                Column('id', Integer),
+                Column('name', String(50)),
+                **{
+                    "starrocks_distributed_by": "HASH(id)",
+                    "starrocks_order_by": ["id", "name"],
+                    "starrocks_properties": {
+                        "replication_num": "2",  # Changed
+                        "storage_medium": "SSD"  # Added
+                    }
+                },
+                schema=self.test_schema
+            )
+
+            # Debug: log what was reflected
+            logger.info("=== REFLECTED TABLE INFO ===")
+            logger.info("reflected_table.kwargs (dict): %s", dict(reflected_table.kwargs))
+            logger.info("target_table.kwargs (dict): %s", dict(target_table.kwargs))
+
+            # Check if properties are in the expected location
+            reflected_props: dict = reflected_table.kwargs.get(TableInfoKeyWithPrefix.PROPERTIES, {})
+            target_props: dict = target_table.kwargs.get(TableInfoKeyWithPrefix.PROPERTIES, {})
+            logger.info("reflected_props: %s", reflected_props)
+            logger.info("target_props: %s", target_props)
+
+            # Compare and verify
+            autogen_context: Mock = self._setup_autogen_context(connection)
+            upgrade_ops = UpgradeOps()
+            compare_starrocks_table(
+                autogen_context, upgrade_ops, self.test_schema, table_name, reflected_table, target_table
+            )
+            result = upgrade_ops.ops
+
+            # Debug: log operations generated
+            logger.info("=== OPERATIONS GENERATED ===")
+            for i, op in enumerate(result):
+                logger.info("%d: %s - %s", i, type(op).__name__, op.__dict__)
+
+            # Should detect properties change
+            assert len(result) == 1
+            from starrocks.alembic.ops import AlterTablePropertiesOp
+            op: AlterTablePropertiesOp = result[0]
+            assert isinstance(op, AlterTablePropertiesOp)
+            assert op.table_name == table_name
+            assert op.schema == self.test_schema
+            if connection.dialect.run_mode == SystemRunMode.SHARED_DATA:
+                assert "default.replication_num" in op.properties
+            else:
+                assert op.properties == {"default.replication_num": "2", "default.storage_medium": "SSD"}
+
+        finally:
+            # Clean up
             full_table_name: str = self._get_full_table_name(table_name)
-            conn.exec_driver_sql(f"""
-                CREATE TABLE {full_table_name} (
-                    id INT,
-                    name VARCHAR(50)
-                )
-                DISTRIBUTED BY HASH(id)
-                PROPERTIES ("replication_num" = "1")
-            """)
-            conn.commit()
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {full_table_name}")
 
-            try:
-                # Reflect actual table from database
-                metadata_db = MetaData()
-                reflected_table = Table(
-                    table_name, metadata_db,
-                    autoload_with=self.engine,  # the table will directly be reflected from the database
-                    schema=self.test_schema
-                )
-
-                # Define target state with different properties
-                metadata_target = MetaData()
-                target_table = Table(
-                    table_name, metadata_target,
-                    Column('id', Integer),
-                    Column('name', String(50)),
-                    **{
-                        "starrocks_distributed_by": "HASH(id)",
-                        "starrocks_order_by": ["id", "name"],
-                        "starrocks_properties": {
-                            "replication_num": "2",  # Changed
-                            "storage_medium": "SSD"  # Added
-                        }
-                    },
-                    schema=self.test_schema
-                )
-
-                # Debug: log what was reflected
-                logger.info("=== REFLECTED TABLE INFO ===")
-                logger.info("reflected_table.kwargs (dict): %s", dict(reflected_table.kwargs))
-                logger.info("target_table.kwargs (dict): %s", dict(target_table.kwargs))
-
-                # Check if properties are in the expected location
-                reflected_props: dict = reflected_table.kwargs.get(TableInfoKeyWithPrefix.PROPERTIES, {})
-                target_props: dict = target_table.kwargs.get(TableInfoKeyWithPrefix.PROPERTIES, {})
-                logger.info("reflected_props: %s", reflected_props)
-                logger.info("target_props: %s", target_props)
-
-                # Compare and verify
-                autogen_context: Mock = self._setup_autogen_context()
-                upgrade_ops = UpgradeOps()
-                compare_starrocks_table(
-                    autogen_context, upgrade_ops, self.test_schema, table_name, reflected_table, target_table
-                )
-                result = upgrade_ops.ops
-
-                # Debug: log operations generated
-                logger.info("=== OPERATIONS GENERATED ===")
-                for i, op in enumerate(result):
-                    logger.info("%d: %s - %s", i, type(op).__name__, op.__dict__)
-
-                # Should detect properties change
-                assert len(result) == 1
-                from starrocks.alembic.ops import AlterTablePropertiesOp
-                op: AlterTablePropertiesOp = result[0]
-                assert isinstance(op, AlterTablePropertiesOp)
-                assert op.table_name == table_name
-                assert op.schema == self.test_schema
-                if self.engine.dialect.run_mode == SystemRunMode.SHARED_DATA:
-                    assert "default.replication_num" in op.properties
-                else:
-                    assert op.properties == {"default.replication_num": "2", "default.storage_medium": "SSD"}
-
-            finally:
-                # Clean up
-                full_table_name: str = self._get_full_table_name(table_name)
-                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {full_table_name}")
-                conn.commit()
-
-    def test_no_changes_detection(self) -> None:
+    def test_no_changes_detection(self, connection) -> None:
         """
         Test: No changes detection with real reflection.
 
@@ -628,70 +627,69 @@ class TestAlterTableIntegration:
         """
         table_name = "test_no_changes"
 
-        with self.engine.connect() as conn:
-            # Create table
-            conn.exec_driver_sql(f"""
-                CREATE TABLE {self.test_schema}.{table_name} (
-                    id INT,
-                    name VARCHAR(50)
-                )
-                DISTRIBUTED BY HASH(id) BUCKETS 8
-                PROPERTIES ("replication_num" = "1")
-            """)
-            conn.commit()
+        # Create table
+        connection.exec_driver_sql(f"""
+            CREATE TABLE {self.test_schema}.{table_name} (
+                id INT,
+                name VARCHAR(50)
+            )
+            DISTRIBUTED BY HASH(id) BUCKETS 8
+            PROPERTIES ("replication_num" = "1")
+        """)
 
-            try:
-                # Reflect actual table
-                metadata_db = MetaData()
-                reflected_table = Table(
-                    table_name, metadata_db,
-                    autoload_with=self.engine,
-                    schema=self.test_schema
-                )
+        try:
+            # Reflect actual table
+            metadata_db = MetaData()
+            reflected_table = Table(
+                table_name, metadata_db,
+                autoload_with=connection,
+                schema=self.test_schema
+            )
 
-                # For true no-change test, we should match what user would write
-                # that results in the same logical structure
-                metadata_target = MetaData()
-                target_table = Table(
-                    table_name, metadata_target,
-                    Column('id', Integer),
-                    Column('name', String(50)),
-                    **{
-                        # Use normalized format (without backticks) - should be equivalent
-                        "starrocks_distributed_by": "HASH(id)   BUCKETS    8",
-                        # Only specify non-default properties that user cares about
-                        "starrocks_properties": {"replication_num": "1"}
-                    },
-                    schema=self.test_schema
-                )
+            # For true no-change test, we should match what user would write
+            # that results in the same logical structure
+            metadata_target = MetaData()
+            target_table = Table(
+                table_name, metadata_target,
+                Column('id', Integer),
+                Column('name', String(50)),
+                **{
+                    # Use normalized format (without backticks) - should be equivalent
+                    "starrocks_distributed_by": "HASH(id)   BUCKETS    8",
+                    # Only specify non-default properties that user cares about
+                    "starrocks_properties": {"replication_num": "1"}
+                },
+                schema=self.test_schema
+            )
 
-                # Debug: log what was reflected
-                logger.info("=== REFLECTED TABLE INFO ===")
-                logger.info("reflected_table.kwargs (dict): %s", dict(reflected_table.kwargs))
-                logger.info("target_table.kwargs (dict): %s", dict(target_table.kwargs))
+            # Debug: log what was reflected
+            logger.info("=== REFLECTED TABLE INFO ===")
+            logger.info("reflected_table.kwargs (dict): %s", dict(reflected_table.kwargs))
+            logger.info("target_table.kwargs (dict): %s", dict(target_table.kwargs))
 
-                # Compare
-                autogen_context = self._setup_autogen_context()
-                upgrade_ops = UpgradeOps()
-                compare_starrocks_table(
-                    autogen_context, upgrade_ops, self.test_schema, table_name, reflected_table, target_table
-                )
-                result = upgrade_ops.ops
+            # Compare
+            autogen_context = self._setup_autogen_context(connection)
+            upgrade_ops = UpgradeOps()
+            compare_starrocks_table(
+                autogen_context, upgrade_ops, self.test_schema, table_name, reflected_table, target_table
+            )
+            result = upgrade_ops.ops
 
-                # Debug: log operations generated
-                logger.info("=== OPERATIONS GENERATED ===")
-                for i, op in enumerate(result):
-                    logger.info("%d: %s - %s", i, type(op).__name__, op.__dict__)
+            # Debug: log operations generated
+            logger.info("=== OPERATIONS GENERATED ===")
+            for i, op in enumerate(result):
+                logger.info("%d: %s - %s", i, type(op).__name__, op.__dict__)
 
-                # Should detect NO changes
-                assert len(result) == 0, f"Expected no changes, but got: {result}"
+            # Should detect NO changes
+            assert len(result) == 0, f"Expected no changes, but got: {result}"
 
-            finally:
-                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
-                conn.commit()
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
 
-    @pytest.mark.parametrize("db_bucket_size", [None, "2147483648"], ids=["server_default", "explicit_2gib"])
-    def test_random_bucket_size_not_reset_when_unmanaged(self, db_bucket_size: Optional[str]) -> None:
+    @testing.combinations(
+        ("server_default", None), ("explicit_2gib", "2147483648"), argnames="db_bucket_size", id_="ia"
+    )
+    def test_random_bucket_size_not_reset_when_unmanaged(self, connection, db_bucket_size: Optional[str]) -> None:
         """
         Test: an unmanaged bucket_size on a RANDOM table is left alone.
 
@@ -707,53 +705,50 @@ class TestAlterTableIntegration:
         table_name = "test_random_bucket_size"
         bucket_size_prop = f', "bucket_size" = "{db_bucket_size}"' if db_bucket_size else ""
 
-        with self.engine.connect() as conn:
-            conn.exec_driver_sql(f"""
-                CREATE TABLE {self.test_schema}.{table_name} (
-                    id INT,
-                    name VARCHAR(50)
-                )
-                DUPLICATE KEY(id)
-                DISTRIBUTED BY RANDOM
-                PROPERTIES ("replication_num" = "1"{bucket_size_prop})
-            """)
-            conn.commit()
+        connection.exec_driver_sql(f"""
+            CREATE TABLE {self.test_schema}.{table_name} (
+                id INT,
+                name VARCHAR(50)
+            )
+            DUPLICATE KEY(id)
+            DISTRIBUTED BY RANDOM
+            PROPERTIES ("replication_num" = "1"{bucket_size_prop})
+        """)
 
-            try:
-                reflected_table = Table(
-                    table_name, MetaData(),
-                    autoload_with=self.engine,
-                    schema=self.test_schema
-                )
-                reflected_bucket_size = reflected_table.dialect_options["starrocks"]["properties"].get("bucket_size")
-                logger.info("reflected bucket_size: %s", reflected_bucket_size)
-                if db_bucket_size:
-                    assert reflected_bucket_size == db_bucket_size
+        try:
+            reflected_table = Table(
+                table_name, MetaData(),
+                autoload_with=connection,
+                schema=self.test_schema
+            )
+            reflected_bucket_size = reflected_table.dialect_options["starrocks"]["properties"].get("bucket_size")
+            logger.info("reflected bucket_size: %s", reflected_bucket_size)
+            if db_bucket_size:
+                assert reflected_bucket_size == db_bucket_size
 
-                target_table = Table(
-                    table_name, MetaData(),
-                    Column('id', Integer),
-                    Column('name', String(50)),
-                    **{
-                        "starrocks_duplicate_key": "id",
-                        "starrocks_distributed_by": "RANDOM",
-                        "starrocks_properties": {"replication_num": "1"}
-                    },
-                    schema=self.test_schema
-                )
+            target_table = Table(
+                table_name, MetaData(),
+                Column('id', Integer),
+                Column('name', String(50)),
+                **{
+                    "starrocks_duplicate_key": "id",
+                    "starrocks_distributed_by": "RANDOM",
+                    "starrocks_properties": {"replication_num": "1"}
+                },
+                schema=self.test_schema
+            )
 
-                autogen_context = self._setup_autogen_context()
-                upgrade_ops = UpgradeOps()
-                compare_starrocks_table(
-                    autogen_context, upgrade_ops, self.test_schema, table_name, reflected_table, target_table
-                )
-                assert upgrade_ops.ops == [], f"Expected no changes, but got: {upgrade_ops.ops}"
+            autogen_context = self._setup_autogen_context(connection)
+            upgrade_ops = UpgradeOps()
+            compare_starrocks_table(
+                autogen_context, upgrade_ops, self.test_schema, table_name, reflected_table, target_table
+            )
+            assert upgrade_ops.ops == [], f"Expected no changes, but got: {upgrade_ops.ops}"
 
-            finally:
-                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
-                conn.commit()
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
 
-    def test_multiple_changes_detection(self) -> None:
+    def test_multiple_changes_detection(self, connection) -> None:
         """
         Test: Multiple changes detection with real reflection.
 
@@ -766,75 +761,71 @@ class TestAlterTableIntegration:
         """
         table_name = "test_multiple_changes"
 
-        with self.engine.connect() as conn:
-            # Create table with baseline state
-            conn.exec_driver_sql(f"""
-                CREATE TABLE {self.test_schema}.{table_name} (
-                    id INT,
-                    user_id INT
-                )
-                DISTRIBUTED BY HASH(id) BUCKETS 4
-                PROPERTIES ("replication_num" = "1")
-            """)
-            conn.commit()
+        # Create table with baseline state
+        connection.exec_driver_sql(f"""
+            CREATE TABLE {self.test_schema}.{table_name} (
+                id INT,
+                user_id INT
+            )
+            DISTRIBUTED BY HASH(id) BUCKETS 4
+            PROPERTIES ("replication_num" = "1")
+        """)
 
-            try:
-                # Reflect actual table
-                metadata_db = MetaData()
-                reflected_table = Table(
-                    table_name, metadata_db,
-                    autoload_with=self.engine,
-                    schema=self.test_schema
-                )
+        try:
+            # Reflect actual table
+            metadata_db = MetaData()
+            reflected_table = Table(
+                table_name, metadata_db,
+                autoload_with=connection,
+                schema=self.test_schema
+            )
 
-                # Target: multiple changes
-                metadata_target = MetaData()
-                target_table = Table(
-                    table_name, metadata_target,
-                    Column('id', Integer),
-                    Column('user_id', Integer),
-                    **{
-                        "starrocks_DISTRIBUTED_BY": "RANDOM BUCKETS 8",  # Changed
-                        "starrocks_ORDER_BY": "id",  # Added
-                        "starrocks_PROPERTIES": {  # Changed
-                            "replication_num": "2",
-                            "storage_medium": "SSD"
-                        }
-                    },
-                    schema=self.test_schema
-                )
+            # Target: multiple changes
+            metadata_target = MetaData()
+            target_table = Table(
+                table_name, metadata_target,
+                Column('id', Integer),
+                Column('user_id', Integer),
+                **{
+                    "starrocks_DISTRIBUTED_BY": "RANDOM BUCKETS 8",  # Changed
+                    "starrocks_ORDER_BY": "id",  # Added
+                    "starrocks_PROPERTIES": {  # Changed
+                        "replication_num": "2",
+                        "storage_medium": "SSD"
+                    }
+                },
+                schema=self.test_schema
+            )
 
-                # Compare
-                autogen_context: Mock = self._setup_autogen_context()
-                upgrade_ops = UpgradeOps()
-                compare_starrocks_table(
-                    autogen_context, upgrade_ops, self.test_schema, table_name, reflected_table, target_table
-                )
-                result = upgrade_ops.ops
+            # Compare
+            autogen_context: Mock = self._setup_autogen_context(connection)
+            upgrade_ops = UpgradeOps()
+            compare_starrocks_table(
+                autogen_context, upgrade_ops, self.test_schema, table_name, reflected_table, target_table
+            )
+            result = upgrade_ops.ops
 
-                # Should detect 3 changes
-                assert len(result) == 3
+            # Should detect 3 changes
+            assert len(result) == 3
 
-                from starrocks.alembic.ops import AlterTableDistributionOp, AlterTableOrderOp, AlterTablePropertiesOp
-                # op_types: list = [type(op) for op in result]
-                distribution_op: AlterTableDistributionOp = result[0]
-                assert distribution_op.distribution_method == "RANDOM"
-                assert distribution_op.buckets == 8
-                order_op: AlterTableOrderOp = result[1]
-                assert order_op.order_by == "id"
-                properties_op: AlterTablePropertiesOp = result[2]
-                if self.engine.dialect.run_mode == SystemRunMode.SHARED_DATA:
-                    assert "default.replication_num" in properties_op.properties
-                else:
-                    assert properties_op.properties == {"default.replication_num": "2", "default.storage_medium": "SSD"}
+            from starrocks.alembic.ops import AlterTableDistributionOp, AlterTableOrderOp, AlterTablePropertiesOp
+            # op_types: list = [type(op) for op in result]
+            distribution_op: AlterTableDistributionOp = result[0]
+            assert distribution_op.distribution_method == "RANDOM"
+            assert distribution_op.buckets == 8
+            order_op: AlterTableOrderOp = result[1]
+            assert order_op.order_by == "id"
+            properties_op: AlterTablePropertiesOp = result[2]
+            if connection.dialect.run_mode == SystemRunMode.SHARED_DATA:
+                assert "default.replication_num" in properties_op.properties
+            else:
+                assert properties_op.properties == {"default.replication_num": "2", "default.storage_medium": "SSD"}
 
-            finally:
-                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
-                conn.commit()
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
 
 
-@pytest.mark.integration
-class TestEnableStatisticCollectOnFirstLoadIntegration:
+class EnableStatisticCollectOnFirstLoadIntegrationTest(fixtures.TestBase):
     """End-to-end tests for the `enable_statistic_collect_on_first_load` property.
 
     StarRocks only records this property in information_schema.tables_config when it is set
@@ -846,87 +837,82 @@ class TestEnableStatisticCollectOnFirstLoadIntegration:
     """
 
     PROP = "enable_statistic_collect_on_first_load"
-    engine: Engine
-    test_schema: Optional[str]
+
+    __backend__ = True
+    __only_on__ = "starrocks"
 
     @classmethod
-    def setup_class(cls) -> None:
-        cls.engine = create_test_engine()
-        cls.test_schema = test_default_schema
-        with cls.engine.connect() as conn:
-            conn.exec_driver_sql(f"CREATE DATABASE IF NOT EXISTS {cls.test_schema}")
-            conn.commit()
+    def setup_test_class(cls):
+        """Tables are named with the worker's database, so parallel workers stay apart."""
+        cls.test_schema = config.db.url.database
 
-    @classmethod
-    def teardown_class(cls) -> None:
-        cls.engine.dispose()
-
-    def _setup_autogen_context(self) -> Mock:
+    def _setup_autogen_context(self, connection: Connection) -> Mock:
         from alembic.autogenerate.api import AutogenContext
         from sqlalchemy import inspect
         autogen_context = Mock(spec=AutogenContext)
-        autogen_context.dialect = self.engine.dialect
-        autogen_context.inspector = inspect(self.engine)
+        autogen_context.dialect = connection.dialect
+        autogen_context.inspector = inspect(connection)
         return autogen_context
 
-    def _ops_for(self, table_name: str, db_value: Optional[str], meta_props: dict):
+    def _ops_for(self, connection: Connection, table_name: str, db_value: Optional[str], meta_props: dict):
         """Create a table with the property set to ``db_value`` (or unset when None),
         reflect it, compare against a target with ``meta_props``, and return the ops.
         """
         full = f"{self.test_schema}.{table_name}"
-        with self.engine.connect() as conn:
-            conn.exec_driver_sql(f"DROP TABLE IF EXISTS {full}")
-            db_props = '"replication_num" = "1"'
-            if db_value is not None:
-                db_props += f', "{self.PROP}" = "{db_value}"'
-            conn.exec_driver_sql(
-                f"CREATE TABLE {full} (id INT) DISTRIBUTED BY HASH(id) PROPERTIES ({db_props})"
+        connection.exec_driver_sql(f"DROP TABLE IF EXISTS {full}")
+        db_props = '"replication_num" = "1"'
+        if db_value is not None:
+            db_props += f', "{self.PROP}" = "{db_value}"'
+        connection.exec_driver_sql(
+            f"CREATE TABLE {full} (id INT) DISTRIBUTED BY HASH(id) PROPERTIES ({db_props})"
+        )
+        try:
+            metadata_db = MetaData()
+            reflected_table = Table(
+                table_name, metadata_db, autoload_with=connection, schema=self.test_schema
             )
-            conn.commit()
-            try:
-                metadata_db = MetaData()
-                reflected_table = Table(
-                    table_name, metadata_db, autoload_with=self.engine, schema=self.test_schema
-                )
-                metadata_target = MetaData()
-                target_props = {"replication_num": "1", **meta_props}
-                target_table = Table(
-                    table_name, metadata_target,
-                    Column("id", Integer),
-                    schema=self.test_schema,
-                    starrocks_distributed_by="HASH(id)",
-                    starrocks_properties=target_props,
-                )
-                autogen_context = self._setup_autogen_context()
-                upgrade_ops = UpgradeOps()
-                compare_starrocks_table(
-                    autogen_context, upgrade_ops, self.test_schema, table_name,
-                    reflected_table, target_table,
-                )
-                return upgrade_ops.ops
-            finally:
-                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {full}")
-                conn.commit()
+            metadata_target = MetaData()
+            target_props = {"replication_num": "1", **meta_props}
+            target_table = Table(
+                table_name, metadata_target,
+                Column("id", Integer),
+                schema=self.test_schema,
+                starrocks_distributed_by="HASH(id)",
+                starrocks_properties=target_props,
+            )
+            autogen_context = self._setup_autogen_context(connection)
+            upgrade_ops = UpgradeOps()
+            compare_starrocks_table(
+                autogen_context, upgrade_ops, self.test_schema, table_name,
+                reflected_table, target_table,
+            )
+            return upgrade_ops.ops
+        finally:
+            connection.exec_driver_sql(f"DROP TABLE IF EXISTS {full}")
 
-    def test_meta_true_db_true_no_phantom_diff(self):
+    @STATISTIC_COLLECT_PROPERTY_MISSING
+    def test_meta_true_db_true_no_phantom_diff(self, connection):
         """The reported bug: model sets true, DB has it true (so it is not reported)."""
-        ops = self._ops_for("stat_true_true", db_value="true", meta_props={self.PROP: "true"})
+        ops = self._ops_for(connection, "stat_true_true", db_value="true", meta_props={self.PROP: "true"})
         assert len(ops) == 0, f"Unexpected phantom diff: {[type(o).__name__ for o in ops]}"
 
-    def test_meta_absent_db_false_no_implicit_reset(self):
+    @STATISTIC_COLLECT_PROPERTY_MISSING
+    def test_meta_absent_db_false_no_implicit_reset(self, connection):
         """DB has it false but the model does not manage it -> no spurious reset."""
-        ops = self._ops_for("stat_absent_false", db_value="false", meta_props={})
+        ops = self._ops_for(connection, "stat_absent_false", db_value="false", meta_props={})
         assert len(ops) == 0, f"Unexpected implicit reset: {[type(o).__name__ for o in ops]}"
 
-    def test_meta_false_db_false_no_change(self):
+    @STATISTIC_COLLECT_PROPERTY_MISSING
+    def test_meta_false_db_false_no_change(self, connection):
         """Both sides false -> no change."""
-        ops = self._ops_for("stat_false_false", db_value="false", meta_props={self.PROP: "false"})
+        ops = self._ops_for(connection, "stat_false_false", db_value="false", meta_props={self.PROP: "false"})
         assert len(ops) == 0, f"Unexpected diff: {[type(o).__name__ for o in ops]}"
 
-    def test_meta_true_db_false_detects_change(self):
+    @STATISTIC_COLLECT_PROPERTY_MISSING
+    def test_meta_true_db_false_detects_change(self, connection):
         """Model wants true while DB has it false -> a real change is detected."""
         from starrocks.alembic.ops import AlterTablePropertiesOp
-        ops = self._ops_for("stat_true_false", db_value="false", meta_props={self.PROP: "true"})
+        ops = self._ops_for(connection, "stat_true_false", db_value="false", meta_props={self.PROP: "true"})
         prop_ops = [o for o in ops if isinstance(o, AlterTablePropertiesOp)]
         assert len(prop_ops) == 1
         assert prop_ops[0].properties.get(self.PROP) == "true"

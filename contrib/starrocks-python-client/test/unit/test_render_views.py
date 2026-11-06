@@ -16,6 +16,7 @@ import logging
 from unittest.mock import Mock
 
 from alembic.autogenerate.api import AutogenContext
+from sqlalchemy.testing import fixtures
 
 from starrocks.alembic.ops import (
     AlterViewOp,
@@ -27,14 +28,14 @@ from starrocks.alembic.render import (
     _create_view,
     _drop_view,
 )
-from test.unit.test_render import _normalize_py_call
+from test.util import normalize_py_call
 
 
 logger = logging.getLogger(__name__)
 
 
-class TestViewRendering:
-    def setup_method(self, method):
+class ViewRenderingTest(fixtures.TestBase):
+    def setup_test(self):
         self.ctx = Mock(spec=AutogenContext)
 
     def test_render_create_view_basic(self):
@@ -42,21 +43,21 @@ class TestViewRendering:
         op = CreateViewOp("v1", "SELECT 1", schema=None, comment=None, starrocks_security=None)
         rendered = _create_view(self.ctx, op)
         expected = "op.create_view('v1', 'SELECT 1')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_render_create_view_with_schema(self):
         """Coverage: CREATE VIEW with schema attribute."""
         op = CreateViewOp("v1", "SELECT 1", schema="myschema")
         rendered = _create_view(self.ctx, op)
         expected = "op.create_view('v1', 'SELECT 1', schema='myschema')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_render_create_view_with_comment(self):
         """Coverage: CREATE VIEW with comment attribute."""
         op = CreateViewOp("v1", "SELECT 1", comment="Test view")
         rendered = _create_view(self.ctx, op)
         expected = "op.create_view('v1', 'SELECT 1', comment='Test view')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_render_create_view_with_security(self):
         """Coverage: CREATE VIEW with security attribute (DEFINER/INVOKER)."""
@@ -64,13 +65,13 @@ class TestViewRendering:
         op = CreateViewOp("v1", "SELECT 1", starrocks_security="INVOKER")
         rendered = _create_view(self.ctx, op)
         expected = "op.create_view('v1', 'SELECT 1', starrocks_security='INVOKER')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
         # Test DEFINER
         op2 = CreateViewOp("v2", "SELECT 2", starrocks_security="DEFINER")
         rendered2 = _create_view(self.ctx, op2)
         expected2 = "op.create_view('v2', 'SELECT 2', starrocks_security='DEFINER')"
-        assert _normalize_py_call(rendered2) == _normalize_py_call(expected2)
+        assert normalize_py_call(rendered2) == normalize_py_call(expected2)
 
     def test_render_create_view_with_columns(self):
         """Coverage: CREATE VIEW with columns attribute."""
@@ -91,7 +92,7 @@ class TestViewRendering:
             {'name': 'email', 'comment': 'Email address'}
         ])
         """
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_render_create_view_complex(self):
         """Complex: CREATE VIEW with all attributes combined."""
@@ -118,7 +119,7 @@ class TestViewRendering:
             starrocks_security='INVOKER'
             )
         """
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_render_drop_view_basic(self):
         """Simple: Basic DROP VIEW rendering."""
@@ -131,42 +132,42 @@ class TestViewRendering:
         op = DropViewOp("v1", schema="myschema", if_exists=False)
         rendered = _drop_view(self.ctx, op)
         expected = "op.drop_view('v1', schema='myschema')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_render_drop_view_with_if_exists(self):
         """Coverage: DROP VIEW with if_exists attribute."""
         op = DropViewOp("v1", schema=None, if_exists=True)
         rendered = _drop_view(self.ctx, op)
         expected = "op.drop_view('v1', if_exists=True)"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_render_drop_view_complex(self):
         """Complex: DROP VIEW with all attributes combined."""
         op = DropViewOp("v1", schema="myschema", if_exists=True)
         rendered = _drop_view(self.ctx, op)
         expected = "op.drop_view('v1', schema='myschema', if_exists=True)"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_render_alter_view_basic(self):
         """Simple: Basic ALTER VIEW rendering (definition only)."""
         op = AlterViewOp("v1", "SELECT 2", schema=None, comment=None, security=None)
         rendered = _alter_view(self.ctx, op)
         expected = "op.alter_view('v1', 'SELECT 2')"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_render_alter_view_with_comment(self):
         """Coverage: ALTER VIEW with comment attribute."""
         op = AlterViewOp("v1", definition=None, comment="Modified comment")
         rendered = _alter_view(self.ctx, op)
         expected = "op.alter_view('v1', comment='Modified comment'"
-        assert _normalize_py_call(expected) in _normalize_py_call(rendered)
+        assert normalize_py_call(expected) in normalize_py_call(rendered)
 
     def test_render_alter_view_with_security(self):
         """Coverage: ALTER VIEW with security attribute."""
         op = AlterViewOp("v1", definition=None, security="DEFINER")
         rendered = _alter_view(self.ctx, op)
         expected = "op.alter_view('v1', security='DEFINER'"
-        assert _normalize_py_call(expected) in _normalize_py_call(rendered)
+        assert normalize_py_call(expected) in normalize_py_call(rendered)
 
     def test_render_alter_view_partial_attrs(self):
         """Coverage: ALTER VIEW with multiple but not all attributes (key scenario)."""
@@ -179,7 +180,7 @@ class TestViewRendering:
         )
         rendered = _alter_view(self.ctx, op)
         expected = "op.alter_view('v1', schema='myschema', comment='Modified comment'"
-        assert _normalize_py_call(expected) in _normalize_py_call(rendered)
+        assert normalize_py_call(expected) in normalize_py_call(rendered)
 
     def test_render_alter_view_complex(self):
         """Complex: ALTER VIEW with all attributes combined."""
@@ -197,7 +198,7 @@ class TestViewRendering:
             comment='Modified view',
             security='DEFINER'
         """
-        assert _normalize_py_call(expected) in _normalize_py_call(rendered)
+        assert normalize_py_call(expected) in normalize_py_call(rendered)
 
     def test_render_view_with_special_chars(self):
         """Complex: Rendering view with special characters in definition and schema."""
@@ -209,12 +210,12 @@ class TestViewRendering:
         rendered = _create_view(self.ctx, op)
         logger.debug(f"rendered={rendered}")
         expected_list = [
-            f"op.create_view('v_complex', ",
+            "op.create_view('v_complex', ",
             f"{repr(op.definition)}, ",
             f"schema={repr(op.schema)})"
         ]
         expected = "".join(expected_list)
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_render_view_with_single_quotes(self):
         """Coverage: View definition with single quotes."""
@@ -224,7 +225,7 @@ class TestViewRendering:
         )
         rendered = _create_view(self.ctx, op)
         expected = f"op.create_view('view_quotes', {repr(op.definition)})"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_render_view_with_backslashes(self):
         """Coverage: View definition with backslashes."""
@@ -234,7 +235,7 @@ class TestViewRendering:
         )
         rendered = _create_view(self.ctx, op)
         expected = f"op.create_view('view_backslash', {repr(op.definition)})"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_render_view_multiline_definition(self):
         """Coverage: View definition with newlines (multi-line SQL)."""
@@ -248,7 +249,7 @@ WHERE id > 0"""
         )
         rendered = _create_view(self.ctx, op)
         expected = f"op.create_view('view_multiline', {repr(op.definition)})"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_render_view_with_mixed_special_chars(self):
         """Complex: View with mixed special characters (quotes, backslashes, newlines)."""
@@ -263,7 +264,7 @@ FROM users"""
         )
         rendered = _create_view(self.ctx, op)
         expected = f"op.create_view('view_mixed', {repr(op.definition)})"
-        assert _normalize_py_call(rendered) == _normalize_py_call(expected)
+        assert normalize_py_call(rendered) == normalize_py_call(expected)
 
     def test_create_view_reverse(self):
         """Reverse: CreateViewOp reverses to DropViewOp."""

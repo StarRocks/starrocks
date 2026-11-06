@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+
+
 class SystemRunMode:
     """`run_mode` values defined by StarRocks"""
     SHARED_DATA = "shared_data"
@@ -75,9 +78,11 @@ class PartitionType:
 
 
 class ColumnAggType:
-    """Supported StarRocks aggregate functions for value columns.
+    """StarRocks aggregate functions for the value columns of an AGGREGATE KEY table.
 
-    Use these constants in Column.info["starrocks_agg"].
+    Pass one as ``Column(..., starrocks_agg_type=ColumnAggType.SUM)``, and mark key columns with
+    ``Column(..., starrocks_is_agg_key=True)``. An aggregate state function such as ``"sum(BIGINT)"``, StarRocks'
+    ``aggStateDesc``, is accepted too.
     """
 
     # Key column type, rather than aggregate value type
@@ -85,46 +90,56 @@ class ColumnAggType:
 
     # Core aggregate types
     SUM = "SUM"
-    COUNT = "COUNT"
     MIN = "MIN"
     MAX = "MAX"
 
     # Specialized aggregate types
     HLL_UNION = "HLL_UNION"
     BITMAP_UNION = "BITMAP_UNION"
+    PERCENTILE_UNION = "PERCENTILE_UNION"
     REPLACE = "REPLACE"
     REPLACE_IF_NOT_NULL = "REPLACE_IF_NOT_NULL"
 
     # Allowed set for validation
     ALLOWED_ITEMS = {
         SUM,
-        COUNT,
         MIN,
         MAX,
         HLL_UNION,
         BITMAP_UNION,
+        PERCENTILE_UNION,
         REPLACE,
         REPLACE_IF_NOT_NULL,
     }
 
+    AGGREGATE_STATE_FUNCTION = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\s*\(.+\)", re.DOTALL)
+
+    @classmethod
+    def is_valid(cls, agg_type: str) -> bool:
+        """Return whether StarRocks accepts ``agg_type`` as a column's aggregate: a named one or a state function."""
+        return agg_type.upper() in cls.ALLOWED_ITEMS or cls.AGGREGATE_STATE_FUNCTION.fullmatch(agg_type) is not None
+
 
 class ViewSecurityType:
-    """Supported StarRocks view security types.
+    """StarRocks view security types, as ``View(..., starrocks_security=ViewSecurityType.INVOKER)``.
 
-    Use these constants in View.info["security"].
+    StarRocks has ``SECURITY NONE`` and ``SECURITY INVOKER`` only; ``DEFINER`` is kept as a deprecated name.
     """
 
     EMPTY = ""
     NONE = "NONE"
     INVOKER = "INVOKER"
     DEFINER = "DEFINER"
+    """Deprecated: StarRocks has no ``SECURITY DEFINER``, so the dialect refuses it with a CompileError.
+
+    It is kept so that code naming it still imports, and it is not in :attr:`ALLOWED_ITEMS`.
+    """
 
     # Allowed set for validation
     ALLOWED_ITEMS = {
         EMPTY,
         NONE,
         INVOKER,
-        DEFINER,
     }
 
 
