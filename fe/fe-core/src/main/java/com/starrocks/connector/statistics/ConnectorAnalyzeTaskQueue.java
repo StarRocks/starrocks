@@ -28,10 +28,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
-<<<<<<< HEAD
 import java.util.concurrent.TimeUnit;
-=======
->>>>>>> f5bd710 ([BugFix][RB-1044] Let the external analyze queue follow its running-task config and merge when full (#82555))
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ConnectorAnalyzeTaskQueue {
@@ -70,17 +67,11 @@ public class ConnectorAnalyzeTaskQueue {
 
         wLock.lock();
         try {
-<<<<<<< HEAD
-            if (pendingTasks.size() >= Config.connector_table_query_trigger_analyze_max_pending_task_num) {
-                LOG.warn("Connector Analyze TaskQueue pending task num reach limit: {}, current: {}",
-                        Config.connector_table_query_trigger_analyze_max_pending_task_num, pendingTasks.size());
-=======
             // the limit counts tables, merging columns into a table that is already pending does not grow the queue
             if (!pendingTasks.containsKey(tableUUID) &&
                     pendingTasks.size() >= Config.connector_table_query_trigger_analyze_max_pending_task_num) {
-                LOG.warn("[ExternalStats] trigger drop | table_uuid={} reason=pending_queue_full queue_size={}",
-                        tableUUID, pendingTasks.size());
->>>>>>> f5bd710 ([BugFix][RB-1044] Let the external analyze queue follow its running-task config and merge when full (#82555))
+                LOG.warn("Connector Analyze TaskQueue pending task num reach limit: {}, current: {}",
+                        Config.connector_table_query_trigger_analyze_max_pending_task_num, pendingTasks.size());
                 return false;
             }
 
