@@ -22,6 +22,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonParser;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -43,6 +45,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.AuditInternalLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
@@ -64,6 +67,7 @@ import com.starrocks.thrift.TStatisticData;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.type.JsonType;
 import com.starrocks.type.Type;
+import io.netty.buffer.Unpooled;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
@@ -74,6 +78,7 @@ import org.apache.thrift.protocol.TCompactProtocol;
 import org.jetbrains.annotations.NotNull;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Collections;
@@ -375,6 +380,36 @@ public class StatisticExecutor {
                                                  List<String> partitionNames, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildDropExternalStatSQLForPartitions(rawTableUUID, partitionNames, columnNames);
         LOG.debug("Cleanup stale raw-keyed external statistic rows SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
+    }
+
+    // Partitions of `tableUUID` whose external column statistics were all written more than `graceSeconds` ago.
+    // Reads the internal statistics table only; never touches the external catalog. Runs on the analyze job's
+    // own context, so KILL ANALYZE and the job's query timeout apply to it.
+    public List<String> queryExternalStatPartitionsNotUpdatedSince(ConnectContext statsConnectCtx, String tableUUID,
+                                                                  List<String> columnNames, long graceSeconds) {
+        String sql = StatisticSQLBuilder.buildQueryExternalStatPartitionsNotUpdatedSinceSQL(tableUUID, columnNames,
+                graceSeconds);
+        LOG.debug("Query external statistic partitions SQL: {}", sql);
+        List<String> partitionNames = Lists.newArrayList();
+        List<TResultBatch> batches = SimpleExecutor.getRepoExecutor().executeDQL(sql, statsConnectCtx);
+        for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
+            for (ByteBuffer buffer : batch.getRows()) {
+                String json = Unpooled.copiedBuffer(buffer).toString(StandardCharsets.UTF_8);
+                JsonArray data = JsonParser.parseString(json).getAsJsonObject().get("data").getAsJsonArray();
+                if (!data.get(0).isJsonNull()) {
+                    partitionNames.add(data.get(0).getAsString());
+                }
+            }
+        }
+        return partitionNames;
+    }
+
+    public boolean dropExternalStatDroppedPartitions(ConnectContext statsConnectCtx, String tableUUID,
+                                                     List<String> partitionNames, List<String> columnNames) {
+        String sql = StatisticSQLBuilder.buildDropExternalStatSQLForDroppedPartitions(tableUUID, partitionNames,
+                columnNames);
+        LOG.debug("Cleanup external statistic rows of dropped partitions SQL: {}", sql);
         return executeDML(statsConnectCtx, sql);
     }
 
