@@ -539,4 +539,50 @@ TEST(AppendWithMaskCoreTest, appendFixedLengthStrictBufferBoundaryUnderAsan) {
     }
 }
 
+TEST(AppendWithMaskCoreTest, sparseSelectionDoesNotOverAllocateCapacity) {
+    constexpr size_t kCount = 4096;
+    auto src = Int32Column::create();
+    for (size_t i = 0; i < kCount; ++i) {
+        src->append(static_cast<int32_t>(i * 10));
+    }
+
+    // 1. Extreme sparsity (2 of 4096 = 0.05% < 5%): must take scalar path and allocate exact size (2), not 4096
+    {
+        std::vector<uint8_t> mask(kCount, 0);
+        mask[17] = 1;
+        mask[3999] = 1;
+        auto dst = Int32Column::create();
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), kCount).ok());
+        ASSERT_EQ(2u, dst->size());
+        EXPECT_EQ(170, dst->get_data()[0]);
+        EXPECT_EQ(39990, dst->get_data()[1]);
+        EXPECT_LT(dst->get_data().capacity(), 64u);
+    }
+
+    // 2. Moderate density (10% = 410 of 4096 >= 5%): takes SIMD path, capacity bounded by selected + 16 (not 4096)
+    {
+        std::vector<uint8_t> mask(kCount, 0);
+        for (size_t i = 0; i < 410; ++i) {
+            mask[i * 10] = 1;
+        }
+        auto dst = Int32Column::create();
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), kCount).ok());
+        ASSERT_EQ(410u, dst->size());
+        EXPECT_LE(dst->get_data().capacity(), 1024u);
+        for (size_t i = 0; i < 410; ++i) {
+            EXPECT_EQ(static_cast<int32_t>(i * 100), dst->get_data()[i]);
+        }
+    }
+
+    // 3. Small batch (_count = 16 < 32) at 50% selectivity: takes scalar path without padding
+    {
+        std::vector<uint8_t> mask(16, 0);
+        for (size_t i = 0; i < 16; i += 2) mask[i] = 1;
+        auto dst = Int32Column::create();
+        ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask.data(), 16).ok());
+        ASSERT_EQ(8u, dst->size());
+        EXPECT_LE(dst->get_data().capacity(), 16u);
+    }
+}
+
 } // namespace starrocks

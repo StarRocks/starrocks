@@ -14,6 +14,7 @@
 
 #include "column/append_with_mask.h"
 
+#include <algorithm>
 #include <cstring>
 #include <type_traits>
 #include <vector>
@@ -155,35 +156,43 @@ Status AppendWithMaskVisitor<PositiveSelect>::append_fixed_length(FixedLengthCol
         return Status::OK();
     }
 
-    if constexpr (PositiveSelect && sizeof(T) <= 32) {
-        // Size destination buffer to orig_size + _count to prevent AVX-512 _mm512_storeu buffer overrun
-        raw::stl_vector_resize_uninitialized(&data, orig_size + _count);
-        auto* __restrict dest = data.data() + orig_size;
-        SIMD::Filter::filter_range(dest, src_data, _mask, 0, _count);
-        raw::stl_vector_resize_uninitialized(&data, orig_size + selected);
-        return Status::OK();
-    } else {
-        raw::stl_vector_resize_uninitialized(&data, orig_size + selected);
-        auto* __restrict dest = data.data() + orig_size;
+    constexpr size_t kMinSimdBatchSize = 32;
+    const bool use_simd = (_count >= kMinSimdBatchSize) && (selected * 20 >= _count);
 
-        size_t i = 0;
-        while (i < _count) {
-            while (i < _count && !is_selected(_mask[i])) {
-                ++i;
-            }
-            if (i >= _count) {
-                break;
-            }
-            size_t run_start = i;
-            while (i < _count && is_selected(_mask[i])) {
-                ++i;
-            }
-            size_t run_len = i - run_start;
-            std::memcpy(dest, src_data + run_start, run_len * sizeof(T));
-            dest += run_len;
+    if constexpr (PositiveSelect && sizeof(T) <= 32) {
+        if (use_simd) {
+            // AVX-512 _mm512_storeu_si512 writes 64 bytes starting at (dest + result) where result <= selected.
+            // Padding by at most (64 / sizeof(T)) elements prevents any unmasked vector store overrun.
+            constexpr size_t kSimdStorePad = (64 / sizeof(T)) > 0 ? (64 / sizeof(T)) : 1;
+            const size_t padded_count = std::min(_count, selected + kSimdStorePad);
+            raw::stl_vector_resize_uninitialized(&data, orig_size + padded_count);
+            auto* __restrict dest = data.data() + orig_size;
+            SIMD::Filter::filter_range(dest, src_data, _mask, 0, _count);
+            raw::stl_vector_resize_uninitialized(&data, orig_size + selected);
+            return Status::OK();
         }
-        return Status::OK();
     }
+
+    raw::stl_vector_resize_uninitialized(&data, orig_size + selected);
+    auto* __restrict dest = data.data() + orig_size;
+
+    size_t i = 0;
+    while (i < _count) {
+        while (i < _count && !is_selected(_mask[i])) {
+            ++i;
+        }
+        if (i >= _count) {
+            break;
+        }
+        size_t run_start = i;
+        while (i < _count && is_selected(_mask[i])) {
+            ++i;
+        }
+        size_t run_len = i - run_start;
+        std::memcpy(dest, src_data + run_start, run_len * sizeof(T));
+        dest += run_len;
+    }
+    return Status::OK();
 }
 
 template <bool PositiveSelect>
