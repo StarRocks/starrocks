@@ -39,6 +39,7 @@
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
 #include "exec/spill/executor.h"
+#include "exec/spill/input_stream_internal.h"
 #include "exec/spill/log_block_manager.h"
 #include "exec/spill/mem_table.h"
 #include "exec/spill/spill_components.h"
@@ -718,6 +719,83 @@ TEST_F(SpillTest, aligned_buffer) {
     buffer.resize(1);
     ASSERT_EQ(buffer.data()[0], '@');
     ASSERT_TRUE(is_aligned(buffer.data(), 4096));
+}
+
+// Child of a BufferedInputStream whose first get_next blocks until the test opens the gate, so the test
+// can hold the buffered stream's prefetch flag while another restore task asks for a prefetch.
+class GatedInputStream final : public spill::SpillInputStream {
+public:
+    explicit GatedInputStream(int num_chunks) : _remaining(num_chunks) {}
+
+    StatusOr<ChunkUniquePtr> get_next(workgroup::YieldContext& yield_ctx, spill::SerdeContext& ctx) override {
+        if (_calls.fetch_add(1) == 0) {
+            _entered.set_value();
+            _gate.wait();
+        }
+        if (_remaining-- <= 0) {
+            return Status::EndOfFile("end of gated stream");
+        }
+        return std::make_unique<Chunk>();
+    }
+    bool is_ready() override { return true; }
+    void close() override {}
+
+    void wait_entered() { _entered_future.wait(); }
+    void open_gate() { _gate_promise.set_value(); }
+    int calls() const { return _calls.load(); }
+
+private:
+    int _remaining;
+    std::atomic_int _calls{0};
+    std::promise<void> _entered;
+    std::future<void> _entered_future = _entered.get_future();
+    std::promise<void> _gate_promise;
+    std::shared_future<void> _gate = _gate_promise.get_future().share();
+};
+
+// Regression test for a lost wakeup in BufferedInputStream::prefetch. Restore tasks that found the
+// prefetch flag held used to return without doing anything; when they all landed while the holder was
+// on its way out after reading its single chunk, nothing read the next chunk and the spilled sort source
+// waited forever (row_number() over a force-spilled sort hung until query timeout). A prefetch request
+// that loses the race must be served by the task holding the flag.
+TEST_F(SpillTest, buffered_input_stream_serves_prefetch_request_that_lost_the_race) {
+    auto factory = spill::make_spilled_factory();
+    SpilledOptions options;
+    options.mem_table_pool_size = 1;
+    options.spill_mem_table_bytes_size = 1024 * 1024;
+    options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    options.block_manager = dummy_block_mgr.get();
+    auto spiller = factory->create(options);
+    spiller->set_metrics(metrics);
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+    auto child = std::make_shared<GatedInputStream>(/*num_chunks=*/4);
+    auto stream = spill::detail::make_buffered_input_stream(/*capacity=*/4, child, spiller.get());
+
+    auto holder = std::async(std::launch::async, [&stream]() {
+        workgroup::YieldContext yield_ctx;
+        spill::SerdeContext ctx;
+        return stream->prefetch(yield_ctx, ctx);
+    });
+    // The holder owns the prefetch flag and is blocked reading its chunk.
+    child->wait_entered();
+
+    workgroup::YieldContext yield_ctx;
+    spill::SerdeContext ctx;
+    // This request loses the race for the flag and returns immediately without reading.
+    ASSERT_OK(stream->prefetch(yield_ctx, ctx));
+    ASSERT_EQ(child->calls(), 1);
+
+    child->open_gate();
+    ASSERT_OK(holder.get());
+
+    // The holder served the request that lost the race: two chunks were read, not one.
+    EXPECT_EQ(child->calls(), 2);
+    ASSERT_TRUE(stream->is_ready());
+    ASSERT_OK(stream->get_next(yield_ctx, ctx).status());
+    ASSERT_TRUE(stream->is_ready());
+    ASSERT_OK(stream->get_next(yield_ctx, ctx).status());
+    ASSERT_FALSE(stream->is_ready());
+    ASSERT_FALSE(stream->eof());
 }
 
 /*

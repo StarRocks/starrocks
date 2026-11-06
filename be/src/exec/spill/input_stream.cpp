@@ -23,18 +23,14 @@
 #include <utility>
 #include <vector>
 
-<<<<<<< HEAD:be/src/exec/spill/input_stream.cpp
-=======
-#include "base/concurrency/blocking_queue.hpp"
->>>>>>> 9eea2ac ([BugFix][RB-377] Fix lost wakeup in spill BufferedInputStream::prefetch (#82515)):be/src/compute_env/spill/input_stream.cpp
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
+#include "exec/spill/input_stream_internal.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/sorted_chunks_merger.h"
 #include "util/blocking_queue.hpp"
-#include "util/defer_op.h"
 
 namespace starrocks::spill {
 
@@ -259,8 +255,6 @@ Status BufferedInputStream::_prefetch_one(workgroup::YieldContext& yield_ctx, Se
     return res.status();
 }
 
-<<<<<<< HEAD:be/src/exec/spill/input_stream.cpp
-=======
 Status BufferedInputStream::prefetch(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) {
     while (true) {
         if (is_buffer_full() || eof()) {
@@ -294,7 +288,6 @@ InputStreamPtr detail::make_buffered_input_stream(int capacity, InputStreamPtr s
     return std::make_shared<BufferedInputStream>(capacity, std::move(stream), spiller);
 }
 
->>>>>>> 9eea2ac ([BugFix][RB-377] Fix lost wakeup in spill BufferedInputStream::prefetch (#82515)):be/src/compute_env/spill/input_stream.cpp
 class SequenceInputStream : public SpillInputStream {
 public:
     SequenceInputStream(std::vector<BlockPtr> input_blocks, SerdePtr serde, BlockReaderOptions options)
