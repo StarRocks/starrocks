@@ -88,13 +88,15 @@ protected:
     }
 
     void check(const std::string& filepath, const TypeDescriptor& col_type, const std::string& col_name,
-               const std::string& expected_value, const size_t expected_rows, bool is_failed = false) {
+               const std::string& expected_value, const size_t expected_rows, bool is_failed = false,
+               const std::string& timezone = "Asia/Shanghai") {
         auto file = _create_file(filepath);
         auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                         std::filesystem::file_size(filepath));
 
         // --------------init context---------------
         auto ctx = _create_scan_context();
+        ctx->format_scan_context.timezone = timezone;
 
         Utils::SlotDesc slot_descs[] = {{col_name, col_type}, {""}};
 
@@ -520,6 +522,26 @@ TEST_F(ColumnConverterTest, Int96Test) {
     }
 }
 
+// Static INT96 pages include signed negative nanos and a NULL row.
+// See test_data/gen_int96_signed_nanoseconds.py for the reproducible fixture recipe.
+TEST_F(ColumnConverterTest, Int96SignedNanosecondsFileRead) {
+    const std::string path = "./be/test/formats/parquet/test_data/column_converter/int96_signed_nanoseconds.parquet";
+    for (bool ntz : {false, true}) {
+        TypeDescriptor type = TYPE_DATETIME_DESC;
+        type.datetime_is_ntz = ntz;
+        for (const std::string zone : {"UTC", "Asia/Shanghai"}) {
+            SCOPED_TRACE(fmt::format("ntz={} zone={}", ntz, zone));
+            const bool shifted = !ntz && zone == "Asia/Shanghai";
+            check(path, type, "before_epoch_us",
+                  shifted ? "[1970-01-01 07:59:59.999999]" : "[1969-12-31 23:59:59.999999]", 5, false, zone);
+            check(path, type, "before_epoch_half_second",
+                  shifted ? "[1970-01-01 07:59:59.500000]" : "[1969-12-31 23:59:59.500000]", 5, false, zone);
+            check(path, type, "after_epoch", shifted ? "[1970-01-01 08:02:03.456789]" : "[1970-01-01 00:02:03.456789]",
+                  5, false, zone);
+        }
+    }
+}
+
 TEST_F(ColumnConverterTest, Int96TimeZoneTest) {
     const std::string file_path =
             "./be/test/formats/parquet/test_data/column_converter/int96_timestamp_timezone.parquet";
@@ -840,6 +862,72 @@ TEST_F(ColumnConverterTest, Int96ReadAsTimestampNtz) {
     EXPECT_EQ(packed, read_back(true));
     // Default (Hive/Spark INT96): shifted into the local timezone (+8h for Asia/Shanghai).
     EXPECT_EQ(timestamp::add<TimeUnit::SECOND>(packed, 8 * 3600), read_back(false));
+}
+
+// Exercise the real factory with Arrow's signed, noncanonical pre-epoch INT96 representation,
+// canonical positive nanoseconds, and arbitrary bytes in NULL rows. Fixed-offset zones make both
+// timezone modes deterministic, including dates outside the usual timezone cache window.
+TEST_F(ColumnConverterTest, Int96SignedNanosecondsRoundTrip) {
+    struct TestCase {
+        int64_t nanos;
+        uint32_t julian;
+        Timestamp expected;
+    };
+    const std::vector<TestCase> cases = {
+            {-1000, 2440588, timestamp::from_datetime(1969, 12, 31, 23, 59, 59, 999999)},
+            {-86400000000000LL, 2440588, timestamp::from_datetime(1969, 12, 31, 0, 0, 0, 0)},
+            {-86400000001000LL, 2440588, timestamp::from_datetime(1969, 12, 30, 23, 59, 59, 999999)},
+            {-85636854775000LL, 2333837, timestamp::from_datetime(1677, 9, 21, 0, 12, 43, 145225)},
+            {85636854775000LL, 2547339, timestamp::from_datetime(2262, 4, 11, 23, 47, 16, 854775)},
+            {86399999999000LL, 2440587, timestamp::from_datetime(1969, 12, 31, 23, 59, 59, 999999)},
+            {123456789000LL, 2440588, timestamp::from_datetime(1970, 1, 1, 0, 2, 3, 456789)},
+            {-1, 2440588, timestamp::from_datetime(1969, 12, 31, 23, 59, 59, 999999)},
+    };
+    ParquetField field;
+    field.physical_type = tparquet::Type::INT96;
+    for (bool ntz : {false, true}) {
+        for (const auto& [zone, offset] : std::vector<std::pair<std::string, int>>{
+                     {"UTC", 0}, {"+08:00", 8 * 3600}, {"-05:30", -(5 * 3600 + 30 * 60)}}) {
+            SCOPED_TRACE(fmt::format("ntz={} zone={}", ntz, zone));
+            TypeDescriptor type(TYPE_DATETIME);
+            type.datetime_is_ntz = ntz;
+            std::unique_ptr<ColumnConverter> converter;
+            ASSERT_OK(ColumnConverterFactory::create_converter(field, type, zone, &converter));
+            ASSERT_TRUE(converter->need_convert);
+            auto src = converter->create_src_column();
+            auto* src_nullable = down_cast<NullableColumn*>(src.get());
+            auto* src_data = down_cast<FixedLengthColumn<int96_t>*>(src_nullable->data_column_raw_ptr());
+            for (const auto& test : cases) {
+                src_data->append(int96_t{static_cast<uint64_t>(test.nanos), test.julian});
+                src_nullable->null_column_raw_ptr()->append(0);
+            }
+            ASSERT_TRUE(src_nullable->append_nulls(1));
+            src_data->get_data().back() = {std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint32_t>::max()};
+            auto dst = ColumnHelper::create_column(type, true);
+            ASSERT_OK(converter->convert(src.get(), dst.get()));
+            ASSERT_EQ(cases.size() + 1, dst->size());
+            ASSERT_TRUE(dst->has_null());
+            ASSERT_TRUE(dst->is_null(cases.size()));
+            const auto* dst_nullable = down_cast<const NullableColumn*>(dst.get());
+            const auto& data = down_cast<const TimestampColumn*>(dst_nullable->data_column().get())->get_data();
+            for (size_t i = 0; i < cases.size(); ++i) {
+                ASSERT_FALSE(dst->is_null(i));
+                const auto expected = timestamp::add<TimeUnit::SECOND>(cases[i].expected, ntz ? 0 : offset);
+                EXPECT_EQ(expected, data[i].timestamp()) << "row " << i;
+            }
+            // An all-NULL batch must not normalize payloads or look up their invalid days.
+            auto all_null = converter->create_src_column();
+            ASSERT_TRUE(all_null->append_nulls(1));
+            auto* all_null_nullable = down_cast<NullableColumn*>(all_null.get());
+            down_cast<FixedLengthColumn<int96_t>*>(all_null_nullable->data_column_raw_ptr())->get_data()[0] = {
+                    std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint32_t>::max()};
+            auto null_dst = ColumnHelper::create_column(type, true);
+            ASSERT_OK(converter->convert(all_null.get(), null_dst.get()));
+            ASSERT_EQ(1, null_dst->size());
+            ASSERT_TRUE(null_dst->has_null());
+            ASSERT_TRUE(null_dst->is_null(0));
+        }
+    }
 }
 
 namespace {
