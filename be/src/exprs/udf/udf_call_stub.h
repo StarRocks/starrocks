@@ -16,6 +16,7 @@
 
 #include <arrow/record_batch.h>
 
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -26,6 +27,8 @@
 #include "exprs/function_context.h"
 
 namespace starrocks {
+// A stub is not thread-safe: do_evaluate is a write-then-read exchange on one stream, so callers
+// must not overlap. UDFCallStubPool hands each stub to one caller at a time.
 class UDFCallStub {
 public:
     UDFCallStub() = default;
@@ -40,9 +43,9 @@ public:
     using arrowSchema = arrow::Schema;
     using arrowField = arrow::Field;
 
-    // The stub is cached per driver and outlives the FunctionContext it is built from: a scan's IO
-    // tasks evaluate conjuncts through ExprContext clones that are freed with their data source,
-    // while the stub stays in the expr's cache. Copy the types instead of keeping the context.
+    // The stub is pooled and outlives the FunctionContext it is built from: a scan's IO tasks
+    // evaluate conjuncts through ExprContext clones that are freed with their data source, while
+    // the stub stays in the expr's pool. Copy the types instead of keeping the context.
     explicit AbstractArrowFuncCallStub(FunctionContext* func_ctx)
             : _arg_types(func_ctx->get_arg_types()), _return_type(func_ctx->get_return_type()) {}
     ~AbstractArrowFuncCallStub() override = default;
@@ -56,11 +59,28 @@ private:
 
     const std::vector<TypeDescriptor> _arg_types;
     const TypeDescriptor _return_type;
-    // A driver's scan IO tasks run on different threads but share the driver's stub, and
-    // do_evaluate is a write-then-read exchange on one stream, so calls must not overlap.
-    std::mutex _evaluate_lock;
 };
 
 std::unique_ptr<UDFCallStub> create_error_call_stub(Status error_status);
+
+// The stubs of one UDF call site. A stub owns one exchange stream with the UDF worker, so a call
+// checks out an idle stub (building one when none is idle) and returns it when done; concurrent
+// calls, such as a scan's IO tasks evaluating the same conjunct, then run on separate streams
+// instead of queueing on one.
+class UDFCallStubPool {
+public:
+    using StubBuilder = std::function<std::unique_ptr<UDFCallStub>()>;
+
+    StatusOr<ColumnPtr> evaluate(const StubBuilder& build, const Columns& columns, size_t row_num);
+
+    // Stubs built so far, idle or in use.
+    size_t num_built() const;
+    size_t num_idle() const;
+
+private:
+    mutable std::mutex _lock;
+    std::vector<std::unique_ptr<UDFCallStub>> _idle;
+    size_t _num_built = 0;
+};
 
 } // namespace starrocks

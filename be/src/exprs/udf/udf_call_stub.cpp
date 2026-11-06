@@ -141,11 +141,7 @@ StatusOr<ColumnPtr> AbstractArrowFuncCallStub::evaluate(const Columns& columns, 
     RETURN_IF_ERROR(convert_columns_to_arrow_batch(row_num, columns, arrow::default_memory_pool(), arg_types.data(),
                                                    schema, &record_batch));
 
-    std::shared_ptr<RecordBatch> result_batch;
-    {
-        std::lock_guard<std::mutex> guard(_evaluate_lock);
-        ASSIGN_OR_RETURN(result_batch, do_evaluate(std::move(*record_batch)));
-    }
+    ASSIGN_OR_RETURN(auto result_batch, do_evaluate(std::move(*record_batch)));
 
     // convert arrow result batch to starrocks column
     if (result_batch->num_columns() != 1) {
@@ -206,6 +202,42 @@ private:
 std::unique_ptr<UDFCallStub> create_error_call_stub(Status error_status) {
     DCHECK(!error_status.ok());
     return std::make_unique<ErrorArrowFuncCallStub>(std::move(error_status));
+}
+
+StatusOr<ColumnPtr> UDFCallStubPool::evaluate(const StubBuilder& build, const Columns& columns, size_t row_num) {
+    std::unique_ptr<UDFCallStub> stub;
+    {
+        std::lock_guard<std::mutex> guard(_lock);
+        if (!_idle.empty()) {
+            stub = std::move(_idle.back());
+            _idle.pop_back();
+        }
+    }
+    if (stub == nullptr) {
+        // Build outside the lock: building may start a worker process and connect to it.
+        stub = build();
+        DCHECK(stub != nullptr);
+        std::lock_guard<std::mutex> guard(_lock);
+        ++_num_built;
+    }
+
+    auto result = stub->evaluate(columns, row_num);
+    if (result.ok()) {
+        std::lock_guard<std::mutex> guard(_lock);
+        _idle.emplace_back(std::move(stub));
+    }
+    // A failed call may leave its stream with an unread reply, so the stub is dropped, not reused.
+    return result;
+}
+
+size_t UDFCallStubPool::num_built() const {
+    std::lock_guard<std::mutex> guard(_lock);
+    return _num_built;
+}
+
+size_t UDFCallStubPool::num_idle() const {
+    std::lock_guard<std::mutex> guard(_lock);
+    return _idle.size();
 }
 
 } // namespace starrocks

@@ -15,15 +15,12 @@
 #include "exprs/arrow_function_call.h"
 
 #include <memory>
-#include <mutex>
 
 #include "base/format.h"
-#include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "common/constexpr.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_context.h"
 #include "exprs/udf/java/jni_arrow_func_call_stub.h"
@@ -35,13 +32,8 @@
 
 namespace starrocks {
 
-using InnerStateMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<UDFCallStub>, phmap::Hash<int32_t>,
-                                                    phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
-                                                    NUM_LOCK_SHARD_LOG, std::mutex>;
-
 struct ArrowCallStubCtx {
-    InnerStateMap inner_states;
-    std::mutex inner_states_lock;
+    UDFCallStubPool stubs;
 };
 
 ArrowFunctionCallExpr::ArrowFunctionCallExpr(const TExprNode& node) : Expr(node) {}
@@ -54,19 +46,10 @@ StatusOr<ColumnPtr> ArrowFunctionCallExpr::evaluate_checked(ExprContext* context
         columns[i] = ColumnHelper::unfold_const_column(_children[i]->type(), num_rows, columns[i]);
     }
 
-    // get call stub
-    int32_t driver_id = CurrentThread::current().get_driver_id();
     FunctionContext* function_context = context->fn_context(_fn_context_index);
-    UDFCallStub* stub = nullptr;
-    _call_stub_ctx->inner_states.lazy_emplace_l(
-            driver_id, [&](auto& value) { stub = value.get(); },
-            [&](auto build) {
-                auto value = _build_stub(driver_id, function_context);
-                stub = value.get();
-                build(driver_id, std::move(value));
-            });
-
-    return stub->evaluate(columns, num_rows);
+    return _call_stub_ctx->stubs.evaluate(
+            [&]() { return _build_stub(CurrentThread::current().get_driver_id(), function_context); }, columns,
+            num_rows);
 }
 
 Status ArrowFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context) {
