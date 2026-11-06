@@ -71,6 +71,13 @@ public class UserIdentityUtils {
         return tUserIdent;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * The caller of a session as an RPC sends it: its identity, the roles it activated and the groups it belongs to.
+     * The FE serving the RPC rebuilds the caller with {@link #setAuthInfoFromThrift(ConnectContext, TUserIdentity)}.
+     */
+>>>>>>> fe8be24 ([BugFix][RB-904] Honor group-granted roles in information_schema RPCs (#82567))
     public static TUserIdentity callerToThrift(ConnectContext context) {
         TUserIdentity tUserIdent = toThrift(context.getCurrentUserIdentity());
         if (context.getCurrentRoleIds() != null) {
