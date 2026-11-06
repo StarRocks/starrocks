@@ -1,0 +1,47 @@
+-- name: test_paimon_int96_signed_nanoseconds
+create external catalog paimon_int96_${uuid0} properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}",
+"aws.s3.region" = "${oss_region}",
+"aws.s3.enable_ssl" = "true"
+);
+-- result:
+-- !result
+set paimon_reader_mode = 'auto';
+-- result:
+-- !result
+set time_zone = 'UTC';
+-- result:
+-- !result
+[ORDER]select cast(before_epoch_us as varchar), cast(before_epoch_half_second as varchar), cast(after_epoch as varchar), count(*) from paimon_int96_${uuid0}.paimon_test.reader_int96_signed_nanos_v1 group by before_epoch_us, before_epoch_half_second, after_epoch order by before_epoch_us;
+-- result:
+None	None	None	1
+1969-12-31 23:59:59.999999	1969-12-31 23:59:59.500000	1970-01-01 00:02:03.456789	4
+-- !result
+function: assert_paimon_reader("select * from paimon_int96_${uuid0}.paimon_test.reader_int96_signed_nanos_v1", "reader_int96_signed_nanos_v1", "starrocks")
+-- result:
+None
+-- !result
+set time_zone = 'Asia/Shanghai';
+-- result:
+-- !result
+[ORDER]select cast(before_epoch_us as varchar), cast(before_epoch_half_second as varchar), cast(after_epoch as varchar), count(*) from paimon_int96_${uuid0}.paimon_test.reader_int96_signed_nanos_v1 group by before_epoch_us, before_epoch_half_second, after_epoch order by before_epoch_us;
+-- result:
+None	None	None	1
+1969-12-31 23:59:59.999999	1969-12-31 23:59:59.500000	1970-01-01 00:02:03.456789	4
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select cast(before_epoch_us as varchar), cast(before_epoch_half_second as varchar), cast(after_epoch as varchar), count(*) from paimon_int96_${uuid0}.paimon_test.reader_int96_signed_nanos_v1 group by before_epoch_us, before_epoch_half_second, after_epoch order by before_epoch_us;
+-- result:
+None	None	None	1
+1969-12-31 23:59:59.999999	1969-12-31 23:59:59.500000	1970-01-01 00:02:03.456789	4
+-- !result
+drop catalog paimon_int96_${uuid0};
+-- result:
+-- !result
