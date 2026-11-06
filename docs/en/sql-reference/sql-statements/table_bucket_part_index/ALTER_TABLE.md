@@ -772,7 +772,7 @@ PROPERTIES: Support setting timeout time and the default timeout time is one day
 `ORDER BY`: defines an independent sort key for the rollup that can differ from the base table's sort key. It is supported only for range-distribution tables in shared-data clusters (from v4.2 onwards), and lets queries that filter or aggregate on the rollup's leading sort-key columns be served by the rollup. The following limitations apply:
 
 - The table must be a Duplicate Key, Aggregate, or Unique Key table. Primary Key tables are not supported.
-- The table must not be a colocate table.
+- On a table with `colocate_with`, the rollup's `ORDER BY` must start with the colocated columns, in the same order and with the same types.
 - A column in the rollup's sort key cannot be dropped, and its type cannot be changed. The only allowed change is increasing the length of a VARCHAR column on its own (without repositioning it or changing another attribute) when it is applied by fast schema evolution. `ORDER BY ... FROM <rollup>` is not supported for such a rollup.
 - Multiple such rollups are supported. Each `ALTER TABLE` statement adds one rollup (add several rollups with separate statements). The rollup is always derived from the base index; `FROM <another_rollup>` is not supported. The table must not carry a synchronous materialized view.
 

@@ -232,23 +232,23 @@ public class RangeDistributionGuardTest {
     }
 
     /**
-     * A colocate range table rollup stays rejected: the rollup would build a fresh K-tablet layout
-     * independent of the colocate range manager's expected ranges.
+     * A rollup of a range table whose colocate_with is set but which is not a member of any colocate
+     * group stays rejected: without the group there are no ColocateRanges to lay the rollup out against.
      */
     @Test
     public void testRangeRollupOnColocateRejected() throws Exception {
         starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_colocate"));
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
                 .getLocalMetastore().getTable("test", "t_guard_rollup_colocate");
-        // Simulate colocate membership via the table's group property: the routing predicate now reads
-        // OlapTable.hasColocateGroup(), equivalent to ColocateTableIndex.isColocateTable for a live table.
+        // Set colocate_with without making the table a member of a colocate group.
         table.setColocateGroup("t_guard_rollup_colocate_group");
         assertAlterRejectedWithRangeDistribution(
                 "alter table t_guard_rollup_colocate add rollup r1(k1, k2, v1) order by (k2, k1)");
     }
 
-    private static final String CREATE_ROLLUP_ON_COLOCATE_ERROR =
-            "ROLLUP is not supported in CREATE TABLE for a range distribution table with 'colocate_with'";
+    private static final String CREATE_ROLLUP_ON_COLOCATE_ERROR = "The sort key of rollup %s of a table in a range "
+            + "colocate group must start with its colocate columns [k1] (same order and types). Got: %s "
+            + "A rollup defined in CREATE TABLE is sorted by its key columns; an ORDER BY written in it is not used.";
 
     private static String colocateRangeTableWithRollupDdl(String name, String rollup, String group) {
         return "create table " + name + " (k1 int, k2 int, v1 int)\n"
@@ -268,26 +268,32 @@ public class RangeDistributionGuardTest {
     }
 
     /**
-     * CREATE TABLE ... ROLLUP on a range table with colocate_with is rejected, and the rejected CREATE
-     * leaves no colocate group behind.
+     * CREATE TABLE ... ROLLUP on a range table with colocate_with is rejected when the rollup's sort key
+     * does not start with the colocate columns, and the rejected CREATE leaves no colocate group behind.
      */
     @Test
     public void testCreateTableRollupOnRangeColocateRejected() throws Exception {
         DdlException e = assertThrowsDdlException(() -> starRocksAssert.withTable(
                 colocateRangeTableWithRollupDdl("t_ctr_colocate", "r1 (k2, k1)", "g_ctr")));
-        assertTrue(e.getMessage().contains(CREATE_ROLLUP_ON_COLOCATE_ERROR), e.getMessage());
+        assertEquals(String.format(CREATE_ROLLUP_ON_COLOCATE_ERROR, "r1", "[k2, k1]"), e.getMessage());
         assertFalse(tableExists("t_ctr_colocate"));
         assertFalse(colocateGroupExists("g_ctr"));
     }
 
-    /** A rollup that leads on the colocate column is rejected as well: no colocate rollup is supported yet. */
+    /** A rollup that leads on the colocate column is accepted: the table joins the group with the rollup. */
     @Test
-    public void testCreateTableRollupLeadingOnColocateColumnRejected() throws Exception {
-        DdlException e = assertThrowsDdlException(() -> starRocksAssert.withTable(
-                colocateRangeTableWithRollupDdl("t_ctr_colocate_lead", "r1 (k1, v1)", "g_ctr_lead")));
-        assertTrue(e.getMessage().contains(CREATE_ROLLUP_ON_COLOCATE_ERROR), e.getMessage());
-        assertFalse(tableExists("t_ctr_colocate_lead"));
-        assertFalse(colocateGroupExists("g_ctr_lead"));
+    public void testCreateTableRollupLeadingOnColocateColumnAccepted() throws Exception {
+        starRocksAssert.withTable(
+                colocateRangeTableWithRollupDdl("t_ctr_colocate_lead", "r1 (k1, v1)", "g_ctr_lead"));
+        assertTrue(tableExists("t_ctr_colocate_lead"));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_ctr_colocate_lead");
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId groupId = colocateIndex.getRangeColocateGroupId(table.getId());
+        assertNotNull(groupId);
+        assertTrue(colocateGroupExists("g_ctr_lead"));
+        assertEquals(List.of(table.getId()), colocateIndex.getAllTableIds(groupId));
+        assertNotNull(table.getIndexMetaIdByName("r1"));
     }
 
     /** A range table without colocate_with keeps accepting ROLLUP in CREATE TABLE. */
@@ -322,7 +328,7 @@ public class RangeDistributionGuardTest {
 
         DdlException e = assertThrowsDdlException(() -> starRocksAssert.withTable(
                 colocateRangeTableWithRollupDdl("t_ctr_candidate", "r3 (k2, k1, v1)", "g_ctr_exist")));
-        assertTrue(e.getMessage().contains(CREATE_ROLLUP_ON_COLOCATE_ERROR), e.getMessage());
+        assertEquals(String.format(CREATE_ROLLUP_ON_COLOCATE_ERROR, "r3", "[k2, k1, v1]"), e.getMessage());
         assertFalse(tableExists("t_ctr_candidate"));
         assertEquals(membersBefore, colocateIndex.getAllTableIds(groupId));
         assertEquals(rangeListBefore, colocateIndex.getColocateRanges(groupId.grpId));
@@ -476,6 +482,7 @@ public class RangeDistributionGuardTest {
         String colocate = "t_sync_colocate";
         starRocksAssert.withTable(rangeTableDdl(colocate));
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", colocate);
+        // colocate_with is set, but the table is not a member of any colocate group.
         table.setColocateGroup("sync_colocate_group");
         DdlException error = assertThrowsDdlException(() -> createSync(colocate, "select k2 from " + colocate));
         assertTrue(error.getMessage().contains("range distribution"));
@@ -555,10 +562,14 @@ public class RangeDistributionGuardTest {
                 + "order by(k1,k2) properties('replication_num'='1')");
         DdlException error = assertThrows(DdlException.class, () -> createSync(name, "select k2 from " + name));
         assertEquals("Synchronous materialized view with range distribution requires a shared-data, "
+<<<<<<< HEAD
                 + "non-colocate, non-primary-key table. "
                 + "Use an asynchronous materialized view instead: declare it with an explicit "
                 + "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, "
                 + "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...",
+=======
+                + "non-primary-key table that is a member of its colocate group when it has colocate_with.",
+>>>>>>> 9bc1a151057... [Enhancement][RB-97] Support rollups and synchronous materialized views on range colocate tables (#68455)
                 error.getMessage());
         assertTrue(GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2().isEmpty());
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", name);
