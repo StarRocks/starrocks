@@ -3418,7 +3418,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableCollectTableLevelScanStats = true;
 
     @VarAttr(name = HIVE_TEMP_STAGING_DIR)
-    private String hiveTempStagingDir = "/tmp/starrocks";
+    private String hiveTempStagingDir = ".sr_staging";
 
     @VarAttr(name = ENABLE_EXPR_PRUNE_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean enableExprPrunePartition = true;

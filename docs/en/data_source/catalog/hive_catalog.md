@@ -1118,6 +1118,20 @@ Note that sinking data to external tables is disabled by default. To sink data t
 
 :::
 
+### Temporary staging directory
+
+For Hive writes on HDFS or ViewFS, `hive_temp_staging_dir` defaults to `.sr_staging`, a relative path under the table location. Each write uses a unique subdirectory. For example, a table at `viewfs://cluster/warehouse/db/table` stages files under `viewfs://cluster/warehouse/db/table/.sr_staging/<UUID>/` before committing them.
+
+This keeps temporary files out of the shared `/tmp/starrocks` directory and reduces ViewFS rename failures caused by staging and table directories being on different mount points. The temporary storage requirement is unchanged; its location moves to the table directory. The filesystem identity used by StarRocks must have permission to create and rename files there.
+
+Explicitly configured values continue to take effect. To retain the previous location for the current session, run:
+
+```SQL
+SET hive_temp_staging_dir = '/tmp/starrocks';
+```
+
+A custom staging directory must support renaming files to the target table or partition location.
+
 [Switch to a Hive catalog and a database in it](#switch-to-a-hive-catalog-and-a-database-in-it), and then use the following syntax to sink the data of StarRocks table to a Parquet-formatted Hive table in that database.
 
 ### Syntax

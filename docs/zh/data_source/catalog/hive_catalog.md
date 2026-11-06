@@ -1127,6 +1127,20 @@ PARTITION BY (par_col1[, par_col2...])
 
 :::
 
+### 临时目录
+
+向 HDFS 或 ViewFS 上的 Hive 表写入数据时，`hive_temp_staging_dir` 默认为 `.sr_staging`，是相对于表 location 的路径。每次写入使用独立的子目录。例如，表 location 为 `viewfs://cluster/warehouse/db/table` 时，数据先写入 `viewfs://cluster/warehouse/db/table/.sr_staging/<UUID>/`，再提交到目标位置。
+
+该默认值将临时文件从公共的 `/tmp/starrocks` 目录分散到各表目录，减少公共 `/tmp` 目录的空间占用，并降低临时目录与表目录位于不同 ViewFS 挂载点时重命名失败的风险。临时文件所需的总空间不变，只是存放位置发生变化。StarRocks 使用的文件系统身份需要具备在相应目录创建文件和重命名的权限。
+
+显式配置的参数值仍然生效。如需在当前会话保留原来的位置，执行：
+
+```SQL
+SET hive_temp_staging_dir = '/tmp/starrocks';
+```
+
+自定义临时目录必须支持将文件重命名到目标表或分区位置。
+
 [切换至目标 Hive Catalog 和数据库](#切换-hive-catalog-和数据库)，然后通过如下语法将 StarRocks 表数据写入到 Parquet 格式的 Hive 表中：
 
 ### 语法

@@ -1118,6 +1118,20 @@ StarRocks の内部テーブルと同様に、Hive テーブル（管理テー�
 
 :::
 
+### 一時ステージングディレクトリ
+
+HDFS または ViewFS 上の Hive テーブルへの書き込みでは、`hive_temp_staging_dir` のデフォルト値は `.sr_staging` で、テーブルの location からの相対パスです。書き込みごとに一意のサブディレクトリを使用します。例えば、テーブルの location が `viewfs://cluster/warehouse/db/table` の場合、コミット前のファイルは `viewfs://cluster/warehouse/db/table/.sr_staging/<UUID>/` に保存されます。
+
+このデフォルト値により、一時ファイルは共有の `/tmp/starrocks` ではなく各テーブルのディレクトリに保存されます。共有 `/tmp` の使用量を抑え、ステージング先とテーブルが異なる ViewFS マウントポイントにあることによるリネーム失敗を減らします。一時ファイルに必要な総容量は変わらず、保存場所が変わります。StarRocks が使用するファイルシステムのユーザーには、保存先でのファイル作成とリネームの権限が必要です。
+
+明示的に設定した値は引き続き有効です。現在のセッションで以前の保存場所を使用するには、次を実行します。
+
+```SQL
+SET hive_temp_staging_dir = '/tmp/starrocks';
+```
+
+カスタムディレクトリでは、対象テーブルまたはパーティションへのファイルのリネームがサポートされている必要があります。
+
 [Hive catalog とその中のデータベースに切り替える](#switch-to-a-hive-catalog-and-a-database-in-it) その後、次の構文を使用してそのデータベース内の Parquet 形式の Hive テーブルに StarRocks テーブルのデータをシンクします。
 
 ### 構文
