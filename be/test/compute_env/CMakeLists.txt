@@ -74,6 +74,7 @@ add_executable(compute_env_test
         compute_env_test.cpp
         compute_env_test_main.cpp
         data_stream_mgr_test.cpp
+        exchange_dynamic_senders_test.cpp
         fragment_dict_state_test.cpp
         load/load_stream_mgr_test.cpp
         load/stream_context_mgr_test.cpp
