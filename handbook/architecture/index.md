@@ -7,3 +7,4 @@ Use this section when you need the repo map or the current internal harness boun
 - [Repo Topology](repo-topology.md): top-level map, subsystem entrypoints, and where to look first.
 - [BE Boundary Harness](be-boundary-harness.md): phase-1 module-boundary guardrails and the files that enforce them.
 - [Schema Compatibility Harness](schema-compatibility-harness.md): diff-aware guardrails for thrift and protobuf evolution in `gensrc/`.
+- [ADR: Durable Stage Exchanges for Intra-Query Fault Tolerance](adr-durable-stage-exchanges.md): decision record for the IQFT RFC — staged execution with durable exchanges in shared-data mode.
