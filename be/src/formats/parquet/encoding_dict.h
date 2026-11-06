@@ -34,6 +34,12 @@
 #include "formats/parquet/encoding.h"
 #include "runtime/current_thread.h"
 
+#if defined(__AVX2__)
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 namespace {
 // Single-pass min/max bounds check for dictionary indices. Reads the unsigned
 // indices through a signed reinterpret to feed SIMD min/max; any value
@@ -130,6 +136,17 @@ public:
                 phmap::priv::BitMask<uint32_t, 32> bitmask(mask);
                 for (auto idx : bitmask) {
                     dst_data[i + idx] = src_data[cnt++];
+                }
+            }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+            const uint8x16_t zero = vdupq_n_u8(0);
+            for (i = 0; i + 16 <= count; i += 16) {
+                uint8x16_t loaded = vld1q_u8(&nulls[i]);
+                uint64_t mask = SIMD::get_nibble_mask(vceqq_u8(loaded, zero)) & 0x1111111111111111ULL;
+                while (mask != 0) {
+                    uint32_t idx = __builtin_ctzll(mask) >> 2;
+                    dst_data[i + idx] = src_data[cnt++];
+                    mask &= (mask - 1);
                 }
             }
 #endif
