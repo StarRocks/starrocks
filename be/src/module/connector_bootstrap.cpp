@@ -45,6 +45,10 @@
 #include "connector/mysql/mysql_connector.h"
 #endif
 
+#ifdef STARROCKS_WITH_CONNECTOR_LANCE
+#include "connector/lance/lance_connector.h"
+#endif
+
 namespace starrocks::connector {
 
 namespace {
@@ -79,6 +83,9 @@ Status bootstrap_builtin_connectors() {
 #endif
 #ifdef STARROCKS_WITH_CONNECTOR_MYSQL
     install_if_absent<MySQLConnector>(registry, Connector::MYSQL);
+#endif
+#ifdef STARROCKS_WITH_CONNECTOR_LANCE
+    install_if_absent<LanceConnector>(registry, Connector::LANCE);
 #endif
     return Status::OK();
 }
