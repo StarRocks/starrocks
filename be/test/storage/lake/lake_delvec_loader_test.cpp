@@ -49,8 +49,8 @@ public:
         _location_provider = std::make_shared<FixedLocationProvider>(kTestDir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager =
-                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1638400000);
+        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(),
+                                                                1638400000, 1638400000);
     }
 
     void TearDown() override { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
@@ -266,7 +266,7 @@ TEST_F(LakeDelvecLoaderTest, test_load_from_file_with_cached_metadata) {
     ASSIGN_OR_ABORT(auto cached_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
     auto meta_path = _tablet_manager->tablet_metadata_location(tablet_id, version);
     ASSERT_TRUE(FileSystem::Default()->delete_file(meta_path).ok());
-    _tablet_manager->metacache()->erase(meta_path);
+    _tablet_manager->metacache()->erase(MetacacheKey::TEST_from_string(meta_path));
 
     DelVectorPtr pdelvec;
     TabletSegmentId tsid(tablet_id, segment_id);

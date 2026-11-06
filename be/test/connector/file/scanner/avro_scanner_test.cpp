@@ -1411,7 +1411,7 @@ TEST_F(AvroScannerTest, test_map_type) {
         types.emplace_back(TYPE_BOOLEAN);
         types.emplace_back(TYPE_BIGINT);
         types.emplace_back(TYPE_DOUBLE);
-        types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_BIGINT)));
+        types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC));
 
         std::vector<TBrokerRangeDesc> ranges;
         TBrokerRangeDesc range;
@@ -1439,7 +1439,7 @@ TEST_F(AvroScannerTest, test_map_type) {
     // load avro map natively into a MAP<VARCHAR, BIGINT> column selected via jsonpaths
     {
         std::vector<TypeDescriptor> types;
-        types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_BIGINT)));
+        types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC));
 
         std::vector<TBrokerRangeDesc> ranges;
         TBrokerRangeDesc range;
@@ -1506,8 +1506,8 @@ TEST_F(AvroScannerTest, test_struct_type) {
         EXPECT_TRUE(write_avro_data(avro_helper, data_path).ok());
 
         std::vector<TypeDescriptor> types;
-        types.emplace_back(TypeDescriptor::create_struct_type(
-                {"f_int", "f_str", "f_opt"}, {TypeDescriptor(TYPE_INT), TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}));
+        types.emplace_back(TypeDescriptor::create_struct_type({"f_int", "f_str", "f_opt"},
+                                                              {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}));
 
         std::vector<TBrokerRangeDesc> ranges;
         TBrokerRangeDesc range;
@@ -1729,8 +1729,8 @@ TEST_F(AvroScannerTest, test_array_of_map) {
     ASSERT_TRUE(write_avro_data(avro_helper, data_path).ok());
 
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_array_type(
-            TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_INT))));
+    types.emplace_back(
+            TypeDescriptor::create_array_type(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC)));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1848,7 +1848,7 @@ TEST_F(AvroScannerTest, test_array_of_struct) {
 
     std::vector<TypeDescriptor> types;
     types.emplace_back(TypeDescriptor::create_array_type(
-            TypeDescriptor::create_struct_type({"a", "b"}, {TypeDescriptor(TYPE_INT), TYPE_VARCHAR_DESC})));
+            TypeDescriptor::create_struct_type({"a", "b"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC})));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1902,8 +1902,7 @@ TEST_F(AvroScannerTest, test_struct_with_map) {
 
     std::vector<TypeDescriptor> types;
     types.emplace_back(TypeDescriptor::create_struct_type(
-            {"id", "m"},
-            {TypeDescriptor(TYPE_INT), TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_INT))}));
+            {"id", "m"}, {TYPE_INT_DESC, TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC)}));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;

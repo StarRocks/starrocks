@@ -101,7 +101,7 @@ PARALLEL_TEST(VariantEncoderTest, encode_int_column) {
     int_col->append_datum(Datum(static_cast<int32_t>(42)));
 
     ColumnBuilder<TYPE_VARIANT> builder(2);
-    Status st = VariantEncoder::encode_column(int_col, TypeDescriptor(TYPE_INT), &builder, true);
+    Status st = VariantEncoder::encode_column(int_col, TYPE_INT_DESC, &builder, true);
     ASSERT_TRUE(st.ok());
 
     ColumnPtr out = builder.build(false);
@@ -141,7 +141,7 @@ PARALLEL_TEST(VariantEncoderTest, encode_map_with_variant_values_and_empty_row) 
     auto keys = NullableColumn::create(std::move(key_data), std::move(key_nulls));
     auto values = make_nullable_variant_column({std::string(R"({"a":1})"), std::string(R"({"b":2})"), std::nullopt});
     auto map = MapColumn::create(keys, values, make_offsets({0, 3, 3}));
-    TypeDescriptor type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARIANT));
+    TypeDescriptor type = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_VARIANT));
 
     expect_typed_column_variant_json(map, 0, type, R"({"left":{"a":1},"null_child":null,"right":{"b":2}})");
     expect_typed_column_variant_json(map, 1, type, R"({})");

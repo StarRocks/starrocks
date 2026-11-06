@@ -810,6 +810,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：Scan Context 的清理间隔。
 - 引入版本：-
 
+### scan_credential_refresh_rpc_timeout_ms
+
+- 默认值：10000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：当为扫描下发的凭证（Iceberg REST Catalog 的 vended credentials）即将过期时，扫描向其 Coordinator FE 请求续期凭证的 RPC 超时时间。该 RPC 不重试：失败或超时后，扫描继续使用当前凭证，并在一分钟后再次请求。取值小于或等于 `0` 时，之后开始的扫描不再续期，始终使用下发时的凭证。
+- 引入版本：-
+
 ### scanner_row_num
 
 - 默认值：16384

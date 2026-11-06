@@ -79,7 +79,7 @@ static TExprNode create_compound_pred_node(TExprOpcode::type opcode) {
     node.__set_num_children(2);
     node.__set_opcode(opcode);
     node.__set_child_type(TPrimitiveType::BOOLEAN);
-    node.__set_type(TypeDescriptor(TYPE_BOOLEAN).to_thrift());
+    node.__set_type(TYPE_BOOLEAN_DESC.to_thrift());
     node.__set_is_nullable(true);
     return node;
 }

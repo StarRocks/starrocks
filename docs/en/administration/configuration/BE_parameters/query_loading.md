@@ -822,6 +822,15 @@ This topic introduces the following types of BE configurations:
 - Description: The time interval at which to clean the Scan Context.
 - Introduced in: -
 
+### scan_credential_refresh_rpc_timeout_ms
+
+- Default: 10000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout of the RPC with which a scan asks its coordinator FE for renewed credentials once the credentials vended for it (Iceberg REST catalog vended credentials) are about to expire. The RPC is not retried: when it fails or times out, the scan keeps its current credentials and asks again a minute later. A value less than or equal to `0` turns the renewal off for scans that start afterwards, which then keep the credentials they were deployed with.
+- Introduced in: -
+
 ### scanner_row_num
 
 - Default: 16384

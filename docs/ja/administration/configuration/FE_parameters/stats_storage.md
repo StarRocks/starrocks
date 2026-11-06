@@ -188,7 +188,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：`true` の場合、パーティション作成（手動の `ALTER TABLE ... ADD PARTITION`、ロード中の自動作成、および動的パーティションスケジューラ）は、安全であることが証明されているメタデータのみの ALTER 操作（現在は存算分離モードの ADD/DROP INDEX ファストパスジョブ、および fast schema evolution の一時的な `UPDATING_META` 状態）と並行して実行できます。DDL を拒否したり ALTER ジョブをキャンセルしたりしません。`false` に設定すると、従来の排他的な動作に戻ります。この設定はパーティション作成のみを緩和し、その他のすべての ALTER ジョブと `ADD PARTITION` 以外のすべての DDL は従来の状態チェックを維持します。
+- 説明：`true` の場合、パーティション作成（手動の `ALTER TABLE ... ADD PARTITION`、ロード中の自動作成、および動的パーティションスケジューラ）は、安全であることが証明されているメタデータのみの ALTER 操作（現在は存算分離モードの ADD/DROP INDEX ファストパスジョブ、および fast schema evolution の一時的な `UPDATING_META` 状態）と並行して実行できます。DDL を拒否したり ALTER ジョブをキャンセルしたりしません。また、最適化ジョブは開始前にテーブルのすべてのレプリカが健全になるまで待機し、これはレプリカ修復が完了するまで続く場合があります。この待機中もパーティションの作成が許可されます。`false` に設定すると、従来の排他的な動作に戻ります。この設定はパーティション作成のみを緩和し、その他のすべての ALTER ジョブと `ADD PARTITION` 以外のすべての DDL は従来の状態チェックを維持します。
 - 導入時期：-
 
 ### `capacity_used_percent_high_water`
@@ -330,7 +330,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：最適化ジョブ作成時に StarRocks が非ブロッキングのオンライン最適化パスを使用するかどうかを制御します。`enable_online_optimize_table` が true で、ターゲットテーブルが互換性チェックを満たす場合 (パーティション/キー/ソート指定なし、分散が `RandomDistributionDesc` でない、ストレージタイプが `COLUMN_WITH_ROW` でない、レプリケートストレージが有効、テーブルがクラウドネイティブテーブルまたはマテリアライズドビューでない)、プランナーは書き込みをブロックせずに最適化を実行するために `OnlineOptimizeJobV2` を作成します。false の場合、または互換性条件が失敗した場合、StarRocks は `OptimizeJobV2` にフォールバックします。これは、最適化中に書き込み操作をブロックする可能性があります。
+- 説明：最適化ジョブ作成時に StarRocks が非ブロッキングのオンライン最適化パスを使用するかどうかを制御します。`enable_online_optimize_table` が true で、ターゲットテーブルが互換性チェックを満たす場合 (パーティション/キー/ソート指定なし、分散が `RandomDistributionDesc` でない、バケッティング方法とバケットキーを変更しない、ストレージタイプが `COLUMN_WITH_ROW` でない、レプリケートストレージが有効、テーブルがクラウドネイティブテーブルまたはマテリアライズドビューでない)、プランナーは書き込みをブロックせずに最適化を実行するために `OnlineOptimizeJobV2` を作成します。false の場合、または互換性条件が失敗した場合、StarRocks は `OptimizeJobV2` にフォールバックします。これは、最適化中に書き込み操作をブロックする可能性があります。オンライン最適化パスは `enable_new_publish_mechanism` をサポートしていません。`enable_new_publish_mechanism` も true の場合、互換性チェックを満たす最適化ジョブの作成はエラーで失敗します。この場合は、`enable_new_publish_mechanism` または `enable_online_optimize_table` を false に設定してください。
 - 導入時期：v3.3.3, v3.4.0, v3.5.0
 
 ### `enable_strict_storage_medium_check`
@@ -760,7 +760,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：`INSERT INTO ... SELECT FROM <table>` 形式の取り込みに対して、サンプリングベースのタブレット事前分割を有効にするかどうか。ソースには内部 OLAP テーブルのほか、Hive、Iceberg、Paimon、Delta Lake、Hudi、JDBC、Elasticsearch など External Catalog のテーブルを指定できます。ビューはソースとしてサポートされません。外部ソースのサイズをテーブル統計から見積もれない場合、その取り込みは事前分割をスキップします。自動 Range パーティションのターゲットをサポートし、明示的に指定された通常／一時パーティション、および static／dynamic の両方の `INSERT OVERWRITE` を含みます。`INSERT INTO` では手動 Range パーティションのターゲットもサポートし、既存の空パーティションを分割するだけで、パーティションは一切作成しません。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。ロールバックする場合は `false` に設定してください。以降の INSERT-from-table 取り込みは即座に事前分割をスキップします。
+- 説明：`INSERT INTO ... SELECT FROM <table>` 形式の取り込みに対して、サンプリングベースのタブレット事前分割を有効にするかどうか。ソースには内部 OLAP テーブルのほか、Hive、Iceberg、Paimon、Delta Lake、Hudi、JDBC、Elasticsearch など External Catalog のテーブルを指定できます。ビューはソースとしてサポートされません。外部ソースのサイズをテーブル統計から見積もれない場合、その取り込みは事前分割をスキップします。自動 Range パーティションのターゲットをサポートし、明示的に指定された通常／一時パーティション、および static／dynamic の両方の `INSERT OVERWRITE` を含みます。`INSERT INTO` と static `INSERT OVERWRITE` では手動 Range パーティションのターゲットもサポートします。`INSERT INTO` は既存の空パーティションを、上書きは置き換え用の一時パーティションを分割し、いずれもパーティションは一切作成しません。内部テーブルのソースを `PARTITION (...)` で限定している場合は、それらのパーティションだけからサンプリングします。クエリが単一の内部テーブルだけを対象とし、集計、結合、集合演算を含まない非増分の非同期マテリアライズドビューのリフレッシュも、同じ方法でサンプリングされます。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。ロールバックする場合は `false` に設定してください。以降の INSERT-from-table 取り込みは即座に事前分割をスキップします。
 - 導入時期：v4.1.0
 
 ### `enable_tablet_pre_split_for_mv_refresh`
@@ -880,7 +880,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Broker Load — 起動した取り込み自身への非対称性。** マルチパーティション事前分割フックは `BrokerLoadJob.createLoadingTask` から発火しますが、これは `task.prepare()` が当時のカタログ状態に対して sink プランを構築した **後** です。したがって Broker Load 経路では、事前作成されたパーティションと分割後のタブレットレイアウトは、同じテーブルへの **後続** の取り込みからしか見えません — フックを起動した Broker Load 自身は元のレイアウトのまま走り、対象となるパーティションは BE ランタイムの自動パーティション作成を使います。INSERT-from-FILES（`StatementPlanner.plan()` の前にフックが発火）はこの非対称性の影響を受けず、起動した取り込み自身が恩恵を受けます。
 - **後続 INSERT 失敗時の事前作成パーティションの残留。** 事前作成は成功したが、起動した INSERT がそれ以外の理由（FILES のスキーマ不一致、BE クラッシュ、取り込みタイムアウト等）で失敗した場合、空の事前作成パーティションがカタログに残ります。これは `ALTER TABLE ADD PARTITION` のセマンティクスと同じで、ALTER も後続失敗時にパーティションを残します。残留を気にする運用者は `ALTER TABLE ... DROP PARTITION` で手動削除できますが、空パーティションのコストは低く、次の取り込みリトライで再利用されます。
-- **手動 Range パーティションのターゲット。** ユーザーが RANGE パーティションを宣言したテーブルでは、事前分割はパーティションを作成しません。サンプリングした各行は、そのレンジを含む既存パーティションに割り当てられ、どの宣言済みレンジにも含まれない値は計画から除外されます。分割対象は、まだ空でタブレットが 1 つだけのパーティションに限られます。典型的には `ALTER TABLE ... ADD PARTITION` で追加した直後のパーティションです。ターゲットパーティションがすべてデータを保持している取り込みは、ソースをサンプリングせずに事前分割をスキップします。手動パーティションテーブルの `INSERT OVERWRITE`、LIST パーティション、式パーティションは対象外です。
+- **手動 Range パーティションのターゲット。** ユーザーが RANGE パーティションを宣言したテーブルでは、事前分割はパーティションを作成しません。サンプリングした各行は、そのレンジを含む既存パーティションに割り当てられ、どの宣言済みレンジにも含まれない値は計画から除外されます。分割対象は、まだ空でタブレットが 1 つだけのパーティションに限られます。典型的には `ALTER TABLE ... ADD PARTITION` で追加した直後のパーティションです。ターゲットパーティションがすべてデータを保持している取り込みは、ソースをサンプリングせずに事前分割をスキップします。static `INSERT OVERWRITE` では、指定したパーティションを置き換える新しい一時パーティションを分割します。手動パーティションテーブルの dynamic `INSERT OVERWRITE`、LIST パーティション、式パーティションは対象外です。
 
 #### 本番デプロイのガイダンス
 

@@ -282,7 +282,7 @@ public:
             } else if (name == "decimal_multi_distinct_sum") {
                 auto distinct_sum = track_function(AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgLT>());
                 return track_function(
-                        AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgLT, ResultLT>,
+                        AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateStateV2<ArgLT, ResultLT>,
                                                                              IsWindowFunc>(distinct_sum));
             }
         } else {

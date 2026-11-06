@@ -72,8 +72,7 @@ public:
         _array_expr.push_back(const_null);
 
         // [null]
-        array = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
-        array->append_datum(DatumArray{Datum()});
+        array = ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, true, {{std::nullopt}});
         auto* null_array = new_fake_const_expr(std::move(array), TYPE_ARRAY_INT_DESC);
         _array_expr.push_back(null_array);
 
@@ -688,7 +687,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, nested_array_map_captures_outer_arg_con
     add_node.type = gen_type_desc(TPrimitiveType::INT);
     auto* add_expr = _objpool.add(VectorizedArithmeticExprFactory::from_thrift(add_node));
     add_expr->add_child(array_length_expr);
-    add_expr->add_child(make_slot_ref(kInnerArg, TypeDescriptor(TYPE_INT)));
+    add_expr->add_child(make_slot_ref(kInnerArg, TYPE_INT_DESC));
 
     // inner lambda: b -> array_length(a) + b
     TExprNode tlambda_inner;
@@ -701,7 +700,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, nested_array_map_captures_outer_arg_con
     tlambda_inner.type = gen_type_desc(TPrimitiveType::INT);
     auto* inner_lambda = _objpool.add(new LambdaFunction(tlambda_inner));
     inner_lambda->add_child(add_expr);
-    inner_lambda->add_child(make_slot_ref(kInnerArg, TypeDescriptor(TYPE_INT)));
+    inner_lambda->add_child(make_slot_ref(kInnerArg, TYPE_INT_DESC));
 
     // inner array_map: array_map(b -> array_length(a) + b, a)
     auto* inner_map = _objpool.add(new ArrayMapExpr(TYPE_ARRAY_INT_DESC));
@@ -747,6 +746,92 @@ TEST_F(VectorizedLambdaFunctionExprTest, nested_array_map_captures_outer_arg_con
     ASSERT_EQ(4, inner_arr[1].get_int32());
 
     ExprExecutor::close(expr_ctxs, &_runtime_state);
+}
+
+// array_map(x -> x + length(z), arr): length(z) does not depend on x, so ArrayMapExpr normally extracts it and
+// evaluates it for every row of the chunk, also for rows whose array is empty. With ALLOW_THROW_EXCEPTION such a row
+// could fail the query although it never runs the lambda, so the expression must stay inside the lambda.
+TEST_F(VectorizedLambdaFunctionExprTest, array_map_keeps_outer_expr_in_lambda_in_throw_mode) {
+    for (bool allow_throw : {false, true}) {
+        TQueryOptions query_options;
+        query_options.__set_allow_throw_exception(allow_throw);
+        RuntimeState state(TUniqueId(), query_options, TQueryGlobals(), nullptr);
+
+        auto make_slot_ref = [&](SlotId slot_id, TPrimitiveType::type type) {
+            TExprNode n;
+            n.node_type = TExprNodeType::SLOT_REF;
+            n.type = gen_type_desc(type);
+            n.num_children = 0;
+            n.__isset.slot_ref = true;
+            n.slot_ref.slot_id = slot_id;
+            n.slot_ref.tuple_id = 0;
+            n.__set_is_nullable(true);
+            return _objpool.add(new ColumnRef(n));
+        };
+
+        TExprNode length_node;
+        length_node.node_type = TExprNodeType::FUNCTION_CALL;
+        length_node.type = gen_type_desc(TPrimitiveType::INT);
+        length_node.num_children = 1;
+        length_node.__isset.fn = true;
+        length_node.fn.name.function_name = "length";
+        length_node.fn.fid = 30120;
+        length_node.fn.__isset.fid = true;
+        length_node.fn.binary_type = TFunctionBinaryType::BUILTIN;
+        auto* length_expr = _objpool.add(new VectorizedFunctionCallExpr(length_node));
+        length_expr->add_child(make_slot_ref(2, TPrimitiveType::VARCHAR));
+
+        TExprNode add_node;
+        add_node.opcode = TExprOpcode::ADD;
+        add_node.child_type = TPrimitiveType::INT;
+        add_node.node_type = TExprNodeType::BINARY_PRED;
+        add_node.num_children = 2;
+        add_node.__isset.opcode = true;
+        add_node.__isset.child_type = true;
+        add_node.type = gen_type_desc(TPrimitiveType::INT);
+        auto* add_expr = _objpool.add(VectorizedArithmeticExprFactory::from_thrift(add_node));
+        add_expr->add_child(make_slot_ref(100000, TPrimitiveType::INT));
+        add_expr->add_child(length_expr);
+
+        TExprNode tlambda_func;
+        tlambda_func.opcode = TExprOpcode::ADD;
+        tlambda_func.child_type = TPrimitiveType::INT;
+        tlambda_func.node_type = TExprNodeType::LAMBDA_FUNCTION_EXPR;
+        tlambda_func.num_children = 2;
+        tlambda_func.__isset.opcode = true;
+        tlambda_func.__isset.child_type = true;
+        tlambda_func.type = gen_type_desc(TPrimitiveType::INT);
+        auto* lambda_func = _objpool.add(new LambdaFunction(tlambda_func));
+        lambda_func->add_child(add_expr);
+        lambda_func->add_child(make_slot_ref(100000, TPrimitiveType::INT));
+
+        // [1, 2], [], [5]
+        auto array = ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{1, 2}, {}, {5}});
+        ArrayMapExpr array_map_expr(TYPE_ARRAY_INT_DESC);
+        array_map_expr.clear_children();
+        array_map_expr.add_child(lambda_func);
+        array_map_expr.add_child(new_fake_const_expr(std::move(array), TYPE_ARRAY_INT_DESC));
+
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnTestHelper::build_column<Slice>({"abc", "de", "f"}), 2);
+
+        ExprContext expr_ctx(&array_map_expr);
+        std::vector<ExprContext*> expr_ctxs = {&expr_ctx};
+        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &state));
+        ASSERT_OK(ExprExecutor::open(expr_ctxs, &state));
+
+        // the extracted expression is replaced by a reference to its precomputed column
+        ASSERT_EQ(allow_throw, add_expr->get_child(1) == length_expr) << "allow_throw=" << allow_throw;
+
+        ColumnPtr result = array_map_expr.evaluate(&expr_ctx, chunk.get());
+        ASSERT_EQ(3, result->size());
+        ASSERT_EQ(4, result->get(0).get_array()[0].get_int32());
+        ASSERT_EQ(5, result->get(0).get_array()[1].get_int32());
+        ASSERT_EQ(0, result->get(1).get_array().size());
+        ASSERT_EQ(6, result->get(2).get_array()[0].get_int32());
+
+        ExprExecutor::close(expr_ctxs, &state);
+    }
 }
 
 } // namespace starrocks

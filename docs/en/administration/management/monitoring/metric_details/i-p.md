@@ -15,7 +15,7 @@ Metrics for materialized views and shared-data clusters are detailed in the corr
 - [Metrics for asynchronous materialized view metrics](../metrics-materialized_view.md)
 - [Metrics for Shared-data Dashboard metrics, and Starlet Dashboard metrics](../metrics-shared-data.md)
 
-For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../monitoring.md).
+For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../prometheus_grafana.md).
 
 :::
 
@@ -395,6 +395,30 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Type: Cumulative
 - Description: Shared-data only. Number of times a publish on a Primary Key table had to load the whole Primary Key index of a tablet because the index was not in the Primary Key index cache, either because it had not been loaded since the BE started or because it had been evicted. A load opens all Primary Key index SST files of the tablet and replays the rowsets those files do not cover yet. Failed loads are also counted. If this value keeps rising while the set of tablets being loaded into does not change, indexes are being evicted and loaded again.
+
+## `lake_publish_batch_retry_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of batch publishes in shared-data clusters that retry an attempt that did not finish, that is, whose first transaction was already sent by an earlier attempt. When `lake_enable_batch_publish_retry_freeze` is `true`, such a retry contains only the transactions of the earlier attempt. Only the Leader FE increments this counter.
+
+## `lake_publish_partial_meta_written`
+
+- Unit: Count
+- Type: Gauge
+- Description: Cumulative number of times since this BE/CN started that it wrote a tablet's publish result to its local data cache. Counted only when the BE configuration item `lake_enable_publish_partial_meta` is `true`, and only for tables with file bundling. A result is written when the tablet's publish finished more than the publish RPC timeout plus 3 seconds after the request arrived, or when the publish is a retry; a retry answered from the kept result writes it again. A later retry on the same node reads it back instead of applying again, see `lake_publish_skipped_by_partial_meta`. Shared-data clusters only. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
+## `lake_publish_skipped_by_partial_meta`
+
+- Unit: Count
+- Type: Gauge
+- Description: Cumulative number of tablet publishes since this BE/CN started that a retried publish answered from the tablet's publish result kept in this node's local data cache (see `lake_publish_partial_meta_written`), instead of applying the transactions again. Counted only when the BE configuration item `lake_enable_publish_partial_meta` is `true`, and only for tables with file bundling. Shared-data clusters only. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
+## `lake_publish_version_skipped_durable`
+
+- Unit: Count
+- Type: Gauge
+- Description: Cumulative number of tablet publishes since this BE/CN started that a retried publish answered from the new version's tablet metadata already written in storage, instead of applying the transactions again. Only a retry (a publish of a partition whose earlier request was sent and did not finish) whose new version is not in the metadata cache is counted; tablets answered from the metadata cache and first attempts are not. Shared-data clusters only. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
 
 ## `lake_segment_cache_hit_minute`
 

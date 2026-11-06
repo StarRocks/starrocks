@@ -36,7 +36,6 @@ inline TypeDescriptor array_type(const LogicalType& child_type) {
 }
 
 // Scalar types used only by tests. The ones also used by production code live in types/type_descriptor.h.
-inline const TypeDescriptor TYPE_UNKNOWN_DESC = TypeDescriptor(LogicalType::TYPE_UNKNOWN);
 inline const TypeDescriptor TYPE_CHAR_DESC = TypeDescriptor::create_char_type(TypeDescriptor::MAX_CHAR_LENGTH);
 inline const TypeDescriptor TYPE_JSON_DESC = TypeDescriptor::create_json_type();
 

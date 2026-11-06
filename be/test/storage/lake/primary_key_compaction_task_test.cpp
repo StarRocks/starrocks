@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <memory>
 #include <random>
+#include <set>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -1437,6 +1438,135 @@ TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
     rowset_metas.clear();
     rowset_vec.clear();
     config::enable_pk_size_tiered_compaction_strategy = old_val;
+}
+
+// A level that never has the highest score -- larger rowsets that the newest small ones outscore in every
+// round -- is merged into the compaction once it holds lake_pk_compaction_max_rowsets_per_level rowsets
+// that still need compaction.
+TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_merges_overfull_level) {
+    const bool old_strategy = config::enable_pk_size_tiered_compaction_strategy;
+    const int64_t old_max_rowsets = config::lake_pk_compaction_max_rowsets_per_level;
+    const int64_t old_max_rowset_size = config::lake_compaction_max_rowset_size;
+    const int64_t old_result_bytes = config::update_compaction_result_bytes;
+    const int64_t old_max_input_rowsets = config::lake_pk_compaction_max_input_rowsets;
+    config::enable_pk_size_tiered_compaction_strategy = true;
+    config::lake_pk_compaction_max_input_rowsets = 500;
+    DeferOp restore([&] {
+        config::enable_pk_size_tiered_compaction_strategy = old_strategy;
+        config::lake_pk_compaction_max_rowsets_per_level = old_max_rowsets;
+        config::lake_compaction_max_rowset_size = old_max_rowset_size;
+        config::update_compaction_result_bytes = old_result_bytes;
+        config::lake_pk_compaction_max_input_rowsets = old_max_input_rowsets;
+    });
+
+    // 100MB base | 25 x 200KB | 10 x 4KB. Level scores: 10 x 256 for the 4KB rowsets, 25 x 5.12 for the 200KB
+    // ones, so the 4KB level is on top and has more than one rowset.
+    std::vector<int64_t> bytes{100 * 1024 * 1024};
+    bytes.insert(bytes.end(), 25, 200 * 1024);
+    bytes.insert(bytes.end(), 10, 4 * 1024);
+    auto pick = [&]() {
+        std::vector<RowsetMetadataPB> rowset_metas;
+        std::vector<RowsetCandidate> rowset_vec;
+        generate_test_rowsets(bytes, &rowset_metas, &rowset_vec);
+        auto pick_level_or = PrimaryCompactionPolicy::pick_max_level(rowset_vec);
+        CHECK(pick_level_or.ok());
+        std::set<int> picked;
+        auto& level = *pick_level_or.value();
+        while (!level.rowsets.empty()) {
+            picked.insert(level.rowsets.top().rowset_index);
+            level.rowsets.pop();
+        }
+        return picked;
+    };
+    auto expected = [](int first, int last) {
+        std::set<int> s;
+        for (int i = first; i <= last; i++) {
+            s.insert(i);
+        }
+        return s;
+    };
+
+    // Disabled: only the 4KB level (rowsets 26..35) is picked.
+    config::lake_pk_compaction_max_rowsets_per_level = 0;
+    EXPECT_EQ(expected(26, 35), pick());
+    // The 200KB level has fewer rowsets than the cap: unchanged.
+    config::lake_pk_compaction_max_rowsets_per_level = 26;
+    EXPECT_EQ(expected(26, 35), pick());
+    // The 200KB level reached the cap: it is merged into the pick, the base rowset is not.
+    config::lake_pk_compaction_max_rowsets_per_level = 25;
+    EXPECT_EQ(expected(1, 35), pick());
+    config::lake_pk_compaction_max_rowsets_per_level = 20;
+    EXPECT_EQ(expected(1, 35), pick());
+    // A level whose rowsets do not fit in one compaction is left to the score: 25 x 200KB > 4MB.
+    config::update_compaction_result_bytes = 4 * 1024 * 1024;
+    EXPECT_EQ(expected(26, 35), pick());
+    // Nor is a level that fits on its own but not next to the picked rowsets: the 200KB level holds
+    // 25 x (200KB + 1) = 5120025 live bytes, the picked 4KB level 10 x (4KB + 1) = 40970 more.
+    config::update_compaction_result_bytes = 5140000;
+    EXPECT_EQ(expected(26, 35), pick());
+    config::update_compaction_result_bytes = old_result_bytes;
+    // The same for the input rowset limit: 10 picked + 25 > 30.
+    config::lake_pk_compaction_max_input_rowsets = 30;
+    EXPECT_EQ(expected(26, 35), pick());
+    config::lake_pk_compaction_max_input_rowsets = 35;
+    EXPECT_EQ(expected(1, 35), pick());
+    config::lake_pk_compaction_max_input_rowsets = 500;
+    // Rowsets that no longer need compaction (large, non-overlapped, no deletes) do not count toward the cap.
+    config::lake_compaction_max_rowset_size = 150 * 1024;
+    EXPECT_EQ(expected(26, 35), pick());
+}
+
+// When several levels are over the cap, the one with the most rowsets that still need compaction is merged into
+// this compaction; the others wait for the next rounds.
+TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_merges_largest_overfull_level) {
+    const bool old_strategy = config::enable_pk_size_tiered_compaction_strategy;
+    const int64_t old_max_rowsets = config::lake_pk_compaction_max_rowsets_per_level;
+    const int64_t old_max_rowset_size = config::lake_compaction_max_rowset_size;
+    const int64_t old_result_bytes = config::update_compaction_result_bytes;
+    const int64_t old_max_input_rowsets = config::lake_pk_compaction_max_input_rowsets;
+    config::enable_pk_size_tiered_compaction_strategy = true;
+    config::lake_pk_compaction_max_rowsets_per_level = 20;
+    config::lake_compaction_max_rowset_size = 4L * 1024 * 1024 * 1024;
+    config::update_compaction_result_bytes = 1024 * 1024 * 1024;
+    config::lake_pk_compaction_max_input_rowsets = 500;
+    DeferOp restore([&] {
+        config::enable_pk_size_tiered_compaction_strategy = old_strategy;
+        config::lake_pk_compaction_max_rowsets_per_level = old_max_rowsets;
+        config::lake_compaction_max_rowset_size = old_max_rowset_size;
+        config::update_compaction_result_bytes = old_result_bytes;
+        config::lake_pk_compaction_max_input_rowsets = old_max_input_rowsets;
+    });
+
+    // 100MB base | n_1mb x 1MB | n_200kb x 200KB | 10 x 4KB; the 4KB level has the highest score.
+    auto pick = [](int n_1mb, int n_200kb) {
+        std::vector<int64_t> bytes{100 * 1024 * 1024};
+        bytes.insert(bytes.end(), n_1mb, 1024 * 1024);
+        bytes.insert(bytes.end(), n_200kb, 200 * 1024);
+        bytes.insert(bytes.end(), 10, 4 * 1024);
+        std::vector<RowsetMetadataPB> rowset_metas;
+        std::vector<RowsetCandidate> rowset_vec;
+        generate_test_rowsets(bytes, &rowset_metas, &rowset_vec);
+        auto pick_level_or = PrimaryCompactionPolicy::pick_max_level(rowset_vec);
+        CHECK(pick_level_or.ok());
+        std::set<int> picked;
+        auto& level = *pick_level_or.value();
+        while (!level.rowsets.empty()) {
+            picked.insert(level.rowsets.top().rowset_index);
+            level.rowsets.pop();
+        }
+        return picked;
+    };
+    auto expected = [](int first, int last, std::set<int> s) {
+        for (int i = first; i <= last; i++) {
+            s.insert(i);
+        }
+        return s;
+    };
+
+    // Both levels are over the cap: the 1MB level (rowsets 1..25) has more rowsets than the 200KB one (26..47).
+    EXPECT_EQ(expected(1, 25, expected(48, 57, {})), pick(25, 22));
+    // Now the 200KB level (rowsets 23..52) has more rowsets than the 1MB one (1..22).
+    EXPECT_EQ(expected(23, 52, expected(53, 62, {})), pick(22, 30));
 }
 
 // Helper: build a tablet_metadata-like vector of rowset PBs with explicit num_dels set,

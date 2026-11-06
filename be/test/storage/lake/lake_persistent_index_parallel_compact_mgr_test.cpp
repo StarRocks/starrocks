@@ -17,14 +17,20 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <functional>
 #include <memory>
+#include <optional>
 
+#include "base/concurrency/countdown_latch.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "base/time/monotime.h"
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_starlet_fwd.h"
+#include "common/thread/threadpool.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
@@ -172,7 +178,7 @@ protected:
 
         for (int i = 0; i < count; i++) {
             auto chunk = std::make_unique<Chunk>();
-            auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+            auto col = ColumnHelper::create_column(TYPE_INT_DESC, false);
             col->append_datum(Datum((int32_t)(start_key + i)));
             chunk->append_column(std::move(col), (SlotId)0);
 
@@ -223,6 +229,64 @@ protected:
         auto sst = std::make_unique<PersistentIndexSstable>();
         RETURN_IF_ERROR(sst->init(std::move(rf), sst_pb, nullptr, false));
         return sst;
+    }
+
+    // Gives the tablet the key range [lower, upper) on c0; a missing bound leaves that side unbounded.
+    void set_tablet_range(std::optional<int32_t> lower, std::optional<int32_t> upper) {
+        _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PK_ENCODING_TYPE_V2);
+        auto* range = _tablet_metadata->mutable_range();
+        if (lower.has_value()) {
+            auto* value = range->mutable_lower_bound()->add_values();
+            value->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
+            value->set_value(std::to_string(*lower));
+            range->set_lower_bound_included(true);
+        }
+        if (upper.has_value()) {
+            auto* value = range->mutable_upper_bound()->add_values();
+            value->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
+            value->set_value(std::to_string(*upper));
+            range->set_upper_bound_included(false);
+        }
+    }
+
+    // The index key of c0 = v under the order-preserving encoding of a range-distribution tablet.
+    std::string encode_int_key(int32_t v) {
+        auto pk_columns = std::vector<ColumnId>{0};
+        auto pkey_schema = ChunkHelper::convert_schema(TabletSchema::create(_tablet_metadata->schema()), pk_columns);
+        auto chunk = std::make_unique<Chunk>();
+        auto col = ColumnTestHelper::build_column<int32_t>({v});
+        chunk->append_column(std::move(col), (SlotId)0);
+        MutableColumnPtr pk_column;
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+        if (pk_column->is_binary()) {
+            return ColumnHelper::get_binary_column(pk_column.get())->get_slice(0).to_string();
+        } else {
+            RawDataVisitor visitor;
+            EXPECT_OK(pk_column->accept(&visitor));
+            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
+        }
+    }
+
+    // Compacts `sst` as the only input and expects one private output under a new file name whose keys run from
+    // `first` to `last`.
+    void expect_lone_sstable_rewritten(const PersistentIndexSstablePB& sst, int32_t first, int32_t last) {
+        auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+        ASSERT_OK(mgr->init());
+        std::vector<std::vector<PersistentIndexSstablePB>> candidates;
+        candidates.push_back({sst});
+
+        std::vector<PersistentIndexSstablePB> output_sstables;
+        ASSERT_OK(mgr->compact(candidates, _tablet_metadata, true, &output_sstables));
+
+        ASSERT_EQ(1, output_sstables.size());
+        EXPECT_NE(sst.filename(), output_sstables[0].filename());
+        EXPECT_FALSE(output_sstables[0].shared());
+        ASSERT_TRUE(output_sstables[0].has_range());
+        EXPECT_EQ(encode_int_key(first), output_sstables[0].range().start_key());
+        EXPECT_EQ(encode_int_key(last), output_sstables[0].range().end_key());
     }
 
     constexpr static const char* const kTestDir = "test_lake_persistent_index_parallel_compact_mgr";
@@ -754,8 +818,10 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sstable_without_range) {
 
     // Should create single task without parallel splitting
     ASSERT_EQ(output_sstables.size(), 1);
-    // should reuse the sstable
-    ASSERT_EQ(output_sstables[0].filename(), sst1.filename());
+    // should rewrite the sstable, so that the output declares a key range
+    ASSERT_NE(output_sstables[0].filename(), sst1.filename());
+    ASSERT_EQ(output_sstables[0].range().start_key(), fmt::format("key_{:016X}", 0));
+    ASSERT_EQ(output_sstables[0].range().end_key(), fmt::format("key_{:016X}", 99));
 }
 
 // ============================================================================
@@ -1043,6 +1109,111 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_concurrent_compaction_tas
     }
 
     config::pk_index_parallel_compaction_task_split_threshold_bytes = old_threshold;
+}
+
+// ============================================================================
+// Tests for AsyncCompactCB
+// ============================================================================
+
+// A real compaction task that records how it reported into its AsyncCompactCB: whether it ran or was cancelled, and
+// whether the AsyncCompactCB had already destroyed its members at that point. Its input is empty, because a task
+// reports into its AsyncCompactCB whatever its input.
+class RecordingCompactTask : public LakePersistentIndexParallelCompactTask {
+public:
+    RecordingCompactTask(TabletManager* tablet_mgr, TabletMetadataPtr metadata,
+                         const std::atomic<bool>* cb_members_destroyed, std::function<void()> before_run)
+            : LakePersistentIndexParallelCompactTask({}, tablet_mgr, std::move(metadata), false, UniqueId::gen_uid(),
+                                                     SstSeekRange()),
+              _cb_members_destroyed(cb_members_destroyed),
+              _before_run(std::move(before_run)) {}
+
+    void run() override {
+        if (_before_run) {
+            _before_run();
+        }
+        _ran = true;
+        _reported_into_destroyed_cb = _cb_members_destroyed->load();
+        LakePersistentIndexParallelCompactTask::run();
+    }
+
+    void cancel() override {
+        _cancelled = true;
+        _reported_into_destroyed_cb = _cb_members_destroyed->load();
+        LakePersistentIndexParallelCompactTask::cancel();
+    }
+
+    bool ran() const { return _ran; }
+    bool cancelled() const { return _cancelled; }
+    bool reported_into_destroyed_cb() const { return _reported_into_destroyed_cb; }
+
+private:
+    const std::atomic<bool>* _cb_members_destroyed;
+    std::function<void()> _before_run;
+    std::atomic<bool> _ran{false};
+    std::atomic<bool> _cancelled{false};
+    std::atomic<bool> _reported_into_destroyed_cb{false};
+};
+
+// A publish that fails after starting an early sst compaction destroys the AsyncCompactCB while its tasks are still
+// queued or running. The tasks report into the AsyncCompactCB, so destroying it must cancel the queued task and wait
+// for the running one while its members are still alive.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_destroy_cb_with_tasks_in_flight) {
+    // One worker, so the second task stays queued while the first one runs.
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("destroy_cb_test").set_min_threads(1).set_max_threads(1).build(&pool));
+
+    std::atomic<bool> cb_members_destroyed{false};
+    CountDownLatch running(1);
+    CountDownLatch destroying(1);
+    std::atomic<bool> hold_timed_out{false};
+
+    // The AsyncCompactCB destroys its callback after the members its tasks report into, so the callback holds an
+    // object that sets the flag when destroyed.
+    auto set_flag_when_destroyed =
+            std::make_shared<DeferOp<std::function<void()>>>([&]() { cb_members_destroyed = true; });
+    auto cb = std::make_unique<AsyncCompactCB>(
+            pool->new_token(ThreadPool::ExecutionMode::CONCURRENT),
+            [set_flag_when_destroyed](const std::vector<PersistentIndexSstablePB>&) { return Status::OK(); });
+    set_flag_when_destroyed.reset();
+    // Releases the running task if an assertion below returns early, so that destroying the AsyncCompactCB does not
+    // wait for it forever.
+    DeferOp release_running_task([&]() { destroying.count_down(); });
+
+    auto running_task =
+            std::make_shared<RecordingCompactTask>(_tablet_mgr.get(), _tablet_metadata, &cb_members_destroyed, [&]() {
+                running.count_down();
+                destroying.wait();
+                // Hold the only worker until the AsyncCompactCB destructor has done all it does before waiting for
+                // this task: without the fix it has destroyed the members; with it, it has shut the token down, which
+                // takes the queued task off the queue.
+                const MonoTime deadline = MonoTime::Now() + MonoDelta::FromSeconds(30);
+                while (!cb_members_destroyed && pool->num_queued_tasks() > 0) {
+                    if (MonoTime::Now() > deadline) {
+                        hold_timed_out = true;
+                        break;
+                    }
+                    SleepFor(MonoDelta::FromMilliseconds(1));
+                }
+            });
+    auto queued_task =
+            std::make_shared<RecordingCompactTask>(_tablet_mgr.get(), _tablet_metadata, &cb_members_destroyed, nullptr);
+    running_task->set_cb(cb.get());
+    queued_task->set_cb(cb.get());
+    ASSERT_OK(cb->thread_pool_token()->submit(running_task));
+    ASSERT_TRUE(running.wait_for(MonoDelta::FromSeconds(30)));
+    ASSERT_OK(cb->thread_pool_token()->submit(queued_task));
+    ASSERT_EQ(1, pool->num_queued_tasks());
+
+    destroying.count_down();
+    cb.reset();
+
+    ASSERT_TRUE(cb_members_destroyed);
+    ASSERT_FALSE(hold_timed_out);
+    ASSERT_TRUE(running_task->ran());
+    ASSERT_FALSE(running_task->reported_into_destroyed_cb());
+    ASSERT_TRUE(queued_task->cancelled());
+    ASSERT_FALSE(queued_task->ran());
+    ASSERT_FALSE(queued_task->reported_into_destroyed_cb());
 }
 
 // ============================================================================
@@ -1381,13 +1552,13 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_tablet_range
     auto* range = _tablet_metadata->mutable_range();
     auto* lower = range->mutable_lower_bound();
     auto* v_lower = lower->add_values();
-    v_lower->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    v_lower->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v_lower->set_value("100");
     range->set_lower_bound_included(true);
 
     auto* upper = range->mutable_upper_bound();
     auto* v_upper = upper->add_values();
-    v_upper->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    v_upper->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v_upper->set_value("200");
     range->set_upper_bound_included(false);
 
@@ -1410,28 +1581,73 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_tablet_range
     // Check range of output SST
     // The keys are encoded INTs. We can't directly compare with "100" string.
     // But we can check if they match the encoded values of 100 and 199.
-    auto encode_key = [&](int32_t v) {
-        auto pk_columns = std::vector<ColumnId>{0};
-        auto pkey_schema = ChunkHelper::convert_schema(TabletSchema::create(_tablet_metadata->schema()), pk_columns);
-        auto chunk = std::make_unique<Chunk>();
-        auto col = ColumnTestHelper::build_column<int32_t>({v});
-        chunk->append_column(std::move(col), (SlotId)0);
-        MutableColumnPtr pk_column;
-        EXPECT_OK(
-                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
-                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
-        if (pk_column->is_binary()) {
-            return ColumnHelper::get_binary_column(pk_column.get())->get_slice(0).to_string();
-        } else {
-            RawDataVisitor visitor;
-            EXPECT_OK(pk_column->accept(&visitor));
-            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
-        }
-    };
+    ASSERT_EQ(output_sstables[0].range().start_key(), encode_int_key(100));
+    ASSERT_EQ(output_sstables[0].range().end_key(), encode_int_key(199));
+}
 
-    ASSERT_EQ(output_sstables[0].range().start_key(), encode_key(100));
-    ASSERT_EQ(output_sstables[0].range().end_key(), encode_key(199));
+// A shared index file is rewritten even when it already lies inside the tablet range: moving it would keep a file
+// that the split sibling still references.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_shared_fileset_inside_tablet_range_is_rewritten) {
+    set_tablet_range(100, 200);
+    PersistentIndexSstablePB sst;
+    ASSERT_OK(create_test_sstable_with_pk("shared_inside.sst", 120, 50, &sst, true /* shared */));
+    expect_lone_sstable_rewritten(sst, 120, 169);
+}
+
+// An index file that lacks an end key cannot be placed among the sampled split points, so the compaction runs as one
+// task over every input instead of dropping that file.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sstable_missing_an_end_key_runs_unsplit) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+    set_tablet_range(100, 200);
+
+    PersistentIndexSstablePB valid;
+    PersistentIndexSstablePB no_end_key;
+    ASSERT_OK(create_test_sstable_with_pk("valid.sst", 100, 50, &valid));
+    ASSERT_OK(create_test_sstable_with_pk("no_end_key.sst", 150, 50, &no_end_key));
+    no_end_key.mutable_range()->clear_end_key();
+    std::vector<std::vector<PersistentIndexSstablePB>> candidates;
+    candidates.push_back({valid});
+    candidates.push_back({no_end_key});
+
+    std::vector<PersistentIndexSstablePB> output_sstables;
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, true, &output_sstables));
+
+    for (int32_t k = 100; k < 200; k++) {
+        const std::string key = encode_int_key(k);
+        bool found = false;
+        for (const auto& out_sst_pb : output_sstables) {
+            ASSIGN_OR_ABORT(auto sst, open_sstable(out_sst_pb));
+            Slice key_slice(key);
+            KeyIndexSet key_indexes;
+            key_indexes.insert(0);
+            std::vector<IndexValue> values(1, IndexValue(NullIndexValue));
+            KeyIndexSet found_key_indexes;
+            auto st = sst->multi_get(&key_slice, key_indexes, -1, values.data(), &found_key_indexes);
+            if (st.ok() && !found_key_indexes.empty()) {
+                found = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(found) << "Key " << k << " not found in any output sstable";
+    }
+}
+
+// A lone private index file without a key range is rewritten rather than moved, so the output declares a range.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_lone_private_sstable_without_range_is_rewritten) {
+    set_tablet_range(std::nullopt, 200);
+    PersistentIndexSstablePB sst;
+    ASSERT_OK(create_test_sstable_with_pk("no_range.sst", 50, 100, &sst));
+    sst.clear_range();
+    expect_lone_sstable_rewritten(sst, 50, 149);
+}
+
+// A private index file that reaches outside the tablet range is clipped to it rather than moved as is.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_private_sstable_outside_tablet_range_is_clipped) {
+    set_tablet_range(100, 200);
+    PersistentIndexSstablePB sst;
+    ASSERT_OK(create_test_sstable_with_pk("private_out.sst", 150, 100, &sst, false /* shared */));
+    expect_lone_sstable_rewritten(sst, 150, 199);
 }
 
 TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column_tablet_range_filtering) {
@@ -1473,19 +1689,19 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column
     auto* range = _tablet_metadata->mutable_range();
     auto* lower = range->mutable_lower_bound();
     auto* v_lower1 = lower->add_values();
-    v_lower1->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    v_lower1->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v_lower1->set_value("100");
     auto* v_lower2 = lower->add_values();
-    v_lower2->mutable_type()->CopyFrom(TypeDescriptor(TYPE_VARCHAR).to_protobuf());
+    v_lower2->mutable_type()->CopyFrom(TYPE_VARCHAR_DESC.to_protobuf());
     v_lower2->set_value("abc");
     range->set_lower_bound_included(true);
 
     auto* upper = range->mutable_upper_bound();
     auto* v_upper1 = upper->add_values();
-    v_upper1->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    v_upper1->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v_upper1->set_value("200");
     auto* v_upper2 = upper->add_values();
-    v_upper2->mutable_type()->CopyFrom(TypeDescriptor(TYPE_VARCHAR).to_protobuf());
+    v_upper2->mutable_type()->CopyFrom(TYPE_VARCHAR_DESC.to_protobuf());
     v_upper2->set_value("def");
     range->set_upper_bound_included(false);
 
@@ -1503,7 +1719,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column
         auto chunk = std::make_unique<Chunk>();
         auto col1 = ColumnTestHelper::build_column<int32_t>({v1});
         chunk->append_column(std::move(col1), (SlotId)0);
-        auto col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false);
+        auto col2 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
         col2->append_datum(Datum(Slice(v2)));
         chunk->append_column(std::move(col2), (SlotId)1);
 

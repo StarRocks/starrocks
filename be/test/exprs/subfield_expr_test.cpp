@@ -79,7 +79,7 @@ TEST_F(SubfieldExprTest, subfield_test) {
     column->append_datum(datum_struct_2);
 
     {
-        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"id"});
+        std::unique_ptr<Expr> expr = create_subfield_expr(TYPE_INT_DESC, {"id"});
         expr->add_child(new_fake_const_expr(column->clone(), struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
@@ -89,7 +89,7 @@ TEST_F(SubfieldExprTest, subfield_test) {
     }
 
     {
-        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"name"});
+        std::unique_ptr<Expr> expr = create_subfield_expr(TYPE_INT_DESC, {"name"});
         expr->add_child(new_fake_const_expr(column->clone(), struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
@@ -121,7 +121,7 @@ TEST_F(SubfieldExprTest, subfield_null_test) {
         datum_struct_3.push_back("cruise");
         column->append_datum(datum_struct_3);
 
-        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"id"});
+        std::unique_ptr<Expr> expr = create_subfield_expr(TYPE_INT_DESC, {"id"});
         expr->add_child(new_fake_const_expr(std::move(column), struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
@@ -148,7 +148,7 @@ TEST_F(SubfieldExprTest, subfield_null_test) {
         datum_struct_3.push_back("cruise");
         column->append_datum(datum_struct_3);
 
-        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"id"});
+        std::unique_ptr<Expr> expr = create_subfield_expr(TYPE_INT_DESC, {"id"});
         expr->add_child(new_fake_const_expr(std::move(column), struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
@@ -179,7 +179,7 @@ TEST_F(SubfieldExprTest, subfield_clone_test) {
     datum_struct_3.push_back("cruise");
     column->append_datum(datum_struct_3);
 
-    std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"id"});
+    std::unique_ptr<Expr> expr = create_subfield_expr(TYPE_INT_DESC, {"id"});
     expr->add_child(new_fake_const_expr(column->clone(), struct_type));
     auto result = expr->evaluate(nullptr, nullptr);
     EXPECT_TRUE(result->is_nullable());
@@ -223,7 +223,7 @@ TEST_F(SubfieldExprTest, subfield_multi_level_test) {
     datum_struct_3_level1.push_back(datum_struct_3_level2);
     column->append_datum(datum_struct_3_level1);
 
-    std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"level1", "level2"});
+    std::unique_ptr<Expr> expr = create_subfield_expr(TYPE_INT_DESC, {"level1", "level2"});
     expr->add_child(new_fake_const_expr(std::move(column), struct_type));
     auto result = expr->evaluate(nullptr, nullptr);
     EXPECT_TRUE(result->is_nullable());

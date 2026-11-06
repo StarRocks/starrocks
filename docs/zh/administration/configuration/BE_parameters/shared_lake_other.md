@@ -80,7 +80,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，Compaction 任务是否在其 Rowset 实例上持有输入 Segment 对象直至任务结束，使 Vertical Compaction 的各列组趟直接复用这些对象，而不再依赖元数据缓存重新加载。关闭持有时，一旦元数据缓存装不下全部输入 Segment（`lake_metadata_cache_limit` 较小，或节点上 Tablet 较多），每一趟都会重新加载并解析全部输入 Segment；该开销为 CPU 密集且与列数成正比，可能使宽表 Compaction 慢一个数量级，或因反复超出内存限制而失败。持有期间，任务不再把输入 Segment 和 Delete Vector 填入共享元数据缓存，因为输入数据在 Compaction 完成后即被删除，缓存它们只会挤掉其他 Tablet 的条目。内存代价为每个运行中任务持有一套输入 Segment 元数据，计入该 Compaction 任务的内存跟踪并随任务释放。设为 `false` 可恢复旧行为，即 Compaction 通过共享元数据缓存复用 Segment 并向其填充输入。
+- 描述：存算分离集群中，Compaction 任务是否在其 Rowset 实例上持有输入 Segment 对象直至任务结束，使 Vertical Compaction 的各列组趟直接复用这些对象，而不再依赖元数据缓存重新加载。关闭持有时，一旦元数据缓存装不下全部输入 Segment（`lake_segment_metadata_cache_limit_percent` 较小，或节点上 Tablet 较多），每一趟都会重新加载并解析全部输入 Segment；该开销为 CPU 密集且与列数成正比，可能使宽表 Compaction 慢一个数量级，或因反复超出内存限制而失败。持有期间，任务不再把输入 Segment 和 Delete Vector 填入共享元数据缓存，因为输入数据在 Compaction 完成后即被删除，缓存它们只会挤掉其他 Tablet 的条目。内存代价为每个运行中任务持有一套输入 Segment 元数据，计入该 Compaction 任务的内存跟踪并随任务释放。设为 `false` 可恢复旧行为，即 Compaction 通过共享元数据缓存复用 Segment 并向其填充输入。
 - 引入版本：v4.2
 
 ### lake_compaction_stream_buffer_size_bytes
@@ -146,6 +146,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否在写入存算分离集群的 Tablet 元数据和事务日志文件时附加 Adler-32 校验和，以便在读取时检测这些文件是否损坏。无论该配置项如何设置，读取端在文件包含校验和时都会自动识别并校验；该配置项仅控制写入格式。仅当集群仍可能降级到不支持该校验和格式的版本时，才将该配置项设置为 `false`。在滚动升级或降级期间，旧版本的 BE 或 CN 使用旧的读取逻辑，无法解析新格式写入的文件。
 - 引入版本：v4.2
 
+### lake_enable_publish_partial_meta
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中开启 File Bundling 的表在导入发布（Publish）时，是否保留聚合节点可能未收到的 Tablet 发布结果。某个 Tablet 的 Publish 在请求到达后超过 Publish RPC 超时时间加 3 秒才完成，或者本次 Publish 是重试，就会把结果保存在本节点的 Data Cache 中，不写入对象存储。之后该节点上的重试会直接读取这份结果，不再重新执行事务，因此慢分区每次重试时，已完成的 Tablet 不会被重做。这些缓存条目和其他 Data Cache 数据一样按需淘汰。仅在开启 Data Cache 时生效。所有 BE 和 CN 节点应设置相同的值。
+- 引入版本：v4.2
+
 ### lake_pk_compaction_max_input_rowsets
 
 - 默认值：500
@@ -154,6 +163,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。该参数默认值自 v3.2.4 和 v3.1.10 版本开始从 `5` 变更为 `1000`，并自 v3.3.1 和 v3.2.9 版本开始变更为 `500`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
 - 引入版本：v3.1.8, v3.2.3
+
+### lake_pk_compaction_max_rowsets_per_level
+
+- 默认值：20
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，主键表的某个大小层中待合并的 Rowset 达到该数量时，即使该层得分不是最高，也会被合并。Size-tiered Compaction 策略每轮只合并得分最高的一层。持续导入时，最新写入的小 Rowset 所在层每轮得分都最高，由较大 Rowset（之前 Compaction 的产物和中等批次的导入）组成的层会一直增长，导致查询需要读取的 Segment 增多，并在 Compaction 刚完成时表现为 Compaction Score 的尖峰。当某个未被选中的层中待合并的 Rowset 达到该数量，且这些 Rowset 能与已选中的 Rowset 在同一次 Compaction 任务中合并时，该层会并入该次 Compaction 任务。设置为 `0` 表示关闭该行为。
+- 引入版本：-
 
 ### lake_pk_compaction_base_enable_delete_trigger
 
@@ -242,7 +260,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中主键表的 publish 在读取所需的基底 Segment 时，是否通过 Segment 元数据缓存读取，而不是每次都重新打开。该项同时覆盖行模式部分列更新和条件更新，二者都需要从相同的 Segment 重新读取旧值。打开一个 Segment 需要解析其 footer 并为表 Schema 的每一列创建一个列读取器，因此在宽表上，高频的部分列更新会在每次 publish 时对相同的基底 Segment 重复付出这份开销。通过缓存读取可以让后续的 publish 复用已经打开的 Segment。包含 JSON、ARRAY、MAP 或 STRUCT 列，或通过 `zstd_compression_columns` 启用列级压缩的列时，使用原有的打开路径，因为按顶层列数估算无法涵盖嵌套元数据或压缩字典。关闭字典写入后，这些表仍绕过缓存，因为已有 Segment 可能仍包含字典。仅当该 tablet 的基底 Segment 能够容纳在 `lake_metadata_cache_limit` 之内，且每个 Segment 的估计大小不超过单个缓存分片的容量时才使用缓存；否则，填充缓存会以与写入相同的速度淘汰条目，因此会退回原有行为。之所以按整个 tablet 而非单次 publish 计算，是因为相继的多次 publish 读取的是其中不同的子集。将该项设置为 `false` 可始终重新打开 Segment。
+- 描述：存算分离集群中主键表的 publish 在读取所需的基底 Segment 时，是否通过 Segment 元数据缓存读取，而不是每次都重新打开。该项同时覆盖行模式部分列更新和条件更新，二者都需要从相同的 Segment 重新读取旧值。打开一个 Segment 需要解析其 footer 并为表 Schema 的每一列创建一个列读取器，因此在宽表上，高频的部分列更新会在每次 publish 时对相同的基底 Segment 重复付出这份开销。通过缓存读取可以让后续的 publish 复用已经打开的 Segment。包含 JSON、ARRAY、MAP 或 STRUCT 列，或通过 `zstd_compression_columns` 启用列级压缩的列时，使用原有的打开路径，因为按顶层列数估算无法涵盖嵌套元数据或压缩字典。关闭字典写入后，这些表仍绕过缓存，因为已有 Segment 可能仍包含字典。仅当该 tablet 的基底 Segment 能够全部放入 Segment 元数据缓存（容量由 `lake_segment_metadata_cache_limit_percent` 决定），且每个 Segment 的估计大小不超过单个缓存分片的容量时才使用缓存；否则，填充缓存会以与写入相同的速度淘汰条目，因此会退回原有行为。之所以按整个 tablet 而非单次 publish 计算，是因为相继的多次 publish 读取的是其中不同的子集。将该项设置为 `false` 可始终重新打开 Segment。
 - 引入版本：v4.2
 
 ### enable_lake_prepared_split_pre_refinement
@@ -288,6 +306,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 流水化读取 `.lcrm` 文件时使用的 sub-chunk 粒度。每个输出 segment 被切分为 `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 个 sub-chunk，独立流水化。值越小，少而大的输出 segment 能获得越高的并发度，但代价是更多的范围读取和消费时一次额外的 memcpy。默认 4 MiB，与 starcache 磁盘层 block 大小对齐。
 
+### lake_segment_metadata_cache_limit_percent
+
+- 默认值：20
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中 Segment 元数据缓存的容量，以 BE 进程内存上限的百分比表示。该缓存存放已打开的 Segment（包括 Footer、索引和列读取器）、Delete Vector 以及 Tablet Schema。它与 Tablet 元数据缓存（参见 `lake_tablet_metadata_cache_limit_percent`）相互独立，加载再多的 Segment 也不会把 Tablet 元数据和事务日志挤出缓存。超出 0–100 的取值按 0 或 100 处理。设为 `0` 即关闭该缓存。该项与 `lake_tablet_metadata_cache_limit_percent` 共同取代原有的 `lake_metadata_cache_limit`。
+- 引入版本：-
+
 ### lake_shard_info_cache_ttl_sec
 
 - 默认值：60
@@ -295,6 +322,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：秒
 - 是否动态：是
 - 描述：存算分离集群下，BE 或 CN 保留不归自己持有的 tablet 的存储位置的时长。在此期间再次访问该 tablet，不必向 StarMgr 查询。节点保留两类存储位置。第一类是节点自己向 StarMgr 查询得到的：节点读写分配给其他节点的 tablet 的文件时需要查询，查询计入 `starrocks_be_staros_shard_info_fallback_total`，例如一次导入由多个节点同时写同一个 tablet，或者 Vacuum 读取一个分区内所有 tablet 的元数据；由这类位置直接应答的查询计入 `staros_shard_info_fallback_cache_hits_total`。第二类是持有 tablet 的节点交来的：向开启了 `file_bundling` 的表导入时，持有节点在回传事务日志时附带存储位置，负责该导入的协调节点据此写各分区的 combined txn log，无需查询；由这类位置直接应答的查询计入 `lake_tablet_location_handoff_hits_total`。持有 tablet 的节点会收到 StarMgr 推送的存储卷变更，而保留的存储位置要到过期后才会更新，因此该配置项同时限定了这类节点最多还会使用多久过时的存储卷配置，例如已轮换的访问凭证。保留的存储位置包含存储卷的访问凭证。设为 `0` 表示两类都关闭：既不交接也不保留，每次都向 StarMgr 查询。
+- 引入版本：-
+
+### lake_tablet_metadata_cache_limit_percent
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中 Tablet 元数据缓存的容量，以 BE 进程内存上限的百分比表示。该缓存存放 Tablet 元数据和事务日志。它与 Segment 元数据缓存（参见 `lake_segment_metadata_cache_limit_percent`）相互独立，加载再多的 Segment 也不会把这些元数据挤出缓存。超出 0–100 的取值按 0 或 100 处理。设为 `0` 即关闭该缓存。该项与 `lake_segment_metadata_cache_limit_percent` 共同取代原有的 `lake_metadata_cache_limit`。
 - 引入版本：-
 
 ### lake_vacuum_enable_task_timeout
@@ -524,7 +560,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### datacache_disk_idle_seconds_for_expansion
 
-- 默认值：7200
+- 默认值：180
 - 类型：Int
 - 单位：秒
 - 是否动态：是
@@ -695,7 +731,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_clear_corrupted_cache_data
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是

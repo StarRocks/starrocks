@@ -52,6 +52,7 @@ import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -205,16 +206,64 @@ public class InsertOverwriteMaterializedViewPreSplitTest {
     }
 
     @Test
-    public void nonPristineAutoIncrementCounterSubmitsNothing() {
-        // Once an id has been handed out, a compute node may still hold cached ids this planner can
-        // neither see nor bound, so the low end of the span is no longer known to be 1 and the whole
-        // derivation is guesswork. The gate is cheap and easy to "optimise away", hence this case.
+    public void overwriteOfFingerprintViewSplitsOnTheBase64Space() {
+        // A fingerprint-encoded row id is a VARCHAR that is uniform over the base64 alphabet, so the
+        // cuts carve the symbol space instead of a numeric span. The 4 MiB estimate against the 1 MiB
+        // pre-split target requests 4 tablets, and the 1 MiB minimum split size also allows 4, so the
+        // three cuts are the quarter points of the first symbol pair: E+, U+ and k+.
+        Column varcharRowId = new Column(IvmOpUtils.COLUMN_ROW_ID, StringType.DEFAULT_STRING);
+        try (Fixture fixture = new Fixture(/*temporaryPartitionCount*/ 1, varcharRowId)) {
+            when(fixture.materializedView.getRowIdStrategy()).thenReturn(RowIdStrategy.QUERY_COMPUTED);
+            when(fixture.materializedView.getEncodeRowIdVersion())
+                    .thenReturn(IvmOpUtils.ENCODE_ROW_ID_VERSION_FINGERPRINT_V2);
+
+            fixture.runner.preSplitStaticOverwriteTempPartitions();
+
+            Map<Long, List<TabletRange>> submitted = fixture.submittedRanges();
+            Assertions.assertEquals(Set.of(FIRST_BASE_TABLET_ID), submitted.keySet());
+            List<TabletRange> ranges = submitted.get(FIRST_BASE_TABLET_ID);
+            Assertions.assertEquals(4, ranges.size(), "three cuts carve four tablets");
+
+            Assertions.assertTrue(ranges.get(0).getRange().isMinimum(), "first range must open at -infinity");
+            Assertions.assertEquals(stringTuple("E+"), ranges.get(0).getRange().getUpperBound());
+            Assertions.assertEquals(stringTuple("E+"), ranges.get(1).getRange().getLowerBound());
+            Assertions.assertEquals(stringTuple("U+"), ranges.get(1).getRange().getUpperBound());
+            Assertions.assertEquals(stringTuple("U+"), ranges.get(2).getRange().getLowerBound());
+            Assertions.assertEquals(stringTuple("k+"), ranges.get(2).getRange().getUpperBound());
+            Assertions.assertEquals(stringTuple("k+"), ranges.get(3).getRange().getLowerBound());
+            Assertions.assertTrue(ranges.get(3).getRange().isMaximum(), "last range must close at +infinity");
+
+            // Variant equality compares the value only, so the boundary type is checked on its own: a
+            // cut typed differently from the sort-key column would not match the BE's key encoding.
+            for (int i = 0; i < 3; i++) {
+                Tuple cut = ranges.get(i).getRange().getUpperBound();
+                Assertions.assertEquals(1, cut.getValues().size());
+                Assertions.assertEquals(varcharRowId.getType(), cut.getValues().get(0).getType(),
+                        "cut " + i + " must carry the row-id column's own type");
+            }
+        }
+    }
+
+    private static Tuple stringTuple(String value) {
+        return new Tuple(List.of(Variant.of(StringType.DEFAULT_STRING, value)));
+    }
+
+    @Test
+    public void usedAutoIncrementCounterCutsAboveTheCounter() {
+        // Every id a later grant hands out is at or above the counter, so the span starts there: same
+        // 4 tablets and 1000-row stride as the pristine case, shifted to 500 + 1000 * k. The doubled gap
+        // mass (2 * 1 node * cache size 25 = 50) still affords 4000 / (10 * 50) = 8 tablets, so the
+        // requested count of 4 survives without touching auto_increment_cache_size.
         try (Fixture fixture = new Fixture(/*temporaryPartitionCount*/ 1)) {
             fixture.assignAutoIncrementId(500L);
 
             fixture.runner.preSplitStaticOverwriteTempPartitions();
 
-            fixture.assertNothingSubmitted();
+            List<TabletRange> ranges = fixture.submittedRanges().get(FIRST_BASE_TABLET_ID);
+            Assertions.assertEquals(4, ranges.size(), "three cuts carve four tablets");
+            Assertions.assertEquals(rowIdTuple(1500L), ranges.get(0).getRange().getUpperBound());
+            Assertions.assertEquals(rowIdTuple(2500L), ranges.get(1).getRange().getUpperBound());
+            Assertions.assertEquals(rowIdTuple(3500L), ranges.get(2).getRange().getUpperBound());
         }
     }
 
@@ -240,6 +289,7 @@ public class InsertOverwriteMaterializedViewPreSplitTest {
         MetricRepo.hasInit = true;
         try (Fixture fixture = new Fixture(/*temporaryPartitionCount*/ 1)) {
             when(fixture.materializedView.getRowIdStrategy()).thenReturn(RowIdStrategy.QUERY_COMPUTED);
+            when(fixture.materializedView.getEncodeRowIdVersion()).thenReturn(0);
             long baselineViewTarget = skipCount(SkipReason.MATERIALIZED_VIEW_TARGET);
             long baselineDisabled = skipCount(SkipReason.DISABLED_BY_CONFIG);
 
@@ -350,12 +400,17 @@ public class InsertOverwriteMaterializedViewPreSplitTest {
         private final InsertOverwriteJobRunner runner;
 
         private Fixture(int temporaryPartitionCount) {
+            this(temporaryPartitionCount, new Column(IvmOpUtils.COLUMN_ROW_ID, IntegerType.BIGINT));
+        }
+
+        private Fixture(int temporaryPartitionCount, Column rowIdColumn) {
             Database database = mock(Database.class);
             when(database.getId()).thenReturn(DB_ID);
             when(database.getFullName()).thenReturn("mv_db");
 
-            // The one target shape the derived tier serves: an incremental view whose single visible
-            // index is keyed by the storage-generated row-id column alone.
+            // The target shapes the derived tier serves: an incremental view whose single visible
+            // index is keyed by the row-id column alone, built here with either a storage-generated
+            // row id or a fingerprint computed by the view's query.
             this.materializedView = mock(MaterializedView.class);
             when(materializedView.getId()).thenReturn(MV_ID);
             when(materializedView.getName()).thenReturn("mv_row_id");
@@ -409,7 +464,6 @@ public class InsertOverwriteMaterializedViewPreSplitTest {
             when(reshardJobMgr.getTabletReshardJob(anyLong())).thenReturn(reshardJob);
             when(globalState.getTabletReshardJobMgr()).thenReturn(reshardJobMgr);
 
-            Column rowIdColumn = new Column(IvmOpUtils.COLUMN_ROW_ID, IntegerType.BIGINT);
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(materializedView))
                     .thenReturn(List.of(rowIdColumn));
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(
@@ -491,7 +545,7 @@ public class InsertOverwriteMaterializedViewPreSplitTest {
             return ArgumentCaptor.forClass(Map.class);
         }
 
-        /** Hand out an id for the view, making the row-id space no longer pristine. */
+        /** Hand out an id for the view so the next span starts above it. */
         private void assignAutoIncrementId(long currentAutoIncrementId) {
             when(localMetastore.getCurrentAutoIncrementIdByTableId(MV_ID)).thenReturn(currentAutoIncrementId);
         }

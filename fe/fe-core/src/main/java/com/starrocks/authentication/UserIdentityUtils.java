@@ -88,6 +88,14 @@ public class UserIdentityUtils {
         if (tUserIdent.isSetCurrent_role_ids()) {
             List<Long> roleIdList = tUserIdent.current_role_ids.getRole_id_list();
             Set<Long> requestedRoleIds = roleIdList != null ? new HashSet<>(roleIdList) : new HashSet<>();
+            if (userIdentity.isEphemeral()) {
+                // An ephemeral user, one authenticated through a security integration, owns no roles to check
+                // against: its privileges are the roles its session activated, as in the privilege collection.
+                // The roles must not be looked up either, as that reads the session of the current thread, and
+                // the RPC threads calling this have none.
+                context.setCurrentRoleIds(requestedRoleIds);
+                return;
+            }
             try {
                 Set<Long> actualRoleIds =
                         GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdsByUser(userIdentity);

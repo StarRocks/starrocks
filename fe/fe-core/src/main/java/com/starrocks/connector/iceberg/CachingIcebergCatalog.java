@@ -51,6 +51,7 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.types.Types;
 import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -64,6 +65,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -82,10 +84,17 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     // REST tables embed short-lived vended credentials (~1h) in their FileIO; cap the table-cache TTL so an
     // idle entry can't outlive its token. Provider-agnostic: bounds cache lifetime, no per-cloud expiry parse.
     private static final long REST_TABLE_CACHE_MAX_TTL_SEC = 3000;
+    // The (package-private) class of an avro record schema, for leaving shared avro schemas out of weights.
+    private static final Set<Class<?>> AVRO_RECORD_SCHEMA = Set.of(org.apache.avro.Schema.createRecord(
+            "r", null, null, false, Collections.emptyList()).getClass());
     private static final ThreadLocal<ConnectContext> TABLE_LOAD_CONTEXT = new ThreadLocal<>();
     private final String catalogName;
     private final IcebergCatalog delegate;
     private final com.github.benmanes.caffeine.cache.LoadingCache<IcebergTableName, Table> tables;
+    // When each table object in the cache was loaded from the catalog, by identity: a reload that fails keeps the
+    // old object and resets the entry's write time, so the entry's age does not tell how old its credentials are.
+    private final com.github.benmanes.caffeine.cache.Cache<Table, Long> tableLoadTimes =
+            Caffeine.newBuilder().weakKeys().build();
     private final com.github.benmanes.caffeine.cache.Cache<String, Database> databases;
     private final ExecutorService backgroundExecutor;
 
@@ -136,14 +145,14 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                         LOG.debug("Loading iceberg table {}.{} from remote catalog",
                                 key.dbName, key.tableName);
                         ConnectContext context = TABLE_LOAD_CONTEXT.get();
-                        return delegate.getTable(context != null ? context : new ConnectContext(),
-                                key.dbName, key.tableName);
+                        return recordLoadTime(delegate.getTable(context != null ? context : new ConnectContext(),
+                                key.dbName, key.tableName));
                     }
 
                     @Override
                     public Table reload(IcebergTableName key, Table oldValue) {
                         try {
-                            return delegate.getTable(new ConnectContext(), key.dbName, key.tableName);
+                            return recordLoadTime(delegate.getTable(new ConnectContext(), key.dbName, key.tableName));
                         } catch (Exception e) {
                             LOG.warn("refresh table {}.{} failed", key.dbName, key.tableName, e);
                             return oldValue;
@@ -275,10 +284,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public Table getTable(ConnectContext connectContext, String dbName, String tableName) throws StarRocksConnectorException {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
 
-        // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
-        boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() &&
-                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog));
-        if (!cacheAllowed) {
+        if (!tableCacheAllowed(connectContext)) {
             return delegate.getTable(connectContext, dbName, tableName);
         }
 
@@ -301,6 +307,58 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         } finally {
             TABLE_LOAD_CONTEXT.remove();
         }
+    }
+
+    // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
+    private boolean tableCacheAllowed(ConnectContext connectContext) {
+        return icebergProperties.isEnableIcebergTableCache() &&
+                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog));
+    }
+
+    private Table recordLoadTime(Table table) {
+        if (table != null) {
+            tableLoadTimes.put(table, System.currentTimeMillis());
+        }
+        return table;
+    }
+
+    @Override
+    public OptionalLong tableLoadedAtMs(ConnectContext connectContext, String dbName, String tableName, Table table,
+                                        long nowMs) {
+        if (connectContext != null && !tableCacheAllowed(connectContext)) {
+            return OptionalLong.of(nowMs);
+        }
+        Long loadedAt = tableLoadTimes.getIfPresent(table);
+        return loadedAt == null ? OptionalLong.empty() : OptionalLong.of(loadedAt);
+    }
+
+    @Override
+    public Set<String> statsColumnsKeptByManifestCache(Table table, Schema schema, Set<String> columnNames) {
+        if (columnNames.isEmpty() || !icebergProperties.isIcebergManifestCacheWithColumnStatistics()) {
+            return Set.of();
+        }
+        Map<Integer, String> namesById = new HashMap<>();
+        for (String name : columnNames) {
+            Types.NestedField field = schema.findField(name);
+            if (field != null) {
+                namesById.put(field.fieldId(), name);
+            }
+        }
+        if (namesById.isEmpty()) {
+            return Set.of();
+        }
+        int limit = Math.max(icebergProperties.getIcebergManifestCacheStatisticsMaxColumns(), 0);
+        Set<String> kept = new HashSet<>();
+        for (Integer id : StarRocksIcebergTableScan.statsColumnIdsKeptByCache(table, schema, limit, namesById.keySet())) {
+            kept.add(namesById.get(id));
+        }
+        return kept;
+    }
+
+    @Override
+    public Table getTableUncached(ConnectContext connectContext, String dbName, String tableName)
+            throws StarRocksConnectorException {
+        return delegate.getTableUncached(connectContext, dbName, tableName);
     }
 
     @Override
@@ -590,6 +648,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         scanContext.setDeleteFileIndexCache(deleteFileIndexCache);
         scanContext.setMetaFileCacheMap(metaFileCacheMap);
         scanContext.setDataFileCacheWithMetrics(icebergProperties.isIcebergManifestCacheWithColumnStatistics());
+        scanContext.setDataFileCacheStatsColumnLimit(icebergProperties.getIcebergManifestCacheStatisticsMaxColumns());
         scanContext.setEnableCacheDataFileIdentifierColumnMetrics(
                 icebergProperties.enableCacheDataFileIdentifierColumnStatistics());
         scanContext.setOnlyReadCache(shouldOnlyReadCache(scanContext.getConnectContext()));
@@ -708,15 +767,46 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
 
     private int weighTableEntry(IcebergTableName key, Table table) {
-        long size = Estimator.estimate(key);
-        if (table != null) {
-            size += Estimator.estimate(table);
-        }
+        long size = Estimator.estimate(key) + weighPrivateTableState(table);
         if (size > Integer.MAX_VALUE) {
             LOG.warn("Table cache entry size for key {} is too large: {} bytes", key, size);
             return Integer.MAX_VALUE;
         }
         return (int) size;
+    }
+
+    // Charge an entry only for the metadata it exclusively owns, which is what evicting it actually
+    // frees. Walking the whole table instead reaches the TableOperations, and from there the objects
+    // the catalog shares across all of its tables -- the Hadoop configuration, the metastore client
+    // pool, the FileIO, the metrics reporter. Those exist once per catalog, so charging them to every
+    // entry makes the ledger grow with the entry count while the heap does not: the cache then
+    // declares itself full while holding a fraction of maximumWeight and evicts continuously.
+    private long weighPrivateTableState(Table table) {
+        if (table == null) {
+            return 0;
+        }
+        if (table instanceof BaseTable) {
+            TableOperations ops = ((BaseTable) table).operations();
+            TableMetadata metadata = ops != null ? ops.current() : null;
+            if (metadata != null) {
+                // The current snapshot caches its manifest list once the table is planned. When it is the newest
+                // snapshot it is the last element of metadata.snapshots(), which the sampled walk of that list does
+                // not reach, so charge it first to count its manifests in full. Otherwise (a rollback, or a newer
+                // commit on a branch) it may sit on a sampled position, where charging it first would make the
+                // sample extrapolate its zero; leave it to the walk then. A v1 table has no sequence numbers to
+                // tell. Every manifest of every table points to the same avro schema of the manifest list, which
+                // no entry owns.
+                Snapshot current = metadata.currentSnapshot();
+                if (current != null && metadata.formatVersion() >= 2 &&
+                        current.sequenceNumber() == metadata.lastSequenceNumber()) {
+                    return Estimator.estimateAll(AVRO_RECORD_SCHEMA, current, metadata);
+                }
+                return Estimator.estimateAll(AVRO_RECORD_SCHEMA, metadata);
+            }
+        }
+        // Nothing we can attribute to this entry alone; charge its own footprint rather than a whole
+        // shared object graph. Deliberately never throws: the weigher runs on Caffeine's write path.
+        return Estimator.shallow(table);
     }
 
     // Each entry holds a whole table's partition map, which is unbounded in bytes (a table can have
@@ -734,14 +824,18 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         if (files == null || files.isEmpty()) {
             return 0L;
         }
-        StructLike like = files.iterator().next().partition();
+        ContentFile<?> first = files.iterator().next();
+        // Compact statistics are shared by every file of the manifest and skipped by the per-file sample.
+        long sharedStatsSize = first instanceof DataFileWrapper wrapper && wrapper.columnStats() != null
+                ? wrapper.columnStats().retainedBytes() : 0L;
+        StructLike like = first.partition();
         if (like instanceof PartitionData partitionData) {
             org.apache.avro.Schema schema = partitionData.getSchema();
             Set<Class<?>> ignoreClass = new HashSet<>();
             ignoreClass.add(schema.getClass());
-            return Estimator.estimate(files, 3, ignoreClass) + Estimator.estimate(schema, 3);
+            return Estimator.estimate(files, 3, ignoreClass) + Estimator.estimate(schema, 3) + sharedStatsSize;
         } else {
-            return Estimator.estimate(files, 3);
+            return Estimator.estimate(files, 3) + sharedStatsSize;
         }
     }
 
@@ -769,35 +863,36 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return counter;
     }
 
+    // The partition, data file and delete file caches report their weigher ledger, so sys.fe_memory_usage
+    // shows exactly what eviction is bounded by; their values do not change after they are weighed. A cached
+    // table does: planning loads its current snapshot's manifest list after the load weighed it, so the table
+    // term weighs the entries again, with the weigher's own private-state rule (walking whole tables reached
+    // the catalog-shared objects and reported several times the real size).
     @Override
     public long estimateSize() {
-        return Estimator.estimate(tables.asMap(), 10) +
+        return estimateTableCacheSize() +
+                weightedSize(partitionCache) +
+                weightedSize(dataFileCache) +
+                weightedSize(deleteFileCache) +
                 Estimator.estimate(databases.asMap(), 10) +
-                estimateDataFileCacheSize() +
-                estimateDeleteFileCacheSize() +
-                Estimator.estimate(partitionCache.asMap(), 10) +
                 Estimator.estimate(metaFileCacheMap, 10) +
                 Estimator.estimate(tableLatestAccessTime, 10) +
                 Estimator.estimate(tableLatestRefreshTime, 10) +
                 Estimator.estimate(tableRefreshLockMap, 10);
     }
 
-    private long estimateDataFileCacheSize() {
-        int cnt = dataFileCache.asMap().size();
-        long size = Estimator.estimate(dataFileCache.asMap().keySet(), cnt);
-        for (Set<DataFile> files : dataFileCache.asMap().values()) {
-            size += estimateContentFilesSize(files);
+    private long estimateTableCacheSize() {
+        long size = 0;
+        for (Map.Entry<IcebergTableName, Table> entry : tables.asMap().entrySet()) {
+            size += Estimator.estimate(entry.getKey()) + weighPrivateTableState(entry.getValue());
         }
         return size;
     }
 
-    private long estimateDeleteFileCacheSize() {
-        int cnt = deleteFileCache.asMap().size();
-        long size = Estimator.estimate(deleteFileCache.asMap().keySet(), cnt);
-        for (Set<DeleteFile> files : deleteFileCache.asMap().values()) {
-            size += estimateContentFilesSize(files);
-        }
-        return size;
+    private static long weightedSize(com.github.benmanes.caffeine.cache.Cache<?, ?> cache) {
+        // Weights are applied by Caffeine's maintenance, which may still be queued on the executor.
+        cache.cleanUp();
+        return cache.policy().eviction().map(e -> e.weightedSize().orElse(0L)).orElse(0L);
     }
 
     private long countSnapshotsSafe(Table table) {

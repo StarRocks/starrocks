@@ -806,6 +806,20 @@ TEST_F(AggregateTest, test_sum_distinct) {
                                                       DecimalV2Value(21));
 }
 
+// multi_distinct_count/sum have no V1 implementation any more: every func_version resolves to the V2 one.
+TEST_F(AggregateTest, test_multi_distinct_resolves_to_v2_for_every_func_version) {
+    ASSERT_NE(nullptr, get_aggregate_function("multi_distinct_count2", TYPE_INT, TYPE_BIGINT, false));
+    ASSERT_NE(nullptr, get_aggregate_function("multi_distinct_sum2", TYPE_INT, TYPE_BIGINT, false));
+    for (int func_version : {0, 1, 7, 8}) {
+        EXPECT_EQ(get_aggregate_function("multi_distinct_count2", TYPE_INT, TYPE_BIGINT, false),
+                  get_aggregate_function("multi_distinct_count", TYPE_INT, TYPE_BIGINT, false,
+                                         TFunctionBinaryType::BUILTIN, func_version));
+        EXPECT_EQ(get_aggregate_function("multi_distinct_sum2", TYPE_INT, TYPE_BIGINT, false),
+                  get_aggregate_function("multi_distinct_sum", TYPE_INT, TYPE_BIGINT, false,
+                                         TFunctionBinaryType::BUILTIN, func_version));
+    }
+}
+
 TEST_F(AggregateTest, test_decimal_multi_distinct_sum) {
     int64_t mem_usage;
     {
@@ -1856,20 +1870,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
 
     // nullable columns input
     {
-        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
-        char_column->append_datum(Datum());
-        char_column->append_datum("bcd");
-        char_column->append_datum("cdrdfe");
-        char_column->append_datum(Datum());
-        char_column->append_datum("esfg");
+        auto char_column =
+                ColumnTestHelper::build_nullable_column<Slice>({"", "bcd", "cdrdfe", "", "esfg"}, {1, 0, 0, 1, 0});
 
-        auto int_type = TYPE_INT_DESC;
-        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
-        int_column->append_datum(Datum());
-        int_column->append_datum(9);
-        int_column->append_datum(Datum());
-        int_column->append_datum(7);
-        int_column->append_datum(6);
+        auto int_column = ColumnTestHelper::build_nullable_column<int32_t>({0, 9, 0, 7, 6}, {1, 0, 1, 0, 0});
 
         std::vector<const Column*> raw_columns;
         Columns columns;
@@ -1926,20 +1930,9 @@ TEST_F(AggregateTest, test_array_aggV2) {
     // not nullable columns input
     state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
     {
-        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
-        char_column->append_datum("");
-        char_column->append_datum("bcd");
-        char_column->append_datum("cdrdfe");
-        char_column->append_datum("Datum()");
-        char_column->append_datum("esfg");
+        auto char_column = ColumnTestHelper::build_column<Slice>({"", "bcd", "cdrdfe", "Datum()", "esfg"});
 
-        auto int_type = TYPE_INT_DESC;
-        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, false);
-        int_column->append_datum(2);
-        int_column->append_datum(9);
-        int_column->append_datum(5);
-        int_column->append_datum(7);
-        int_column->append_datum(6);
+        auto int_column = ColumnTestHelper::build_column<int32_t>({2, 9, 5, 7, 6});
 
         std::vector<const Column*> raw_columns;
         Columns columns;
@@ -2102,20 +2095,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
 
     // append nullable columns input
     {
-        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
-        char_column->append_datum(Datum());
-        char_column->append_datum("bcd");
-        char_column->append_datum("cdrdfe");
-        char_column->append_datum(Datum());
-        char_column->append_datum("esfg");
+        auto char_column =
+                ColumnTestHelper::build_nullable_column<Slice>({"", "bcd", "cdrdfe", "", "esfg"}, {1, 0, 0, 1, 0});
 
-        auto int_type = TYPE_INT_DESC;
-        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
-        int_column->append_datum(Datum());
-        int_column->append_datum(9);
-        int_column->append_datum(Datum());
-        int_column->append_datum(7);
-        int_column->append_datum(6);
+        auto int_column = ColumnTestHelper::build_nullable_column<int32_t>({0, 9, 0, 7, 6}, {1, 0, 1, 0, 0});
 
         std::vector<const Column*> raw_columns;
         Columns columns;
@@ -2178,20 +2161,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
     // nullable columns input with cancelled
     {
         auto state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
-        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
-        char_column->append_datum(Datum());
-        char_column->append_datum("bcd");
-        char_column->append_datum("cdrdfe");
-        char_column->append_datum(Datum());
-        char_column->append_datum("esfg");
+        auto char_column =
+                ColumnTestHelper::build_nullable_column<Slice>({"", "bcd", "cdrdfe", "", "esfg"}, {1, 0, 0, 1, 0});
 
-        auto int_type = TYPE_INT_DESC;
-        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
-        int_column->append_datum(Datum());
-        int_column->append_datum(9);
-        int_column->append_datum(Datum());
-        int_column->append_datum(7);
-        int_column->append_datum(6);
+        auto int_column = ColumnTestHelper::build_nullable_column<int32_t>({0, 9, 0, 7, 6}, {1, 0, 1, 0, 0});
 
         std::vector<const Column*> raw_columns;
         Columns columns;
@@ -2264,13 +2237,8 @@ TEST_F(AggregateTest, test_array_aggV2_cancelled_keeps_nullable_result_consisten
     const AggregateFunction* array_agg_func = get_aggregate_function("array_agg2", TYPE_BIGINT, TYPE_ARRAY, false);
     auto state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
 
-    MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
-    char_column->append_datum("a");
-    char_column->append_datum("b");
-
-    MutableColumnPtr int_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
-    int_column->append_datum(2);
-    int_column->append_datum(1);
+    auto char_column = ColumnTestHelper::build_nullable_column<Slice>({"a", "b"});
+    auto int_column = ColumnTestHelper::build_nullable_column<int32_t>({2, 1});
 
     std::vector<const Column*> raw_columns{char_column.get(), int_column.get()};
     array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(), state->state());
@@ -2322,27 +2290,10 @@ TEST_F(AggregateTest, test_array_aggV2_multi_order_by) {
         // - Then by varchar_col2 ASC (for same int_col):
         //   * NULL("w") -> 20("x") -> 20("z") -> 10("x") -> 10("y")
         // Result: ["e", "c", "d", "a", "b"]
-        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
-        char_column->append_datum("a");
-        char_column->append_datum("b");
-        char_column->append_datum("c");
-        char_column->append_datum("d");
-        char_column->append_datum("e");
+        auto char_column = ColumnTestHelper::build_nullable_column<Slice>({"a", "b", "c", "d", "e"});
 
-        auto int_type = TYPE_INT_DESC;
-        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
-        int_column->append_datum(10);
-        int_column->append_datum(10);
-        int_column->append_datum(20);
-        int_column->append_datum(20);
-        int_column->append_datum(Datum());
-
-        MutableColumnPtr char_column2 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
-        char_column2->append_datum("x");
-        char_column2->append_datum("y");
-        char_column2->append_datum("x");
-        char_column2->append_datum("z");
-        char_column2->append_datum("w");
+        auto int_column = ColumnTestHelper::build_nullable_column<int32_t>({10, 10, 20, 20, 0}, {0, 0, 0, 0, 1});
+        auto char_column2 = ColumnTestHelper::build_column<Slice>({"x", "y", "x", "z", "w"});
 
         std::vector<const Column*> raw_columns;
         std::vector<ColumnPtr> columns;
@@ -2450,14 +2401,7 @@ TEST_F(AggregateTest, test_array_aggV2_multi_order_by) {
         int_column->append_datum(10);
         int_column->append_datum(15); // same order by value for duplicate "d"
 
-        MutableColumnPtr char_column2 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
-        char_column2->append_datum("xx");
-        char_column2->append_datum("yy");
-        char_column2->append_datum("zz");
-        char_column2->append_datum("xy");
-        char_column2->append_datum("xz");
-        char_column2->append_datum("zy");
-        char_column2->append_datum("zx");
+        auto char_column2 = ColumnTestHelper::build_column<Slice>({"xx", "yy", "zz", "xy", "xz", "zy", "zx"});
 
         std::vector<const Column*> raw_columns;
         std::vector<ColumnPtr> columns;
@@ -2541,22 +2485,12 @@ TEST_F(AggregateTest, test_group_concatV2) {
 
     // nullable columns input
     {
-        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
-        char_column->append_datum(Datum());
-        char_column->append_datum("bcd");
-        char_column->append_datum("cdrdfe");
-        char_column->append_datum(Datum());
-        char_column->append_datum("esfg");
+        auto char_column =
+                ColumnTestHelper::build_nullable_column<Slice>({"", "bcd", "cdrdfe", "", "esfg"}, {1, 0, 0, 1, 0});
 
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 5);
 
-        auto int_type = TYPE_INT_DESC;
-        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
-        int_column->append_datum(Datum());
-        int_column->append_datum(9);
-        int_column->append_datum(Datum());
-        int_column->append_datum(7);
-        int_column->append_datum(6);
+        auto int_column = ColumnTestHelper::build_nullable_column<int32_t>({0, 9, 0, 7, 6}, {1, 0, 1, 0, 0});
 
         std::vector<const Column*> raw_columns;
         Columns columns;
@@ -2615,22 +2549,11 @@ TEST_F(AggregateTest, test_group_concatV2) {
     gc_func = get_aggregate_function("group_concat2", TYPE_BIGINT, TYPE_VARCHAR, false);
     state = ManagedAggrState::create(local_ctx.get(), gc_func);
     {
-        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
-        char_column->append_datum("");
-        char_column->append_datum("bcd");
-        char_column->append_datum("cdrdfe");
-        char_column->append_datum("Datum()");
-        char_column->append_datum("esfg");
+        auto char_column = ColumnTestHelper::build_column<Slice>({"", "bcd", "cdrdfe", "Datum()", "esfg"});
 
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 5);
 
-        auto int_type = TYPE_INT_DESC;
-        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, false);
-        int_column->append_datum(2);
-        int_column->append_datum(9);
-        int_column->append_datum(5);
-        int_column->append_datum(7);
-        int_column->append_datum(6);
+        auto int_column = ColumnTestHelper::build_column<int32_t>({2, 9, 5, 7, 6});
 
         std::vector<const Column*> raw_columns;
         Columns columns;
@@ -2738,7 +2661,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(), "[NULL, NULL]");
 
-        auto res_col = ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_VARCHAR), true);
+        auto res_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
         ASSERT_EQ(res_col->debug_string(), "[NULL]");
     }
@@ -2748,22 +2671,12 @@ TEST_F(AggregateTest, test_group_concatV2) {
 
     // nullable columns input with cancelled
     {
-        MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
-        char_column->append_datum(Datum());
-        char_column->append_datum("bcd");
-        char_column->append_datum("cdrdfe");
-        char_column->append_datum(Datum());
-        char_column->append_datum("esfg");
+        auto char_column =
+                ColumnTestHelper::build_nullable_column<Slice>({"", "bcd", "cdrdfe", "", "esfg"}, {1, 0, 0, 1, 0});
 
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 5);
 
-        auto int_type = TYPE_INT_DESC;
-        MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
-        int_column->append_datum(Datum());
-        int_column->append_datum(9);
-        int_column->append_datum(Datum());
-        int_column->append_datum(7);
-        int_column->append_datum(6);
+        auto int_column = ColumnTestHelper::build_nullable_column<int32_t>({0, 9, 0, 7, 6}, {1, 0, 1, 0, 0});
 
         std::vector<const Column*> raw_columns;
         Columns columns;
@@ -2985,18 +2898,9 @@ TEST_F(AggregateTest, test_array_aggV2_max_array_length) {
 
     const AggregateFunction* array_agg_func = get_aggregate_function("array_agg2", TYPE_BIGINT, TYPE_ARRAY, false);
 
-    MutableColumnPtr char_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
-    char_column->append_datum("bcd");
-    char_column->append_datum(Datum());
-    char_column->append_datum("esfg");
-    char_column->append_datum("cdrdfe");
+    auto char_column = ColumnTestHelper::build_nullable_column<Slice>({"bcd", "", "esfg", "cdrdfe"}, {0, 1, 0, 0});
 
-    auto int_type = TYPE_INT_DESC;
-    MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
-    int_column->append_datum(9);
-    int_column->append_datum(Datum());
-    int_column->append_datum(7);
-    int_column->append_datum(6);
+    auto int_column = ColumnTestHelper::build_nullable_column<int32_t>({9, 0, 7, 6}, {0, 1, 0, 0});
 
     std::vector<const Column*> raw_columns{char_column.get(), int_column.get()};
 
@@ -3050,14 +2954,7 @@ TEST_F(AggregateTest, test_array_aggV2_max_array_length_distinct) {
     char_column->append_datum("b");
     char_column->append_datum("b");
 
-    auto int_type = TYPE_INT_DESC;
-    MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
-    int_column->append_datum(1);
-    int_column->append_datum(2);
-    int_column->append_datum(3);
-    int_column->append_datum(4);
-    int_column->append_datum(5);
-    int_column->append_datum(6);
+    auto int_column = ColumnTestHelper::build_nullable_column<int32_t>({1, 2, 3, 4, 5, 6});
 
     std::vector<const Column*> raw_columns{char_column.get(), int_column.get()};
 

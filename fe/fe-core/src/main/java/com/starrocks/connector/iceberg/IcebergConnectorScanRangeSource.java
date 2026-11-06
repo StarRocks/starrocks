@@ -149,6 +149,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final PartitionIdGenerator partitionIdGenerator;
     private final boolean usedForDelete;
     private Set<String> runtimeFilterPruningColumns = Set.of();
+    // Slots probed by a join runtime filter. Each data file carries its bounds of these slots, so the BE
+    // can skip the whole file once the filter has arrived, before opening it.
+    private Set<Integer> runtimeFilterProbeSlotIds = Set.of();
 
     public IcebergConnectorScanRangeSource(IcebergTable table,
                                            RemoteFileInfoSource remoteFileInfoSource,
@@ -251,32 +254,15 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     // Note: unlike getSourceOutputs(), this path does not call addPartition(), so scan_lake_partition_num_limit is
     // never enforced here. This is intentional - it's only used by compaction (OPTIMIZE TABLE), not by user SELECTs.
-    public List<FileScanTask> getSourceFileScanOutputs(int maxSize, long fileSizeThreshold, boolean allFiles) {
+    public List<FileScanTask> getSourceFileScanOutputs(int maxSize, IcebergRewriteFileSelector selector) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getScanFiles")) {
             List<FileScanTask> res = new ArrayList<>();
             while (hasMoreOutput() && res.size() < maxSize) {
                 RemoteFileInfo remoteFileInfo = remoteFileInfoSource.getOutput();
                 IcebergRemoteFileInfo icebergRemoteFileInfo = remoteFileInfo.cast();
                 FileScanTask fileScanTask = icebergRemoteFileInfo.getFileScanTask();
-                if (allFiles || fileScanTask.file().fileSizeInBytes() <= fileSizeThreshold) {
+                if (selector.shouldRewrite(fileScanTask)) {
                     res.add(fileScanTask);
-                } else {
-                    for (DeleteFile del : fileScanTask.deletes()) {
-                        if (del.content() == FileContent.POSITION_DELETES) {
-                            // if the pos delete is a file level pos delete, then we may skip the data file scan if 
-                            // the condition does not match. Otherwise(partition-level delete file), 
-                            // we scan the data file anyway, to make sure the pos delete can be eliminated any way
-                            int filePathId = 2147483546; //https://iceberg.apache.org/spec/#reserved-field-ids
-                            if (del.referencedDataFile() == null && (del.lowerBounds() != null && del.upperBounds() != null &&
-                                    !del.lowerBounds().get(filePathId).equals(del.upperBounds().get(filePathId)))) {
-                                //partition pos delete file related files
-                                res.add(fileScanTask);
-                            }
-                        } else if (del.content() == FileContent.EQUALITY_DELETES) {
-                            // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure that
-                            // we can eliminate the equality delete files.
-                        }
-                    }
                 }
             }
             return res;
@@ -287,8 +273,14 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         if (bucketProperties.isPresent()) {
             List<PartitionField> fields = table.getNativeTable().spec().fields();
             for (BucketProperty bucket : bucketProperties.get()) {
-                for (int i = 0; i < fields.size(); i++) {
-                    if (fields.get(i).name().equals(bucket.getColumn().getName() + "_bucket")) {
+                // Match the partition field by its source column id and bucket count: the field name is not
+                // always <column>_bucket (a renamed source column keeps the old field name, or the name was set
+                // explicitly), and one column can have several bucket transforms with different counts.
+                Types.NestedField source = table.getReadSchema().findField(bucket.getColumn().getName());
+                String transform = "bucket[" + bucket.getBucketNum() + "]";
+                for (int i = 0; source != null && i < fields.size(); i++) {
+                    if (fields.get(i).sourceId() == source.fieldId()
+                            && fields.get(i).transform().toString().equals(transform)) {
                         bucketInfo.add(new Pair<>(i, bucket.getBucketNum()));
                         break;
                     }
@@ -412,6 +404,10 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         this.runtimeFilterPruningColumns = runtimeFilterPruningColumns;
     }
 
+    public void setRuntimeFilterProbeSlotIds(Set<Integer> runtimeFilterProbeSlotIds) {
+        this.runtimeFilterProbeSlotIds = runtimeFilterProbeSlotIds;
+    }
+
     // A runtime-filter pruning column of the delete scan takes the delete file's identity partition value, which
     // only a partition-scoped delete of the data file's own spec has. Any other delete file would get a wrong value
     // and silently stop deleting rows, so fail the query instead.
@@ -517,11 +513,16 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         hdfsScanRange.setRecord_count(file.recordCount());
         hdfsScanRange.setIs_first_split(isFirstSplit);
 
-        if (useMinMaxOpt && file.nullValueCounts() != null && file.valueCounts() != null) {
-            // fill min/max value
+        // min/max values: all slots for the min/max optimization, else the runtime filter probe slots, which the
+        // BE compares with the arrived filters to skip the file (it fills column values only under min/max opt).
+        // Bounds only for skipping widen a timestamp with time zone to surely cover the file in the session zone.
+        List<SlotDescriptor> minMaxSlots = useMinMaxOpt ? slots
+                : slots.stream().filter(slot -> runtimeFilterProbeSlotIds.contains(slot.getId().asInt())).toList();
+        if (!minMaxSlots.isEmpty() && file.nullValueCounts() != null && file.valueCounts() != null) {
+            // the read schema: the slots, the requested statistics and the field ids are all bound to it
             Map<Integer, TExprMinMaxValue> tExprMinMaxValueMap = IcebergUtil.toThriftMinMaxValueBySlots(
-                    table.getNativeTable().schema(), file.lowerBounds(), file.upperBounds(),
-                    file.nullValueCounts(), file.valueCounts(), slots);
+                    table.getReadSchema(), file.lowerBounds(), file.upperBounds(),
+                    file.nullValueCounts(), file.valueCounts(), minMaxSlots, !useMinMaxOpt);
             hdfsScanRange.setMin_max_values(tExprMinMaxValueMap);
         }
 

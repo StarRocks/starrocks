@@ -1424,7 +1424,7 @@ Expr* ChunkPredicateBuilder<E, Type>::_gen_min_binary_pred(Expr* col_ref, Vector
                                                            bool is_close_interval) {
     TExprNode node;
     node.node_type = TExprNodeType::BINARY_PRED;
-    node.type = TypeDescriptor(TYPE_BOOLEAN).to_thrift();
+    node.type = TYPE_BOOLEAN_DESC.to_thrift();
     node.child_type = to_thrift(col_ref->type().type);
     if (is_close_interval) {
         node.__set_opcode(TExprOpcode::GE);
@@ -1443,7 +1443,7 @@ Expr* ChunkPredicateBuilder<E, Type>::_gen_max_binary_pred(Expr* col_ref, Vector
                                                            bool is_close_interval) {
     TExprNode node;
     node.node_type = TExprNodeType::BINARY_PRED;
-    node.type = TypeDescriptor(TYPE_BOOLEAN).to_thrift();
+    node.type = TYPE_BOOLEAN_DESC.to_thrift();
     node.child_type = to_thrift(col_ref->type().type);
     if (is_close_interval) {
         node.__set_opcode(TExprOpcode::LE);
@@ -1484,7 +1484,7 @@ Expr* ChunkPredicateBuilder<E, Type>::_gen_and_pred(Expr* left, Expr* right) {
     and_pred_node.is_nullable = true;
     and_pred_node.__set_opcode(TExprOpcode::COMPOUND_AND);
     and_pred_node.__set_child_type(TPrimitiveType::BOOLEAN);
-    and_pred_node.__set_type(TypeDescriptor(TYPE_BOOLEAN).to_thrift());
+    and_pred_node.__set_type(TYPE_BOOLEAN_DESC.to_thrift());
 
     Expr* expr = _opts.obj_pool->add(VectorizedCompoundPredicateFactory::from_thrift(and_pred_node));
     expr->add_child(left);

@@ -63,6 +63,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否限制缓存的 Query Profile 的读取权限。设置为 `true` 时，SHOW PROFILELIST、ANALYZE PROFILE、`get_query_profile` 函数、`/api/profile` 和 `/api/query/progress` HTTP 接口，以及 `/query` 和 `/query_profile` Web 页面只向执行该查询的用户，或拥有 SYSTEM 级 OPERATE 权限的用户返回 Profile；未记录用户的 Profile（例如 EXPORT 作业和 Stream Load 导入）只有拥有 OPERATE 权限的用户才能读取。`/api/query_detail` 和 `/api/v2/query_detail` 接口仍会列出所有查询，但按同样的规则省略 `profile` 字段，以及由该 Profile 渲染而来的 `explain` 字段。若同时开启 `authorization_enable_admin_user_protection`，`root` 执行的查询的 Profile 仅 `root` 自己可以读取。设置为 `false`（默认值）时，任何已登录用户都可以读取所有 Profile，与此前版本的行为一致。每个 FE 只对自身持有的 Profile 执行此检查。若要在整个集群范围内限制访问，请在所有 FE 升级到支持该配置项的版本后，在每个 FE 的 `fe.conf` 中设置该项。开启前还需注意两点影响：一是 `/api/query/progress` 不再接受匿名请求，因为权限判断需要调用方身份，原先匿名轮询该接口的程序会收到 `401`；二是如果 `query_id` 对应的 Profile 未缓存在当前会话连接的 FE 上，`get_query_profile()` 需要 OPERATE 权限——跨 FE 获取 Profile 的 RPC 不携带调用方身份，无法在对端完成鉴权，因此开启该检查期间，跨 FE 获取 Profile 仅限拥有 OPERATE 权限的用户。
 - 引入版本: v4.1
 
+### `enable_new_load_job_privilege_check`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否按目标表上的权限展示导入作业。设置为 `true`（默认值）时，`information_schema.loads`、`load_tracking_logs`、`routine_load_jobs`、`stream_loads`，SHOW LOAD、SHOW STREAM LOAD、SHOW ROUTINE LOAD 及其对应的 SHOW PROC 节点，以及 `/api/{db}/_load_info` HTTP 接口，只对拥有该作业每一张目标表至少一项权限，或拥有 OPERATE 权限的用户展示该作业；只有对每一张目标表都拥有 SELECT 权限的用户，才能看到被拒绝的数据行、错误日志 URL、错误信息和属性。设置为 `false` 可在不重启 FE 的情况下回退：上述各处恢复各自原来的权限检查，即四个 `information_schema` 视图、SHOW LOAD 和 SHOW PROC 不检查权限，SHOW STREAM LOAD 和 SHOW ROUTINE LOAD 要求目标表的 INSERT 权限，`/api/{db}/_load_info` 要求数据库中的 INSERT 权限，并且全部字段都会展示。此时，导入作业被拒绝的数据行和错误日志 URL 会重新暴露给没有目标表 SELECT 权限的用户。错误日志文件名中的随机部分不受该配置项影响。
+- 引入版本: -
+
 ### `enable_task_info_mask_credential`
 
 - 默认值: true
@@ -901,7 +910,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: 自动收集的结束时间。取值范围：`00:00:00` - `23:59:59`。
+- 描述: 自动收集的结束时间。取值范围：`00:00:00` - `23:59:59`。开始时间和结束时间都按秒计算并包含在采集时间段内。例如，结束时间为 `17:00:00` 时，`17:00:00` 这一秒结束前都允许采集。如果开始时间晚于结束时间，则采集时间段跨越午夜。
 - 引入版本: -
 
 ### `statistic_auto_analyze_start_time`
@@ -910,7 +919,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: 自动收集的开始时间。取值范围：`00:00:00` - `23:59:59`。
+- 描述: 自动收集的开始时间。取值范围：`00:00:00` - `23:59:59`。开始时间和结束时间都按秒计算并包含在采集时间段内。例如，结束时间为 `17:00:00` 时，`17:00:00` 这一秒结束前都允许采集。如果开始时间晚于结束时间，则采集时间段跨越午夜。
 - 引入版本: -
 
 ### `statistic_auto_collect_ratio`
@@ -1030,6 +1039,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: SQL 层检查的任务调度的最小允许调度间隔（以秒为单位）。提交任务时，TaskAnalyzer 将调度周期转换为秒，如果周期小于 `task_min_schedule_interval_s`，则以 `ERR_INVALID_PARAMETER` 拒绝提交。这可以防止创建运行过于频繁的任务，并保护调度器免受高频任务的影响。如果调度没有显式开始时间，TaskAnalyzer 会将开始时间设置为当前纪元秒。
 - 引入版本: v3.3.0, v3.4.0, v3.5.0
 
+### `task_runs_dispatch_interval_ms`
+
+- 默认值: 1000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: Leader FE 检查正在运行的 TaskRun 是否完成、并启动等待中的 TaskRun 的间隔。可通过 `ADMIN SET FRONTEND CONFIG` 修改，无需重启 FE。新间隔在当前调度周期结束后生效。减小该值可使等待中的 TaskRun 更快启动、完成状态更快更新，但会增加 FE CPU 开销；增大该值可降低开销，但会延迟启动。负值按 `1000` 处理。`0` 按 `1` 处理。
+- 引入版本: -
+
 ### `task_runs_timeout_second`
 
 - 默认值: 4 * 3600
@@ -1085,7 +1103,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为云原生表启用 File Bundling 优化。启用此功能 (设置为 `true`) 后，系统会自动捆绑加载、Compaction 或 Publish 操作生成的数据文件，从而降低因频繁访问外部存储系统而产生的 API 成本。您还可以使用 CREATE TABLE 属性 `file_bundling` 在表级别控制此行为。
+- 描述: 是否为云原生表启用 File Bundling 优化。自 v26.2 起，该配置也作用于存算分离集群中的异步物化视图。启用此功能 (设置为 `true`) 后，系统会自动捆绑加载、Compaction 或 Publish 操作生成的数据文件，从而降低因频繁访问外部存储系统而产生的 API 成本。您还可以使用 CREATE TABLE 属性 `file_bundling` 在表级别控制此行为，或使用 CREATE MATERIALIZED VIEW 属性 `file_bundling` 在物化视图级别控制此行为。
 - 引入版本: v4.0
 
 ### `enable_pipeline_routine_load`

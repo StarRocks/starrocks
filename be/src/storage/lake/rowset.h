@@ -179,7 +179,9 @@ public:
             const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>& prepared_segments,
             size_t segment_idx, const PreparedSegmentReadStatePtr& prepared_segment_state,
             std::vector<ChunkIteratorPtr>* reusable_segment_iterators = nullptr);
-    StatusOr<std::optional<SeekRange>> get_seek_range() const;
+    // Default to archived ordinals. A grouped reader may request its current ID space
+    // after validating that both schemas retain the same ordered sort-key UIDs.
+    StatusOr<std::optional<SeekRange>> get_seek_range(const TabletSchemaCSPtr& decoding_schema = nullptr) const;
     Status init_segment_read_options(const RowsetReadOptions& options, const LakeIOOptions& lake_io_opts,
                                      const DisjunctivePredicates& delete_predicates, OlapReaderStatistics* stats,
                                      SegmentReadOptions* segment_options) const;
@@ -288,6 +290,9 @@ public:
 
     [[nodiscard]] std::vector<SegmentSharedPtr> get_segments() override;
     [[nodiscard]] StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked() override;
+    [[nodiscard]] StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked(const LakeIOOptions& lake_io_opts,
+                                                                               OlapReaderStatistics* stats,
+                                                                               const std::atomic<bool>* is_cancelled);
 
     StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 

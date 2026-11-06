@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.staros.proto.FileCacheInfo;
 import com.starrocks.alter.reshard.ReshardingPhysicalPartition.PublishResult;
 import com.starrocks.alter.reshard.ReshardingPhysicalPartition.PublishState;
 import com.starrocks.catalog.ColocateRange;
@@ -38,6 +39,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.proto.TxnInfoPB;
@@ -202,29 +204,37 @@ public class MergeTabletJob extends TabletReshardJob {
         // 1. Begin transaction (allocate transaction id)
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         transactionId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
-        gtid = globalStateMgr.getGtidGenerator().nextGtid();
 
         // 2. Create new shards on StarOS — the last "abortable" step before the no-abort
-        //    boundary below. No table lock needed: init() already moved the
-        //    table to TABLET_RESHARD, which blocks concurrent DDL. If this throws, run()
-        //    catches, abort() fires (state still PENDING), runAbortingJob unwinds the
-        //    FE-side mutations, and any orphan staros shards from a partial RPC are reaped
-        //    by StarMgrMetaSyncer's diff-and-purge cycle.
+        //    boundary below. TABLET_RESHARD does not block every DDL: partitions can be added,
+        //    dropped or replaced and the table renamed or swapped meanwhile, so the table and the
+        //    job's partitions are resolved under the table READ lock; the StarOS RPCs then run
+        //    without it. If this throws, run() catches, abort() fires (state still PENDING),
+        //    runAbortingJob unwinds the FE-side mutations, and any orphan staros shards from a
+        //    partial RPC are reaped by StarMgrMetaSyncer's diff-and-purge cycle.
         createShardsOnStarOS();
 
         // 3. Commit transaction (update next version)
         // NOTE: After updateNextVersions(), the table's next version is advanced.
         // From this point the job must not abort or throw, because the run() wrapper would attempt to abort.
-        updateNextVersions();
+        // Steps 4-6 stay under the same lock, so the reservation is journaled (step 6) before a load can commit
+        // above it. A load journaled first would leave a new leader with the load but not the reservation, and
+        // the reserved version would never be published.
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
+            // Same lock as the version reservation, so the gtid falls between those of commits before and after.
+            // Drawn first, so a failure here leaves no version reserved.
+            gtid = globalStateMgr.getGtidGenerator().nextGtid();
+            updateNextVersions(lockedTable.get());
 
-        // 4. Add new tablets to inverted index
-        addTabletsToInvertedIndex();
+            // 4. Add new tablets to inverted index
+            addTabletsToInvertedIndex();
 
-        // 5. Register resharding tablets
-        registerReshardingTablets();
+            // 5. Register resharding tablets
+            registerReshardingTablets();
 
-        // 6. Set job state to PREPARING
-        setJobState(JobState.PREPARING);
+            // 6. Set job state to PREPARING
+            setJobState(JobState.PREPARING);
+        }
     }
 
     /*
@@ -473,7 +483,9 @@ public class MergeTabletJob extends TabletReshardJob {
     // Correspond to runPendingJob()
     @Override
     protected void replayPreparingJob() {
-        updateNextVersions();
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
+            updateNextVersions(lockedTable.get());
+        }
         addTabletsToInvertedIndex();
         registerReshardingTablets();
         LOG.info("Merge tablet job replayed preparing job. {}", this);
@@ -612,32 +624,29 @@ public class MergeTabletJob extends TabletReshardJob {
         }
     }
 
-    private void updateNextVersions() {
-        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
-            OlapTable olapTable = lockedTable.get();
-            for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
-                PhysicalPartition physicalPartition = olapTable
-                        .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
-                if (physicalPartition == null) {
-                    continue;
-                }
+    // The caller holds the table WRITE lock.
+    private void updateNextVersions(OlapTable olapTable) {
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            PhysicalPartition physicalPartition = olapTable
+                    .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                continue;
+            }
 
-                long commitVersion = reshardingPhysicalPartition.getCommitVersion();
-                if (commitVersion <= 0) {
-                    commitVersion = physicalPartition.getNextVersion();
-                    reshardingPhysicalPartition.setCommitVersion(commitVersion);
-                }
+            long commitVersion = reshardingPhysicalPartition.getCommitVersion();
+            if (commitVersion <= 0) {
+                commitVersion = physicalPartition.getNextVersion();
+                reshardingPhysicalPartition.setCommitVersion(commitVersion);
+            }
 
-                // Never move nextVersion backwards. The commit version is reserved here, in
-                // runPendingJob, but the job does not journal anything until it reaches PREPARING a
-                // few steps later -- so a load transaction that commits in between journals its own
-                // entry first, and a replaying FE applies that entry before this one. By then the
-                // transaction has already carried nextVersion past the version reserved here, and
-                // assigning commitVersion + 1 unconditionally would drag it back, handing the same
-                // version out twice.
-                if (physicalPartition.getNextVersion() < commitVersion + 1) {
-                    physicalPartition.setNextVersion(commitVersion + 1);
-                }
+            // Never move nextVersion backwards. runPendingJob journals the reservation before it
+            // releases the table lock, but a journal written by an FE without that ordering can
+            // still carry a load that committed between the reservation and its PREPARING entry.
+            // A replaying FE applies that load first, so the load has already carried nextVersion
+            // past the version reserved here, and assigning commitVersion + 1 unconditionally
+            // would drag it back, handing the same version out twice.
+            if (physicalPartition.getNextVersion() < commitVersion + 1) {
+                physicalPartition.setNextVersion(commitVersion + 1);
             }
         }
     }
@@ -709,12 +718,8 @@ public class MergeTabletJob extends TabletReshardJob {
     private Map<Long, TabletRange> publishVersion(List<Tablet> tablets, long commitVersion,
             boolean useAggregatePublish, ComputeResource computeResource, boolean preferSharedInitialMetadata) {
         try {
-            TxnInfoPB txnInfo = new TxnInfoPB();
-            txnInfo.txnId = transactionId;
-            txnInfo.combinedTxnLog = false;
-            txnInfo.commitTime = stateStartedTimeMs / 1000;
-            txnInfo.txnType = TxnTypePB.TXN_TABLET_RESHARD;
-            txnInfo.gtid = gtid;
+            TxnInfoPB txnInfo = TxnInfoHelper.forJobPublish(transactionId, TxnTypePB.TXN_TABLET_RESHARD,
+                    stateStartedTimeMs, gtid);
 
             Map<Long, TabletRange> tabletRange = new HashMap<>();
             // vectorIndexBuildInfos is required by the publishVersion signature but intentionally
@@ -808,8 +813,8 @@ public class MergeTabletJob extends TabletReshardJob {
         }
     }
 
-    private LockedObject<OlapTable> getLockedTable(LockType lockType) {
-        return new LockedObject<>(dbId, List.of(tableId), lockType, getOlapTable());
+    LockedObject<OlapTable> getLockedTable(LockType lockType) {
+        return new LockedObject<>(dbId, List.of(tableId), lockType, this::getOlapTable);
     }
 
     private OlapTable getOlapTable() {
@@ -877,7 +882,17 @@ public class MergeTabletJob extends TabletReshardJob {
      * diff-and-purge cycle.
      */
     void createShardsOnStarOS() {
-        OlapTable table = getOlapTable();
+        OlapTable table;
+        // Present partitions only, with the cache settings read while the lock is held.
+        Map<Long, FileCacheInfo> cacheInfos = new HashMap<>();
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
+            table = lockedTable.get();
+            for (long physicalPartitionId : reshardingPhysicalPartitions.keySet()) {
+                if (table.getPhysicalPartition(physicalPartitionId) != null) {
+                    cacheInfos.put(physicalPartitionId, table.getPartitionFileCacheInfo(physicalPartitionId));
+                }
+            }
+        }
         // Snapshot the colocate ranges once: the createShard RPCs in the inner loop cannot change
         // them, and every shard of this job must be placed against the same topology.
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
@@ -894,6 +909,9 @@ public class MergeTabletJob extends TabletReshardJob {
         try {
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 long physicalPartitionId = reshardingPhysicalPartition.getPhysicalPartitionId();
+                if (!cacheInfos.containsKey(physicalPartitionId)) {
+                    continue;
+                }
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
@@ -920,7 +938,7 @@ public class MergeTabletJob extends TabletReshardJob {
                             newToOldTabletIds,
                             newTabletIdToGroupIds,
                             table.getPartitionFilePathInfo(physicalPartitionId),
-                            table.getPartitionFileCacheInfo(physicalPartitionId),
+                            cacheInfos.get(physicalPartitionId),
                             properties, resolveComputeResource(tableId));
                 }
             }

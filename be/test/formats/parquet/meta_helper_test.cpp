@@ -268,16 +268,15 @@ TEST(ParquetMetaHelperTest, IncompatibleGroupMapKeyIsKeptForTheReaderToReject) {
     map.type = ColumnType::MAP;
     map.children = {key, value};
 
-    const TypeDescriptor unknown(TYPE_UNKNOWN);
     ParquetMetaHelper helper(/*file_metadata=*/nullptr, /*case_sensitive=*/false);
     // incompatible key read, value pruned: kept for the reader to reject
-    const TypeDescriptor key_only = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, unknown);
+    const TypeDescriptor key_only = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_UNKNOWN_DESC);
     EXPECT_TRUE(helper._is_valid_type(&map, &key_only));
     // key pruned, value read: valid as before
-    const TypeDescriptor value_only = TypeDescriptor::create_map_type(unknown, TYPE_VARCHAR_DESC);
+    const TypeDescriptor value_only = TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_VARCHAR_DESC);
     EXPECT_TRUE(helper._is_valid_type(&map, &value_only));
     // nothing read
-    const TypeDescriptor none = TypeDescriptor::create_map_type(unknown, unknown);
+    const TypeDescriptor none = TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_UNKNOWN_DESC);
     EXPECT_FALSE(helper._is_valid_type(&map, &none));
 }
 

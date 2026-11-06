@@ -63,6 +63,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：キャッシュされた query profile の読み取りを制限するかどうか。`true` に設定すると、SHOW PROFILELIST、ANALYZE PROFILE、`get_query_profile` 関数、`/api/profile` および `/api/query/progress` HTTP エンドポイント、ならびに `/query` および `/query_profile` Web UI ページは、そのクエリを実行したユーザー、または SYSTEM レベルの OPERATE 権限を持つユーザーにのみ profile を返します。ユーザーが記録されていない profile（例：EXPORT ジョブや Stream Load）は、OPERATE 権限を持つ場合のみ読み取れます。`/api/query_detail` および `/api/v2/query_detail` エンドポイントはすべてのクエリを一覧に含めますが、同じルールに従って `profile` フィールド、およびその profile から生成された `explain` フィールドを省略します。`authorization_enable_admin_user_protection` も有効な場合、`root` が実行したクエリの profile は `root` 自身のみが読み取れます。`false`（デフォルト）の場合、認証済みのすべてのユーザーがすべての profile を読み取れます。これは以前のバージョンと同じ動作です。各 FE は自身が保持する profile に対してのみこのチェックを行います。クラスター全体でアクセスを制限するには、すべての FE をこの項目をサポートするバージョンにアップグレードした後、各 FE の `fe.conf` にこの項目を設定してください。有効にする際は、さらに次の 2 点に注意してください。1 つは、権限判定に呼び出し元の識別情報が必要なため `/api/query/progress` が匿名リクエストを受け付けなくなり、このエンドポイントを匿名でポーリングしていた処理が `401` を受け取るようになることです。もう 1 つは、`query_id` に対応する profile がセッションの接続先 FE にキャッシュされていない場合、`get_query_profile()` に OPERATE 権限が必要になることです。他の FE から profile を取得する RPC は呼び出し元の識別情報を持たず対向側で認可できないため、このチェックが有効な間、FE をまたぐ取得は OPERATE 権限を持つユーザーに限られます。
 - 導入時期：v4.1
 
+### `enable_new_load_job_privilege_check`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：ロードジョブをロード先テーブルに対する権限に従って表示するかどうか。`true`（デフォルト）の場合、`information_schema.loads`、`load_tracking_logs`、`routine_load_jobs`、`stream_loads`、SHOW LOAD、SHOW STREAM LOAD、SHOW ROUTINE LOAD とそれらの SHOW PROC ノード、および `/api/{db}/_load_info` HTTP エンドポイントは、ジョブのすべてのロード先テーブルに対して少なくとも 1 つの権限を持つユーザー、または OPERATE 権限を持つユーザーにのみジョブを表示し、拒否された行、エラーログの URL、エラーメッセージ、プロパティは、すべてのロード先テーブルに対して SELECT 権限を持つユーザーにのみ表示します。`false` に設定すると、FE を再起動せずにこの動作を元に戻せます。上記の各箇所はそれぞれ以前の権限チェックに戻ります。つまり、4 つの `information_schema` ビュー、SHOW LOAD、SHOW PROC は権限をチェックせず、SHOW STREAM LOAD と SHOW ROUTINE LOAD はロード先テーブルの INSERT 権限を、`/api/{db}/_load_info` はデータベース内の INSERT 権限を要求し、いずれもすべてのフィールドを表示します。このとき、ロードジョブの拒否された行とエラーログの URL は、ロード先テーブルの SELECT 権限を持たないユーザーにも再び公開されます。エラーログのファイル名に含まれるランダムな部分は、この項目の影響を受けません。
+- 導入時期：-
+
 ### `enable_task_info_mask_credential`
 
 - デフォルト：true
@@ -883,7 +892,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：自動収集の終了時刻。値の範囲: `00:00:00` - `23:59:59`。
+- 説明：自動収集の終了時刻。値の範囲: `00:00:00` - `23:59:59`。開始時刻と終了時刻は秒単位で扱われ、どちらも収集期間に含まれます。例えば、終了時刻が `17:00:00` の場合、`17:00:00` の 1 秒間が終わるまで収集できます。開始時刻が終了時刻より遅い場合、収集期間は午前 0 時をまたぎます。
 - 導入時期：-
 
 ### `statistic_auto_analyze_start_time`
@@ -892,7 +901,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：自動収集の開始時刻。値の範囲: `00:00:00` - `23:59:59`。
+- 説明：自動収集の開始時刻。値の範囲: `00:00:00` - `23:59:59`。開始時刻と終了時刻は秒単位で扱われ、どちらも収集期間に含まれます。例えば、終了時刻が `17:00:00` の場合、`17:00:00` の 1 秒間が終わるまで収集できます。開始時刻が終了時刻より遅い場合、収集期間は午前 0 時をまたぎます。
 - 導入時期：-
 
 ### `statistic_auto_collect_ratio`
@@ -1012,6 +1021,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：SQL レイヤーによってチェックされるタスクスケジュールの最小許容スケジュール間隔 (秒単位)。タスクが送信されると、TaskAnalyzer はスケジュール期間を秒に変換し、期間が `task_min_schedule_interval_s` より小さい場合、`ERR_INVALID_PARAMETER` で送信を拒否します。これにより、頻繁すぎる実行タスクの作成が防止され、スケジューラーが高頻度タスクから保護されます。スケジュールに明示的な開始時間がない場合、TaskAnalyzer は開始時間を現在のエポック秒に設定します。
 - 導入時期：v3.3.0, v3.4.0, v3.5.0
 
+### `task_runs_dispatch_interval_ms`
+
+- デフォルト：1000
+- タイプ：Int
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：Leader FE が実行中の TaskRun の完了を確認し、待機中の TaskRun を開始する間隔です。`ADMIN SET FRONTEND CONFIG` で変更でき、FE の再起動は不要です。新しい間隔は現在のディスパッチ周期が終わった後に有効になります。値を小さくすると待機中の TaskRun の開始と完了状態の更新が速くなりますが、FE の CPU 使用量が増えます。値を大きくするとオーバーヘッドは減りますが、開始が遅れます。負の値は `1000` として扱います。`0` は `1` として扱います。
+- 導入時期：-
+
 ### `task_runs_timeout_second`
 
 - デフォルト：4 * 3600
@@ -1067,7 +1085,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：クラウドネイティブテーブルのファイルバンドル最適化を有効にするかどうか。この機能が有効 ( `true` に設定) の場合、システムはロード、コンパクション、または公開操作によって生成されたデータファイルを自動的にバンドルし、それによって外部ストレージシステムへの高頻度アクセスによって発生する API コストを削減します。この動作は、CREATE TABLE プロパティ `file_bundling` を使用してテーブルレベルで制御することもできます。詳細な手順については、CREATE TABLE を参照してください。
+- 説明：クラウドネイティブテーブルのファイルバンドル最適化を有効にするかどうか。v26.2 以降は、共有データクラスタの非同期マテリアライズドビューにも適用されます。この機能が有効 ( `true` に設定) の場合、システムはロード、コンパクション、または公開操作によって生成されたデータファイルを自動的にバンドルし、それによって外部ストレージシステムへの高頻度アクセスによって発生する API コストを削減します。この動作は、CREATE TABLE プロパティ `file_bundling` を使用してテーブルレベルで、または CREATE MATERIALIZED VIEW プロパティ `file_bundling` を使用してマテリアライズドビューレベルで制御することもできます。詳細な手順については、CREATE TABLE を参照してください。
 - 導入時期：v4.0
 
 ### `enable_pipeline_routine_load`

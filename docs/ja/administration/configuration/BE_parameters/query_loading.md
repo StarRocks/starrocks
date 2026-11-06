@@ -787,6 +787,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: スキャンコンテキストをクリーンアップする時間間隔。
 - 導入バージョン: -
 
+### scan_credential_refresh_rpc_timeout_ms
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: スキャンに払い出された認証情報（Iceberg REST カタログの vended credentials）の有効期限が近づいたときに、スキャンがコーディネーター FE に更新済みの認証情報を要求する RPC のタイムアウト。この RPC はリトライされません。失敗またはタイムアウトした場合、スキャンは現在の認証情報を使い続け、1 分後に再度要求します。`0` 以下の値を指定すると、それ以降に開始するスキャンでは更新が無効になり、デプロイ時の認証情報を使い続けます。
+- 導入バージョン: -
+
 ### scanner_row_num
 
 - デフォルト: 16384

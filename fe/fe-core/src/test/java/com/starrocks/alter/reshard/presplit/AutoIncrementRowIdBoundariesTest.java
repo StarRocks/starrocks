@@ -67,17 +67,59 @@ public class AutoIncrementRowIdBoundariesTest {
     }
 
     @Test
-    public void testUsedCounterIsNotDerivable() {
-        // Any allocation already made means a compute node may hold cached ids this planner cannot
-        // bound. If this gate regressed, boundaries would be derived for a span whose real occupancy
-        // is unknown.
-        Config.auto_increment_cache_size = 25;
+    public void testUsedCounterStartsTheSpanAtTheCounter() {
+        // cache 5, 1 node: gap mass doubles to 10 for a used counter, headroom 100 rows/tablet, 1000 rows -> 4 tablets.
+        // Every later grant starts at or above the counter, so the cuts are carved from it rather than from 1.
+        Config.auto_increment_cache_size = 5;
 
         DerivedBoundarySource.Result result = AutoIncrementRowIdBoundaries.plan(
-                /*currentAutoIncrementId=*/ 1L, /*totalRows=*/ 1000, /*requestedTabletCount=*/ 4,
+                /*currentAutoIncrementId=*/ 1001L, /*totalRows=*/ 1000, /*requestedTabletCount=*/ 4,
                 /*activeComputeNodeCount=*/ 1, ROW_ID_COLUMN);
 
-        assertSkipped(SkipReason.ROW_ID_SPACE_NOT_PRISTINE, result);
+        // cuts are 1001 + 250 * k
+        Assertions.assertEquals(List.of(bigintTuple(1251), bigintTuple(1501), bigintTuple(1751)),
+                boundariesOf(result));
+    }
+
+    @Test
+    public void testUsedCounterDoublesTheGapHeadroom() {
+        // cache 1e5, 3 nodes: a null counter has gap mass 3e5, so 1e7 rows afford 3 tablets (see the clamp test).
+        // A used counter doubles it to 6e5: the same 1e7 rows afford only 1 -> skipped, and 2e7 rows afford 3.
+        Config.auto_increment_cache_size = 100000;
+
+        Assertions.assertEquals(2, boundariesOf(AutoIncrementRowIdBoundaries.plan(
+                null, 10_000_000L, 9, 3, ROW_ID_COLUMN)).size());
+        assertSkipped(SkipReason.ROW_ID_SPAN_TOO_SMALL, AutoIncrementRowIdBoundaries.plan(
+                42L, 10_000_000L, 9, 3, ROW_ID_COLUMN));
+        Assertions.assertEquals(2, boundariesOf(AutoIncrementRowIdBoundaries.plan(
+                42L, 20_000_000L, 9, 3, ROW_ID_COLUMN)).size());
+    }
+
+    @Test
+    public void testCounterNearLongMaxDoesNotWrap() {
+        // The span starts at the counter, so a counter near the top of the id space leaves no room for
+        // even one stride; the accumulator must stop rather than wrap below its predecessor.
+        Config.auto_increment_cache_size = 1;
+
+        assertSkipped(SkipReason.ROW_ID_SPAN_TOO_SMALL, AutoIncrementRowIdBoundaries.plan(
+                Long.MAX_VALUE - 10, 1_000_000_000L, 4, 1, ROW_ID_COLUMN));
+    }
+
+    @Test
+    public void testCounterNearLongMaxKeepsTheCutsThatFit() {
+        // cache 1, 1 node, used counter: gap mass 2, so 4000 rows afford 4 tablets (stride 1000, 3 cuts).
+        // Counter = MAX - 1500: the first cut MAX - 500 fits (MAX - 1500 <= MAX - 1000), the second would
+        // need MAX + 500 and stops the loop. One cut remains, so the plan is kept as 2 tablets.
+        Config.auto_increment_cache_size = 1;
+        long counter = Long.MAX_VALUE - 1500;
+
+        DerivedBoundarySource.Result result = AutoIncrementRowIdBoundaries.plan(
+                counter, /*totalRows=*/ 4000, /*requestedTabletCount=*/ 4,
+                /*activeComputeNodeCount=*/ 1, ROW_ID_COLUMN);
+
+        List<Tuple> boundaries = boundariesOf(result);
+        Assertions.assertEquals(List.of(bigintTuple(Long.MAX_VALUE - 500)), boundaries);
+        Assertions.assertEquals(2, result.boundaries().getEffectiveTabletCount());
     }
 
     @Test
@@ -130,10 +172,14 @@ public class AutoIncrementRowIdBoundariesTest {
         Config.auto_increment_cache_size = 0;
         assertSkipped(SkipReason.DERIVATION_FAILED, AutoIncrementRowIdBoundaries.plan(
                 null, 1_000_000_000L, 9, 3, ROW_ID_COLUMN));
+        assertSkipped(SkipReason.DERIVATION_FAILED, AutoIncrementRowIdBoundaries.plan(
+                7L, 1_000_000_000L, 9, 3, ROW_ID_COLUMN));
 
         Config.auto_increment_cache_size = -1;
         assertSkipped(SkipReason.DERIVATION_FAILED, AutoIncrementRowIdBoundaries.plan(
                 null, 1_000_000_000L, 9, 3, ROW_ID_COLUMN));
+        assertSkipped(SkipReason.DERIVATION_FAILED, AutoIncrementRowIdBoundaries.plan(
+                7L, 1_000_000_000L, 9, 3, ROW_ID_COLUMN));
     }
 
     @Test

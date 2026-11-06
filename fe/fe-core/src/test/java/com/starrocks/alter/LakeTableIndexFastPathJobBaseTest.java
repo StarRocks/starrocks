@@ -46,6 +46,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.transaction.TransactionIdGenerator;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
@@ -1178,6 +1179,9 @@ public class LakeTableIndexFastPathJobBaseTest {
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 
         GlobalStateMgr gsm = buildLockableGsm(db, table);
+        GtidGenerator gtidGenerator = mock(GtidGenerator.class);
+        when(gtidGenerator.nextGtid()).thenReturn(42L);
+        when(gsm.getGtidGenerator()).thenReturn(gtidGenerator);
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             invokePrivate(job, "runRunningJob");
@@ -1185,6 +1189,8 @@ public class LakeTableIndexFastPathJobBaseTest {
         @SuppressWarnings("unchecked")
         Map<Long, Long> commitMap = (Map<Long, Long>) getField(job, "commitVersionMap");
         assertEquals(Long.valueOf(5L), commitMap.get(100L));
+        // The commit versions carry the gtid drawn when they were reserved.
+        assertEquals(42L, getField(job, "commitGtid"));
         assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
         // updateNextVersion runnable should have flipped the next version on the partition.
         verify(pp).setNextVersion(6L);
@@ -2201,6 +2207,10 @@ public class LakeTableIndexFastPathJobBaseTest {
     private void withDispatchMocks(OlapTable table, WarehouseManager wm, ThrowingRunnable action) throws Exception {
         GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
         when(gsm.getWarehouseMgr()).thenReturn(wm);
+        // runRunningJob draws the gtid of the commit versions once the tasks have finished.
+        GtidGenerator gtidGenerator = mock(GtidGenerator.class);
+        when(gtidGenerator.nextGtid()).thenReturn(42L);
+        when(gsm.getGtidGenerator()).thenReturn(gtidGenerator);
         SchemaInfo schemaInfo = mock(SchemaInfo.class);
         when(schemaInfo.toTabletSchema()).thenReturn(new TTabletSchema());
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);

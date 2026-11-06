@@ -135,6 +135,59 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
     }
 
     @Test
+    public void testExtractBucketIdAfterBucketColumnRename() {
+        // The partition field keeps its name (k1_bucket) after the source column is renamed.
+        mockedNativeTable2Bucket.newFastAppend().appendFile(FILE_J_1).appendFile(FILE_J_2).commit();
+        mockedNativeTable2Bucket.updateSchema().renameColumn("k1", "k1_new").commit();
+        List<Column> schema = new ArrayList<>();
+        schema.add(new Column("id", INT));
+        schema.add(new Column("k1_new", INT));
+        schema.add(new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTable2Bucket, Maps.newHashMap());
+        List<BucketProperty> bucketProperties = icebergTable.getBucketProperties();
+        Assertions.assertEquals(2, bucketProperties.size());
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor, Optional.of(bucketProperties),
+                PartitionIdGenerator.of(), false, false);
+
+        for (FileScanTask fileScanTask : mockedNativeTable2Bucket.newScan().planFiles()) {
+            int mappingId = scanRangeSource.extractBucketId(fileScanTask);
+            if (fileScanTask.file().location().endsWith("data-j1.parquet")) {
+                Assertions.assertEquals((BUCKETS_NUMBER2 + 1) + 1, mappingId);
+            } else {
+                Assertions.assertEquals(2 * (BUCKETS_NUMBER2 + 1) + 1, mappingId);
+            }
+        }
+    }
+
+    @Test
+    public void testExtractBucketIdTwoBucketTransformsOnOneColumn() {
+        // bucket(k1, 4) named k1_4 comes first; the bucket property is the 8-bucket one (field k1_bucket).
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).bucket("k1", 4, "k1_4").bucket("k1", 8).build();
+        TestTables.TestTable nativeTable = create(SCHEMA_J, spec, "k1_two_buckets", 2);
+        DataFile file = DataFiles.builder(spec).withPath("/path/to/k1_4=1/k1_bucket=3/a.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("k1_4=1/k1_bucket=3").withRecordCount(1).build();
+        nativeTable.newFastAppend().appendFile(file).commit();
+        List<Column> schema = new ArrayList<>();
+        schema.add(new Column("id", INT));
+        schema.add(new Column("k1", INT));
+        schema.add(new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, nativeTable, Maps.newHashMap());
+        BucketProperty bucket8 = icebergTable.getBucketProperties().stream()
+                .filter(bp -> bp.getBucketNum() == 8).findFirst().orElseThrow();
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor, Optional.of(List.of(bucket8)),
+                PartitionIdGenerator.of(), false, false);
+        for (FileScanTask fileScanTask : nativeTable.newScan().planFiles()) {
+            Assertions.assertEquals(3, scanRangeSource.extractBucketId(fileScanTask));
+        }
+    }
+
+    @Test
     public void testExtractBucketIdFromTaskOnlyOneBucketProperty() {
         List<Column> schema = new ArrayList<>();
         schema.add(new Column("id", INT));
@@ -531,6 +584,70 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 PartitionIdGenerator.of(), false, false);
         notPartitioned.setRuntimeFilterPruningColumns(Set.of("k1"));
         Assertions.assertThrows(StarRocksConnectorException.class, () -> notPartitioned.toScanRanges(task));
+    }
+
+    @Test
+    public void testRuntimeFilterProbeSlotsCarryFileBounds() throws Exception {
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(20));
+        SlotDescriptor k1Slot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        k1Slot.setType(INT);
+        k1Slot.setColumn(new Column("k1", INT));
+        localTupleDescriptor.addSlot(k1Slot);
+        SlotDescriptor k2Slot = new SlotDescriptor(new SlotId(2), localTupleDescriptor);
+        k2Slot.setType(INT);
+        k2Slot.setColumn(new Column("k2", INT));
+        localTupleDescriptor.addSlot(k2Slot);
+
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_3).commit();
+        List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableB, Maps.newHashMap());
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        FileScanTask task = Lists.newArrayList(mockedNativeTableB.newScan().includeColumnStats().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(task);
+        // without probe slots (and without the min/max optimization) no bounds are sent
+        Assertions.assertFalse(scanRangeSource.buildScanRange(task, task.file(), partitionId).isSetMin_max_values());
+
+        scanRangeSource.setRuntimeFilterProbeSlotIds(Set.of(k1Slot.getId().asInt()));
+        THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), partitionId);
+        Assertions.assertEquals(Set.of(k1Slot.getId().asInt()), range.getMin_max_values().keySet());
+        Assertions.assertEquals(1, range.getMin_max_values().get(k1Slot.getId().asInt()).getMin_int_value());
+        Assertions.assertEquals(2, range.getMin_max_values().get(k1Slot.getId().asInt()).getMax_int_value());
+    }
+
+    // A time-travel read binds the slots to the snapshot schema: the bounds are looked up by the name there, not in
+    // the current schema where the column was renamed since.
+    @Test
+    public void testRuntimeFilterProbeSlotBoundsUseReadSchema() throws Exception {
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(21));
+        SlotDescriptor k1Slot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        k1Slot.setType(INT);
+        k1Slot.setColumn(new Column("k1", INT));
+        localTupleDescriptor.addSlot(k1Slot);
+
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_3).commit();
+        long snapshotId = mockedNativeTableB.currentSnapshot().snapshotId();
+        Schema snapshotSchema = mockedNativeTableB.schema();
+        mockedNativeTableB.updateSchema().renameColumn("k1", "k1_renamed").commit();
+
+        List<Column> schema = Lists.newArrayList(new Column("k1_renamed", INT), new Column("k2", INT));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableB, Maps.newHashMap())
+                .withReadMetadata(snapshotSchema, IcebergMetadata.getSnapshotSpecs(mockedNativeTableB, snapshotId));
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+        scanRangeSource.setRuntimeFilterProbeSlotIds(Set.of(k1Slot.getId().asInt()));
+
+        FileScanTask task = Lists.newArrayList(
+                mockedNativeTableB.newScan().useSnapshot(snapshotId).includeColumnStats().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(task);
+        THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), partitionId);
+        Assertions.assertEquals(1, range.getMin_max_values().get(k1Slot.getId().asInt()).getMin_int_value());
+        Assertions.assertEquals(2, range.getMin_max_values().get(k1Slot.getId().asInt()).getMax_int_value());
     }
 
     @Test
