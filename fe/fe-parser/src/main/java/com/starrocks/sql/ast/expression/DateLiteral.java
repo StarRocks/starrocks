@@ -184,12 +184,32 @@ public class DateLiteral extends LiteralExpr {
         if (expr == MaxLiteral.MAX_VALUE) {
             return -1;
         }
-        if (getDoubleValue() < expr.getDoubleValue()) {
-            return -1;
-        } else if (getDoubleValue() > expr.getDoubleValue()) {
-            return 1;
+
+        // compare with (long + microsecond)
+        if (expr instanceof DateLiteral) {
+            DateLiteral dateExpr = (DateLiteral) expr;
+            if (getLongValue() < expr.getLongValue()) {
+                return -1;
+            } else if (getLongValue() > expr.getLongValue()) {
+                return 1;
+            } else {
+                if (microsecond < dateExpr.microsecond) {
+                    return -1;
+                } else if (microsecond > dateExpr.microsecond) {
+                    return 1;
+                }
+
+                return 0;
+            }
+        } else { 
+            if (getDoubleValue() < expr.getDoubleValue()) {
+                return -1;
+            } else if (getDoubleValue() > expr.getDoubleValue()) {
+                return 1;
+            }
+
+            return 0;
         }
-        return 0;
     }
 
     @Override
