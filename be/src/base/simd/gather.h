@@ -195,6 +195,30 @@ struct SIMDGather {
     static constexpr size_t kPrefetchPoolBytes = 16 * 1024 * 1024;
     /// How many rows ahead of the loads the prefetches are issued.
     static constexpr size_t kPrefetchLookahead = 8;
+    /// Number of leading rows sampled to estimate cache-line cardinality before prefetching.
+    static constexpr size_t kPrefetchLocalitySampleRows = 128;
+    /// Minimum set bits in the 256-bit cache-line sketch over `kPrefetchLocalitySampleRows` rows
+    /// required to enable software prefetching. By the pigeonhole principle, any chunk touching <= 64
+    /// distinct cache lines (or sequential indices touching 8-16 cache lines in 128 rows) sets at most
+    /// 64 bits and stays on `gather_buffered`, whereas scattered high-cardinality probes set ~100 bits.
+    static constexpr int kPrefetchMinUniqueSampleBits = 72;
+
+    /// Returns true when the leading `kPrefetchLocalitySampleRows` indices touch enough distinct
+    /// 64-byte source cache lines to justify software prefetching. Caller must ensure
+    /// `num_rows >= kPrefetchLocalitySampleRows` (satisfied whenever `num_rows >= kPrefetchMinRows`).
+    template <typename DataType, typename IndexType>
+    static inline bool should_prefetch_indexes(const IndexType* indexes) {
+        static_assert(kPrefetchMinRows >= kPrefetchLocalitySampleRows);
+        uint64_t seen[4] = {0, 0, 0, 0};
+        for (size_t k = 0; k < kPrefetchLocalitySampleRows; ++k) {
+            const uint32_t cl = static_cast<uint32_t>((static_cast<size_t>(indexes[k]) * sizeof(DataType)) >> 6);
+            const uint32_t h = (cl * 0x9E3779B1u) >> 24;
+            seen[h >> 6] |= (1ULL << (h & 63));
+        }
+        const int unique_bits = __builtin_popcountll(seen[0]) + __builtin_popcountll(seen[1]) +
+                                __builtin_popcountll(seen[2]) + __builtin_popcountll(seen[3]);
+        return unique_bits >= kPrefetchMinUniqueSampleBits;
+    }
 
     /// Default gather loop on every target and element size: SIMD-width batches staged through a
     /// local buffer, continuing from index `i` (where the prefetch loop stopped, if it ran). Skips batching when NUM_BATCH_VALUES == 0 (e.g. int256_t on
@@ -280,9 +304,10 @@ struct SIMDGather {
     /// Contract: `dest`, `src` and `indexes` must not overlap: the helpers take `__restrict__`
     /// pointers, so overlapping ranges are undefined behaviour.
     /// `pool_size` is a PERFORMANCE hint only and never affects correctness. Prefetch is issued only
-    /// for rows whose indexes the subsequent loads will read (filtered rows are skipped). Prefetch is
-    /// x86-64 only (measured regression on AArch64); elsewhere this overload degenerates to the plain
-    /// buffered default loop.
+    /// when the leading sample touches enough distinct cache lines (`should_prefetch_indexes`);
+    /// low-cardinality or sequential cache-hot index streams (e.g., <= 64 distinct cache lines in the
+    /// leading sample) stay on `gather_buffered`. Prefetch is x86-64 only (measured regression on
+    /// AArch64); elsewhere this overload degenerates to the plain buffered default loop.
     /// @param pool_size Element count of the source array (`src`), wrapped in SourcePoolSize.
     template <typename DataType, typename IndexType>
     static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows,
@@ -293,7 +318,7 @@ struct SIMDGather {
 #if defined(__x86_64__) || defined(_M_X64)
         const bool is_large_pool = (pool_size.elements >= kPrefetchPoolBytes / sizeof(DataType));
 
-        if (num_rows >= kPrefetchMinRows && is_large_pool) {
+        if (num_rows >= kPrefetchMinRows && is_large_pool && should_prefetch_indexes<DataType>(indexes)) {
             for (size_t p = 0; p < kPrefetchLookahead; ++p) {
                 STARROCKS_PREFETCH(src + indexes[p]);
             }

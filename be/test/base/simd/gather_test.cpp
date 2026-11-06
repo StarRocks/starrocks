@@ -597,7 +597,118 @@ TEST(SIMDGatherTest, prefetch_constants_pinned) {
     static_assert(SIMDGather::kPrefetchMinRows == 512);
     static_assert(SIMDGather::kPrefetchPoolBytes == 16 * 1024 * 1024);
     static_assert(SIMDGather::kPrefetchLookahead == 8);
+    static_assert(SIMDGather::kPrefetchLocalitySampleRows == 128);
+    static_assert(SIMDGather::kPrefetchMinUniqueSampleBits == 72);
     EXPECT_EQ(512u, SIMDGather::kPrefetchMinRows);
+    EXPECT_EQ(128u, SIMDGather::kPrefetchLocalitySampleRows);
+    EXPECT_EQ(72, SIMDGather::kPrefetchMinUniqueSampleBits);
+}
+
+TEST(SIMDGatherTest, test_locality_gate_low_vs_high_cardinality) {
+    constexpr size_t kRows = 4096;
+
+    // Low cardinality: both cyclic and uniform random draws from a small palette must stay on gather_buffered.
+    for (size_t unique_keys : {size_t(1), size_t(8), size_t(32), size_t(64)}) {
+        std::vector<uint32_t> palette(unique_keys);
+        for (size_t k = 0; k < unique_keys; ++k) {
+            palette[k] = static_cast<uint32_t>(k * 1024);
+        }
+
+        // Deterministic cyclic
+        std::vector<uint32_t> cyclic_indexes(kRows);
+        for (size_t i = 0; i < kRows; ++i) {
+            cyclic_indexes[i] = palette[i % unique_keys];
+        }
+        EXPECT_FALSE(SIMDGather::should_prefetch_indexes<uint32_t>(cyclic_indexes.data()))
+                << "cyclic unique_keys=" << unique_keys;
+        EXPECT_FALSE(SIMDGather::should_prefetch_indexes<int64_t>(cyclic_indexes.data()))
+                << "cyclic unique_keys=" << unique_keys;
+
+        // Uniform random draws from palette
+        std::mt19937 rng(static_cast<uint32_t>(42 + unique_keys));
+        std::uniform_int_distribution<size_t> dist(0, unique_keys - 1);
+        std::vector<uint32_t> random_indexes(kRows);
+        for (size_t i = 0; i < kRows; ++i) {
+            random_indexes[i] = palette[dist(rng)];
+        }
+        EXPECT_FALSE(SIMDGather::should_prefetch_indexes<uint32_t>(random_indexes.data()))
+                << "random unique_keys=" << unique_keys;
+        EXPECT_FALSE(SIMDGather::should_prefetch_indexes<int64_t>(random_indexes.data()))
+                << "random unique_keys=" << unique_keys;
+    }
+
+    // Sequential contiguous indices (touching 8 cache lines for uint32_t and 16 for int64_t in 128 rows)
+    {
+        std::vector<uint32_t> seq_indexes(kRows);
+        for (size_t i = 0; i < kRows; ++i) {
+            seq_indexes[i] = static_cast<uint32_t>(i);
+        }
+        EXPECT_FALSE(SIMDGather::should_prefetch_indexes<uint32_t>(seq_indexes.data()));
+        EXPECT_FALSE(SIMDGather::should_prefetch_indexes<int64_t>(seq_indexes.data()));
+    }
+
+    // High cardinality: scattered cache-line-separated keys
+    for (size_t unique_keys : {size_t(4096), size_t(16 * 1024 * 1024)}) {
+        std::mt19937 rng(static_cast<uint32_t>(100 + unique_keys));
+        std::uniform_int_distribution<size_t> dist(0, unique_keys - 1);
+        std::vector<uint32_t> high_card_indexes(kRows);
+        for (size_t i = 0; i < kRows; ++i) {
+            const size_t k = dist(rng);
+            high_card_indexes[i] = static_cast<uint32_t>(k * 37);
+        }
+        EXPECT_TRUE(SIMDGather::should_prefetch_indexes<uint32_t>(high_card_indexes.data()))
+                << "high_card unique_keys=" << unique_keys;
+        EXPECT_TRUE(SIMDGather::should_prefetch_indexes<int64_t>(high_card_indexes.data()))
+                << "high_card unique_keys=" << unique_keys;
+    }
+
+    // End-to-end gather verification for both low-cardinality (64 keys) and high-cardinality (4096 keys)
+    constexpr size_t kPoolElements = 4096 * 37 + 64;
+    std::vector<int32_t> src32(kPoolElements);
+    std::vector<int64_t> src64(kPoolElements);
+    for (size_t i = 0; i < kPoolElements; ++i) {
+        src32[i] = static_cast<int32_t>(i * 7 + 3);
+        src64[i] = static_cast<int64_t>(i * 13 + 5);
+    }
+
+    for (size_t unique_keys : {size_t(64), size_t(4096)}) {
+        for (size_t n : {size_t(511), size_t(512), size_t(513), size_t(520), size_t(4096)}) {
+            std::mt19937 rng(static_cast<uint32_t>(200 + unique_keys + n));
+            std::uniform_int_distribution<size_t> dist(0, unique_keys - 1);
+            std::vector<uint32_t> indexes(n);
+            for (size_t i = 0; i < n; ++i) {
+                indexes[i] = static_cast<uint32_t>(dist(rng) * 37);
+            }
+
+            {
+                const int32_t kSentinel32 = -123456789;
+                std::vector<int32_t> dest32(n + kGuard, kSentinel32);
+                SIMDGather::gather(dest32.data(), src32.data(), indexes.data(), n, SourcePoolSize{16 * 1024 * 1024});
+                for (size_t i = 0; i < n; ++i) {
+                    ASSERT_EQ(src32[indexes[i]], dest32[i])
+                            << "int32 gather failed at unique_keys=" << unique_keys << " n=" << n << " i=" << i;
+                }
+                for (size_t g = n; g < n + kGuard; ++g) {
+                    ASSERT_EQ(kSentinel32, dest32[g])
+                            << "int32 guard corrupted at unique_keys=" << unique_keys << " n=" << n << " g=" << g;
+                }
+            }
+
+            {
+                const int64_t kSentinel64 = -123456789012345LL;
+                std::vector<int64_t> dest64(n + kGuard, kSentinel64);
+                SIMDGather::gather(dest64.data(), src64.data(), indexes.data(), n, SourcePoolSize{16 * 1024 * 1024});
+                for (size_t i = 0; i < n; ++i) {
+                    ASSERT_EQ(src64[indexes[i]], dest64[i])
+                            << "int64 gather failed at unique_keys=" << unique_keys << " n=" << n << " i=" << i;
+                }
+                for (size_t g = n; g < n + kGuard; ++g) {
+                    ASSERT_EQ(kSentinel64, dest64[g])
+                            << "int64 guard corrupted at unique_keys=" << unique_keys << " n=" << n << " g=" << g;
+                }
+            }
+        }
+    }
 }
 
 // Row counts around the prefetch row gate and the unroll/lookahead tails, pool hints one below,
