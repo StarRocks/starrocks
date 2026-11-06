@@ -871,6 +871,11 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Table prefetchTableMetadataForAnalyze(String dbName, String tableName, ConnectContext connectContext) {
+        return getTable(connectContext, dbName, tableName);
+    }
+
+    @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
         TableIdentifier identifier = TableIdentifier.of(dbName, tblName);
 

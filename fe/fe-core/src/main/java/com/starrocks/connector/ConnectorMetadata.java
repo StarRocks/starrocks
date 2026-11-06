@@ -281,6 +281,15 @@ public interface ConnectorMetadata {
         return true;
     }
 
+    /**
+     * Prefetch the metadata needed to resolve a table during analysis.
+     * Returns the resolved table, including views, so callers can discover dependencies.
+     * The default implementation does not prefetch and returns null.
+     */
+    default Table prefetchTableMetadataForAnalyze(String dbName, String tableName, ConnectContext connectContext) {
+        return null;
+    }
+
     // return true if the connector has self info schema
     default boolean hasSelfInfoSchema() {
         return false;

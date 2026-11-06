@@ -17,7 +17,6 @@ package com.starrocks.catalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
@@ -26,8 +25,8 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
 
@@ -51,13 +50,15 @@ public abstract class ConnectorView extends Table {
         SessionVariable sessionVariable = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable()
                 : new SessionVariable();
         String sqlDialect = sessionVariable.getSqlDialect();
-        QueryStatement queryStatement = doGetQueryStatement(sessionVariable);
-        sessionVariable.setSqlDialect(sqlDialect);
-        List<String> cteRelationNames = queryStatement.getQueryRelation().getCteRelations()
-                .stream().map(CTERelation::getName)
-                .collect(Collectors.toList());
-        List<TableRelation> tableRelations = AnalyzerUtils.collectTableRelations(queryStatement);
-        formatRelations(tableRelations, cteRelationNames);
+        QueryStatement queryStatement;
+        try {
+            queryStatement = doGetQueryStatement(sessionVariable);
+        } finally {
+            sessionVariable.setSqlDialect(sqlDialect);
+        }
+        // Identify physical relations before qualification so nested CTE references stay unqualified.
+        List<TableRelation> tableRelations = AnalyzerUtils.collectNonCTETableRelations(queryStatement);
+        formatRelations(tableRelations, Collections.emptyList());
         return queryStatement;
     }
 

@@ -50,6 +50,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.InsertAnalyzer;
 import com.starrocks.sql.analyzer.InsertSourceRefresher;
+import com.starrocks.sql.analyzer.ParallelAnalyzeTableMetadataPrefetcher;
 import com.starrocks.sql.analyzer.PipeAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
@@ -263,6 +264,7 @@ public class StatementPlanner {
             }
         };
         try (Timer ignored = Tracers.watchScope("Analyzer")) {
+            ParallelAnalyzeTableMetadataPrefetcher.prefetch(statement, session);
             InsertStmt insertStmt = null;
             if (statement instanceof SubmitTaskStmt submitTaskStmt && submitTaskStmt.getInsertStmt() != null) {
                 insertStmt = ((SubmitTaskStmt) statement).getInsertStmt();
