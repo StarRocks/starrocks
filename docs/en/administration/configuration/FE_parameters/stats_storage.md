@@ -847,7 +847,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Maximum number of predicted target partitions a single Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions (the lightest ones: fewest input bytes when the data tier sampled a subset of files whose partition values come from the file paths, otherwise fewest sampled rows) are dropped and fall back to runtime auto-create with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to zero or a negative value to disable the cap.
+- Description: Maximum number of predicted target partitions a single Sample-Based Tablet Pre-Split invocation will operate on. On a sampled load, excess predicted partitions (the lightest ones: fewest input bytes when the data tier sampled a subset of files whose partition values come from the file paths, otherwise fewest sampled rows) are dropped and fall back to runtime auto-create with no pre-split. Bounds hook latency on pathological multi-partition loads. On a refresh of an incremental materialized view whose row ids are fingerprints computed by the refresh query, the temporary partitions it writes are created before pre-split runs. The first eligible ones by name, up to the cap, are pre-split, and the rest keep the single tablet they were created with. Each partition's share of the refresh is still computed over all the partitions it writes. Set to zero or a negative value to disable the cap.
 - Introduced in: v4.1.0
 
 ### `tablet_pre_split_target_size`

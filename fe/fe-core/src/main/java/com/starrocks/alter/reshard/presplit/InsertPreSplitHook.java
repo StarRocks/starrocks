@@ -146,10 +146,13 @@ public final class InsertPreSplitHook {
                         PreSplitMetrics.recordEligibilitySkip(SkipReason.MATERIALIZED_VIEW_TARGET);
                         return;
                     }
-                    // Part of identifying the candidate, not of serving it: turning the flag on would not
-                    // make a multi-partition refresh eligible, so charging it to the config gate would
-                    // misreport it.
-                    if (partitionScope.catalogPartitionNames().size() != 1) {
+                    // A multi-partition refresh of an auto-increment view is declined before the flag gets a
+                    // say: turning the flag on would not make it eligible, so charging it to the config gate
+                    // would misreport it. One counter serves the whole view, so each partition's ids sit in
+                    // one band of the id space. Fingerprints are uniform in every partition, so a fingerprint
+                    // view goes on to the flow, which carves all of them with the same cuts.
+                    if (partitionScope.catalogPartitionNames().size() != 1
+                            && !MaterializedViewRowIdBoundaries.isFingerprintRowId(materializedView)) {
                         PreSplitMetrics.recordEligibilitySkip(SkipReason.MULTIPLE_TEMPORARY_PARTITIONS);
                         return;
                     }

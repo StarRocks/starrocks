@@ -14,15 +14,20 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.google.common.base.Preconditions;
+import com.google.common.math.IntMath;
+import com.google.common.math.LongMath;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.mv.RowIdStrategy;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 
+import java.math.RoundingMode;
 import java.util.List;
 
 /**
@@ -63,16 +68,31 @@ final class MaterializedViewRowIdBoundaries {
     /**
      * @param estimates              the refresh's estimated output; the fingerprint route carves the id space
      *                               by the byte estimate, the auto-increment route by the row count
-     * @param activeComputeNodeCount compute nodes that can hold cached id blocks; only the auto-increment
-     *                               route uses it
+     * @param activeComputeNodeCount compute nodes the refresh writes through; the fingerprint route sizes its
+     *                               tablet count by it, the auto-increment route bounds the cached id blocks by it
+     * @param partitionCount         the temporary partitions the overwrite writes. The fingerprint route sizes
+     *                               itself for that many partitions and ignores the count the pipeline requests;
+     *                               the auto-increment route accepts only one.
      * @return a source that derives the cuts when it is asked to plan. Callers must have established
      *         {@link #isDerivable(OlapTable)} first.
      */
-    static DerivedBoundarySource sourceFor(OlapTable table, Estimates estimates, int activeComputeNodeCount) {
+    static DerivedBoundarySource sourceFor(OlapTable table, Estimates estimates, int activeComputeNodeCount,
+                                           int partitionCount) {
         if (table instanceof MaterializedView materializedView && isFingerprintRowId(materializedView)) {
-            return (indexTarget, requestedTabletCount) -> FingerprintRowIdBoundaries.plan(
-                    estimates.totalBytes(), requestedTabletCount, indexTarget.sortKey().get(0));
+            // Fingerprints are uniform in every partition, so the refresh is sized once and each partition takes an
+            // equal share of the tablets and of the bytes, both rounded up. The per-old-tablet cap applies to a
+            // share, never to the whole refresh. The sizing is read here once, and the source plans the cuts once,
+            // so every partition gets the same cuts.
+            int budget = TabletPreSplitCoordinator.selectPreSplitTabletBudget(estimates, activeComputeNodeCount);
+            int partitionTabletCount = Math.min(IntMath.divide(budget, partitionCount, RoundingMode.CEILING),
+                    Config.tablet_reshard_max_split_count);
+            long partitionBytes = LongMath.divide(estimates.totalBytes(), partitionCount, RoundingMode.CEILING);
+            return new SharedFingerprintCuts(partitionBytes, partitionTabletCount);
         }
+        // One counter serves the whole view, so a partition's ids sit in a narrow band of the span and whole-span
+        // cuts would leave most of its tablets empty. The hook declines such a refresh before it gets here.
+        Preconditions.checkArgument(partitionCount == 1,
+                "auto-increment row ids are carved one partition at a time, got %s partitions", partitionCount);
         return (indexTarget, requestedTabletCount) -> AutoIncrementRowIdBoundaries.plan(
                 // Read when the boundaries are planned rather than when this source is resolved: the span
                 // starts at the counter, so reading it as close as possible to the split being submitted
@@ -114,9 +134,10 @@ final class MaterializedViewRowIdBoundaries {
      * Whether the view's own query computes its row id as a fingerprint of the group-by keys. Such an id
      * is uniform over its alphabet whatever the data holds, so it can be carved without a sample; an id
      * that is an order-preserving encoding of the group-by keys follows the data and stays underivable.
-     * {@link #sourceFor} routes on this same predicate, so the two cannot disagree.
+     * {@link #sourceFor} routes on this same predicate, so the two cannot disagree. The hook uses it to let a
+     * refresh that overwrites several partitions through.
      */
-    private static boolean isFingerprintRowId(MaterializedView materializedView) {
+    static boolean isFingerprintRowId(MaterializedView materializedView) {
         if (materializedView.getRowIdStrategy() != RowIdStrategy.QUERY_COMPUTED) {
             return false;
         }
@@ -128,6 +149,34 @@ final class MaterializedViewRowIdBoundaries {
     /** The hidden row-id column alone — the only sort key the derived arithmetic describes. */
     private static boolean isRowIdSortKey(List<Column> sortKey) {
         return sortKey.size() == 1 && IvmOpUtils.COLUMN_ROW_ID.equalsIgnoreCase(sortKey.get(0).getName());
+    }
+
+    /**
+     * Plans the fingerprint cuts on the first index target it is asked about and hands that same result to every
+     * later one. {@link FingerprintRowIdBoundaries} reads {@code tablet_reshard_min_split_size} on each call, and
+     * the pipeline calls the source once per partition, so planning per call could give partitions different cuts
+     * after a config change. Every target is the base index's row-id column, so the first target's column serves
+     * them all. The pipeline's requested count is ignored: it is capped per old tablet and sized as if for one
+     * partition.
+     */
+    private static final class SharedFingerprintCuts implements DerivedBoundarySource {
+        private final long partitionBytes;
+        private final int partitionTabletCount;
+        private Result planned;
+
+        SharedFingerprintCuts(long partitionBytes, int partitionTabletCount) {
+            this.partitionBytes = partitionBytes;
+            this.partitionTabletCount = partitionTabletCount;
+        }
+
+        @Override
+        public Result plan(IndexPreSplitTarget indexTarget, int ignoredRequestedTabletCount) {
+            if (planned == null) {
+                planned = FingerprintRowIdBoundaries.plan(partitionBytes, partitionTabletCount,
+                        indexTarget.sortKey().get(0));
+            }
+            return planned;
+        }
     }
 
     /**
