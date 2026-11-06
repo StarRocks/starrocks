@@ -317,7 +317,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     @Override
-    public boolean createTable(ConnectContext context, CreateTableStmt stmt) throws DdlException {
+    public boolean createTable(ConnectContext context, CreateTableStmt stmt) throws DdlException, AlreadyExistsException {
         return normal.createTable(context, stmt);
     }
 
