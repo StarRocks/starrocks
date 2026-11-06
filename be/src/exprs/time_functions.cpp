@@ -228,6 +228,19 @@ int64_t iceberg_hours_since_epoch(const TimestampValue& timestamp) {
     return floor_div_microseconds(iceberg_microseconds_since_epoch(timestamp), USECS_PER_HOUR);
 }
 
+// Iceberg year/month ordinals floor toward the period start, unlike date_diff which truncates toward zero.
+int64_t iceberg_years_since_epoch(const DateValue& date) {
+    int year, month, day;
+    date.to_date(&year, &month, &day);
+    return year - 1970;
+}
+
+int64_t iceberg_months_since_epoch(const DateValue& date) {
+    int year, month, day;
+    date.to_date(&year, &month, &day);
+    return (year - 1970) * 12LL + month - 1;
+}
+
 template <typename TransformFn>
 StatusOr<ColumnPtr> evaluate_iceberg_timestamptz_transform(FunctionContext* context, const Columns& columns,
                                                            TransformFn transform_fn) {
@@ -3361,14 +3374,11 @@ Status TimeFunctions::date_trunc_close(FunctionContext* context, FunctionContext
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_years_since_epoch_dateImpl, v) {
-    int y, m, d;
-    ((DateValue)v).to_date(&y, &m, &d);
-    auto ts = TimestampValue::create(y, m, d, 0, 0, 0, 0);
-    return years_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(ts, TimeFunctions::unix_epoch);
+    return iceberg_years_since_epoch((DateValue)v);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_years_since_epoch_datetimeImpl, v) {
-    return years_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+    return iceberg_years_since_epoch((DateValue)v);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::iceberg_years_since_epoch_date(FunctionContext* context,
@@ -3386,19 +3396,16 @@ StatusOr<ColumnPtr> TimeFunctions::iceberg_years_since_epoch_datetime(FunctionCo
 StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_years_since_epoch_datetime(FunctionContext* context,
                                                                                   const starrocks::Columns& columns) {
     return evaluate_iceberg_timestamptz_transform(context, columns, [](const TimestampValue& timestamp) {
-        return years_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(timestamp, TimeFunctions::unix_epoch);
+        return iceberg_years_since_epoch((DateValue)timestamp);
     });
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_months_since_epoch_dateImpl, v) {
-    int y, m, d;
-    ((DateValue)v).to_date(&y, &m, &d);
-    auto ts = TimestampValue::create(y, m, d, 0, 0, 0, 0);
-    return months_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(ts, TimeFunctions::unix_epoch);
+    return iceberg_months_since_epoch((DateValue)v);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_months_since_epoch_datetimeImpl, v) {
-    return months_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+    return iceberg_months_since_epoch((DateValue)v);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::iceberg_months_since_epoch_date(FunctionContext* context,
@@ -3416,7 +3423,7 @@ StatusOr<ColumnPtr> TimeFunctions::iceberg_months_since_epoch_datetime(FunctionC
 StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_months_since_epoch_datetime(FunctionContext* context,
                                                                                    const starrocks::Columns& columns) {
     return evaluate_iceberg_timestamptz_transform(context, columns, [](const TimestampValue& timestamp) {
-        return months_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(timestamp, TimeFunctions::unix_epoch);
+        return iceberg_months_since_epoch((DateValue)timestamp);
     });
 }
 
