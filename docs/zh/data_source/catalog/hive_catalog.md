@@ -1158,40 +1158,6 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 | query       | 查询语句，查询的结果会导入至目标表中。查询语句支持任意 StarRocks 支持的 SQL 查询语法。 |
 | PARTITION   | 导入的目标分区。需要指定目标表的所有分区列，指定的分区列的顺序可以与建表时定义的分区列的顺序不一致。指定分区时，不允许通过列名 (`column_name`) 指定导入的目标列。 |
 
-### 临时目录与 ViewFS
-
-向 HDFS 或 ViewFS 上的 Hive 表写入数据时，StarRocks 先将数据文件写入临时目录，再在提交时将其重命名到目标表或分区位置。会话变量 `hive_temp_staging_dir` 默认为 `/tmp/starrocks`，每次写入使用独立的子目录，例如 `viewfs://cluster/tmp/starrocks/<UUID>/`。这是目标文件系统上的路径，并非 FE 或 BE 本机的 `/tmp` 目录。该临时目录设置不适用于 S3 表的直接写入路径。
-
-#### /tmp 空间占用的原因
-
-大批量写入和多个并发写入会将临时数据集中存放在 `/tmp/starrocks` 下。StarRocks 会在写入结束时尝试清理临时目录，但进程终止或清理失败可能留下文件。清理旧目录前，应核对正在运行的写入任务和清理错误日志，不要删除仍有任务使用的目录。调整临时目录可以分散空间占用，但不会减少一次写入所需的临时数据量。
-
-#### 配置 ViewFS 临时目录
-
-即使具有相同的 `viewfs://cluster/` 前缀，ViewFS 路径也可能映射到不同挂载点或底层文件系统。例如，`viewfs://cluster/` 下的 `/tmp` 和 `/warehouse` 可以映射到不同的 HDFS 命名空间，此时使用 `/tmp/starrocks` 暂存数据可能导致提交时重命名失败。调整本参数不能使跨文件系统的重命名成为可能，需要选择支持向所有目标表或分区位置重命名的临时目录。
-
-例如，假设 `/warehouse` 是一个 ViewFS 挂载点，表 location 为 `viewfs://cluster/warehouse/db/table`，管理员可以预先创建专用目录 `viewfs://cluster/warehouse/.sr_staging`，并为 StarRocks 使用的文件系统身份授予在该目录创建、重命名和删除文件的权限。在执行写入的同一会话中设置：
-
-```SQL
-SET hive_temp_staging_dir = '/warehouse/.sr_staging';
-```
-
-此时，每次写入使用 `viewfs://cluster/warehouse/.sr_staging/<UUID>/`，临时目录位于表目录之外。请根据实际挂载布局和权限调整路径；如果存在更具体的挂载点，将临时目录与目标位置分隔到不同挂载范围，上述示例也可能不适用。还需要检查自定义分区 location，并按照[准备工作](#准备工作)在所有 FE 和 BE 或 CN 节点部署所需的 ViewFS 配置。
-
-也可以设置相对路径，例如 `.sr_staging`，将临时文件放在表 location 下：
-
-```SQL
-SET hive_temp_staging_dir = '.sr_staging';
-```
-
-:::warning
-
-表内临时目录与 `INSERT OVERWRITE` 配合使用时需要额外注意。对于 HDFS 或 ViewFS 上的非分区表，应使用包含[相对临时目录覆盖写入修复](https://github.com/StarRocks/starrocks/pull/67615)的版本。该修复仅处理本次覆盖写入的临时目录随表目录移动后的路径变化，不会保护其他写入任务的临时目录免于随表目录一起被移动或删除。使用表内临时目录时，应避免同一张表的写入与覆盖写入重叠，包括 Hive 或 Spark 发起的写入。如果无法确保这种隔离，应使用位于覆盖操作替换范围之外的专用临时目录。
-
-:::
-
-`SET` 仅作用于当前会话。如果在新连接中重试写入，需要在该连接上先设置本参数，再执行重试。
-
 ### 示例
 
 以下写入语句以默认的 Parquet 格式为例。
