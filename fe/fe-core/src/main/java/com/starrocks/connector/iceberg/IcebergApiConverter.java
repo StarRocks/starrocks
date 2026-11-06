@@ -100,6 +100,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -127,6 +128,7 @@ import static org.apache.iceberg.view.ViewProperties.COMMENT;
 public class IcebergApiConverter {
     private static final Logger LOG = LogManager.getLogger(IcebergApiConverter.class);
     public static final String PARTITION_NULL_VALUE = "null";
+    public static final String IDENTIFIER_FIELDS = "identifier-fields";
     private static final Pattern ICEBERG_BUCKET_PATTERN = Pattern.compile("bucket\\[(\\d+)]");
     private static final Pattern ICEBERG_TRUNCATE_PATTERN = Pattern.compile("truncate\\[(\\d+)]");
     private static final int FAKE_FIELD_ID = -1;
@@ -178,6 +180,54 @@ public class IcebergApiConverter {
         AtomicInteger nextFieldId = new AtomicInteger(1);
         icebergSchema = TypeUtil.assignFreshIds(icebergSchema, nextFieldId::getAndIncrement);
         return new Schema(icebergSchema.asStructType().fields());
+    }
+
+    // Resolves comma-separated top-level column names into the schema's identifier fields; Iceberg validates each.
+    public static Schema withIdentifierFields(Schema schema, String identifierFields) throws DdlException {
+        Set<Integer> fieldIds = resolveIdentifierFieldIds(schema, identifierFields);
+        try {
+            return new Schema(schema.columns(), fieldIds);
+        } catch (IllegalArgumentException e) {
+            throw new DdlException(e.getMessage(), e);
+        }
+    }
+
+    private static Set<Integer> resolveIdentifierFieldIds(Schema schema, String identifierFields) throws DdlException {
+        Set<Integer> fieldIds = new LinkedHashSet<>();
+        for (String name : identifierFields.split(",")) {
+            String colName = name.trim();
+            if (colName.isEmpty()) {
+                continue;
+            }
+            Types.NestedField field = schema.columns().stream()
+                    .filter(f -> f.name().equalsIgnoreCase(colName)).findFirst().orElse(null);
+            if (field == null) {
+                throw new DdlException("Unknown column '" + colName + "' in property " + IDENTIFIER_FIELDS);
+            }
+            if (!fieldIds.add(field.fieldId())) {
+                throw new DdlException("Duplicate column '" + colName + "' in property " + IDENTIFIER_FIELDS);
+            }
+        }
+        if (fieldIds.isEmpty()) {
+            throw new DdlException("Property " + IDENTIFIER_FIELDS + " must name at least one column");
+        }
+        return fieldIds;
+    }
+
+    // Inverse of withIdentifierFields, for SHOW CREATE TABLE. Null when there are none, or when the property would
+    // not resolve back to the same fields (nested identifiers set by other engines, names with commas, padding or
+    // case collisions), so replaying the DDL never fails or picks other columns.
+    public static String toIdentifierFieldsProperty(Schema schema) {
+        Set<Integer> ids = schema.identifierFieldIds();
+        if (ids.isEmpty()) {
+            return null;
+        }
+        String property = ids.stream().sorted().map(schema::findColumnName).collect(Collectors.joining(","));
+        try {
+            return resolveIdentifierFieldIds(schema, property).equals(ids) ? property : null;
+        } catch (DdlException e) {
+            return null;
+        }
     }
 
     public static SortOrder toIcebergSortOrder(Schema schema, List<OrderByElement> orderByElements) throws DdlException {

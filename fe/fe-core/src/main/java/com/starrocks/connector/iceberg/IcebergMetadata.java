@@ -366,12 +366,18 @@ public class IcebergMetadata implements ConnectorMetadata {
         String tableName = stmt.getTableName();
 
         Schema schema = toIcebergApiSchema(stmt.getColumns());
+        Map<String, String> properties = stmt.getProperties() == null ? new HashMap<>() :
+                new HashMap<>(stmt.getProperties());
+        // identifier fields belong to the schema, not the table properties
+        String identifierFields = properties.remove(IcebergApiConverter.IDENTIFIER_FIELDS);
+        if (identifierFields != null) {
+            schema = IcebergApiConverter.withIdentifierFields(schema, identifierFields);
+        }
         PartitionDesc partitionDesc = stmt.getPartitionDesc();
         if (partitionDesc != null && !(partitionDesc instanceof ListPartitionDesc)) {
             throw new DdlException("Only list partition is supported for iceberg table");
         }
         PartitionSpec partitionSpec = parsePartitionFields(schema, (ListPartitionDesc) partitionDesc);
-        Map<String, String> properties = stmt.getProperties() == null ? new HashMap<>() : stmt.getProperties();
         String tableLocation = properties.get(LOCATION_PROPERTY);
         String comment = stmt.getComment();
         if (comment != null && !comment.isEmpty()) {
