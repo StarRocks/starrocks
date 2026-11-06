@@ -482,10 +482,47 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: カウント
 - 説明: ロードされた合計行数。
 
+## `load_rpc_active_threads`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- 説明: ロード RPC スレッドプールで実行中のタスク数。このスレッドプールは Routine Load とテーブル関数によるロードの RPC を処理します。
+
+## `load_rpc_execute_time_ns_total`
+
+- 単位: ナノ秒
+- タイプ: 累積値
+- 説明: 完了したロード RPC タスクの合計実行時間。各タスクの完了時に更新されます。
+
+## `load_rpc_executed_tasks_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: ロード RPC スレッドプールが完了したタスク数。
+
+## `load_rpc_pending_time_ns_total`
+
+- 単位: ナノ秒
+- タイプ: 累積値
+- 説明: 完了したロード RPC タスクがスレッドプールのキューで待機した合計時間。各タスクの完了時に更新され、まだキューにあるタスクは含まれません。
+
+## `load_rpc_queue_count`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- 説明: ロード RPC スレッドプールのキューで待機しているタスク数。この値が増え続ける場合、Routine Load またはテーブル関数によるロードの RPC がスレッドプールの処理速度より速く到着しています。
+
+## `load_rpc_running_threads`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- 説明: ロード RPC スレッドプールの現在のスレッド数。スレッドプールは 10 スレッドで始まり、必要に応じて増えます。v4.2 より前はこの値が `load_rpc_threadpool_size` として出力されていました。
+
 ## `load_rpc_threadpool_size`
 
 - 単位: カウント
-- 説明: RPCスレッドプールの現在のサイズ。これは、ルーチンロードとテーブル関数を介したロードの処理に使用されます。デフォルト値は10で、最大値は1000です。この値は、スレッドプールの使用状況に基づいて動的に調整されます。
+- タイプ: 瞬間値
+- 説明: ロード RPC スレッドプールの最大スレッド数（1000）。v4.2 より前はこのメトリクスは現在のスレッド数を報告していましたが、その値は現在 `load_rpc_running_threads` です。
 
 ## `load_sink_close_active_threads`
 
@@ -699,6 +736,47 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: カウント
 - 説明: ネットワーク経由で送信されたパケットの合計数。
+
+## `object_storage_<backend>_<op>_latency`
+
+- 単位: マイクロ秒
+- タイプ: ゲージ
+- 説明: この BE/CN 自身のストレージクライアントがオブジェクトストレージまたは HDFS に送るリクエストのレイテンシー分布。バックエンド（`s3`、`azblob`、`adls2`、`gs`、`hdfs`）と操作（`get` は Broker Load や `FILES()` などのソースファイル読み取り、`put` は書き込み）ごとに 1 系列あります。`dump_metrics_with_bvar` が有効な場合に `/metrics` から出力され、`_99`（直近 1 秒の p99）、`_999`、`_max_latency`、`_qps` などの通常の bvar サフィックスが付きます。Starlet 自身のストレージクライアントは含まれません。それらには独自のメトリクスがあります。
+
+## `object_storage_request_failed_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- ラベル: `backend`（`s3`、`azblob`、`adls2`、`gs`、`hdfs`）、`client`（`curl`、`poco`、`azure_sdk`、`libhdfs`）、`op`（`get` または `put`）
+- 説明: オブジェクトストレージまたは HDFS へのリクエストのうち、クライアントのリトライを使い切った後も失敗した数。
+
+## `object_storage_request_latency_us_total`
+
+- 単位: マイクロ秒
+- タイプ: 累積値
+- ラベル: `backend`（`s3`、`azblob`、`adls2`、`gs`、`hdfs`）、`client`（`curl`、`poco`、`azure_sdk`、`libhdfs`）、`op`（`get` または `put`）
+- 説明: オブジェクトストレージまたは HDFS へのリクエストに費やした合計時間（リトライを含む）。`object_storage_requests_total` で割ると平均レイテンシーになります。
+
+## `object_storage_request_retry_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- ラベル: `backend`（`s3`、`azblob`、`adls2`、`gs`、`hdfs`）、`client`（`curl`、`poco`、`azure_sdk`、`libhdfs`）、`op`（`get` または `put`）
+- 説明: ストレージクライアントがリトライしたリクエスト試行の数。レイテンシーが変わらないのにリトライが増える場合、ストレージ側がスロットリングまたはエラーを返しています。
+
+## `object_storage_request_timeout_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- ラベル: `backend`（`s3`、`azblob`、`adls2`、`gs`、`hdfs`）、`client`（`curl`、`poco`、`azure_sdk`、`libhdfs`）、`op`（`get` または `put`）
+- 説明: クライアントのタイムアウト（たとえば S3 の `object_storage_request_timeout_ms`）に達したリクエスト試行の数。`client` ラベルで AWS SDK の curl と Poco の HTTP クライアントを区別します。
+
+## `object_storage_requests_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- ラベル: `backend`（`s3`、`azblob`、`adls2`、`gs`、`hdfs`）、`client`（`curl`、`poco`、`azure_sdk`、`libhdfs`）、`op`（`get` または `put`）
+- 説明: この BE/CN 自身のストレージクライアントがオブジェクトストレージまたは HDFS に送ったリクエスト数。`backend` はリクエストの送信先、`client` は送信したライブラリ、`op` は読み取り（`get`）か書き込み（`put`）かを示します。Starlet 自身のストレージクライアントは含まれません。
 
 ## `ordinal_index_mem_bytes`
 

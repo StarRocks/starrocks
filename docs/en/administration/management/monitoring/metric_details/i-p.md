@@ -482,10 +482,47 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Total loaded rows.
 
+## `load_rpc_active_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tasks that are running in the load RPC thread pool, which handles Routine Load and table function load RPCs.
+
+## `load_rpc_execute_time_ns_total`
+
+- Unit: Nanoseconds
+- Type: Cumulative
+- Description: The total execution time of completed load RPC tasks. Updated when each task finishes.
+
+## `load_rpc_executed_tasks_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: The number of tasks completed by the load RPC thread pool.
+
+## `load_rpc_pending_time_ns_total`
+
+- Unit: Nanoseconds
+- Type: Cumulative
+- Description: The total time completed load RPC tasks spent waiting in the thread pool queue. Updated when each task finishes; currently queued tasks are not yet included.
+
+## `load_rpc_queue_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of tasks waiting in the queue of the load RPC thread pool. A value that keeps growing means Routine Load or table function load RPCs arrive faster than the pool handles them.
+
+## `load_rpc_running_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The current number of threads in the load RPC thread pool. The pool starts with 10 threads and grows on demand. Before v4.2 this value was exported as `load_rpc_threadpool_size`.
+
 ## `load_rpc_threadpool_size`
 
 - Unit: Count
-- Description: The current size of the RPC thread pool, which is used for handling Routine Load and loading via table functions. The default value is 10, with a maximum value of 1000. This value is dynamically adjusted based on the usage of the thread pool.
+- Type: Instantaneous
+- Description: The maximum number of threads in the load RPC thread pool (1000). Before v4.2 this metric reported the current number of threads, which is now `load_rpc_running_threads`.
 
 ## `load_sink_close_active_threads`
 
@@ -699,6 +736,47 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 
 - Unit: Count
 - Description: Total number of packets sent through the network.
+
+## `object_storage_<backend>_<op>_latency`
+
+- Unit: Microseconds
+- Type: Gauge
+- Description: Latency distribution of the requests this BE/CN's own storage clients send to object storage or HDFS, one family per backend (`s3`, `azblob`, `adls2`, `gs`, `hdfs`) and operation (`get` reads a source file, for example for Broker Load or `FILES()`; `put` writes). Exported through `/metrics` when `dump_metrics_with_bvar` is enabled, with the usual bvar suffixes such as `_99` (p99 over the last second), `_999`, `_max_latency`, and `_qps`. Starlet's own storage clients are not included; they have their own metrics.
+
+## `object_storage_request_failed_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `backend` (`s3`, `azblob`, `adls2`, `gs`, or `hdfs`), `client` (`curl`, `poco`, `azure_sdk`, or `libhdfs`), `op` (`get` or `put`)
+- Description: The number of requests to object storage or HDFS that failed after the client's retries were exhausted.
+
+## `object_storage_request_latency_us_total`
+
+- Unit: Microseconds
+- Type: Cumulative
+- Labels: `backend` (`s3`, `azblob`, `adls2`, `gs`, or `hdfs`), `client` (`curl`, `poco`, `azure_sdk`, or `libhdfs`), `op` (`get` or `put`)
+- Description: The total time spent in requests to object storage or HDFS, retries included. Divide by `object_storage_requests_total` for the average latency.
+
+## `object_storage_request_retry_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `backend` (`s3`, `azblob`, `adls2`, `gs`, or `hdfs`), `client` (`curl`, `poco`, `azure_sdk`, or `libhdfs`), `op` (`get` or `put`)
+- Description: The number of request attempts that the storage client retried. Rising retries with unchanged latency means the store is throttling or returning errors.
+
+## `object_storage_request_timeout_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `backend` (`s3`, `azblob`, `adls2`, `gs`, or `hdfs`), `client` (`curl`, `poco`, `azure_sdk`, or `libhdfs`), `op` (`get` or `put`)
+- Description: The number of request attempts that hit the client timeout, for example `object_storage_request_timeout_ms` for S3. The `client` label separates the curl and Poco HTTP clients of the AWS SDK.
+
+## `object_storage_requests_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `backend` (`s3`, `azblob`, `adls2`, `gs`, or `hdfs`), `client` (`curl`, `poco`, `azure_sdk`, or `libhdfs`), `op` (`get` or `put`)
+- Description: The number of requests this BE/CN's own storage clients sent to object storage or HDFS. `backend` is where the request went, `client` the library that sent it, `op` whether it read (`get`) or wrote (`put`). Starlet's own storage clients are not included.
 
 ## `ordinal_index_mem_bytes`
 
