@@ -16,6 +16,9 @@ package com.starrocks.server;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.TaskRunScheduler;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.log4j.LogManager;
@@ -61,6 +64,39 @@ public class TemporaryTableCleanerTest {
         cleaner.runAfterLeaseValid();
         Assertions.assertTrue(mgr.sessionExists(session1));
         Assertions.assertFalse(mgr.sessionExists(session2));
+    }
+
+    @Test
+    public void testRunningTaskRunSessionIsAlive() throws Exception {
+        UUID taskSessionId = UUIDUtil.genUUID();
+        TemporaryTableMgr mgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+        mgr.addTemporaryTable(taskSessionId, 1, "task_temp_table", 1);
+
+        ConnectContext taskContext = new ConnectContext(null);
+        taskContext.setSessionId(taskSessionId);
+        TaskRun taskRun = new TaskRun() {
+            @Override
+            public ConnectContext getRunCtx() {
+                return taskContext;
+            }
+        };
+        taskRun.setTaskId(Long.MAX_VALUE);
+        TaskRunScheduler scheduler = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunScheduler();
+        scheduler.addRunningTaskRun(taskRun);
+
+        try {
+            new MockUp<TemporaryTableCleaner>() {
+                @Mock
+                protected Set<UUID> getAliveSessions() {
+                    return new HashSet<>();
+                }
+            };
+            cleaner.runAfterLeaseValid();
+            Assertions.assertTrue(mgr.sessionExists(taskSessionId));
+        } finally {
+            scheduler.removeRunningTask(taskRun.getTaskId());
+            mgr.removeTemporaryTables(taskSessionId);
+        }
     }
 
     @Test
