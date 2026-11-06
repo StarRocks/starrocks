@@ -34,11 +34,13 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntSupplier;
@@ -78,14 +80,24 @@ public class ConnectorAnalyzeTaskQueueTest {
         Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, tableUUID);
         ConnectorAnalyzeTask task1 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey", "o_custkey"));
 
+        long oldLimit = Config.connector_table_query_trigger_analyze_max_pending_task_num;
         Config.connector_table_query_trigger_analyze_max_pending_task_num = 1;
-        ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue();
-        queue.addPendingTask(tableUUID, task1);
-        Assertions.assertEquals(1, queue.getPendingTaskSize());
-        // add task exceed limit
-        ConnectorAnalyzeTask task2 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderstatus"));
-        Assertions.assertFalse(queue.addPendingTask(tableUUID, task2));
-        Config.connector_table_query_trigger_analyze_max_pending_task_num = 100;
+        try {
+            ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue();
+            queue.addPendingTask(tableUUID, task1);
+            Assertions.assertEquals(1, queue.getPendingTaskSize());
+            // a full queue still merges new columns into a table that is already pending
+            ConnectorAnalyzeTask task2 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderstatus"));
+            Assertions.assertTrue(queue.addPendingTask(tableUUID, task2));
+            Assertions.assertEquals(1, queue.getPendingTaskSize());
+            Assertions.assertTrue(task1.getColumns().contains("o_orderstatus"));
+            // but rejects a new table
+            ConnectorAnalyzeTask task3 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey"));
+            Assertions.assertFalse(queue.addPendingTask(tableUUID + "_other", task3));
+            Assertions.assertEquals(1, queue.getPendingTaskSize());
+        } finally {
+            Config.connector_table_query_trigger_analyze_max_pending_task_num = oldLimit;
+        }
     }
 
     @Test
@@ -323,6 +335,52 @@ public class ConnectorAnalyzeTaskQueueTest {
                     new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey"))));
         } finally {
             Config.connector_table_query_trigger_analyze_failure_backoff_max_second = saved;
+        }
+    }
+
+    @Test
+    public void testPoolFollowsMaxRunningTaskNum() {
+        Triple<String, Database, Table> tableTriple = getOrdersTableTriple();
+        int oldLimit = Config.connector_table_query_trigger_analyze_max_running_task_num;
+        Config.connector_table_query_trigger_analyze_max_running_task_num = 2;
+        ThreadPoolExecutor pool = ThreadPoolManager.newDaemonFixedThreadPoolWithAbortPolicy(2, 2,
+                "connector-trigger-analyze-test-pool", false);
+        List<BlockingTask> tasks = Lists.newArrayList();
+        try {
+            ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue(pool);
+            AtomicInteger runCount = new AtomicInteger();
+            for (int i = 0; i < 4; i++) {
+                BlockingTask task = new BlockingTask(tableTriple, Sets.newHashSet("o_orderkey"), runCount);
+                tasks.add(task);
+                Assertions.assertTrue(queue.addPendingTask("t" + i, task));
+            }
+            queue.schedulePendingTask();
+            waitUntil(runCount::get, 2);
+            Assertions.assertEquals(2, queue.getPendingTaskSize());
+
+            // raising the limit grows the pool, so the extra tasks run instead of being rejected
+            Config.connector_table_query_trigger_analyze_max_running_task_num = 4;
+            queue.schedulePendingTask();
+            Assertions.assertEquals(4, pool.getCorePoolSize());
+            Assertions.assertEquals(4, pool.getMaximumPoolSize());
+            Assertions.assertEquals(0, queue.getPendingTaskSize());
+            waitUntil(runCount::get, 4);
+            Assertions.assertEquals(4, queue.getRunningTaskSize());
+
+            // lowering it shrinks the pool
+            Config.connector_table_query_trigger_analyze_max_running_task_num = 1;
+            queue.schedulePendingTask();
+            Assertions.assertEquals(1, pool.getCorePoolSize());
+            Assertions.assertEquals(1, pool.getMaximumPoolSize());
+
+            // a non-positive limit keeps one thread
+            Config.connector_table_query_trigger_analyze_max_running_task_num = 0;
+            queue.schedulePendingTask();
+            Assertions.assertEquals(1, pool.getMaximumPoolSize());
+        } finally {
+            tasks.forEach(BlockingTask::finish);
+            Config.connector_table_query_trigger_analyze_max_running_task_num = oldLimit;
+            pool.shutdownNow();
         }
     }
 }
