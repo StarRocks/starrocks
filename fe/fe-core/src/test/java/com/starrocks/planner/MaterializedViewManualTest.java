@@ -629,7 +629,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                ");");
        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
                "DISTRIBUTED BY RANDOM\n" +
-               "REFRESH ASYNC\n" +
+               "REFRESH ON_CHANGE\n" +
                "PROPERTIES (\n" +
                "\"replication_num\" = \"1\"\n" +
                ")\n" +
@@ -700,7 +700,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
         {
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
                     "DISTRIBUTED BY RANDOM\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "PROPERTIES (\n" +
                     "\"replication_num\" = \"1\"\n" +
                     ")\n" +
@@ -713,7 +713,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
         {
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
                     "DISTRIBUTED BY RANDOM\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "PROPERTIES (\n" +
                     "\"replication_num\" = \"1\"\n" +
                     ")\n" +

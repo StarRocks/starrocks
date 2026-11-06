@@ -110,7 +110,7 @@ DISTRIBUTED BY HASH(k1);
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv1
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY datekey
   AS 
   SELECT 
@@ -131,7 +131,7 @@ DISTRIBUTED BY HASH(k1);
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv2
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY str2date(datekey, '%Y-%m-%d')
   AS 
   SELECT 
@@ -158,7 +158,7 @@ DISTRIBUTED BY HASH(k1);
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv3
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY date_trunc('month', datekey)
   AS 
   SELECT 
@@ -183,7 +183,7 @@ DISTRIBUTED BY HASH(k1);
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv4
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY date_trunc('month', mv_datekey)
   AS 
   SELECT 
@@ -214,7 +214,7 @@ SELECT
 
 ```SQL
 CREATE MATERIALIZED VIEW par_mv5
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY date_trunc('day', mv_datekey)
 AS 
 SELECT 
@@ -236,7 +236,7 @@ GROUP BY datekey, k1;
 ```SQL
 -- 使用 JOIN 连接基表。
 CREATE MATERIALIZED VIEW par_mv6
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY datekey
 AS SELECT 
   par_tbl1.datekey,
@@ -249,7 +249,7 @@ GROUP BY par_tbl1.datekey, t1k1, t2k1;
 
 -- 使用 UNION 连接基表。
 CREATE MATERIALIZED VIEW par_mv7
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY datekey
 AS SELECT 
   par_tbl1.datekey,
@@ -350,8 +350,8 @@ SELECT * FROM iceberg_catalog.test_db.lineitem_days;
   物化数据的范围由 `partition_ttl_number`（v3.1.5 之前的版本）或 `partition_ttl`（推荐用于 v3.1.5 及更高版本）属性控制。`partition_ttl_number` 用于指定要保留的最新分区的数量，`partition_ttl` 用于指定要保留的物化视图数据的时间范围。在每次刷新过程中，StarRocks 会按时间顺序排列分区，并且仅保留符合 TTL 要求的分区。
 
 - **刷新策略**
-  - 自动刷新 (`REFRESH ASYNC`) 的物化视图在基表数据发生变化时会自动刷新。
-  - 定时刷新 (`REFRESH ASYNC [START (<start_time>)] EVERY (INTERVAL <interval>)`) 的物化视图将按照定义的间隔定时刷新。
+  - 自动刷新 (`REFRESH ON_CHANGE`) 的物化视图在基表数据发生变化时会自动刷新。
+  - 定时刷新 (`REFRESH SCHEDULE [START (<start_time>)] EVERY (INTERVAL <interval>)`) 的物化视图将按照定义的间隔定时刷新。
 
   :::note
 
@@ -365,7 +365,7 @@ SELECT * FROM iceberg_catalog.test_db.lineitem_days;
 
 ```SQL
 CREATE MATERIALIZED VIEW par_mv8
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY datekey
 PROPERTIES(
   "partition_ttl_number" = "2",

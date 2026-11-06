@@ -927,7 +927,7 @@ For rollup-like aggregation use cases, use an **asynchronous materialized view**
 ```sql
 CREATE MATERIALIZED VIEW mv
 DISTRIBUTED BY HASH(col)
-REFRESH ASYNC
+REFRESH ON_CHANGE
 AS SELECT ... FROM range_table;
 ```
 

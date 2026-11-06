@@ -209,7 +209,8 @@ public class AlterJobV2Test extends StarRocksTestBase {
     public void testModifyRelatedColumnWithMv() {
         try {
             String sql = "CREATE MATERIALIZED VIEW test.mv2 DISTRIBUTED BY HASH(k1) " +
-                        " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT k1, k2 FROM modify_column_test";
+                        " BUCKETS 10 REFRESH ON_CHANGE properties('replication_num' = '1') " +
+                        "AS SELECT k1, k2 FROM modify_column_test";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             GlobalStateMgr.getCurrentState().getLocalMetastore()
                         .createMaterializedView((CreateMaterializedViewStatement) statementBase);
@@ -236,7 +237,7 @@ public class AlterJobV2Test extends StarRocksTestBase {
             starRocksAssert.withTable("CREATE TABLE modify_column_test3(k1 int, k2 int, k3 int) ENGINE = OLAP " +
                         "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
             String sql = "CREATE MATERIALIZED VIEW test.mv3 DISTRIBUTED BY HASH(k1) " +
-                        " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') " +
+                        " BUCKETS 10 REFRESH ON_CHANGE properties('replication_num' = '1') " +
                         "AS SELECT * FROM modify_column_test3";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -262,7 +263,7 @@ public class AlterJobV2Test extends StarRocksTestBase {
             starRocksAssert.withTable("CREATE TABLE testModifyWithSelectStarMV2(k1 int, k2 int, k3 int) ENGINE = OLAP " +
                         "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
             String sql = "CREATE MATERIALIZED VIEW test.mv6 DISTRIBUTED BY HASH(k1) " +
-                        " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') " +
+                        " BUCKETS 10 REFRESH ON_CHANGE properties('replication_num' = '1') " +
                         "AS SELECT * FROM testModifyWithSelectStarMV2";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -291,7 +292,7 @@ public class AlterJobV2Test extends StarRocksTestBase {
             starRocksAssert.withTable("CREATE TABLE modify_column_test5(k1 int, k2 int, k3 int) ENGINE = OLAP " +
                         "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
             String sql = "CREATE MATERIALIZED VIEW test.mv5 DISTRIBUTED BY HASH(k1) " +
-                        " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') " +
+                        " BUCKETS 10 REFRESH ON_CHANGE properties('replication_num' = '1') " +
                         "AS SELECT * FROM modify_column_test5";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -318,7 +319,7 @@ public class AlterJobV2Test extends StarRocksTestBase {
             starRocksAssert.withTable("CREATE TABLE modify_column_test4(k1 int, k2 int, k3 int) ENGINE = OLAP " +
                         "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
             String sql = "CREATE MATERIALIZED VIEW test.mv4 DISTRIBUTED BY HASH(k1) " +
-                        " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1')" +
+                        " BUCKETS 10 REFRESH ON_CHANGE properties('replication_num' = '1')" +
                         " AS SELECT k1, k2 + 1 FROM modify_column_test4";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -363,7 +364,8 @@ public class AlterJobV2Test extends StarRocksTestBase {
     public void testModifyUnRelatedColumnWithMv() {
         try {
             String sql = "CREATE MATERIALIZED VIEW test.mv1 DISTRIBUTED BY HASH(k1) " +
-                        " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT k1, k2 FROM modify_column_test";
+                        " BUCKETS 10 REFRESH ON_CHANGE properties('replication_num' = '1') " +
+                        "AS SELECT k1, k2 FROM modify_column_test";
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             GlobalStateMgr.getCurrentState().getLocalMetastore()
                         .createMaterializedView((CreateMaterializedViewStatement) statementBase);
