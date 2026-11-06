@@ -133,8 +133,17 @@ public:
 
     virtual Status next_batch(const SparseRange<>& range, Column* dst);
 
+    // Collection child columns can contain more than UINT32_MAX values even though
+    // the parent segment has at most UINT32_MAX rows.
+    virtual Status next_batch_by_ordinal(const OrdinalSparseRange& range, Column* dst);
+
     virtual StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
                                                                                 Column* dst) {
+        return Status::NotSupported("Not Implemented");
+    }
+
+    virtual StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec_by_ordinal(
+            const OrdinalSparseRange& range, Column* dst) {
         return Status::NotSupported("Not Implemented");
     }
 
@@ -220,6 +229,8 @@ public:
     virtual Status next_dict_codes(size_t* n, Column* dst) { return Status::NotSupported(""); }
 
     virtual Status next_dict_codes(const SparseRange<>& range, Column* dst) { return Status::NotSupported(""); }
+
+    virtual Status next_dict_codes_by_ordinal(const OrdinalSparseRange& range, Column* dst);
 
     // given a list of dictionary codes, fill |dst| column with the decoded values.
     // |codes| pointer to the array of dictionary codes.
