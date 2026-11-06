@@ -118,22 +118,20 @@ inline size_t count_zero(const T* data, size_t size) {
         count += vaddlvq_u8(acc);
     }
 
+    uint8x16_t tail_acc = vdupq_n_u8(0);
     const T* end64 = data + ((end - data) / 64 * 64);
     for (; data < end64; data += 64) {
-        uint8x16_t acc = vdupq_n_u8(0);
-        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data)), zero_vec));
-        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 16)), zero_vec));
-        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 32)), zero_vec));
-        acc = vsubq_u8(acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 48)), zero_vec));
-        count += vaddlvq_u8(acc);
+        tail_acc = vsubq_u8(tail_acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data)), zero_vec));
+        tail_acc = vsubq_u8(tail_acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 16)), zero_vec));
+        tail_acc = vsubq_u8(tail_acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 32)), zero_vec));
+        tail_acc = vsubq_u8(tail_acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data + 48)), zero_vec));
     }
 
     const T* end16 = data + ((end - data) / 16 * 16);
     for (; data < end16; data += 16) {
-        uint8x16_t vdata = vld1q_u8(reinterpret_cast<const uint8_t*>(data));
-        uint8x16_t result = vceqq_u8(vdata, zero_vec);
-        count += vaddlvq_u8(vsubq_u8(vdupq_n_u8(0), result));
+        tail_acc = vsubq_u8(tail_acc, vceqq_u8(vld1q_u8(reinterpret_cast<const uint8_t*>(data)), zero_vec));
     }
+    count += vaddlvq_u8(tail_acc);
 #endif
 
     for (; data < end; ++data) {
