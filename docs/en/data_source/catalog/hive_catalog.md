@@ -1149,6 +1149,40 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 | query       | Query statement whose result will be loaded into the Hive table. It can be any SQL statement supported by StarRocks. |
 | PARTITION   | The partitions into which you want to load data. You must specify all partition columns of the Hive table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If you specify this property, you cannot specify the `column_name` property. |
 
+### Temporary staging directories and ViewFS
+
+For writes to Hive tables on HDFS or ViewFS, StarRocks first writes data files to a temporary staging directory and then renames them to the target table or partition location during commit. The session variable `hive_temp_staging_dir` defaults to `/tmp/starrocks`. Each write uses a unique subdirectory, such as `viewfs://cluster/tmp/starrocks/<UUID>/`. This is a path on the target filesystem, not the local `/tmp` directory of an FE or BE. This staging setting does not apply to the direct-write path for S3 tables.
+
+#### Space usage under /tmp
+
+Large writes and multiple concurrent writes can concentrate temporary data under `/tmp/starrocks`. StarRocks attempts to clean up the staging directory when the write finishes, but process termination or cleanup failures can leave files behind. Check running writes and cleanup errors before removing old directories; do not delete directories used by active writes. Changing the staging path redistributes this space usage but does not reduce the amount of temporary data needed by a write.
+
+#### Configure staging for ViewFS
+
+ViewFS paths with the same URI authority can resolve to different mount points or underlying filesystems. For example, `/tmp` and `/warehouse` under `viewfs://cluster/` can be mapped to different HDFS namespaces. Staging under `/tmp/starrocks` can then cause the commit rename to fail. Changing this variable does not enable cross-filesystem rename. Choose a staging directory from which renames to every target table or partition location are supported.
+
+For example, if `/warehouse` is a ViewFS mount point and the table is at `viewfs://cluster/warehouse/db/table`, an administrator can provision a dedicated directory at `viewfs://cluster/warehouse/.sr_staging`. Grant the filesystem identity used by StarRocks permission to create, rename, and delete files there. Configure it in the same session before running the write:
+
+```SQL
+SET hive_temp_staging_dir = '/warehouse/.sr_staging';
+```
+
+With this configuration, each write stages data under `viewfs://cluster/warehouse/.sr_staging/<UUID>/`. The directory is outside the table directory. Adapt the path to your mount layout and permissions; the example does not work if a more specific mount separates the staging directory from the target. Check custom partition locations as well. Ensure that the required ViewFS configuration is available on all FE and BE or CN nodes, as described in [Integration preparations](#integration-preparations).
+
+You can also specify a relative path, such as `.sr_staging`, to stage files under the table location:
+
+```SQL
+SET hive_temp_staging_dir = '.sr_staging';
+```
+
+:::warning
+
+Table-local staging requires additional care with `INSERT OVERWRITE`. For non-partitioned HDFS or ViewFS tables, use a release containing the [relative-staging overwrite fix](https://github.com/StarRocks/starrocks/pull/67615). This fix handles relocation of the overwriter's own staging directory; it does not protect another writer's staging directory from being moved or deleted with the table directory. When using table-local staging, avoid overlapping writes and overwrites to the same table, including writes from Hive or Spark. Use a dedicated staging directory outside directories that overwrite operations replace when this isolation cannot be ensured.
+
+:::
+
+`SET` applies to the current session. If a write is retried on a new connection, configure the variable on that connection before retrying.
+
 ### Examples
 
 The following DMLs use the default file format Parquet as an example.
