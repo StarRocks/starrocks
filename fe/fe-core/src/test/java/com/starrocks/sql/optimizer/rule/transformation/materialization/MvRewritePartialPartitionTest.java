@@ -451,7 +451,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
                 "     PARTITION PREDICATES: 25: l_shipdate IN ('1998-01-02')\n" +
                 "     NON-PARTITION PREDICATES: 23: l_orderkey > 100\n" +
                 "     MIN/MAX PREDICATES: 23: l_orderkey > 100\n" +
-                "     partitions=1/6");
+                "     partitions=1/1");
         dropMv("test", "hive_parttbl_mv_2");
     }
 
@@ -514,7 +514,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
         query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` ";
         plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_5", "orders",
-                "     partitions=28/1095");
+                "     partitions=28/28");
 
         // updated partitions are not in the query's partition range
         query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` " +

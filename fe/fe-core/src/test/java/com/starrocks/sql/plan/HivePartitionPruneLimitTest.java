@@ -80,7 +80,7 @@ public class HivePartitionPruneLimitTest extends ConnectorPlanTestBase {
                 "OR (4: par_col = 5), 4: par_col IN (0, 5)\n" +
                 "     NO EVAL-PARTITION PREDICATES: ((4: par_col = 0) AND (abs(4: par_col) = 3)) " +
                 "OR (4: par_col = 5)\n" +
-                "     partitions=1/3");
+                "     partitions=1/1");
 
         sql = "select * from t1 where abs(par_col) = 3 and par_col = 0 or par_col = 2";
         plan = getFragmentPlan(sql);
@@ -88,7 +88,7 @@ public class HivePartitionPruneLimitTest extends ConnectorPlanTestBase {
                 "OR (4: par_col = 2), 4: par_col IN (0, 2)\n" +
                 "     NO EVAL-PARTITION PREDICATES: ((abs(4: par_col) = 3) AND (4: par_col = 0)) " +
                 "OR (4: par_col = 2)\n" +
-                "     partitions=2/3");
+                "     partitions=2/2");
 
         sql = "select * from t1 where abs(par_col) = 3 and par_col = 10 or par_col = 2";
         plan = getFragmentPlan(sql);
@@ -96,7 +96,7 @@ public class HivePartitionPruneLimitTest extends ConnectorPlanTestBase {
                 "OR (4: par_col = 2), 4: par_col IN (10, 2)\n" +
                 "     NO EVAL-PARTITION PREDICATES: ((abs(4: par_col) = 3) AND (4: par_col = 10)) " +
                 "OR (4: par_col = 2)\n" +
-                "     partitions=1/3");
+                "     partitions=1/1");
 
         String sql1 = "select * from t1 where abs(par_col) = 1 and abs(par_col) = 3 or par_col = 10";
         plan = getFragmentPlan(sql);
@@ -105,7 +105,7 @@ public class HivePartitionPruneLimitTest extends ConnectorPlanTestBase {
         sql = "select * from t1 where par_col = 1 or par_col = 2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "PARTITION PREDICATES: 4: par_col IN (1, 2)\n" +
-                "     partitions=2/3");
+                "     partitions=2/2");
 
         String sql2 = "select * from t1 where par_col = 1 or abs(par_col) = 2";
         Assertions.assertThrows(StarRocksPlannerException.class, () -> getFragmentPlan(sql2));
@@ -122,7 +122,7 @@ public class HivePartitionPruneLimitTest extends ConnectorPlanTestBase {
                 "AND (abs(4: par_col) = 2)), 4: par_col IN (0, 1)\n" +
                 "     NO EVAL-PARTITION PREDICATES: (4: par_col = 0) OR ((4: par_col = 1) " +
                 "AND (abs(4: par_col) = 2))\n" +
-                "     partitions=2/3");
+                "     partitions=2/2");
     }
 
     @Test

@@ -52,6 +52,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
@@ -133,6 +134,22 @@ public class HiveMetastoreOperationsTest {
     @Test
     public void testGetPartitionKeys() {
         Assertions.assertEquals(Lists.newArrayList("col1"), hmsOps.getPartitionKeys("db1", "tbl1"));
+    }
+
+    @Test
+    public void testGetPartitionKeysByFilterOnlyForHms() {
+        Optional<List<String>> partitionNames =
+                hmsOps.getPartitionKeysByFilter("db1", "table1", "col1 >= 1");
+
+        Assertions.assertTrue(partitionNames.isPresent());
+        Assertions.assertEquals(2, partitionNames.get().size());
+        Assertions.assertTrue(partitionNames.get().contains("col1=1"));
+        Assertions.assertTrue(partitionNames.get().contains("col1=2"));
+
+        HiveMetastoreOperations glueOps = new HiveMetastoreOperations(
+                cachingHiveMetastore, true, new Configuration(), MetastoreType.GLUE, "hive_catalog");
+        Assertions.assertTrue(glueOps.getPartitionKeysByFilter(
+                "db1", "table1", "col1 >= 1").isEmpty());
     }
 
     @Test
