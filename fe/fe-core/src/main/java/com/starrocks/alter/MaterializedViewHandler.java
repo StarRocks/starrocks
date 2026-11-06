@@ -647,14 +647,10 @@ public class MaterializedViewHandler extends AlterHandler {
             if (queryStatement != null) {
                 throw new DdlException(
                     "Synchronous materialized view with range distribution requires a shared-data, " +
-<<<<<<< HEAD
-                    "non-colocate, non-primary-key table. " +
+                    "non-primary-key table that is a member of its colocate group when it has colocate_with. " +
                     "Use an asynchronous materialized view instead: declare it with an explicit " +
                     "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, " +
                     "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...");
-=======
-                    "non-primary-key table that is a member of its colocate group when it has colocate_with.");
->>>>>>> 9bc1a151057... [Enhancement][RB-97] Support rollups and synchronous materialized views on range colocate tables (#68455)
             }
             throw new DdlException(
                 "ADD ROLLUP is not supported on this table with range distribution. A range distribution " +

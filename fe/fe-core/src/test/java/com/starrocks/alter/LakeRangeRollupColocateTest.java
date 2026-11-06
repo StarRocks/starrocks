@@ -688,7 +688,10 @@ public class LakeRangeRollupColocateTest {
         assertRejected("t_orphan",
                 () -> createSyncMv("t_orphan", "mv_orphan", "select k1, sum(v1) from t_orphan group by k1"),
                 "Synchronous materialized view with range distribution requires a shared-data, non-primary-key table "
-                        + "that is a member of its colocate group when it has colocate_with.");
+                        + "that is a member of its colocate group when it has colocate_with. "
+                        + "Use an asynchronous materialized view instead: declare it with an explicit "
+                        + "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, "
+                        + "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...");
     }
 
     /**

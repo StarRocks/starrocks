@@ -45,11 +45,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-<<<<<<< HEAD
-import java.util.Arrays;
-=======
-import java.util.Collection;
->>>>>>> 9bc1a151057... [Enhancement][RB-97] Support rollups and synchronous materialized views on range colocate tables (#68455)
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
