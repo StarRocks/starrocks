@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <future>
@@ -37,10 +38,10 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
-<<<<<<< HEAD:be/test/io/spill_test.cpp
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
 #include "exec/spill/executor.h"
+#include "exec/spill/input_stream_internal.h"
 #include "exec/spill/log_block_manager.h"
 #include "exec/spill/mem_table.h"
 #include "exec/spill/spill_components.h"
@@ -48,22 +49,6 @@
 #include "exec/spill/spiller.hpp"
 #include "exec/spill/spiller_factory.h"
 #include "exec/workgroup/scan_task_queue.h"
-=======
-#include "common/storage_define.h"
-#include "compute_env/sorting/merge.h"
-#include "compute_env/spill/input_stream_internal.h"
-#include "compute_env/spill/log_block_manager.h"
-#include "compute_env/spill/mem_table.h"
-#include "compute_env/spill/mem_tracker_guard.h"
-#include "compute_env/spill/spill_components.h"
-#include "compute_env/spill/spill_observable.h"
-#include "compute_env/spill/spiller.h"
-#include "compute_env/spill/spiller.hpp"
-#include "compute_env/spill/spiller_factory.h"
-#include "compute_env/spill/task_executor.h"
-#include "compute_env/workgroup/scan_task.h"
-#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
->>>>>>> 9eea2ac ([BugFix][RB-377] Fix lost wakeup in spill BufferedInputStream::prefetch (#82515)):be/test/compute_env/spill/spill_test.cpp
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "fs/fs.h"
@@ -989,10 +974,18 @@ private:
 // waited forever (row_number() over a force-spilled sort hung until query timeout). A prefetch request
 // that loses the race must be served by the task holding the flag.
 TEST_F(SpillTest, buffered_input_stream_serves_prefetch_request_that_lost_the_race) {
-    ObjectPool pool;
-    RawSpillerFixture fx(this, &pool, &dummy_rt_st, /*pool_size=*/1);
+    SpilledOptions spill_options;
+    spill_options.mem_table_pool_size = 1;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    spill_options.block_manager = dummy_block_mgr.get();
+    auto factory = spill::make_spilled_factory();
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
     auto child = std::make_shared<GatedInputStream>(/*num_chunks=*/4);
-    auto stream = spill::detail::make_buffered_input_stream(/*capacity=*/4, child, fx.spiller.get());
+    auto stream = spill::detail::make_buffered_input_stream(/*capacity=*/4, child, spiller.get());
 
     auto holder = std::async(std::launch::async, [&stream]() {
         workgroup::YieldContext yield_ctx;
