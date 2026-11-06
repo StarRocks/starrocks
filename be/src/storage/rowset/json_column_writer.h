@@ -17,8 +17,8 @@
 #include <map>
 #include <optional>
 
-#include "column/flat_json/flat_json_internal.h"
 #include "storage/rowset/column_writer.h"
+#include "util/json_flattener.h"
 
 namespace starrocks {
 class BloomFilter;

@@ -19,13 +19,7 @@
 
 #include <memory>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
-#include "base/utility/defer_op.h"
-#include "column/chunk_factory.h"
 #include "column/json_column.h"
->>>>>>> cf33ef6 ([Enhancement] Stream flat JSON compaction of mixed flat and whole-JSON inputs (#81425))
 #include "column/schema.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
@@ -35,7 +29,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/compaction.h"
 #include "storage/compaction_utils.h"
-#include "storage/flat_json_metrics.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -43,11 +36,9 @@
 #include "storage/tablet_meta.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
-<<<<<<< HEAD
 #include "testutil/assert.h"
-=======
-#include "types/json_value.h"
->>>>>>> cf33ef6 ([Enhancement] Stream flat JSON compaction of mixed flat and whole-JSON inputs (#81425))
+#include "util/json.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -1044,7 +1035,7 @@ TEST_F(CumulativeCompactionTest, test_vertical_compaction_streams_every_flat_jso
         create_rowset_writer_context(&context, _version++);
         std::unique_ptr<RowsetWriter> writer;
         ASSERT_OK(RowsetFactory::create_rowset_writer(context, &writer));
-        auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(_tablet_schema), kRows);
+        auto chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(_tablet_schema), kRows);
         auto cols = chunk->columns();
         for (int32_t i = 0; i < kRows; i++) {
             const int32_t k = r * kRows + i;
@@ -1064,11 +1055,11 @@ TEST_F(CumulativeCompactionTest, test_vertical_compaction_streams_every_flat_jso
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
     ASSERT_OK(tablet->init());
 
-    const int64_t streamed_before = FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value();
+    const int64_t streamed_before = StarRocksMetrics::instance()->flat_json_compaction_streaming_total.value();
     CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_OK(cumulative_compaction.compact());
     ASSERT_EQ(1, tablet->version_count());
-    EXPECT_EQ(streamed_before + 2, FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value());
+    EXPECT_EQ(streamed_before + 2, StarRocksMetrics::instance()->flat_json_compaction_streaming_total.value());
 
     auto schema = ChunkHelper::convert_schema(_tablet_schema);
     TabletReader reader(tablet, Version(0, _version - 1), schema);
@@ -1077,7 +1068,7 @@ TEST_F(CumulativeCompactionTest, test_vertical_compaction_streams_every_flat_jso
     params.skip_aggregation = false;
     ASSERT_OK(reader.prepare());
     ASSERT_OK(reader.open(params));
-    auto chunk = ChunkFactory::new_chunk(schema, 1024);
+    auto chunk = ChunkHelper::new_chunk(schema, 1024);
     size_t rows = 0;
     while (true) {
         chunk->reset();

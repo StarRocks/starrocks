@@ -22,13 +22,7 @@
 #include <vector>
 
 #include "column/column.h"
-<<<<<<< HEAD
-=======
 #include "column/column_helper.h"
-#include "column/flat_json/json_flat_path.h"
-#include "column/flat_json/json_flattener.h"
-#include "column/flat_json/json_merger.h"
->>>>>>> cf33ef6 ([Enhancement] Stream flat JSON compaction of mixed flat and whole-JSON inputs (#81425))
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -39,12 +33,8 @@
 #include "gutil/casts.h"
 #include "storage/rowset/column_writer.h"
 #include "types/constexpr.h"
-<<<<<<< HEAD
 #include "util/json_flattener.h"
 #include "util/starrocks_metrics.h"
-=======
-#include "types/type_descriptor.h"
->>>>>>> cf33ef6 ([Enhancement] Stream flat JSON compaction of mixed flat and whole-JSON inputs (#81425))
 
 namespace starrocks {
 
@@ -104,7 +94,7 @@ Status FlatJsonColumnCompactor::append(const Column& column) {
 }
 
 Status FlatJsonColumnCompactor::_start_plain_streaming() {
-    FlatJsonMetrics::instance()->flat_json_compaction_plain_fallback_total.increment(1);
+    StarRocksMetrics::instance()->flat_json_compaction_plain_fallback_total.increment(1);
     VLOG(2) << "FlatJsonColumnCompactor writes whole json after " << _json_datas.size() << " chunks, "
             << _buffered_memory << " bytes without one flat layout";
     _plain_streaming = true;

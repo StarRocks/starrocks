@@ -25,13 +25,8 @@
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
-<<<<<<< HEAD
 #include "storage/conjunctive_predicates.h"
 #include "storage/empty_iterator.h"
-=======
-#include "storage/flat_json_metrics.h"
-#include "storage/json_path_deriver.h"
->>>>>>> cf33ef6 ([Enhancement] Stream flat JSON compaction of mixed flat and whole-JSON inputs (#81425))
 #include "storage/lake/rowset.h"
 #include "storage/lake/utils.h"
 #include "storage/lake/versioned_tablet.h"
@@ -48,6 +43,7 @@
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/json_flattener.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::lake {
 
@@ -304,7 +300,7 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
                 // A whole-JSON input may hold any value at any path; JSON keeps each as it is, and the value
                 // stats of the JSON sub-columns written let a later compaction type the paths by their values.
                 types.assign(types.size(), LogicalType::TYPE_JSON);
-                FlatJsonMetrics::instance()->flat_json_compaction_mixed_inputs_total.increment(1);
+                StarRocksMetrics::instance()->flat_json_compaction_mixed_inputs_total.increment(1);
             }
             VLOG(3) << "Lake Compaction flat json column: " << JsonFlatPath::debug_flat_json(paths, types, true);
             ASSIGN_OR_RETURN(auto res, ColumnAccessPath::create(TAccessPathType::ROOT, std::string(col.name()), i));

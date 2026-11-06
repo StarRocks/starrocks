@@ -104,8 +104,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：控制是否为 Flat Json 数据进行 Compaction。
 - 引入版本：v3.3.3
 
-<<<<<<< HEAD
-=======
 ### enable_compaction_flat_json_mixed_inputs
 
 - 默认值：True
@@ -124,17 +122,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：Flat JSON 的 Compaction 中，某个子列只在部分输入 segment 中存在时，如果包含它的行数足够多（`json_flat_sparsity_factor`），是否在输出中保留这个子列。不含该子列的 segment 从其剩余 JSON 中提供对应的值；若这样的 segment 可能在剩余 JSON 中存有该值，该子列使用 JSON 类型。关闭时，Compaction 只保留所有输入 segment 都有的子列，任一输入 segment 未拍平的 key 都存入剩余 JSON。仅在 `enable_compaction_flat_json` 为 `true` 时生效。
 - 引入版本：-
 
-### enable_default_value_column_zonemap_filter
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 取值范围：`true`、`false`
-- 是否动态：是
-- 描述：是否通过常量折叠对 segment 中物理缺失的列进行数据裁剪。通过 fast schema evolution（`ALTER TABLE ... ADD COLUMN`）新增的列不会写入已有的 segment，因此该列的每一行都是列默认值（或 `NULL`）。取值为 `true` 时，针对该列的谓词会直接对这个常量求值，若不可能命中则整个 segment 被跳过。取值为 `false` 时，这些 segment 会被完整读取，且每个批次都会重新按删除条件检查，即该选项引入之前的行为。如果新增过列的表出现查询结果异常，可将其设为 `false` 回滚。该选项与 `enable_index_page_level_zonemap_filter` 相互独立，后者无法覆盖 runtime filter 路径。
-- 引入版本：-
-
->>>>>>> cf33ef6 ([Enhancement] Stream flat JSON compaction of mixed flat and whole-JSON inputs (#81425))
 ### enable_json_flat
 
 - 默认值：false

@@ -32,13 +32,8 @@
 #include "storage/column_predicate_rewriter.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/delete_predicates.h"
-<<<<<<< HEAD
 #include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
-=======
-#include "storage/flat_json_metrics.h"
-#include "storage/json_path_deriver.h"
->>>>>>> cf33ef6 ([Enhancement] Stream flat JSON compaction of mixed flat and whole-JSON inputs (#81425))
 #include "storage/olap_common.h"
 #include "storage/predicate_parser.h"
 #include "storage/rowset/column_reader.h"
@@ -50,6 +45,7 @@
 #include "storage/union_iterator.h"
 #include "types/logical_type.h"
 #include "util/json_flattener.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -207,7 +203,7 @@ Status TabletReader::_init_compaction_column_paths(const TabletReaderParams& rea
                 // A whole-JSON input may hold any value at any path; JSON keeps each as it is, and the value
                 // stats of the JSON sub-columns written let a later compaction type the paths by their values.
                 types.assign(types.size(), LogicalType::TYPE_JSON);
-                FlatJsonMetrics::instance()->flat_json_compaction_mixed_inputs_total.increment(1);
+                StarRocksMetrics::instance()->flat_json_compaction_mixed_inputs_total.increment(1);
             }
 
             VLOG(3) << "Compaction flat json column: " << JsonFlatPath::debug_flat_json(paths, types, true);
