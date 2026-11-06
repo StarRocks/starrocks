@@ -98,6 +98,7 @@ public enum ErrorCode {
     ERR_UNSUPPORTED_PS(1295, "HY000".getBytes(),
             "This command is not supported in the prepared statement protocol yet"),
     ERR_UNKNOWN_TIME_ZONE(1298, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown or incorrect time zone: '%s'"),
+    ERR_QUERY_INTERRUPTED(1317, new byte[] {'7', '0', '1', '0', '0'}, "Query execution was interrupted"),
     ERR_WRONG_OBJECT(1347, new byte[] {'H', 'Y', '0', '0', '0'}, "'%s'.'%s' is not '%s'"),
     ERR_VIEW_WRONG_LIST(1353, new byte[] {'H', 'Y', '0', '0', '0'},
             "View's SELECT and view's field list have different column counts"),

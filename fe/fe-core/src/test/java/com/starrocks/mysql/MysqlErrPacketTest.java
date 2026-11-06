@@ -17,6 +17,7 @@
 
 package com.starrocks.mysql;
 
+import com.starrocks.common.ErrorCode;
 import com.starrocks.qe.QueryState;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -80,5 +81,23 @@ public class MysqlErrPacketTest {
         Assertions.assertEquals(0, buffer.remaining());
     }
 
-}
+    @Test
+    public void testWriteWithErrorCode() {
+        MysqlSerializer serializer = MysqlSerializer.newInstance(capability);
+        QueryState state = new QueryState();
+        state.setError("killed manually: KILL QUERY 1");
+        state.setErrorCode(ErrorCode.ERR_QUERY_INTERRUPTED);
 
+        MysqlErrPacket packet = new MysqlErrPacket(state);
+        packet.writeTo(serializer);
+        ByteBuffer buffer = serializer.toByteBuffer();
+
+        Assertions.assertEquals(0xff, MysqlCodec.readInt1(buffer));
+        Assertions.assertEquals(1317, MysqlCodec.readInt2(buffer));
+        Assertions.assertEquals('#', MysqlCodec.readInt1(buffer));
+        Assertions.assertEquals("70100", new String(MysqlCodec.readFixedString(buffer, 5)));
+        Assertions.assertEquals("killed manually: KILL QUERY 1", new String(MysqlCodec.readEofString(buffer)));
+        Assertions.assertEquals(0, buffer.remaining());
+    }
+
+}
