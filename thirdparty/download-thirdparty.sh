@@ -931,6 +931,11 @@ if [[ -d $TP_SOURCE_DIR/$CCTZ_SOURCE ]] ; then
         apply_patch -p1 "$TP_PATCH_DIR/cctz_02_lookup_offset.patch"
         touch "$PATCHED_MARK"
     fi
+    # Use a separate marker so existing 2.3 source caches receive this fix too.
+    if [[ $CCTZ_SOURCE == "cctz-2.3" ]] && [ ! -f "patched_all_year_dst" ]; then
+        apply_patch -p1 "$TP_PATCH_DIR/cctz_all_year_dst.patch"
+        touch "patched_all_year_dst"
+    fi
     cd -
     echo "Finished patching $CCTZ_SOURCE"
 fi
