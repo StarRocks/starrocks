@@ -77,12 +77,14 @@ BE ごとに固定の CPU コア数（例：64 コア）を仮定します。あ
 
 ### 分析
 
-以下の SQL は、過去 30 日間のユーザーごとの単一クエリの最大メモリ使用量 (`memCostBytes`) を計算します。
+`memCostBytes` は、クエリを実行する各 BE（共有データクラスターでは CN）で計測したクエリのピークメモリ使用量の最大値です。各ノードのピークはクエリ全体のメモリ追跡結果に基づき、各オペレーターのピーク値を合計したものではありません。
+
+以下の SQL は、過去 30 日間のクエリについて、ユーザーごとに単一ノードでのピークメモリ使用量の最大値を求めます。
 
 ```SQL
 SELECT 
     user,
-    MAX(memCostBytes) / (1024 * 1024) AS max_mem_mb            -- クエリごとの最大メモリ使用量（MB 単位）。
+    MAX(memCostBytes) / (1024 * 1024) AS max_mem_mb            -- 単一ノードのクエリメモリピークの最大値（MB 単位）。
 FROM starrocks_audit_db__.starrocks_audit_tbl__
 WHERE state IN ('EOF','OK')                                    -- 完了したクエリのみを含む。
   AND timestamp >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)   -- 過去 30 日間のデータをクエリ。
@@ -93,7 +95,7 @@ LIMIT 20;                                                      -- メモリリ�
 
 ### ベストプラクティス
 
-`max_mem_mb` は**すべての BEs にわたる総メモリ使用量**を表します。おおよその BE ごとのメモリ使用量を次のように計算できます：`max_mem_mb / number_of_BEs`。
+`max_mem_mb` はすでに**単一ノードのピーク値**であり、すべての BE のメモリ使用量の合計ではありません。ノードごとのメモリ使用量を推定するために、BE や CN の台数で割らないでください。
 
 リソースグループのメモリ制限を次のように設定できます：
 
@@ -173,7 +175,7 @@ LIMIT 50;                                                     -- 同時実行数
 ```SQL
 SELECT 
     user,
-    MAX(memCostBytes) / (1024 * 1024) AS max_mem_mb             -- クエリごとの最大メモリ使用量（MB 単位）。
+    MAX(memCostBytes) / (1024 * 1024) AS max_mem_mb             -- 単一ノードのクエリメモリピークの最大値（MB 単位）。
 FROM starrocks_audit_db__.starrocks_audit_tbl__
 WHERE state IN ('EOF','OK')                                     -- 完了したクエリのみを含む。
   AND timestamp >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)    -- 過去 30 日間のデータをクエリ。

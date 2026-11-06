@@ -78,12 +78,14 @@ Identify memory-intensive users and define appropriate memory limits and circuit
 
 ### Analysis
 
-The following SQL computes the maximum memory usage per user (`memCostBytes`) for a single query over the last 30 days.
+`memCostBytes` records the maximum of a query's per-node peak memory usage across participating BEs (CNs in shared-data clusters). Each node measures the peak of the query's total tracked memory usage on that node, not the sum of individual operators' peak memory usage.
+
+The following SQL finds, for each user, the highest per-node peak memory usage among their queries over the last 30 days.
 
 ```SQL
 SELECT 
     user,
-    MAX(memCostBytes) / (1024 * 1024) AS max_mem_mb            -- Max memory usage (in MB) per query.
+    MAX(memCostBytes) / (1024 * 1024) AS max_mem_mb            -- Highest per-node query memory peak (MB).
 FROM starrocks_audit_db__.starrocks_audit_tbl__
 WHERE state IN ('EOF','OK')                                    -- Include queries that are finished only.
   AND timestamp >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)   -- Query the data of the last 30 days.
@@ -94,7 +96,7 @@ LIMIT 20;                                                      -- List the top 2
 
 ### Best Practices
 
-`max_mem_mb` represents **total memory usage across all BEs**. You can calculate the approximate per-BE memory usage as: `max_mem_mb / number_of_BEs`.
+`max_mem_mb` is already a **per-node peak value**, not the total memory usage across all BEs. Do not divide it by the number of BEs or CNs to estimate per-node memory usage.
 
 You can configure the memory limits for the resource group as follows:
 
@@ -174,7 +176,7 @@ The following SQL identifies memory-intensive materialized view refresh operatio
 ```SQL
 SELECT 
     user,
-    MAX(memCostBytes) / (1024 * 1024) AS max_mem_mb             -- Max memory usage (in MB) per query.
+    MAX(memCostBytes) / (1024 * 1024) AS max_mem_mb             -- Highest per-node query memory peak (MB).
 FROM starrocks_audit_db__.starrocks_audit_tbl__
 WHERE state IN ('EOF','OK')                                     -- Include queries that are finished only.
   AND timestamp >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)    -- Query the data of the last 30 days.
