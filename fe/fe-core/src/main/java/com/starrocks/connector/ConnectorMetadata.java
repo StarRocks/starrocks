@@ -79,6 +79,15 @@ public interface ConnectorMetadata {
     }
 
     /**
+     * Table type of the views of this connector, used as a hint when only names are known (e.g. SHOW TABLES).
+     *
+     * @return null if the connector has no views
+     */
+    default Table.TableType getViewType() {
+        return null;
+    }
+
+    /**
      * List all database names of connector
      *
      * @return a list of string containing all database names of connector
@@ -94,6 +103,17 @@ public interface ConnectorMetadata {
      * @return a list of string containing all table names of `dbName`
      */
     default List<String> listTableNames(ConnectContext context, String dbName) {
+        return Lists.newArrayList();
+    }
+
+    /**
+     * List the names of views of the database specific by `dbName`.
+     * The names must be a subset of the names returned by {@link #listTableNames}.
+     *
+     * @param dbName - the string of which all view names are listed
+     * @return a list of string containing all view names of `dbName`
+     */
+    default List<String> listViewNames(ConnectContext context, String dbName) {
         return Lists.newArrayList();
     }
 
