@@ -12,13 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <unistd.h>
+
+#include "common/config.h"
 #include "exec/chunks_sorter_full_sort.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
 #include "exec/spillable_chunks_sorter_sort.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
+DEFINE_FAIL_POINT(chunk_sorter_spill_on_set_finishing);
+DEFINE_FAIL_POINT(spill_sort_process_task_sleep);
+
 void SpillableChunksSorterFullSort::setup_runtime(RuntimeState* state, RuntimeProfile* profile,
                                                   MemTracker* parent_mem_tracker) {
     ChunksSorterFullSort::setup_runtime(state, profile, parent_mem_tracker);
@@ -60,6 +67,12 @@ Status SpillableChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr
 }
 
 Status SpillableChunksSorterFullSort::do_done(RuntimeState* state) {
+    FAIL_POINT_TRIGGER_EXECUTE(chunk_sorter_spill_on_set_finishing,
+                               { _spill_strategy = spill::SpillStrategy::SPILL_ALL; });
+    if (config::spill_sort_force_spill_on_done) {
+        _spill_strategy = spill::SpillStrategy::SPILL_ALL;
+    }
+
     if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
         return ChunksSorterFullSort::do_done(state);
     }
@@ -132,6 +145,15 @@ void SpillableChunksSorterFullSort::_update_revocable_mem_bytes() {
 
 std::function<StatusOr<ChunkPtr>()> SpillableChunksSorterFullSort::_spill_process_task() {
     return [this]() -> StatusOr<ChunkPtr> {
+        // Park the spill IO thread here so a concurrent cancel can drive SortContext::close()
+        // (which clears _chunks_sorter_partitions, destroying this sorter and its _sorted_chunks)
+        // while this task is still about to read those very vectors. Widens the race window that
+        // the production crashes hit by chance; test-only.
+        FAIL_POINT_TRIGGER_EXECUTE(spill_sort_process_task_sleep, { sleep(3); });
+        if (int ms = config::spill_sort_process_task_sleep_ms; ms > 0) {
+            usleep(static_cast<useconds_t>(ms) * 1000);
+        }
+
         if (_unsorted_chunk != nullptr) {
             return std::move(_unsorted_chunk);
         }
