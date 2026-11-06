@@ -52,8 +52,10 @@ import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
@@ -146,30 +148,28 @@ public class DeletePlanner {
     }
 
     /**
-     * Extract predicate from OptExpression tree
+     * Extract the delete predicate for a metadata delete, or null when the plan does not prove it is the whole
+     * delete condition. A metadata delete drops the target rows that satisfy the predicate, so the filter must be
+     * the only operator between the target scan and the sink that can change rows. A project without predicate or
+     * limit keeps every row; any other operator (e.g. the apply of a subquery in WHERE) may drop or add rows, so the
+     * delete falls back to row-level.
      */
     private ScalarOperator extractPredicateFromOptExpression(OptExpression expr) {
-        if (expr == null || expr.getOp() == null) {
-            return null;
-        }
-        if (expr.getOp() instanceof LogicalApplyOperator) {
-            return null;
-        }
-
-        // Try to get predicate from the operator
-        if (expr.getOp() instanceof LogicalFilterOperator filterOp) {
-            return filterOp.getPredicate();
-        }
-
-        // Recursively check children for filter operators
-        for (OptExpression child : expr.getInputs()) {
-            ScalarOperator pred = extractPredicateFromOptExpression(child);
-            if (pred != null) {
-                return pred;
+        ScalarOperator predicate = null;
+        while (!(expr.getOp() instanceof LogicalIcebergScanOperator)) {
+            Operator op = expr.getOp();
+            if (expr.getInputs().size() != 1 || op.hasLimit()) {
+                return null;
             }
+            if (op instanceof LogicalFilterOperator && predicate == null) {
+                predicate = op.getPredicate();
+            } else if (!(op instanceof LogicalProjectOperator) || op.getPredicate() != null) {
+                return null;
+            }
+            expr = expr.inputAt(0);
         }
-
-        return null;
+        Operator scan = expr.getOp();
+        return scan.getPredicate() == null && !scan.hasLimit() ? predicate : null;
     }
 
     /**
