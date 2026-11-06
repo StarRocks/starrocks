@@ -181,6 +181,15 @@ This topic introduces the following types of FE configurations:
 - Description: The least fraction of the partitions an external-table statistics collection asked for that must actually be collected before a column's statistics are recorded. A collection that is cut short - some queries tolerated away, or the job failing partway - still writes rows for the partitions it read and records how many that was, so the read path scales them correctly. Below some coverage that stops being worthwhile: row counts extrapolate from the partitions collected, but NDV does not, and NDV is what join cardinality estimates are most sensitive to. A column collected from a twentieth of its partitions would hand the optimizer an NDV roughly twenty times too small, presented as fact. A column below this ratio is left without metadata instead, so the optimizer falls back to the connector's own table metadata: an accurate row count and no NDV, which gives a default selectivity rather than a confidently wrong one. Measured against what the collection asked for, not against the table, so a sample is not treated as sparse merely for being a sample. A value of `0` or less records whatever was collected.
 - Introduced in: v4.1
 
+### `connector_table_analyze_dropped_partition_stats_cleanup_interval_second`
+
+- Default: 3600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Interval at which the Leader FE periodically deletes the column statistics of dropped partitions of external tables, independent of statistics collections. The cleanup at the end of a collection misses partitions dropped after the table's last collection, or still within `connector_table_analyze_dropped_partition_stats_grace_second` at that time; the periodic cleanup applies the same rule to a bounded number of tables per round. It only cleans columns whose statistics were last collected by a FULL collection; sampled columns are cleaned by their own next collection. Tables with a pending or running collection are skipped. A value of `0` or less disables the periodic cleanup. The periodic cleanup is also disabled when `connector_table_analyze_dropped_partition_stats_grace_second` is `0` or less.
+- Introduced in: v4.2
+
 ### `connector_table_analyze_dropped_partition_stats_grace_second`
 
 - Default: 86400

@@ -74,7 +74,6 @@ import org.apache.velocity.VelocityContext;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -705,26 +704,15 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                 return;
             }
             StatisticExecutor executor = new StatisticExecutor();
-            String tableUuid = table.getUUID();
-            Set<String> live = toStoredPartitionNames(livePartitionNames);
-            List<String> dropped = executor.queryExternalStatPartitionsNotUpdatedSince(context, tableUuid,
-                            columnNames, graceSeconds).stream()
-                    .filter(p -> !live.contains(p))
-                    .collect(Collectors.toList());
+            List<String> dropped = ExternalDroppedPartitionStats.findDroppedPartitions(context, executor, table,
+                    livePartitionNames, columnNames, graceSeconds);
             if (dropped.isEmpty()) {
                 return;
             }
-            // Also bounded by the DELETE's own IN-list limit, which applies to the shared-data (UNIQUE_KEYS) table.
-            int batchSize = Math.max(1,
-                    Math.min(Config.expr_children_limit / 2, Config.max_allowed_in_element_num_of_delete));
-            int batches = 0;
-            int failedBatches = 0;
-            for (List<String> batch : Lists.partition(dropped, batchSize)) {
-                batches++;
-                if (!executor.dropExternalStatDroppedPartitions(context, tableUuid, batch, columnNames)) {
-                    failedBatches++;
-                }
-            }
+            ExternalDroppedPartitionStats.DeleteResult result =
+                    ExternalDroppedPartitionStats.deleteInBatches(context, executor, table, dropped, columnNames);
+            int batches = result.batches;
+            int failedBatches = result.failedBatches;
             if (failedBatches > 0) {
                 LOG.warn("[ExternalStats] dropped partition stats cleanup partially failed | jobId={} catalog={} " +
                                 "db={} table={} droppedPartitions={} batches={} failedBatches={}",
@@ -744,21 +732,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     // The table's complete partition list. Usually served from the connector's metadata cache, which the
     // collection has just refreshed.
     protected List<String> listLivePartitionNames() {
-        return ConnectorPartitionTraits.build(table).getPartitionNames();
-    }
-
-    // Partition names as the collection stores them (see buildColumnSelectFromCTE): Iceberg names as listed, other
-    // connectors normalized so their NULL placeholders (e.g. __HIVE_DEFAULT_PARTITION__) read as NULL. Comparing
-    // the raw listed names against the stored ones would take a live NULL partition for a dropped one.
-    private Set<String> toStoredPartitionNames(List<String> partitionNames) {
-        if (table.isIcebergTable()) {
-            return new HashSet<>(partitionNames);
-        }
-        Collection<String> nullValues = resolveNullValues(table);
-        List<String> partitionColumnNames = table.getPartitionColumnNames();
-        return partitionNames.stream()
-                .map(p -> PartitionUtil.normalizePartitionName(p, partitionColumnNames, nullValues))
-                .collect(Collectors.toSet());
+        return ExternalDroppedPartitionStats.listLivePartitionNames(table);
     }
 
     private static boolean isAnalyzeCancelled(long jobId) {
@@ -919,7 +893,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         return build(context, BATCH_FULL_STATISTIC_SELECT_TEMPLATE);
     }
 
-    private Collection<String> resolveNullValues(Table table) {
+    static Collection<String> resolveNullValues(Table table) {
         if (table.isIcebergTable()) {
             return Collections.singleton(IcebergApiConverter.PARTITION_NULL_VALUE);
         } else if (table.isPaimonTable()) {

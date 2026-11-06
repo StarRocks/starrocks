@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.type.Type;
@@ -34,7 +35,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -53,9 +56,12 @@ public class ExternalStatsDroppedPartitionCleanupTest extends PlanTestNoneDBBase
     private static Table hiveTable;
 
     private static final long GRACE_SECONDS = 7200;
+    private static final long RUNNING_ANALYZE_ID = 987654321L;
     private final int savedExprChildrenLimit = Config.expr_children_limit;
     private final int savedMaxInDelete = Config.max_allowed_in_element_num_of_delete;
     private final long savedGrace = Config.connector_table_analyze_dropped_partition_stats_grace_second;
+    private final long savedCleanupInterval =
+            Config.connector_table_analyze_dropped_partition_stats_cleanup_interval_second;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -75,6 +81,11 @@ public class ExternalStatsDroppedPartitionCleanupTest extends PlanTestNoneDBBase
         Config.expr_children_limit = savedExprChildrenLimit;
         Config.max_allowed_in_element_num_of_delete = savedMaxInDelete;
         Config.connector_table_analyze_dropped_partition_stats_grace_second = savedGrace;
+        Config.connector_table_analyze_dropped_partition_stats_cleanup_interval_second = savedCleanupInterval;
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        analyzeMgr.getExternalBasicStatsMetaMap().clear();
+        analyzeMgr.getAnalyzeStatusMap().remove(RUNNING_ANALYZE_ID);
+        analyzeMgr.resetExternalDroppedPartitionCleanupRound();
     }
 
     private static File newFolder(File root, String... subDirs) throws IOException {
@@ -113,6 +124,7 @@ public class ExternalStatsDroppedPartitionCleanupTest extends PlanTestNoneDBBase
     // recorded batch by batch.
     private static class FakeStatsTable {
         final List<List<String>> deletedBatches = new ArrayList<>();
+        final List<List<String>> deletedColumnBatches = new ArrayList<>();
         final AtomicInteger queries = new AtomicInteger();
 
         FakeStatsTable(List<String> stale, boolean deleteSucceeds) {
@@ -135,8 +147,9 @@ public class ExternalStatsDroppedPartitionCleanupTest extends PlanTestNoneDBBase
                                                                  List<String> partitionNames,
                                                                  List<String> columnNames) {
                     Assertions.assertEquals(hiveTable.getUUID(), tableUUID);
-                    Assertions.assertEquals(columns(), columnNames);
+                    Assertions.assertTrue(columns().containsAll(columnNames), columnNames.toString());
                     deletedBatches.add(new ArrayList<>(partitionNames));
+                    deletedColumnBatches.add(new ArrayList<>(columnNames));
                     return deleteSucceeds;
                 }
             };
@@ -179,7 +192,10 @@ public class ExternalStatsDroppedPartitionCleanupTest extends PlanTestNoneDBBase
         Config.max_allowed_in_element_num_of_delete = 1;
         FakeStatsTable stats = new FakeStatsTable(Lists.newArrayList("par_col=10", "par_col=11", "par_col=12"), true);
         newJob(Lists.newArrayList("par_col=0")).cleanupDroppedPartitionStats(connectContext, 1L);
-        Assertions.assertEquals(3, stats.deletedBatches.size());
+        // The column list is an IN predicate as well: 3 partition batches x 2 column batches.
+        Assertions.assertEquals(6, stats.deletedBatches.size());
+        stats.deletedColumnBatches.forEach(batch -> Assertions.assertEquals(1, batch.size(), batch.toString()));
+        Assertions.assertEquals(3, stats.deletedColumnBatches.stream().filter(b -> b.equals(List.of("c1"))).count());
     }
 
     @Test
@@ -233,7 +249,8 @@ public class ExternalStatsDroppedPartitionCleanupTest extends PlanTestNoneDBBase
         FakeStatsTable stats = new FakeStatsTable(Lists.newArrayList("par_col=7", "par_col=8"), false);
         Assertions.assertDoesNotThrow(() ->
                 newJob(Lists.newArrayList("par_col=0")).cleanupDroppedPartitionStats(connectContext, 1L));
-        Assertions.assertEquals(2, stats.deletedBatches.size());
+        // Batch size 1: 2 partitions x 2 columns.
+        Assertions.assertEquals(4, stats.deletedBatches.size());
 
         new MockUp<StatisticExecutor>() {
             @Mock
@@ -268,5 +285,124 @@ public class ExternalStatsDroppedPartitionCleanupTest extends PlanTestNoneDBBase
                 columnTypes(), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap())
                 .cleanupDroppedPartitionStats(connectContext, 1L);
         Assertions.assertEquals(Lists.newArrayList("par_col=7"), stats.deleted());
+    }
+
+    // ---- Periodic pass (AnalyzeMgr#clearStatisticFromExternalDroppedPartition): no collection involved. ----
+
+    // A table whose columns c1, c2 were last collected FULL.
+    private static void addStatsMeta(String table) {
+        ExternalBasicStatsMeta meta = new ExternalBasicStatsMeta(CATALOG, DB, table, columns(),
+                StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap());
+        for (String column : columns()) {
+            meta.addColumnStatsMeta(new ColumnStatsMeta(column, StatsConstants.AnalyzeType.FULL, LocalDateTime.now()));
+        }
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddExternalBasicStatsMeta(meta);
+    }
+
+    private static void runPeriodic() {
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromExternalDroppedPartition();
+    }
+
+    @Test
+    public void testPeriodicDeletesDroppedPartitionsWithoutACollection() {
+        addStatsMeta(TABLE);
+        // The mocked table lists par_col=0..2: par_col=1 is live, par_col=7 is gone.
+        FakeStatsTable stats = new FakeStatsTable(Lists.newArrayList("par_col=1", "par_col=7"), true);
+        runPeriodic();
+        Assertions.assertEquals(Lists.newArrayList("par_col=7"), stats.deleted());
+    }
+
+    @Test
+    public void testPeriodicRunsAtMostOncePerInterval() {
+        addStatsMeta(TABLE);
+        FakeStatsTable stats = new FakeStatsTable(Lists.newArrayList("par_col=7"), true);
+        runPeriodic();
+        runPeriodic();
+        Assertions.assertEquals(1, stats.queries.get());
+    }
+
+    @Test
+    public void testPeriodicDisabled() {
+        addStatsMeta(TABLE);
+        FakeStatsTable stats = new FakeStatsTable(Lists.newArrayList("par_col=7"), true);
+        Config.connector_table_analyze_dropped_partition_stats_cleanup_interval_second = 0;
+        runPeriodic();
+        Config.connector_table_analyze_dropped_partition_stats_cleanup_interval_second = 3600;
+        Config.connector_table_analyze_dropped_partition_stats_grace_second = 0;
+        runPeriodic();
+        Assertions.assertEquals(0, stats.queries.get());
+    }
+
+    @Test
+    public void testPeriodicSkipsATableUnderAnalyze() {
+        addStatsMeta(TABLE);
+        ExternalAnalyzeStatus status = new ExternalAnalyzeStatus(RUNNING_ANALYZE_ID, CATALOG, DB, TABLE,
+                hiveTable.getUUID(), columns(), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap(), LocalDateTime.now());
+        status.setStatus(StatsConstants.ScheduleStatus.RUNNING);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(status);
+        FakeStatsTable stats = new FakeStatsTable(Lists.newArrayList("par_col=7"), true);
+        runPeriodic();
+        Assertions.assertEquals(0, stats.queries.get());
+    }
+
+    @Test
+    public void testPeriodicSkipsUnresolvableTablesAndSurvivesFailures() {
+        // A table the catalog no longer has is left alone (the dropped-table cleanup owns it).
+        addStatsMeta("no_such_table");
+        addStatsMeta(TABLE);
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<String> queryExternalStatPartitionsNotUpdatedSince(ConnectContext ctx, String tableUUID,
+                                                                          List<String> columnNames,
+                                                                          long graceSeconds) {
+                throw new RuntimeException("statistics table unavailable");
+            }
+        };
+        Assertions.assertDoesNotThrow(ExternalStatsDroppedPartitionCleanupTest::runPeriodic);
+    }
+
+    @Test
+    public void testPeriodicCleansOnlyFullColumns() {
+        // c1 was last collected by SAMPLE: its rows are scaled up by the partition count its metadata recorded,
+        // which only a collection rewrites. A sample whose coverage is incomplete may also be resumed from its
+        // recorded partition set. Either way only its own collection may delete its rows.
+        for (ColumnStatsMeta c1 : List.of(
+                new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                        new HashSet<>(List.of(1L, 2L, 3L)), 3, 3),
+                new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                        new HashSet<>(List.of(1L)), 3, 3))) {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().resetExternalDroppedPartitionCleanupRound();
+            ExternalBasicStatsMeta meta = new ExternalBasicStatsMeta(CATALOG, DB, TABLE, columns(),
+                    StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), Maps.newHashMap());
+            meta.addColumnStatsMeta(c1);
+            meta.addColumnStatsMeta(new ColumnStatsMeta("c2", StatsConstants.AnalyzeType.FULL, LocalDateTime.now()));
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddExternalBasicStatsMeta(meta);
+            FakeStatsTable stats = new FakeStatsTable(Lists.newArrayList("par_col=7"), true);
+            new MockUp<StatisticExecutor>() {
+                @Mock
+                public List<String> queryExternalStatPartitionsNotUpdatedSince(ConnectContext ctx, String tableUUID,
+                                                                              List<String> columnNames,
+                                                                              long graceSeconds) {
+                    Assertions.assertEquals(List.of("c2"), columnNames);
+                    stats.queries.incrementAndGet();
+                    return Lists.newArrayList("par_col=7");
+                }
+            };
+            runPeriodic();
+            Assertions.assertEquals(1, stats.queries.get());
+            Assertions.assertEquals(List.of(List.of("c2")), stats.deletedColumnBatches);
+        }
+    }
+
+    @Test
+    public void testPeriodicSkipsATableWithoutFullColumns() {
+        // Legacy metadata without per-column entries: the optimizer ignores such rows, nothing to clean.
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddExternalBasicStatsMeta(
+                new ExternalBasicStatsMeta(CATALOG, DB, TABLE, columns(), StatsConstants.AnalyzeType.FULL,
+                        LocalDateTime.now(), Maps.newHashMap()));
+        FakeStatsTable stats = new FakeStatsTable(Lists.newArrayList("par_col=7"), true);
+        runPeriodic();
+        Assertions.assertEquals(0, stats.queries.get());
     }
 }
