@@ -1,0 +1,270 @@
+-- REFRESH ... FORCE on an incrementally maintained view rewrites every partition from one snapshot of the base tables
+-- and moves the incremental position to that snapshot, so the refresh after it is incremental again.
+
+-- name: test_ivm_force_rebuilds_an_unchanged_view @cloud
+CREATE TABLE frc_un_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO frc_un_base VALUES ('2026-10-01',1,10),('2026-10-01',1,10),('2026-10-02',2,20),('2026-10-03',3,30);
+CREATE MATERIALIZED VIEW mv_frc_un_inc
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM frc_un_base GROUP BY dt, k;
+CREATE MATERIALIZED VIEW mv_frc_un_auto
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM frc_un_base GROUP BY dt, k;
+[UC]TASK_INC=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_frc_un_inc';
+[UC]TASK_AUTO=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_frc_un_auto';
+REFRESH MATERIALIZED VIEW mv_frc_un_inc WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_frc_un_auto WITH SYNC MODE;
+-- Nothing changed, and FORCE still rewrites all three partitions.
+REFRESH MATERIALIZED VIEW mv_frc_un_inc FORCE WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_frc_un_auto FORCE WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode'), get_json_string(EXTRA_MESSAGE, '$.refreshModeReason'), json_length(parse_json(EXTRA_MESSAGE), '$.mvPartitionsToRefresh') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_INC}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode'), get_json_string(EXTRA_MESSAGE, '$.refreshModeReason'), json_length(parse_json(EXTRA_MESSAGE), '$.mvPartitionsToRefresh') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_AUTO}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+SELECT TABLE_NAME, IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME LIKE 'mv_frc_un_%' ORDER BY TABLE_NAME;
+INSERT INTO frc_un_base VALUES ('2026-10-02',2,20),('2026-10-04',4,40);
+REFRESH MATERIALIZED VIEW mv_frc_un_inc WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_frc_un_auto WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_INC}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_AUTO}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+-- Rewriting the base-side query to the view would compare the view with itself.
+set enable_materialized_view_rewrite = false;
+SELECT dt, k, v, c FROM mv_frc_un_inc ORDER BY dt, k;
+SELECT dt, k, v, c FROM mv_frc_un_auto ORDER BY dt, k;
+SELECT dt, k, SUM(v), COUNT(*) FROM frc_un_base GROUP BY dt, k ORDER BY dt, k;
+
+-- name: test_ivm_force_in_batches @cloud
+-- One batch per partition, and each later batch carries the FORCE of the request.
+CREATE TABLE frc_ba_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO frc_ba_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20),('2026-10-03',3,30);
+CREATE MATERIALIZED VIEW mv_frc_ba
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '1',
+            'partition_refresh_strategy' = 'strict')
+AS SELECT dt, k, v FROM frc_ba_base;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_frc_ba';
+REFRESH MATERIALIZED VIEW mv_frc_ba;
+function: wait_mv_refresh_count("${db[0]}", "mv_frc_ba", 3)
+INSERT INTO frc_ba_base VALUES ('2026-10-02',2,5);
+REFRESH MATERIALIZED VIEW mv_frc_ba FORCE;
+function: wait_mv_refresh_count("${db[0]}", "mv_frc_ba", 6)
+SELECT LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_frc_ba';
+INSERT INTO frc_ba_base VALUES ('2026-10-01',1,10),('2026-10-03',3,1);
+REFRESH MATERIALIZED VIEW mv_frc_ba WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+set enable_materialized_view_rewrite = false;
+SELECT dt, k, v FROM mv_frc_ba ORDER BY dt, k, v;
+SELECT dt, k, v FROM frc_ba_base ORDER BY dt, k, v;
+
+-- name: test_ivm_force_join_view @cloud
+-- Only the fact table changes before the rebuild. The dim table's position is set again all the same, so a later
+-- change to the dim table is applied incrementally.
+CREATE TABLE frc_jf (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+CREATE TABLE frc_jd (k int, name varchar(8))
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO frc_jd VALUES (1,'a'),(2,'b'),(3,'c');
+INSERT INTO frc_jf VALUES ('2026-10-01',1,10),('2026-10-02',2,20),('2026-10-03',3,30);
+CREATE MATERIALIZED VIEW mv_frc_j
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT f.dt, f.k, f.v, d.name FROM frc_jf f JOIN frc_jd d ON f.k = d.k;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_frc_j';
+REFRESH MATERIALIZED VIEW mv_frc_j WITH SYNC MODE;
+INSERT INTO frc_jf VALUES ('2026-10-02',2,20),('2026-10-03',4,40);
+REFRESH MATERIALIZED VIEW mv_frc_j FORCE WITH SYNC MODE;
+INSERT INTO frc_jd VALUES (4,'d'),(2,'b');
+REFRESH MATERIALIZED VIEW mv_frc_j WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+set enable_materialized_view_rewrite = false;
+SELECT dt, k, v, name FROM mv_frc_j ORDER BY dt, k, v, name;
+SELECT f.dt, f.k, f.v, d.name FROM frc_jf f JOIN frc_jd d ON f.k = d.k ORDER BY f.dt, f.k, f.v, d.name;
+
+-- name: test_ivm_force_then_retract @cloud
+-- The rebuild writes the aggregate state the incremental refresh merges into, including for rows it later retracts.
+CREATE TABLE frc_rt_base (id INT NOT NULL, g INT, v BIGINT)
+PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+INSERT INTO frc_rt_base VALUES (1,10,100),(2,10,200),(3,20,300),(4,20,400);
+CREATE MATERIALIZED VIEW mv_frc_rt
+DISTRIBUTED BY HASH(g) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT g, SUM(v) AS sv, MAX(v) AS mx, COUNT(*) AS c FROM frc_rt_base GROUP BY g;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_frc_rt';
+REFRESH MATERIALIZED VIEW mv_frc_rt WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_frc_rt FORCE WITH SYNC MODE;
+DELETE FROM frc_rt_base WHERE id = 2;
+UPDATE frc_rt_base SET v = 350 WHERE id = 4;
+INSERT INTO frc_rt_base VALUES (5,30,500);
+REFRESH MATERIALIZED VIEW mv_frc_rt WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+set enable_materialized_view_rewrite = false;
+SELECT g, sv, mx, c FROM mv_frc_rt ORDER BY g;
+SELECT g, SUM(v), MAX(v), COUNT(*) FROM frc_rt_base GROUP BY g ORDER BY g;
+
+-- name: test_ivm_force_as_the_first_refresh @cloud
+CREATE TABLE frc_ff_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO frc_ff_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20);
+CREATE MATERIALIZED VIEW mv_frc_ff
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, v FROM frc_ff_base;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_frc_ff';
+REFRESH MATERIALIZED VIEW mv_frc_ff FORCE WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode'), get_json_string(EXTRA_MESSAGE, '$.refreshModeReason') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+INSERT INTO frc_ff_base VALUES ('2026-10-02',2,20),('2026-10-03',3,30);
+REFRESH MATERIALIZED VIEW mv_frc_ff WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+set enable_materialized_view_rewrite = false;
+SELECT dt, k, v FROM mv_frc_ff ORDER BY dt, k, v;
+SELECT dt, k, v FROM frc_ff_base ORDER BY dt, k, v;
+
+-- name: test_ivm_force_on_a_base_without_partitions @cloud
+CREATE TABLE frc_em_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+CREATE MATERIALIZED VIEW mv_frc_em
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, v FROM frc_em_base;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_frc_em';
+REFRESH MATERIALIZED VIEW mv_frc_em FORCE WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+INSERT INTO frc_em_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20);
+REFRESH MATERIALIZED VIEW mv_frc_em WITH SYNC MODE;
+INSERT INTO frc_em_base VALUES ('2026-10-02',2,20);
+REFRESH MATERIALIZED VIEW mv_frc_em WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+set enable_materialized_view_rewrite = false;
+SELECT dt, k, v FROM mv_frc_em ORDER BY dt, k, v;
+SELECT dt, k, v FROM frc_em_base ORDER BY dt, k, v;
+
+-- name: test_ivm_force_with_concurrent_loads @cloud
+-- Rows loaded while the rebuild runs are either read by it or applied by the next refresh, never both.
+CREATE TABLE frc_cl_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO frc_cl_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20),('2026-10-03',3,30);
+CREATE MATERIALIZED VIEW mv_frc_cl
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '1',
+            'partition_refresh_strategy' = 'strict')
+AS SELECT dt, k, v FROM frc_cl_base;
+REFRESH MATERIALIZED VIEW mv_frc_cl;
+function: wait_mv_refresh_count("${db[0]}", "mv_frc_cl", 3)
+-- The loads only go to existing partitions, so the rebuild is three batches whenever they land.
+REFRESH MATERIALIZED VIEW mv_frc_cl FORCE;
+INSERT INTO frc_cl_base VALUES ('2026-10-01',1,10),('2026-10-03',3,30);
+INSERT INTO frc_cl_base VALUES ('2026-10-02',2,20);
+INSERT INTO frc_cl_base VALUES ('2026-10-03',3,30);
+function: wait_mv_refresh_count("${db[0]}", "mv_frc_cl", 6)
+REFRESH MATERIALIZED VIEW mv_frc_cl WITH SYNC MODE;
+set enable_materialized_view_rewrite = false;
+SELECT dt, k, v FROM mv_frc_cl ORDER BY dt, k, v;
+SELECT dt, k, v FROM frc_cl_base ORDER BY dt, k, v;
+
+-- name: test_ivm_standing_force_setting_ignored @cloud
+-- A standing force strategy would rebuild the view on every refresh; only the FORCE of a request counts.
+CREATE TABLE frc_st_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO frc_st_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20);
+CREATE MATERIALIZED VIEW mv_frc_st
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1',
+            'partition_refresh_strategy' = 'force')
+AS SELECT dt, k, v FROM frc_st_base;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_frc_st';
+REFRESH MATERIALIZED VIEW mv_frc_st WITH SYNC MODE;
+INSERT INTO frc_st_base VALUES ('2026-10-02',2,5);
+REFRESH MATERIALIZED VIEW mv_frc_st WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode'), get_json_string(EXTRA_MESSAGE, '$.refreshModeReason') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+REFRESH MATERIALIZED VIEW mv_frc_st FORCE WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode'), get_json_string(EXTRA_MESSAGE, '$.refreshModeReason') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+set enable_materialized_view_rewrite = false;
+SELECT dt, k, v FROM mv_frc_st ORDER BY dt, k, v;
+SELECT dt, k, v FROM frc_st_base ORDER BY dt, k, v;
+
+-- name: test_ivm_force_on_a_degraded_auto_view @cloud
+-- An AUTO view built as plain PCT, because its query has no incremental plan, takes a FORCE as a PCT view does.
+CREATE TABLE frc_dg_base (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO frc_dg_base VALUES (1,10),(2,20);
+CREATE MATERIALIZED VIEW mv_frc_dg
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT k, row_number() over (order by v) AS rn FROM frc_dg_base;
+REFRESH MATERIALIZED VIEW mv_frc_dg WITH SYNC MODE;
+INSERT INTO frc_dg_base VALUES (3,5);
+REFRESH MATERIALIZED VIEW mv_frc_dg FORCE WITH SYNC MODE;
+SELECT LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_frc_dg';
+SELECT k, rn FROM mv_frc_dg ORDER BY k;
+
+-- name: test_ivm_partition_force_rejected @cloud
+-- FORCE does not lift the restriction on partition refresh, for a range or a list partitioned view. The framework does
+-- not compare the result of a REFRESH, so the case counts task runs: a rejected REFRESH submits none.
+CREATE TABLE frc_pr_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO frc_pr_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20);
+CREATE MATERIALIZED VIEW mv_frc_pr_inc
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT dt, k, v FROM frc_pr_base;
+CREATE MATERIALIZED VIEW mv_frc_pr_auto
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, v FROM frc_pr_base;
+[UC]REFRESH MATERIALIZED VIEW mv_frc_pr_inc PARTITION START ('2026-10-01') END ('2026-10-02') FORCE;
+[UC]REFRESH MATERIALIZED VIEW mv_frc_pr_auto PARTITION START ('2026-10-01') END ('2026-10-02') FORCE;
+CREATE TABLE frc_pl_base (region varchar(16) NOT NULL, k int NOT NULL, v bigint)
+DUPLICATE KEY(region, k)
+PARTITION BY (region)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO frc_pl_base VALUES ('a',1,10),('b',2,20);
+CREATE MATERIALIZED VIEW mv_frc_pl
+PARTITION BY region
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT region, k, v FROM frc_pl_base;
+[UC]REFRESH MATERIALIZED VIEW mv_frc_pl PARTITION (('a')) FORCE;
+SELECT COUNT(*) FROM information_schema.task_runs WHERE `DATABASE` = database();
