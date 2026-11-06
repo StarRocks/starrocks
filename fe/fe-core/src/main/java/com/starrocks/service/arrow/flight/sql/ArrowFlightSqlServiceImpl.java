@@ -40,6 +40,8 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TUniqueId;
+import io.grpc.ManagedChannel;
+import io.grpc.netty.NettyChannelBuilder;
 import org.apache.arrow.flight.Action;
 import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.CloseSessionRequest;
@@ -49,6 +51,7 @@ import org.apache.arrow.flight.FlightClient;
 import org.apache.arrow.flight.FlightConstants;
 import org.apache.arrow.flight.FlightDescriptor;
 import org.apache.arrow.flight.FlightEndpoint;
+import org.apache.arrow.flight.FlightGrpcUtils;
 import org.apache.arrow.flight.FlightInfo;
 import org.apache.arrow.flight.FlightStream;
 import org.apache.arrow.flight.Location;
@@ -639,10 +642,17 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         }
     }
 
-    private FlightClient getOrCreateClient(String key, String host, int port) throws Exception {
+    // FlightClient.Builder resolves the host once and pins the channel to that IP, so a node that came back
+    // on a new IP stayed unreachable through its cached client. A channel built from the host name lets gRPC
+    // resolve it again when it reconnects. Message limits match what FlightClient.Builder sets.
+    FlightClient getOrCreateClient(String key, String host, int port) throws Exception {
         return clientCache.get(key, () -> {
-            Location location = Location.forGrpcInsecure(host, port);
-            return FlightClient.builder().allocator(rootAllocator).location(location).build();
+            ManagedChannel channel = NettyChannelBuilder.forAddress(host, port)
+                    .usePlaintext()
+                    .maxInboundMessageSize(Integer.MAX_VALUE)
+                    .maxInboundMetadataSize(Integer.MAX_VALUE)
+                    .build();
+            return FlightGrpcUtils.createFlightClient(rootAllocator, channel);
         });
     }
 
