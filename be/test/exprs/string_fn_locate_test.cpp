@@ -667,4 +667,169 @@ TEST_F(StringFunctionLocateTest, locateNullColumnNotSharedTest) {
     }
 }
 
+TEST_F(StringFunctionLocateTest, LocateConstStartPosNullableAndUtf8) {
+    // 1. Constant start_pos <= 0 on Nullable haystack
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto str = BinaryColumn::create();
+        auto null = NullColumn::create();
+        for (int i = 0; i < 32; ++i) {
+            str->append(i % 3 == 0 ? "https://www.google.com.au" : "https://starrocks.io");
+            null->append(i % 4 == 0 ? 1 : 0);
+        }
+
+        Columns columns;
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>("google", 32));
+        columns.emplace_back(NullableColumn::create(std::move(str), std::move(null)));
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(0, 32));
+
+        ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
+        ASSERT_EQ(32, result->size());
+        ASSERT_TRUE(result->is_nullable());
+        auto data_col =
+                ColumnHelper::cast_to<TYPE_INT>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
+        for (int i = 0; i < 32; ++i) {
+            if (i % 4 == 0) {
+                EXPECT_TRUE(result->is_null(i));
+            } else {
+                EXPECT_FALSE(result->is_null(i));
+                EXPECT_EQ(0, data_col->get_data()[i]);
+            }
+        }
+    }
+
+    // 2. Constant start_pos > 1 on multi-byte UTF-8 haystack with needle appearing both before and after start_pos
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto str = BinaryColumn::create();
+        // Char positions: 1:'中', 2:'文', 3:'g', 4:'o', 5:'o', 6:'g', 7:'l', 8:'e', 9:'测', 10:'试', 11:'g', ...
+        str->append("中文google测试google尾");
+        str->append("中文google测试无后缀");
+
+        Columns columns;
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>("google", 2));
+        columns.emplace_back(std::move(str));
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(4, 2));
+
+        ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
+        auto data_col = ColumnHelper::cast_to<TYPE_INT>(result);
+        ASSERT_EQ(2, data_col->size());
+        EXPECT_EQ(11, data_col->get_data()[0]);
+        EXPECT_EQ(0, data_col->get_data()[1]);
+    }
+
+    // 3. Constant start_pos wrapped in a NullableColumn (both non-null and null)
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto str = BinaryColumn::create();
+        str->append("中文google测试google尾");
+        str->append("中文google测试无后缀");
+
+        auto pos_data = Int32Column::create();
+        pos_data->append(4);
+        auto pos_null = NullColumn::create(1, 0);
+        auto nullable_const_pos =
+                ConstColumn::create(NullableColumn::create(std::move(pos_data), std::move(pos_null)), 2);
+
+        Columns columns;
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>("google", 2));
+        columns.emplace_back(std::move(str));
+        columns.emplace_back(std::move(nullable_const_pos));
+
+        ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
+        auto data_col = ColumnHelper::cast_to<TYPE_INT>(result);
+        ASSERT_EQ(2, data_col->size());
+        EXPECT_EQ(11, data_col->get_data()[0]);
+        EXPECT_EQ(0, data_col->get_data()[1]);
+    }
+
+    // 4. Constant start_pos <= 0 on non-nullable haystack
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto str = BinaryColumn::create();
+        str->append("https://www.google.com.au");
+        str->append("https://starrocks.io");
+
+        Columns columns;
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>("google", 2));
+        columns.emplace_back(std::move(str));
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(-1, 2));
+
+        ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
+        ASSERT_FALSE(result->is_nullable());
+        auto data_col = ColumnHelper::cast_to<TYPE_INT>(result);
+        ASSERT_EQ(2, data_col->size());
+        EXPECT_EQ(0, data_col->get_data()[0]);
+        EXPECT_EQ(0, data_col->get_data()[1]);
+    }
+
+    // 5. Nullable haystack and nullable non-constant start_pos with constant needle
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto str = BinaryColumn::create();
+        auto str_null = NullColumn::create();
+        auto pos = Int32Column::create();
+        auto pos_null = NullColumn::create();
+
+        str->append("xxgoogle");
+        str_null->append(0);
+        pos->append(1);
+        pos_null->append(0);
+
+        str->append("xxgoogle");
+        str_null->append(1);
+        pos->append(1);
+        pos_null->append(0);
+
+        str->append("xxgoogle");
+        str_null->append(0);
+        pos->append(1);
+        pos_null->append(1);
+
+        Columns columns;
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>("google", 3));
+        columns.emplace_back(NullableColumn::create(std::move(str), std::move(str_null)));
+        columns.emplace_back(NullableColumn::create(std::move(pos), std::move(pos_null)));
+
+        ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
+        ASSERT_TRUE(result->is_nullable());
+        EXPECT_FALSE(result->is_null(0));
+        EXPECT_TRUE(result->is_null(1));
+        EXPECT_TRUE(result->is_null(2));
+        auto data_col =
+                ColumnHelper::cast_to<TYPE_INT>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
+        EXPECT_EQ(3, data_col->get_data()[0]);
+    }
+
+    // 6. Long homogeneous constant needle (100,000 'a' bytes) across a short chunk and a matching chunk
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        const std::string long_needle(100000, 'a');
+
+        auto short_str = BinaryColumn::create();
+        short_str->append("short_row_1");
+        short_str->append("short_row_2");
+        Columns short_cols;
+        short_cols.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(long_needle), 2));
+        short_cols.emplace_back(std::move(short_str));
+        ColumnPtr short_res = StringFunctions::locate(ctx.get(), short_cols).value();
+        auto short_data = ColumnHelper::cast_to<TYPE_INT>(short_res);
+        ASSERT_EQ(2, short_data->size());
+        EXPECT_EQ(0, short_data->get_data()[0]);
+        EXPECT_EQ(0, short_data->get_data()[1]);
+
+        auto hit_str = BinaryColumn::create();
+        hit_str->append(std::string(100050, 'b'));
+        hit_str->append("中文" + long_needle + "尾");
+        Columns hit_cols;
+        hit_cols.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(long_needle), 2));
+        hit_cols.emplace_back(std::move(hit_str));
+        ColumnPtr hit_res = StringFunctions::locate(ctx.get(), hit_cols).value();
+        auto hit_data = ColumnHelper::cast_to<TYPE_INT>(hit_res);
+        ASSERT_EQ(2, hit_data->size());
+        EXPECT_EQ(0, hit_data->get_data()[0]);
+        EXPECT_EQ(3, hit_data->get_data()[1]);
+    }
+}
+
 } // namespace starrocks

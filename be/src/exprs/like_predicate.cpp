@@ -14,7 +14,10 @@
 
 #include "exprs/like_predicate.h"
 
+#include <algorithm>
+#include <cstring>
 #include <memory>
+#include <type_traits>
 
 #include "base/string/volnitsky.h"
 #include "base/utility/defer_op.h"
@@ -140,6 +143,7 @@ Status LikePredicate::setup_like_state(FunctionContext* context, LikePredicateSt
     } else if (RE2::FullMatch(pattern_str, LIKE_SUBSTRING_RE, &search_string)) {
         remove_escape_character(&search_string);
         state->set_search_string(search_string);
+        state->init_substring_searcher();
         state->function = &constant_substring_fn;
     } else {
         auto re_pattern = LikePredicate::template convert_like_pattern<true>(context, pattern, state->escape_char);
@@ -205,6 +209,7 @@ Status LikePredicate::setup_regex_state(FunctionContext* context, LikePredicateS
         state->function = &constant_ends_with_fn;
     } else if (RE2::FullMatch(pattern_str, SUBSTRING_RE, &search_string)) {
         state->set_search_string(search_string);
+        state->init_substring_searcher();
         state->function = &constant_substring_fn;
     } else {
         RETURN_IF_ERROR(compile_with_hyperscan_or_re2<false>(pattern_str, state, context, pattern));
@@ -368,36 +373,51 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
     } else {
         const auto& offsets = haystack->get_offset();
         res->resize(haystack->size());
+        uint8_t* __restrict res_data = res->get_data().data();
+        if (res->size() > 0) {
+            std::memset(res_data, 0, res->size());
+        }
 
         const char* begin = haystack->get_string_begin();
         const char* end = haystack->get_string_end();
 
         offsets.visit_storage([&](const auto& offsets_buf) {
+            const size_t num_rows = haystack->size();
             const auto* __restrict offset_data = offsets_buf.data();
-            const char* pos = begin;
+            using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
 
-            /// Current index in the array of strings.
-            size_t i = 0;
+            auto scan = [&](const auto& searcher) {
+                const char* pos = begin;
+                size_t i = 0;
 
-            auto searcher = VolnitskyUTF8(needle.data, needle.size, end - pos);
-            /// We will search for the next occurrence in all strings at once.
-            while (pos < end && end != (pos = searcher.search(pos, end - pos))) {
-                /// Determine which index it refers to.
-                while (begin + offset_data[i + 1] <= pos) {
-                    res->get_data()[i] = false;
+                /// We will search for the next occurrence in all strings at once.
+                while (pos < end && end != (pos = searcher.search(pos, end - pos))) {
+                    const auto target_offset = static_cast<OffsetValue>(pos - begin);
+                    if (i + 16 < num_rows && offset_data[i + 16] <= target_offset) {
+                        const auto* it =
+                                std::upper_bound(offset_data + i + 17, offset_data + num_rows + 1, target_offset);
+                        i = static_cast<size_t>((it - offset_data) - 1);
+                    } else {
+                        while (offset_data[i + 1] <= target_offset) {
+                            ++i;
+                        }
+                    }
+                    const char* row_end = begin + offset_data[i + 1];
+
+                    /// We check that the entry does not pass through the boundaries of strings.
+                    res_data[i] = static_cast<uint8_t>(pos + needle.size <= row_end);
+                    pos = row_end;
                     ++i;
                 }
-                const char* row_end = begin + offset_data[i + 1];
+            };
 
-                /// We check that the entry does not pass through the boundaries of strings.
-                res->get_data()[i] = pos + needle.size <= row_end;
-                pos = row_end;
-                ++i;
-            }
-
-            if (i < res->size()) {
-                size_t type_size = res->type_size();
-                memset(res->mutable_raw_data() + i * type_size, 0, (res->size() - i) * type_size);
+            const size_t chunk_bytes = static_cast<size_t>(end - begin);
+            DCHECK(state->substring_fallback != nullptr);
+            if (needle.size < VolnitskyTraits::min_needle_size_for_algorithm ||
+                chunk_bytes < VolnitskyTraits::min_haystack_size_for_algorithm) {
+                scan(*state->substring_fallback);
+            } else {
+                scan(*state->get_or_init_volnitsky_searcher());
             }
         });
     }
