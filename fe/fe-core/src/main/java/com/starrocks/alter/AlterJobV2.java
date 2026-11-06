@@ -151,6 +151,9 @@ public abstract class AlterJobV2 implements Writable {
     // Physical partitions this job has sent a lake publish request for, see PublishVersionRequest.is_retry_publish.
     // Not persisted: a leader that has just taken over sends its first request as a first attempt.
     private transient Set<Long> lakePublishSentPartitions;
+    // Set once a FORCE cancel has sent a no-op publish. That publish writes each partition's commit version with the
+    // job's gtid but without the alter's changes, so a later normal publish must not take a stored version as its own.
+    private transient volatile boolean lakeNoOpPublishSent;
 
     public AlterJobV2(long jobId, JobType jobType, long dbId, long tableId, String tableName, long timeoutMs) {
         this.jobId = jobId;
@@ -677,7 +680,13 @@ public abstract class AlterJobV2 implements Writable {
         if (lakePublishSentPartitions == null) {
             lakePublishSentPartitions = Sets.newHashSet();
         }
-        return !lakePublishSentPartitions.add(physicalPartitionId);
+        return !lakePublishSentPartitions.add(physicalPartitionId) && !lakeNoOpPublishSent;
+    }
+
+    // Call before sending a FORCE cancel's no-op publish. A no-op publish that fails part way leaves the job in
+    // FINISHED_REWRITING, where normal publishes resume; from then on they are never sent as retries.
+    protected void markLakeNoOpPublishSent() {
+        lakeNoOpPublishSent = true;
     }
 
     protected boolean publishVersion() {

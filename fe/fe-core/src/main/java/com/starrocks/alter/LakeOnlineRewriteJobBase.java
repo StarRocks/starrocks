@@ -2142,6 +2142,7 @@ public abstract class LakeOnlineRewriteJobBase
         // and new loads do not queue forever waiting for the cancelled alter's missing version.
         boolean advanceVersionForForce = force && jobState == JobState.FINISHED_REWRITING && tableExists();
         if (advanceVersionForForce) {
+            markLakeNoOpPublishSent();
             if (!lakePublishVersionWithSkip(errMsg)) {
                 return false;
             }

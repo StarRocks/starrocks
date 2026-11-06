@@ -520,6 +520,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         boolean advanceVersionForForce =
                 force && jobState == JobState.FINISHED_REWRITING && tableStillExists && hasReservedVersion;
         if (advanceVersionForForce) {
+            markLakeNoOpPublishSent();
             if (!lakePublishVersionWithSkip(errMsg)) {
                 // The no-op publish RPC failed; leave the job in
                 // FINISHED_REWRITING so the operator can retry

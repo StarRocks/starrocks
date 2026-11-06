@@ -1422,6 +1422,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         // See LakeTableAlterMetaJobBase.cancelImpl for the same pattern.
         boolean advanceVersionForForce = force && jobState == JobState.FINISHED_REWRITING && tableExists();
         if (advanceVersionForForce) {
+            markLakeNoOpPublishSent();
             if (!lakePublishVersionWithSkip(errMsg)) {
                 return false;
             }
