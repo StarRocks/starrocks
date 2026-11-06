@@ -320,8 +320,9 @@ public class MaterializedViewHandler extends AlterHandler {
                 AlterJobV2 alterJobV2;
                 if (rangeRoutable) {
                     // Shared-data range table: build the additive K-tablet range-rollup job directly.
-                    // Any range table that is NOT routable (shared-nothing, colocate,
-                    // primary-key) keeps the existing rejection in createMaterializedViewJob.
+                    // Any range table that is NOT routable (shared-nothing, primary-key, or with
+                    // colocate_with but not a member of its colocate group) keeps the existing
+                    // rejection in createMaterializedViewJob.
                     alterJobV2 = createRangeRollupJob(addRollupClause, olapTable, db, baseIndexMetaId,
                             rollupIndexName, rollupSchema);
                 } else {
@@ -364,18 +365,61 @@ public class MaterializedViewHandler extends AlterHandler {
     /**
      * Whether an {@code ADD ROLLUP} or synchronous MV on a range-distribution table is routed to the additive
      * {@link LakeRangeRollupJob} (instead of being rejected by {@code createMaterializedViewJob}).
-     * Only a shared-data, non-colocate, non-primary-key range table qualifies.
+     * Only a shared-data, non-primary-key range table qualifies; one with colocate_with only when it is a
+     * member of its colocate group (see {@link SchemaChangeHandler#hasColocateWithOutsideRangeColocateGroup}).
      */
     public static boolean isRangeRollupRoutable(OlapTable olapTable) {
-        // A cloud-native, non-colocate, non-primary-key range-distribution table
-        // admits an additive rollup. A table that already carries one or more rollups is still routable:
+        // A cloud-native, non-primary-key range-distribution table admits an additive rollup, a table with
+        // colocate_with only as a member of its range colocate group: the rollup is laid out against the
+        // group's ColocateRanges and its sort key must start with the colocate columns
+        // (checkRangeColocateRollupPrefix). A table that already carries one or more rollups is still routable:
         // each additive job is serialized by the table's OlapTableState (a new ADD ROLLUP requires the
         // table to be NORMAL) and operates only on its own shadow index meta id, so a completed rollup
         // does not interfere. Synchronous MVs use the same eligibility constraints.
         return olapTable.isRangeDistribution()
                 && olapTable.isCloudNativeTable()
-                && !olapTable.hasColocateGroup()
+                && !SchemaChangeHandler.hasColocateWithOutsideRangeColocateGroup(olapTable)
                 && olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
+    }
+
+    /**
+     * How the sort key of a synchronous materialized view is derived, added to the colocate prefix rule's message
+     * for one: a view without GROUP BY, aggregation or DISTINCT can not choose its sort key.
+     */
+    static final String SYNC_MV_SORT_KEY_HINT = "The sort key of a synchronous materialized view is its leading "
+            + "non-aggregated columns in SELECT order; for a view without GROUP BY, aggregation or DISTINCT it is the "
+            + "short-key prefix of the SELECT list (at most 3 columns and 36 bytes; it ends with the first VARCHAR "
+            + "column, or before the first column whose type cannot be a key, such as FLOAT or DOUBLE), "
+            + "and ORDER BY does not change it. Use ALTER TABLE ... ADD ROLLUP ... ORDER BY (...) to choose the sort key "
+            + "of such a projection.";
+
+    /** Added to the colocate prefix rule's message for a rollup named in CREATE TABLE. */
+    static final String CREATE_TABLE_ROLLUP_SORT_KEY_HINT = "A rollup defined in CREATE TABLE is sorted by its key "
+            + "columns; an ORDER BY written in it is not used.";
+
+    /**
+     * Rejects a rollup or synchronous materialized view {@code indexName} of a table in a range colocate group whose
+     * routing columns do not start with the group's colocate columns: every index of a member is laid out against the
+     * group's ColocateRanges. Does nothing for a table that is not in a range colocate group.
+     */
+    static void checkRangeColocateRollupPrefix(OlapTable table, String indexName, boolean syncMv,
+                                               List<Column> routingColumns) throws DdlException {
+        SchemaChangeHandler.checkRangeColocatePrefix(table, routingColumns, rollupPrefixSubject(indexName, syncMv),
+                syncMv ? SYNC_MV_SORT_KEY_HINT : null);
+    }
+
+    /**
+     * The same rule for a rollup named in CREATE TABLE, checked against the explicit colocate columns before the
+     * table joins its group.
+     */
+    public static void checkRangeColocateRollupPrefix(List<Column> colocateColumns, String rollupName,
+                                                      List<Column> routingColumns) throws DdlException {
+        SchemaChangeHandler.checkRangeColocatePrefix(colocateColumns, null, routingColumns,
+                rollupPrefixSubject(rollupName, false), CREATE_TABLE_ROLLUP_SORT_KEY_HINT);
+    }
+
+    private static String rollupPrefixSubject(String indexName, boolean syncMv) {
+        return (syncMv ? "synchronous materialized view " : "rollup ") + indexName + " of a table";
     }
 
     /**
@@ -484,12 +528,15 @@ public class MaterializedViewHandler extends AlterHandler {
             sortKeyIdxes.add(i);
         }
         return buildRangeRollupJob(olapTable, db, baseIndexMetaId, rollupIndexName,
-                finalSchema, keysType, sortKeyIdxes, addRollupClause.getProperties());
+                finalSchema, keysType, sortKeyIdxes, addRollupClause.getProperties(), false);
     }
 
     private AlterJobV2 createRangeMaterializedViewJob(CreateSyncMVStmt stmt, OlapTable table, Database db,
                                                      long baseIndexMetaId, List<Column> mvColumns)
             throws DdlException, AnalysisException {
+        // colocate_mv only selects the colocate load sender, which a range table never uses
+        // (OlapTableSink.canUseColocateMVIndex), so a range table keeps only the group check below and the
+        // flag is not stored.
         boolean isColocateMv = PropertyAnalyzer.analyzeBooleanProp(stmt.getProperties(),
                 PropertyAnalyzer.PROPERTIES_COLOCATE_MV, false) && stmt.getWhereClause() == null;
         if (isColocateMv && Strings.isNullOrEmpty(table.getColocateGroup())) {
@@ -509,7 +556,7 @@ public class MaterializedViewHandler extends AlterHandler {
         }
         Preconditions.checkState(!sortKeyIdxes.isEmpty(), "synchronous MV has no key columns");
         LakeRangeRollupJob job = buildRangeRollupJob(table, db, baseIndexMetaId, stmt.getMVName(),
-                mvColumns, stmt.getMVKeysType(), sortKeyIdxes, stmt.getProperties());
+                mvColumns, stmt.getMVKeysType(), sortKeyIdxes, stmt.getProperties(), true);
         job.setSyncMaterializedView(stmt.getOrigStmt(), AstToSQLBuilder.toSQL(stmt.getQueryStatement()),
                 SyncMaterializedViewDefinition.capture(mvColumns, stmt.getWhereClause()));
         return job;
@@ -517,7 +564,8 @@ public class MaterializedViewHandler extends AlterHandler {
 
     private LakeRangeRollupJob buildRangeRollupJob(OlapTable olapTable, Database db, long baseIndexMetaId,
                                                   String indexName, List<Column> schema, KeysType keysType,
-                                                  List<Integer> sortKeyIdxes, Map<String, String> properties)
+                                                  List<Integer> sortKeyIdxes, Map<String, String> properties,
+                                                  boolean isSyncMv)
             throws DdlException, AnalysisException {
         // sortKeyUniqueIds: the uniqueId of each sort-key column. The rollup reuses base column
         // identities. A routable range rollup is cloud-native only, where every column is assigned a
@@ -530,6 +578,11 @@ public class MaterializedViewHandler extends AlterHandler {
                     "range rollup sort-key column %s has no uniqueId", column.getName());
             sortKeyUniqueIds.add(column.getUniqueId());
         }
+        // On a member of a range colocate group the rollup's final sort key must start with the colocate columns.
+        // Checked before any id is allocated; the job checks it again under the table lock before it installs the
+        // rollup.
+        checkRangeColocateRollupPrefix(olapTable, indexName, isSyncMv,
+                SchemaChangeHandler.newRangeRoutingColumns(schema, keysType, sortKeyIdxes));
 
         // Short key count must be computed with the sort-key-aware path (the sort key is the leading
         // prefix), not the plain key-prefix default.
@@ -589,19 +642,20 @@ public class MaterializedViewHandler extends AlterHandler {
         if (olapTable.isRangeDistribution()) {
             // A shared-data range-distribution rollup that satisfies isRangeRollupRoutable is
             // intercepted in processBatchAddRollup and routed to LakeRangeRollupJob before reaching
-            // this method. Ineligible shared-nothing, colocate and primary-key range tables are
-            // rejected here.
+            // this method. Ineligible shared-nothing and primary-key range tables, and range tables
+            // with colocate_with that are not a member of their colocate group, are rejected here.
             if (queryStatement != null) {
                 throw new DdlException(
                     "Synchronous materialized view with range distribution requires a shared-data, " +
-                    "non-colocate, non-primary-key table. " +
+                    "non-primary-key table that is a member of its colocate group when it has colocate_with. " +
                     "Use an asynchronous materialized view instead: declare it with an explicit " +
                     "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, " +
                     "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...");
             }
             throw new DdlException(
                 "ADD ROLLUP is not supported on this table with range distribution. A range distribution " +
-                "rollup is supported only on a shared-data, non-colocate, non-primary-key range table.");
+                "rollup is supported only on a shared-data, non-primary-key range table that is a member " +
+                "of its colocate group when it has colocate_with.");
         }
         if (mvKeysType == null) {
             // assign rollup index's key type, same as base index's
