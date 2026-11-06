@@ -1110,6 +1110,37 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     }
 
     @Test
+    public void testInterruptedAutoFallbackIsTakenOverByPct() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "1"));
+        advanceTableVersionTo(2);
+        runRemainingBatches(getMVTaskRunProcessor(mv).getMVRefreshProcessor());
+        Assertions.assertEquals(2L, tvrBaselineVersion(mv));
+
+        MockIcebergMetadata mockIcebergMetadata =
+                (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
+        mockIcebergMetadata.updatePartitions("partitioned_db", "t1",
+                ImmutableList.of("date=2020-01-02", "date=2020-01-03"));
+        advanceTableVersionTo(3);
+        mockListTableDeltaTraitsThrows("Starting snapshot (exclusive) 2 is not a parent ancestor of end snapshot 3");
+        MVRefreshProcessor interrupted = getMVTaskRunProcessor(mv).getMVRefreshProcessor();
+        Assertions.assertTrue(((MVHybridRefreshProcessor) interrupted).getCurrentProcessor()
+                instanceof MVPCTRefreshProcessor);
+        Assertions.assertNotNull(nextBatchOf(interrupted), "the fallback must stop with a batch still to run");
+
+        mockListTableDeltaTraits(ImmutableList.of(
+                TvrTableDeltaTrait.ofMonotonic(TvrTableDelta.of(2L, 3L), TvrDeltaStats.EMPTY)));
+        MVRefreshProcessor takeover = getMVTaskRunProcessor(mv).getMVRefreshProcessor();
+        Assertions.assertTrue(((MVHybridRefreshProcessor) takeover).getCurrentProcessor()
+                        instanceof MVPCTRefreshProcessor,
+                "a job that stopped after writing must be rebuilt, not resumed from a baseline its data moved past");
+        runRemainingBatches(takeover);
+        Assertions.assertEquals(3L, tvrBaselineVersion(mv));
+    }
+
+    @Test
     public void testIVMAggregatePlanContainsStateUnionAndMvScan() throws Exception {
         doTestWith3Runs("SELECT date, sum(id), approx_count_distinct(data) " +
                         "FROM `iceberg0`.`partitioned_db`.`t1` as a group by date;",
@@ -1798,6 +1829,27 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
             cur = cur.getCause();
         }
         return sb.toString();
+    }
+
+    private static TaskRun nextBatchOf(MVRefreshProcessor executed) {
+        if (executed instanceof MVHybridRefreshProcessor hybrid) {
+            return hybrid.getCurrentProcessor().getNextTaskRun();
+        }
+        return executed.getNextTaskRun();
+    }
+
+    private static void runRemainingBatches(MVRefreshProcessor firstBatch) throws Exception {
+        for (TaskRun batch = nextBatchOf(firstBatch); batch != null;
+                batch = nextBatchOf(getMVTaskRunProcessor(batch).getMVRefreshProcessor())) {
+            initAndExecuteTaskRun(batch);
+        }
+    }
+
+    private static long tvrBaselineVersion(MaterializedView mv) {
+        Map<BaseTableInfo, TvrVersionRange> baseline =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
+        Assertions.assertEquals(1, baseline.size(), "baseline: " + baseline);
+        return baseline.values().iterator().next().to().getVersion();
     }
 
     @Test

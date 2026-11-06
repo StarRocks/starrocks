@@ -31,6 +31,8 @@ import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
@@ -56,6 +58,7 @@ import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.mv.IvmRefreshDefinition;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -77,10 +80,13 @@ import static com.starrocks.scheduler.TaskRun.MV_UNCOPYABLE_PROPERTIES;
  */
 public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
 
+<<<<<<< HEAD
     // One-shot callback invoked after syncAndCheckPCTPartitions and before plan building. Used by
     // Hybrid fallback to freeze TVR so the pinned state is visible to the plan builder and differ.
     private Runnable afterSyncHook;
 
+=======
+>>>>>>> f7db58ef15c... [BugFix] Clear the IVM baseline before a PCT refresh writes to the MV (#64167)
     // True when this is a subsequent pinned batch whose job no longer owns the pinning state: a newer
     // job overwrote the owner, or took over and released it when done. Run unpinned, the batch would
     // write past the baseline that job left behind.
@@ -179,6 +185,7 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                                                       ProcessExecPlan processExecPlan,
                                                       MVRefreshExecutor executor) throws Exception {
         ExecPlan mvExecPlan = processExecPlan.execPlan();
+        clearTvrBaselineBeforeWrite();
         try (Timer ignored = Tracers.watchScope("MVRefreshMaterializedView")) {
             InsertStmt insertStmt = processExecPlan.insertStmt();
             executor.executePlan(mvExecPlan, insertStmt);
@@ -188,6 +195,32 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             updateVersionMeta(mvExecPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions);
         }
         return Constants.TaskRunState.SUCCESS;
+    }
+
+    /**
+     * A batch's write moves the MV past the IVM baseline, so the baseline has to leave the journal before it.
+     * Not on the switch to PCT: a run that then fails to plan, or skips, writes nothing and keeps its baseline.
+     */
+    private void clearTvrBaselineBeforeWrite() {
+        if (mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap().isEmpty()) {
+            return;
+        }
+        Locker locker = new Locker();
+        if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE,
+                Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+            throw new DmlException("refresh of materialized view %s.%s failed before it wrote: failed to acquire " +
+                            "write lock on database %s within %d ms to clear its incremental baseline",
+                    db.getFullName(), mv.getName(), db.getFullName(), Config.mv_refresh_try_lock_timeout_ms);
+        }
+        try {
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mv.getId()) == null) {
+                throw new DmlException("refresh failed: materialized view %s.%s does not exist, " +
+                        "it may have been dropped during refresh", db.getFullName(), mv.getName());
+            }
+            new MVVersionManager(mv, mvContext, null).clearTvrBaseline(isPinnedMode());
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE);
+        }
     }
 
     private static Map<Table, PCellSortedSet> toTableKeyedRefreshPartitions(
