@@ -13,10 +13,11 @@
 # limitations under the License.
 
 from enum import Enum
+from typing import Any
 from urllib.parse import urlparse
 
 from sqlalchemy.schema import Table
-from sqlalchemy.sql import TableClause, ClauseElement
+from sqlalchemy.sql import ClauseElement, TableClause
 from sqlalchemy.sql.dml import UpdateBase
 from sqlalchemy.sql.functions import FunctionElement
 
@@ -173,22 +174,43 @@ class FilesTarget(FilesClause):
 
         return f"FILES(\n{repr(self.storage)}\n{repr(self.format)}\n{repr(self.options)}\n)"
 
+def _argument_or_its_old_name(name: str, value: Any, old_name: str, old_value: Any) -> Any:
+    """Return the argument passed as ``name`` or under its old name ``old_name``, refusing both at once."""
+    if value is not None and old_value is not None:
+        raise TypeError(f"Pass {name} or its old name {old_name}, not both")
+    return old_value if value is None else value
+
+
 class FilesTargetOptions(_FilesOptions):
+    """Unload options of a FILES() table function, for INSERT INTO FILES.
+
+    ``single`` writes one file, ``target_max_file_size`` caps each file at a best-effort number of bytes, and
+    ``partition_by`` names the comma-separated columns whose values partition the files into directories.
+    ``target_max_files_size`` and ``partitioned_by`` are their old names: earlier releases wrote those names into
+    the statement, where StarRocks ignored them.
+    """
+
     def __init__(
         self,
         *,
-        single: bool = None,
-        target_max_files_size: int = None,
-        partitioned_by: str = None,
-        **kwargs,
-    ):
+        single: bool | None = None,
+        target_max_file_size: int | None = None,
+        partition_by: str | None = None,
+        target_max_files_size: int | None = None,
+        partitioned_by: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
+        target_max_file_size = _argument_or_its_old_name(
+            "target_max_file_size", target_max_file_size, "target_max_files_size", target_max_files_size
+        )
+        partition_by = _argument_or_its_old_name("partition_by", partition_by, "partitioned_by", partitioned_by)
         if single is not None:
-            self.options["single"] = "true" if single else "false"
-        if target_max_files_size is not None:
-            self.options["target_max_files_size"] = target_max_files_size
-        if partitioned_by is not None:
-            self.options["partitioned_by"] = partitioned_by
+            self.options["single"] = single
+        if target_max_file_size is not None:
+            self.options["target_max_file_size"] = target_max_file_size
+        if partition_by is not None:
+            self.options["partition_by"] = partition_by
 
 
 class FilesSource(FilesClause, FunctionElement):
@@ -319,24 +341,30 @@ class FilesFormat(ClauseElement):
 
 
 class CSVFormat(FilesFormat):
+    """CSV format of a FILES() table function.
+
+    Loading reads ``column_separator``, ``row_delimiter``, ``enclose``, ``escape``, ``skip_header`` and
+    ``trim_space``; unloading reads ``column_separator``, ``row_delimiter``, ``include_header``, ``enclose`` and
+    ``escape``. ``line_delimiter`` is an old name for ``row_delimiter``, which StarRocks reads for both.
+    """
     __format_type__ = "csv"
 
     def __init__(
         self,
         *,
-        column_separator: str = None,
-        row_delimiter: str = None,
-        line_delimiter: str = None,
-        enclose: str = None,
-        escape: str = None,
-        skip_header: int = None,
-        trim_space: bool = None,
-        compression: Compression|str = None,
-        **kwargs,
-    ):
+        column_separator: str | None = None,
+        row_delimiter: str | None = None,
+        line_delimiter: str | None = None,
+        enclose: str | None = None,
+        escape: str | None = None,
+        skip_header: int | None = None,
+        trim_space: bool | None = None,
+        include_header: bool | None = None,
+        compression: Compression | str | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(compression, **kwargs)
-        if row_delimiter is not None and line_delimiter is not None:
-            raise Exception('Only specify one of row_delimiter (for load) or line_delimiter (for unload)')
+        row_delimiter = _argument_or_its_old_name("row_delimiter", row_delimiter, "line_delimiter", line_delimiter)
         if row_delimiter:
             if (
                 len(str(row_delimiter).encode().decode("unicode_escape")) != 1
@@ -344,13 +372,6 @@ class CSVFormat(FilesFormat):
             ):
                 raise TypeError("Record Delimiter should be a single character.")
             self.add_option("row_delimiter", row_delimiter)
-        if line_delimiter:
-            if (
-                len(str(line_delimiter).encode().decode("unicode_escape")) != 1
-                and line_delimiter != "\r\n"
-            ):
-                raise TypeError("Record Delimiter should be a single character.")
-            self.add_option("line_delimiter", line_delimiter)
         if column_separator:
             if len(str(column_separator).encode().decode("unicode_escape")) != 1:
                 raise TypeError("Column Separator should be a single character")
@@ -369,6 +390,8 @@ class CSVFormat(FilesFormat):
             self.add_option("skip_header", str(skip_header))
         if isinstance(trim_space, bool):
             self.add_option("trim_space", trim_space)
+        if isinstance(include_header, bool):
+            self.add_option("include_header", include_header)
 
 
 class ParquetFormat(FilesFormat):
@@ -439,20 +462,30 @@ class ORCFormat(FilesFormat):
 
 
 class _StorageClause(ClauseElement):
+    """Base class for the storage properties of a FILES() table function.
+
+    ``__uri_schemes__`` lists the path schemes StarRocks reads the storage system from, and
+    ``__option_prefix__`` the prefix of its credential properties. A path with any other scheme raises
+    ``ValueError``, naming only the scheme so that a credential carried in the path is not echoed.
+    """
     __visit_name__ = "cloud_storage"
-    __uri_scheme__ = None
+    __uri_schemes__: tuple[str, ...] = ()
     __option_prefix__ = ''
 
     def __init__(
         self,
         *,
         uri: str,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         self.options = dict()
-        url_components = urlparse(uri)
-        if url_components.scheme != self.__uri_scheme__:
-            raise Exception(f'Invalid path prefix for storage clause {self.__class__.__name__}')
+        scheme = urlparse(uri).scheme
+        if scheme not in self.__uri_schemes__:
+            accepted = " or ".join(f"{accepted_scheme}://" for accepted_scheme in self.__uri_schemes__)
+            raise ValueError(
+                f"Invalid path prefix for storage clause {self.__class__.__name__}: "
+                f"expected {accepted}, got scheme {scheme!r}"
+            )
         self.options['path'] = uri
         self.options.update(kwargs)  # Allow use of any other parameters
 
@@ -468,7 +501,7 @@ class _StorageClause(ClauseElement):
 
 class AmazonS3(_StorageClause):
     """Amazon S3"""
-    __uri_scheme__ = "s3"
+    __uri_schemes__ = ("s3",)
     __option_prefix__ = 'aws.s3'
 
     def __init__(
@@ -495,7 +528,7 @@ class AmazonS3(_StorageClause):
             self.add_option('secret_key', secret_key)
 
 class OtherS3Compatibile(_StorageClause):
-    __uri_scheme__ = "s3"
+    __uri_schemes__ = ("s3",)
     __option_prefix__ = 'aws.s3'
 
     def __init__(
@@ -522,21 +555,32 @@ class OtherS3Compatibile(_StorageClause):
             self.add_option('endpoint', endpoint)
 
 class AzureBlobStorage(_StorageClause):
-    """Microsoft Azure Blob Storage"""
-    __uri_scheme__ = "azure"
+    """Microsoft Azure Blob Storage.
+
+    The path is ``wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>``. Authenticate with
+    ``shared_key``, ``sas_token``, a user-assigned managed identity (``oauth2_use_managed_identity`` and
+    ``oauth2_client_id``) or a service principal (``oauth2_client_id``, ``oauth2_client_secret`` and
+    ``oauth2_tenant_id``). StarRocks' native Azure client, used unless the FE's ``azure_use_native_sdk`` is false,
+    takes the storage account and container from the path; ``endpoint``, ``storage_account`` and ``container``
+    are read only by the Hadoop client used when it is false.
+    """
+    __uri_schemes__ = ("wasb", "wasbs")
     __option_prefix__ = 'azure.blob'
 
     def __init__(
         self, *,
         uri: str,
-        shared_key: str = None,
-        sas_token: str = None,
-        oauth2_use_managed_identity: bool = None,
-        oauth2_client_id: str = None,
-        oauth2_client_secret: str = None,
-        oauth2_tenant_id: str = None,
-        **kwargs,
-    ):
+        shared_key: str | None = None,
+        sas_token: str | None = None,
+        oauth2_use_managed_identity: bool | None = None,
+        oauth2_client_id: str | None = None,
+        oauth2_client_secret: str | None = None,
+        oauth2_tenant_id: str | None = None,
+        endpoint: str | None = None,
+        storage_account: str | None = None,
+        container: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(uri=uri, **kwargs)
 
         if shared_key:
@@ -551,51 +595,82 @@ class AzureBlobStorage(_StorageClause):
             self.add_option('oauth2_client_secret', oauth2_client_secret)
         if oauth2_tenant_id:
             self.add_option('oauth2_tenant_id', oauth2_tenant_id)
+        if endpoint:
+            self.add_option('endpoint', endpoint)
+        if storage_account:
+            self.add_option('storage_account', storage_account)
+        if container:
+            self.add_option('container', container)
 
 class AzureDataLakeStorage1(_StorageClause):
-    """Microsoft Azure Data Lake Storage Gen1"""
-    __uri_scheme__ = "wasb"
-    __option_prefix__ = 'azure.adls2'
+    """Microsoft Azure Data Lake Storage Gen1.
+
+    The path is ``adl://<account>.azuredatalakestore.net/<path>``. Authenticate with the managed service identity
+    (``use_managed_service_identity``) or a service principal (``oauth2_client_id``, ``oauth2_credential`` and
+    ``oauth2_endpoint``). ``oauth2_client_credential`` and ``oauth2_client_endpoint`` are the old names of
+    ``oauth2_credential`` and ``oauth2_endpoint``.
+    """
+    __uri_schemes__ = ("adl",)
+    __option_prefix__ = 'azure.adls1'
 
     def __init__(
         self,
         *,
         uri: str,
-        use_managed_service_identity: bool = None,
-        oauth2_client_id: str = None,
-        oauth2_client_credential: str = None,
-        oauth2_client_endpoint: str = None,
-        **kwargs,
-    ):
+        use_managed_service_identity: bool | None = None,
+        oauth2_client_id: str | None = None,
+        oauth2_credential: str | None = None,
+        oauth2_endpoint: str | None = None,
+        oauth2_client_credential: str | None = None,
+        oauth2_client_endpoint: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(uri=uri, **kwargs)
+        oauth2_credential = _argument_or_its_old_name(
+            "oauth2_credential", oauth2_credential, "oauth2_client_credential", oauth2_client_credential
+        )
+        oauth2_endpoint = _argument_or_its_old_name(
+            "oauth2_endpoint", oauth2_endpoint, "oauth2_client_endpoint", oauth2_client_endpoint
+        )
 
         if isinstance(use_managed_service_identity, bool):
             self.add_option('use_managed_service_identity', str(use_managed_service_identity).lower())
         if oauth2_client_id:
             self.add_option('oauth2_client_id', oauth2_client_id)
-        if oauth2_client_credential:
-            self.add_option('oauth2_client_credential', oauth2_client_credential)
-        if oauth2_client_endpoint:
-            self.add_option('oauth2_client_endpoint', oauth2_client_endpoint)
+        if oauth2_credential:
+            self.add_option('oauth2_credential', oauth2_credential)
+        if oauth2_endpoint:
+            self.add_option('oauth2_endpoint', oauth2_endpoint)
 
 class AzureDataLakeStorage2(_StorageClause):
-    """Microsoft Azure Data Lake Storage2"""
-    __uri_scheme__ = "wasb"
+    """Microsoft Azure Data Lake Storage Gen2.
+
+    The path is ``abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>``. Authenticate with a
+    managed identity (``oauth2_use_managed_identity``, ``oauth2_tenant_id`` and ``oauth2_client_id``),
+    ``shared_key``, ``sas_token``, a service principal (``oauth2_client_id``, ``oauth2_client_secret`` and
+    ``oauth2_client_endpoint``) or a workload identity (``oauth2_token_file``, ``oauth2_tenant_id`` and
+    ``oauth2_client_id``). Give ``storage_account`` (or ``endpoint``) with ``shared_key`` or ``sas_token``:
+    StarRocks takes the account from the path when loading, but not when unloading with INSERT INTO FILES.
+    """
+    __uri_schemes__ = ("abfs", "abfss")
     __option_prefix__ = 'azure.adls2'
 
     def __init__(
         self,
         *,
         uri: str,
-        shared_key: str = None,
-        storage_account: str = None,
-        oauth2_use_managed_identity: bool = None,
-        oauth2_tenant_id: str = None,
-        oauth2_client_id: str = None,
-        oauth2_client_secret: str = None,
-        oauth2_client_endpoint: str = None,
-        **kwargs,
-    ):
+        shared_key: str | None = None,
+        storage_account: str | None = None,
+        oauth2_use_managed_identity: bool | None = None,
+        oauth2_tenant_id: str | None = None,
+        oauth2_client_id: str | None = None,
+        oauth2_client_secret: str | None = None,
+        oauth2_client_endpoint: str | None = None,
+        sas_token: str | None = None,
+        endpoint: str | None = None,
+        oauth2_token_file: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(uri=uri, **kwargs)
 
         if shared_key:
@@ -603,7 +678,7 @@ class AzureDataLakeStorage2(_StorageClause):
         if storage_account:
             self.add_option('storage_account', storage_account)
         if isinstance(oauth2_use_managed_identity, bool):
-            self.add_option('oauth2_managed_identity', str(oauth2_use_managed_identity).lower())
+            self.add_option('oauth2_use_managed_identity', str(oauth2_use_managed_identity).lower())
         if oauth2_tenant_id:
             self.add_option('oauth2_tenant_id', oauth2_tenant_id)
         if oauth2_client_id:
@@ -612,10 +687,16 @@ class AzureDataLakeStorage2(_StorageClause):
             self.add_option('oauth2_client_secret', oauth2_client_secret)
         if oauth2_client_endpoint:
             self.add_option('oauth2_client_endpoint', oauth2_client_endpoint)
+        if sas_token:
+            self.add_option('sas_token', sas_token)
+        if endpoint:
+            self.add_option('endpoint', endpoint)
+        if oauth2_token_file:
+            self.add_option('oauth2_token_file', oauth2_token_file)
 
 class GoogleCloudStorage(_StorageClause):
     """Google Cloud Storage"""
-    __uri_scheme__ = "gs"
+    __uri_schemes__ = ("gs",)
     __option_prefix__ = "gcp.gcs"
 
     def __init__(
@@ -643,7 +724,7 @@ class GoogleCloudStorage(_StorageClause):
 
 class HadoopHDFSStorage(_StorageClause):
     """Hadoop HDFS"""
-    __uri_scheme__ = "hdfs"
+    __uri_schemes__ = ("hdfs",)
     __option_prefix__ = 'hadoop'
 
     def __init__(

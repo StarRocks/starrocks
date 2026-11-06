@@ -11,6 +11,15 @@ Version history
   (e.g. the same one as `version_table_schema`) instead of on every schema that holds a view.
 - Coalesce multiple `ADD`/`DROP COLUMN` autogenerate operations on a table into a single `ALTER TABLE` statement via the `combine_column_alters` rewriter, avoiding StarRocks in-progress schema-change failures (#78647 by @chris-celerdata)
 - Add opt-in `starrocks_wait_for_schema_change` to block until a column schema-change job reaches a terminal state (#78647 by @chris-celerdata)
+- Fix the `FILES()` storage, unload and format options to write the properties StarRocks reads (by @rad-pat):
+  - `AzureBlobStorage` takes `wasb://` and `wasbs://` paths instead of `azure://`, and adds `endpoint`, `storage_account` and `container`.
+  - `AzureDataLakeStorage1` takes `adl://` paths and writes `azure.adls1.*` properties. Its `oauth2_client_credential` and `oauth2_client_endpoint` arguments are now `oauth2_credential` and `oauth2_endpoint`; the old names still work.
+  - `AzureDataLakeStorage2` takes `abfs://` and `abfss://` paths, writes `azure.adls2.oauth2_use_managed_identity` instead of `oauth2_managed_identity`, and adds `sas_token`, `endpoint` and `oauth2_token_file`.
+  - A path with the wrong scheme raises `ValueError`. The Data Lake classes no longer take `wasb://` paths; use `AzureBlobStorage` for those.
+  - `FilesTargetOptions` writes `target_max_file_size` and `partition_by` instead of `target_max_files_size` and `partitioned_by`, which StarRocks ignored. The old argument names still work, so they now take effect: an unload with `partitioned_by` is partitioned, and fails where StarRocks refuses the partitioning, as with `single=True`.
+  - `CSVFormat(line_delimiter=...)` writes `csv.row_delimiter`, which StarRocks reads for unloading as well as loading, instead of `csv.line_delimiter`, which it ignored; the row delimiter now takes effect. `CSVFormat` gains `include_header` for unloading.
+  - Every property value is written as a string, a bool as `true` or `false`: `trim_space=True` and `use_legacy_encoding=True` used to be a bare `True`, which is a syntax error. A missing value, or one that isn't a string, number or bool, raises `CompileError`.
+  - A `%` in a property value, as in a SAS token, is escaped for the driver instead of failing in pymysql's parameter formatting. Write it once: a `%%` doubled by hand now reaches StarRocks as `%%`.
 
 **1.3.4**
 

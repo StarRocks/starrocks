@@ -311,20 +311,48 @@ class StarRocksSQLCompiler(MySQLCompiler):
             f" {self.process(insert_into.from_, **kw)}"
         )
 
-    def visit_files_target(self, files, **kw):
-        target_items = []
-        target_items.append(self.process(files.storage, **kw))
-        target_items.append(self.process(files.format, **kw))
+    def visit_files_target(self, files: Any, **kw: Any) -> str:
+        return self._files_table_function(files, **kw)
+
+    def _files_table_function(self, files: Any, **kw: Any) -> str:
+        """Render ``FILES(<storage>, <format>, <options>)``, leaving out a section with no properties, such as an
+        empty ``FilesTargetOptions()``, rather than writing the trailing comma StarRocks rejects."""
+        sections = [self.process(files.storage, **kw), self.process(files.format, **kw)]
         if files.options is not None:
-            target_items.append(self.process(files.options, **kw))
-        files_str = ",\n".join(target_items)
+            sections.append(self.process(files.options, **kw))
+        files_str = ",\n".join(section for section in sections if section)
         return f"FILES(\n{files_str}\n)"
 
-    def _key_value_format(self, items: dict):
-        return ',\n'.join([
-            f'{repr(k)} = {repr(v)}'
+    def _key_value_format(self, items: dict[str, Any]) -> str:
+        """Render FILES() properties as ``'key' = 'value'`` pairs.
+
+        A ``%`` is doubled for the driver's paramstyle, as SQLAlchemy does for text, so values such as SAS tokens
+        (``se=...%3A...&sig=...%3D``) reach StarRocks intact instead of breaking the driver's parameter formatting.
+        """
+        return self.post_process_text(',\n'.join([
+            f'{repr(k)} = {repr(self._files_property_text(k, v))}'
             for k, v in items.items()
-        ])
+        ]))
+
+    @staticmethod
+    def _files_property_text(key: str, value: Any) -> str:
+        """Return a FILES() property value as the string StarRocks' grammar requires.
+
+        A bool is written ``true`` or ``false``, the form StarRocks parses, and a string or number with ``str``, so
+        ``trim_space=True`` or a size of ``1024`` is quoted rather than rejected as a syntax error. Any other value,
+        ``None``, bytes or an enum among them, is refused rather than written as a string StarRocks would misread.
+        The error names the value's type, not the value, which may be a credential.
+        """
+        if value is None:
+            raise exc.CompileError(f"FILES() property {key!r} has no value; StarRocks properties are strings")
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, (str, int, float)):
+            return str(value)
+        raise exc.CompileError(
+            f"FILES() property {key!r} is a {type(value).__name__}; StarRocks properties are strings, numbers or "
+            "booleans"
+        )
 
     def visit_cloud_storage(self, storage, **kw):
         return self._key_value_format(storage.options)
@@ -358,14 +386,8 @@ class StarRocksSQLCompiler(MySQLCompiler):
             f" FROM {self.process(insert_from.from_, **kw)}"
         )
 
-    def visit_files_source(self, files, **kw):
-        source_items = []
-        source_items.append(self.process(files.storage, **kw))
-        source_items.append(self.process(files.format, **kw))
-        if files.options is not None:
-            source_items.append(self.process(files.options, **kw))
-        files_str = ",\n".join(source_items)
-        return f"FILES(\n{files_str}\n)"
+    def visit_files_source(self, files: Any, **kw: Any) -> str:
+        return self._files_table_function(files, **kw)
 
 class StarRocksDDLCompiler(MySQLDDLCompiler):
     def __init__(self, *args, **kwargs):
