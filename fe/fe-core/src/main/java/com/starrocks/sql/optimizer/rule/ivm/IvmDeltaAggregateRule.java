@@ -69,6 +69,9 @@ import java.util.stream.Collectors;
  *           │           └── child...
  *           └── OlapScan(MV)           ← scan existing MV state
  * </pre>
+ *
+ * <p>An aggregate with no aggregate function leaves the MV no state to merge, so it plans the aggregate and the
+ * projection alone, without the join or the MV scan.
  */
 public class IvmDeltaAggregateRule extends TransformationRule {
     public IvmDeltaAggregateRule() {
@@ -114,6 +117,19 @@ public class IvmDeltaAggregateRule extends TransformationRule {
         Preconditions.checkState(rowIdColumn != null, "__ROW_ID__ column must exist in MV");
         int encodeRowIdVersion = mv.getEncodeRowIdVersion();
 
+        List<ColumnRefOperator> groupingKeys = inputAggOp.getGroupingKeys();
+        Map<ColumnRefOperator, CallOperator> inputAggMap = inputAggOp.getAggregations();
+        if (inputAggMap.isEmpty()) {
+            // Every MV column is a group key or the row id derived from them, so a group already in the MV is
+            // upserted with the values it holds.
+            LogicalAggregationOperator groupOnlyAgg =
+                    buildIntermediateAggOperator(columnRefFactory, groupingKeys, inputAggMap, Maps.newHashMap());
+            OptExpression groupOnlyAggExpr = OptExpression.create(groupOnlyAgg,
+                    OptExpression.create(new LogicalDeltaOperator(false, delta.getActionColumn()), aggChild));
+            return List.of(OptExpression.create(
+                    new LogicalProjectOperator(upsertProjection(inputAggOp, delta)), groupOnlyAggExpr));
+        }
+
         // Step 2: Create MV scan
         LogicalOlapScanOperator mvScan = MvRewritePreprocessor.createScanMvOperator(
                 mv, columnRefFactory, PCellSortedSet.of(), true);
@@ -126,8 +142,6 @@ public class IvmDeltaAggregateRule extends TransformationRule {
         // Step 3: Collect input aggregate info and the aggregate -> state-column binding
         // (built by IvmRewriter.bindStateColumnsForAggregate; keyed by ref id so the pairing
         // holds for any column layout).
-        List<ColumnRefOperator> groupingKeys = inputAggOp.getGroupingKeys();
-        Map<ColumnRefOperator, CallOperator> inputAggMap = inputAggOp.getAggregations();
         Map<Integer, String> stateColumnByAggRefId =
                 context.getTvrOptContext().getIvmStateColumnNameByAggRefId();
         Preconditions.checkState(stateColumnByAggRefId != null,
@@ -159,10 +173,7 @@ public class IvmDeltaAggregateRule extends TransformationRule {
                 OptExpression.create(mvScan));
 
         // Step 7: Build state_union project
-        Map<ColumnRefOperator, ScalarOperator> projMap = Maps.newHashMap();
-        if (inputAggOp.getProjection() != null) {
-            projMap.putAll(inputAggOp.getProjection().getColumnRefMap());
-        }
+        Map<ColumnRefOperator, ScalarOperator> projMap = upsertProjection(inputAggOp, delta);
 
         // Iteration is id-sorted only to keep plans deterministic; the pairing itself is by ref id.
         List<ColumnRefOperator> inputAggCallRefs = inputAggMap.keySet().stream()
@@ -190,14 +201,22 @@ public class IvmDeltaAggregateRule extends TransformationRule {
             projMap.put(origRef, stateUnion);
         }
 
-        // Aggregate MV outputs are all UPSERTs. __ACTION__ = INSERT_ACTION (= __op UPSERT).
+        OptExpression result = OptExpression.create(new LogicalProjectOperator(projMap), joinExpr);
+        return List.of(result);
+    }
+
+    // Aggregate MV outputs are all UPSERTs. __ACTION__ = INSERT_ACTION (= __op UPSERT).
+    private static Map<ColumnRefOperator, ScalarOperator> upsertProjection(LogicalAggregationOperator inputAggOp,
+                                                                           LogicalDeltaOperator delta) {
+        Map<ColumnRefOperator, ScalarOperator> projMap = Maps.newHashMap();
+        if (inputAggOp.getProjection() != null) {
+            projMap.putAll(inputAggOp.getProjection().getColumnRefMap());
+        }
         ColumnRefOperator actionColumn = delta.getActionColumn();
         if (actionColumn != null) {
             projMap.put(actionColumn, ConstantOperator.createTinyInt(IvmRuleUtils.INSERT_ACTION));
         }
-
-        OptExpression result = OptExpression.create(new LogicalProjectOperator(projMap), joinExpr);
-        return List.of(result);
+        return projMap;
     }
 
     private LogicalAggregationOperator buildIntermediateAggOperator(

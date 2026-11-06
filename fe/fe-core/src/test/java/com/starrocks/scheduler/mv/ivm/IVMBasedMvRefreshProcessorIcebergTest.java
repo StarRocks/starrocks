@@ -161,7 +161,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     @Test
     public void testIVMWithGroupByNoAggregate() throws Exception {
         // Guards the row-id fix: GROUP BY-only refresh used to fail TypeChecker on the
-        // __ROW_ID__ merge join (BIGINT vs VARCHAR).
+        // __ROW_ID__ merge join (BIGINT vs VARCHAR). The row id is the encoded key, and with
+        // no aggregate state to merge the refresh does not join the MV.
         doTestWith3RunsNoCheckRewrite("SELECT id FROM `iceberg0`.`unpartitioned_db`.`t0` as a GROUP BY id;",
                 plan -> {
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
@@ -171,8 +172,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 plan -> {
                     String planStr = plan.getExplainString(TExplainLevel.NORMAL);
                     PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
-                    PlanTestBase.assertContains(planStr, "__ROW_ID__ = ");
                     PlanTestBase.assertContains(planStr, "from_binary");
+                    PlanTestBase.assertNotContains(planStr, "__ROW_ID__ = ");
                 }
         );
     }
@@ -180,7 +181,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     @Test
     public void testIVMWithSelectDistinctNoAggregate() throws Exception {
         // Statement-level SELECT DISTINCT used to pick AUTO_INCREMENT and crash refresh
-        // TypeChecker on the __ROW_ID__ merge join (BIGINT vs VARCHAR).
+        // TypeChecker on the __ROW_ID__ merge join (BIGINT vs VARCHAR). The row id is the encoded
+        // key, and with no aggregate state to merge the refresh does not join the MV.
         doTestWith3RunsNoCheckRewrite("SELECT DISTINCT id FROM `iceberg0`.`unpartitioned_db`.`t0` as a;",
                 plan -> {
                     PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.NORMAL),
@@ -190,8 +192,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 plan -> {
                     String planStr = plan.getExplainString(TExplainLevel.NORMAL);
                     PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
-                    PlanTestBase.assertContains(planStr, "__ROW_ID__ = ");
                     PlanTestBase.assertContains(planStr, "from_binary");
+                    PlanTestBase.assertNotContains(planStr, "__ROW_ID__ = ");
                 }
         );
     }
