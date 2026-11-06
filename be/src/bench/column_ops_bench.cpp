@@ -43,6 +43,7 @@
 
 #include "base/simd/simd.h"
 #include "base/simd/simd_utils.h"
+#include "column/simd_mulselector.h"
 
 namespace starrocks {
 
@@ -367,6 +368,93 @@ BENCHMARK_TEMPLATE(do_FillDefault, int64_t, fill_default_hoist<int64_t>)
         ->Arg(10)
         ->Arg(50)
         ->Arg(90);
+
+static void fill_clustered_mask(uint8_t* data, size_t n, size_t cluster_len, int one_ratio_percent, uint64_t seed) {
+    if (cluster_len <= 1) {
+        fill_byte_mask(data, n, one_ratio_percent, seed);
+        return;
+    }
+    std::mt19937_64 rng(seed);
+    std::uniform_int_distribution<int> d(0, 99);
+    for (size_t i = 0; i < n; i += cluster_len) {
+        uint8_t val = (d(rng) < one_ratio_percent) ? 1 : 0;
+        size_t end = std::min(n, i + cluster_len);
+        std::memset(data + i, val, end - i);
+    }
+}
+
+// =====================================================================
+// simd_mulselector.h :: SIMD_muti_selector::multi_select_if
+// =====================================================================
+// Scenarios:
+//   0 = Var Random 50%
+//   1 = Const Random 50%
+//   2 = Var First-WHEN 100% True
+//   3 = Var All-WHEN False (ELSE)
+//   4 = Var Clustered16 50%
+
+enum MulSelectorScenario {
+    kVarRandom50 = 0,
+    kConstRandom50 = 1,
+    kVarFirstTrue100 = 2,
+    kVarAllFalse = 3,
+    kVarClustered16 = 4,
+};
+
+template <LogicalType LT>
+static void do_SIMD_mulselector(benchmark::State& state) {
+    using CppType = RunTimeCppType<LT>;
+    using Container = typename RunTimeColumnType<LT>::Container;
+
+    const int arity = static_cast<int>(state.range(0));
+    const int scenario = static_cast<int>(state.range(1));
+    const int list_size = arity + 1;
+
+    std::vector<Filter> filters(arity, Filter(kChunk, 0));
+    std::vector<uint8_t*> select_vec(arity);
+    for (int i = 0; i < arity; ++i) {
+        if (scenario == kVarFirstTrue100) {
+            std::memset(filters[i].data(), (i == 0) ? 1 : 0, kChunk);
+        } else if (scenario == kVarAllFalse) {
+            std::memset(filters[i].data(), 0, kChunk);
+        } else if (scenario == kVarClustered16) {
+            fill_clustered_mask(filters[i].data(), kChunk, 16, 50, 0x7000ULL + i);
+        } else {
+            fill_byte_mask(filters[i].data(), kChunk, 50, 0x5000ULL + i);
+        }
+        select_vec[i] = filters[i].data();
+    }
+
+    const bool use_const = (scenario == kConstRandom50);
+    std::vector<Container> branches(list_size);
+    std::vector<const Container*> select_list(list_size);
+    std::vector<bool> is_const(list_size, use_const);
+    for (int i = 0; i < list_size; ++i) {
+        branches[i].resize(use_const ? 1 : kChunk);
+        for (size_t r = 0; r < branches[i].size(); ++r) {
+            branches[i][r] = static_cast<CppType>((i + 1) * 100000 + r);
+        }
+        select_list[i] = &branches[i];
+    }
+
+    Container dst(kChunk);
+    for (auto _ : state) {
+        SIMD_muti_selector<LT>::multi_select_if(select_vec.data(), arity, dst, select_list.data(), list_size, is_const,
+                                                static_cast<int>(kChunk));
+        benchmark::DoNotOptimize(dst.data());
+    }
+}
+
+static void MulSelectorArgs(benchmark::Benchmark* b) {
+    for (int arity : {2, 4, 8}) {
+        for (int scenario : {kVarRandom50, kConstRandom50, kVarFirstTrue100, kVarAllFalse, kVarClustered16}) {
+            b->Args({arity, scenario});
+        }
+    }
+}
+
+BENCHMARK_TEMPLATE(do_SIMD_mulselector, TYPE_BIGINT)->Name("BM_SIMD_mulselector_8byte")->Apply(MulSelectorArgs);
+BENCHMARK_TEMPLATE(do_SIMD_mulselector, TYPE_INT)->Name("BM_SIMD_mulselector_4byte")->Apply(MulSelectorArgs);
 
 } // namespace starrocks
 
