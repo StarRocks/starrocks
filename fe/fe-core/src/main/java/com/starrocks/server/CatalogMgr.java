@@ -39,6 +39,7 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.credential.CredentialUtil;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.ImageWriter;
@@ -197,7 +198,8 @@ public class CatalogMgr {
                     AlterCatalogLog alterCatalogLog = new AlterCatalogLog(catalogName, properties);
                     GlobalStateMgr.getCurrentState().getEditLog().logAlterCatalog(alterCatalogLog,
                             wal -> alterCatalogInternal(catalog, newConnector, properties));
-                    LOG.info("Recreate catalog [{}] with properties [{}]", catalogName, catalog.getConfig());
+                    LOG.info("Recreate catalog [{}] with properties [{}]", catalogName,
+                            CredentialUtil.maskedCopy(catalog.getConfig()));
                 } catch (Exception e) {
                     LOG.warn("alter catalog failed, shutdown new connector", e);
                     newConnector.shutdown();
@@ -370,7 +372,8 @@ public class CatalogMgr {
             }
 
             alterCatalogInternal(catalog, newConnector, properties);
-            LOG.info("Recreate catalog [{}] with properties [{}] in replay", catalog.getName(), catalog.getConfig());
+            LOG.info("Recreate catalog [{}] with properties [{}] in replay", catalog.getName(),
+                    CredentialUtil.maskedCopy(catalog.getConfig()));
         } finally {
             writeUnLock();
         }
