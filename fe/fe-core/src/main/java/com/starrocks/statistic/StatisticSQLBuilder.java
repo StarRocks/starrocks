@@ -441,6 +441,35 @@ public class StatisticSQLBuilder {
                 " AND COLUMN_NAME IN (" + columnsIn + ")";
     }
 
+    // Partitions that have external column statistics but none written within the last `graceSeconds`.
+    // update_time is written with now() (see ExternalFullStatisticsCollectJob), so comparing against now()
+    // here uses the same clock. Matches both the hashed and the raw table_uuid.
+    public static String buildQueryExternalStatPartitionsNotUpdatedSinceSQL(String tableUUID, List<String> columnNames,
+                                                                            long graceSeconds) {
+        return "SELECT partition_name FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME +
+                " WHERE " + buildTableUUIDInPredicateQuoted(tableUUID) +
+                " AND COLUMN_NAME IN (" + quotedInList(columnNames) + ")" +
+                " GROUP BY partition_name" +
+                " HAVING max(update_time) < date_sub(now(), INTERVAL " + graceSeconds + " SECOND)";
+    }
+
+    // Deletes the given columns' statistics of the given partitions, under both the hashed and the raw table_uuid.
+    // Used to drop the statistics of partitions that no longer exist in the table. Filters on key columns only:
+    // in shared-data mode the statistics table is UNIQUE_KEYS, whose DELETE accepts nothing else.
+    public static String buildDropExternalStatSQLForDroppedPartitions(String tableUUID, List<String> partitionNames,
+                                                                      List<String> columnNames) {
+        Preconditions.checkState(partitionNames != null && !partitionNames.isEmpty());
+        Preconditions.checkState(columnNames != null && !columnNames.isEmpty());
+        return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME +
+                " WHERE " + buildTableUUIDInPredicateQuoted(tableUUID) +
+                " AND PARTITION_NAME IN (" + quotedInList(partitionNames) + ")" +
+                " AND COLUMN_NAME IN (" + quotedInList(columnNames) + ")";
+    }
+
+    private static String quotedInList(List<String> values) {
+        return values.stream().map(v -> "'" + SqlUtils.escapeSqlString(v) + "'").collect(Collectors.joining(", "));
+    }
+
     // Same cleanup purpose as buildDropExternalStatSQLForPartitions, for external_histogram_statistics
     // (PK is table_uuid + column_name, no partition dimension).
     public static String buildDropExternalHistogramSQLForRawUuid(String rawTableUUID, List<String> columnNames) {

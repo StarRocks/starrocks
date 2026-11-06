@@ -181,6 +181,15 @@ This topic introduces the following types of FE configurations:
 - Description: The least fraction of the partitions an external-table statistics collection asked for that must actually be collected before a column's statistics are recorded. A collection that is cut short - some queries tolerated away, or the job failing partway - still writes rows for the partitions it read and records how many that was, so the read path scales them correctly. Below some coverage that stops being worthwhile: row counts extrapolate from the partitions collected, but NDV does not, and NDV is what join cardinality estimates are most sensitive to. A column collected from a twentieth of its partitions would hand the optimizer an NDV roughly twenty times too small, presented as fact. A column below this ratio is left without metadata instead, so the optimizer falls back to the connector's own table metadata: an accurate row count and no NDV, which gives a default selectivity rather than a confidently wrong one. Measured against what the collection asked for, not against the table, so a sample is not treated as sparse merely for being a sample. A value of `0` or less records whatever was collected.
 - Introduced in: v4.1
 
+### `connector_table_analyze_dropped_partition_stats_grace_second`
+
+- Default: 86400
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How long the column statistics of an external-table partition that no longer exists are kept. At the end of each successful statistics collection, the statistics of partitions missing from the table's current partition list are deleted once none of their rows has been written for longer than this value. Without the cleanup, the statistics of dropped partitions (for example, partitions expired or deleted in Iceberg) keep contributing to the table's row count, NDV, and min/max values. The grace period protects partitions that a concurrent collection has just written but that the current collection's partition list does not include yet. A value of `0` or less disables the cleanup.
+- Introduced in: v4.2
+
 ### `connector_table_analyze_memory_backoff_budget_second`
 
 - Default: 300
