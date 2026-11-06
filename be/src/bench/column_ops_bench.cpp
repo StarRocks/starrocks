@@ -423,10 +423,10 @@ static void BM_SimdFilterRange_InPlace(benchmark::State& state) {
     run_filter_range_bench<T, true>(state);
 }
 
-BENCHMARK_TEMPLATE(BM_SimdFilterRange, uint32_t)->ArgsProduct({{0, 1, 10, 25, 50, 75, 90, 99, 100}, {0, 16, 32}});
-BENCHMARK_TEMPLATE(BM_SimdFilterRange, uint64_t)->ArgsProduct({{0, 1, 10, 25, 50, 75, 90, 99, 100}, {0, 16, 32}});
-BENCHMARK_TEMPLATE(BM_SimdFilterRange_InPlace, uint32_t)->ArgsProduct({{0, 10, 50, 90, 100}, {0, 16}});
-BENCHMARK_TEMPLATE(BM_SimdFilterRange_InPlace, uint64_t)->ArgsProduct({{0, 10, 50, 90, 100}, {0, 16}});
+BENCHMARK_TEMPLATE(BM_SimdFilterRange, uint32_t)->ArgsProduct({{0, 1, 5, 10, 25, 50, 75, 90, 99, 100}, {0, 16, 32}});
+BENCHMARK_TEMPLATE(BM_SimdFilterRange, uint64_t)->ArgsProduct({{0, 1, 5, 10, 25, 50, 75, 90, 99, 100}, {0, 16, 32}});
+BENCHMARK_TEMPLATE(BM_SimdFilterRange_InPlace, uint32_t)->ArgsProduct({{0, 1, 5, 10, 50, 90, 100}, {0, 16}});
+BENCHMARK_TEMPLATE(BM_SimdFilterRange_InPlace, uint64_t)->ArgsProduct({{0, 1, 5, 10, 50, 90, 100}, {0, 16}});
 
 #if defined(__ARM_NEON) && defined(__aarch64__)
 template <typename T, size_t (*Kernel)(T*, const T*, const uint8_t*, size_t, size_t)>
@@ -449,9 +449,9 @@ static void BM_SimdFilterKernel(benchmark::State& state) {
 }
 
 BENCHMARK_TEMPLATE(BM_SimdFilterKernel, uint32_t, SIMD::Filter::detail::compress_neon_w4)
-        ->ArgsProduct({{0, 1, 10, 25, 50, 75, 90, 99, 100}, {0, 16, 32}});
+        ->ArgsProduct({{0, 1, 5, 10, 25, 50, 75, 90, 99, 100}, {0, 16, 32}});
 BENCHMARK_TEMPLATE(BM_SimdFilterKernel, uint64_t, SIMD::Filter::detail::compress_neon_w8)
-        ->ArgsProduct({{0, 1, 10, 25, 50, 75, 90, 99, 100}, {0, 16, 32}});
+        ->ArgsProduct({{0, 1, 5, 10, 25, 50, 75, 90, 99, 100}, {0, 16, 32}});
 #endif
 
 } // namespace starrocks
