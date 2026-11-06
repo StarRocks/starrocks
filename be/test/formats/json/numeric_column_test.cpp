@@ -239,6 +239,49 @@ TEST_F(AddNumericColumnTest, test_add_double_big_integer) {
     ASSERT_DOUBLE_EQ(1e40, column->get_data()[2]);
 }
 
+TEST_F(AddNumericColumnTest, test_add_big_integer_overflow) {
+    simdjson::ondemand::parser parser;
+
+    // 41-digit integer (10^40) exceeds int128_t::max() (~1.7e38) and float::max() (~3.4e38).
+    auto json_1e40 = R"(  { "f_num": 10000000000000000000000000000000000000000} )"_padded;
+
+    // 1. int128_t column: string_to_int<int128_t> overflows int128_t, triggering the conversion failure branch.
+    {
+        auto col_i128 = FixedLengthColumn<int128_t>::create();
+        TypeDescriptor t(TYPE_LARGEINT);
+        auto doc = parser.iterate(json_1e40);
+        simdjson::ondemand::value val = doc.find_field("f_num");
+        auto st = add_numeric_column<int128_t>(col_i128.get(), t, "f_num", &val);
+        ASSERT_FALSE(st.ok());
+        ASSERT_TRUE(st.is_invalid_argument());
+        ASSERT_TRUE(st.to_string().find("Fail to convert big integer") != std::string::npos);
+    }
+
+    // 2. float column: string_to_float<float> overflows float, triggering the conversion failure branch.
+    {
+        auto col_float = FixedLengthColumn<float>::create();
+        auto doc = parser.iterate(json_1e40);
+        simdjson::ondemand::value val = doc.find_field("f_num");
+        auto st = add_numeric_column<float>(col_float.get(), TYPE_FLOAT_DESC, "f_num", &val);
+        ASSERT_FALSE(st.ok());
+        ASSERT_TRUE(st.is_invalid_argument());
+        ASSERT_TRUE(st.to_string().find("Fail to convert big integer") != std::string::npos);
+    }
+
+    // 3. double column: a 315-digit integer (10^310) exceeds double::max() (~1.79e308).
+    {
+        std::string raw_json = R"(  { "f_num": 1)" + std::string(310, '0') + "} ";
+        simdjson::padded_string json_1e310(raw_json);
+        auto col_double = FixedLengthColumn<double>::create();
+        auto doc = parser.iterate(json_1e310);
+        simdjson::ondemand::value val = doc.find_field("f_num");
+        auto st = add_numeric_column<double>(col_double.get(), TYPE_DOUBLE_DESC, "f_num", &val);
+        ASSERT_FALSE(st.ok());
+        ASSERT_TRUE(st.is_invalid_argument());
+        ASSERT_TRUE(st.to_string().find("Fail to convert big integer") != std::string::npos);
+    }
+}
+
 TEST_F(AddNumericColumnTest, test_add_big_integer_trailing_garbage) {
     simdjson::ondemand::parser parser;
     for (std::string_view raw :
