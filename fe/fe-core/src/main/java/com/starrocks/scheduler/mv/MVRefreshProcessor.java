@@ -44,6 +44,7 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.mv.refresh.pct.MVPCTRefreshPlanner;
 import com.starrocks.mv.refresh.pct.MVPCTRefreshSynchronizer;
@@ -890,6 +891,10 @@ public abstract class MVRefreshProcessor {
         if (table.isNativeTableOrMaterializedView()) {
             return Lists.newArrayList(((OlapTable) table).getVisiblePartitionNames());
         } else if (MVPCTRefreshPartitioner.isPartitionRefreshSupported(table)) {
+            return Lists.newArrayList(PartitionUtil.getPartitionNames(table));
+        } else if (mv.getPartitionInfo().isUnPartitioned() && DeltaLakePartitionTraits.isTableVersionTracked(table)) {
+            // TODO: a partitioned mv never fully refreshes on a Delta change (needsRefreshBasedOnNonRefTables skips
+            //  non-PCT tables), so recording the version could mark partitions built from an older version as fresh.
             return Lists.newArrayList(PartitionUtil.getPartitionNames(table));
         } else {
             return Lists.newArrayList();
