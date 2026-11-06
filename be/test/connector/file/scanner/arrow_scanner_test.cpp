@@ -6000,6 +6000,67 @@ TEST_F(ArrowScannerTest, TestStreamRejectsJsonStructKeyExpansionInPreflight) {
         EXPECT_EQ(1, ctx->counter->arrow_messages_read);
         scanner.close();
     }
+
+    // 1-row map<double, int8> with 4,096 keys near DBL_MAX (~36 KiB wire size < 1 MiB pipe/pool cap, but ~1.35 MiB
+    // formatted key output > 1 MiB cap) targeting JSON is rejected in preflight before convert_single_arrow_map()
+    // formats 316-byte std::to_string(double) keys into vpack::Builder.
+    {
+        constexpr int32_t kMapEntries = 4'096;
+        arrow::DoubleBuilder bad_key_builder;
+        ASSERT_ARROW_OK(
+                bad_key_builder.AppendValues(std::vector<double>(kMapEntries, std::numeric_limits<double>::max())));
+        std::shared_ptr<arrow::Array> bad_keys;
+        ASSERT_ARROW_OK(bad_key_builder.Finish(&bad_keys));
+
+        arrow::Int8Builder bad_item_builder;
+        ASSERT_ARROW_OK(bad_item_builder.AppendValues(std::vector<int8_t>(kMapEntries, 1)));
+        std::shared_ptr<arrow::Array> bad_items;
+        ASSERT_ARROW_OK(bad_item_builder.Finish(&bad_items));
+
+        arrow::Int32Builder bad_offsets_builder;
+        ASSERT_ARROW_OK(bad_offsets_builder.AppendValues({0, kMapEntries}));
+        std::shared_ptr<arrow::Array> bad_offsets;
+        ASSERT_ARROW_OK(bad_offsets_builder.Finish(&bad_offsets));
+
+        auto bad_map = arrow::MapArray::FromArrays(bad_offsets, bad_keys, bad_items).ValueOrDie();
+        auto map_schema = arrow::schema({arrow::field("c0_json", bad_map->type())});
+        auto bad_map_batch = arrow::RecordBatch::Make(map_schema, 1, {bad_map});
+
+        arrow::DoubleBuilder ok_key_builder;
+        ASSERT_ARROW_OK(ok_key_builder.AppendValues({1.5, 2.5}));
+        std::shared_ptr<arrow::Array> ok_keys;
+        ASSERT_ARROW_OK(ok_key_builder.Finish(&ok_keys));
+        arrow::Int8Builder ok_item_builder;
+        ASSERT_ARROW_OK(ok_item_builder.AppendValues({7, 8}));
+        std::shared_ptr<arrow::Array> ok_items;
+        ASSERT_ARROW_OK(ok_item_builder.Finish(&ok_items));
+        arrow::Int32Builder ok_offsets_builder;
+        ASSERT_ARROW_OK(ok_offsets_builder.AppendValues({0, 2}));
+        std::shared_ptr<arrow::Array> ok_offsets;
+        ASSERT_ARROW_OK(ok_offsets_builder.Finish(&ok_offsets));
+        auto ok_map = arrow::MapArray::FromArrays(ok_offsets, ok_keys, ok_items).ValueOrDie();
+        auto ok_map_batch = arrow::RecordBatch::Make(map_schema, 1, {ok_map});
+
+        auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+        auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+        ASSERT_OK(ctx_res.status());
+        auto& ctx = ctx_res.value();
+
+        append_ipc_message(pipe, map_schema, {bad_map_batch});
+        append_ipc_message(pipe, map_schema, {ok_map_batch});
+        ASSERT_OK(pipe->finish());
+
+        ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+        ASSERT_OK(scanner.open());
+        auto res = scanner.get_next();
+        ASSERT_OK(res.status());
+        ASSERT_EQ(1, res.value()->num_rows());
+        EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+        EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
+        EXPECT_EQ(1, ctx->counter->num_rows_filtered);
+        EXPECT_EQ(1, ctx->counter->arrow_messages_read);
+        scanner.close();
+    }
 }
 
 namespace {

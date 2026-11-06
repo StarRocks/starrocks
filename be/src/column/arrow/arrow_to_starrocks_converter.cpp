@@ -1588,6 +1588,24 @@ int64_t estimate_default_column_bytes(const TypeDescriptor& dst_type, int64_t le
 }
 
 int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t length, const TypeDescriptor* dst_type,
+                              int depth);
+
+int64_t estimate_json_map_key_bytes(const arrow::Array& keys, int64_t begin, int64_t length, int depth) {
+    const TypeDescriptor varchar_dst = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    int64_t key_bytes = estimate_output_bytes(keys, begin, length, &varchar_dst, depth);
+    const arrow::Type::type effective_type_id = unwrap_arrow_dictionary_type(keys.type().get())->id();
+    // convert_array_element_to_string() in arrow_to_json_converter.cpp formats numeric MAP keys with
+    // std::to_string(), which uses fixed-point "%f" for floating-point values (up to 317 chars for double near
+    // DBL_MAX and 47 chars for float near FLT_MAX, plus VelocyPack key/index overhead).
+    if (effective_type_id == arrow::Type::DOUBLE) {
+        key_bytes = std::max(key_bytes, saturating_mul(length, 328));
+    } else if (effective_type_id == arrow::Type::FLOAT) {
+        key_bytes = std::max(key_bytes, saturating_mul(length, 58));
+    }
+    return key_bytes;
+}
+
+int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t length, const TypeDescriptor* dst_type,
                               int depth) {
     if (length <= 0) {
         return 0;
@@ -1710,7 +1728,7 @@ int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t 
             return std::max(untyped_map_bytes, total);
         }
         const TypeDescriptor json_dst(TYPE_JSON);
-        const int64_t json_keys = estimate_output_bytes(*a.keys(), first, child_len, &json_dst, depth + 1);
+        const int64_t json_keys = estimate_json_map_key_bytes(*a.keys(), first, child_len, depth + 1);
         const int64_t json_items = estimate_output_bytes(*a.items(), first, child_len, &json_dst, depth + 1);
         const int64_t json_map_bytes = saturating_add(json_keys, json_items);
         const int64_t map_payload = std::max({untyped_map_bytes, json_map_bytes, saturating_mul(child_len, 16)});

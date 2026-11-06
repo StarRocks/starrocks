@@ -3146,6 +3146,35 @@ TEST(ArrowOutputSizeEstimateTest, DestinationTypeAwareEstimation) {
         auto list_dict_i8 = arrow::ListArray::FromArrays(*make_offsets32({0, 1000}), *dict_i8).ValueOrDie();
         EXPECT_GE(estimate_arrow_array_output_bytes(*list_dict_i8, 0, 1, &arr_dec256_type), 36'004);
     }
+
+    // Case 9 (JSON-serialized MAP with floating-point keys formatted via std::to_string()):
+    // 1-row map<double, int8> with 250,000 entries near DBL_MAX targeting JSON and VARCHAR exceeds 64 MiB.
+    {
+        constexpr int32_t kEntries = 250'000;
+        arrow::DoubleBuilder dbl_builder;
+        ASSERT_TRUE(dbl_builder.AppendValues(std::vector<double>(kEntries, std::numeric_limits<double>::max())).ok());
+        std::shared_ptr<arrow::Array> dbl_keys;
+        ASSERT_TRUE(dbl_builder.Finish(&dbl_keys).ok());
+
+        arrow::Int8Builder i8_builder;
+        ASSERT_TRUE(i8_builder.AppendValues(std::vector<int8_t>(kEntries, 1)).ok());
+        std::shared_ptr<arrow::Array> i8_items;
+        ASSERT_TRUE(i8_builder.Finish(&i8_items).ok());
+
+        auto map_dbl = arrow::MapArray::FromArrays(make_offsets32({0, kEntries}), dbl_keys, i8_items).ValueOrDie();
+        auto json_type = TypeDescriptor::from_logical_type(TYPE_JSON);
+        auto varchar_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+        EXPECT_GT(estimate_arrow_array_output_bytes(*map_dbl, 0, 1, &json_type), 64LL * 1024 * 1024);
+        EXPECT_GT(estimate_arrow_array_output_bytes(*map_dbl, 0, 1, &varchar_type), 128LL * 1024 * 1024);
+
+        arrow::FloatBuilder flt_builder;
+        ASSERT_TRUE(flt_builder.AppendValues(std::vector<float>(2000, std::numeric_limits<float>::max())).ok());
+        std::shared_ptr<arrow::Array> flt_keys;
+        ASSERT_TRUE(flt_builder.Finish(&flt_keys).ok());
+        auto map_flt =
+                arrow::MapArray::FromArrays(make_offsets32({0, 2000}), flt_keys, i8_items->Slice(0, 2000)).ValueOrDie();
+        EXPECT_GE(estimate_arrow_array_output_bytes(*map_flt, 0, 1, &json_type), 2000 * 58);
+    }
 }
 
 } // namespace starrocks
