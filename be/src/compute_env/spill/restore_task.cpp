@@ -16,13 +16,14 @@
 
 #include <glog/logging.h>
 
+#include <algorithm>
+
 #include "common/runtime_profile.h"
 #include "compute_env/spill/yield.h"
 
 namespace starrocks::spill {
 
 Status YieldableRestoreTask::do_read(workgroup::YieldContext& yield_ctx, SerdeContext& context) {
-    size_t num_eos = 0;
     yield_ctx.total_yield_point_cnt = _sub_stream.size();
     auto wg = yield_ctx.wg;
     while (yield_ctx.yield_point < yield_ctx.total_yield_point_cnt) {
@@ -41,13 +42,18 @@ Status YieldableRestoreTask::do_read(workgroup::YieldContext& yield_ctx, SerdeCo
                 }
             }
             yield_ctx.yield_point++;
-            num_eos += _sub_stream[i]->eof();
         }
 
         BREAK_IF_YIELD(wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);
     }
 
-    if (num_eos == _sub_stream.size()) {
+    // Decide EOF from the sub-streams' actual state, not from how many of them this invocation happened
+    // to visit. A task resumed after a yield re-enters with yield_point > 0, so a per-invocation count can
+    // never reach _sub_stream.size() and a fully drained stream would finish without being marked EOF --
+    // leaving the reader waiting for a restore task that is never re-armed.
+    const bool all_eof =
+            std::all_of(_sub_stream.begin(), _sub_stream.end(), [](const auto& stream) { return stream->eof(); });
+    if (all_eof) {
         _input_stream->mark_is_eof();
         return Status::EndOfFile("eos");
     }
