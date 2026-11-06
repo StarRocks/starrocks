@@ -294,7 +294,6 @@ namespace detail {
 inline constexpr size_t kNeonBatchNums = 16;
 inline constexpr uint64_t kAllNibblesMask = 0xffff'ffff'ffff'ffffull;
 inline constexpr uint64_t kNibbleHighBitsMask = 0x8888'8888'8888'8888ull;
-inline constexpr int kNeonCompressMinBitsW8 = 6; // matches x86 kCompressMinBits; validated on Arm Neoverse-V2 (c4a)
 
 size_t compress_neon_w4(uint32_t* dst, const uint32_t* src, const uint8_t* selector, size_t from, size_t to) {
     size_t start = from;
@@ -310,6 +309,12 @@ size_t compress_neon_w4(uint32_t* dst, const uint32_t* src, const uint8_t* selec
                 std::memmove(dst + result, src + start, kNeonBatchNums * sizeof(uint32_t));
             }
             result += kNeonBatchNums;
+        } else if (uint64_t m = nibble_mask & kNibbleHighBitsMask; __builtin_popcountll(m) < kNeonCompressMinBitsW4) {
+            // Sparse guard: for 1-2 survivors across 16 elements, a scalar CTZ bit-walk
+            // (1-2 indexed copies) beats 4 sub-batch mask extractions + 128-bit TBLs.
+            for (; m != 0; m &= m - 1) {
+                dst[result++] = src[start + (__builtin_ctzll(m) >> 2)];
+            }
         } else {
             for (int k = 0; k < 4; ++k) {
                 uint32_t mask4 = extract_neon_mask4(nibble_mask, k);
@@ -347,10 +352,10 @@ size_t compress_neon_w8(uint64_t* dst, const uint64_t* src, const uint8_t* selec
                 std::memmove(dst + result, src + start, kNeonBatchNums * sizeof(uint64_t));
             }
             result += kNeonBatchNums;
-        } else if (__builtin_popcountll(nibble_mask & kNibbleHighBitsMask) < kNeonCompressMinBitsW8) {
+        } else if (uint64_t m = nibble_mask & kNibbleHighBitsMask; __builtin_popcountll(m) < kNeonCompressMinBitsW8) {
             // Sparse guard (mirrors x86 compress_w8 kCompressMinBits): 2-lane TBL steps are barely better than
             // scalar copies, so sparse batches (< 6 survivors) use the ctz bit-walk.
-            for (uint64_t m = nibble_mask & kNibbleHighBitsMask; m != 0; m &= m - 1) {
+            for (; m != 0; m &= m - 1) {
                 dst[result++] = src[start + (__builtin_ctzll(m) >> 2)];
             }
         } else {

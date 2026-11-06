@@ -91,6 +91,9 @@ constexpr uint32_t extract_neon_mask2(uint64_t nibble_mask, int k) noexcept {
     return (pair_bits | (pair_bits >> 3)) & 0x3u;
 }
 
+inline constexpr int kNeonCompressMinBitsW4 = 3;
+inline constexpr int kNeonCompressMinBitsW8 = 6;
+
 #if defined(__ARM_NEON) && defined(__aarch64__)
 size_t compress_neon_w4(uint32_t* dst, const uint32_t* src, const uint8_t* selector, size_t from, size_t to);
 size_t compress_neon_w8(uint64_t* dst, const uint64_t* src, const uint8_t* selector, size_t from, size_t to);

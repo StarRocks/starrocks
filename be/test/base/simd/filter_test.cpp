@@ -417,6 +417,45 @@ PARALLEL_TEST(SimdFilterTest, exhaustive_subbatch_patterns_and_float_bits) {
     }
 }
 
+PARALLEL_TEST(SimdFilterTest, sparse_four_byte_batches) {
+    static_assert(SIMD::Filter::detail::kNeonCompressMinBitsW4 == 3);
+    static_assert(SIMD::Filter::detail::kNeonCompressMinBitsW8 == 6);
+    // Exercise 0, 1, 2 (CTZ sparse path), 3, 4 (vqtbl1q_u8 path), 15, 16 survivors per 16-row batch
+    // across all 16 rotations, including non-zero `from` and unaligned `kN = 37` tail.
+    const int counts[] = {0, 1, 2, 3, 4, 15, 16};
+    const uint8_t truthy_bytes[] = {1, 0x02, 0x7F, 0x80, 0xFF};
+    constexpr size_t kN = 37;
+    for (int cnt : counts) {
+        for (int rot = 0; rot < 16; ++rot) {
+            std::vector<uint8_t> sel(kN, 0);
+            for (int b = 0; b < cnt; ++b) {
+                size_t pos0 = (rot + b * 3) & 15;
+                size_t pos1 = 16 + ((rot + b * 5) & 15);
+                while (sel[pos0]) pos0 = (pos0 + 1) & 15;
+                while (sel[pos1]) pos1 = 16 + ((pos1 + 1) & 15);
+                sel[pos0] = truthy_bytes[(rot + b) % 5];
+                sel[pos1] = truthy_bytes[(rot + b + 2) % 5];
+            }
+            // Populate tail [32, 37)
+            for (size_t t = 32; t < kN; ++t) {
+                sel[t] = ((t + rot + cnt) & 1u) ? truthy_bytes[t % 5] : 0;
+            }
+            for (size_t from : {size_t(0), size_t(3)}) {
+                for (bool in_place : {false, true}) {
+                    expect_matches_reference<uint32_t>(public_api<uint32_t>(), kN, from, kN, sel, in_place,
+                                                       "sparse_w4_u32_api");
+                    expect_matches_reference<float>(public_api<float>(), kN, from, kN, sel, in_place,
+                                                    "sparse_w4_f32_api");
+#if defined(__ARM_NEON) && defined(__aarch64__)
+                    expect_matches_reference<uint32_t>(SIMD::Filter::detail::compress_neon_w4, kN, from, kN, sel,
+                                                       in_place, "sparse_w4_u32_neon");
+#endif
+                }
+            }
+        }
+    }
+}
+
 PARALLEL_TEST(SimdFilterTest, sparse_eight_byte_batches) {
     // Exercise 0, 1, 2, 5, 6, 7, 15, 16 survivors per 16-row batch at every rotation (0..15).
     const int counts[] = {0, 1, 2, 5, 6, 7, 15, 16};
