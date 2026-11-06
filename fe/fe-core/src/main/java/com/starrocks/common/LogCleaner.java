@@ -129,15 +129,30 @@ public class LogCleaner extends FrontendDaemon {
                     continue;
                 }
                 // Both -Xlog:gc*:filename:time and -Xlog:gc*:file=filename:time are supported.
-                String[] fields = argument.substring("-Xlog:".length()).split(":", 3);
+                String[] fields = argument.substring("-Xlog:".length()).split(":", 2);
                 if (fields.length < 2) {
                     continue;
                 }
                 String output = fields[1].startsWith("file=") ? fields[1].substring(5) : fields[1];
+                // Colons inside a quoted filename are not logging-field separators.
+                boolean quoted = false;
+                int end = 0;
+                for (; end < output.length(); end++) {
+                    if (output.charAt(end) == '"') {
+                        quoted = !quoted;
+                    } else if (output.charAt(end) == ':' && !quoted) {
+                        break;
+                    }
+                }
+                if (quoted) {
+                    throw new IllegalArgumentException("Unterminated quoted GC log output: " + output);
+                }
+                output = output.substring(0, end);
                 if (output.startsWith("\"") && output.endsWith("\"")) {
                     output = output.substring(1, output.length() - 1);
                 }
-                output = output.replace("%p", Long.toString(ProcessHandle.current().pid()));
+                // HotSpot expands only the first %p; any remaining placeholder triggers the guard below.
+                output = output.replaceFirst("%p", Long.toString(ProcessHandle.current().pid()));
                 Path path = Paths.get(output);
                 if (!isGcLogFile(path.getFileName().toString())) {
                     continue;

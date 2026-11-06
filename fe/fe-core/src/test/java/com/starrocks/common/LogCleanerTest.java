@@ -327,6 +327,40 @@ public class LogCleanerTest {
         assertFalse(new File(testLogDir, "fe.log.20240101-1").exists());
     }
 
+    @Test
+    public void testGcRepeatedPidPlaceholderProtectsFiles() throws IOException {
+        String activeName = "fe.gc.log." + ProcessHandle.current().pid() + ".%p";
+        long oldTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(10);
+        createLogFileWithTime(activeName, 10, oldTime);
+        createLogFileWithTime("fe.gc.log.archive", 10, oldTime);
+        for (boolean diskCleanup : List.of(false, true)) {
+            Config.log_cleaner_disk_util_based_enable = diskCleanup;
+            new LogCleaner(List.of("-Xlog:gc*:file=" + new File(testLogDir, "fe.gc.log.%p.%p") + ":time"))
+                    .runAfterCatalogReady();
+            assertTrue(new File(testLogDir, activeName).exists());
+            assertTrue(new File(testLogDir, "fe.gc.log.archive").exists());
+        }
+    }
+
+    @Test
+    public void testGcQuotedOutputWithColons() throws IOException {
+        Config.log_cleaner_disk_util_based_enable = false;
+        long oldTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(10);
+        File gcDirectory = Files.createDirectory(testLogDir.toPath().resolve("gc:logs")).toFile();
+        File active = new File(gcDirectory, "fe.gc.log.12:34:56");
+        File old = new File(gcDirectory, "fe.gc.log.archive");
+        Files.writeString(active.toPath(), "current");
+        Files.setLastModifiedTime(active.toPath(), FileTime.fromMillis(oldTime));
+        for (String prefix : List.of("", "file=")) {
+            Files.writeString(old.toPath(), "old");
+            Files.setLastModifiedTime(old.toPath(), FileTime.fromMillis(oldTime));
+            new LogCleaner(List.of("-Xlog:gc*:" + prefix + "\"" + active + "\":time"))
+                    .runAfterCatalogReady();
+            assertTrue(active.exists());
+            assertFalse(old.exists());
+        }
+    }
+
     private void createLogFile(String fileName, long size) throws IOException {
         File file = new File(testLogDir, fileName);
         try (java.io.FileWriter writer = new java.io.FileWriter(file)) {
