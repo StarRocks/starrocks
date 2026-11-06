@@ -288,4 +288,56 @@ PARALLEL_TEST(SimdFilterTest, range_filter_nonzero_offsets_exact_16_multiples) {
     }
 }
 
+PARALLEL_TEST(SimdFilterTest, SparseAndHalfEmptyBatchCompaction4BAnd8B) {
+    constexpr size_t kNumElements = 128;
+    // Test sparse bit counts 1..7 per 32-element batch and half-empty masks (lower 16 only, upper 16 only)
+    for (int bits_per_batch : {1, 2, 3, 5, 6, 7, 16}) {
+        for (int half_mode : {0, 1, 2}) { // 0: spread, 1: lower 16 lanes only, 2: upper 16 lanes only
+            std::vector<uint32_t> src32(kNumElements);
+            std::vector<uint64_t> src64(kNumElements);
+            std::vector<uint8_t> sel(kNumElements, 0);
+            std::vector<uint32_t> expected32;
+            std::vector<uint64_t> expected64;
+
+            for (size_t i = 0; i < kNumElements; ++i) {
+                src32[i] = static_cast<uint32_t>(10000 + i);
+                src64[i] = static_cast<uint64_t>(20000 + i);
+            }
+
+            for (size_t batch = 0; batch < kNumElements / 32; ++batch) {
+                int placed = 0;
+                for (size_t lane = 0; lane < 32 && placed < bits_per_batch; ++lane) {
+                    if (half_mode == 1 && lane >= 16) continue;
+                    if (half_mode == 2 && lane < 16) continue;
+                    sel[batch * 32 + lane] = 1;
+                    ++placed;
+                }
+            }
+
+            for (size_t i = 0; i < kNumElements; ++i) {
+                if (sel[i]) {
+                    expected32.push_back(src32[i]);
+                    expected64.push_back(src64[i]);
+                }
+            }
+
+            // When sparse (bits_per_batch < 6), exact destination sizing (expected.size()) must not overflow
+            size_t pad = (bits_per_batch < 6) ? 0 : 16;
+            std::vector<uint32_t> dst32(expected32.size() + pad, 0xDEADBEEFu);
+            size_t out32 = filter_range(dst32.data(), src32.data(), sel, 0, kNumElements);
+            ASSERT_EQ(expected32.size(), out32);
+            for (size_t i = 0; i < out32; ++i) {
+                ASSERT_EQ(expected32[i], dst32[i]);
+            }
+
+            std::vector<uint64_t> dst64(expected64.size() + pad, 0xDEADBEEFCAFEBABEull);
+            size_t out64 = filter_range(dst64.data(), src64.data(), sel, 0, kNumElements);
+            ASSERT_EQ(expected64.size(), out64);
+            for (size_t i = 0; i < out64; ++i) {
+                ASSERT_EQ(expected64[i], dst64[i]);
+            }
+        }
+    }
+}
+
 } // namespace starrocks
