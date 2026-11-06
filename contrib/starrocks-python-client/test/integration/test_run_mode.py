@@ -22,14 +22,13 @@ needs OPERATE. Tests branch on which one the server under test supports.
 import logging
 from typing import Any
 
-import pytest
-from sqlalchemy import create_engine, exc, text
+from sqlalchemy import exc, testing, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.testing import config, engines, fixtures
 
 from starrocks.common.types import SystemRunMode
 
 
-READ_ONLY_USER = "sqla_run_mode_ro"
 READ_ONLY_PASSWORD = "sqla_run_mode_ro_pw"
 
 
@@ -49,24 +48,6 @@ def _supports_run_mode_variable(root_engine: Engine) -> bool:
         return False
 
 
-@pytest.fixture(scope="module")
-def read_only_engine(sr_root_engine: Engine) -> Engine:
-    """An engine for a user holding only SELECT on the test database."""
-    database = sr_root_engine.url.database
-    with sr_root_engine.connect() as conn:
-        conn.execute(text(f"DROP USER IF EXISTS '{READ_ONLY_USER}'@'%'"))
-        conn.execute(text(f"CREATE USER '{READ_ONLY_USER}'@'%' IDENTIFIED BY '{READ_ONLY_PASSWORD}'"))
-        conn.execute(text(f"GRANT SELECT ON ALL TABLES IN DATABASE {database} TO '{READ_ONLY_USER}'@'%'"))
-    url = sr_root_engine.url.set(username=READ_ONLY_USER, password=READ_ONLY_PASSWORD)
-    engine = create_engine(url)
-    try:
-        yield engine
-    finally:
-        engine.dispose()
-        with sr_root_engine.connect() as conn:
-            conn.execute(text(f"DROP USER IF EXISTS '{READ_ONLY_USER}'@'%'"))
-
-
 def _connect_and_capture_warnings(engine: Engine, caplog: Any) -> list:
     """Connect for the first time (which runs dialect.initialize) and return dialect warnings."""
     caplog.clear()
@@ -76,32 +57,49 @@ def _connect_and_capture_warnings(engine: Engine, caplog: Any) -> list:
     return [r for r in caplog.records if r.name == "starrocks.dialect" and r.levelno >= logging.WARNING]
 
 
-class TestRunModeIntegration:
-    def test_root_detects_run_mode(self, sr_root_engine: Engine):
-        with sr_root_engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        assert sr_root_engine.dialect.run_mode == _frontend_config_run_mode(sr_root_engine)
+class RunModeTest(fixtures.TestBase):
+    __backend__ = True
+    __only_on__ = "starrocks"
 
-    def test_read_only_user_detects_run_mode_without_warning(
-        self, sr_root_engine: Engine, read_only_engine: Engine, caplog: Any
-    ):
-        if not _supports_run_mode_variable(sr_root_engine):
-            pytest.skip("server has no @@run_mode variable (added in StarRocks 4.0)")
+    @testing.fixture
+    def read_only_engine(self):
+        """An engine for a user holding only SELECT on the test database.
+
+        The user is named after the test database, so parallel workers do not share it.
+        """
+        database = config.db.url.database
+        user = f"sqla_ro_{database}"
+        with config.db.begin() as conn:
+            conn.execute(text(f"DROP USER IF EXISTS '{user}'@'%'"))
+            conn.execute(text(f"CREATE USER '{user}'@'%' IDENTIFIED BY '{READ_ONLY_PASSWORD}'"))
+            conn.execute(text(f"GRANT SELECT ON ALL TABLES IN DATABASE {database} TO '{user}'@'%'"))
+        engine = engines.testing_engine(url=config.db.url.set(username=user, password=READ_ONLY_PASSWORD))
+        try:
+            yield engine
+        finally:
+            engine.dispose()
+            with config.db.begin() as conn:
+                conn.execute(text(f"DROP USER IF EXISTS '{user}'@'%'"))
+
+    def test_root_detects_run_mode(self):
+        assert config.db.dialect.run_mode == _frontend_config_run_mode(config.db)
+
+    def test_read_only_user_detects_run_mode_without_warning(self, read_only_engine, caplog):
+        if not _supports_run_mode_variable(config.db):
+            config.skip_test("server has no @@run_mode variable (added in StarRocks 4.0.7)")
 
         warnings = _connect_and_capture_warnings(read_only_engine, caplog)
 
-        assert read_only_engine.dialect.run_mode == _frontend_config_run_mode(sr_root_engine)
+        assert read_only_engine.dialect.run_mode == _frontend_config_run_mode(config.db)
         assert not warnings, [r.getMessage() for r in warnings]
 
-    def test_read_only_user_falls_back_to_default_on_old_server(
-        self, sr_root_engine: Engine, read_only_engine: Engine, caplog: Any
-    ):
-        if _supports_run_mode_variable(sr_root_engine):
-            pytest.skip("server has @@run_mode; the fallback path is not reached")
+    def test_read_only_user_falls_back_to_default_on_old_server(self, read_only_engine, caplog):
+        """Neither source is readable without OPERATE, so the dialect warns and falls back to the
+        shared_nothing default rather than failing to connect."""
+        if _supports_run_mode_variable(config.db):
+            config.skip_test("server has @@run_mode; the fallback path is not reached")
 
         warnings = _connect_and_capture_warnings(read_only_engine, caplog)
 
-        # Neither source is readable without OPERATE, so the dialect warns and
-        # falls back to the shared_nothing default rather than failing to connect.
         assert read_only_engine.dialect.run_mode == SystemRunMode.SHARED_NOTHING
         assert any("Failed to get run_mode" in r.getMessage() for r in warnings)

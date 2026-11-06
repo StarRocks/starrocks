@@ -20,10 +20,11 @@ avoiding the complexity of mocking the full reflection flow.
 """
 
 from unittest.mock import Mock
+import warnings
 
 from alembic.operations import ops
-from alembic.testing import eq_
 from sqlalchemy import Column, MetaData, Table
+from sqlalchemy.testing import eq_, expect_raises_message, fixtures
 
 from starrocks.alembic.compare import _autogen_for_views, compare_view
 from starrocks.alembic.ops import AlterViewOp, CreateViewOp, DropViewOp
@@ -33,14 +34,16 @@ from starrocks.datatype import VARCHAR
 from starrocks.sql.schema import View
 
 
-class TestAutogenerateViews:
+class AutogenerateViewsTest(fixtures.TestBase):
     """Test full autogenerate flow with mock inspector.
 
     These tests use mock inspector to test CREATE/DROP operations which require
     get_view_names() functionality.
     """
 
-    def setup_method(self, method):
+    __requires__ = ("sqlalchemy_2",)
+
+    def setup_test(self):
         self.mock_inspector = Mock()
         self.mock_autogen_context = Mock()
         self.mock_autogen_context.inspector = self.mock_inspector
@@ -171,14 +174,16 @@ class TestAutogenerateViews:
         eq_(op.view_name, 'my_test_view')
 
 
-class TestCompareView:
+class CompareViewTest(fixtures.TestBase):
     """Test compare_view function directly (without full autogen flow).
 
     This approach avoids complex mocking of reflect_table and tests the core
     comparison logic with real SQLAlchemy Table/View objects.
     """
 
-    def setup_method(self, method):
+    __requires__ = ("sqlalchemy_2",)
+
+    def setup_test(self):
         self.mock_autogen_context = Mock()
         self.mock_autogen_context.dialect = Mock()
         self.mock_autogen_context.dialect.name = 'starrocks'
@@ -283,8 +288,6 @@ class TestCompareView:
         Compare generates AlterViewOp with the new comment for future compatibility.
         A warning is issued to inform users about current limitation.
         """
-        import warnings
-
         upgrade_ops = ops.UpgradeOps([])
 
         # Database view (no comment)
@@ -326,8 +329,6 @@ class TestCompareView:
 
     def test_alter_view_comment_value_to_none(self):
         """ALTER COMMENT: value → None (generates AlterViewOp with warning)."""
-        import warnings
-
         upgrade_ops = ops.UpgradeOps([])
 
         # Database view (with comment)
@@ -370,8 +371,6 @@ class TestCompareView:
 
     def test_alter_view_comment_value_to_different(self):
         """ALTER COMMENT: value1 → value2 (generates AlterViewOp with warning)."""
-        import warnings
-
         upgrade_ops = ops.UpgradeOps([])
 
         # Database view (old comment)
@@ -442,8 +441,6 @@ class TestCompareView:
 
     def test_alter_view_security_none_to_invoker(self):
         """ALTER SECURITY: None → INVOKER (generates AlterViewOp with warning)."""
-        import warnings
-
         upgrade_ops = ops.UpgradeOps([])
 
         # Database view (no security)
@@ -482,8 +479,6 @@ class TestCompareView:
 
     def test_alter_view_security_invoker_to_none(self):
         """ALTER SECURITY: INVOKER → None (generates AlterViewOp with warning)."""
-        import warnings
-
         upgrade_ops = ops.UpgradeOps([])
 
         # Database view (with security)
@@ -527,8 +522,6 @@ class TestCompareView:
     def test_alter_view_security_change_value(self):
         """ALTER SECURITY: INVOKER → NONE (generates AlterViewOp with warning).
         """
-        import warnings
-
         upgrade_ops = ops.UpgradeOps([])
 
         # Database view (INVOKER security)
@@ -599,8 +592,6 @@ class TestCompareView:
 
     def test_alter_view_columns_changed_with_definition(self):
         """ALTER COLUMNS: Changed together with definition (generates AlterViewOp with warning)."""
-        import warnings
-
         upgrade_ops = ops.UpgradeOps([])
 
         # Database view
@@ -645,8 +636,6 @@ class TestCompareView:
 
     def test_alter_view_columns_only_raises_error(self):
         """ALTER COLUMNS: Changed without definition (raises ValueError)."""
-        import pytest
-
         upgrade_ops = ops.UpgradeOps([])
 
         # Database view
@@ -669,7 +658,7 @@ class TestCompareView:
         )
 
         # Should raise NotImplementedError
-        with pytest.raises(NotImplementedError, match="does not support altering view columns independently"):
+        with expect_raises_message(NotImplementedError, "does not support altering view columns independently"):
             compare_view(
                 self.mock_autogen_context,
                 upgrade_ops,
@@ -736,28 +725,27 @@ class TestCompareView:
         eq_(len(upgrade_ops.ops), 0)
 
 
-class TestViewExceptions:
+class ViewExceptionsTest(fixtures.TestBase):
     """Test exception cases for View creation."""
+
+    __requires__ = ("sqlalchemy_2",)
 
     def test_view_without_definition_raises_error(self):
         """Test that creating a View without definition raises ValueError."""
-        import pytest
         m = MetaData()
-        with pytest.raises(ValueError, match="definition is required"):
+        with expect_raises_message(ValueError, "definition is required"):
             View('my_view', m)
 
     def test_view_with_invalid_definition_type_raises_error(self):
         """Test that creating a View with invalid definition type raises TypeError."""
-        import pytest
         m = MetaData()
-        with pytest.raises(TypeError, match="definition must be a string or a Selectable"):
+        with expect_raises_message(TypeError, "definition must be a string or a Selectable"):
             View('my_view', m, definition=123)  # Invalid type
 
     def test_view_with_none_definition_raises_error(self):
         """Test that explicitly passing None as definition raises ValueError."""
-        import pytest
         m = MetaData()
-        with pytest.raises(ValueError, match="definition is required"):
+        with expect_raises_message(ValueError, "definition is required"):
             View('my_view', m, definition=None)
 
     def test_view_with_selectable_definition(self):

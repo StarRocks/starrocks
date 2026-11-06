@@ -47,7 +47,7 @@ Alembic 将 **当前的 StarRocks schema** 与 **您的 SQLAlchemy 模型** 进�
 ### 先决条件
 
 - StarRocks Python 客户端：1.3.2 或更高版本
-- `SQLAlchemy`：1.4 或更高版本（推荐使用 SQLAlchemy 2.0，且使用 `sqlacodegen` 时是必需的）
+- `SQLAlchemy`：1.4 或更高版本。视图、物化视图、Alembic autogenerate 和 `sqlacodegen` 需要 SQLAlchemy 2.0。
 - `Alembic`：1.16 或更高版本
 
 ### 安装 StarRocks Python 客户端

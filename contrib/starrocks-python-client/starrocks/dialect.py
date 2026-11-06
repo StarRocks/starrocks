@@ -64,6 +64,7 @@ from starrocks.common.params import (
 )
 from starrocks.common.types import ColumnAggType, SystemRunMode, TableEngine, TableType
 from starrocks.common.utils import TableAttributeNormalizer
+from starrocks.schema_change import SchemaChangeJob
 from starrocks.sql.schema import View
 
 from . import reflection as _reflection
@@ -1714,6 +1715,22 @@ class StarRocksDialect(MySQLDialect_pymysql):
                 f"WHERE TableName={table_predicate}{state_clause}{order_by_clause}{limit_clause}")
         # logger.debug("generate show alter table statement: %s", stmt)
         return stmt
+
+    @staticmethod
+    def get_newest_schema_change_job(
+        connection: Connection, table_name: str, alter_type: str, schema: Optional[str] = None
+    ) -> Optional[SchemaChangeJob]:
+        """Return the table's newest job that ``SHOW ALTER TABLE <alter_type>`` lists, in any state, or None.
+
+        The newest job has the highest JobId, a unique counter that the FE increases, not the latest CreateTime:
+        CreateTime has second granularity, so jobs submitted back to back on a table share it, and ordering by it
+        returns an arbitrary one of them (observed: the oldest).
+        """
+        query = StarRocksDialect.gen_show_alter_table_statement(
+            table_name, alter_type, schema=schema, state=None, order_by="JobId DESC", limit=1, bind_table_name=True
+        )
+        row = connection.execute(text(query), {"table_name": table_name}).mappings().first()
+        return SchemaChangeJob.from_row(row)
 
     @staticmethod
     def get_show_alter_table(connection: Connection, table_name: str, alter_type: str,
