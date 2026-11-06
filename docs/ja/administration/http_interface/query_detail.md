@@ -27,7 +27,7 @@ Query detail レコードは、FE 構成の `enable_collect_query_detail_info` �
 
 ## レスポンス
 
-- v1 は QueryDetail 配列を返します。
+- v1 は QueryDetail 配列を返します。配列はチャンク転送エンコーディング（chunked transfer encoding）でストリーミングされるため、レスポンスに `Content-Length` ヘッダーは含まれません。HTTP/1.0 リクエストの場合、ボディは接続のクローズで終わります。
 - v2 は `{ "code": "0", "message": "OK", "result": [ ... ] }` を返し、`result` が QueryDetail 配列です。
 
 ## 認証と権限
