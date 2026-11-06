@@ -1180,6 +1180,10 @@ Status TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo&
             return apply_st;
         }
     }
+    // Read the flag again after load: an index that was not cached (e.g. evicted) has no persistent index
+    // until it is loaded. With the stale flag, the index meta would be neither read nor saved, and the
+    // next load would rebuild the whole index.
+    enable_persistent_index = index.enable_persistent_index();
     PersistentIndexMetaPB index_meta;
     if (enable_persistent_index) {
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), _tablet.tablet_id(), &index_meta);
