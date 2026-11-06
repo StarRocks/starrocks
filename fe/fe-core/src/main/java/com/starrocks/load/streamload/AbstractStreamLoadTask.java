@@ -9,6 +9,7 @@
 package com.starrocks.load.streamload;
 
 import com.starrocks.catalog.system.information.LoadsSystemTable;
+import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.http.rest.TransactionResult;
@@ -30,9 +31,11 @@ import java.util.List;
 public abstract class AbstractStreamLoadTask extends AbstractTxnStateChangeCallback
         implements Writable, GsonPostProcessable, GsonPreProcessable, LoadJobWithWarehouse, LoadsSystemTable.Job {
 
-    public abstract void beginTxnFromFrontend(TransactionResult resp);
-    public abstract void beginTxnFromFrontend(int channelId, int channelNum, TransactionResult resp);
-    public abstract void beginTxnFromBackend(TUniqueId requestId, String clientIp, long backendId, TransactionResult resp);
+    public abstract void beginTxnFromFrontend(TransactionResult resp) throws DuplicatedRequestException;
+    public abstract void beginTxnFromFrontend(int channelId, int channelNum, TransactionResult resp)
+            throws DuplicatedRequestException;
+    public abstract void beginTxnFromBackend(TUniqueId requestId, String clientIp, long backendId, TransactionResult resp)
+            throws DuplicatedRequestException;
     public abstract TNetworkAddress tryLoad(int channelId, String tableName, TransactionResult resp) throws StarRocksException;
     public abstract TNetworkAddress executeTask(int channelId, String tableName, HttpHeaders headers, TransactionResult resp);
     public abstract void prepareChannel(int channelId, String tableName, HttpHeaders headers, TransactionResult resp);
