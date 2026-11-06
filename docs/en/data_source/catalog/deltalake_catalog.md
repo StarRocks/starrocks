@@ -16,6 +16,53 @@ import DatabricksDataParams from '../../_assets/catalog/_databricks_data_params.
 
 - The file format of Delta Lake that StarRocks supports is Parquet. Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
 
+## Unity Catalog REST on ADLS Gen2
+
+Set `hive.metastore.type` to `unity` to read Parquet Delta tables through a Unity Catalog-compatible REST API. This path supports ADLS Gen2 locations under `dfs.core.windows.net` and requires the service to return a read-only, directory-scoped Azure SAS for each table.
+
+### Authentication
+
+Connect using StarRocks' existing [JWT authentication](../../administration/user_privs/authentication/jwt_authentication.md). The SQL login must establish an authenticated session token that the Catalog service also accepts. StarRocks forwards that complete token as `Authorization: Bearer <token>` on metadata and temporary-credential requests. Password-only sessions cannot use this metastore.
+
+StarRocks SQL privileges and Catalog permissions are separate checks. Configure the SQL account's JWT principal, issuer, audience and public keys for your identity provider, grant the required catalog `USAGE` and table `SELECT` privileges, and authorize the token's user in Catalog. The connector adds no authentication plugin and performs no token exchange.
+
+### Create and query the catalog
+
+```sql
+CREATE EXTERNAL CATALOG unity_delta PROPERTIES (
+    "type" = "deltalake",
+    "hive.metastore.type" = "unity",
+    "unity.catalog.uri" = "https://catalog.example.com/api/2.1/unity-catalog",
+    "unity.catalog.name" = "main"
+);
+
+SHOW DATABASES FROM unity_delta;
+SHOW TABLES FROM unity_delta.example_schema;
+DESCRIBE unity_delta.example_schema.example_table;
+SELECT * FROM unity_delta.example_schema.example_table LIMIT 10;
+```
+
+| Property | Required | Description |
+| --- | --- | --- |
+| `hive.metastore.type` | Yes | Set to `unity`. |
+| `unity.catalog.uri` | Yes | API base URI, including `/api/2.1/unity-catalog` and any deployment prefix. HTTP and HTTPS are accepted; protect bearer tokens with TLS or a trusted internal transport. Redirects are disabled. |
+| `unity.catalog.name` | Yes | The upstream catalog whose schemas become StarRocks databases. Catalog, schema and table names must be nonempty and must not contain dots, slashes or control characters. |
+
+The connector lists schemas/tables and requests `READ` credentials from `temporary-table-credentials` using the returned table ID. The response must contain the matching table storage `url`, an `expiration_time` in epoch milliseconds, and `azure_user_delegation_sas.sas_token`. The SAS must be unexpired, use `sr=d` with the table's directory depth, and permit only `r` or `rl`. Container-wide SAS and other storage credential types are unsupported. HTTPS DFS table locations are normalized to `abfss`.
+
+Each query captures its authenticated token and owns its metadata cache. Catalog-wide Delta table, JSON and checkpoint caches are bypassed for Unity, including when their cache properties are enabled. Each table gets its own storage configuration. The existing worker scan receives the fixed table SAS; it does not receive the Catalog token.
+
+Use Hadoop settings compatible with fixed SAS credentials. An inherited `fs.azure.sas.token.provider.type.<account>` provider takes precedence over the fixed SAS. The existing cloud-credential transport is unchanged; raw fragment DEBUG/VLOG diagnostics can include SAS values.
+
+### Scope and credential lifetime
+
+- Reads only; no table creation, writes or client-credential authentication mode.
+- Delta reader protocol versions up to 3, with `columnMapping`, `deletionVectors`, `timestampNtz` and `v2Checkpoint`, subject to the existing Delta Kernel reader validation. Data files and external deletion vectors must remain inside the table's storage root.
+- No JWT or SAS renewal. Expiring a JWT prevents later authenticated Catalog requests; an already-planned storage read can continue only while its SAS remains valid. Reconnect with a fresh token for new queries when necessary.
+- Catalog requests and snapshot loading appear in the existing external query profile as `UnityCatalog.request` and `DeltaLake.getSnapshot`; existing Delta file-reader and scan-range timers remain in use.
+
+Hive, Glue and DLF catalog behavior is unchanged. Check the REST response and credential requirements above against the Catalog implementation you use.
+
 ## Integration preparations
 
 Before you create a Delta Lake catalog, make sure your StarRocks cluster can integrate with the storage system and metastore of your Delta Lake cluster.
