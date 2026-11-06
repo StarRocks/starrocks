@@ -35,6 +35,7 @@ The reader-boundary cases additionally use these fixed tables:
 | `reader_json_v1`, `reader_per_level_v1` | JSON data files and an unsupported per-level format configuration |
 | `reader_aggregate_product_v1` | Unsupported native `product` aggregation uses JNI |
 | `reader_timestamp9_v1`, `reader_orc_legacy_v1` | Nanosecond timestamps and legacy ORC timestamp encoding |
+| `reader_struct_parent_null_v1` | 8,192 rows with NULL ancestor ROWs, SQL NULL and VARIANT null; two overlapping primary-key files require SDK reads |
 | `reader_pk_nullable_map_orc_v1`, `reader_nullable_map_avro_v1` | Nullable MAP keys on SDK reads; the ORC table retains unmerged primary-key files |
 | `reader_schema_cast_v1` | INT-to-STRING evolution outside native compatibility rules |
 | `reader_bitmap64_dv_v1` | Real bitmap64 DV files plus INT-to-STRING evolution, preventing raw-file bypass of the SDK check |
@@ -152,6 +153,7 @@ rows to verify results as well as the reader path.
 | `partition_pruning` | Equality, IN and NULL partition filters, with EXPLAIN partition counts |
 | `schema_versions` | Mixed-schema files after rename, widening, drop/add; projection and filters |
 | `nested_types_*`, `map_size_native` | ARRAY/MAP/ROW, nested ARRAY, empty/NULL values, subfield projection and map-size pruning |
+| `struct_parent_null` | NULL ancestor ROWs around VARIANT, full/pruned projections, predicates, chunk boundaries, NATIVE/AUTO routing and native profile |
 | `empty_table_*`, `empty_after_delete` | No-snapshot empty tables and all-deleted tables |
 | `writer_snapshot` | Final rows from an independent Paimon writer update/insert |
 | `predicate_pushdown` | Actual TRACE predicates, file pruning, typed literals, unsupported/partially supported predicates and final rows |
@@ -205,6 +207,42 @@ The additional tables were generated and verified with the Paimon 2.0.0
 Java API. The existing five imported tables have unknown original generator
 versions; `pk_merge_v1` has its
 [original generator](https://github.com/StarRocks/starrocks-testing-data/blob/4bce0eac1a87b23982561b7c53636d125e13abf2/catalog/paimon/datagen/README.md).
+
+## NULL STRUCT fixture
+
+`test_paimon_struct_parent_null` reads `reader_struct_parent_null_v1` through
+paimon-cpp. Its 8,192 rows repeat eight patterns: ordinary values, a NULL outer
+ROW, a NULL nested ROW, SQL NULL VARIANT fields, encoded VARIANT null, and
+object/array/boolean/decimal values. Two overlapping, uncompacted primary-key
+files prevent the StarRocks raw-file reader from bypassing Arrow conversion.
+The Java generator verifies the final rows and rejects splits eligible for raw
+reads. SQL checks full structs, pruned and unpruned subfields, NULL predicates,
+aggregates, small chunks and chunk boundaries, plus NATIVE/AUTO reader selection
+and the BE `PaimonNativeReader` profile. JNI does not support these VARIANT fields.
+
+This fixture checks integration and compatibility. Ordinary SDK-generated NULL
+rows can also query correctly before the fix; the BE Arrow converter tests
+separately reproduce valid child buffers hidden by NULL ancestors and verify
+that those buffers are ignored during conversion.
+
+To reproduce the fixture offline from the repository root, use a compatible JDK
+and a built FE distribution containing Paimon 2.0.0:
+
+```bash
+mkdir -p "$FIXTURE_CLASSES"
+javac -proc:none -cp 'fe/fe-server/target/lib/*' -d "$FIXTURE_CLASSES" \
+  test/sql/test_paimon_catalog/datagen/GenerateStructParentNullFixture.java
+java -cp "$FIXTURE_CLASSES:fe/fe-server/target/lib/*" GenerateStructParentNullFixture \
+  "$NEW_FIXTURE_WAREHOUSE"
+```
+
+Set `FIXTURE_CLASSES` to a scratch class directory and `NEW_FIXTURE_WAREHOUSE` to
+a new local directory. Publish the complete generated
+`paimon_test.db/reader_struct_parent_null_v1/` directory, including schema,
+snapshots, manifests and data, under
+`oss://${oss_bucket}/ci_catalog_test_data/paimon/paimon_test.db/`.
+Do not overwrite the existing shared fixture during test execution. The SQL case
+only creates and cleans up its own Catalog; it does not modify the static table.
 
 ## Statistics and layout assertions
 
