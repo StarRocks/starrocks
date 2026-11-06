@@ -38,7 +38,6 @@ import com.google.common.base.Enums;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.base.Suppliers;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -287,7 +286,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -309,7 +307,6 @@ import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -2666,7 +2663,7 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowAnalyzeStatusStatement(ShowAnalyzeStatusStmt statement, ConnectContext context) {
             ShowResultSetMetaData metaData = showResultMetaFactory.getMetadata(statement);
-            Predicate<List<String>> earlyFilter = buildEarlyFilter(statement, metaData,
+            java.util.function.Predicate<List<String>> earlyFilter = buildEarlyFilter(statement, metaData,
                     ShowAnalyzeStatusStmt.EARLY_FILTER_COLUMNS);
             long rowCap = rowCapForLimit(statement);
 
@@ -2706,7 +2703,8 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt statement, ConnectContext context) {
             ShowResultSetMetaData metaData = showResultMetaFactory.getMetadata(statement);
-            Predicate<List<String>> earlyFilter = buildEarlyFilter(statement, metaData, STATS_META_EARLY_FILTER_COLUMNS);
+            java.util.function.Predicate<List<String>> earlyFilter = buildEarlyFilter(statement, metaData,
+                    ShowBasicStatsMetaStmt.EARLY_FILTER_COLUMNS);
             long rowCap = rowCapForLimit(statement);
 
             long startMs = System.currentTimeMillis();
@@ -2721,11 +2719,7 @@ public class ShowExecutor {
                 internalBuilt++;
                 long metaStartMs = System.currentTimeMillis();
                 try {
-<<<<<<< HEAD
-                    List<String> result = ShowBasicStatsMetaStmt.showBasicStatsMeta(context, meta);
-=======
-                    List<String> result = ShowExecutor.showBasicStatsMeta(context, meta, earlyFilter);
->>>>>>> 11e663d ([BugFix][RB-1044] Skip costly work for rows SHOW STATS META and SHOW ANALYZE STATUS will filter out (#82564))
+                    List<String> result = ShowBasicStatsMetaStmt.showBasicStatsMeta(context, meta, earlyFilter);
                     if (result != null) {
                         rows.add(result);
                     }
@@ -2748,11 +2742,8 @@ public class ShowExecutor {
                 externalBuilt++;
                 long metaStartMs = System.currentTimeMillis();
                 try {
-<<<<<<< HEAD
-                    List<String> result = ShowBasicStatsMetaStmt.showExternalBasicStatsMeta(context, meta);
-=======
-                    List<String> result = ShowExecutor.showExternalBasicStatsMeta(context, meta, earlyFilter);
->>>>>>> 11e663d ([BugFix][RB-1044] Skip costly work for rows SHOW STATS META and SHOW ANALYZE STATUS will filter out (#82564))
+                    List<String> result = ShowBasicStatsMetaStmt.showExternalBasicStatsMeta(context, meta,
+                            earlyFilter);
                     if (result != null) {
                         rows.add(result);
                     }
@@ -2810,8 +2801,9 @@ public class ShowExecutor {
          * are known before the costly columns are computed, otherwise null. The full WHERE clause is still applied
          * to the built rows afterwards, so this only skips work and never changes the result.
          */
-        private Predicate<List<String>> buildEarlyFilter(ShowStmt statement, ShowResultSetMetaData metaData,
-                                                         Set<String> earlyColumns) {
+        private java.util.function.Predicate<List<String>> buildEarlyFilter(ShowStmt statement,
+                                                                            ShowResultSetMetaData metaData,
+                                                                            Set<String> earlyColumns) {
             Expr predicate = statement.getPredicate();
             if (predicate == null) {
                 return null;
@@ -3452,229 +3444,4 @@ public class ShowExecutor {
             return rows;
         }
     }
-<<<<<<< HEAD
-=======
-
-    // Columns of SHOW STATS META that are filled before the costly ones (health of internal tables, table loading
-    // from the remote catalog of external tables), lower case.
-    static final Set<String> STATS_META_EARLY_FILTER_COLUMNS = ImmutableSet.of(
-            "database", "table", "type", "updatetime", "properties", "columnstats", "tabletstatsreporttime");
-
-    public static List<String> showBasicStatsMeta(ConnectContext context,
-                                                  BasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
-        return showBasicStatsMeta(context, basicStatsMeta, null);
-    }
-
-    /**
-     * @param earlyFilter if not null, evaluated on a row in which only the columns in
-     *                    {@link #STATS_META_EARLY_FILTER_COLUMNS} are filled; returns null when it rejects the row,
-     *                    so the expensive health columns are only computed for rows that can be returned.
-     */
-    static List<String> showBasicStatsMeta(ConnectContext context, BasicStatsMeta basicStatsMeta,
-                                           Predicate<List<String>> earlyFilter) throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "", "", "", "");
-        long dbId = basicStatsMeta.getDbId();
-        long tableId = basicStatsMeta.getTableId();
-        List<String> columns = basicStatsMeta.getColumns();
-
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (db == null) {
-            throw new MetaNotFoundException("No found database: " + dbId);
-        }
-        row.set(0, db.getOriginName());
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
-        if (table == null) {
-            throw new MetaNotFoundException("No found table: " + tableId);
-        }
-        row.set(1, table.getName());
-
-        // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
-        try {
-            Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
-        } catch (AccessDeniedException e) {
-            return null;
-        }
-
-        long totalCollectColumnsSize = StatisticUtils.getCollectibleColumns(table).size();
-        if (null != columns && !columns.isEmpty() && (columns.size() != totalCollectColumnsSize)) {
-            row.set(2, String.join(",", columns));
-        }
-
-        row.set(3, basicStatsMeta.getType().name());
-        row.set(4, basicStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-        row.set(5, basicStatsMeta.getProperties() == null ? "{}" : basicStatsMeta.getProperties().toString());
-        row.set(7, basicStatsMeta.getColumnStatsString());
-        row.set(8, basicStatsMeta.getTabletStatsReportTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-        if (earlyFilter != null && !earlyFilter.test(row)) {
-            return null;
-        }
-
-        // Both are costly (all partitions, maybe a statistics cache load), so compute them once per row.
-        BasicStatsMeta.TableHealthyMetrics metrics = basicStatsMeta.getTableHealthyMetrics(table);
-        LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
-        row.set(6, (int) (basicStatsMeta.getHealthy(metrics, tableUpdateTime) * 100) + "%");
-        row.set(9, metrics.toString());
-        row.set(10, tableUpdateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-
-        return row;
-    }
-
-    public static List<String> showExternalBasicStatsMeta(ConnectContext context,
-                                                          ExternalBasicStatsMeta basicStatsMeta)
-            throws MetaNotFoundException {
-        return showExternalBasicStatsMeta(context, basicStatsMeta, null);
-    }
-
-    /**
-     * @param earlyFilter see {@link #showBasicStatsMeta(ConnectContext, BasicStatsMeta, Predicate)}; evaluated
-     *                    before the database and table are loaded from the remote catalog.
-     */
-    static List<String> showExternalBasicStatsMeta(ConnectContext context, ExternalBasicStatsMeta basicStatsMeta,
-                                                   Predicate<List<String>> earlyFilter)
-            throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "", "", "", "");
-        String catalogName = basicStatsMeta.getCatalogName();
-        String dbName = basicStatsMeta.getDbName();
-        String tableName = basicStatsMeta.getTableName();
-
-        List<String> columns = basicStatsMeta.getColumns();
-
-        if (earlyFilter != null) {
-            List<String> earlyRow = Lists.newArrayList(row);
-            earlyRow.set(0, catalogName + "." + dbName);
-            earlyRow.set(1, tableName);
-            earlyRow.set(3, basicStatsMeta.getType().name());
-            earlyRow.set(4, basicStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-            earlyRow.set(5, basicStatsMeta.getProperties() == null ? "{}" : basicStatsMeta.getProperties().toString());
-            earlyRow.set(7, basicStatsMeta.getColumnStatsString());
-            if (!earlyFilter.test(earlyRow)) {
-                return null;
-            }
-        }
-
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
-        if (db == null) {
-            throw new MetaNotFoundException("No found database: " + catalogName + "." + dbName);
-        }
-        row.set(0, catalogName + "." + dbName);
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, catalogName, dbName, tableName);
-        if (table == null) {
-            throw new MetaNotFoundException("No found table: " + catalogName + "." + dbName + "." + tableName);
-        }
-        row.set(1, tableName);
-
-        // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
-        try {
-            Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
-        } catch (AccessDeniedException e) {
-            return null;
-        }
-
-        long totalCollectColumnsSize = StatisticUtils.getCollectibleColumns(table).size();
-        if (null != columns && !columns.isEmpty() && (columns.size() != totalCollectColumnsSize)) {
-            row.set(2, String.join(",", columns));
-        }
-
-        row.set(3, basicStatsMeta.getType().name());
-        row.set(4, basicStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-        row.set(5, basicStatsMeta.getProperties() == null ? "{}" : basicStatsMeta.getProperties().toString());
-        row.set(7, basicStatsMeta.getColumnStatsString());
-
-        return row;
-    }
-
-    public static List<String> showHistogramStatsMeta(ConnectContext context,
-                                                      HistogramStatsMeta histogramStatsMeta)
-            throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "", "", "", "");
-        long dbId = histogramStatsMeta.getDbId();
-        long tableId = histogramStatsMeta.getTableId();
-
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (db == null) {
-            throw new MetaNotFoundException("No found database: " + dbId);
-        }
-        row.set(0, db.getOriginName());
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
-        if (table == null) {
-            throw new MetaNotFoundException("No found table: " + tableId);
-        }
-        try {
-            Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
-        } catch (AccessDeniedException e) {
-            return null;
-        }
-
-        row.set(1, table.getName());
-        row.set(2, histogramStatsMeta.getColumn());
-        row.set(3, histogramStatsMeta.getType().name());
-        row.set(4, histogramStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-        row.set(5, histogramStatsMeta.getProperties() == null ? "{}" : histogramStatsMeta.getProperties().toString());
-
-        return row;
-    }
-
-    public static List<String> showExternalHistogramStatsMeta(ConnectContext context,
-                                                              ExternalHistogramStatsMeta histogramStatsMeta)
-            throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "", "", "", "");
-        String catalogName = histogramStatsMeta.getCatalogName();
-        String dbName = histogramStatsMeta.getDbName();
-        String tableName = histogramStatsMeta.getTableName();
-
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
-        if (db == null) {
-            throw new MetaNotFoundException("No found database: " + catalogName + "." + dbName);
-        }
-        row.set(0, catalogName + "." + dbName);
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, catalogName, dbName, tableName);
-        if (table == null) {
-            throw new MetaNotFoundException("No found table: " + catalogName + "." + dbName + "." + tableName);
-        }
-        try {
-            Authorizer.checkAnyActionOnTable(context, new TableName(catalogName, db.getFullName(), table.getName()));
-        } catch (AccessDeniedException e) {
-            return null;
-        }
-
-        row.set(1, table.getName());
-        row.set(2, histogramStatsMeta.getColumn());
-        row.set(3, histogramStatsMeta.getType().name());
-        row.set(4, histogramStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-        row.set(5, histogramStatsMeta.getProperties() == null ? "{}" : histogramStatsMeta.getProperties().toString());
-
-        return row;
-    }
-
-    public static List<String> showMultiColumnStatsMeta(ConnectContext context, MultiColumnStatsMeta meta)
-            throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "", "", "", "", "");
-        long dbId = meta.getDbId();
-        long tableId = meta.getTableId();
-
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (db == null) {
-            throw new MetaNotFoundException("No found database: " + dbId);
-        }
-        row.set(0, db.getOriginName());
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
-        if (table == null) {
-            throw new MetaNotFoundException("No found table: " + tableId);
-        }
-        try {
-            Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
-        } catch (AccessDeniedException e) {
-            return null;
-        }
-
-        row.set(1, table.getName());
-        row.set(2, meta.getColumnIds().stream().map(id -> table.getColumnByUniqueId(id).getName()).toList().toString());
-        row.set(3, meta.getAnalyzeType().name());
-        row.set(4, meta.getStatsTypes().stream().map(Enum::name).collect(Collectors.joining(", ")));
-        row.set(5, meta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-        row.set(6, meta.getProperties() == null ? "{}" : meta.getProperties().toString());
-
-        return row;
-    }
->>>>>>> 11e663d ([BugFix][RB-1044] Skip costly work for rows SHOW STATS META and SHOW ANALYZE STATUS will filter out (#82564))
 }

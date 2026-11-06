@@ -37,7 +37,6 @@ import org.apache.logging.log4j.Logger;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Predicate;
 
 public class ShowAnalyzeStatusStmt extends ShowStmt {
     private static final Logger LOG = LogManager.getLogger(ShowAnalyzeStatusStmt.class);
@@ -66,7 +65,8 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
      *                    can be returned.
      */
     public static List<String> showAnalyzeStatus(ConnectContext context, AnalyzeStatus analyzeStatus,
-                                                 Predicate<List<String>> earlyFilter) throws MetaNotFoundException {
+                                                 java.util.function.Predicate<List<String>> earlyFilter)
+            throws MetaNotFoundException {
         List<String> row = Lists.newArrayList("", "", "", "ALL", "", "", "", "", "", "", "");
         List<String> columns = analyzeStatus.getColumns();
 

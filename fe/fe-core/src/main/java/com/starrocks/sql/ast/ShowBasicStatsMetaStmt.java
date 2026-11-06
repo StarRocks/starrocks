@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
@@ -32,8 +33,10 @@ import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.StatisticUtils;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Set;
 
 public class ShowBasicStatsMetaStmt extends ShowStmt {
 
@@ -45,8 +48,24 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         this.orderByElements = orderByElements;
     }
 
+    // Columns of SHOW STATS META that are filled before the costly ones (health of internal tables, table loading
+    // from the remote catalog of external tables), lower case.
+    public static final Set<String> EARLY_FILTER_COLUMNS = ImmutableSet.of(
+            "database", "table", "type", "updatetime", "properties", "columnstats", "tabletstatsreporttime");
+
     public static List<String> showBasicStatsMeta(ConnectContext context,
                                                   BasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
+        return showBasicStatsMeta(context, basicStatsMeta, null);
+    }
+
+    /**
+     * @param earlyFilter if not null, evaluated on a row in which only the columns in
+     *                    {@link #EARLY_FILTER_COLUMNS} are filled; returns null when it rejects the row,
+     *                    so the expensive health columns are only computed for rows that can be returned.
+     */
+    public static List<String> showBasicStatsMeta(ConnectContext context, BasicStatsMeta basicStatsMeta,
+                                                  java.util.function.Predicate<List<String>> earlyFilter)
+            throws MetaNotFoundException {
         List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "", "", "", "");
         long dbId = basicStatsMeta.getDbId();
         long tableId = basicStatsMeta.getTableId();
@@ -78,23 +97,53 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         row.set(3, basicStatsMeta.getType().name());
         row.set(4, basicStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         row.set(5, basicStatsMeta.getProperties() == null ? "{}" : basicStatsMeta.getProperties().toString());
-        row.set(6, (int) (basicStatsMeta.getHealthy() * 100) + "%");
         row.set(7, basicStatsMeta.getColumnStatsString());
         row.set(8, basicStatsMeta.getTabletStatsReportTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-        row.set(9, basicStatsMeta.getTableHealthyMetrics(table).toString());
-        row.set(10, StatisticUtils.getTableLastUpdateTime(table).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        if (earlyFilter != null && !earlyFilter.test(row)) {
+            return null;
+        }
+
+        // Both are costly (all partitions, maybe a statistics cache load), so compute them once per row.
+        BasicStatsMeta.TableHealthyMetrics metrics = basicStatsMeta.getTableHealthyMetrics(table);
+        LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
+        row.set(6, (int) (basicStatsMeta.getHealthy(metrics, tableUpdateTime) * 100) + "%");
+        row.set(9, metrics.toString());
+        row.set(10, tableUpdateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
 
         return row;
     }
 
     public static List<String> showExternalBasicStatsMeta(ConnectContext context,
                                                           ExternalBasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
+        return showExternalBasicStatsMeta(context, basicStatsMeta, null);
+    }
+
+    /**
+     * @param earlyFilter see {@link #showBasicStatsMeta(ConnectContext, BasicStatsMeta, java.util.function.Predicate)};
+     *                    evaluated before the database and table are loaded from the remote catalog.
+     */
+    public static List<String> showExternalBasicStatsMeta(ConnectContext context, ExternalBasicStatsMeta basicStatsMeta,
+                                                          java.util.function.Predicate<List<String>> earlyFilter)
+            throws MetaNotFoundException {
         List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "", "", "", "");
         String catalogName = basicStatsMeta.getCatalogName();
         String dbName = basicStatsMeta.getDbName();
         String tableName = basicStatsMeta.getTableName();
 
         List<String> columns = basicStatsMeta.getColumns();
+
+        if (earlyFilter != null) {
+            List<String> earlyRow = Lists.newArrayList(row);
+            earlyRow.set(0, catalogName + "." + dbName);
+            earlyRow.set(1, tableName);
+            earlyRow.set(3, basicStatsMeta.getType().name());
+            earlyRow.set(4, basicStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+            earlyRow.set(5, basicStatsMeta.getProperties() == null ? "{}" : basicStatsMeta.getProperties().toString());
+            earlyRow.set(7, basicStatsMeta.getColumnStatsString());
+            if (!earlyFilter.test(earlyRow)) {
+                return null;
+            }
+        }
 
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
         if (db == null) {
