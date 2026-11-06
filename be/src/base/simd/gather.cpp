@@ -65,4 +65,52 @@ bool SIMDGather::should_prefetch_indexes(const uint32_t* indexes, size_t element
     return unique_bits >= kPrefetchMinUniqueSampleBits;
 }
 
+void SIMDGather::gather(uint32_t* dest, const uint32_t* src, const uint32_t* indexes, size_t num_rows,
+                        SourcePoolSize pool_size) {
+    size_t i = 0;
+#if defined(__x86_64__) || defined(_M_X64)
+    const bool is_large_pool = (pool_size.elements >= kPrefetchPoolBytes / sizeof(uint32_t));
+
+    if (num_rows >= kPrefetchMinRows && is_large_pool && should_prefetch_indexes(indexes, sizeof(uint32_t))) {
+        for (size_t p = 0; p < kPrefetchLookahead; ++p) {
+            STARROCKS_PREFETCH(src + indexes[p]);
+        }
+        for (; i + kPrefetchLookahead + 8 <= num_rows; i += 8) {
+            STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 0]);
+            STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 1]);
+            STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 2]);
+            STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 3]);
+            STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 4]);
+            STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 5]);
+            STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 6]);
+            STARROCKS_PREFETCH(src + indexes[i + kPrefetchLookahead + 7]);
+
+            gather_8_unrolled(dest, src, indexes, i);
+        }
+    }
+#else
+    (void)pool_size;
+#endif
+
+    gather_buffered(dest, src, indexes, num_rows, i);
+}
+
+void SIMDGather::gather(uint32_t* dest, const uint32_t* src, const uint32_t* indexes, const uint8_t* is_filtered,
+                        size_t num_rows, SourcePoolSize pool_size) {
+    (void)pool_size;
+    size_t i = 0;
+    gather_filtered_buffered(dest, src, indexes, is_filtered, num_rows, i);
+}
+
+void SIMDGather::gather(int32_t* dest, const int32_t* src, const uint32_t* indexes, size_t num_rows,
+                        SourcePoolSize pool_size) {
+    gather(reinterpret_cast<uint32_t*>(dest), reinterpret_cast<const uint32_t*>(src), indexes, num_rows, pool_size);
+}
+
+void SIMDGather::gather(int32_t* dest, const int32_t* src, const uint32_t* indexes, const uint8_t* is_filtered,
+                        size_t num_rows, SourcePoolSize pool_size) {
+    gather(reinterpret_cast<uint32_t*>(dest), reinterpret_cast<const uint32_t*>(src), indexes, is_filtered, num_rows,
+           pool_size);
+}
+
 } // namespace starrocks

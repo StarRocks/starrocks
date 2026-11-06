@@ -1397,17 +1397,21 @@ TEST_F(JoinHashMapTest, BucketChainedLookupInitLargePoolPrefetch) {
     table_items.build_slots = hash_table_slot_vec;
     table_items.probe_slots = hash_table_slot_vec;
 
-    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->probe_prepare(_runtime_state.get());
-
-    // Non-null high-cardinality probe chunk exercising line 102 and the 8-way prefetch loop in libExecJoinCore
+    // 1. Non-null high-cardinality probe chunk exercising line 102 and the 8-way prefetch loop in libExecJoinCore
+    HashTableProbeState high_card_probe_state;
+    auto high_card_join_hash_map =
+            std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &high_card_probe_state);
+    high_card_join_hash_map->probe_prepare(_runtime_state.get());
     auto non_null_chunk = std::make_shared<Chunk>();
     non_null_chunk->append_column(const_probe_col, 0);
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     bool has_remain = false;
-    join_hash_map->probe(_runtime_state.get(), probe_columns, &non_null_chunk, &result_chunk, &has_remain);
+    high_card_join_hash_map->probe(_runtime_state.get(), probe_columns, &non_null_chunk, &result_chunk, &has_remain);
 
-    // Low-cardinality non-null probe chunk exercising the rejection path (fallback to gather_buffered) in libExecJoinCore
+    // 2. Low-cardinality non-null probe chunk exercising the rejection path (fallback to gather_buffered) in libExecJoinCore
+    HashTableProbeState low_card_probe_state;
+    auto low_card_join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &low_card_probe_state);
+    low_card_join_hash_map->probe_prepare(_runtime_state.get());
     MutableColumnPtr low_card_col = ColumnHelper::create_column(int_type, false);
     for (size_t i = 0; i < kProbeRows; i++) {
         low_card_col->append_datum(static_cast<int32_t>(0));
@@ -1418,18 +1422,25 @@ TEST_F(JoinHashMapTest, BucketChainedLookupInitLargePoolPrefetch) {
     low_card_chunk->append_column(low_card_probe_col, 0);
     ChunkPtr low_card_result = std::make_shared<Chunk>();
     bool low_card_has_remain = false;
-    join_hash_map->probe(_runtime_state.get(), low_card_probe_columns, &low_card_chunk, &low_card_result,
-                         &low_card_has_remain);
+    low_card_join_hash_map->probe(_runtime_state.get(), low_card_probe_columns, &low_card_chunk, &low_card_result,
+                                  &low_card_has_remain);
 
-    // Nullable probe chunk exercising line 118 and gather_filtered_buffered in libExecJoinCore
+    // 3. Nullable probe chunk with nulls exercising line 118 and gather_filtered_buffered in libExecJoinCore
+    HashTableProbeState null_probe_state;
+    auto null_join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &null_probe_state);
+    null_join_hash_map->probe_prepare(_runtime_state.get());
     auto nullable_chunk = std::make_shared<Chunk>();
     nullable_chunk->append_column(nullable_probe_col, 0);
     ChunkPtr null_result_chunk = std::make_shared<Chunk>();
     bool null_has_remain = false;
-    join_hash_map->probe(_runtime_state.get(), nullable_probe_columns, &nullable_chunk, &null_result_chunk,
-                         &null_has_remain);
+    null_join_hash_map->probe(_runtime_state.get(), nullable_probe_columns, &nullable_chunk, &null_result_chunk,
+                              &null_has_remain);
 
-    // Unaligned probe chunks (515 rows) exercising the scalar tails (gather_scalar & gather_filtered_scalar) in libExecJoinCore
+    // 4. Unaligned probe chunks (515 rows) exercising the scalar tails (gather_scalar) in libExecJoinCore
+    HashTableProbeState unaligned_probe_state;
+    auto unaligned_join_hash_map =
+            std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &unaligned_probe_state);
+    unaligned_join_hash_map->probe_prepare(_runtime_state.get());
     constexpr size_t kUnalignedRows = 515;
     MutableColumnPtr unaligned_col = ColumnHelper::create_column(int_type, false);
     for (size_t i = 0; i < kUnalignedRows; i++) {
@@ -1441,17 +1452,22 @@ TEST_F(JoinHashMapTest, BucketChainedLookupInitLargePoolPrefetch) {
     unaligned_chunk->append_column(unaligned_probe_col, 0);
     ChunkPtr unaligned_result = std::make_shared<Chunk>();
     bool unaligned_has_remain = false;
-    join_hash_map->probe(_runtime_state.get(), unaligned_probe_columns, &unaligned_chunk, &unaligned_result,
-                         &unaligned_has_remain);
+    unaligned_join_hash_map->probe(_runtime_state.get(), unaligned_probe_columns, &unaligned_chunk, &unaligned_result,
+                                   &unaligned_has_remain);
 
+    // 5. Unaligned nullable probe chunk (515 rows) exercising line 118 and gather_filtered_scalar in libExecJoinCore
+    HashTableProbeState unaligned_null_probe_state;
+    auto unaligned_null_join_hash_map =
+            std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &unaligned_null_probe_state);
+    unaligned_null_join_hash_map->probe_prepare(_runtime_state.get());
     auto unaligned_nullable_probe_col = JoinHashMapTest::create_int32_nullable_column(kUnalignedRows, 0);
     Columns unaligned_null_probe_columns{unaligned_nullable_probe_col};
     auto unaligned_null_chunk = std::make_shared<Chunk>();
     unaligned_null_chunk->append_column(unaligned_nullable_probe_col, 0);
     ChunkPtr unaligned_null_result = std::make_shared<Chunk>();
     bool unaligned_null_has_remain = false;
-    join_hash_map->probe(_runtime_state.get(), unaligned_null_probe_columns, &unaligned_null_chunk,
-                         &unaligned_null_result, &unaligned_null_has_remain);
+    unaligned_null_join_hash_map->probe(_runtime_state.get(), unaligned_null_probe_columns, &unaligned_null_chunk,
+                                        &unaligned_null_result, &unaligned_null_has_remain);
 }
 
 // NOLINTNEXTLINE
