@@ -1095,13 +1095,15 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_keeps_persistent_index_vers
     auto partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
     // UPDATE mode, then UPSERT mode where every key already exists: neither inserts a row.
     for (auto mode : {PartialUpdateMode::COLUMN_UPDATE_MODE, PartialUpdateMode::COLUMN_UPSERT_MODE}) {
-        // Apply with the index cached, then with the index just evicted.
+        // Apply with the index cached. Then load the update state ahead of the apply, as the write-time
+        // preload does, and evict the index before the apply, so the apply finds the index unloaded.
         for (bool evict_index : {false, true}) {
-            if (evict_index) {
-                ASSERT_TRUE(manager->index_cache().try_remove_by_key(tablet->tablet_id()));
-            }
             auto partial_rowset =
                     create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schema, 1, mode);
+            if (evict_index) {
+                ASSERT_OK(manager->on_rowset_finished(tablet.get(), partial_rowset.get()));
+                ASSERT_TRUE(manager->index_cache().try_remove_by_key(tablet->tablet_id()));
+            }
             ASSERT_OK(tablet->rowset_commit(++version, partial_rowset, 10000));
             tablet->updates()->wait_apply_done();
             ASSERT_FALSE(tablet->updates()->is_error());
