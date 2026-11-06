@@ -203,7 +203,7 @@ public:
                _state == DriverState::INTERNAL_ERROR;
     }
     bool pending_finish() { return _state == DriverState::PENDING_FINISH; }
-    bool is_still_pending_finish() { return source_operator()->pending_finish() || sink_operator()->pending_finish(); }
+    bool is_still_pending_finish();
     // return false if all the dependencies are ready, otherwise return true.
     bool dependencies_block();
 
@@ -280,77 +280,12 @@ public:
         }
     }
 
-    StatusOr<bool> is_not_blocked() {
-        // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
-        if (sink_operator()->is_finished()) {
-            return true;
-        }
-        // PRECONDITION_BLOCK
-        if (_state == DriverState::PRECONDITION_BLOCK) {
-            if (is_precondition_block()) {
-                return false;
-            }
-
-            mark_precondition_ready();
-
-            RETURN_IF_ERROR(check_short_circuit());
-            if (_state == DriverState::PENDING_FINISH) {
-                return false;
-            }
-            // Driver state must be set to a state different from PRECONDITION_BLOCK bellow,
-            // to avoid call mark_precondition_ready() and check_short_circuit() multiple times.
-        }
-
-        // OUTPUT_FULL
-        if (!sink_operator()->need_input() && !sink_operator()->is_finished()) {
-            set_driver_state(DriverState::OUTPUT_FULL);
-            return false;
-        }
-
-        // INPUT_EMPTY
-        if (!source_operator()->has_output() && !source_operator()->is_finished()) {
-            set_driver_state(DriverState::INPUT_EMPTY);
-            return false;
-        }
-
-        return true;
-    }
+    StatusOr<bool> is_not_blocked();
 
     // used in event scheduler
     // check driver is ready for schedule
     // similar to is_not_blocked but without check short_circuit.
-    bool check_is_ready() {
-        // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
-        if (sink_operator()->is_finished()) {
-            return true;
-        }
-        if (_state == DriverState::PRECONDITION_BLOCK) {
-            if (is_precondition_block()) {
-                return false;
-            }
-            mark_precondition_ready();
-            // In the event scheduler, we avoid calling check_short_circuit inside check_is_ready.
-            // Because check_short_circuit may trigger cascading recursive calls such as set_finished.
-            // It will increase scheduler complexity (like call set finished in unknown thread).
-            // Instead, we directly return true after the precondition block state changes.
-            // The check is performed in driver::process.
-            return true;
-        }
-
-        // OUTPUT_FULL
-        if (!sink_operator()->need_input() && !sink_operator()->is_finished()) {
-            set_driver_state(DriverState::OUTPUT_FULL);
-            return false;
-        }
-
-        // INPUT_EMPTY
-        if (!source_operator()->has_output() && !source_operator()->is_finished()) {
-            set_driver_state(DriverState::INPUT_EMPTY);
-            return false;
-        }
-
-        return true;
-    }
+    bool check_is_ready();
 
     // Check whether an operator can be short-circuited, when is_precondition_block() becomes false from true.
     Status check_short_circuit();
