@@ -1300,6 +1300,79 @@ TEST_F(JoinHashMapTest, BucketChainedLookupInitNullableWithNulls) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, BucketChainedLookupInitLargePoolPrefetch) {
+    JoinHashTableItems table_items;
+    HashTableProbeState probe_state;
+
+    // 4M buckets = 16 MiB for uint32_t first array, meeting kPrefetchPoolBytes threshold
+    constexpr size_t kBucketSize = 4 * 1024 * 1024;
+    constexpr size_t kProbeRows = 512; // meets kPrefetchMinRows
+
+    table_items.first.assign(kBucketSize, 0);
+    // Populate distinct sentinel values across the buckets
+    for (size_t b = 0; b < kBucketSize; b += 1024) {
+        table_items.first[b] = static_cast<uint32_t>(b + 1);
+    }
+    table_items.bucket_size = kBucketSize;
+    table_items.log_bucket_size = 22; // 2^22 = 4M
+
+    probe_state.probe_row_count = kProbeRows;
+    probe_state.buckets.resize(config::vector_chunk_size);
+    probe_state.next.resize(config::vector_chunk_size, 0);
+
+    // Create high-cardinality probe keys to trigger should_prefetch_indexes == true
+    auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    MutableColumnPtr probe_col = ColumnHelper::create_column(int_type, false);
+    for (size_t i = 0; i < kProbeRows; i++) {
+        probe_col->append_datum(static_cast<int32_t>(i * 8192));
+    }
+    ColumnPtr const_probe_col = std::move(probe_col);
+    Columns probe_columns{const_probe_col};
+    probe_state.key_columns = &probe_columns;
+
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_INT>;
+    ImmBuffer<int32_t> empty_build_keys{};
+    const auto* data_col = ColumnHelper::as_raw_column<Int32Column>(const_probe_col);
+    ImmBuffer<int32_t> probe_keys(data_col->get_data().data(), kProbeRows);
+
+    // Direct call exercising large-pool prefetch path through lookup_init
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, empty_build_keys, probe_keys, std::nullopt);
+
+    // Verify all gathered next entries match first[bucket]
+    for (size_t i = 0; i < kProbeRows; i++) {
+        uint32_t bucket = probe_state.buckets[i];
+        ASSERT_EQ(probe_state.next[i], table_items.first[bucket]);
+    }
+
+    // Also exercise nullable large-pool path with nulls present
+    auto nullable_probe_col = JoinHashMapTest::create_int32_nullable_column(kProbeRows, 0);
+    Columns nullable_probe_columns{nullable_probe_col};
+    probe_state.key_columns = &nullable_probe_columns;
+
+    using ProbeKeyConstructor = ProbeKeyConstructorForOneKey<LogicalType::TYPE_INT>;
+    ProbeKeyConstructor::prepare(nullptr, &probe_state);
+    ProbeKeyConstructor::build_key(table_items, &probe_state);
+    ASSERT_TRUE(probe_state.null_array.has_value());
+
+    const auto& nullable_data_col = ColumnHelper::as_raw_column<NullableColumn>(nullable_probe_col)->data_column();
+    const auto* int_data = ColumnHelper::as_raw_column<Int32Column>(nullable_data_col.get());
+    ImmBuffer<int32_t> nullable_probe_keys(int_data->get_data().data(), kProbeRows);
+
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, empty_build_keys, nullable_probe_keys,
+                                   probe_state.null_array);
+
+    const auto* is_nulls_data = probe_state.null_array->data();
+    for (size_t i = 0; i < kProbeRows; i++) {
+        if (is_nulls_data[i] != 0) {
+            ASSERT_EQ(probe_state.next[i], 0);
+        } else {
+            uint32_t bucket = probe_state.buckets[i];
+            ASSERT_EQ(probe_state.next[i], table_items.first[bucket]);
+        }
+    }
+}
+
+// NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
     TDescriptorTableBuilder row_desc_builder;
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, false, 1);
