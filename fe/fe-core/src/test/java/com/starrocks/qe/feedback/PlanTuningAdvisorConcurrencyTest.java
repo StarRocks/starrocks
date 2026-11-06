@@ -20,13 +20,18 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.feedback.analyzer.PlanTuningAnalyzer;
 import com.starrocks.qe.feedback.guide.StreamingAggTuningGuide;
+import com.starrocks.qe.feedback.skeleton.BlockingAggNode;
 import com.starrocks.qe.feedback.skeleton.ScanNode;
 import com.starrocks.qe.feedback.skeleton.SkeletonBuilder;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.DistributedEnvPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -270,10 +275,18 @@ class PlanTuningAdvisorConcurrencyTest extends DistributedEnvPlanTestBase {
         put(advisor, a, guides(1));
         put(advisor, plan(0, 1200, 1800), guides(1));
         Assertions.assertEquals(0, advisor.getAdvisorSize());
-        // a wider pattern is accepted, and blacklisting it adds a second blacklist entry
+        // a wider pattern is accepted, and blacklisting it replaces the blacklisted key it covers
         OperatorTuningGuides wider = put(advisor, plan(0, 500, 5000), guides(1));
         Assertions.assertEquals(1, advisor.getAdvisorSize());
         advisor.deleteTuningGuides(wider.getOriginalQueryId(), true);
+        Assertions.assertEquals(1, advisor.blacklistSize());
+        put(advisor, a, guides(1));
+        put(advisor, plan(0, 600, 4000), guides(1));
+        Assertions.assertEquals(0, advisor.getAdvisorSize(), "the wider key blocks the ranges of the one it replaced");
+        // a disjoint pattern is accepted, and blacklisting it adds a second key
+        OperatorTuningGuides disjoint = put(advisor, plan(0, 6000, 7000), guides(1));
+        Assertions.assertEquals(1, advisor.getAdvisorSize());
+        advisor.deleteTuningGuides(disjoint.getOriginalQueryId(), true);
         Assertions.assertEquals(2, advisor.blacklistSize());
         // another IN list is not blacklisted
         put(advisor, plan(1, 1000, 2000), guides(1));
@@ -288,6 +301,72 @@ class PlanTuningAdvisorConcurrencyTest extends DistributedEnvPlanTestBase {
         put(advisor, a, guides(1));
         Assertions.assertEquals(1, advisor.getAdvisorSize());
         advisor.checkInvariants();
+    }
+
+    /** Puts guides for p and blacklists them at once, as for a query whose tuned run was slower. */
+    private static void putAndBlacklist(PlanTuningAdvisor advisor, Planned p) {
+        advisor.deleteTuningGuides(put(advisor, p, guides(1)).getOriginalQueryId(), true);
+    }
+
+    /**
+     * Blacklisting the guides of one disjoint range of a shape after another must not pile up keys: a shape keeps its
+     * newest MAX_BLACKLISTED_KEYS_PER_SHAPE keys, and the blacklist holds at most capacity keys of all shapes.
+     */
+    @Test
+    void testBlacklistIsBounded() throws Exception {
+        int perShape = PlanTuningAdvisor.MAX_BLACKLISTED_KEYS_PER_SHAPE;
+        PlanTuningAdvisor advisor = new PlanTuningAdvisor(4 * perShape);
+        List<Planned> ranges = new ArrayList<>();
+        for (int i = 0; i < perShape + 2; i++) {
+            ranges.add(plan(0, i * 1000L, i * 1000L + 100));
+            putAndBlacklist(advisor, ranges.get(i));
+            Assertions.assertEquals(0, advisor.getAdvisorSize());
+        }
+        advisor.checkInvariants();
+        Assertions.assertEquals(perShape, advisor.blacklistSize());
+        // the newest keys still block their ranges, the two oldest were dropped and their ranges accept guides again
+        put(advisor, ranges.get(2), guides(1));
+        put(advisor, ranges.get(ranges.size() - 1), guides(1));
+        Assertions.assertEquals(0, advisor.getAdvisorSize());
+        OperatorTuningGuides oldest = put(advisor, ranges.get(0), guides(1));
+        Assertions.assertSame(oldest, get(advisor, ranges.get(0)));
+
+        // 4 shapes with 2 keys each into a blacklist of 4 keys: whole shapes are evicted until it holds 4 keys at most
+        PlanTuningAdvisor small = new PlanTuningAdvisor(4);
+        for (int shape = 0; shape < 4; shape++) {
+            putAndBlacklist(small, plan(shape, 1000, 2000));
+            putAndBlacklist(small, plan(shape, 3000, 4000));
+        }
+        small.checkInvariants();
+        Assertions.assertTrue(small.blacklistSize() > 0 && small.blacklistSize() <= 4,
+                "blacklisted keys: " + small.blacklistSize());
+    }
+
+    /**
+     * BlockingAggNode compares its group by keys as a set, so its hash code must not depend on their order either. Otherwise
+     * two equal keys can be two entries, and a probe finds the guides only with the group by order they were put with.
+     */
+    @Test
+    void testReorderedGroupByKeysAreOnePattern() {
+        ColumnRefOperator a = new ColumnRefOperator(1, IntegerType.INT, "a", true);
+        ColumnRefOperator b = new ColumnRefOperator(2, IntegerType.INT, "b", true);
+        boolean[][] equal = assertEqualsContract(List.of(new PlanTuningCacheKey("ab", aggSkeleton(List.of(a, b))),
+                new PlanTuningCacheKey("ba", aggSkeleton(List.of(b, a)))));
+        Assertions.assertTrue(equal[0][1]);
+
+        PlanTuningAdvisor advisor = new PlanTuningAdvisor(8);
+        OperatorTuningGuides guides = guides(1);
+        advisor.putTuningGuides("ab", aggSkeleton(List.of(a, b)), guides);
+        advisor.putTuningGuides("ba", aggSkeleton(List.of(b, a)), guides(1));
+        Assertions.assertEquals(1, advisor.getAdvisorSize());
+        Assertions.assertSame(guides, advisor.getTuningGuides("ba", aggSkeleton(List.of(b, a))));
+        advisor.checkInvariants();
+    }
+
+    private static SkeletonNode aggSkeleton(List<ColumnRefOperator> groupBys) {
+        PhysicalHashAggregateOperator agg = new PhysicalHashAggregateOperator(AggType.GLOBAL, groupBys, List.of(), Map.of(),
+                false, Operator.DEFAULT_LIMIT, null, null);
+        return new BlockingAggNode(OptExpression.create(agg), null, null);
     }
 
     /**

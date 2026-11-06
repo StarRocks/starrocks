@@ -24,15 +24,19 @@ import com.starrocks.qe.feedback.skeleton.ScanNode;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.server.GlobalStateMgr;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
 public class PlanTuningAdvisor {
 
     private static final int CAPACITY = 300;
+
+    // The blacklist keeps at most this many keys of one shape, and drops the oldest first
+    @VisibleForTesting
+    static final int MAX_BLACKLISTED_KEYS_PER_SHAPE = 8;
 
     // StmtExecutor removes the record of a query when the statement ends. Queries planned outside StmtExecutor.execute
     // never remove theirs, so the records are also bounded. The TTL only has to outlive the queries that still run.
@@ -46,7 +50,8 @@ public class PlanTuningAdvisor {
     private final Cache<PlanTuningCacheKey, CacheEntry> cache;
 
     // Record and permanently disable tuning guide usage for patterns with poor performance.
-    // All blacklisted keys of a shape are kept, since each of them only covers its own predicate ranges.
+    // Each blacklisted key of a shape only covers its own predicate ranges, so a shape can have several of them. The
+    // blacklist holds at most capacity keys in total, as when it held one key per shape.
     private final Cache<PlanTuningCacheKey, List<PlanTuningCacheKey>> tuningGuideBlacklist;
 
     // The tuning guides each running query was planned with, keyed by query id
@@ -60,7 +65,8 @@ public class PlanTuningAdvisor {
 
 
         this.tuningGuideBlacklist = Caffeine.newBuilder()
-                .maximumSize(capacity)
+                .maximumWeight(capacity)
+                .weigher((PlanTuningCacheKey shape, List<PlanTuningCacheKey> keys) -> keys.size())
                 .build();
 
         this.optimizedQueryRecords = Caffeine.newBuilder()
@@ -153,17 +159,38 @@ public class PlanTuningAdvisor {
             if (entry.getValue().tuningGuides().getOriginalQueryId().equals(queryId)) {
                 cache.invalidate(entry.getKey());
                 if (preventFutureTuning) {
-                    tuningGuideBlacklist.asMap().compute(entry.getKey(), (k, keys) -> {
-                        List<PlanTuningCacheKey> blacklistedKeys = keys != null ? keys : new CopyOnWriteArrayList<>();
-                        blacklistedKeys.add(entry.getValue().key());
-                        return blacklistedKeys;
-                    });
+                    tuningGuideBlacklist.asMap().compute(entry.getKey(),
+                            (k, keys) -> addBlacklistedKey(keys, entry.getValue().key()));
                     Tracers.record(Tracers.Module.BASE, "AddBlacklistTuningGuide", "The tuning guides for the current " +
                             "query pattern are ineffective and will be removed and permanently disabled.");
                 }
             }
         }
         optimizedQueryRecords.invalidate(queryId);
+    }
+
+    /**
+     * Returns the blacklisted keys of a shape with {@code key} added. A key covered by another one blocks nothing more, so
+     * {@code key} is not added if a blacklisted key covers it, and it replaces the blacklisted keys it covers. The list is
+     * immutable, so isBlacklisted can read it without a lock.
+     */
+    private static List<PlanTuningCacheKey> addBlacklistedKey(List<PlanTuningCacheKey> keys, PlanTuningCacheKey key) {
+        if (keys == null) {
+            return List.of(key);
+        }
+        if (keys.stream().anyMatch(key::isCoveredBy)) {
+            return keys;
+        }
+
+        List<PlanTuningCacheKey> result = new ArrayList<>(keys.size() + 1);
+        for (PlanTuningCacheKey blacklisted : keys) {
+            if (!blacklisted.isCoveredBy(key)) {
+                result.add(blacklisted);
+            }
+        }
+        result.add(key);
+        int from = Math.max(0, result.size() - MAX_BLACKLISTED_KEYS_PER_SHAPE);
+        return List.copyOf(result.subList(from, result.size()));
     }
 
     public long getAdvisorSize() {
@@ -202,9 +229,13 @@ public class PlanTuningAdvisor {
         for (PlanTuningCacheKey key : blacklistKeys) {
             List<PlanTuningCacheKey> blacklistedKeys = tuningGuideBlacklist.asMap().get(key);
             Preconditions.checkState(blacklistedKeys != null && !blacklistedKeys.isEmpty() &&
+                    blacklistedKeys.size() <= MAX_BLACKLISTED_KEYS_PER_SHAPE &&
                     blacklistedKeys.stream().allMatch(key::equals), "bad blacklist entry of %s", key.getSql());
         }
         checkNoEqualKeys(blacklistKeys);
+        long maxBlacklistedKeys = tuningGuideBlacklist.policy().eviction().orElseThrow().getMaximum();
+        Preconditions.checkState(blacklistSize() <= maxBlacklistedKeys,
+                "the blacklist holds %s keys, more than its maximum of %s", blacklistSize(), maxBlacklistedKeys);
     }
 
     private static void checkNoEqualKeys(List<PlanTuningCacheKey> keys) {
