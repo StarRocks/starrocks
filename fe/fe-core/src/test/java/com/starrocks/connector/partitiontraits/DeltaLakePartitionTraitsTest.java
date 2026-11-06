@@ -17,6 +17,7 @@ package com.starrocks.connector.partitiontraits;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.catalog.LightWeightDeltaLakeTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
@@ -37,7 +38,6 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class DeltaLakePartitionTraitsTest {
@@ -105,38 +105,43 @@ public class DeltaLakePartitionTraitsTest {
     }
 
     @Test
-    public void recreatedTableIsUnknown() {
+    public void checkDoesNotWriteTheRefreshState() {
+        DeltaLakeTable table = table(7);
+        MaterializedView.AsyncRefreshContext context = new MaterializedView.AsyncRefreshContext();
+        updatedPartitionNames(table, baseTableInfo(table), context);
+        assertTrue(context.getBaseTableInfoVisibleVersionMap().isEmpty());
+    }
+
+    @Test
+    public void recreatedTableIsStale() {
         DeltaLakeTable dropped = table(7);
         DeltaLakeTable recreated = table("6f3a2c1e-0000-4000-8000-000000000002", List.of(), 7);
-        assertNull(updatedPartitionNames(recreated, baseTableInfo(dropped), refreshedFrom(dropped, TBL)));
+        assertEquals(Set.of(TBL), updatedPartitionNames(recreated, baseTableInfo(dropped), refreshedFrom(dropped, TBL)));
     }
 
     @Test
-    public void mvRefreshedFromTheCurrentVersionOfAPartitionedTableIsFresh() {
+    public void partitionedTableIsNotTrackedAndAlwaysStale() {
         DeltaLakeTable table = partitionedTable(7);
-        assertEquals(Set.of(), updatedPartitionNames(table, baseTableInfo(table), refreshedFrom(table, "p=a", "p=b")));
+        assertFalse(DeltaLakePartitionTraits.isTableVersionTracked(table));
+        assertEquals(Set.of(TBL), updatedPartitionNames(table, baseTableInfo(table),
+                new MaterializedView.AsyncRefreshContext()));
     }
 
     @Test
-    public void mvRefreshedFromAnOlderVersionOfAPartitionedTableIsStale() {
-        DeltaLakeTable current = partitionedTable(8);
-        assertEquals(Set.of("p=a", "p=b"), updatedPartitionNames(current, baseTableInfo(current),
-                refreshedFrom(partitionedTable(7), "p=a", "p=b")));
-    }
-
-    @Test
-    public void partitionsOfAPartitionedTableAreNotListed() {
-        assertThrows(UnsupportedOperationException.class,
-                () -> ConnectorPartitionTraits.build(partitionedTable(7)).getPartitionNameWithPartitionInfo());
-    }
-
-    @Test
-    public void tableWithoutASnapshotIsNotTracked() {
+    public void tableWithoutASnapshotIsNotTrackedAndAlwaysStale() {
         DeltaLakeTable table = table(7);
         table.clearMetadata();
         assertFalse(DeltaLakePartitionTraits.isTableVersionTracked(table));
-        assertNull(updatedPartitionNames(table, new BaseTableInfo(CATALOG, DB, TBL, TBL + ":" + TABLE_ID),
+        assertEquals(Set.of(TBL), updatedPartitionNames(table, new BaseTableInfo(CATALOG, DB, TBL, TBL + ":" + TABLE_ID),
                 new MaterializedView.AsyncRefreshContext()));
+    }
+
+    @Test
+    public void lightWeightTableIsNotTrackedAndAlwaysStale() {
+        DeltaLakeTable table = table(7);
+        DeltaLakeTable lightWeight = new LightWeightDeltaLakeTable(table);
+        assertFalse(DeltaLakePartitionTraits.isTableVersionTracked(lightWeight));
+        assertEquals(Set.of(TBL), updatedPartitionNames(lightWeight, baseTableInfo(table), refreshedFrom(table, TBL)));
     }
 
     @Test
