@@ -1075,6 +1075,9 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_keeps_persistent_index_vers
     std::vector<RowsetSharedPtr> rowsets{create_rowset(tablet, keys)};
     int64_t version = 1;
     commit_rowsets(tablet, rowsets, version);
+    // rowset_commit() returns once the version is applied, but the apply thread may still hold
+    // the index cache entry. Wait for it before touching the cache.
+    tablet->updates()->wait_apply_done();
 
     auto expect_index_meta_at_applied_version = [&]() {
         EditVersion applied_version;
@@ -1100,6 +1103,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_keeps_persistent_index_vers
             auto partial_rowset =
                     create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schema, 1, mode);
             ASSERT_OK(tablet->rowset_commit(++version, partial_rowset, 10000));
+            tablet->updates()->wait_apply_done();
             ASSERT_FALSE(tablet->updates()->is_error());
             ASSERT_NO_FATAL_FAILURE(expect_index_meta_at_applied_version());
             // An apply that loaded the index keeps it cached for the next apply.
@@ -1116,6 +1120,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_keeps_persistent_index_vers
     ASSERT_TRUE(manager->index_cache().try_remove_by_key(tablet->tablet_id()));
     rowsets = {create_rowset(tablet, {0, N})};
     commit_rowsets(tablet, rowsets, version);
+    tablet->updates()->wait_apply_done();
     ASSERT_NO_FATAL_FAILURE(expect_index_meta_at_applied_version());
     ASSERT_TRUE(check_tablet(tablet, version, N + 1, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
         if (k1 == 0 || k1 == N) {
