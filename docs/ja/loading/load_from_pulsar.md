@@ -95,6 +95,27 @@ Routine Load は、Pulsar 用の以下のカスタムパラメータをサポー
 | ---------------------------------------- | -------- | ------------------------------------------------------------ |
 | property.pulsar_default_initial_position | No       | トピックのパーティションがサブスクライブされたときのデフォルトの初期位置。このパラメータは `pulsar_initial_positions` が指定されていない場合に有効です。その有効な値は `pulsar_initial_positions` の有効な値と同じです。例: `"``property.pulsar_default_initial_position" = "POSITION_EARLIEST"` |
 | property.auth.token                      | No       | Pulsar がセキュリティトークンを使用してクライアントを認証する場合、あなたの身元を確認するためにトークン文字列が必要です。例: `"p``roperty.auth.token" = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUJzdWIiOiJqaXV0aWFuY2hlbiJ9.lulGngOC72vE70OW54zcbyw7XdKSOxET94WT_hIqD"` |
+| property.connection_timeout_ms | No | 接続タイムアウト（ミリ秒）。有効な範囲は `1` から `2147483647` です。省略した場合、Pulsar クライアントのデフォルト値（`10000` ミリ秒）を使用します。 |
+| property.operation_timeout_seconds | No | コンシューマーの作成を含む、クライアント操作のタイムアウト（秒）。有効な範囲は `1` から `2147483` です。省略した場合、Pulsar クライアントのデフォルト値（`30` 秒）を使用します。 |
+
+### Pulsar クライアントのタイムアウトを設定する
+
+ジョブの作成時に、`FROM PULSAR` のプロパティで `property.connection_timeout_ms` と `property.operation_timeout_seconds` を設定できます。どちらも任意で、そのジョブの Pulsar クライアントにのみ適用されます。Routine Load タスクのタイムアウトは変更されず、Broker やネットワークの障害からの復旧を保証するものではありません。`task_timeout_second` には、クライアント操作とロードを完了できる十分な時間を設定してください。
+
+既存のジョブのタイムアウトを変更する例：
+
+```sql
+PAUSE ROUTINE LOAD FOR routine_wiki_edit_1;
+ALTER ROUTINE LOAD FOR routine_wiki_edit_1
+FROM PULSAR
+(
+    "property.connection_timeout_ms" = "25000",
+    "property.operation_timeout_seconds" = "60"
+);
+RESUME ROUTINE LOAD FOR routine_wiki_edit_1;
+```
+
+変更後のプロパティは後続のタスクに適用され、BE の再起動は不要です。異なるプロパティを持つキャッシュ済みコンシューマーは再利用されません。タイムアウトの変更によって、サブスクリプションや初期位置の設定が変わることはありません。これらのプロパティを使用する前に、すべての FE と BE を対応バージョンにアップグレードしてください。古い BE は未対応のカスタムプロパティを無視します。
 
 ## ロードジョブとタスクを確認する
 
@@ -144,6 +165,6 @@ Routine Load が Pulsar からデータを消費するために使用される�
 
 **次の点に注意してください**：
 
-- `data_source_properties` に関連するパラメータの中で、現在サポートされているのは `pulsar_partitions`、`pulsar_initial_positions`、およびカスタム Pulsar パラメータ `property.pulsar_default_initial_position` と `property.auth.token` のみです。`pulsar_service_url`、`pulsar_topic`、および `pulsar_subscription` は変更できません。
+- `data_source_properties` に関連するパラメータの中で、現在サポートされているのは `pulsar_partitions`、`pulsar_initial_positions`、およびカスタム Pulsar パラメータ `property.pulsar_default_initial_position`、`property.auth.token`、`property.connection_timeout_ms`、`property.operation_timeout_seconds` のみです。`pulsar_service_url`、`pulsar_topic`、および `pulsar_subscription` は変更できません。
 - 消費するパーティションと一致する初期位置を変更する必要がある場合は、Routine Load ジョブを作成する際に `pulsar_partitions` を使用してパーティションを指定し、指定されたパーティションの初期位置 `pulsar_initial_positions` のみを変更できることを確認する必要があります。
 - Routine Load ジョブを作成する際にトピック `pulsar_topic` のみを指定し、パーティション `pulsar_partitions` を指定しない場合、トピックのすべてのパーティションの開始位置を `pulsar_default_initial_position` を介して変更できます。
