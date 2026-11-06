@@ -550,6 +550,41 @@ public class TabletPreSplitCoordinatorTest {
                 new Estimates(totalBytes, /*totalRows*/ 0L), activeComputeNodeCount);
     }
 
+    private static int selectPreSplitTabletBudget(long totalBytes, int activeComputeNodeCount) {
+        return TabletPreSplitCoordinator.selectPreSplitTabletBudget(
+                new Estimates(totalBytes, /*totalRows*/ 0L), activeComputeNodeCount);
+    }
+
+    @Test
+    public void testPreSplitTabletBudgetIsNotCappedByMaxSplitCount() {
+        Config.tablet_pre_split_target_size = 0L;
+        Config.tablet_reshard_max_split_count = 2;
+        Assertions.assertEquals(12, selectPreSplitTabletBudget(100L * DebugUtil.GIGABYTE, 3));
+        Assertions.assertEquals(2, selectPreSplitTabletCount(100L * DebugUtil.GIGABYTE, 3));
+    }
+
+    @Test
+    public void testPreSplitTabletBudgetMatchesTheCappedCountBelowTheCap() {
+        Config.tablet_pre_split_target_size = 0L;
+        assertBudgetMatchesCount(1, 3, 2);
+        assertBudgetMatchesCount(70, 3, 9);
+        assertBudgetMatchesCount(30, 100, 15);
+        Assertions.assertEquals(2, selectPreSplitTabletCount(0L, 1));
+        Assertions.assertEquals(2, selectPreSplitTabletBudget(0L, 1));
+    }
+
+    private static void assertBudgetMatchesCount(long gib, int activeComputeNodeCount, int expected) {
+        long bytes = gib * DebugUtil.GIGABYTE;
+        Assertions.assertEquals(expected, selectPreSplitTabletCount(bytes, activeComputeNodeCount));
+        Assertions.assertEquals(expected, selectPreSplitTabletBudget(bytes, activeComputeNodeCount));
+    }
+
+    @Test
+    public void testPreSplitTabletBudgetSaturatesWithoutOverflow() {
+        Config.tablet_pre_split_target_size = 1L;
+        Assertions.assertEquals(Integer.MAX_VALUE, selectPreSplitTabletBudget(Long.MAX_VALUE, 3));
+    }
+
     @Test
     public void testPreSplitTargetSizeDefaultsToReshardTargetSize() {
         // Zero is the default: pre-split must size exactly as it did before the config existed.
