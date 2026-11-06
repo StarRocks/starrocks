@@ -19,6 +19,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
+import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -31,7 +33,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
- * LogCleaner periodically checks disk usage and cleans log files when disk usage exceeds threshold.
+ * LogCleaner expires historical GC logs independently of the optional disk-usage cleanup.
  * 
  * Cleaning strategy:
  * 1. When disk usage exceeds log_cleaner_disk_usage_threshold (default 80%), start cleaning
@@ -42,6 +44,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class LogCleaner extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(LogCleaner.class);
+    private static final String GC_LOG_PREFIX = "fe.gc.log";
 
     // All log file patterns that should be cleaned
     private static final String[] ALL_LOG_PATTERNS = {
@@ -56,6 +59,10 @@ public class LogCleaner extends FrontendDaemon {
             "fe.gc.log",
             "fe.plan.log"
     };
+
+    private final Set<Path> currentGcLogFiles = new LinkedHashSet<>();
+    private final boolean gcLogOutputsKnown;
+    private final long gcLogRetentionMillis;
 
     /**
      * Represents a log directory
@@ -93,17 +100,104 @@ public class LogCleaner extends FrontendDaemon {
     }
 
     public LogCleaner() {
+        this(ManagementFactory.getRuntimeMXBean().getInputArguments());
+    }
+
+    LogCleaner(List<String> jvmArguments) {
         super("LogCleaner", Config.log_cleaner_check_interval_second * 1000L);
+        gcLogOutputsKnown = findGcLogOutputs(jvmArguments);
+        long retentionMillis = -1;
+        try {
+            String age = Config.gc_log_delete_age.trim();
+            if (!age.matches("[1-9][0-9]*[dD]")) {
+                throw new IllegalArgumentException("GC log expiration age must be a positive number of days followed by d");
+            }
+            retentionMillis = Math.multiplyExact(Long.parseLong(age.substring(0, age.length() - 1)),
+                    TimeUnit.DAYS.toMillis(1));
+        } catch (RuntimeException e) {
+            LOG.warn("Invalid gc_log_delete_age '{}'; GC log expiration cleanup is disabled",
+                    Config.gc_log_delete_age, e);
+            retentionMillis = -1;
+        }
+        gcLogRetentionMillis = retentionMillis;
+    }
+
+    private boolean findGcLogOutputs(List<String> jvmArguments) {
+        try {
+            for (String argument : jvmArguments) {
+                if (!argument.startsWith("-Xlog:")) {
+                    continue;
+                }
+                // Both -Xlog:gc*:filename:time and -Xlog:gc*:file=filename:time are supported.
+                String[] fields = argument.substring("-Xlog:".length()).split(":", 3);
+                if (fields.length < 2) {
+                    continue;
+                }
+                String output = fields[1].startsWith("file=") ? fields[1].substring(5) : fields[1];
+                if (output.startsWith("\"") && output.endsWith("\"")) {
+                    output = output.substring(1, output.length() - 1);
+                }
+                output = output.replace("%p", Long.toString(ProcessHandle.current().pid()));
+                Path path = Paths.get(output);
+                if (!isGcLogFile(path.getFileName().toString())) {
+                    continue;
+                }
+                // Do not guess the expansion of JVM placeholders such as %t: protect all GC logs instead.
+                if (output.contains("%")) {
+                    throw new IllegalArgumentException("Unresolved GC log output: " + output);
+                }
+                currentGcLogFiles.add(path.toFile().getCanonicalFile().toPath());
+            }
+            return true;
+        } catch (IOException | RuntimeException e) {
+            LOG.warn("Cannot identify current GC log outputs; skipping GC log cleanup", e);
+            return false;
+        }
+    }
+
+    private boolean isGcLogFile(String fileName) {
+        return fileName.equals(GC_LOG_PREFIX) || fileName.startsWith(GC_LOG_PREFIX + ".");
+    }
+
+    private boolean isProtectedGcLog(File file) throws IOException {
+        return isGcLogFile(file.getName()) && (!gcLogOutputsKnown || Files.isSymbolicLink(file.toPath()) ||
+                currentGcLogFiles.contains(file.getCanonicalFile().toPath()));
+    }
+
+    private void cleanExpiredGcLogs() {
+        if (!gcLogOutputsKnown || gcLogRetentionMillis <= 0) {
+            return;
+        }
+        Set<Path> directories = new LinkedHashSet<>();
+        currentGcLogFiles.forEach(path -> directories.add(path.getParent()));
+        long expirationTime = System.currentTimeMillis() - gcLogRetentionMillis;
+        for (Path directory : directories) {
+            for (LogFileInfo fileInfo : collectLogFilesInDirectory(directory.toFile())) {
+                File file = fileInfo.getFile();
+                if (isGcLogFile(file.getName()) && fileInfo.getModificationTime() < expirationTime) {
+                    if (file.delete()) {
+                        LOG.info("Deleted expired GC log file: {}", file);
+                    } else {
+                        LOG.warn("Failed to delete expired GC log file: {}", file);
+                    }
+                }
+            }
+        }
     }
 
     @Override
     protected void runAfterCatalogReady() {
+        // Update interval from config
+        setInterval(Config.log_cleaner_check_interval_second * 1000L);
+
+        try {
+            cleanExpiredGcLogs();
+        } catch (Exception e) {
+            LOG.warn("Error in GC log expiration cleanup", e);
+        }
         if (!Config.log_cleaner_disk_util_based_enable) {
             return;
         }
-
-        // Update interval from config
-        setInterval(Config.log_cleaner_check_interval_second * 1000L);
 
         try {
             cleanLogsIfNeeded();
@@ -237,6 +331,9 @@ public class LogCleaner extends FrontendDaemon {
                 if (matchesLogPattern(fileName, pattern)) {
                     try {
                         Path filePath = Paths.get(file.getAbsolutePath());
+                        if (isProtectedGcLog(file)) {
+                            continue;
+                        }
                         BasicFileAttributes attrs = Files.readAttributes(filePath, BasicFileAttributes.class);
                         logFiles.add(new LogFileInfo(file, attrs.lastModifiedTime().toMillis()));
                     } catch (Exception e) {

@@ -21,8 +21,10 @@ import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,6 +37,7 @@ public class LogCleanerTest {
     private int originalTarget;
     private int originalRetentionDays;
     private int originalCheckInterval;
+    private String originalGcLogDeleteAge;
 
     @BeforeEach
     public void setUp() throws IOException {
@@ -44,6 +47,8 @@ public class LogCleanerTest {
         originalTarget = Config.log_cleaner_disk_usage_target;
         originalRetentionDays = Config.log_cleaner_audit_log_min_retention_days;
         originalCheckInterval = Config.log_cleaner_check_interval_second;
+        originalGcLogDeleteAge = Config.gc_log_delete_age;
+        Config.gc_log_delete_age = "7d";
 
         // Create temporary test directory
         testLogDir = Files.createTempDirectory("log_cleaner_test").toFile();
@@ -70,6 +75,7 @@ public class LogCleanerTest {
         Config.log_cleaner_disk_usage_target = originalTarget;
         Config.log_cleaner_audit_log_min_retention_days = originalRetentionDays;
         Config.log_cleaner_check_interval_second = originalCheckInterval;
+        Config.gc_log_delete_age = originalGcLogDeleteAge;
 
         // Clean up test directory
         if (testLogDir != null && testLogDir.exists()) {
@@ -216,6 +222,108 @@ public class LogCleanerTest {
         // Current log file should not be deleted (doesn't match pattern)
         assertTrue(new File(testLogDir, "fe.log").exists());
         // Old log file should be deleted
+        assertFalse(new File(testLogDir, "fe.log.20240101-1").exists());
+    }
+
+    @Test
+    public void testGcExpirationIndependentOfDiskCleanup() throws IOException {
+        Config.log_cleaner_disk_util_based_enable = false;
+        long oldTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(10);
+        long recentTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(2);
+        createLogFileWithTime("fe.gc.log.20240101-000000", 10, oldTime);
+        createLogFileWithTime("fe.gc.log.20240101-000000.0", 10, oldTime);
+        createLogFileWithTime("fe.gc.log.20230101-000000", 10, recentTime);
+        createLogFileWithTime("fe.gc.log.active", 10, oldTime);
+        createLogFileWithTime("fe.log.20240101-1", 10, oldTime);
+
+        new LogCleaner(List.of("-Xlog:gc*:" + new File(testLogDir, "fe.gc.log.active") + ":time"))
+                .runAfterCatalogReady();
+
+        assertFalse(new File(testLogDir, "fe.gc.log.20240101-000000").exists());
+        assertFalse(new File(testLogDir, "fe.gc.log.20240101-000000.0").exists());
+        assertTrue(new File(testLogDir, "fe.gc.log.20230101-000000").exists());
+        assertTrue(new File(testLogDir, "fe.gc.log.active").exists());
+        assertTrue(new File(testLogDir, "fe.log.20240101-1").exists());
+    }
+
+    @Test
+    public void testGcExpirationUsesConfiguredDirectoryAndAge() throws IOException {
+        Config.log_cleaner_disk_usage_threshold = 99;
+        Config.gc_log_delete_age = "3d";
+        File gcDirectory = Files.createDirectory(testLogDir.toPath().resolve("gc")).toFile();
+        File old = new File(gcDirectory, "fe.gc.log.20240101-000000");
+        File recent = new File(gcDirectory, "fe.gc.log.20240102-000000");
+        Files.writeString(old.toPath(), "old");
+        Files.writeString(recent.toPath(), "recent");
+        Files.setLastModifiedTime(old.toPath(), FileTime.fromMillis(
+                System.currentTimeMillis() - TimeUnit.DAYS.toMillis(4)));
+        Files.setLastModifiedTime(recent.toPath(), FileTime.fromMillis(
+                System.currentTimeMillis() - TimeUnit.DAYS.toMillis(2)));
+        LogCleaner cleaner = new LogCleaner(List.of("-Xlog:gc*:file=" +
+                new File(gcDirectory, "fe.gc.log.current") + ":time:filecount=10,filesize=100M"));
+        Config.gc_log_delete_age = "7d"; // The static setting is read when the cleaner is constructed.
+
+        cleaner.runAfterCatalogReady();
+
+        assertFalse(old.exists());
+        assertTrue(recent.exists());
+    }
+
+    @Test
+    public void testGcCurrentOutputProtectedDuringDiskCleanup() throws IOException {
+        long oldTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(10);
+        createLogFileWithTime("fe.gc.log.active", 10, oldTime);
+        createLogFileWithTime("fe.gc.log.archive", 10, System.currentTimeMillis());
+
+        new LogCleaner(List.of("-Xlog:gc*:file=" + new File(testLogDir, "fe.gc.log.active") + ":time"))
+                .runAfterCatalogReady();
+
+        assertTrue(new File(testLogDir, "fe.gc.log.active").exists());
+        // Expiration age is not a minimum retention guarantee during disk-pressure cleanup.
+        assertFalse(new File(testLogDir, "fe.gc.log.archive").exists());
+    }
+
+    @Test
+    public void testGcSymlinkAndDirectoryNotDeleted() throws IOException {
+        Config.log_cleaner_disk_util_based_enable = false;
+        long oldTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(10);
+        createLogFileWithTime("other.log", 10, oldTime);
+        Path link = testLogDir.toPath().resolve("fe.gc.log.link");
+        Path directory = testLogDir.toPath().resolve("fe.gc.log.directory");
+        Files.createSymbolicLink(link, testLogDir.toPath().resolve("other.log"));
+        Files.createDirectory(directory);
+
+        new LogCleaner(List.of("-Xlog:gc*:file=" + new File(testLogDir, "fe.gc.log.active") + ":time"))
+                .runAfterCatalogReady();
+
+        assertTrue(Files.isSymbolicLink(link));
+        assertTrue(Files.isDirectory(directory));
+        assertTrue(new File(testLogDir, "other.log").exists());
+    }
+
+    @Test
+    public void testGcInvalidAgeSkipsExpiration() throws IOException {
+        Config.log_cleaner_disk_util_based_enable = false;
+        createLogFileWithTime("fe.gc.log.archive", 10,
+                System.currentTimeMillis() - TimeUnit.DAYS.toMillis(10));
+        for (String age : List.of("invalid", "0d", "-1d", "9223372036854775807d")) {
+            Config.gc_log_delete_age = age;
+            new LogCleaner(List.of("-Xlog:gc*:file=" + new File(testLogDir, "fe.gc.log.active") + ":time"))
+                    .runAfterCatalogReady();
+            assertTrue(new File(testLogDir, "fe.gc.log.archive").exists(), age);
+        }
+    }
+
+    @Test
+    public void testGcUnresolvedOutputProtectsFiles() throws IOException {
+        createLogFileWithTime("fe.gc.log.archive", 10,
+                System.currentTimeMillis() - TimeUnit.DAYS.toMillis(10));
+        createLogFile("fe.log.20240101-1", 10);
+
+        new LogCleaner(List.of("-Xlog:gc*:file=" + new File(testLogDir, "fe.gc.log.%t") + ":time"))
+                .runAfterCatalogReady();
+
+        assertTrue(new File(testLogDir, "fe.gc.log.archive").exists());
         assertFalse(new File(testLogDir, "fe.log.20240101-1").exists());
     }
 

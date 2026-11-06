@@ -480,6 +480,10 @@ public class Config extends ConfigBase {
     @ConfField
     public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
 
+    @ConfField(comment = "Expiration age of historical FE GC log files, based on last modification time. " +
+            "Use a positive number of days followed by d, such as 3d or 7d. Changes require an FE restart.")
+    public static String gc_log_delete_age = "7d";
+
     @ConfField(mutable = true, comment = "Enable automatic log cleaning based on disk usage. " +
             "When enabled, logs will be cleaned when disk usage exceeds the threshold.")
     public static boolean log_cleaner_disk_util_based_enable = false;

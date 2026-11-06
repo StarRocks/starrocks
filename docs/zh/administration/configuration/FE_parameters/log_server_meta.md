@@ -366,6 +366,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: Log4j `DefaultRolloverStrategy` 为 `fe.features.log` 使用的滚动文件索引策略。有效值为 `min`、`max` 和 `nomax`。使用 `min` 时，Log4j 最多保留 `feature_log_roll_num` 个归档文件，并在每次轮转时移动索引，使最新归档位于最小索引处。使用 `max` 时，Log4j 同样最多保留 `feature_log_roll_num` 个归档文件，但将最新归档保留在最大索引处。使用 `nomax` 时，Log4j 会持续递增索引且不重命名已有归档；由于 `nomax` 会使 Log4j 忽略 `max`（即 `feature_log_roll_num`）限制，请设置 `feature_log_delete_count` 以限制磁盘占用。无效值会在日志初始化时抛出 IOException。
 - 引入版本: -
 
+### `gc_log_delete_age`
+
+- 默认值: 7d
+- 类型: String
+- 单位: 天，带 `d` 后缀
+- 是否动态: 否
+- 描述: FE 历史 GC 日志的过期删除时间，按文件最后修改时间计算。取值为正整数加 `d`，例如 `3d` 或 `7d`。清理周期由 `log_cleaner_check_interval_second` 控制，不依赖磁盘压力清理开关。GC 路径从 JVM 启动 `-Xlog` 参数中名为 `fe.gc.log` 或 `fe.gc.log.*` 的文件输出获取，默认 `JAVA_OPTS` 无需修改。当前输出文件及符号链接不会删除。无法解析文件名占位符时跳过 GC 清理；过期时间配置非法时告警并跳过过期清理。磁盘压力清理仍可提前删除历史文件，因此这不是最短保留时间。修改后需重启 FE 生效。
+- 引入版本: -
+
 ### `internal_log_delete_age`
 
 - 默认值: 7d

@@ -366,6 +366,15 @@ This topic introduces the following types of FE configurations:
 - Description: The rollover file index strategy passed to Log4j's `DefaultRolloverStrategy` for `fe.features.log`. Valid values are `min`, `max`, and `nomax`. With `min`, Log4j keeps at most `feature_log_roll_num` archives and, on each rollover, shifts the indexes so the newest archive is at the lowest index. With `max`, Log4j also keeps at most `feature_log_roll_num` archives but keeps the newest archive at the highest index. With `nomax`, Log4j appends monotonically increasing indexes without renaming existing archives; because `nomax` makes Log4j ignore the `max` (`feature_log_roll_num`) limit, set `feature_log_delete_count` to bound disk usage. An invalid value causes an IOException during logging initialization.
 - Introduced in: -
 
+### `gc_log_delete_age`
+
+- Default: 7d
+- Type: String
+- Unit: Days, with the `d` suffix
+- Is mutable: No
+- Description: Expiration age of historical FE GC logs, measured from file modification time. Use a positive number of days followed by `d`, such as `3d` or `7d`. The cleaner runs every `log_cleaner_check_interval_second` independently of disk-pressure cleanup. It reads GC file outputs named `fe.gc.log` or `fe.gc.log.*` from JVM startup `-Xlog` arguments, so the default `JAVA_OPTS` needs no changes. Current outputs and symbolic links are protected. Unresolved filename placeholders cause GC cleanup to be skipped; an invalid age disables expiration cleanup with a warning. Disk-pressure cleanup can still remove historical files sooner. Changes require an FE restart.
+- Introduced in: -
+
 ### `internal_log_delete_age`
 
 - Default: 7d

@@ -357,6 +357,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Log4j の `DefaultRolloverStrategy` が `fe.features.log` に使用するロールオーバーのファイルインデックス戦略。有効な値は `min`、`max`、`nomax` です。`min` の場合、Log4j は最大 `feature_log_roll_num` 個のアーカイブを保持し、ロールオーバーのたびにインデックスをシフトして最新のアーカイブを最小のインデックスに配置します。`max` の場合、Log4j も最大 `feature_log_roll_num` 個のアーカイブを保持しますが、最新のアーカイブを最大のインデックスに配置します。`nomax` の場合、Log4j はインデックスを単調増加させ、既存のアーカイブをリネームしません。`nomax` は Log4j に `max`（`feature_log_roll_num`）の上限を無視させるため、ディスク使用量を制限するには `feature_log_delete_count` を設定してください。無効な値はログ初期化時に IOException を発生させます。
 - 導入時期：-
 
+### `gc_log_delete_age`
+
+- デフォルト: 7d
+- タイプ: String
+- 単位: 日数（`d` サフィックス付き）
+- 変更可能: いいえ
+- 説明: FE の過去の GC ログの有効期間です。最終更新時刻を基準にし、`3d` や `7d` のように正の整数と `d` を指定します。`log_cleaner_check_interval_second` の間隔で、ディスク使用率による削除とは独立して実行します。対象ディレクトリは JVM 起動時の `-Xlog` 引数の `fe.gc.log` または `fe.gc.log.*` ファイル出力から取得し、デフォルトの `JAVA_OPTS` は変更不要です。現在の出力ファイルとシンボリックリンクは保護します。ファイル名のプレースホルダーを解決できない場合は GC ログの削除をスキップします。期間が無効な場合は警告を記録して期限による削除を無効にします。ディスク使用率による削除は、この期間より前の過去ログも削除する場合があります。変更には FE の再起動が必要です。
+- 導入バージョン: -
+
 ### `internal_log_delete_age`
 
 - デフォルト：7d
