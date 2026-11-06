@@ -88,9 +88,9 @@ INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
 select v1 from t0 inner join t1 on v3 = v4 where (v2 = 2 or v2 = 3) and (v3 = 3 or v4 = 4);
 [result]
 INNER JOIN (join-predicate [3: v3 = 4: v4 AND 3: v3 = 3 OR 4: v4 = 4] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 IN (2, 3)])
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[3: v3 IN (3, 4) AND 2: v2 IN (2, 3)])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
+        SCAN (columns[4: v4] predicate[4: v4 IN (3, 4)])
 [end]
 
 [sql]
