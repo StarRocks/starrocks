@@ -26,7 +26,6 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "storage/chunk_helper.h"
-#include "storage/flat_json_metrics.h"
 #include "storage/lake/compaction_test_utils.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/horizontal_compaction_task.h"
@@ -38,7 +37,8 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/init_test_env.h"
-#include "types/json_value.h"
+#include "util/json.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::lake {
 
@@ -813,7 +813,7 @@ TEST_F(LakeFlatJsonColumnsInGroupsCompactionTest, test_every_json_column_streams
 
     // A small budget makes a flat JSON compactor that can stream start streaming within its first chunks.
     config::compaction_memory_limit_per_worker = 1024 * 1024;
-    const int64_t streamed_before = FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value();
+    const int64_t streamed_before = StarRocksMetrics::instance()->flat_json_compaction_streaming_total.value();
     auto txn_id = next_id();
     auto task_context =
             std::make_unique<CompactionTaskContext>(txn_id, _tablet_metadata->id(), version, false, false, nullptr);
@@ -823,7 +823,7 @@ TEST_F(LakeFlatJsonColumnsInGroupsCompactionTest, test_every_json_column_streams
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
     version++;
     // Both JSON columns streamed, not only the one in the first group that holds a JSON column.
-    EXPECT_EQ(streamed_before + 2, FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value());
+    EXPECT_EQ(streamed_before + 2, StarRocksMetrics::instance()->flat_json_compaction_streaming_total.value());
 
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
     ASSERT_EQ(1, metadata->rowsets_size());
@@ -831,7 +831,7 @@ TEST_F(LakeFlatJsonColumnsInGroupsCompactionTest, test_every_json_column_streams
     ASSERT_OK(reader->prepare());
     ASSERT_OK(reader->open(TabletReaderParams()));
     std::vector<bool> seen(3 * kRowsPerLoad, false);
-    auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
+    auto chunk = ChunkHelper::new_chunk(*_schema, 1024);
     while (true) {
         auto st = reader->get_next(chunk.get());
         if (st.is_end_of_file()) {
