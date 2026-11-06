@@ -89,7 +89,9 @@ public class OdpsColumnValue implements ColumnValue {
         List data = (List) fieldData;
         ArrayTypeInfo arrayTypeInfo = (ArrayTypeInfo) dataType;
         for (int i = 0; i < data.size(); i++) {
-            values.add(new OdpsColumnValue(data.get(i), arrayTypeInfo.getElementTypeInfo(), timezone));
+            Object element = data.get(i);
+            values.add(element == null ? null :
+                    new OdpsColumnValue(element, arrayTypeInfo.getElementTypeInfo(), timezone));
         }
     }
 
@@ -109,7 +111,8 @@ public class OdpsColumnValue implements ColumnValue {
         List<TypeInfo> fieldTypeInfos = structTypeInfo.getFieldTypeInfos();
         Struct data = (Struct) fieldData;
         for (int i = 0; i < data.getFieldCount(); i++) {
-            values.add(new OdpsColumnValue(data.getFieldValue(i), fieldTypeInfos.get(i), timezone));
+            Object field = data.getFieldValue(i);
+            values.add(field == null ? null : new OdpsColumnValue(field, fieldTypeInfos.get(i), timezone));
         }
     }
 
