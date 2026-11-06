@@ -592,4 +592,23 @@ TEST_F(SIMDTest, contain_zero) {
     }
 }
 
+TEST_F(SIMDTest, CountZero8BitTailAccumulatorBoundaries) {
+    // Exhaustively test every size from 0 to 520, covering all combinations of 256B, 64B, 16B, and scalar tails
+    for (size_t sz = 0; sz <= 520; ++sz) {
+        std::vector<uint8_t> all_zero(sz, 0);
+        EXPECT_EQ(sz, SIMD::count_zero(all_zero.data(), sz)) << "all_zero failed at sz=" << sz;
+
+        std::vector<uint8_t> no_zero(sz, 1);
+        EXPECT_EQ(0u, SIMD::count_zero(no_zero.data(), sz)) << "no_zero failed at sz=" << sz;
+
+        std::vector<uint8_t> alternating(sz);
+        size_t expected = 0;
+        for (size_t i = 0; i < sz; ++i) {
+            alternating[i] = (i % 3 == 0) ? 0 : static_cast<uint8_t>((i % 255) + 1);
+            if (alternating[i] == 0) ++expected;
+        }
+        EXPECT_EQ(expected, SIMD::count_zero(alternating.data(), sz)) << "alternating failed at sz=" << sz;
+    }
+}
+
 } // namespace starrocks
