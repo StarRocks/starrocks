@@ -2653,7 +2653,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     + table.getColocateGroup() + "', cannot create range colocate tablets");
         }
         int colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
-        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
+        // Expand with the sort key of the index being created, not the base index's: every index routes its rows by its
+        // own sort key, which starts with the colocate columns but can be shorter or longer than the base sort key.
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table, index.getMetaId());
 
         for (ColocateRange colocateRange : colocateRanges) {
             List<Long> shardIds = stateMgr.getStarOSAgent().createShards(1,
