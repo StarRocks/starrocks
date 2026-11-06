@@ -494,6 +494,12 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
             } else {
                 return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_VARBINARY, false>(node);
             }
+        } else if (is_binary_type(from_type)) {
+            if (allow_throw_exception) {
+                return new VectorizedCastExpr<TYPE_VARBINARY, TYPE_VARBINARY, true>(node);
+            } else {
+                return new VectorizedCastExpr<TYPE_VARBINARY, TYPE_VARBINARY, false>(node);
+            }
         } else {
             LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
             return nullptr;
