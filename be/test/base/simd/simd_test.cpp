@@ -400,6 +400,15 @@ TEST_F(SIMDTest, all_ones) {
 TEST_F(SIMDTest, contain_zero) {
     // 1. Empty container and empty raw-pointer
     {
+        std::vector<uint8_t> default_empty;
+        ASSERT_EQ(nullptr, default_empty.data());
+        EXPECT_FALSE(SIMD::contain_zero(default_empty));
+        EXPECT_FALSE(SIMD::contain_zero(static_cast<const uint8_t*>(nullptr), 0));
+        EXPECT_FALSE(SIMD::contain_zero(static_cast<const int8_t*>(nullptr), 0));
+        EXPECT_TRUE(SIMD::all_ones(default_empty));
+        EXPECT_TRUE(SIMD::all_ones(static_cast<const uint8_t*>(nullptr), 0));
+        EXPECT_TRUE(SIMD::all_ones(static_cast<const int8_t*>(nullptr), 0));
+
         std::vector<uint8_t> u8_empty;
         EXPECT_FALSE(SIMD::contain_zero(u8_empty));
         EXPECT_FALSE(SIMD::contain_zero(u8_empty.data(), u8_empty.size()));
