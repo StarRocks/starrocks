@@ -111,6 +111,7 @@ subprojects {
             implementation("com.baidu:jprotobuf-precompile-plugin:2.2.12")
             implementation("com.baidu:jprotobuf-rpc-common:1.9")
             implementation("com.clickhouse:clickhouse-jdbc:0.4.6")
+            implementation("com.dameng:DmJdbcDriver18:8.1.3.140")
             implementation("com.esotericsoftware:kryo-shaded:4.0.2")
             implementation("com.fasterxml.jackson.core:jackson-annotations:${project.ext["jackson-annotations.version"]}")
             implementation("com.fasterxml.jackson.core:jackson-core:${project.ext["jackson.version"]}")

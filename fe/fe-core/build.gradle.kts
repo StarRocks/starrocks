@@ -82,6 +82,7 @@ dependencies {
     }
     implementation("com.baidu:jprotobuf-rpc-common")
     implementation("com.clickhouse:clickhouse-jdbc")
+    implementation("com.dameng:DmJdbcDriver18")
     implementation("com.fasterxml.jackson.core:jackson-annotations")
     implementation("com.fasterxml.jackson.core:jackson-core")
     implementation("com.fasterxml.jackson.core:jackson-databind")

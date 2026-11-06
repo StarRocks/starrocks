@@ -846,6 +846,13 @@ under the License.
             <artifactId>clickhouse-jdbc</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/com.dameng/DmJdbcDriver18 -->
+        <!-- we need DM (Dameng) driver for jdbc connector -->
+        <dependency>
+            <groupId>com.dameng</groupId>
+            <artifactId>DmJdbcDriver18</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.oracle.database.jdbc/ojdbc10 -->
         <dependency>
             <groupId>com.oracle.database.jdbc</groupId>

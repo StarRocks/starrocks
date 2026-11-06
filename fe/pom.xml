@@ -1336,6 +1336,14 @@ under the License.
                 <version>0.4.6</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/com.dameng/DmJdbcDriver18 -->
+            <!-- we need DM (Dameng) driver for jdbc connector -->
+            <dependency>
+                <groupId>com.dameng</groupId>
+                <artifactId>DmJdbcDriver18</artifactId>
+                <version>8.1.3.140</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/com.oracle.database.jdbc/ojdbc10 -->
             <dependency>
                 <groupId>com.oracle.database.jdbc</groupId>
