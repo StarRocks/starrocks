@@ -23,13 +23,7 @@
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
 #include "column/schema.h"
-<<<<<<< HEAD
 #include "common/config.h"
-=======
-#include "common/config_compaction_fwd.h"
-#include "common/config_json_flat_fwd.h"
-#include "common/config_lake_fwd.h"
->>>>>>> 8b57d0a ([BugFix] Read every JSON column of a vertical compaction through a flat layout (#81080))
 #include "common/logging.h"
 #include "storage/chunk_helper.h"
 #include "storage/flat_json_metrics.h"
