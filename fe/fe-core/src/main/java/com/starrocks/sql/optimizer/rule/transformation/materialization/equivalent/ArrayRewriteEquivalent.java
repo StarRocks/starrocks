@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.Type;
 
@@ -129,6 +130,7 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
         if (rollup == null) {
             return null;
         }
+        rollup = ScalarOperatorUtil.withConcreteTypes(rollup, argTypes, argTypes[0]);
         return new CallOperator(FunctionSet.ARRAY_UNIQUE_AGG, new ArrayType(newInputArgType), Lists.newArrayList(arg0), rollup);
     }
 
@@ -141,6 +143,10 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
             return null;
         }
         Function rollup = ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_UNIQUE_AGG, argTypes, compareMode);
+        if (rollup == null) {
+            return null;
+        }
+        rollup = ScalarOperatorUtil.withConcreteTypes(rollup, argTypes, argTypes[0]);
         CallOperator res = new CallOperator(
                 FunctionSet.ARRAY_UNIQUE_AGG,
                 new ArrayType(newInputArgType),
