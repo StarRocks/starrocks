@@ -26,6 +26,7 @@ import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
 import com.starrocks.qe.ConnectContext;
 import org.apache.hadoop.conf.Configuration;
@@ -70,6 +71,17 @@ public class IcebergGlueCatalog implements IcebergCatalog {
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
         copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
         copiedProperties.put(AwsProperties.GLUE_CATALOG_SKIP_NAME_VALIDATION, "true");
+
+        // StarRocks exposes the cross-account Glue Data Catalog id as "aws.glue.catalog_id", but Apache
+        // Iceberg's GlueCatalog only honors its native "glue.id" (AwsProperties.GLUE_CATALOG_ID) property
+        // when building Glue API requests, so "aws.glue.catalog_id" alone silently targets the caller's own
+        // account. Translate it into "glue.id" so cross-account access works as documented. An explicitly
+        // provided "glue.id" takes precedence and is left untouched.
+        String glueCatalogId = properties.get(CloudConfigurationConstants.AWS_GLUE_CATALOG_ID);
+        if (!Strings.isNullOrEmpty(glueCatalogId) && !copiedProperties.containsKey(AwsProperties.GLUE_CATALOG_ID)) {
+            copiedProperties.put(AwsProperties.GLUE_CATALOG_ID, glueCatalogId);
+        }
+
         // No door on construction, unlike the jdbc catalog (which opens its connection here) and the REST
         // one (which fetches /v1/config). Building the Glue client goes remote only when the credential
         // provider has to look something up -- an instance profile queries IMDS, static credentials with

@@ -19,11 +19,14 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.aws.glue.GlueCatalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -31,6 +34,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -120,5 +124,48 @@ public class IcebergGlueCatalogTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Failed to access database testdb",
                 () -> icebergGlueCatalog.dropDB(connectContext, "testdb"));
+    }
+
+    // Captures the properties map that IcebergGlueCatalog passes down to Iceberg's GlueCatalog.initialize().
+    private Map<String, String> capturePropertiesPassedToGlue(GlueCatalog glueCatalog, Map<String, String> inputProperties) {
+        new IcebergGlueCatalog("glue_native_catalog", new Configuration(), inputProperties);
+        List<Map<String, String>> captured = new ArrayList<>();
+        new Verifications() {
+            {
+                glueCatalog.initialize(anyString, withCapture(captured));
+            }
+        };
+        Assertions.assertFalse(captured.isEmpty(), "GlueCatalog.initialize should have been invoked");
+        return captured.get(captured.size() - 1);
+    }
+
+    @Test
+    public void testGlueCatalogIdIsTranslatedToGlueId(@Mocked GlueCatalog glueCatalog) {
+        // "aws.glue.catalog_id" (StarRocks property) must be forwarded as Iceberg's native "glue.id"
+        // so that cross-account Glue Data Catalog access actually reaches the remote account.
+        Map<String, String> icebergProperties = new HashMap<>();
+        icebergProperties.put(CloudConfigurationConstants.AWS_GLUE_CATALOG_ID, "123456789012");
+
+        Map<String, String> passed = capturePropertiesPassedToGlue(glueCatalog, icebergProperties);
+        Assertions.assertEquals("123456789012", passed.get(AwsProperties.GLUE_CATALOG_ID));
+    }
+
+    @Test
+    public void testExplicitGlueIdTakesPrecedence(@Mocked GlueCatalog glueCatalog) {
+        // If the user sets the native "glue.id" explicitly, it must win over "aws.glue.catalog_id".
+        Map<String, String> icebergProperties = new HashMap<>();
+        icebergProperties.put(CloudConfigurationConstants.AWS_GLUE_CATALOG_ID, "111111111111");
+        icebergProperties.put(AwsProperties.GLUE_CATALOG_ID, "222222222222");
+
+        Map<String, String> passed = capturePropertiesPassedToGlue(glueCatalog, icebergProperties);
+        Assertions.assertEquals("222222222222", passed.get(AwsProperties.GLUE_CATALOG_ID));
+    }
+
+    @Test
+    public void testGlueIdAbsentWhenCatalogIdNotSet(@Mocked GlueCatalog glueCatalog) {
+        // Without "aws.glue.catalog_id", StarRocks must not inject a "glue.id", so Iceberg keeps
+        // defaulting to the caller's own account.
+        Map<String, String> passed = capturePropertiesPassedToGlue(glueCatalog, new HashMap<>());
+        Assertions.assertFalse(passed.containsKey(AwsProperties.GLUE_CATALOG_ID));
     }
 }
