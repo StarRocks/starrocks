@@ -78,11 +78,13 @@ void ColumnMaterializer::rebuild_read_order_ctx() {
 }
 
 void ColumnMaterializer::add_dict_filter_column(int col_idx, std::vector<std::string>& sub_field_path) {
-    _dict_column_indices.emplace_back(col_idx);
-    if (_dict_column_sub_field_paths.find(col_idx) == _dict_column_sub_field_paths.end()) {
-        _dict_column_sub_field_paths.insert({col_idx, std::vector<std::vector<std::string>>({sub_field_path})});
-    } else {
-        _dict_column_sub_field_paths[col_idx].emplace_back(sub_field_path);
+    auto [it, inserted] = _dict_column_sub_field_paths.try_emplace(col_idx);
+    if (inserted) {
+        _dict_column_indices.emplace_back(col_idx);
+    }
+    auto& sub_field_paths = it->second;
+    if (std::find(sub_field_paths.begin(), sub_field_paths.end(), sub_field_path) == sub_field_paths.end()) {
+        sub_field_paths.emplace_back(sub_field_path);
     }
 }
 
