@@ -23,6 +23,98 @@ Due to an unstable load order issue in the v4.1.0 container image, BE processes 
 
 :::
 
+## 4.1.8
+
+Release Date: November 16, 2026
+
+### Behavior Changes
+
+- The shared-data primary key index cache eviction policy was changed: the cache has an urgent level that is checked after every publish. [#81143](https://github.com/StarRocks/starrocks/pull/81143) [#81168](https://github.com/StarRocks/starrocks/pull/81168)
+- Local (shared-nothing) Primary Key inserts no longer check the immutable L1 and L2 persistent-index files for duplicate keys by default. The new BE configuration `skip_pindex_l1_l2_check_in_insert` defaults to `true`; set it to `false` to restore the previous behavior. [#81304](https://github.com/StarRocks/starrocks/pull/81304)
+- `lake_pk_preload_memory_limit_percent`, `lake_pk_index_block_cache_limit_percent`, and `put_combined_txn_log_thread_pool_num_max` now take effect at runtime without restarting the BE or CN. `lake_pk_index_block_cache_limit_percent` is now mutable. [#81164](https://github.com/StarRocks/starrocks/pull/81164) [#81244](https://github.com/StarRocks/starrocks/pull/81244) [#81677](https://github.com/StarRocks/starrocks/pull/81677)
+- Materialized view refresh handling changed: a dropped base partition stays tracked until its materialized view partitions are refreshed, materialized view partitions that no tracked base partition accounts for are refreshed, and a superseded batch of an incremental materialized view rebuild is skipped instead of failing. [#81187](https://github.com/StarRocks/starrocks/pull/81187) [#81192](https://github.com/StarRocks/starrocks/pull/81192) [#81262](https://github.com/StarRocks/starrocks/pull/81262)
+- Incremental materialized views use a prefix-free row id fingerprint for `__ROW_ID__`. [#81259](https://github.com/StarRocks/starrocks/pull/81259)
+- Materialized views are activated layer by layer on FE startup so they cannot starve the `mv-plan-cache` pool. [#81497](https://github.com/StarRocks/starrocks/pull/81497)
+- `DESCRIBE` on external catalog tables and external database and table listings now use the caller's session context for metadata calls. [#80628](https://github.com/StarRocks/starrocks/pull/80628)
+- `bool_or` can merge an intermediate column that holds NULLs. [#81237](https://github.com/StarRocks/starrocks/pull/81237)
+- Unsupported interval arithmetic now reports a descriptive error instead of `Unknown error`. [#81024](https://github.com/StarRocks/starrocks/pull/81024)
+- `CREATE BASELINE` works on a follower FE. [#81157](https://github.com/StarRocks/starrocks/pull/81157)
+- The FE no longer renews a global dictionary incorrectly across FEs. [#79511](https://github.com/StarRocks/starrocks/pull/79511)
+- Reading version 1 of a dropped shared-data tablet now returns `NotFound`. [#81196](https://github.com/StarRocks/starrocks/pull/81196)
+- Shared-data Primary Key tablet recovery was reworked: the publish's delete vectors stay consistent with recovery, a multi-statement transaction's batch apply is recovered on a primary key inconsistency, physical row ids are used, and delete files inherited by compaction are dropped. [#81204](https://github.com/StarRocks/starrocks/pull/81204) [#81206](https://github.com/StarRocks/starrocks/pull/81206) [#81211](https://github.com/StarRocks/starrocks/pull/81211) [#81250](https://github.com/StarRocks/starrocks/pull/81250)
+- Kafka routine load tracks EOF per partition and handles empty loads (batches that produce no destination rows) differently. [#81412](https://github.com/StarRocks/starrocks/pull/81412)
+- The load ids of explicit transactions are now persisted so a publish can find the transaction logs after an FE restart or leader change. [#81413](https://github.com/StarRocks/starrocks/pull/81413)
+- Group providers are kept for legacy per-user-DN LDAP users. [#81399](https://github.com/StarRocks/starrocks/pull/81399)
+- Rejected session variable values are skipped when the FE loads an image instead of failing the FE startup. [#81655](https://github.com/StarRocks/starrocks/pull/81655)
+- Parquet ranges that Arrow pre-buffers are read on the scan thread for `FILES()` and broker load. [#81771](https://github.com/StarRocks/starrocks/pull/81771)
+- Iceberg partition values are decoded with each data file's own partition spec. [#81789](https://github.com/StarRocks/starrocks/pull/81789)
+- Single-transaction lake publish batches honor retry backoff. [#81803](https://github.com/StarRocks/starrocks/pull/81803)
+- A flat JSON path is typed as JSON when the trie bound previously dropped it. [#81816](https://github.com/StarRocks/starrocks/pull/81816)
+- Lake metadata cache keys and eviction on metadata deletion were fixed. [#81978](https://github.com/StarRocks/starrocks/pull/81978)
+
+### Improvements
+
+- Added scan executor worker-thread metrics. [#77435](https://github.com/StarRocks/starrocks/pull/77435)
+- The shared-data publish version timeout is now configurable. [#79332](https://github.com/StarRocks/starrocks/pull/79332)
+- Large flat JSON compaction output is streamed instead of buffering the whole segment. [#80470](https://github.com/StarRocks/starrocks/pull/80470)
+- `update_memory_limit_percent` is now mutable. [#81118](https://github.com/StarRocks/starrocks/pull/81118)
+- JVM committed memory is counted in the BE process memory tracker. [#81127](https://github.com/StarRocks/starrocks/pull/81127)
+- Immutable index existence checks reuse `get`. [#81307](https://github.com/StarRocks/starrocks/pull/81307)
+- Supports `DELETE` on Iceberg tables whose data files are ORC. [#81435](https://github.com/StarRocks/starrocks/pull/81435)
+- Supports reading Iceberg v3 row lineage from ORC data files. [#81440](https://github.com/StarRocks/starrocks/pull/81440)
+- Iceberg equality delete files of partitions that runtime filters reject are skipped, and per-file partition work is skipped when planning Iceberg scan ranges. [#81437](https://github.com/StarRocks/starrocks/pull/81437) [#81438](https://github.com/StarRocks/starrocks/pull/81438)
+- Shared-data backup nodes are spread by tablet hash. [#81436](https://github.com/StarRocks/starrocks/pull/81436)
+
+### Security
+
+- Bumped FE ZooKeeper to 3.9.6. [#81292](https://github.com/StarRocks/starrocks/pull/81292)
+- Bumped pprof to release/20261022. [#81300](https://github.com/StarRocks/starrocks/pull/81300)
+- Bumped guava to 33.7.2 and snappy-java to 1.1.10.9. [#81859](https://github.com/StarRocks/starrocks/pull/81859)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Iceberg reads and inserts: unknown partition transforms, ORC field ids, promoted bounds, the unknown type, and default values were fixed. [#81257](https://github.com/StarRocks/starrocks/pull/81257) [#81311](https://github.com/StarRocks/starrocks/pull/81311) [#81432](https://github.com/StarRocks/starrocks/pull/81432)
+- Iceberg reads and writes on tables with partition evolution were fixed, including position deletes kept under their data file spec. [#81401](https://github.com/StarRocks/starrocks/pull/81401) [#81361](https://github.com/StarRocks/starrocks/pull/81361)
+- Iceberg DML target lookup, v3 lookup rows paired by row id, and NULL writes for columns without a write-default were fixed. [#81165](https://github.com/StarRocks/starrocks/pull/81165) [#81188](https://github.com/StarRocks/starrocks/pull/81188) [#81362](https://github.com/StarRocks/starrocks/pull/81362)
+- Two Iceberg FE hangs (explain partition listing and OSS read-ahead wait) and idle Iceberg commit executor threads were fixed. [#81711](https://github.com/StarRocks/starrocks/pull/81711) [#81805](https://github.com/StarRocks/starrocks/pull/81805)
+- Iceberg, Delta, and Hudi `INSERT` sources are invalidated instead of refreshed under the table lock. [#81923](https://github.com/StarRocks/starrocks/pull/81923)
+- The Iceberg REST catalog user agent is built without `NodeMgr`. [#80660](https://github.com/StarRocks/starrocks/pull/80660)
+- Negated `MATCH` in an `OR` inverted-index fallback returned NULL rows. [#76350](https://github.com/StarRocks/starrocks/pull/76350)
+- Level -1 rowset selection in Primary Key compaction was unbounded. [#80471](https://github.com/StarRocks/starrocks/pull/80471)
+- Buffered pass-through chunks were not accounted in query and process memory. [#80910](https://github.com/StarRocks/starrocks/pull/80910)
+- An aggregate-state combinator leaked the wrapped state on batch destroy. [#81054](https://github.com/StarRocks/starrocks/pull/81054)
+- The merged JSON column could be released while the compactor was writing it. [#81117](https://github.com/StarRocks/starrocks/pull/81117)
+- A spiller's flush-all callback could run twice when a flush finished concurrently. [#81134](https://github.com/StarRocks/starrocks/pull/81134)
+- A min/max runtime filter's bounds were read without holding the slice lock. [#81138](https://github.com/StarRocks/starrocks/pull/81138)
+- A spillable aggregate source could access a released spiller. [#81199](https://github.com/StarRocks/starrocks/pull/81199)
+- `getShardInfo` calls were not bounded in the number of shards per batch. [#81197](https://github.com/StarRocks/starrocks/pull/81197)
+- Load sink close submission exceptions could terminate the BE or CN process. [#81251](https://github.com/StarRocks/starrocks/pull/81251)
+- Trino `TIMESTAMP WITH TIME ZONE` literals used the wrong time zone direction. [#81256](https://github.com/StarRocks/starrocks/pull/81256)
+- `ALTER MATERIALIZED VIEW ... ACTIVE` lost the `Can not active materialized view` message when activation failed. [#81258](https://github.com/StarRocks/starrocks/pull/81258)
+- `mv_rewrite_staleness_second` was not restored from the materialized view property when loading an image. [#81263](https://github.com/StarRocks/starrocks/pull/81263)
+- Casting `DOUBLE` or `FLOAT` to `DECIMAL` returned different results on aarch64 than on x86. [#81261](https://github.com/StarRocks/starrocks/pull/81261)
+- `convert_tz` now returns NULL when the result leaves the `DATETIME` range. [#81264](https://github.com/StarRocks/starrocks/pull/81264)
+- Planning failed on an equality filter over a `VARBINARY` column. [#81310](https://github.com/StarRocks/starrocks/pull/81310)
+- Materialized view naming and lookup: the MV is named when its ref base table partition columns are not analyzed, and `inspect_mv_refresh_info` keys same-named base tables by full name. [#81357](https://github.com/StarRocks/starrocks/pull/81357) [#81358](https://github.com/StarRocks/starrocks/pull/81358)
+- Global late materialization lookups could not reach compute nodes in shared-nothing mode. [#81359](https://github.com/StarRocks/starrocks/pull/81359)
+- Concurrent queries did not re-plan during a shared-data schema change because `lastSchemaUpdateTime` was bumped too late. [#81363](https://github.com/StarRocks/starrocks/pull/81363)
+- The Ranger service definition did not allow granting `SELECT` on views and materialized views. [#81400](https://github.com/StarRocks/starrocks/pull/81400)
+- `UNION` merge could produce values in the wrong order. [#81420](https://github.com/StarRocks/starrocks/pull/81420)
+- Task run process start time was not replayed on followers. [#81433](https://github.com/StarRocks/starrocks/pull/81433)
+- The `DROP` privilege is checked on an unloadable external table under `IF EXISTS`. [#81434](https://github.com/StarRocks/starrocks/pull/81434)
+- Lake segments are no longer opened once the query is cancelled. [#81598](https://github.com/StarRocks/starrocks/pull/81598)
+- The materialized view inactivation done by a refresh is journaled and its task stays scheduled. [#81660](https://github.com/StarRocks/starrocks/pull/81660)
+- A partition holding a trailing NULL was dropped when only a key prefix was constrained. [#81675](https://github.com/StarRocks/starrocks/pull/81675)
+- A string `IN` predicate was read as dictionary codes in the runtime filter pass. [#81676](https://github.com/StarRocks/starrocks/pull/81676)
+- Late materialized view pruning did not preserve the columns its predicates require. [#81687](https://github.com/StarRocks/starrocks/pull/81687)
+- Constant `IN` predicate value lists could contain column references. [#81825](https://github.com/StarRocks/starrocks/pull/81825)
+- `HAVING` was not normalized after a constant group-by key was folded into it. [#81919](https://github.com/StarRocks/starrocks/pull/81919)
+- Month-based date arithmetic was rewritten as if it were invertible. [#81979](https://github.com/StarRocks/starrocks/pull/81979)
+- Materialized view force drop recursed when the retention period is 0. [#81953](https://github.com/StarRocks/starrocks/pull/81953)
+- Upgraded StarOS and StarCache to v4.1.6. [#81508](https://github.com/StarRocks/starrocks/pull/81508)
+
 ## 4.1.7
 
 Release Date: October 26, 2026
