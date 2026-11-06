@@ -40,6 +40,7 @@ import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -425,5 +426,43 @@ public class ConnectorPartitionTraitsTest {
         Assertions.assertEquals(99L, cached.getPinnedVersionRange().to().getVersion());
         Assertions.assertNotNull(innerTraits.getPinnedVersionRange());
         Assertions.assertEquals(99L, innerTraits.getPinnedVersionRange().to().getVersion());
+    }
+
+    /**
+     * One mv refresh task run shares this cache and asks the same base table both questions: the IVM
+     * attempt reads live, the pinned PCT fallback reads the frozen snapshot. Keying only on the table
+     * would serve whichever ran first to both.
+     */
+    @Test
+    public void testCachedPartitionTraitsSeparatesPinnedAndLiveAnswers(@Mocked org.apache.iceberg.Table nativeTable) {
+        IcebergTable icebergTable = new IcebergTable(0, "name", "iceberg_catalog", "resource_name", "icebergDb",
+                "icebergTable", "",
+                Lists.newArrayList(), nativeTable, Maps.newHashMap());
+        new MockUp<IcebergPartitionTraits>() {
+            @Mock
+            public List<String> getPartitionNames(Invocation invocation) {
+                ConnectorPartitionTraits traits = invocation.getInvokedInstance();
+                return traits.getPinnedVersionRange() == null
+                        ? Lists.newArrayList("p1")
+                        : Lists.newArrayList("p1", "p2");
+            }
+        };
+
+        com.github.benmanes.caffeine.cache.Cache<Object, Object> cache =
+                com.github.benmanes.caffeine.cache.Caffeine.newBuilder().build();
+        com.starrocks.sql.optimizer.QueryMaterializationContext.QueryCacheStats stats =
+                Mockito.mock(com.starrocks.sql.optimizer.QueryMaterializationContext.QueryCacheStats.class);
+
+        com.starrocks.connector.partitiontraits.CachedPartitionTraits live =
+                new com.starrocks.connector.partitiontraits.CachedPartitionTraits(
+                        cache, ConnectorPartitionTraits.build(icebergTable), stats, null);
+        Assertions.assertEquals(Lists.newArrayList("p1"), live.getPartitionNames());
+
+        com.starrocks.connector.partitiontraits.CachedPartitionTraits pinned =
+                new com.starrocks.connector.partitiontraits.CachedPartitionTraits(
+                        cache, ConnectorPartitionTraits.build(icebergTable), stats, null);
+        pinned.setPinnedVersionRange(TvrTableSnapshot.of(42L));
+        Assertions.assertEquals(Lists.newArrayList("p1", "p2"), pinned.getPartitionNames(),
+                "a pinned caller was served the live answer cached earlier in the same task run");
     }
 }

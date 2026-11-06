@@ -153,11 +153,15 @@ public abstract class ConnectorPartitionTraits {
         return build(null, table, pinnedVersionRange);
     }
 
+<<<<<<< HEAD
     /**
      * Build the partition traits for the table without the query-context cache wrapper, whatever the current
      * thread's context.
      */
     public static ConnectorPartitionTraits buildWithoutCache(Table table) {
+=======
+    private static ConnectorPartitionTraits buildWithoutCache(Table table) {
+>>>>>>> f17c92d150b... [BugFix] Derive a pinned refresh's scope from the frozen snapshot, not from live (#62148)
         ConnectorPartitionTraits res = build(table.getType());
         res.table = table;
         return res;
