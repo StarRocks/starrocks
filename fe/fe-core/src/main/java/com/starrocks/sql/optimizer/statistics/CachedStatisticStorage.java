@@ -562,6 +562,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             allKeys.add(key);
         }
         columnStatistics.synchronous().invalidateAll(allKeys);
+        partitionStatistics.synchronous().invalidateAll(allKeys);
     }
 
     @Override

@@ -217,6 +217,50 @@ public class BasicStatsMetaTest extends PlanTestBase {
         }
     }
 
+    @Test
+    public void testRemoveColumnStatsMeta() {
+        BasicStatsMeta meta = new BasicStatsMeta(1L, 2L, Lists.newArrayList("c1", "c2"),
+                StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap());
+        meta.addColumnStatsMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.FULL, LocalDateTime.now()));
+        meta.addColumnStatsMeta(new ColumnStatsMeta("c2", StatsConstants.AnalyzeType.FULL, LocalDateTime.now()));
+
+        // removal is case-insensitive and updates both the meta map and the deprecated legacy list
+        meta.removeColumnStatsMeta(List.of("C1"));
+        Assertions.assertEquals(List.of("c2"), meta.getColumns());
+        Assertions.assertFalse(meta.getAnalyzedColumns().containsKey("c1"));
+
+        // the removal survives the GSON round-trip used by clone()/edit log persistence
+        BasicStatsMeta cloned = meta.clone();
+        Assertions.assertEquals(List.of("c2"), cloned.getColumns());
+
+        // once the map becomes empty, getColumns() falls back to the legacy list, which must not
+        // resurrect removed entries
+        meta.removeColumnStatsMeta(List.of("c2"));
+        Assertions.assertTrue(meta.getColumns().isEmpty());
+    }
+
+    @Test
+    public void testRemovedColumns() {
+        BasicStatsMeta oldMeta = new BasicStatsMeta(1L, 2L, Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap());
+        oldMeta.addColumnStatsMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.FULL, LocalDateTime.now()));
+        oldMeta.addColumnStatsMeta(new ColumnStatsMeta("c2", StatsConstants.AnalyzeType.FULL, LocalDateTime.now()));
+
+        BasicStatsMeta newMeta = oldMeta.clone();
+        newMeta.removeColumnStatsMeta(List.of("c2"));
+
+        // no previous meta: nothing to expire
+        Assertions.assertTrue(BasicStatsMeta.removedColumns(null, newMeta).isEmpty());
+        // unchanged meta: nothing removed
+        Assertions.assertTrue(BasicStatsMeta.removedColumns(oldMeta, oldMeta).isEmpty());
+        // c2 was revoked; comparison is case-insensitive
+        Assertions.assertEquals(List.of("c2"), BasicStatsMeta.removedColumns(oldMeta, newMeta));
+        BasicStatsMeta upperMeta = new BasicStatsMeta(1L, 2L, Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap());
+        upperMeta.addColumnStatsMeta(new ColumnStatsMeta("C1", StatsConstants.AnalyzeType.FULL, LocalDateTime.now()));
+        Assertions.assertTrue(BasicStatsMeta.removedColumns(upperMeta, oldMeta).isEmpty());
+    }
+
     @AfterEach
     public void after() {
         FeConstants.runningUnitTest = false;
