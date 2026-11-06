@@ -19,6 +19,7 @@ from alembic.runtime.migration import MigrationContext
 import pytest
 from sqlalchemy import MetaData, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import OperationalError
 
 from starrocks.alembic.compare import combine_include_object
 from starrocks.alembic.ops import (
@@ -428,6 +429,83 @@ class TestAlterMaterializedView(TestAutogenerateBase):
             finally:
                 conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
                 conn.execute(text(f"DROP TABLE IF EXISTS {base_table}"))
+
+    @pytest.mark.parametrize("prop_key, ddl_value, meta_value", [
+        # StarRocks reports these two uppercased, whatever case the CREATE used
+        ("query_rewrite_consistency", "loose", "loose"),
+        ("force_external_table_query_rewrite", "checked", "checked"),
+        # StarRocks reports these as written, but accepts them in any case
+        ("partition_refresh_strategy", "adaptive", "ADAPTIVE"),
+        ("refresh_mode", "pct", "PCT"),
+    ])
+    def test_no_diff_for_mv_enum_property_case(self, prop_key: str, ddl_value: str, meta_value: str) -> None:
+        """No change: an MV enum property differing from the reflected value only in case."""
+        engine = self.engine
+        mv_name = "test_mv_enum_property_case"
+        with engine.connect() as conn:
+            conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+            try:
+                conn.execute(text(
+                    f"CREATE MATERIALIZED VIEW {mv_name} "
+                    "REFRESH DEFERRED MANUAL "
+                    f"PROPERTIES ('replication_num' = '1', '{prop_key}' = '{ddl_value}') "
+                    "AS SELECT val FROM t_autogen"
+                ))
+            except OperationalError as e:
+                # partition_refresh_strategy and refresh_mode do not exist on older versions
+                if "unknown properties" in str(e):
+                    pytest.skip(f"{prop_key} is not supported by this StarRocks version")
+                raise
+            try:
+                target_metadata = MetaData()
+                MaterializedView(
+                    mv_name,
+                    target_metadata,
+                    definition="SELECT val FROM t_autogen",
+                    starrocks_refresh="DEFERRED MANUAL",
+                    starrocks_properties={"replication_num": "1", prop_key: meta_value},
+                )
+                mc = create_migration_context(conn, target_metadata)
+                migration_script = api.produce_migrations(mc, target_metadata)
+
+                mv_ops = [op for op in migration_script.upgrade_ops.ops if getattr(op, "view_name", None) == mv_name]
+                assert mv_ops == [], (
+                    f"Unexpected op for MV whose {prop_key} differs only in case: "
+                    f"{[getattr(op, 'properties', op) for op in mv_ops]}"
+                )
+            finally:
+                conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+
+    def test_mv_enum_property_change_detected(self) -> None:
+        """ALTER: a real change to a case-insensitive MV enum property is still detected."""
+        engine = self.engine
+        mv_name = "test_mv_enum_property_change"
+        with engine.connect() as conn:
+            conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+            conn.execute(text(
+                f"CREATE MATERIALIZED VIEW {mv_name} "
+                "REFRESH DEFERRED MANUAL "
+                "PROPERTIES ('replication_num' = '1', 'query_rewrite_consistency' = 'loose') "
+                "AS SELECT val FROM t_autogen"
+            ))
+            try:
+                target_metadata = MetaData()
+                MaterializedView(
+                    mv_name,
+                    target_metadata,
+                    definition="SELECT val FROM t_autogen",
+                    starrocks_refresh="DEFERRED MANUAL",
+                    starrocks_properties={"replication_num": "1", "query_rewrite_consistency": "checked"},
+                )
+                mc = create_migration_context(conn, target_metadata)
+                migration_script = api.produce_migrations(mc, target_metadata)
+
+                mv_ops = [op for op in migration_script.upgrade_ops.ops if getattr(op, "view_name", None) == mv_name]
+                assert len(mv_ops) == 1
+                assert isinstance(mv_ops[0], AlterMaterializedViewOp)
+                assert mv_ops[0].properties == {"query_rewrite_consistency": "checked"}
+            finally:
+                conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
 
     def test_refresh_interval_change_detected(self) -> None:
         """ALTER: a genuine change to the refresh interval is still detected.
