@@ -101,14 +101,14 @@ public class HiveTableSinkTest {
         Assertions.assertNull(sink.getOutputPartition());
         Assertions.assertTrue(sink.canUsePipeLine());
         Assertions.assertTrue(sink.canUseRuntimeAdaptiveDop());
-        Assertions.assertTrue(sink.getStagingDir().contains("/tmp/starrocks"));
+        Assertions.assertTrue(sink.getStagingDir().startsWith("hdfs://hadoop01:9000/tableLocation/.sr_staging/"));
         Assertions.assertTrue(sink.getExplainString("SINK", TExplainLevel.NORMAL).contains(
                 "SINKHive TABLE SINK\n" +
                         "SINK  TABLE: hive_catalog.hive_db.hive_table"));
         TDataSink tDataSink = sink.toThrift();
         Assertions.assertEquals(TDataSinkType.HIVE_TABLE_SINK, tDataSink.getType());
         THiveTableSink tHiveTableSink = tDataSink.getHive_table_sink();
-        Assertions.assertTrue(tHiveTableSink.getStaging_dir().startsWith("hdfs://hadoop01:9000/tmp/starrocks"));
+        Assertions.assertEquals(sink.getStagingDir(), tHiveTableSink.getStaging_dir());
         Assertions.assertEquals("parquet", tHiveTableSink.getFile_format());
         Assertions.assertEquals("c1", tHiveTableSink.getData_column_names().get(0));
         Assertions.assertEquals("p1", tHiveTableSink.getPartition_column_names().get(0));
