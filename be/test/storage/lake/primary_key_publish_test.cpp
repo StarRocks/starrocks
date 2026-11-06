@@ -3227,8 +3227,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_transform_batch_to_single) {
 TEST_P(LakePrimaryKeyPublishTest, test_mem_tracker) {
     EXPECT_EQ(10 * 1024 * 1024, _mem_tracker->limit());
     EXPECT_EQ(10 * 1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
-              _primary_key_mgr->compaction_state_mem_tracker()->limit());
-    EXPECT_EQ(10 * 1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
               _primary_key_mgr->update_state_mem_tracker()->limit());
 }
 
@@ -4218,11 +4216,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_multi_chunk_upsert) {
 }
 
 // experimental_lake_ignore_lost_segment: a PK compaction whose output segment file is lost before the
-// compaction txn is published must not crash and must not fail the publish. This covers all three
+// compaction txn is published must not crash and must not fail the publish. This covers both
 // publish shapes with an error-injected (physically deleted) lost output segment:
-//   1. light publish, NO loss    -> normal SST ingest + conflict resolver
-//   2. light publish, lost seg   -> conflict-resolver lost branch + SST-ingest skip
-//   3. non-light publish, lost   -> PrimaryKeyCompactionState empty PK column
+//   1. NO loss    -> normal SST ingest + conflict resolver
+//   2. lost seg   -> conflict-resolver lost branch + SST-ingest skip
 // and runs under both LOCAL (resolver execute()) and CLOUD_NATIVE (resolver execute_without_update_index
 // + SST ingest) persistent index via the param list.
 TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_segment) {
@@ -4276,19 +4273,13 @@ TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_
         return st;
     };
 
-    // 1. Light publish (default enable_light_pk_compaction_publish=true), no loss: normal ingest path.
+    // 1. No loss: normal ingest path.
     write_rowsets(3);
     ASSERT_OK(compact_and_publish(/*lose_output_segment=*/false));
 
-    // 2. Light publish, lost output segment: resolver lost branch + SST-ingest skip.
+    // 2. Lost output segment: resolver lost branch + SST-ingest skip.
     config::experimental_lake_ignore_lost_segment = true;
     DeferOp reset_flag([] { config::experimental_lake_ignore_lost_segment = false; });
-    write_rowsets(3);
-    ASSERT_OK(compact_and_publish(/*lose_output_segment=*/true));
-
-    // 3. Non-light publish, lost output segment: PrimaryKeyCompactionState empty PK column path.
-    config::enable_light_pk_compaction_publish = false;
-    DeferOp reset_light([] { config::enable_light_pk_compaction_publish = true; });
     write_rowsets(3);
     ASSERT_OK(compact_and_publish(/*lose_output_segment=*/true));
 
@@ -4363,7 +4354,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_light_compaction_publish_row_count_from_m
 
     // Build index SSTs during load (write_buffer_size forces multi-segment rowsets; the 1-byte eager
     // threshold builds an index SST for each) so the compaction carries op_compaction.ssts and
-    // light_publish_primary_compaction dispatches to execute_without_update_index (the path under test)
+    // publish_primary_compaction dispatches to execute_without_update_index (the path under test)
     // rather than resolver->execute(). This is the recipe proven deterministic by pk_tablet_sst_writer_test.
     ConfigResetGuard<int64_t> g_write_buffer(&config::write_buffer_size, 512);
     ConfigResetGuard<int64_t> g_eager_threshold(&config::pk_index_eager_build_threshold_bytes, 1);
@@ -4415,7 +4406,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_light_compaction_publish_row_count_from_m
     EXPECT_EQ(240, read_rows(tablet_id, version));
 
     // Compact the rowsets into one; the eager-built index ssts drive
-    // light_publish_primary_compaction -> execute_without_update_index.
+    // publish_primary_compaction -> execute_without_update_index.
     int64_t txn_id = next_id();
     auto ctx = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(ctx.get()));
@@ -4430,7 +4421,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_light_compaction_publish_row_count_from_m
     version++;
 
     // The compaction preserves every live row. The publish goes through
-    // light_publish_primary_compaction -> execute_without_update_index (the path under test), where a
+    // publish_primary_compaction -> execute_without_update_index (the path under test), where a
     // wrong per-segment row count (from output_segment_num_rows()) would mis-advance the rows-mapper and
     // drop or duplicate rows.
     EXPECT_EQ(240, read_rows(tablet_id, version));

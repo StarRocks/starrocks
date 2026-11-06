@@ -44,7 +44,6 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/parallel_task_runner.h"
 #include "storage/lake/pk_index_utils.h"
-#include "storage/lake/primary_key_compaction_state.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -116,7 +115,6 @@ static Status apply_opcompaction_to_metadata(const TabletMetadata& metadata, con
 PrimaryKeyManager::PrimaryKeyManager(std::shared_ptr<LocationProvider> location_provider, MemTracker* mem_tracker)
         : _index_cache(std::numeric_limits<size_t>::max()),
           _update_state_cache(std::numeric_limits<size_t>::max()),
-          _compaction_cache(std::numeric_limits<size_t>::max()),
           _location_provider(std::move(location_provider)),
           _pk_index_shards(config::pk_index_map_shard_size) {
     _primary_key_mem_tracker = mem_tracker;
@@ -124,8 +122,6 @@ PrimaryKeyManager::PrimaryKeyManager(std::shared_ptr<LocationProvider> location_
     _update_state_mem_tracker =
             std::make_unique<MemTracker>(preload_mem_limit, "lake_rowset_update_state", mem_tracker);
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "lake_index_cache", mem_tracker);
-    _compaction_state_mem_tracker =
-            std::make_unique<MemTracker>(preload_mem_limit, "lake_compaction_state", mem_tracker);
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 
@@ -137,7 +133,6 @@ PrimaryKeyManager::PrimaryKeyManager(std::shared_ptr<LocationProvider> location_
 PrimaryKeyManager::~PrimaryKeyManager() {
     _index_cache.clear();
     _update_state_cache.clear();
-    _compaction_cache.clear();
 }
 
 PrimaryKeyManager::PkIndexShard& PrimaryKeyManager::_get_pk_index_shard(int64_t tabletId) {
@@ -2169,19 +2164,11 @@ void PrimaryKeyManager::expire_cache() {
         ssize_t index_size = _index_cache.size();
         ssize_t index_obj_size = _index_cache.object_size();
 
-        ssize_t compaction_cache_orig_size = _compaction_cache.size();
-        ssize_t compaction_cache_orig_obj_size = _compaction_cache.object_size();
-        _compaction_cache.clear_expired();
-        ssize_t compaction_cache_size = _compaction_cache.size();
-        ssize_t compaction_cache_obj_size = _compaction_cache.object_size();
-
-        LOG(INFO) << strings::Substitute(
-                "update state cache expire: ($0 $1), index cache expire: ($2 $3), compaction cache expire: ($4 $5)",
-                update_state_orig_obj_size - update_state_obj_size,
-                PrettyPrinter::print_bytes(update_state_orig_size - update_state_size),
-                index_orig_obj_size - index_obj_size, PrettyPrinter::print_bytes(index_orig_size - index_size),
-                compaction_cache_orig_obj_size - compaction_cache_obj_size,
-                PrettyPrinter::print_bytes(compaction_cache_orig_size - compaction_cache_size));
+        LOG(INFO) << strings::Substitute("update state cache expire: ($0 $1), index cache expire: ($2 $3)",
+                                         update_state_orig_obj_size - update_state_obj_size,
+                                         PrettyPrinter::print_bytes(update_state_orig_size - update_state_size),
+                                         index_orig_obj_size - index_obj_size,
+                                         PrettyPrinter::print_bytes(index_orig_size - index_size));
 
         _last_clear_expired_cache_millis = MonotonicMillis();
     }
@@ -2242,26 +2229,39 @@ size_t PrimaryKeyManager::get_rowset_num_deletes(const TabletMetadata& metadata,
     return num_dels;
 }
 
-bool PrimaryKeyManager::_use_light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction) {
-    // Is config enable ?
-    if (!config::enable_light_pk_compaction_publish) {
-        return false;
+DEFINE_FAIL_POINT(hook_publish_primary_key_tablet_compaction);
+Status PrimaryKeyManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
+                                                     const TabletMetadataPtr& metadata, const Tablet& tablet,
+                                                     IndexEntry* index_entry, MetaFileBuilder* builder,
+                                                     int64_t base_version) {
+    FAIL_POINT_TRIGGER_EXECUTE(hook_publish_primary_key_tablet_compaction, {
+        std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(),
+                                               op_compaction.input_rowsets().end());
+        ASSIGN_OR_RETURN(auto tablet_schema, _tablet_mgr->get_output_rowset_schema(input_rowsets_id, metadata.get()));
+        return builder->apply_opcompaction(
+                op_compaction,
+                *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end()),
+                tablet_schema->id());
+    });
+    if (CompactionUpdateConflictChecker::conflict_check(op_compaction, txn_id, *metadata, builder)) {
+        // conflict happens
+        return Status::OK();
+    }
+    // A compaction that outputs rows always writes a rows mapper (.lcrm) and records it in the txn log; publish reads
+    // the mapper instead of re-reading the output segments. A compaction with no output rows writes none and has
+    // nothing to resolve. Output segments without a mapper only come from a txn log written by an older release that
+    // could still compact without one. Publish cannot resolve such a compaction, and failing would block every later
+    // publish of the tablet, so drop its output and keep the input rowsets, as on a conflict; a later compaction
+    // redoes the work.
+    const bool has_output_segments = op_compaction.output_rowset().segment_metas_size() > 0;
+    if (has_output_segments && !op_compaction.has_lcrm_file()) {
+        LOG(WARNING) << "Drop PK compaction output without a rows mapper file, tablet_id: " << tablet.id()
+                     << " txn_id: " << txn_id
+                     << " output_segments: " << op_compaction.output_rowset().segment_metas_size();
+        builder->apply_opcompaction_with_conflict(op_compaction);
+        return Status::OK();
     }
 
-    // WHY: Light publish optimization uses the pre-computed rows mapper to avoid re-reading
-    // and re-processing compaction input/output rowsets during publish phase. This can reduce
-    // publish time from minutes to seconds for large compactions.
-    //
-    // The rows mapper is always stored on remote storage (.lcrm) and its metadata is recorded
-    // in the txn log. Its presence guarantees the mapper file exists on remote storage (S3/HDFS),
-    // so metadata is the source of truth and no file-existence check is needed.
-    return op_compaction.has_lcrm_file();
-}
-
-Status PrimaryKeyManager::light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                                           const TabletMetadataPtr& metadata, const Tablet& tablet,
-                                                           IndexEntry* index_entry, MetaFileBuilder* builder,
-                                                           int64_t base_version) {
     // 1. init some state
     auto& index = index_entry->value();
     std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
@@ -2276,22 +2276,25 @@ Status PrimaryKeyManager::light_publish_primary_compaction(const TxnLogPB_OpComp
             *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
 
     // 2. update primary index, and generate delete info.
-    auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(
-            metadata.get(), &output_rowset, _tablet_mgr, builder, &index, base_version, op_compaction.lcrm_file(),
-            &segment_id_to_add_dels, &delvecs);
-    {
-        TRACE_COUNTER_SCOPE_LATENCY_US("compaction_conflict_resolve_us");
-        if (op_compaction.ssts_size() > 0) {
-            RETURN_IF_ERROR(resolver->execute_without_update_index());
-        } else {
-            RETURN_IF_ERROR(resolver->execute());
+    std::set<uint32_t> lost_segments;
+    if (has_output_segments) {
+        auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(
+                metadata.get(), &output_rowset, _tablet_mgr, builder, &index, base_version, op_compaction.lcrm_file(),
+                &segment_id_to_add_dels, &delvecs);
+        {
+            TRACE_COUNTER_SCOPE_LATENCY_US("compaction_conflict_resolve_us");
+            if (op_compaction.ssts_size() > 0) {
+                RETURN_IF_ERROR(resolver->execute_without_update_index());
+            } else {
+                RETURN_IF_ERROR(resolver->execute());
+            }
         }
+        // A lost output segment (experimental_lake_ignore_lost_segment) has no data and its SST must not be
+        // ingested, otherwise the PK index would reference an rssid that scans skip. The resolver reports
+        // those positions; skip both the delvec and the SST ingest for them so the index stays consistent
+        // (the segment_metas are still kept in the output rowset -- its data is simply gone).
+        lost_segments = resolver->lost_segment_positions();
     }
-    // A lost output segment (experimental_lake_ignore_lost_segment) has no data and its SST must not be
-    // ingested, otherwise the PK index would reference an rssid that scans skip. The resolver reports
-    // those positions; skip both the delvec and the SST ingest for them so the index stays consistent
-    // (the segment_metas are still kept in the output rowset -- its data is simply gone).
-    const auto& lost_segments = resolver->lost_segment_positions();
     // 3. add delvec to builder
     for (size_t i = 0; i < delvecs.size(); i++) {
         if (lost_segments.count(static_cast<uint32_t>(i)) > 0) {
@@ -2327,110 +2330,6 @@ Status PrimaryKeyManager::light_publish_primary_compaction(const TxnLogPB_OpComp
     TRACE_COUNTER_INCREMENT("output_rowsets_size", output_rowset.num_segments());
     TRACE_COUNTER_INCREMENT("max_rowsetid", max_rowset_id);
     TRACE_COUNTER_INCREMENT("input_rowsets_size", op_compaction.input_rowsets_size());
-
-    _print_memory_stats();
-
-    return Status::OK();
-}
-
-DEFINE_FAIL_POINT(hook_publish_primary_key_tablet_compaction);
-Status PrimaryKeyManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                                     const TabletMetadataPtr& metadata, const Tablet& tablet,
-                                                     IndexEntry* index_entry, MetaFileBuilder* builder,
-                                                     int64_t base_version) {
-    FAIL_POINT_TRIGGER_EXECUTE(hook_publish_primary_key_tablet_compaction, {
-        std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(),
-                                               op_compaction.input_rowsets().end());
-        ASSIGN_OR_RETURN(auto tablet_schema, _tablet_mgr->get_output_rowset_schema(input_rowsets_id, metadata.get()));
-        return builder->apply_opcompaction(
-                op_compaction,
-                *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end()),
-                tablet_schema->id());
-    });
-    if (CompactionUpdateConflictChecker::conflict_check(op_compaction, txn_id, *metadata, builder)) {
-        // conflict happens
-        return Status::OK();
-    }
-    if (_use_light_publish_primary_compaction(op_compaction)) {
-        return light_publish_primary_compaction(op_compaction, txn_id, metadata, tablet, index_entry, builder,
-                                                base_version);
-    }
-    auto& index = index_entry->value();
-    // 1. iterate output rowset, update primary index and generate delvec
-    std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
-    ASSIGN_OR_RETURN(auto tablet_schema, _tablet_mgr->get_output_rowset_schema(input_rowsets_id, metadata.get()));
-    Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
-                         tablet_schema);
-    auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txn_id));
-    compaction_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
-    // only use state entry once, remove it when publish finish or fail
-    DeferOp remove_state_entry([&] { _compaction_cache.remove(compaction_entry); });
-    auto& compaction_state = compaction_entry->value();
-    size_t total_deletes = 0;
-    size_t total_rows = 0;
-    vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
-    vector<uint32_t> tmp_deletes;
-    const uint32_t rowset_id = metadata->next_rowset_id();
-    // get max rowset id in input rowsets
-    uint32_t max_rowset_id =
-            *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
-    // then get the max src rssid, to solve conflict between write and compaction
-    auto input_rowset = std::find_if(metadata->rowsets().begin(), metadata->rowsets().end(),
-                                     [&](const RowsetMetadata& r) { return r.id() == max_rowset_id; });
-    if (input_rowset == metadata->rowsets().end()) {
-        LOG(ERROR) << "cannot find input rowset in tablet metadata, rowset_id: " << max_rowset_id
-                   << ", meta : " << metadata->ShortDebugString();
-        return Status::InternalError("cannot find input rowset in tablet metadata");
-    }
-    uint32_t max_src_rssid = max_rowset_id;
-    for (int i = 0; i < input_rowset->segment_metas_size(); ++i) {
-        max_src_rssid = std::max(max_src_rssid, get_rssid(*input_rowset, i));
-    }
-    std::map<uint32_t, size_t> segment_id_to_add_dels;
-
-    // 2. update primary index, and generate delete info.
-    TRACE_COUNTER_INCREMENT("output_rowsets_size", output_rowset.num_segments());
-    for (size_t i = 0; i < output_rowset.num_segments(); i++) {
-        RETURN_IF_ERROR(compaction_state.load_segments(&output_rowset, this, tablet_schema, i));
-        TRACE_COUNTER_INCREMENT("state_bytes", compaction_state.memory_usage());
-        auto& pk_col = compaction_state.pk_cols[i];
-        total_rows += pk_col->size();
-        uint32_t rssid = rowset_id + get_segment_idx(output_rowset.metadata(), static_cast<int32_t>(i));
-        tmp_deletes.clear();
-        // replace will not grow hashtable, so don't need to check memory limit
-        {
-            TRACE_COUNTER_SCOPE_LATENCY_US("update_index_latency_us");
-            RETURN_IF_ERROR(index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes));
-            update_index_cache_size(index_entry);
-        }
-        DelVectorPtr dv = std::make_shared<DelVector>();
-        if (tmp_deletes.empty()) {
-            dv->init(metadata->version(), nullptr, 0);
-        } else {
-            dv->init(metadata->version(), tmp_deletes.data(), tmp_deletes.size());
-            total_deletes += tmp_deletes.size();
-        }
-        segment_id_to_add_dels[rssid] += tmp_deletes.size();
-        delvecs.emplace_back(rssid, dv);
-        compaction_state.release_segments(i);
-    }
-    _block_cache->update_memory_usage();
-
-    // 3. update TabletMeta and write to meta file
-    for (auto&& each : delvecs) {
-        builder->append_delvec(each.second, each.first);
-    }
-    RETURN_IF_ERROR(apply_opcompaction_to_metadata(*metadata, *tablet_schema, op_compaction, txn_id, max_rowset_id,
-                                                   &index, builder));
-    RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
-
-    RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
-
-    TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
-    TRACE_COUNTER_INCREMENT("max_rowsetid", max_rowset_id);
-    TRACE_COUNTER_INCREMENT("output_rows", total_rows);
-    TRACE_COUNTER_INCREMENT("input_rowsets_size", op_compaction.input_rowsets_size());
-    TRACE_COUNTER_INCREMENT("total_del", total_deletes);
 
     _print_memory_stats();
 
@@ -2513,7 +2412,6 @@ void PrimaryKeyManager::refresh_block_cache_mem_limit() {
 void PrimaryKeyManager::refresh_preload_mem_limit() {
     const int64_t preload_mem_limit = _calc_preload_mem_limit();
     _update_state_mem_tracker->set_limit(preload_mem_limit);
-    _compaction_state_mem_tracker->set_limit(preload_mem_limit);
 }
 
 void PrimaryKeyManager::refresh_mem_limits() {
@@ -2525,13 +2423,11 @@ void PrimaryKeyManager::refresh_mem_limits() {
 void PrimaryKeyManager::_print_memory_stats() {
     static std::atomic<int64_t> last_print_ts;
     if (time(nullptr) > last_print_ts.load() + kPrintMemoryStatsInterval && _primary_key_mem_tracker != nullptr) {
-        LOG(INFO) << strings::Substitute(
-                "[lake update manager memory]index:$0 update_state:$1 compact_state:$2 total:$3/$4",
-                PrettyPrinter::print_bytes(_index_cache_mem_tracker->consumption()),
-                PrettyPrinter::print_bytes(_update_state_mem_tracker->consumption()),
-                PrettyPrinter::print_bytes(_compaction_state_mem_tracker->consumption()),
-                PrettyPrinter::print_bytes(_primary_key_mem_tracker->consumption()),
-                PrettyPrinter::print_bytes(_primary_key_mem_tracker->limit()));
+        LOG(INFO) << strings::Substitute("[lake update manager memory]index:$0 update_state:$1 total:$2/$3",
+                                         PrettyPrinter::print_bytes(_index_cache_mem_tracker->consumption()),
+                                         PrettyPrinter::print_bytes(_update_state_mem_tracker->consumption()),
+                                         PrettyPrinter::print_bytes(_primary_key_mem_tracker->consumption()),
+                                         PrettyPrinter::print_bytes(_primary_key_mem_tracker->limit()));
         last_print_ts.store(time(nullptr));
     }
 }
@@ -2569,77 +2465,9 @@ bool PrimaryKeyManager::TEST_check_update_state_cache_absent(uint32_t tablet_id,
     }
 }
 
-bool PrimaryKeyManager::TEST_check_compaction_cache_absent(uint32_t tablet_id, int64_t txn_id) {
-    auto compaction_entry = _compaction_cache.get(cache_key(tablet_id, txn_id));
-    if (compaction_entry == nullptr) {
-        return true;
-    } else {
-        _compaction_cache.release(compaction_entry);
-        return false;
-    }
-}
-
-void PrimaryKeyManager::TEST_remove_compaction_cache(uint32_t tablet_id, int64_t txn_id) {
-    auto compaction_entry = _compaction_cache.get(cache_key(tablet_id, txn_id));
-    if (compaction_entry != nullptr) {
-        _compaction_cache.remove(compaction_entry);
-    }
-}
-
 void PrimaryKeyManager::try_remove_cache(uint32_t tablet_id, int64_t txn_id) {
     auto key = cache_key(tablet_id, txn_id);
     _update_state_cache.try_remove_by_key(key);
-    _compaction_cache.try_remove_by_key(key);
-}
-
-void PrimaryKeyManager::preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet,
-                                                 const TabletSchemaCSPtr& tablet_schema) {
-    // use process mem tracker instread of load mem tracker here.
-    SCOPED_THREAD_LOCAL_MEM_SETTER(RuntimeEnv::GetInstance()->process_mem_tracker(), true);
-    SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _primary_key_mem_tracker
-                                                                                             : nullptr);
-    // no need to preload if using light compaction publish
-    if (StorageEngine::instance()->enable_light_pk_compaction_publish()) {
-        return;
-    }
-    // no need to preload if output rowset is empty.
-    const int segments_size = txnlog.op_compaction().output_rowset().segment_metas_size();
-    if (segments_size <= 0) return;
-    scoped_refptr<Trace> trace_guard(new Trace);
-    ADOPT_TRACE(trace_guard.get());
-    TRACE("start preload_compaction_state tablet_id=$0 txn_id=$1", tablet.id(), txnlog.txn_id());
-    auto start_ts = MonotonicMillis();
-    Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &txnlog.op_compaction().output_rowset(), -1 /*unused*/,
-                         tablet_schema);
-    // use tabletid-txnid as compaction state cache's key, so it can retry safe.
-    auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txnlog.txn_id()));
-    compaction_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
-    auto& compaction_state = compaction_entry->value();
-    // preload compaction state, only load first output segment, to avoid too much memory cost
-    auto st = Status::OK();
-    // skip preload if memory limit exceed
-    for (int i = 0; i < segments_size && !_compaction_state_mem_tracker->any_limit_exceeded(); i++) {
-        st = compaction_state.load_segments(&output_rowset, this, tablet_schema, i);
-        if (!st.ok()) {
-            break;
-        }
-    }
-    if (!st.ok()) {
-        _compaction_cache.remove(compaction_entry);
-        LOG(ERROR) << strings::Substitute("lake primary table preload_compaction_state id:$0 error:$1", tablet.id(),
-                                          st.to_string());
-        // not return error even it fail, because we can load compaction state in publish again.
-    } else {
-        // just release it, will use it again in publish
-        _compaction_cache.release(compaction_entry);
-    }
-    auto cost_ms = MonotonicMillis() - start_ts;
-    if (cost_ms >= config::lake_publish_version_slow_log_ms) {
-        LOG(INFO) << "Slow preload_compaction_state tablet_id=" << tablet.id() << " txn_id=" << txnlog.txn_id()
-                  << " segments=" << segments_size << " cost=" << cost_ms
-                  << "ms, trace: " << trace_guard->MetricsAsJSON();
-    }
-    TEST_SYNC_POINT("PrimaryKeyManager::preload_compaction_state:return");
 }
 
 DEFINE_FAIL_POINT(fail_execute_index_major_compaction);
