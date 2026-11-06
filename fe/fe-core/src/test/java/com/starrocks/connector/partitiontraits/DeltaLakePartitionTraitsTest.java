@@ -29,6 +29,7 @@ import io.delta.kernel.internal.actions.Metadata;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -145,6 +146,13 @@ public class DeltaLakePartitionTraitsTest {
         Map<String, PartitionInfo> infos = ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo();
         assertEquals(Set.of(TBL), infos.keySet());
         assertEquals(7, infos.get(TBL).getVersion());
+    }
+
+    @Test
+    public void statisticsSeeNoUpdateTime() {
+        ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(table(7));
+        assertNull(traits.getUpdatedPartitionNames(LocalDateTime.MIN, 60));
+        assertNull(traits.getTableLastUpdateTime(60));
     }
 
     @Test

@@ -27,6 +27,7 @@ import io.delta.kernel.Snapshot;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -105,6 +106,8 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
             // never report a change as null: CachedPartitionTraits turns null into {}
             Map<String, MaterializedView.BasePartitionInfo> versionMap = context.getBaseTableRefreshInfo(baseTableInfo);
             if (versionMap.isEmpty()) {
+                // nothing recorded, so the MV is stale. Which names are reported doesn't matter: a Delta table is
+                // never the partition ref table of an MV, so any change makes the whole MV stale.
                 return Sets.newHashSet(table.getName());
             }
             boolean changed = versionMap.values().stream()
@@ -113,6 +116,20 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
         }
         return null;
     }
+
+    // The table version is only for MVs: statistics collection keeps treating Delta tables as of unknown update time.
+    @Override
+    public Set<String> getUpdatedPartitionNames(LocalDateTime checkTime, int extraSeconds) {
+        return null;
+    }
+
+    @Override
+    public LocalDateTime getTableLastUpdateTime(int extraSeconds) {
+        return null;
+    }
+
+    // TODO: maxPartitionRefreshTs() is not implemented, so mv_rewrite_staleness_second is not supported for MVs
+    //  over Delta tables.
 
     private static final class DeltaLakeTableVersion implements PartitionInfo {
         private final DeltaLakeTable table;

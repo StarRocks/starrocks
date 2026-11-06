@@ -38,6 +38,10 @@ public class MockedMetadataMgr extends MetadataMgr {
         metadatas.put(catalogName, metadata);
     }
 
+    public void unregisterMockedMetadata(String catalogName) {
+        metadatas.remove(catalogName);
+    }
+
     @Override
     public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
         if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
