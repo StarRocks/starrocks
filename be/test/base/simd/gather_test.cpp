@@ -749,6 +749,8 @@ TEST(SIMDGatherTest, test_locality_gate_cheap_rejection_stages) {
         std::vector<uint32_t> uniform_indexes(kRows, val);
         EXPECT_FALSE(SIMDGather::should_prefetch_indexes<uint32_t>(uniform_indexes.data()));
         EXPECT_FALSE(SIMDGather::should_prefetch_indexes<int64_t>(uniform_indexes.data()));
+        EXPECT_FALSE(SIMDGather::should_prefetch_indexes(uniform_indexes.data(), sizeof(uint32_t)));
+        EXPECT_FALSE(SIMDGather::should_prefetch_indexes(uniform_indexes.data(), sizeof(int64_t)));
     }
 
     // Stage 1: Low cardinality (2, 4, 8, 16 keys) must reject early in micro-sketch
