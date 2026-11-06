@@ -1,5 +1,14 @@
 -- name: test_mv_fast_schema_change @sequential @slow
-admin set frontend config('alter_scheduler_interval_millisecond' = '100');
+-- Test Point: Preserve MV schema-change defaults and recomputed data in each fast evolution mode.
+-- Method: Deferred manual refresh, strict refresh results, full base/MV comparisons and exact default-value checks.
+-- Scope: MV fast schema evolution, column identity, physical defaults and configuration restoration.
+[UC]function: orig_mv_fast_schema_change_mode=execute_sql("ADMIN SHOW FRONTEND CONFIG LIKE 'mv_fast_schema_change_mode'", True)["result"][0][2]
+-- result:
+-- !result
+CREATE DATABASE mv_fse_strict_${uuid0};
+-- result:
+-- !result
+USE mv_fse_strict_${uuid0};
 -- result:
 -- !result
 admin set frontend config('mv_fast_schema_change_mode' = 'strict');
@@ -36,13 +45,39 @@ PROPERTIES (
   "replication_num" = "1",
   "query_rewrite_consistency" = "force_mv"
 )
-AS 
+REFRESH DEFERRED MANUAL
+AS
 SELECT dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0;
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("mv_fse_strict_${uuid0}", "test_mv1")
 -- result:
-019c2d99-e28d-7a24-a292-c8b7523a20ab
+True
+-- !result
+
+-- A logical oracle reads the base table without substituting an MV, even in force_mv mode.
+function: check_no_hit_materialized_view('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1 FROM t1 GROUP BY dt, c0 ORDER BY ALL;', 'TABLE: test_mv1')
+-- result:
+None
+-- !result
+function: assert_equal_result('SELECT dt, c0, cnt_c1 FROM test_mv1 ORDER BY ALL;', 'SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1 FROM t1 GROUP BY dt, c0 ORDER BY ALL;')
+-- result:
+None
+-- !result
+
+-- Check every refreshed group, rather than only the first three.
+SELECT dt, c0, cnt_c1 FROM test_mv1 ORDER BY ALL;
+-- result:
+2026-01-01 00:00:00	0	10
+2026-01-01 00:00:00	1	10
+2026-01-01 00:00:00	2	10
+2026-01-01 00:00:00	3	10
+2026-01-01 00:00:00	4	10
+2026-01-01 00:00:00	5	10
+2026-01-01 00:00:00	6	10
+2026-01-01 00:00:00	7	10
+2026-01-01 00:00:00	8	10
+2026-01-01 00:00:00	9	10
 -- !result
 set enable_materialized_view_rewrite = false;
 -- result:
@@ -69,6 +104,12 @@ ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN cnt_c2 AS count(c2);
 function: wait_alter_table_finish()
 -- result:
 None
+-- !result
+
+-- Before refreshing, existing segment rows expose the new column's physical default.
+SELECT count(*), count(cnt_c2), min(cnt_c2), max(cnt_c2) FROM test_mv1;
+-- result:
+10	0	None	None
 -- !result
 DESC test_mv1;
 -- result:
@@ -100,6 +141,12 @@ function: wait_alter_table_finish()
 -- result:
 None
 -- !result
+
+-- Before refreshing, existing segment rows expose the new column's physical default.
+SELECT count(*), count(cnt_c3), min(cnt_c3), max(cnt_c3) FROM test_mv1;
+-- result:
+10	10	0	0
+-- !result
 DESC test_mv1;
 -- result:
 dt	datetime	YES	true	None	
@@ -127,9 +174,34 @@ SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0);
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("mv_fse_strict_${uuid0}", "test_mv1")
 -- result:
-019c2d9a-138c-7a0e-9459-478545393304
+True
+-- !result
+
+-- A logical oracle reads the base table without substituting an MV, even in force_mv mode.
+function: check_no_hit_materialized_view('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1, count(c2) AS cnt_c2, count(c3) AS cnt_c3 FROM t1 GROUP BY dt, c0 ORDER BY ALL;', 'TABLE: test_mv1')
+-- result:
+None
+-- !result
+function: assert_equal_result('SELECT dt, c0, cnt_c1, cnt_c2, cnt_c3 FROM test_mv1 ORDER BY ALL;', 'SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1, count(c2) AS cnt_c2, count(c3) AS cnt_c3 FROM t1 GROUP BY dt, c0 ORDER BY ALL;')
+-- result:
+None
+-- !result
+
+-- Check every refreshed group, rather than only the first three.
+SELECT dt, c0, cnt_c1, cnt_c2, cnt_c3 FROM test_mv1 ORDER BY ALL;
+-- result:
+2026-01-01 00:00:00	0	11	11	11
+2026-01-01 00:00:00	1	10	10	10
+2026-01-01 00:00:00	2	10	10	10
+2026-01-01 00:00:00	3	10	10	10
+2026-01-01 00:00:00	4	10	10	10
+2026-01-01 00:00:00	5	10	10	10
+2026-01-01 00:00:00	6	10	10	10
+2026-01-01 00:00:00	7	10	10	10
+2026-01-01 00:00:00	8	10	10	10
+2026-01-01 00:00:00	9	10	10	10
 -- !result
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2 from t1 group by dt, c0", "test_mv1")
 -- result:
@@ -166,9 +238,34 @@ c4	int	YES	false	None
 INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("mv_fse_strict_${uuid0}", "test_mv1")
 -- result:
-019c2d9a-2b23-74a0-81e1-feda2a22fbf9
+True
+-- !result
+
+-- A logical oracle reads the base table without substituting an MV, even in force_mv mode.
+function: check_no_hit_materialized_view('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1, count(c2) AS cnt_c2, count(c3) AS cnt_c3 FROM t1 GROUP BY dt, c0 ORDER BY ALL;', 'TABLE: test_mv1')
+-- result:
+None
+-- !result
+function: assert_equal_result('SELECT dt, c0, cnt_c1, cnt_c2, cnt_c3 FROM test_mv1 ORDER BY ALL;', 'SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1, count(c2) AS cnt_c2, count(c3) AS cnt_c3 FROM t1 GROUP BY dt, c0 ORDER BY ALL;')
+-- result:
+None
+-- !result
+
+-- Check every refreshed group, rather than only the first three.
+SELECT dt, c0, cnt_c1, cnt_c2, cnt_c3 FROM test_mv1 ORDER BY ALL;
+-- result:
+2026-01-01 00:00:00	0	12	12	12
+2026-01-01 00:00:00	1	10	10	10
+2026-01-01 00:00:00	2	10	10	10
+2026-01-01 00:00:00	3	10	10	10
+2026-01-01 00:00:00	4	10	10	10
+2026-01-01 00:00:00	5	10	10	10
+2026-01-01 00:00:00	6	10	10	10
+2026-01-01 00:00:00	7	10	10	10
+2026-01-01 00:00:00	8	10	10	10
+2026-01-01 00:00:00	9	10	10	10
 -- !result
 ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN sum_c4 AS sum(c4);
 -- result:
@@ -176,6 +273,12 @@ ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN sum_c4 AS sum(c4);
 function: wait_alter_table_finish()
 -- result:
 None
+-- !result
+
+-- Before refreshing, existing segment rows expose the new column's physical default.
+SELECT count(*), count(sum_c4), min(sum_c4), max(sum_c4) FROM test_mv1;
+-- result:
+10	0	None	None
 -- !result
 DESC test_mv1;
 -- result:
@@ -205,9 +308,34 @@ SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("mv_fse_strict_${uuid0}", "test_mv1")
 -- result:
-019c2d9a-41d2-71b3-a6ae-6df4d979c893
+True
+-- !result
+
+-- A logical oracle reads the base table without substituting an MV, even in force_mv mode.
+function: check_no_hit_materialized_view('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1, count(c2) AS cnt_c2, count(c3) AS cnt_c3, sum(c4) AS sum_c4 FROM t1 GROUP BY dt, c0 ORDER BY ALL;', 'TABLE: test_mv1')
+-- result:
+None
+-- !result
+function: assert_equal_result('SELECT dt, c0, cnt_c1, cnt_c2, cnt_c3, sum_c4 FROM test_mv1 ORDER BY ALL;', 'SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1, count(c2) AS cnt_c2, count(c3) AS cnt_c3, sum(c4) AS sum_c4 FROM t1 GROUP BY dt, c0 ORDER BY ALL;')
+-- result:
+None
+-- !result
+
+-- Check every refreshed group, rather than only the first three.
+SELECT dt, c0, cnt_c1, cnt_c2, cnt_c3, sum_c4 FROM test_mv1 ORDER BY ALL;
+-- result:
+2026-01-01 00:00:00	0	13	13	13	0
+2026-01-01 00:00:00	1	10	10	10	None
+2026-01-01 00:00:00	2	10	10	10	None
+2026-01-01 00:00:00	3	10	10	10	None
+2026-01-01 00:00:00	4	10	10	10	None
+2026-01-01 00:00:00	5	10	10	10	None
+2026-01-01 00:00:00	6	10	10	10	None
+2026-01-01 00:00:00	7	10	10	10	None
+2026-01-01 00:00:00	8	10	10	10	None
+2026-01-01 00:00:00	9	10	10	10	None
 -- !result
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0", "test_mv1")
 -- result:
@@ -231,6 +359,12 @@ ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN c4 AS c4;
 function: wait_alter_table_finish()
 -- result:
 None
+-- !result
+
+-- Before refreshing, existing segment rows expose the new column's physical default.
+SELECT count(*), count(c4), min(c4), max(c4) FROM test_mv1;
+-- result:
+10	0	None	None
 -- !result
 DESC test_mv1;
 -- result:
@@ -261,9 +395,35 @@ SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("mv_fse_strict_${uuid0}", "test_mv1")
 -- result:
-019c2d9a-5c24-7374-bc49-dfcd5a98c216
+True
+-- !result
+
+-- A logical oracle reads the base table without substituting an MV, even in force_mv mode.
+function: check_no_hit_materialized_view('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1, count(c2) AS cnt_c2, count(c3) AS cnt_c3, sum(c4) AS sum_c4, c4 AS c4 FROM t1 GROUP BY dt, c0, c4 ORDER BY ALL;', 'TABLE: test_mv1')
+-- result:
+None
+-- !result
+function: assert_equal_result('SELECT dt, c0, cnt_c1, cnt_c2, cnt_c3, sum_c4, c4 FROM test_mv1 ORDER BY ALL;', 'SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1, count(c2) AS cnt_c2, count(c3) AS cnt_c3, sum(c4) AS sum_c4, c4 AS c4 FROM t1 GROUP BY dt, c0, c4 ORDER BY ALL;')
+-- result:
+None
+-- !result
+
+-- Check every refreshed group, rather than only the first three.
+SELECT dt, c0, cnt_c1, cnt_c2, cnt_c3, sum_c4, c4 FROM test_mv1 ORDER BY ALL;
+-- result:
+2026-01-01 00:00:00	0	3	3	3	0	0
+2026-01-01 00:00:00	0	11	11	11	None	None
+2026-01-01 00:00:00	1	10	10	10	None	None
+2026-01-01 00:00:00	2	10	10	10	None	None
+2026-01-01 00:00:00	3	10	10	10	None	None
+2026-01-01 00:00:00	4	10	10	10	None	None
+2026-01-01 00:00:00	5	10	10	10	None	None
+2026-01-01 00:00:00	6	10	10	10	None	None
+2026-01-01 00:00:00	7	10	10	10	None	None
+2026-01-01 00:00:00	8	10	10	10	None	None
+2026-01-01 00:00:00	9	10	10	10	None	None
 -- !result
 function: print_hit_materialized_view("select dt, c0, c4, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0, c4", "test_mv1")
 -- result:
@@ -316,9 +476,35 @@ SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("mv_fse_strict_${uuid0}", "test_mv1")
 -- result:
-019c2d9a-7aad-765c-8411-847fcf8ddaad
+True
+-- !result
+
+-- A logical oracle reads the base table without substituting an MV, even in force_mv mode.
+function: check_no_hit_materialized_view('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1, count(c3) AS cnt_c3, sum(c4) AS sum_c4, c4 AS c4 FROM t1 GROUP BY dt, c0, c4 ORDER BY ALL;', 'TABLE: test_mv1')
+-- result:
+None
+-- !result
+function: assert_equal_result('SELECT dt, c0, cnt_c1, cnt_c3, sum_c4, c4 FROM test_mv1 ORDER BY ALL;', 'SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1, count(c3) AS cnt_c3, sum(c4) AS sum_c4, c4 AS c4 FROM t1 GROUP BY dt, c0, c4 ORDER BY ALL;')
+-- result:
+None
+-- !result
+
+-- Check every refreshed group, rather than only the first three.
+SELECT dt, c0, cnt_c1, cnt_c3, sum_c4, c4 FROM test_mv1 ORDER BY ALL;
+-- result:
+2026-01-01 00:00:00	0	4	4	0	0
+2026-01-01 00:00:00	0	11	11	None	None
+2026-01-01 00:00:00	1	10	10	None	None
+2026-01-01 00:00:00	2	10	10	None	None
+2026-01-01 00:00:00	3	10	10	None	None
+2026-01-01 00:00:00	4	10	10	None	None
+2026-01-01 00:00:00	5	10	10	None	None
+2026-01-01 00:00:00	6	10	10	None	None
+2026-01-01 00:00:00	7	10	10	None	None
+2026-01-01 00:00:00	8	10	10	None	None
+2026-01-01 00:00:00	9	10	10	None	None
 -- !result
 function: print_hit_materialized_view("select dt, c0, c4, count(c1) as cnt_c1, sum(c4) as sum_c4 from t1 group by dt, c0, c4", "test_mv1")
 -- result:
@@ -370,9 +556,35 @@ SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("mv_fse_strict_${uuid0}", "test_mv1")
 -- result:
-019c2d9a-8eea-70ee-9b5d-f7e1869247ee
+True
+-- !result
+
+-- A logical oracle reads the base table without substituting an MV, even in force_mv mode.
+function: check_no_hit_materialized_view('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1, count(c3) AS cnt_c3, c4 AS c4 FROM t1 GROUP BY dt, c0, c4 ORDER BY ALL;', 'TABLE: test_mv1')
+-- result:
+None
+-- !result
+function: assert_equal_result('SELECT dt, c0, cnt_c1, cnt_c3, c4 FROM test_mv1 ORDER BY ALL;', 'SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1, count(c3) AS cnt_c3, c4 AS c4 FROM t1 GROUP BY dt, c0, c4 ORDER BY ALL;')
+-- result:
+None
+-- !result
+
+-- Check every refreshed group, rather than only the first three.
+SELECT dt, c0, cnt_c1, cnt_c3, c4 FROM test_mv1 ORDER BY ALL;
+-- result:
+2026-01-01 00:00:00	0	5	5	0
+2026-01-01 00:00:00	0	11	11	None
+2026-01-01 00:00:00	1	10	10	None
+2026-01-01 00:00:00	2	10	10	None
+2026-01-01 00:00:00	3	10	10	None
+2026-01-01 00:00:00	4	10	10	None
+2026-01-01 00:00:00	5	10	10	None
+2026-01-01 00:00:00	6	10	10	None
+2026-01-01 00:00:00	7	10	10	None
+2026-01-01 00:00:00	8	10	10	None
+2026-01-01 00:00:00	9	10	10	None
 -- !result
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, c4 from t1 group by dt, c0, c4", "test_mv1")
 -- result:
@@ -390,16 +602,42 @@ SELECT * FROM test_mv1 ORDER BY ALL limit 3;
 2026-01-01 00:00:00	0	11	11	None
 2026-01-01 00:00:00	1	10	10	None
 -- !result
-[UC]ALTER MATERIALIZED VIEW test_mv1 DROP COLUMN c4;
+ALTER MATERIALIZED VIEW test_mv1 DROP COLUMN c4;
 -- result:
-[REGEX]E:.*
+[REGEX]E:.*Cannot drop column 'c4' because it is used in GROUP BY clause.*
 -- !result
 INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("mv_fse_strict_${uuid0}", "test_mv1")
 -- result:
-019c2d9a-981a-707a-a87b-ea6b3e31347f
+True
+-- !result
+
+-- A logical oracle reads the base table without substituting an MV, even in force_mv mode.
+function: check_no_hit_materialized_view('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1, count(c3) AS cnt_c3, c4 AS c4 FROM t1 GROUP BY dt, c0, c4 ORDER BY ALL;', 'TABLE: test_mv1')
+-- result:
+None
+-- !result
+function: assert_equal_result('SELECT dt, c0, cnt_c1, cnt_c3, c4 FROM test_mv1 ORDER BY ALL;', 'SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, count(c1) AS cnt_c1, count(c3) AS cnt_c3, c4 AS c4 FROM t1 GROUP BY dt, c0, c4 ORDER BY ALL;')
+-- result:
+None
+-- !result
+
+-- Check every refreshed group, rather than only the first three.
+SELECT dt, c0, cnt_c1, cnt_c3, c4 FROM test_mv1 ORDER BY ALL;
+-- result:
+2026-01-01 00:00:00	0	6	6	0
+2026-01-01 00:00:00	0	11	11	None
+2026-01-01 00:00:00	1	10	10	None
+2026-01-01 00:00:00	2	10	10	None
+2026-01-01 00:00:00	3	10	10	None
+2026-01-01 00:00:00	4	10	10	None
+2026-01-01 00:00:00	5	10	10	None
+2026-01-01 00:00:00	6	10	10	None
+2026-01-01 00:00:00	7	10	10	None
+2026-01-01 00:00:00	8	10	10	None
+2026-01-01 00:00:00	9	10	10	None
 -- !result
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0", "test_mv1")
 -- result:
@@ -444,13 +682,34 @@ insert into t2 SELECT '2026-01-01', generate_series % 5, generate_series, genera
 CREATE MATERIALIZED VIEW test_mv2 
 PARTITION BY date_trunc('day', dt)  
 DISTRIBUTED BY HASH(`c0`, `c1`) 
-AS 
+REFRESH DEFERRED MANUAL
+AS
 SELECT dt, c0, c1 from t2;
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+function: refresh_mv_manual("mv_fse_strict_${uuid0}", "test_mv2")
 -- result:
-019c2d9a-a57b-7efd-b3d4-7394b8c8a5fa
+True
+-- !result
+
+-- A logical oracle reads the base table without substituting an MV, even in force_mv mode.
+function: check_no_hit_materialized_view('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, c1 AS c1 FROM t2 ORDER BY ALL;', 'TABLE: test_mv2')
+-- result:
+None
+-- !result
+function: assert_equal_result('SELECT dt, c0, c1 FROM test_mv2 ORDER BY ALL;', 'SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, c1 AS c1 FROM t2 ORDER BY ALL;')
+-- result:
+None
+-- !result
+
+-- The complete row comparison above also covers projection rows beyond LIMIT 3.
+SELECT c0, count(*) FROM test_mv2 GROUP BY c0 ORDER BY c0;
+-- result:
+0	20
+1	20
+2	20
+3	20
+4	20
 -- !result
 function: print_hit_materialized_view("select dt, c0, c1 from t2", "test_mv2")
 -- result:
@@ -472,10 +731,6 @@ ALTER MATERIALIZED VIEW test_mv2 ADD COLUMN c3 AS c3 + 1;
 -- result:
 [REGEX]E:.*
 -- !result
-function: wait_alter_table_finish()
--- result:
-None
--- !result
 DESC test_mv2;
 -- result:
 dt	datetime	YES	true	None	
@@ -495,10 +750,6 @@ SELECT dt, c0, c1, c3 + 1 from t2 order by ALL limit 3;
 ALTER MATERIALIZED VIEW test_mv2 ADD COLUMN c3_default AS c3 + 1 DEFAULT "0";
 -- result:
 [REGEX]E:.*
--- !result
-function: wait_alter_table_finish()
--- result:
-None
 -- !result
 DESC test_mv2;
 -- result:
@@ -539,6 +790,12 @@ function: wait_alter_table_finish()
 -- result:
 None
 -- !result
+
+-- Before refreshing, existing segment rows expose the new column's physical default.
+SELECT count(*), count(c4), min(c4), max(c4) FROM test_mv2;
+-- result:
+100	0	None	None
+-- !result
 DESC test_mv2;
 -- result:
 dt	datetime	YES	true	None	
@@ -565,9 +822,29 @@ SELECT dt, c0, c1, c4 + 1 from t2 order by ALL limit 3;
 INSERT INTO t2 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+function: refresh_mv_manual("mv_fse_strict_${uuid0}", "test_mv2")
 -- result:
-019c2d9a-c5e3-7a00-9617-238601ee35d9
+True
+-- !result
+
+-- A logical oracle reads the base table without substituting an MV, even in force_mv mode.
+function: check_no_hit_materialized_view('SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, c1 AS c1, c4 + 1 AS c4 FROM t2 ORDER BY ALL;', 'TABLE: test_mv2')
+-- result:
+None
+-- !result
+function: assert_equal_result('SELECT dt, c0, c1, c4 FROM test_mv2 ORDER BY ALL;', 'SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt AS dt, c0 AS c0, c1 AS c1, c4 + 1 AS c4 FROM t2 ORDER BY ALL;')
+-- result:
+None
+-- !result
+
+-- The complete row comparison above also covers projection rows beyond LIMIT 3.
+SELECT c0, count(*) FROM test_mv2 GROUP BY c0 ORDER BY c0;
+-- result:
+0	21
+1	20
+2	20
+3	20
+4	20
 -- !result
 function: print_hit_materialized_view("select dt, c0, c1, c4 + 1 from t2", "test_mv2")
 -- result:
@@ -604,3 +881,19 @@ DROP MATERIALIZED VIEW test_mv2;
 DROP TABLE t2;
 -- result:
 -- !result
+DROP DATABASE mv_fse_strict_${uuid0} FORCE;
+-- result:
+-- !result
+admin set frontend config('mv_fast_schema_change_mode'='${orig_mv_fast_schema_change_mode}');
+-- result:
+-- !result
+function: execute_sql("ADMIN SHOW FRONTEND CONFIG LIKE 'mv_fast_schema_change_mode'", True)["result"][0][2] == "${orig_mv_fast_schema_change_mode}"
+-- result:
+True
+-- !result
+
+CLEANUP {
+    admin set frontend config('mv_fast_schema_change_mode'='${orig_mv_fast_schema_change_mode}');
+    function: execute_sql("ADMIN SHOW FRONTEND CONFIG LIKE 'mv_fast_schema_change_mode'", True)["result"][0][2] == "${orig_mv_fast_schema_change_mode}" or (_ for _ in ()).throw(AssertionError("mv_fast_schema_change_mode was not restored"))
+    DROP DATABASE IF EXISTS mv_fse_strict_${uuid0} FORCE;
+} END CLEANUP

@@ -1,43 +1,127 @@
 -- name: test_alter_table_with_mv
+-- Test Point: Rejected column drops preserve nonempty filtered rollups and base schema/data.
+-- Method: Keep all dependency errors, then read both indexes and recheck schema/data after each rejection.
+
+create database alter_table_with_mv_${uuid0};
+-- result:
+-- !result
+
+use alter_table_with_mv_${uuid0};
+-- result:
+-- !result
+
 CREATE TABLE t0(k0 BIGINT, k1 DATETIME, v0 INT, v1 VARCHAR(100))
  distributed by hash(k0)
  order by (v0)
  properties('replication_num'='1');
 -- result:
 -- !result
-INSERT INTO t0 VALUES(0, '2024-01-01 00:00:00', 10, '100');
+
+INSERT INTO t0 VALUES(0, '2024-01-01 00:00:00', 10, '100'),
+(1, '2024-01-01 00:00:00', 20, '200'),
+(2, '2024-01-02 00:00:00', 30, '300');
 -- result:
 -- !result
+
 CREATE MATERIALIZED VIEW test_mv1 AS SELECT k0, v1 FROM t0 WHERE v0 > 10;
 -- result:
 -- !result
+
 function: wait_table_rollup_finish()
 -- result:
 None
 -- !result
+
 CREATE MATERIALIZED VIEW test_mv2 AS SELECT k0, v1, k1, v0 FROM t0 WHERE v0 > 10 and k1 = '2024-01-01 00:00:00';
 -- result:
 -- !result
+
 function: wait_table_rollup_finish()
 -- result:
 None
 -- !result
+
+[ORDER]SELECT k0, v1 FROM test_mv1 [_SYNC_MV_] ORDER BY k0;
+-- result:
+1	200
+2	300
+-- !result
+
+[ORDER]SELECT k0, v1, k1, v0 FROM test_mv2 [_SYNC_MV_] ORDER BY k0;
+-- result:
+1	200	2024-01-01 00:00:00	20
+-- !result
+
+[UC]function: initial_rollup_schema=execute_sql("DESC t0", True)["result"]
+
 ALTER TABLE t0 DROP COLUMN k1;
 -- result:
 [REGEX].*Can not drop/modify the column k1, because the column is used in the related rollup.*
 -- !result
+
+function: execute_sql("DESC t0", True)["result"] == ${initial_rollup_schema}
+-- result:
+True
+-- !result
+
+[ORDER]SELECT * from t0 order by k0;
+-- result:
+0	2024-01-01 00:00:00	10	100
+1	2024-01-01 00:00:00	20	200
+2	2024-01-02 00:00:00	30	300
+-- !result
+
 ALTER TABLE t0 DROP COLUMN v0;
 -- result:
 [REGEX].*Can not drop/modify the column v0, because the column is used in the related rollup.*
 -- !result
+
+function: execute_sql("DESC t0", True)["result"] == ${initial_rollup_schema}
+-- result:
+True
+-- !result
+
+[ORDER]SELECT * from t0 order by k0;
+-- result:
+0	2024-01-01 00:00:00	10	100
+1	2024-01-01 00:00:00	20	200
+2	2024-01-02 00:00:00	30	300
+-- !result
+
 ALTER TABLE t0 DROP COLUMN v1, DROP COLUMN v0;
 -- result:
 [REGEX].*Can not drop/modify the column v0, because the column is used in the related rollup.*
 -- !result
+
+function: execute_sql("DESC t0", True)["result"] == ${initial_rollup_schema}
+-- result:
+True
+-- !result
+
+[ORDER]SELECT * from t0 order by k0;
+-- result:
+0	2024-01-01 00:00:00	10	100
+1	2024-01-01 00:00:00	20	200
+2	2024-01-02 00:00:00	30	300
+-- !result
+
 ALTER TABLE t0 DROP COLUMN v1, DROP COLUMN v100;
 -- result:
 E: (1064, 'Column does not exists: v100')
 -- !result
+
+function: execute_sql("DESC t0", True)["result"] == ${initial_rollup_schema}
+-- result:
+True
+-- !result
+
+[ORDER]SELECT * from t0 order by k0;
+-- result:
+0	2024-01-01 00:00:00	10	100
+1	2024-01-01 00:00:00	20	200
+2	2024-01-02 00:00:00	30	300
+-- !result
+
 DESC t0;
 -- result:
 k0	bigint	YES	true	None	
@@ -45,7 +129,34 @@ k1	datetime	YES	true	None
 v0	int	YES	true	None	
 v1	varchar(100)	YES	false	None	
 -- !result
-SELECT * from t0 order by k0;
+
+[ORDER]SELECT k0, v1 FROM test_mv1 [_SYNC_MV_] ORDER BY k0;
 -- result:
-0	2024-01-01 00:00:00	10	100
+1	200
+2	300
 -- !result
+
+[ORDER]SELECT k0, v1, k1, v0 FROM test_mv2 [_SYNC_MV_] ORDER BY k0;
+-- result:
+1	200	2024-01-01 00:00:00	20
+-- !result
+
+drop materialized view test_mv2;
+-- result:
+-- !result
+
+drop materialized view test_mv1;
+-- result:
+-- !result
+
+drop table t0;
+-- result:
+-- !result
+
+drop database alter_table_with_mv_${uuid0};
+-- result:
+-- !result
+
+CLEANUP {
+  drop database if exists alter_table_with_mv_${uuid0} force;
+} END CLEANUP
