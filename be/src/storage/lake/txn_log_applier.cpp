@@ -433,6 +433,10 @@ public:
               _base_version(_metadata->version()),
               _new_version(new_version),
               _builder(_tablet, _metadata),
+<<<<<<< HEAD
+=======
+              _publish_property(publish_property),
+>>>>>>> 430ecc7b392... [Tool][RB-1330] Fix backend compilation with Clang 20 (#68839)
               _rebuild_pindex(rebuild_pindex) {
         _metadata->set_version(_new_version);
         _skip_write_tablet_metadata = skip_write_tablet_metadata;
