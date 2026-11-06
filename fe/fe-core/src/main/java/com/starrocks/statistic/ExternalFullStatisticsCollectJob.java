@@ -74,6 +74,7 @@ import org.apache.velocity.VelocityContext;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -326,6 +327,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         executeCollectPhase(collectTasks, context, analyzeStatus, 0, collectTasks.size(), parallelism);
         flushInsertStatisticsData(context, true);
         cleanupStaleRawKeyedRows(context, jobId);
+        cleanupDroppedPartitionStats(context, jobId);
         reportToleratedFailures(analyzeStatus, jobId);
     }
 
@@ -673,6 +675,94 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             LOG.warn("[ExternalStats] failed to clean up stale raw-keyed rows | jobId={} catalog={} db={} table={}",
                     jobId, catalogName, db.getOriginName(), table.getName());
         }
+    }
+
+    // Deletes the statistics of partitions that no longer exist in the table. Nothing else removes them: a
+    // later collection only rewrites the partitions it collects, while the read path aggregates every row of
+    // the table, so a dropped partition's rows keep inflating NDV and row count and pin min/max to its values.
+    //
+    // A partition is deleted only when it is missing from the table's partition list, listed here after the
+    // collection, AND none of its rows was written within
+    // Config.connector_table_analyze_dropped_partition_stats_grace_second. The grace covers a list that lags the
+    // table (connector caches) and a concurrent job that just collected a partition this list does not have yet.
+    //
+    // Only this job's columns are cleaned: the job commits (and so refreshes the statistics cache for) exactly
+    // these columns, so deleting another column's rows would leave its cached statistics stale.
+    //
+    // It is best-effort and errs on the side of keeping rows, which a later collection cleans up: it skips after
+    // a tolerated failure (not every column is committed, and resume records may still name the partitions),
+    // when the analyze is cancelled, and when the partition list cannot be obtained or is empty. A failure must
+    // never fail the job. Rare races (a dropped partition reappearing between the lookup and the DELETE) are
+    // accepted; such rows are collected again later.
+    protected void cleanupDroppedPartitionStats(ConnectContext context, long jobId) {
+        long graceSeconds = Config.connector_table_analyze_dropped_partition_stats_grace_second;
+        if (graceSeconds <= 0 || table.isUnPartitioned() || hasToleratedFailures() || isAnalyzeCancelled(jobId)) {
+            return;
+        }
+        try {
+            List<String> livePartitionNames = listLivePartitionNames();
+            if (livePartitionNames == null || livePartitionNames.isEmpty()) {
+                return;
+            }
+            StatisticExecutor executor = new StatisticExecutor();
+            String tableUuid = table.getUUID();
+            Set<String> live = toStoredPartitionNames(livePartitionNames);
+            List<String> dropped = executor.queryExternalStatPartitionsNotUpdatedSince(context, tableUuid,
+                            columnNames, graceSeconds).stream()
+                    .filter(p -> !live.contains(p))
+                    .collect(Collectors.toList());
+            if (dropped.isEmpty()) {
+                return;
+            }
+            // Also bounded by the DELETE's own IN-list limit, which applies to the shared-data (UNIQUE_KEYS) table.
+            int batchSize = Math.max(1,
+                    Math.min(Config.expr_children_limit / 2, Config.max_allowed_in_element_num_of_delete));
+            int batches = 0;
+            int failedBatches = 0;
+            for (List<String> batch : Lists.partition(dropped, batchSize)) {
+                batches++;
+                if (!executor.dropExternalStatDroppedPartitions(context, tableUuid, batch, columnNames)) {
+                    failedBatches++;
+                }
+            }
+            if (failedBatches > 0) {
+                LOG.warn("[ExternalStats] dropped partition stats cleanup partially failed | jobId={} catalog={} " +
+                                "db={} table={} droppedPartitions={} batches={} failedBatches={}",
+                        jobId, catalogName, db.getOriginName(), table.getName(), dropped.size(), batches,
+                        failedBatches);
+            } else {
+                LOG.info("[ExternalStats] dropped partition stats cleaned up | jobId={} catalog={} db={} table={} " +
+                                "droppedPartitions={} batches={}",
+                        jobId, catalogName, db.getOriginName(), table.getName(), dropped.size(), batches);
+            }
+        } catch (Exception e) {
+            LOG.warn("[ExternalStats] dropped partition stats cleanup failed | jobId={} catalog={} db={} table={}",
+                    jobId, catalogName, db.getOriginName(), table.getName(), e);
+        }
+    }
+
+    // The table's complete partition list. Usually served from the connector's metadata cache, which the
+    // collection has just refreshed.
+    protected List<String> listLivePartitionNames() {
+        return ConnectorPartitionTraits.build(table).getPartitionNames();
+    }
+
+    // Partition names as the collection stores them (see buildColumnSelectFromCTE): Iceberg names as listed, other
+    // connectors normalized so their NULL placeholders (e.g. __HIVE_DEFAULT_PARTITION__) read as NULL. Comparing
+    // the raw listed names against the stored ones would take a live NULL partition for a dropped one.
+    private Set<String> toStoredPartitionNames(List<String> partitionNames) {
+        if (table.isIcebergTable()) {
+            return new HashSet<>(partitionNames);
+        }
+        Collection<String> nullValues = resolveNullValues(table);
+        List<String> partitionColumnNames = table.getPartitionColumnNames();
+        return partitionNames.stream()
+                .map(p -> PartitionUtil.normalizePartitionName(p, partitionColumnNames, nullValues))
+                .collect(Collectors.toSet());
+    }
+
+    private static boolean isAnalyzeCancelled(long jobId) {
+        return GlobalStateMgr.getCurrentState().getAnalyzeMgr().isAnalyzeCancelled(jobId);
     }
 
     protected List<CollectTask> buildCollectSQLList(int parallelism) {
