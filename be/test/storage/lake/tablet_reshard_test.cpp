@@ -6082,4 +6082,74 @@ TEST_F(LakeTabletReshardTest, test_separate_sort_key_parallel_unshare_skips_the_
     EXPECT_FALSE(op_parallel.has_output_sstable());
 }
 
+// An identical copy flushes its source's index on the node that serves the source. That node can still cache the
+// source's index at an older version when the source was published on another node since. Flushed as is, the old
+// index would replace the base version's SST list with its own, and the SST the other node wrote would be missing from
+// both the old and the new tablet. The flush reloads such an index from the base metadata instead.
+TEST_F(LakeTabletReshardTest, test_identical_tablet_reloads_a_stale_source_index) {
+    const int64_t source_id = next_id();
+    const int64_t new_tablet_id = next_id();
+    prepare_tablet_dirs(new_tablet_id);
+    ASSIGN_OR_ABORT(auto source, create_lifecycle_source(source_id, 0, 100, 10, 100, /*include_delete=*/false));
+    ASSERT_EQ(source->version(), _primary_key_manager->get_primary_index_data_version(source_id));
+
+    // Another node publishes the next version and flushes its index, so the base metadata lists an SST this node's
+    // index has never seen.
+    auto other_node = make_other_compute_node();
+    ASSIGN_OR_ABORT(source, publish_followup_upsert_delete_on(other_node.tablet_manager.get(), source_id,
+                                                              source->version(), 11, 110, 0, /*include_delete=*/false));
+    {
+        ScopedPkIndexFlush flush;
+        ASSIGN_OR_ABORT(source,
+                        other_node.primary_key_manager->flush_pk_memtable(source, source->version(), std::nullopt));
+    }
+    ASSERT_OK(put_tablet_metadata(source));
+    ASSERT_GT(source->sstable_meta().sstables_size(), 0);
+    ASSERT_LT(_primary_key_manager->get_primary_index_data_version(source_id), source->version());
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& identical_tablet = *resharding_tablet.mutable_identical_tablet_info();
+    identical_tablet.set_old_tablet_id(source_id);
+    identical_tablet.set_new_tablet_id(new_tablet_id);
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(next_id());
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    {
+        ScopedPkIndexFlush flush;
+        ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, source->version(),
+                                                  source->version() + 1, txn_info, false, tablet_metadatas,
+                                                  tablet_ranges));
+    }
+
+    const auto& copied = tablet_metadatas.at(new_tablet_id);
+    for (const auto& sst : source->sstable_meta().sstables()) {
+        EXPECT_EQ(1, std::count_if(copied->sstable_meta().sstables().begin(), copied->sstable_meta().sstables().end(),
+                                   [&](const auto& carried) { return carried.filename() == sst.filename(); }))
+                << sst.filename() << " of the base version is missing from the new tablet";
+    }
+    expect_lifecycle_oracle(copied, {{10, 100}, {11, 110}}, {});
+}
+
+// A flush given metadata older than the index the node caches comes from a reshard task that ran after the tablet
+// moved on. It fails instead of flushing the newer index into the older metadata, and it leaves the cached index as
+// it is: rewinding it would hand the tablet's next publish the wrong state.
+TEST_F(LakeTabletReshardTest, test_pk_flush_refuses_an_index_newer_than_its_metadata) {
+    const int64_t tablet_id = next_id();
+    ASSIGN_OR_ABORT(auto older, create_lifecycle_source(tablet_id, 0, 100, 10, 100, /*include_delete=*/false));
+    ASSIGN_OR_ABORT(auto newer, publish_followup_upsert_delete(tablet_id, older->version(), 11, 110, 0, false));
+    ASSERT_EQ(newer->version(), _primary_key_manager->get_primary_index_data_version(tablet_id));
+
+    {
+        ScopedPkIndexFlush flush;
+        EXPECT_FALSE(_primary_key_manager->flush_pk_memtable(older, older->version(), std::nullopt).ok());
+    }
+    EXPECT_EQ(newer->version(), _primary_key_manager->get_primary_index_data_version(tablet_id));
+
+    ASSIGN_OR_ABORT(auto next, publish_followup_upsert_delete(tablet_id, newer->version(), 12, 120, 10));
+    expect_lifecycle_oracle(next, {{11, 110}, {12, 120}}, {10});
+}
+
 } // namespace starrocks
