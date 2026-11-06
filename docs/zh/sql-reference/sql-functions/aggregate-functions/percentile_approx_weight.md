@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "计算指定百分位数的加权近似值，支持常量整数 compression。"
+---
+
 # percentile_approx_weight
 
 计算指定百分位数的加权近似值。百分位数参数 p 可以是一个值或一个数组。`percentile_approx_weight` 是 `PERCENTILE_APPROX` 的加权版本，允许用户为每个输入值指定一个权重（一个常量值或数值列）。
@@ -14,6 +19,8 @@ DOUBLE PERCENTILE_APPROX_WEIGHT(expr, BIGINT weight, DOUBLE|ARRAY<DOUBLE> p[, DO
 - `p` : 支持的数据类型为 DOUBLE，p 的值介于 0 到 1 之间; 数组类型`ARRAY<DOUBLE>`, 数组每个值介于0 到 1之间。 例如，`0.99` 表示第 99 个百分位数。
 - `weight` : 权重列。必须是一个正的常量数或列。
 - `compression` : （可选）压缩比。范围：[2048, 10000]。值越大，精度越高，内存消耗越大，计算时间越长。如果未指定此参数或值超出 [2048, 10000] 的范围，则使用默认值 `10000`。
+
+`compression` 必须是结果为整数的常量表达式。支持 `5000`、`5000.0`、`CAST(5000 AS DOUBLE)` 和 `2500 * 2`。对于 `5000.5` 等非整数值及非常量表达式，函数会报错，不会进行取整。省略此参数、指定 `NULL` 或指定超出 [2048, 10000] 范围的整数时，使用默认值 `10000`。
 
 ## 示例
 
