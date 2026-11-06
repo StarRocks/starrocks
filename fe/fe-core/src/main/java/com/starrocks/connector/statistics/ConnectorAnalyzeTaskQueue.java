@@ -67,7 +67,9 @@ public class ConnectorAnalyzeTaskQueue {
 
         wLock.lock();
         try {
-            if (pendingTasks.size() >= Config.connector_table_query_trigger_analyze_max_pending_task_num) {
+            // the limit counts tables, merging columns into a table that is already pending does not grow the queue
+            if (!pendingTasks.containsKey(tableUUID) &&
+                    pendingTasks.size() >= Config.connector_table_query_trigger_analyze_max_pending_task_num) {
                 LOG.warn("Connector Analyze TaskQueue pending task num reach limit: {}, current: {}",
                         Config.connector_table_query_trigger_analyze_max_pending_task_num, pendingTasks.size());
                 return false;
@@ -113,7 +115,32 @@ public class ConnectorAnalyzeTaskQueue {
         return runningTasks.size() >= Config.connector_table_query_trigger_analyze_max_running_task_num;
     }
 
+    // The pool is sized from connector_table_query_trigger_analyze_max_running_task_num at construction, but the
+    // config is mutable and the scheduler admits tasks by its live value. Follow it here, otherwise a raised limit
+    // only turns the extra tasks into pool rejections until FE restarts.
+    @VisibleForTesting
+    void resizeTaskRunPoolIfNeeded() {
+        if (!(taskRunPool instanceof ThreadPoolExecutor pool)) {
+            return;
+        }
+        int target = Math.max(Config.connector_table_query_trigger_analyze_max_running_task_num, 1);
+        int current = pool.getMaximumPoolSize();
+        if (current == target && pool.getCorePoolSize() == target) {
+            return;
+        }
+        // core must never exceed maximum: grow maximum first, shrink core first
+        if (target > current) {
+            pool.setMaximumPoolSize(target);
+            pool.setCorePoolSize(target);
+        } else {
+            pool.setCorePoolSize(target);
+            pool.setMaximumPoolSize(target);
+        }
+        LOG.info("[ExternalStats] pool resize | from={} to={}", current, target);
+    }
+
     public void schedulePendingTask() {
+        resizeTaskRunPoolIfNeeded();
         // do not dispatch task if max running concurrency reached or no pending task
         if (isMaxRunningConcurrencyReached()) {
             LOG.info("Connector Analyze TaskQueue running task num reach limit: {}, current: {}",
