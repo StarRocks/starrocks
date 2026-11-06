@@ -35,7 +35,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
- * MV freshness of a Delta table is tracked by its table version, recorded for every partition an MV refresh read.
+ * MV freshness of an unpartitioned Delta table is tracked by its table version, recorded under the table's name, its
+ * only partition. Partitioned Delta tables are not tracked: listing their partitions scans all their data files.
  */
 public class DeltaLakePartitionTraits extends DefaultTraits {
     private static final Logger LOG = LogManager.getLogger(DeltaLakePartitionTraits.class);
@@ -56,7 +57,7 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
     }
 
     public static boolean isTableVersionTracked(Table table) {
-        return versionOf(table) >= 0;
+        return table.isUnPartitioned() && versionOf(table) >= 0;
     }
 
     private static long versionOf(Table table) {
@@ -74,16 +75,6 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
     }
 
     @Override
-    Map<String, PartitionInfo> fetchPartitionNameWithPartitionInfo() {
-        // listing the partitions of a partitioned Delta table scans all its data files
-        if (!table.isUnPartitioned()) {
-            throw new UnsupportedOperationException(
-                    "Listing the partitions of partitioned Delta table " + table.getName() + " is not supported");
-        }
-        return super.fetchPartitionNameWithPartitionInfo();
-    }
-
-    @Override
     public List<PartitionInfo> getPartitions(List<String> partitionNames) {
         if (pinnedVersionRange != null || !isTableVersionTracked(table)) {
             return super.getPartitions(partitionNames);
@@ -92,29 +83,30 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
         return partitionNames.stream().map(name -> tableVersion).collect(Collectors.toList());
     }
 
+    /**
+     * @return {} if the MV was refreshed from the current table version, otherwise the table name. Never null:
+     * {@link CachedPartitionTraits} turns null into {}, i.e. fresh. Which names are reported doesn't matter, since a
+     * Delta table is never the partition ref table of an MV and any change makes the whole MV stale.
+     */
     @Override
     public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                 MaterializedView.AsyncRefreshContext context) {
-        long currentVersion = versionOf(table);
-        if (currentVersion < 0) {
-            return null;
+        Set<String> changed = Sets.newHashSet(table.getName());
+        if (!isTableVersionTracked(table)) {
+            return changed;
         }
+        long currentVersion = versionOf(table);
         for (BaseTableInfo baseTableInfo : baseTables) {
+            // a dropped and recreated table has a new Delta table id, so it matches no base table info
             if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(table.getTableIdentifier())) {
                 continue;
             }
-            // never report a change as null: CachedPartitionTraits turns null into {}
-            Map<String, MaterializedView.BasePartitionInfo> versionMap = context.getBaseTableRefreshInfo(baseTableInfo);
-            if (versionMap.isEmpty()) {
-                // nothing recorded, so the MV is stale. Which names are reported doesn't matter: a Delta table is
-                // never the partition ref table of an MV, so any change makes the whole MV stale.
-                return Sets.newHashSet(table.getName());
-            }
-            boolean changed = versionMap.values().stream()
-                    .anyMatch(refreshed -> refreshed == null || refreshed.getVersion() != currentVersion);
-            return changed ? Sets.newHashSet(versionMap.keySet()) : Sets.newHashSet();
+            Map<String, MaterializedView.BasePartitionInfo> versionMap =
+                    context.getBaseTableInfoVisibleVersionMap().get(baseTableInfo);
+            MaterializedView.BasePartitionInfo refreshed = versionMap == null ? null : versionMap.get(table.getName());
+            return refreshed != null && refreshed.getVersion() == currentVersion ? Sets.newHashSet() : changed;
         }
-        return null;
+        return changed;
     }
 
     // The table version is only for MVs: statistics collection keeps treating Delta tables as of unknown update time.
