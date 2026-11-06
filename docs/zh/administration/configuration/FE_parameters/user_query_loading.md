@@ -181,6 +181,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 一列的统计信息被记录下来所需的最低覆盖率——即本次外部表统计收集请求的分区中，实际采集成功的比例下限。被中断的收集（部分查询被容忍跳过，或任务中途失败）仍会把已读取分区的行写入并记录请求了多少个分区，读路径据此正确放大。但覆盖率低到一定程度就不值得了：行数可以按采集到的分区外推，NDV 不能，而 NDV 恰恰是 join 基数估算最敏感的输入。一列只采到二十分之一的分区，就会给优化器一个偏低约 20 倍、却被当作事实的 NDV。低于该比例的列不写元数据，优化器退回 connector 自身的表元数据：行数准确、没有 NDV，用默认选择率总好过一个自信的错误值。该比例以本次收集"请求了多少分区"为分母，而不是整表分区数，因此采样不会仅仅因为是采样就被判为覆盖不足。取值 `0` 或更小表示采到多少就记多少。
 - 引入版本: v4.1
 
+### `connector_table_analyze_dropped_partition_stats_cleanup_interval_second`
+
+- 默认值: 3600
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: Leader FE 定期清理外部表已删除分区列统计信息的间隔，与统计信息收集无关。收集结束时的清理会漏掉在表最后一次收集之后才删除的分区，以及当时仍处于 `connector_table_analyze_dropped_partition_stats_grace_second` 保留期内的分区；定期清理对每轮有限数量的表应用相同规则。定期清理只处理最近一次以 FULL 方式收集的列，采样列由其下一次收集负责清理。有待执行或正在执行的收集任务的表会被跳过。取值 `0` 或更小表示关闭定期清理。当 `connector_table_analyze_dropped_partition_stats_grace_second` 为 `0` 或更小时，定期清理同样关闭。
+- 引入版本: v4.2
+
 ### `connector_table_analyze_dropped_partition_stats_grace_second`
 
 - 默认值: 86400

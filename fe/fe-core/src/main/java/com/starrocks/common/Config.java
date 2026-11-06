@@ -3339,6 +3339,14 @@ public class Config extends ConfigBase {
             "<= 0 disables the cleanup.")
     public static long connector_table_analyze_dropped_partition_stats_grace_second = 86400; // default 1 day
 
+    // The cleanup above only runs at the end of a collection, so a partition dropped after the table's last
+    // collection (or still inside the grace at it) keeps its statistics until the next one. The leader also runs
+    // the same cleanup periodically, at most once per this interval, over a bounded number of tables per round.
+    @ConfField(mutable = true, comment = "Interval at which the leader FE periodically deletes the column " +
+            "statistics of dropped partitions of external tables, independent of collections; <= 0 disables " +
+            "the periodic cleanup.")
+    public static long connector_table_analyze_dropped_partition_stats_cleanup_interval_second = 3600;
+
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
      * This may reduce network transmission in following case:
