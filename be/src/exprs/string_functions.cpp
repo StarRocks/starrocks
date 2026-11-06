@@ -2024,7 +2024,21 @@ StatusOr<ColumnPtr> StringFunctions::utf8_length(FunctionContext* context, const
     if (data_col->is_binary() && !data_col->is_view()) {
         const auto* bin_col = down_cast<const BinaryColumn*>(data_col);
         const auto bytes = bin_col->get_immutable_bytes();
-        if (bytes.empty() || validate_ascii_fast(reinterpret_cast<const char*>(bytes.data()), bytes.size())) {
+        const char* raw_ptr = reinterpret_cast<const char*>(bytes.data());
+        const size_t total_bytes = bytes.size();
+        if (total_bytes == 0) {
+            return length(context, columns);
+        }
+        // For large buffers (> 4096 bytes), probe 64-byte windows at the midpoint and tail first
+        // so columns with late or periodic UTF-8 characters bail out in O(1) without a full-buffer double scan.
+        constexpr size_t kAsciiProbeThreshold = 4096;
+        constexpr size_t kAsciiProbeWindow = 64;
+        bool probe_ok = true;
+        if (total_bytes > kAsciiProbeThreshold) {
+            probe_ok = validate_ascii_fast(raw_ptr + (total_bytes / 2), kAsciiProbeWindow) &&
+                       validate_ascii_fast(raw_ptr + (total_bytes - kAsciiProbeWindow), kAsciiProbeWindow);
+        }
+        if (probe_ok && validate_ascii_fast(raw_ptr, total_bytes)) {
             return length(context, columns);
         }
     }
