@@ -49,6 +49,21 @@ struct RandomGenerator {
     static T next_value() { return ThreadLocalRandomUniform(range); }
 };
 
+template <int range>
+struct RandomGenerator<DateValue, range> {
+    static DateValue next_value() {
+        return DateValue{static_cast<int32_t>(DateValue::MIN_DATE_VALUE._julian + ThreadLocalRandomUniform(range))};
+    }
+};
+
+template <int range>
+struct RandomGenerator<TimestampValue, range> {
+    static TimestampValue next_value() {
+        return TimestampValue{
+                static_cast<int64_t>(TimestampValue::MIN_TIMESTAMP_VALUE._timestamp + ThreadLocalRandomUniform(range))};
+    }
+};
+
 template <class T, int range>
 struct RandomConstGenerator {
     static T next_value() {
@@ -67,6 +82,44 @@ bool RandomConstGenerator<T, range>::_is_initialize = false;
 
 template <class T, int range>
 T RandomConstGenerator<T, range>::const_value = 0;
+
+template <int range>
+struct RandomConstGenerator<DateValue, range> {
+    static DateValue next_value() {
+        if (!_is_initialize) {
+            const_value = RandomGenerator<DateValue, range>::next_value();
+            _is_initialize = true;
+        }
+        return const_value;
+    }
+    static DateValue const_value;
+    static bool _is_initialize;
+};
+
+template <int range>
+bool RandomConstGenerator<DateValue, range>::_is_initialize = false;
+
+template <int range>
+DateValue RandomConstGenerator<DateValue, range>::const_value = DateValue::MIN_DATE_VALUE;
+
+template <int range>
+struct RandomConstGenerator<TimestampValue, range> {
+    static TimestampValue next_value() {
+        if (!_is_initialize) {
+            const_value = RandomGenerator<TimestampValue, range>::next_value();
+            _is_initialize = true;
+        }
+        return const_value;
+    }
+    static TimestampValue const_value;
+    static bool _is_initialize;
+};
+
+template <int range>
+bool RandomConstGenerator<TimestampValue, range>::_is_initialize = false;
+
+template <int range>
+TimestampValue RandomConstGenerator<TimestampValue, range>::const_value = TimestampValue::MIN_TIMESTAMP_VALUE;
 
 template <class DataGenerator, class Container, int init_size>
 struct ContainerIniter {
