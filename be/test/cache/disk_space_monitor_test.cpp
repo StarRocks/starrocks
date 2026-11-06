@@ -150,7 +150,7 @@ public:
         config::datacache_disk_size = _datacache_disk_size;
     }
 
-    static void insert_to_cache(BlockCache* cache, size_t count);
+    static void insert_to_cache(BlockCache* cache, size_t count, size_t start = 0);
     static StatusOr<bool> adjust_quota_once(DiskSpaceMonitor* monitor);
 
 protected:
@@ -163,10 +163,10 @@ protected:
 
 const size_t DiskSpaceMonitorTest::kBlockSize = 256 * KB;
 
-void DiskSpaceMonitorTest::insert_to_cache(BlockCache* cache, size_t count) {
+void DiskSpaceMonitorTest::insert_to_cache(BlockCache* cache, size_t count, size_t start) {
     size_t batch_size = MB;
     const std::string cache_key = "test_file";
-    for (size_t i = 0; i < count; ++i) {
+    for (size_t i = start; i < start + count; ++i) {
         char ch = 'a' + i % 26;
         std::string value(batch_size, ch);
         Status st = cache->write(cache_key + std::to_string(i), 0, batch_size, value.c_str());
@@ -251,8 +251,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
     {
         insert_to_cache(block_cache.get(), 19);
         auto metrics = local_cache->cache_metrics();
-        int64_t used_rate = metrics.disk_used_bytes * 100 / metrics.disk_quota_bytes;
-        ASSERT_GT(used_rate, DiskSpace::kAutoIncreaseThreshold);
+        ASSERT_GE(metrics.disk_used_bytes, metrics.disk_quota_bytes * 9 / 10);
     }
 
     {
@@ -302,8 +301,7 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_with_limit) {
     {
         insert_to_cache(block_cache.get(), 19);
         auto metrics = local_cache->cache_metrics();
-        int64_t used_rate = metrics.disk_used_bytes * 100 / metrics.disk_quota_bytes;
-        ASSERT_GT(used_rate, DiskSpace::kAutoIncreaseThreshold);
+        ASSERT_GE(metrics.disk_used_bytes, metrics.disk_quota_bytes * 9 / 10);
     }
 
     {
@@ -332,6 +330,104 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_with_limit) {
     }
 }
 
+TEST_F(DiskSpaceMonitorTest, skip_expansion_for_underused_cache) {
+    SCOPED_UPDATE(bool, config::datacache_enable, true);
+    SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
+    SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
+    SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 1);
+    SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 1);
+
+    auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 20 * MB);
+    auto block_cache = TestCacheUtils::create_cache(options);
+    auto local_cache = block_cache->local_cache();
+
+    // The real disk usage (290M) is below the low level (300M), but the cache has used only 2M of its 20M
+    // quota. Counting the unused 18M as used, the projected usage (308M) is above the low level.
+    SpaceInfo space_info = {.capacity = 500 * MB, .free = 300 * MB, .available = 210 * MB};
+    _mock_fs->set_space(1, ".", space_info);
+
+    auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
+    ASSERT_OK(space_monitor->init(&options.dir_spaces));
+    insert_to_cache(block_cache.get(), 2);
+
+    {
+        config::enable_datacache_disk_auto_adjust = true;
+        for (int i = 0; i < 3; ++i) {
+            ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+            ASSERT_FALSE(changed);
+        }
+        auto metrics = local_cache->cache_metrics();
+        ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
+    }
+
+    // Once the cache has consumed its quota, the projected usage (291M) drops below the low level and the
+    // quota is expanded toward the safe level.
+    {
+        insert_to_cache(block_cache.get(), 17, 2);
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_TRUE(changed);
+        auto metrics = local_cache->cache_metrics();
+        // other: 500M - 210M - 19M = 271M
+        // new quota: 500 * 0.7 - other = 79M, 79M/10 * 10 = 70M
+        ASSERT_EQ(metrics.disk_quota_bytes, 70 * MB);
+    }
+}
+
+TEST_F(DiskSpaceMonitorTest, reset_free_period_when_disk_usage_rises) {
+    SCOPED_UPDATE(bool, config::datacache_enable, true);
+    SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
+    SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
+    SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 1);
+    // The idle period spans two rounds, so that a single round above the low level in between must restart
+    // the count.
+    SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 2);
+
+    auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 20 * MB);
+    auto block_cache = TestCacheUtils::create_cache(options);
+    auto local_cache = block_cache->local_cache();
+
+    SpaceInfo low_space_info = {.capacity = 500 * MB, .free = 400 * MB, .available = 300 * MB};
+    SpaceInfo mid_space_info = {.capacity = 500 * MB, .free = 200 * MB, .available = 150 * MB};
+    _mock_fs->set_space(1, ".", low_space_info);
+
+    auto space_monitor = std::make_shared<DiskSpaceMonitor>(local_cache.get(), _mock_fs);
+    ASSERT_OK(space_monitor->init(&options.dir_spaces));
+    insert_to_cache(block_cache.get(), 19);
+    config::enable_datacache_disk_auto_adjust = true;
+
+    // Round 1: below the low level, the free period reaches 1s.
+    {
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_FALSE(changed);
+    }
+
+    // Round 2: the disk usage rises between the low level and the high level, the free period restarts.
+    {
+        _mock_fs->set_space(1, ".", mid_space_info);
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_FALSE(changed);
+    }
+
+    // Round 3: below the low level again, but the free period is only 1s, so still no expansion.
+    {
+        _mock_fs->set_space(1, ".", low_space_info);
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_FALSE(changed);
+        auto metrics = local_cache->cache_metrics();
+        ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
+    }
+
+    // Round 4: the free period reaches 2s and the quota is expanded.
+    {
+        ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
+        ASSERT_TRUE(changed);
+        auto metrics = local_cache->cache_metrics();
+        // other: 500M - 300M - 19M = 181M
+        // new quota: 500 * 0.7 - other = 169M, 169M/10 * 10 = 160M
+        ASSERT_EQ(metrics.disk_quota_bytes, 160 * MB);
+    }
+}
+
 TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
     SCOPED_UPDATE(bool, config::datacache_enable, true);
     SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
@@ -353,8 +449,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota) {
     {
         insert_to_cache(block_cache.get(), 50);
         auto metrics = local_cache->cache_metrics();
-        int64_t used_rate = metrics.disk_used_bytes * 100 / metrics.disk_quota_bytes;
-        ASSERT_GT(used_rate, DiskSpace::kAutoIncreaseThreshold);
+        ASSERT_GE(metrics.disk_used_bytes, metrics.disk_quota_bytes * 9 / 10);
     }
 
     {
@@ -394,8 +489,7 @@ TEST_F(DiskSpaceMonitorTest, auto_decrease_cache_quota_to_zero) {
     {
         insert_to_cache(block_cache.get(), 50);
         auto metrics = local_cache->cache_metrics();
-        int64_t used_rate = metrics.disk_used_bytes * 100 / metrics.disk_quota_bytes;
-        ASSERT_GT(used_rate, DiskSpace::kAutoIncreaseThreshold);
+        ASSERT_GE(metrics.disk_used_bytes, metrics.disk_quota_bytes * 9 / 10);
     }
 
     {

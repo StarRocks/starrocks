@@ -270,7 +270,7 @@ datacache_auto_adjust_enable=true
 启用自动扩缩容后：
 
 - 当磁盘使用量超过 BE 配置指定的阈值 `disk_high_level`（默认值为 `90`，即磁盘空间的 90%）时，系统将自动淘汰缓存数据以释放磁盘空间。
-- 当磁盘使用量持续低于 BE 配置指定的阈值 `disk_low_level`（默认值为 `60`，即磁盘空间的 60%），且 Data Cache 使用的当前磁盘空间已满时，系统将自动扩容缓存容量。
+- 当磁盘使用量（Data Cache 尚未用满的缓存容量也计为已用）持续低于 BE 配置指定的阈值 `disk_low_level`（默认值为 `75`，即磁盘空间的 75%），且持续时长达到 `datacache_disk_idle_seconds_for_expansion` 时，系统将自动扩容缓存容量。
 - 在自动扩缩容缓存容量时，系统将努力将缓存容量调整到 BE 配置指定的 `disk_safe_level`（默认值为 `80`，即磁盘空间的 80%）水平。
 
 ## 缓存共享

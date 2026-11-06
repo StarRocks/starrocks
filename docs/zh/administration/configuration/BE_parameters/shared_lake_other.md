@@ -641,11 +641,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### disk_low_level
 
-- 默认值：60
+- 默认值：75
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：磁盘低水位（百分比）。当磁盘使用率在 `datacache_disk_idle_seconds_for_expansion` 指定的时间内持续低于该值，且用于缓存数据的空间已经写满时，系统将自动进行缓存扩容，增加缓存上限。该参数自 v4.0 起由 `datacache_disk_low_level` 更名为 `disk_low_level`。
+- 描述：磁盘低水位（百分比）。计算磁盘使用率时，Data Cache 尚未用满的缓存容量也计为已用。当该使用率在 `datacache_disk_idle_seconds_for_expansion` 指定的时间内持续低于该值时，系统将自动进行缓存扩容，把缓存上限提高到 `disk_safe_level` 对应的水位。该参数自 v4.0 起由 `datacache_disk_low_level` 更名为 `disk_low_level`。
 - 引入版本：v3.3.0
 
 ### disk_safe_level

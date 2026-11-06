@@ -103,8 +103,9 @@ CONF_mInt64(disk_high_level, "90");
 // The safe disk usage level.
 CONF_mInt64(disk_safe_level, "80");
 // The low disk usage level, which triggers increasing the quota for some components,
-// currently only supports data cache.
-CONF_mInt64(disk_low_level, "60");
+// currently only supports data cache. The usage is evaluated as if the component had
+// filled its current quota, so the quota of an underused component is not increased.
+CONF_mInt64(disk_low_level, "75");
 
 // process memory limit specified as number of bytes
 // ('<int>[bB]?'), megabytes ('<float>[mM]'), gigabytes ('<float>[gG]'),

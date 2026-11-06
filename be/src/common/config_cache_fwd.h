@@ -37,8 +37,9 @@ CONF_mInt64(disk_high_level, "90");
 CONF_mInt64(disk_safe_level, "80");
 
 // The low disk usage level, which triggers increasing the quota for some components,
-// currently only supports data cache.
-CONF_mInt64(disk_low_level, "60");
+// currently only supports data cache. The usage is evaluated as if the component had
+// filled its current quota, so the quota of an underused component is not increased.
+CONF_mInt64(disk_low_level, "75");
 
 // clear corrupted datacache for external tables, as lake_clear_corrupted_cache_data does for lake tables
 CONF_mBool(external_table_clear_corrupted_cache_data, "true");

@@ -93,18 +93,12 @@ public:
     // which can help reduce processing the special tail files.
     const static size_t kQuotaAlignUnit;
 
-    // The cache usage threshold for automatically increase disk quota, if the cache usage is under this level,
-    // the disk expansion will be skipped.
-    // NOTICE: When users update the disk quota manually, this threshold will be ignored.
-    const static double kAutoIncreaseThreshold;
-
 private:
     Status _update_disk_stats();
     Status _update_disk_options();
 
-    void _update_spaces_by_cache_quota(size_t cache_avalil_bytes);
-
-    bool _allow_expansion(const AdjustContext& ctx);
+    size_t _align_cache_quota(size_t cache_avail_bytes) const;
+    void _update_spaces_by_cache_quota(size_t cache_avail_bytes);
 
     size_t _cache_usage(const AdjustContext& ctx);
     size_t _cache_file_space_usage();

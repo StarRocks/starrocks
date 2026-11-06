@@ -626,11 +626,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### disk_low_level
 
-- デフォルト: 60
+- デフォルト: 75
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: キャッシュ容量の自動スケーリングをトリガーするディスク使用率 (パーセンテージ) の下限。ディスク使用率が `datacache_disk_idle_seconds_for_expansion` で指定された期間を超えてこの値を下回り、Data Cache に割り当てられたスペースが完全に利用される場合、システムは上限を増やしてキャッシュ容量を自動的に拡張します。この項目はバージョン4.0以降、`datacache_disk_low_level` から `disk_low_level` に名称変更されました。
+- 説明: キャッシュ容量の自動拡張をトリガーするディスク使用率 (パーセンテージ) の下限。ディスク使用率は、Data Cache がまだ使用していないキャッシュ容量も使用済みとして計算されます。この値が `datacache_disk_idle_seconds_for_expansion` で指定された期間を超えて下限を下回り続けると、システムは `disk_safe_level` で指定されたレベルに向けてキャッシュ容量を自動的に拡張します。この項目はバージョン4.0以降、`datacache_disk_low_level` から `disk_low_level` に名称変更されました。
 - 導入バージョン: v3.3.0
 
 ### disk_safe_level

@@ -635,11 +635,11 @@ This topic introduces the following types of BE configurations:
 
 ### disk_low_level
 
-- Default: 60
+- Default: 75
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The lower limit of disk usage (in percentage) that triggers the automatic scaling down of the cache capacity. When the disk usage remains below this value for the period specified in `datacache_disk_idle_seconds_for_expansion`, and the space allocated for Data Cache is fully utilized, the system will automatically expand the cache capacity by increasing the upper limit. This item is renamed from `datacache_disk_low_level` to `disk_low_level` from v4.0 onwards.
+- Description: The lower limit of disk usage (in percentage) that triggers the automatic scaling up of the cache capacity. The disk usage is evaluated as if Data Cache had filled its current capacity, that is, the part of the cache capacity not used yet is counted as used. When this value remains below the lower limit for the period specified in `datacache_disk_idle_seconds_for_expansion`, the system will automatically expand the cache capacity toward the level specified by `disk_safe_level`. This item is renamed from `datacache_disk_low_level` to `disk_low_level` from v4.0 onwards.
 - Introduced in: v3.3.0
 
 ### disk_safe_level

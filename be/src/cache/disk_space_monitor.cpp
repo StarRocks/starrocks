@@ -30,8 +30,6 @@ const size_t DiskSpace::kQuotaAlignUnit = 10uL * 1024 * 1024 * 1024;
 const size_t DiskSpace::kQuotaAlignUnit = 10uL * 1024 * 1024;
 #endif
 
-const double DiskSpace::kAutoIncreaseThreshold = 0.9;
-
 Status DiskSpace::init_spaces(const std::vector<DirSpace>& dir_spaces) {
     _dir_spaces = dir_spaces;
     Status st = _update_disk_stats();
@@ -64,25 +62,43 @@ bool DiskSpace::adjust_spaces(const AdjustContext& ctx) {
         return false;
     }
 
+    size_t old_cache_quota = cache_quota();
+    size_t cur_cache_usage = _cache_usage(ctx);
     int64_t used_bytes = _disk_stats.used_bytes();
-    if (used_bytes < _disk_opts.low_level_size) {
-        _disk_free_period += _disk_opts.adjust_interval_s;
-        if (!_allow_expansion(ctx)) {
-            return false;
+
+    bool shrink = used_bytes > _disk_opts.high_level_size;
+    bool expand = false;
+    if (!shrink) {
+        // Evaluate the disk usage as if the cache had filled its current quota. An underused cache gets no
+        // new quota before it has consumed what it already has, and a full cache is expanded as soon as the
+        // real disk usage leaves enough room below the safe level, whatever the absolute usage is.
+        size_t unused_cache_quota = old_cache_quota > cur_cache_usage ? old_cache_quota - cur_cache_usage : 0;
+        int64_t projected_used_bytes = used_bytes + static_cast<int64_t>(unused_cache_quota);
+        if (projected_used_bytes < _disk_opts.low_level_size) {
+            _disk_free_period += _disk_opts.adjust_interval_s;
+            expand = _disk_free_period >= _disk_opts.idle_for_expansion_s;
+        } else {
+            // The idle period must be continuous, a short dip below the low level does not count.
+            _disk_free_period = 0;
         }
-    } else if (used_bytes <= _disk_opts.high_level_size) {
+    }
+    if (!shrink && !expand) {
         return false;
     }
 
-    size_t old_cache_quota = cache_quota();
-    size_t new_cache_quota = _calc_new_cache_quota(_cache_usage(ctx));
-    _update_spaces_by_cache_quota(new_cache_quota);
-
     // Compare the aligned quota that will really be applied, otherwise a change swallowed by the alignment
     // would be reported and applied repeatedly.
+    size_t new_cache_quota = _align_cache_quota(_calc_new_cache_quota(cur_cache_usage));
+    if (new_cache_quota == old_cache_quota || (expand && new_cache_quota < old_cache_quota)) {
+        // Either nothing changes, or the expansion target is capped by `datacache_disk_size` or by the
+        // minimum quota, so there is nothing to expand to.
+        return false;
+    }
+    _update_spaces_by_cache_quota(new_cache_quota);
+
     // The free period is only reset in `commit_adjustment()` after the cache engine accepts the new quota,
     // otherwise a transient failure would postpone the next attempt by another `idle_for_expansion_s`.
-    _pending_adjustment = cache_quota() != old_cache_quota;
+    _pending_adjustment = true;
     return _pending_adjustment;
 }
 
@@ -156,8 +172,12 @@ Status DiskSpace::_update_disk_options() {
     return Status::OK();
 }
 
+size_t DiskSpace::_align_cache_quota(size_t cache_avail_bytes) const {
+    return cache_avail_bytes / _dir_spaces.size() / kQuotaAlignUnit * kQuotaAlignUnit * _dir_spaces.size();
+}
+
 void DiskSpace::_update_spaces_by_cache_quota(size_t cache_avail_bytes) {
-    size_t avg_dir_size = cache_avail_bytes / _dir_spaces.size() / kQuotaAlignUnit * kQuotaAlignUnit;
+    size_t avg_dir_size = _align_cache_quota(cache_avail_bytes) / _dir_spaces.size();
     for (auto& dir : _dir_spaces) {
         dir.size = avg_dir_size;
     }
@@ -184,19 +204,6 @@ size_t DiskSpace::_calc_new_cache_quota(size_t cur_cache_usage) {
     }
 
     return new_cache_quota;
-}
-
-bool DiskSpace::_allow_expansion(const AdjustContext& ctx) {
-    if (_disk_free_period < _disk_opts.idle_for_expansion_s) {
-        return false;
-    }
-    if (ctx.total_cache_quota > 0) {
-        double cache_used_rate = static_cast<double>(ctx.total_cache_usage) / ctx.total_cache_quota;
-        if (cache_used_rate < kAutoIncreaseThreshold) {
-            return false;
-        }
-    }
-    return true;
 }
 
 size_t DiskSpace::_check_cache_limit(int64_t cache_quota) {
