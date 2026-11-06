@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 #if defined(__x86_64__) && defined(__AVX2__)
 #include <immintrin.h>
@@ -26,11 +27,9 @@ namespace starrocks {
 static inline bool contains_negative_value(const int32_t* data, size_t size) {
     size_t i = 0;
 #ifdef __AVX2__
-    __m256i v_zero = _mm256_setzero_si256();
     for (; i + 8 <= size; i += 8) {
-        __m256i v = _mm256_loadu_si256((__m256i*)(data + i));
-        __m256i cmp = _mm256_cmpgt_epi32(v_zero, v);
-        if (_mm256_movemask_epi8(cmp)) return true;
+        __m256i v = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + i));
+        if (_mm256_movemask_ps(_mm256_castsi256_ps(v))) return true;
     }
 #endif
     for (; i < size; ++i) {
@@ -40,20 +39,26 @@ static inline bool contains_negative_value(const int32_t* data, size_t size) {
 }
 
 template <typename T>
-static inline void delta_decode_chain_scalar_prefetch(T* buf, int n, T min_delta, T& last_value) noexcept {
-    T acc = last_value;
+inline void delta_decode_chain_scalar_prefetch(T* buf, int n, T min_delta, T& last_value) noexcept {
+    using U = std::make_unsigned_t<T>;
+    U acc = static_cast<U>(last_value);
+    const U u_min_delta = static_cast<U>(min_delta);
     int i = 0;
     for (i = 0; (i + 8) < n; ++i) {
         __builtin_prefetch(buf + i + 8);
-        acc += buf[i] + min_delta;
-        buf[i] = acc;
+        acc += static_cast<U>(buf[i]) + u_min_delta;
+        buf[i] = static_cast<T>(acc);
     }
     for (; i < n; ++i) {
-        acc += buf[i] + min_delta;
-        buf[i] = acc;
+        acc += static_cast<U>(buf[i]) + u_min_delta;
+        buf[i] = static_cast<T>(acc);
     }
-    last_value = acc;
+    last_value = static_cast<T>(acc);
 }
+
+// Portable scalar reference implementations, defined in delta_decode.cpp.
+void delta_decode_chain_int32_scalar(int32_t* buf, int n, int32_t min_delta, int32_t& last_value);
+void delta_decode_chain_int64_scalar(int64_t* buf, int n, int64_t min_delta, int64_t& last_value);
 
 // ISA-specific implementations, defined in delta_decode.cpp. Each kernel carries a per-function
 // `target` attribute so its AVX2 / AVX-512 intrinsics are available even when the global build
