@@ -242,7 +242,6 @@ public class ConnectorAnalyzeTaskQueueTest {
         }
     }
 
-<<<<<<< HEAD
     private static AnalyzeStatus statusWith(StatsConstants.ScheduleStatus scheduleStatus, String tableUUID) {
         AnalyzeStatus status = new ExternalAnalyzeStatus(1L, "hive0", "partitioned_db", "orders", tableUUID,
                 Lists.newArrayList("o_orderkey"), StatsConstants.AnalyzeType.FULL,
@@ -336,7 +335,9 @@ public class ConnectorAnalyzeTaskQueueTest {
                     new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey"))));
         } finally {
             Config.connector_table_query_trigger_analyze_failure_backoff_max_second = saved;
-=======
+        }
+    }
+
     @Test
     public void testPoolFollowsMaxRunningTaskNum() {
         Triple<String, Database, Table> tableTriple = getOrdersTableTriple();
@@ -380,7 +381,6 @@ public class ConnectorAnalyzeTaskQueueTest {
             tasks.forEach(BlockingTask::finish);
             Config.connector_table_query_trigger_analyze_max_running_task_num = oldLimit;
             pool.shutdownNow();
->>>>>>> 7699f5f9c29... [BugFix][RB-1044] Let the external analyze queue follow its running-task config and merge when full (#68730)
         }
     }
 }
