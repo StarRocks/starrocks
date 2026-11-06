@@ -1685,6 +1685,28 @@ PARALLEL_TEST(VecStringFunctionsTest, Utf8LengthAsciiFastPathTest) {
         auto v_utf8 = ColumnHelper::cast_to<TYPE_INT>(down_cast<const ConstColumn*>(res_utf8.get())->data_column());
         ASSERT_EQ(4, v_utf8->get_data()[0]);
     }
+
+    // 6. Large buffer (> 4096 bytes) probing: all-ASCII, midpoint non-ASCII, tail non-ASCII, and interior non-ASCII
+    {
+        constexpr size_t kNumRows = 100;
+        const std::string ascii_row(64, 'x');                          // 6400 bytes total (> 4096)
+        const std::string utf8_row = std::string(60, 'x') + "é" + "🚀"; // 60 + 2 + 4 = 66 bytes, 62 chars
+
+        for (size_t non_ascii_idx : {size_t(0), kNumRows / 2, kNumRows - 1, size_t(10), kNumRows}) {
+            auto col = BinaryColumn::create();
+            for (size_t i = 0; i < kNumRows; ++i) {
+                col->append(i == non_ascii_idx ? utf8_row : ascii_row);
+            }
+            Columns cols{col};
+            auto res = StringFunctions::utf8_length(ctx.get(), cols).value();
+            ASSERT_EQ(kNumRows, res->size());
+            auto v = ColumnHelper::cast_to<TYPE_INT>(res);
+            for (size_t i = 0; i < kNumRows; ++i) {
+                int32_t expected_len = (i == non_ascii_idx) ? 62 : 64;
+                EXPECT_EQ(expected_len, v->get_data()[i]) << "Mismatch at row " << i << " for case " << non_ascii_idx;
+            }
+        }
+    }
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, upperTest) {
