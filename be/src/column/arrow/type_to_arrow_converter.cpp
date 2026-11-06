@@ -20,6 +20,7 @@
 #include <arrow/type.h>
 #include <fmt/format.h>
 
+#include "gen_cpp/InternalService_types.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
@@ -109,7 +110,8 @@ Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::
     return Status::OK();
 }
 
-Status convert_to_arrow_type_for_flight_sql(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result) {
+Status convert_to_arrow_type_for_flight_sql(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result,
+                                            int32_t version) {
     switch (type.type) {
     case TYPE_BOOLEAN:
         *result = arrow::boolean();
@@ -142,7 +144,12 @@ Status convert_to_arrow_type_for_flight_sql(const TypeDescriptor& type, std::sha
         *result = arrow::date32();
         break;
     case TYPE_DATETIME:
-        *result = arrow::timestamp(arrow::TimeUnit::MICRO, "UTC");
+        // DATETIME has no time zone. Before V2 it was labeled UTC, which clients read as a UTC instant.
+        if (version >= TArrowFlightSQLVersion::V2) {
+            *result = arrow::timestamp(arrow::TimeUnit::MICRO);
+        } else {
+            *result = arrow::timestamp(arrow::TimeUnit::MICRO, "UTC");
+        }
         break;
     case TYPE_VARCHAR:
     case TYPE_CHAR:
@@ -169,15 +176,15 @@ Status convert_to_arrow_type_for_flight_sql(const TypeDescriptor& type, std::sha
         break;
     case TYPE_ARRAY: {
         std::shared_ptr<arrow::DataType> type0;
-        RETURN_IF_ERROR(convert_to_arrow_type_for_flight_sql(type.children[0], &type0));
+        RETURN_IF_ERROR(convert_to_arrow_type_for_flight_sql(type.children[0], &type0, version));
         *result = arrow::list(type0);
         break;
     }
     case TYPE_MAP: {
         std::shared_ptr<arrow::DataType> type0;
-        RETURN_IF_ERROR(convert_to_arrow_type_for_flight_sql(type.children[0], &type0));
+        RETURN_IF_ERROR(convert_to_arrow_type_for_flight_sql(type.children[0], &type0, version));
         std::shared_ptr<arrow::DataType> type1;
-        RETURN_IF_ERROR(convert_to_arrow_type_for_flight_sql(type.children[1], &type1));
+        RETURN_IF_ERROR(convert_to_arrow_type_for_flight_sql(type.children[1], &type1, version));
         *result = arrow::map(type0, type1);
         break;
     }
@@ -190,7 +197,7 @@ Status convert_to_arrow_type_for_flight_sql(const TypeDescriptor& type, std::sha
         }
         for (auto i = 0; i < type.children.size(); ++i) {
             std::shared_ptr<arrow::DataType> type0;
-            RETURN_IF_ERROR(convert_to_arrow_type_for_flight_sql(type.children[i], &type0));
+            RETURN_IF_ERROR(convert_to_arrow_type_for_flight_sql(type.children[i], &type0, version));
             fields.emplace_back(arrow::field(type.field_names[i], type0));
         }
         *result = arrow::struct_(fields);
@@ -218,7 +225,7 @@ Status convert_to_arrow_field_for_flight_sql(const TypeDescriptor& desc, const s
     if (const auto lt = desc.type; lt == TYPE_HLL || lt == TYPE_OBJECT || lt == TYPE_PERCENTILE) {
         is_nullable = true;
     }
-    RETURN_IF_ERROR(convert_to_arrow_type_for_flight_sql(desc, &type));
+    RETURN_IF_ERROR(convert_to_arrow_type_for_flight_sql(desc, &type, version));
 
     // Keep the column name for compatibility. Arrow consumers must not adjust column order by name.
     *field = arrow::field(col_name, type, is_nullable);

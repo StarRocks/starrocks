@@ -100,7 +100,8 @@ public final class ArrowUtils {
             case DATE:
                 return new ArrowType.Date(DateUnit.DAY);
             case DATETIME:
-                return new ArrowType.Timestamp(TimeUnit.MICROSECOND, "UTC");
+                // DATETIME has no time zone, so it is a timestamp without time zone (TArrowFlightSQLVersion.V2).
+                return new ArrowType.Timestamp(TimeUnit.MICROSECOND, null);
             case VARCHAR:
             case CHAR:
             case JSON:
