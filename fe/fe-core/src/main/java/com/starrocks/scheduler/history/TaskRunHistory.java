@@ -19,12 +19,14 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TGetTasksParams;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -114,10 +116,19 @@ public class TaskRunHistory {
         List<TaskRunStatus> result = getInMemoryHistory().stream()
                 .filter(x -> x.match(params))
                 .collect(Collectors.toList());
-        if (isEnableArchiveHistory()) {
+        if (isEnableArchiveHistory() && mayBeArchived(params)) {
             result.addAll(historyTable.lookup(params));
         }
         return result;
+    }
+
+    // Only finished runs are archived, so a PENDING or RUNNING filter can never match the history table.
+    private static boolean mayBeArchived(TGetTasksParams params) {
+        if (params == null || params.getState() == null) {
+            return true;
+        }
+        Constants.TaskRunState state = EnumUtils.getEnumIgnoreCase(Constants.TaskRunState.class, params.getState());
+        return state == null || state.isFinishState();
     }
 
     // TODO: make it thread safe
