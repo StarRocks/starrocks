@@ -783,6 +783,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：用于查询执行在发生中间数据溢写（例如外部排序、哈希连接和其他算子）时的可写 scratch 目录的逗号分隔列表。指定一个或多个以 `;` 分隔的路径（例如 `/mnt/ssd1/tmp;/mnt/ssd2/tmp`）。这些目录应当对 BE 进程可访问且可写，并具有足够的可用空间；StarRocks 会在它们之间选择以分散溢写 I/O。更改此项需要重启才能生效。如果目录丢失、不可写或已满，溢写可能失败或导致查询性能下降。
 - 引入版本：v3.2.0
 
+### radix_sort_threshold
+
+- 默认值：256
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：对定长数值和时间类型列（`int8`/`int16`/`int32`/`int64`、`uint8`/`uint16`/`uint32`/`uint64`、`float`、`double`、`DATE` 和 `DATETIME`）进行排序时，启用 SIMD 8 位 LSD 基数排序替代 `pdqsort` 的最小平局子区间（tie-range）行数阈值。长度小于该阈值的子区间将继续使用基于比较的 `pdqsort`。将该值设置为 `0` 或负整数将禁用基数排序，并对所有子区间回退使用 `pdqsort`。
+- 引入版本：-
+
 ### result_buffer_cancelled_interval_time
 
 - 默认值：300
