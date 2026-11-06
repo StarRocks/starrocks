@@ -74,6 +74,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
@@ -90,9 +91,10 @@ public class CompactionScheduler extends Daemon {
     private final ConcurrentHashMap<PartitionIdentifier, CompactionJob> runningCompactions;
     private final SynchronizedCircularQueue<CompactionRecord> history;
     private long lastPartitionCleanTime;
-    private volatile Set<Long> disabledIds; // copy-on-write, table id or partition id
+    // Publish copy-on-write snapshots containing table or partition IDs.
+    private final AtomicReference<Set<Long>> disabledIds = new AtomicReference<>(Collections.emptySet());
     // null means NORMAL; an empty set allows no tables. Publish mode and IDs together on config refresh.
-    private volatile Set<Long> allowedTableIds = Collections.emptySet();
+    private final AtomicReference<Set<Long>> allowedTableIds = new AtomicReference<>(Collections.emptySet());
 
     CompactionScheduler(@NotNull CompactionMgr compactionManager, @NotNull SystemInfoService systemInfoService,
                         @NotNull GlobalTransactionMgr transactionMgr, @NotNull GlobalStateMgr stateMgr,
@@ -105,8 +107,6 @@ public class CompactionScheduler extends Daemon {
         this.runningCompactions = new ConcurrentHashMap<>();
         this.lastPartitionCleanTime = System.currentTimeMillis();
         this.history = new SynchronizedCircularQueue<>(Config.lake_compaction_history_size);
-        this.disabledIds = Collections.unmodifiableSet(new HashSet<>());
-
         disableTableOrPartitionId(disableIdsStr);
         updateCompactionAllowlist(Config.lake_compaction_admission_mode, Config.lake_compaction_allow_table_ids);
     }
@@ -226,7 +226,7 @@ public class CompactionScheduler extends Daemon {
         }
 
         List<PartitionStatisticsSnapshot> partitions = compactionManager.choosePartitionsToCompact(
-                runningCompactions.keySet(), disabledIds);
+                runningCompactions.keySet(), disabledIds.get());
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         int limitReachCnt = 0;
@@ -866,12 +866,12 @@ public class CompactionScheduler extends Daemon {
     }
 
     public boolean isTableDisabled(Long tableId) {
-        return disabledIds.contains(tableId);
+        return disabledIds.get().contains(tableId);
     }
 
     boolean isCompactionAllowed(PartitionIdentifier partition) {
-        Set<Long> allowed = allowedTableIds;
-        Set<Long> disabled = disabledIds;
+        Set<Long> allowed = allowedTableIds.get();
+        Set<Long> disabled = disabledIds.get();
         return !disabled.contains(partition.getTableId()) && !disabled.contains(partition.getPartitionId())
                 && (allowed == null || allowed.contains(partition.getTableId()));
     }
@@ -879,7 +879,7 @@ public class CompactionScheduler extends Daemon {
     void updateCompactionAllowlist(String mode, String tableIds) {
         Set<Long> newAllowedIds = new HashSet<>();
         if ("NORMAL".equals(mode.trim())) {
-            allowedTableIds = null;
+            allowedTableIds.set(null);
         } else {
             try {
                 if (!"ALLOWLIST".equals(mode.trim())) {
@@ -895,10 +895,10 @@ public class CompactionScheduler extends Daemon {
                         newAllowedIds.add(parsedId);
                     }
                 }
-                allowedTableIds = Collections.unmodifiableSet(newAllowedIds);
+                allowedTableIds.set(Collections.unmodifiableSet(newAllowedIds));
             } catch (IllegalArgumentException e) {
                 // Fail closed, including at startup: a typo must not enable compaction on migrating tables.
-                allowedTableIds = Collections.emptySet();
+                allowedTableIds.set(Collections.emptySet());
                 LOG.warn("Invalid compaction mode '{}' or table allowlist '{}'; no new compactions will be scheduled. " +
                         "Use NORMAL or ALLOWLIST and positive table IDs separated by semicolons", mode, tableIds);
             }
@@ -906,7 +906,7 @@ public class CompactionScheduler extends Daemon {
     }
 
     public boolean isPartitionDisabled(Long partitionId) {
-        return disabledIds.contains(partitionId);
+        return disabledIds.get().contains(partitionId);
     }
 
     public void disableTableOrPartitionId(String disableIdsStr) {
@@ -924,7 +924,7 @@ public class CompactionScheduler extends Daemon {
                 }
             }
         }
-        disabledIds = Collections.unmodifiableSet(newDisabledIds);
+        disabledIds.set(Collections.unmodifiableSet(newDisabledIds));
     }
 
     private Map<ComputeResource, Integer> getRunningTaskInfo() {

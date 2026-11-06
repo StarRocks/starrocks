@@ -4141,7 +4141,7 @@ public class Config extends ConfigBase {
             aliases = {"lake_compaction_disable_tables"})
     public static String lake_compaction_disable_ids = "";
 
-    @ConfField(mutable = true, comment = "Compaction admission mode: NORMAL ignores the allowlist; " +
+    @ConfField(mutable = true, acceptEmpty = true, comment = "Compaction admission mode: NORMAL ignores the allowlist; " +
             "ALLOWLIST only allows tables in lake_compaction_allow_table_ids.")
     public static String lake_compaction_admission_mode = "NORMAL";
 
