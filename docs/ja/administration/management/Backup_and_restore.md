@@ -142,7 +142,7 @@ StarRocks は、データベース、テーブル、またはパーティショ�
 
 ### データベースのバックアップ
 
-データベースに対して完全な BACKUP を実行すると、データベース内のすべてのテーブル、同期および非同期マテリアライズドビュー、ビュー、および UDF がバックアップされます。
+データベースに対して完全な BACKUP を実行すると、データベース内のすべてのテーブル、同期マテリアライズドビュー、ビュー、および UDF がバックアップされます。非同期マテリアライズドビューは、FE 設定項目 [`enable_backup_materialized_view`](../configuration/FE_parameters/user_query_loading.md#enable_backup_materialized_view) が `true` に設定されていない限りスキップされます（デフォルト: `false`）。デフォルト設定で非同期マテリアライズドビューをバックアップするには、名前を指定してください。[マテリアライズドビューのバックアップ](#マテリアライズドビューのバックアップ)を参照してください。
 
 次の例では、スナップショット `sr_hub_backup` にデータベース `sr_hub` をバックアップし、リポジトリ `test_repo` にスナップショットをアップロードします。
 
@@ -212,7 +212,10 @@ ON (sr_member PARTITION (p1));
 
 同期マテリアライズドビューは、ベーステーブルの BACKUP 操作と共にバックアップされるため、手動でバックアップする必要はありません。
 
-非同期マテリアライズドビューは、それが属するデータベースの BACKUP 操作と共にバックアップできます。また、手動でバックアップすることもできます。
+デフォルトでは、非同期マテリアライズドビューは、それが属するデータベースの BACKUP 操作と共にはバックアップされません。次のいずれかの方法でバックアップできます。
+
+- `ON` 句で名前を指定する（以下の例を参照）。この方法は `enable_backup_materialized_view` の影響を受けません。
+- FE 設定項目 [`enable_backup_materialized_view`](../configuration/FE_parameters/user_query_loading.md#enable_backup_materialized_view) を `true` に設定する。データベース全体の BACKUP と `ON (ALL MATERIALIZED VIEWS)` に非同期マテリアライズドビューが含まれるようになります。
 
 次の例では、スナップショット `sr_mv1_backup` にデータベース `sr_hub` のマテリアライズドビュー `sr_mv1` をバックアップし、リポジトリ `test_repo` にスナップショットをアップロードします。
 
@@ -237,6 +240,12 @@ BACKUP DATABASE sr_hub SNAPSHOT sr_mv3_backup
 TO test_repo
 ON (ALL MATERIALIZED VIEWS);
 ```
+
+:::note
+
+`enable_backup_materialized_view` が `false`（デフォルト）の場合、上記のステートメントはマテリアライズドビューを一切バックアップしませんが、BACKUP ジョブはエラーなく完了します。
+
+:::
 
 ### ビューのバックアップ
 
