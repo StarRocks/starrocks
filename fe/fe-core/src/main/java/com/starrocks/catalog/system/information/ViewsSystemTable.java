@@ -48,7 +48,6 @@ import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TUserIdentity;
-import com.starrocks.thrift.TUserRoles;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.NotImplementedException;
@@ -58,7 +57,6 @@ import org.apache.parquet.Strings;
 import org.apache.thrift.TException;
 import org.apache.thrift.meta_data.FieldValueMetaData;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -130,12 +128,7 @@ public class ViewsSystemTable extends SystemTable {
     public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
         final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
-        TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
-        if (context.getCurrentRoleIds() != null) {
-            TUserRoles userRoles = new TUserRoles();
-            userRoles.setRole_id_list(new ArrayList<>(context.getCurrentRoleIds()));
-            userIdentity.setCurrent_role_ids(userRoles);
-        }
+        TUserIdentity userIdentity = UserIdentityUtils.callerToThrift(context);
         TGetTablesParams params = new TGetTablesParams();
         params.setCurrent_user_ident(userIdentity);
         params.setType(VIEW);
