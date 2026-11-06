@@ -299,8 +299,9 @@ public final class TabletPreSplitCoordinator {
             }
         }
         if (prepared.isEmpty()) {
-            LOG.info("Pre-split skipped for table {}: planner found no useful cuts", table.getName());
-            return new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS);
+            SkipReason reason = pipeline.emptyPreSubmitReason();
+            LOG.info("Pre-split skipped for table {}: no job prepared ({})", table.getName(), reason);
+            return new PreSplitOutcome.Skipped(reason);
         }
 
         PreSplitPipeline.PreparedReshardJob preparedJob = prepared.get();
@@ -626,6 +627,17 @@ public final class TabletPreSplitCoordinator {
     }
 
     /**
+     * Sizing for a load that carves several old tablets with one estimate: the same arithmetic as
+     * {@link #selectPreSplitTabletCount} without the {@code tablet_reshard_max_split_count} bound, which limits how many
+     * tablets ONE old tablet may split into, not how many a whole load may produce. The caller shares the budget across
+     * its tablets and caps each share itself. Saturates at {@link Integer#MAX_VALUE}, which also keeps the compute-node
+     * rounding free of overflow. Below the cap the result equals {@link #selectPreSplitTabletCount}.
+     */
+    static int selectPreSplitTabletBudget(Estimates estimates, int activeComputeNodeCount) {
+        return (int) sizeTabletCount(estimates, activeComputeNodeCount, preSplitTargetSize(), Integer.MAX_VALUE);
+    }
+
+    /**
      * The target tablet size load-time pre-split sizes against: {@code tablet_pre_split_target_size}
      * when set to a positive value, otherwise {@code tablet_reshard_target_size}.
      *
@@ -651,16 +663,25 @@ public final class TabletPreSplitCoordinator {
      *                   Must be {@code > 0}.
      */
     public static int selectTabletCount(Estimates estimates, int activeComputeNodeCount, long targetSize) {
+        int maxSplitCount = Config.tablet_reshard_max_split_count;
+        Preconditions.checkState(maxSplitCount >= 2,
+                "tablet_reshard_max_split_count must be >= 2, was %s", maxSplitCount);
+        return (int) sizeTabletCount(estimates, activeComputeNodeCount, targetSize, maxSplitCount);
+    }
+
+    /**
+     * The sizing arithmetic shared by {@link #selectTabletCount(Estimates, int, long)} and
+     * {@link #selectPreSplitTabletBudget}; {@code upperBound} is the largest count it may return.
+     */
+    private static long sizeTabletCount(Estimates estimates, int activeComputeNodeCount, long targetSize,
+                                        long upperBound) {
         Objects.requireNonNull(estimates, "estimates");
         Preconditions.checkArgument(activeComputeNodeCount >= 1,
                 "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
 
-        int maxSplitCount = Config.tablet_reshard_max_split_count;
         long minSplitSize = Config.tablet_reshard_min_split_size;
         Preconditions.checkState(targetSize > 0,
                 "target tablet size must be > 0, was %s", targetSize);
-        Preconditions.checkState(maxSplitCount >= 2,
-                "tablet_reshard_max_split_count must be >= 2, was %s", maxSplitCount);
         Preconditions.checkState(minSplitSize > 0,
                 "tablet_reshard_min_split_size must be > 0, was %s", minSplitSize);
 
@@ -668,11 +689,11 @@ public final class TabletPreSplitCoordinator {
         // does not overflow when totalBytes is near Long.MAX_VALUE.
         long totalBytes = estimates.totalBytes();
         long byteTargetTabletCount = totalBytes == 0L ? 0L : ((totalBytes - 1) / targetSize) + 1;
-        // Clamp to maxSplitCount before the node-count rounding. The final result is
-        // capped at maxSplitCount anyway, and clamping first keeps the rounding
+        // Clamp to upperBound before the node-count rounding. The final result is
+        // capped at upperBound anyway, and clamping first keeps the rounding
         // arithmetic (+ activeComputeNodeCount) from overflowing on a near-
         // Long.MAX_VALUE estimate (tiny target_size + huge input).
-        long boundedByteTarget = Math.min(byteTargetTabletCount, maxSplitCount);
+        long boundedByteTarget = Math.min(byteTargetTabletCount, upperBound);
         // Bound the node count we align to by how many min-split-size tablets the input can
         // fill (totalBytes / tablet_reshard_min_split_size). Without this, the rounding and
         // node-count floor below would split a small load into one tiny tablet per node on a
@@ -690,8 +711,7 @@ public final class TabletPreSplitCoordinator {
                 ((boundedByteTarget + alignmentNodeCount - 1) / alignmentNodeCount)
                         * alignmentNodeCount;
         long proposed = Math.max(alignmentNodeCount, nodeAlignedCount);
-        long clamped = Math.max(2L, Math.min(proposed, maxSplitCount));
-        return (int) clamped;
+        return Math.max(2L, Math.min(proposed, upperBound));
     }
 
     /**

@@ -503,7 +503,7 @@ StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷�
 - 如果省略 `distribution_desc`，仅当处于存算分离模式且 `enable_range_distribution` 与 `enable_mv_range_distribution` 均已启用时，StarRocks 才使用 Range 分布。其他情况下，StarRocks 回退到基于目标表全部 Key 列的哈希分布。
 - Range 分布没有用户可指定的 `DISTRIBUTED BY RANGE` 语法，无法显式指定。
 - 如果显式指定哈希分布或随机分布，StarRocks 会将其归一化为基于目标表全部 Key 列的哈希分布，并保留显式指定的分桶数量。
-- Range 分布的分区初始只有一个 Tablet，覆盖写刷新所写入的替换分区同样如此，这类刷新原本只能由单个节点写入。为此 StarRocks 会对该次刷新写入的 Tablet 进行预分裂，区间边界由内部 Row ID 列推导，不采样任何数据。该行为在以下条件下生效：物化视图的 Row ID 由存储引擎生成或是刷新查询计算出的指纹，且该次刷新只覆盖写单个分区，例如新建视图的首次刷新。这是尽力而为的优化：其他情况下刷新将不做预分裂，原因记录在 `starrocks_fe_tablet_pre_split_eligibility_skipped` 中。将 `enable_tablet_pre_split_for_mv_refresh` 设为 `false` 可关闭该行为。
+- Range 分布的分区初始只有一个 Tablet，覆盖写刷新所写入的替换分区同样如此，这类刷新原本只能由单个节点写入。为此 StarRocks 会对该次刷新写入的 Tablet 进行预分裂，区间边界由内部 Row ID 列推导，不采样任何数据。该行为分两种情况生效：若物化视图的 Row ID 是刷新查询计算出的指纹，则该次刷新覆盖写的各分区均分预估的输出量，只要预估输出所需的 Tablet 数多于分区数，就会预分裂其中最多 `tablet_pre_split_max_partitions_per_load` 个分区；若 Row ID 由存储引擎生成，则仅当该次刷新只覆盖写单个分区时才会预分裂，例如新建视图的首次刷新。这是尽力而为的优化：其他情况下刷新将不做预分裂，原因记录在 `starrocks_fe_tablet_pre_split_eligibility_skipped` 中。将 `enable_tablet_pre_split_for_mv_refresh` 设为 `false` 可关闭该行为。
 
 #### 排序键
 
