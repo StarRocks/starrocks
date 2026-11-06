@@ -11,7 +11,10 @@ You cannot drop a synchronous materialized view that is being created in process
 
 :::tip
 
-This operation requires the DROP privilege on the target materialized view.
+The required privilege depends on the type of materialized view:
+
+- To drop an asynchronous materialized view, you need the DROP privilege on the target materialized view.
+- To drop a synchronous materialized view (rollup), you need the ALTER privilege on its base table.
 
 :::
 
