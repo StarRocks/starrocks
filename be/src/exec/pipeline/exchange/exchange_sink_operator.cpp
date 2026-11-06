@@ -18,11 +18,14 @@
 
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <random>
 #include <utility>
 
 #include "base/compression/block_compression.h"
 #include "base/compression/compression_utils.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "column/json_column.h"
 #include "common/brpc/brpc_stub_cache.h"
@@ -48,6 +51,32 @@
 #include "runtime/serde/protobuf_chunk_serde.h"
 
 namespace starrocks::pipeline {
+
+namespace {
+
+size_t append_serialized_chunk(PTransmitChunkParams* request, ChunkPB* chunk, std::optional<int32_t> driver_sequence) {
+    const int num_chunks = request->chunks_size();
+    const int num_driver_sequences = request->driver_sequences_size();
+    const size_t serialized_bytes = chunk->data().size();
+    CancelableDefer rollback([&] {
+        while (request->chunks_size() > num_chunks) {
+            request->mutable_chunks()->RemoveLast();
+        }
+        while (request->driver_sequences_size() > num_driver_sequences) {
+            request->mutable_driver_sequences()->RemoveLast();
+        }
+    });
+
+    if (driver_sequence.has_value()) {
+        request->add_driver_sequences(*driver_sequence);
+    }
+    TEST_SYNC_POINT_CALLBACK("ExchangeSinkOperator::append_serialized_chunk", request);
+    request->add_chunks()->Swap(chunk);
+    rollback.cancel();
+    return serialized_bytes;
+}
+
+} // namespace
 
 class ExchangeSinkOperator::Channel {
 public:
@@ -383,12 +412,15 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
             COUNTER_UPDATE(_parent->_bytes_pass_through_counter, chunk_size);
             COUNTER_SET(_parent->_pass_through_buffer_peak_mem_usage, _pass_through_context.total_bytes());
         } else {
-            if (_parent->_is_pipeline_level_shuffle) {
-                _chunk_request->add_driver_sequences(driver_sequence);
-            }
-            auto pchunk = _chunk_request->add_chunks();
-            TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk)));
-            _current_request_bytes += pchunk->data().size();
+            ChunkPB serialized_chunk;
+            size_t serialized_bytes = 0;
+            TRY_CATCH_BAD_ALLOC({
+                RETURN_IF_ERROR(_parent->serialize_chunk(chunk, &serialized_chunk, &_is_first_chunk));
+                serialized_bytes = append_serialized_chunk(
+                        _chunk_request.get(), &serialized_chunk,
+                        _parent->_is_pipeline_level_shuffle ? std::optional<int32_t>(driver_sequence) : std::nullopt);
+            });
+            _current_request_bytes += serialized_bytes;
         }
     }
 
@@ -688,13 +720,15 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
         // Do serialization once, and send serialized data.
         if (has_not_pass_through) {
             // We use sender request to avoid serialize chunk many times.
-            // 1. create a new chunk PB to serialize
-            ChunkPB* pchunk = _chunk_request->add_chunks();
-            // 2. serialize input chunk to pchunk
-            TRY_CATCH_BAD_ALLOC(
-                    RETURN_IF_ERROR(serialize_chunk(send_chunk, pchunk, &_is_first_chunk, _channels.size())));
-            _current_request_bytes += pchunk->data().size();
-            // 3. if request bytes exceede the threshold, send current request
+            // Append the chunk only after serialization succeeds.
+            ChunkPB serialized_chunk;
+            size_t serialized_bytes = 0;
+            TRY_CATCH_BAD_ALLOC({
+                RETURN_IF_ERROR(serialize_chunk(send_chunk, &serialized_chunk, &_is_first_chunk, _channels.size()));
+                serialized_bytes = append_serialized_chunk(_chunk_request.get(), &serialized_chunk, std::nullopt);
+            });
+            _current_request_bytes += serialized_bytes;
+            // Send the request when its size exceeds the batching threshold.
             if (_current_request_bytes > config::max_transmit_batched_bytes) {
                 butil::IOBuf attachment;
                 construct_brpc_attachment(_chunk_request, attachment);
@@ -903,6 +937,7 @@ void ExchangeSinkOperator::close(RuntimeState* state) {
 }
 
 Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, bool* is_first_chunk, int num_receivers) {
+    TEST_SYNC_POINT_CALLBACK("ExchangeSinkOperator::serialize_chunk", dst);
     VLOG_ROW << "[ExchangeSinkOperator] serializing " << src->num_rows() << " rows";
     auto unserialized_bytes = src->bytes_usage();
     COUNTER_UPDATE(_raw_input_bytes_counter, unserialized_bytes * num_receivers);
