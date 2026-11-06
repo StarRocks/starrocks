@@ -103,7 +103,7 @@ public class LogCleanerTest {
         createLogFile("fe.audit.log.20240101-1", 1000);
         Config.log_cleaner_disk_util_based_enable = false;
 
-        LogCleaner cleaner = new LogCleaner();
+        LogCleaner cleaner = new LogCleaner(List.of());
         cleaner.runAfterCatalogReady();
 
         // Files should not be deleted when cleaner is disabled
@@ -120,7 +120,7 @@ public class LogCleanerTest {
         // Set high threshold so current disk usage is below it
         Config.log_cleaner_disk_usage_threshold = 99;
 
-        LogCleaner cleaner = new LogCleaner();
+        LogCleaner cleaner = new LogCleaner(List.of());
         cleaner.runAfterCatalogReady();
 
         // Files should not be deleted when disk usage is below threshold
@@ -136,7 +136,7 @@ public class LogCleanerTest {
         createLogFileWithTime("fe.log.20240102-1", 1000, oldTime);
         createLogFileWithTime("fe.dump.log.20240101-1", 1000, oldTime);
 
-        LogCleaner cleaner = new LogCleaner();
+        LogCleaner cleaner = new LogCleaner(List.of());
         cleaner.runAfterCatalogReady();
 
         assertFalse(new File(testLogDir, "fe.log.20240101-1").exists());
@@ -154,7 +154,7 @@ public class LogCleanerTest {
         long oldTime = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(5);
         createLogFileWithTime("fe.audit.log.20240102-1", 1000, oldTime);
 
-        LogCleaner cleaner = new LogCleaner();
+        LogCleaner cleaner = new LogCleaner(List.of());
         cleaner.runAfterCatalogReady();
 
         // Recent audit log should still exist (protected)
@@ -180,7 +180,7 @@ public class LogCleanerTest {
         // Non-log file should not be matched
         createLogFile("other.log.20240101-1", 1000);
 
-        LogCleaner cleaner = new LogCleaner();
+        LogCleaner cleaner = new LogCleaner(List.of());
         cleaner.runAfterCatalogReady();
 
         assertFalse(new File(testLogDir, "fe.log.20240101-1").exists());
@@ -198,14 +198,14 @@ public class LogCleanerTest {
     public void testNonExistentDirectory() {
         Config.sys_log_dir = "/non/existent/directory";
 
-        LogCleaner cleaner = new LogCleaner();
+        LogCleaner cleaner = new LogCleaner(List.of());
         // Should not throw exception
         cleaner.runAfterCatalogReady();
     }
 
     @Test
     public void testEmptyDirectory() {
-        LogCleaner cleaner = new LogCleaner();
+        LogCleaner cleaner = new LogCleaner(List.of());
         // Should not throw exception with empty directory
         cleaner.runAfterCatalogReady();
     }
@@ -216,7 +216,7 @@ public class LogCleanerTest {
         createLogFile("fe.log", 1000);
         createLogFile("fe.log.20240101-1", 1000);
 
-        LogCleaner cleaner = new LogCleaner();
+        LogCleaner cleaner = new LogCleaner(List.of());
         cleaner.runAfterCatalogReady();
 
         // Current log file should not be deleted (doesn't match pattern)
