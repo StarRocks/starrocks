@@ -30,6 +30,7 @@
 #include <variant>
 #include <vector>
 
+#include "base/coding.h"
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
@@ -42,6 +43,7 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "common/config_exec_fwd.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/ai_project_node.h"
@@ -49,6 +51,7 @@
 #include "exec/pipeline/ai/ai_project_factory.h"
 #include "exec/pipeline/ai/ai_project_operator.h"
 #include "exec/pipeline/ai/ai_project_runtime.h"
+#include "exec/pipeline/ai/ai_query_memory_account.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/project_operator.h"
 #include "exec/pipeline_node.h"
@@ -58,6 +61,7 @@
 #include "exec/runtime/query_context.h"
 #include "exec_primitive/pipeline/operator_factory.h"
 #include "exec_primitive/pipeline/source_operator.h"
+#include "exprs/ai/ai_aggregate_state.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
@@ -68,9 +72,11 @@
 #include "platform/llm/ai_http_client.h"
 #include "platform/llm/ai_metrics.h"
 #include "platform/llm/ai_runtime.h"
+#include "platform/llm/openai_compatible_provider.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/query_context_lifetime.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 #include "testutil/type_test_helper.h"
@@ -93,6 +99,7 @@ constexpr TSlotId kPromptSlotId = 1;
 constexpr TSlotId kCommonSlotId = 2;
 constexpr TSlotId kAnswerSlotId = 3;
 constexpr TSlotId kFileSlotId = 6;
+constexpr TSlotId kAggregateStateSlotId = 7;
 constexpr int64_t kLimit = 5;
 constexpr size_t kUpstreamDop = 6;
 constexpr size_t kBuilderDop = 9;
@@ -395,9 +402,15 @@ public:
     }
 
     Status try_submit(AICompletionWork work) override {
+        if (reject_next) {
+            reject_next = false;
+            return Status::ResourceBusy("test completion queue is full");
+        }
         _work.emplace_back(std::move(work));
         return Status::OK();
     }
+
+    bool reject_next = false;
 
     void run_until_idle() {
         while (!_work.empty()) {
@@ -591,6 +604,188 @@ std::optional<std::string> nullable_string(const ChunkPtr& chunk, SlotId slot_id
     return data.get_slice(row).to_string();
 }
 
+// Exercise the production dispatcher and shared admission independently of the
+// expression factory: only transport, completion scheduling and clock are controlled.
+TEST(AIProjectLiveAdmissionTest, ScalarQueueTracksLiveLimitsAfterOpeningAtOne) {
+    class Projection final : public AIProjectProjection {
+    public:
+        explicit Projection(size_t output_count) : _output_count(output_count) {}
+        StatusOr<AIProjectPreparedSubchunk> prepare_subchunk(RuntimeState*, int32_t, const ChunkPtr& input) override {
+            AIProjectPreparedSubchunk result;
+            result.output_chunk = std::make_shared<Chunk>();
+            result.output_chunk->append_column(input->get_column_by_slot_id(kPromptSlotId), kPromptSlotId);
+            for (size_t output = 0; output < _output_count; ++output) {
+                AIProjectPreparedOutput prepared;
+                prepared.slot_id = kAnswerSlotId + output;
+                prepared.result_type = varchar_type();
+                auto& rows = std::get<AIFunctionInputBatch>(prepared.input).rows;
+                for (size_t row = 0; row < input->num_rows(); ++row) {
+                    AIFunctionRowInput value;
+                    value.action = AIFunctionRowAction::DISPATCH;
+                    value.model = "model";
+                    value.prompt = "prompt-" + std::to_string(row);
+                    rows.emplace_back(std::move(value));
+                }
+                result.ai_outputs.emplace_back(std::move(prepared));
+            }
+            return result;
+        }
+
+    private:
+        size_t _output_count;
+    };
+    class Handle final : public AIProjectTaskHandle {
+    public:
+        explicit Handle(AITaskHandle handle) : _handle(std::move(handle)) {}
+        void cancel() noexcept override { _handle.cancel(); }
+
+    private:
+        AITaskHandle _handle;
+    };
+    class Submitter final : public AIProjectTaskSubmitter {
+    public:
+        Submitter(AITaskDispatcher* dispatcher, const AIClock* clock, AIMemoryContext memory)
+                : _dispatcher(dispatcher), _clock(clock), _memory(std::move(memory)) {}
+        AIMemoryContext memory_context() const noexcept override { return _memory; }
+        StatusOr<std::unique_ptr<AIProjectTaskHandle>> submit(AIProjectTaskRequest task,
+                                                              AITaskCallback&& callback) override {
+            AIDispatchRequest request;
+            request.task_id = task.task_id;
+            request.workgroup_key = UniqueId{0, 1};
+            request.query_id = UniqueId{0, 2};
+            request.chat_request = {.endpoint = "https://model.invalid/v1/chat/completions",
+                                    .model = task.model,
+                                    .prompt = task.prompt};
+            request.request_deadline_ns = _clock->monotonic_now_ns() + 600'000'000'000;
+            request.connect_timeout_ms = 1000;
+            request.max_response_bytes = 1024;
+            request.memory = _memory;
+            const auto deadline = request.request_deadline_ns;
+            request.lifecycle = [deadline] { return AIQueryLifecycleSnapshot{.monotonic_deadline_ns = deadline}; };
+            ASSIGN_OR_RETURN(auto handle, _dispatcher->submit(std::move(request), std::move(callback)));
+            ++submitted;
+            return std::make_unique<Handle>(std::move(handle));
+        }
+        size_t submitted = 0;
+
+    private:
+        AITaskDispatcher* _dispatcher;
+        const AIClock* _clock;
+        AIMemoryContext _memory;
+    };
+    for (size_t outputs : {1, 2}) {
+        SCOPED_TRACE(outputs);
+        AIRuntimeConfig initial;
+        initial.max_inflight = 64;
+        initial.sub_chunk_size = 128;
+        initial.rate_limit_qps_chat = 100000;
+        auto config_source = AIRuntimeConfigSource::create(initial);
+        ASSERT_TRUE(config_source.ok()) << config_source.status();
+        FixedClock clock;
+        DrainableControlScheduler control(&clock);
+        CapturingHttpClient http;
+        QueuedCompletionExecutor completion;
+        ZeroRandom random;
+        OpenAICompatibleProvider provider;
+        // Admission's completion storage is fixed at process startup. Lower the
+        // live limit only after constructing it with enough capacity for 64.
+        AIAdmissionController admission(&clock, &control, config_source.value().get(),
+                                        ai_completion_capacity(initial.max_inflight, initial.worker_thread_num));
+        AIMetrics metrics;
+        AITaskDispatcher dispatcher(&admission, &http, &provider, &completion, &clock, &random, &metrics);
+        auto config = initial;
+        config.max_inflight = 1;
+        ASSERT_OK(config_source.value()->update(config));
+        auto process_tracker = std::make_shared<MemTracker>(MemTrackerType::PROCESS, -1, "process");
+        auto query_pool =
+                std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, -1, "query_pool", process_tracker.get());
+        auto workgroup = std::make_shared<workgroup::WorkGroup>("wg", 1, 1, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL,
+                                                                "ai_test_pool");
+        workgroup->_shared_mem_tracker = query_pool;
+        workgroup->_mem_tracker =
+                std::make_shared<MemTracker>(MemTrackerType::RESOURCE_GROUP, -1, "wg", query_pool.get());
+        auto query_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY, -1, "query", workgroup->mem_tracker());
+        auto lifetime = std::make_shared<QueryContextLifetime>();
+        FragmentRuntimeState fragment;
+        fragment.set_workgroup(workgroup);
+        RuntimeState state;
+        state.set_fragment_runtime_state(&fragment);
+        state.set_query_mem_tracker(query_tracker);
+        state.set_query_ctx_lifetime(lifetime);
+        auto account = AIQueryMemoryAccount::create(state);
+        ASSERT_TRUE(account.ok()) << account.status();
+        auto submitter = std::make_shared<Submitter>(&dispatcher, &clock, account.value()->memory_context());
+        auto buffer = AIChunkBuffer::create(2, 32 * kMiB);
+        ASSERT_TRUE(buffer.ok()) << buffer.status();
+        auto made =
+                AIProjectProcessor::create(buffer.value(), std::make_shared<Projection>(outputs), submitter, config);
+        ASSERT_TRUE(made.ok()) << made.status();
+        auto processor = made.value();
+        ASSERT_OK(processor->configure(1));
+        auto admitted = buffer.value()->try_put(0, make_prompt_chunk(0, 128));
+        ASSERT_TRUE(admitted.ok()) << admitted.status();
+        ASSERT_TRUE(admitted.value());
+        ASSERT_OK(buffer.value()->set_sink_eos(0));
+        DeferOp cleanup([&] {
+            EXPECT_OK(processor->set_source_finished(0));
+            admission.shutdown();
+            control.run_until_idle();
+            http.shutdown();
+            completion.run_until_idle();
+            control.run_until_idle();
+        });
+        for (size_t turn = 0; turn < 4; ++turn) ASSERT_OK(processor->try_process(&state, 0));
+        control.run_until_idle();
+        EXPECT_EQ(128 * outputs, submitter->submitted);
+        ASSERT_EQ(1, http.pending_count());
+        auto update_limit = [&](int limit) {
+            config.max_inflight = limit;
+            EXPECT_OK(config_source.value()->update(config));
+            admission.notify_limits_changed();
+            control.run_until_idle();
+        };
+        update_limit(8);
+        EXPECT_EQ(8, http.pending_count());
+        if (http.pending_count() != 8) continue;
+        update_limit(1);
+        ASSERT_EQ(8, http.pending_count()) << "lowering the limit must retain already running transports";
+        const std::string body = R"({"choices":[{"message":{"content":"value"}}]})";
+        for (size_t remaining = 7; remaining > 0; --remaining) {
+            http.complete_next(body);
+            completion.run_until_idle();
+            control.run_until_idle();
+            EXPECT_EQ(remaining, http.pending_count()) << "no new attempt may bypass the lowered live limit";
+        }
+        http.complete_next(body);
+        completion.run_until_idle();
+        control.run_until_idle();
+        ASSERT_EQ(1, http.pending_count());
+        update_limit(64);
+        ASSERT_EQ(64, http.pending_count());
+        for (size_t completed = 8; completed < 128 * outputs; ++completed) {
+            ASSERT_GT(http.pending_count(), 0);
+            http.complete_next(body);
+            completion.run_until_idle();
+            control.run_until_idle();
+            EXPECT_LE(http.pending_count(), 64);
+        }
+        EXPECT_EQ(0, http.pending_count());
+        auto output = processor->pull_chunk(&state, 0);
+        ASSERT_TRUE(output.ok()) << output.status();
+        ASSERT_NE(nullptr, output.value());
+        EXPECT_EQ(128, output.value()->num_rows());
+        for (size_t column = 0; column < outputs; ++column) {
+            for (size_t row = 0; row < 128; ++row)
+                EXPECT_EQ("value", nullable_string(output.value(), kAnswerSlotId + column, row));
+        }
+        EXPECT_EQ(128 * outputs, processor->statistics(0).request_count);
+        EXPECT_EQ(0, processor->statistics(0).error_count);
+        EXPECT_EQ(128 * outputs, metrics.ai_http_requests_total.value());
+        EXPECT_FALSE(processor->pending_finish(0));
+        EXPECT_EQ(0, account.value()->reserved_bytes());
+    }
+}
+
 class AIProjectPipelineTest : public ::testing::Test {
 protected:
     AIProjectPipelineTest() : _control(&_clock) {}
@@ -615,6 +810,12 @@ protected:
                                .type(TypeDescriptor(TYPE_FILE))
                                .nullable(true)
                                .column_name("file")
+                               .build());
+        tuple.add_slot(TSlotDescriptorBuilder()
+                               .id(kAggregateStateSlotId)
+                               .type(TypeDescriptor(TYPE_VARBINARY))
+                               .nullable(true)
+                               .column_name("aggregate_state")
                                .build());
         tuple.build(&table);
 
@@ -795,6 +996,61 @@ protected:
                 {{.slot_id = kAnswerSlotId, .expr_ctx = ai, .nullable = true, .kind = AIProjectOutputKind::AI}}, {},
                 provider_model_configs());
         return AIProjectExpressionProjection::create(std::move(spec), max_input_file_bytes);
+    }
+
+    StatusOr<std::shared_ptr<AIProjectProcessor>> create_aggregate_processor(std::string on_error) {
+        auto expression = make_ai_complete(_tuple_id, kAggregateStateSlotId);
+        auto& call = expression.nodes.front();
+        const auto binary_type = TypeDescriptor(TYPE_VARBINARY).to_thrift();
+        call.__set_num_children(5);
+        call.fn.__set_fid(200155);
+        call.fn.name.__set_function_name("__ai_agg_reduce");
+        call.__set_ai_provider_id("provider:aggregate-default");
+        call.fn.__set_arg_types({binary_type, varchar_type().to_thrift(), varchar_type().to_thrift(),
+                                 varchar_type().to_thrift(), TypeDescriptor(TYPE_JSON).to_thrift()});
+        expression.nodes[1].__set_type(binary_type);
+        auto instruction = expression.nodes[2];
+        instruction.string_literal.__set_value("Summarize all records.");
+        expression.nodes.insert(expression.nodes.begin() + 2, std::move(instruction));
+        AIProjectModelConfigs configs{
+                {"provider:aggregate-default", AIProjectModelConfig{.endpoint = std::string(kEndpointSentinel),
+                                                                    .model = std::string(kModelSentinel),
+                                                                    .api_key = std::string(kSecretSentinel)}}};
+        ASSIGN_OR_RETURN(ExprContext * ai, create_expr_context(std::move(expression)));
+        AIProjectProjectionSpec spec(
+                _runtime_state.get(),
+                {{.slot_id = kAnswerSlotId, .expr_ctx = ai, .nullable = true, .kind = AIProjectOutputKind::AI}}, {},
+                configs);
+        ASSIGN_OR_RETURN(auto projection, AIProjectExpressionProjection::create(std::move(spec)));
+        auto config = _config_source->snapshot();
+        config.on_error = std::move(on_error);
+        ASSIGN_OR_RETURN(auto submitter, AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, config));
+        ASSIGN_OR_RETURN(auto buffer, AIChunkBuffer::create(2, 32 * kMiB));
+        return AIProjectProcessor::create(std::move(buffer), std::move(projection), std::move(submitter), config);
+    }
+
+    ChunkPtr make_aggregate_chunk() {
+        constexpr size_t records = 4;
+        constexpr size_t value_bytes = 32 * 1024;
+        const size_t payload_bytes = records * (kAiAggregateRecordLengthBytes + value_bytes);
+        std::string encoded(kAiAggregateStateHeaderBytes + payload_bytes, '\0');
+        encode_ai_aggregate_state_header(reinterpret_cast<uint8_t*>(encoded.data()), records, payload_bytes);
+        size_t offset = kAiAggregateStateHeaderBytes;
+        for (size_t i = 0; i < records; ++i) {
+            encode_fixed64_le(reinterpret_cast<uint8_t*>(encoded.data()) + offset, value_bytes);
+            offset += kAiAggregateRecordLengthBytes;
+            encoded.replace(offset, value_bytes, value_bytes, static_cast<char>('a' + i));
+            offset += value_bytes;
+        }
+        auto data = BinaryColumn::create();
+        data->append(Slice(encoded));
+        auto nulls = NullColumn::create();
+        nulls->append(0);
+        auto states = NullableColumn::create(std::move(data), std::move(nulls));
+        states->append_nulls(1);
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(std::move(states), kAggregateStateSlotId);
+        return chunk;
     }
 
     void set_query_deadline_ns(int64_t deadline_ns) {
@@ -1262,7 +1518,7 @@ TEST_F(AIProjectPipelineTest, ProviderDimensionsArePreparedOncePerExpressionBatc
             ASSERT_EQ(options.size(), prepared->ai_outputs.size());
             for (size_t index = 0; index < options.size(); ++index) {
                 const auto& output = prepared->ai_outputs[index];
-                const auto& batch = output.input;
+                const auto& batch = std::get<AIFunctionInputBatch>(output.input);
                 ASSERT_EQ(2, batch.rows.size());
                 ASSERT_NE(nullptr, batch.options);
                 const auto& members = batch.options->members();
@@ -1333,13 +1589,13 @@ TEST_F(AIProjectPipelineTest, ProviderDefaultsAreNotMergedForEmptyOrNullBatches)
     auto empty = projection.value()->prepare_subchunk(_runtime_state.get(), 0, make_prompt_chunk(0, 0));
     ASSERT_TRUE(empty.ok()) << empty.status();
     ASSERT_EQ(1, empty->ai_outputs.size());
-    EXPECT_TRUE(empty->ai_outputs.front().input.rows.empty());
-    EXPECT_EQ(nullptr, empty->ai_outputs.front().input.options);
+    EXPECT_TRUE(std::get<AIFunctionInputBatch>(empty->ai_outputs.front().input).rows.empty());
+    EXPECT_EQ(nullptr, std::get<AIFunctionInputBatch>(empty->ai_outputs.front().input).options);
 
     auto nulls = projection.value()->prepare_subchunk(_runtime_state.get(), 0, make_prompt_chunk(0, 1, 0));
     ASSERT_TRUE(nulls.ok()) << nulls.status();
     ASSERT_EQ(1, nulls->ai_outputs.size());
-    const auto& batch = nulls->ai_outputs.front().input;
+    const auto& batch = std::get<AIFunctionInputBatch>(nulls->ai_outputs.front().input);
     ASSERT_EQ(1, batch.rows.size());
     EXPECT_EQ(AIFunctionRowAction::SQL_NULL, batch.rows.front().action);
     ASSERT_NE(nullptr, batch.options);
@@ -1395,12 +1651,15 @@ TEST_F(AIProjectPipelineTest, ProductionProjectionEvaluatesCommonBeforeAiAndPres
     ASSERT_EQ(1, prepared.ai_outputs.size());
     EXPECT_EQ(kAnswerSlotId, prepared.ai_outputs.front().slot_id);
     EXPECT_TRUE(prepared.ai_outputs.front().replace_existing);
-    ASSERT_EQ(3, prepared.ai_outputs.front().input.rows.size());
-    EXPECT_EQ(AIFunctionRowAction::DISPATCH, prepared.ai_outputs.front().input.rows[0].action);
-    EXPECT_EQ("prompt-0", prepared.ai_outputs.front().input.rows[0].prompt);
-    EXPECT_EQ(AIFunctionRowAction::SQL_NULL, prepared.ai_outputs.front().input.rows[1].action);
-    EXPECT_EQ(AIFunctionRowAction::DISPATCH, prepared.ai_outputs.front().input.rows[2].action);
-    EXPECT_EQ("prompt-2", prepared.ai_outputs.front().input.rows[2].prompt);
+    ASSERT_EQ(3, std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows.size());
+    EXPECT_EQ(AIFunctionRowAction::DISPATCH,
+              std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows[0].action);
+    EXPECT_EQ("prompt-0", std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows[0].prompt);
+    EXPECT_EQ(AIFunctionRowAction::SQL_NULL,
+              std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows[1].action);
+    EXPECT_EQ(AIFunctionRowAction::DISPATCH,
+              std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows[2].action);
+    EXPECT_EQ("prompt-2", std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows[2].prompt);
 
     EXPECT_EQ(71, prepared.output_chunk->owner_info().owner_id());
     EXPECT_TRUE(prepared.output_chunk->owner_info().is_last_chunk());
@@ -1436,7 +1695,7 @@ TEST_F(AIProjectPipelineTest, ZeroRowLastChunkSkipsExpressionEvaluationAndProduc
     EXPECT_TRUE(prepared.output_chunk->get_column_by_slot_id(kAnswerSlotId)->is_nullable());
     ASSERT_EQ(1, prepared.ai_outputs.size());
     EXPECT_TRUE(prepared.ai_outputs.front().replace_existing);
-    EXPECT_TRUE(prepared.ai_outputs.front().input.rows.empty());
+    EXPECT_TRUE(std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows.empty());
     EXPECT_EQ(79, prepared.output_chunk->owner_info().owner_id());
     EXPECT_TRUE(prepared.output_chunk->owner_info().is_last_chunk());
     EXPECT_TRUE(prepared.output_chunk->owner_info().is_passthrough());
@@ -1478,7 +1737,7 @@ TEST_F(AIProjectPipelineTest, ValidConstantArrayPreservesZeroRowOutputAcrossDriv
         EXPECT_TRUE(prepared.output_chunk->get_column_by_slot_id(kAnswerSlotId)->is_nullable());
         ASSERT_EQ(1, prepared.ai_outputs.size());
         EXPECT_EQ(TYPE_JSON, prepared.ai_outputs.front().result_type.type);
-        EXPECT_TRUE(prepared.ai_outputs.front().input.rows.empty());
+        EXPECT_TRUE(std::get<AIFunctionInputBatch>(prepared.ai_outputs.front().input).rows.empty());
         EXPECT_EQ(79, prepared.output_chunk->owner_info().owner_id());
         EXPECT_TRUE(prepared.output_chunk->owner_info().is_last_chunk());
         EXPECT_TRUE(prepared.output_chunk->owner_info().is_passthrough());
@@ -1732,6 +1991,128 @@ TEST_F(AIProjectPipelineTest, MixedDefaultAndExplicitProviderRoutesKeepCredentia
     processor->close(_runtime_state.get());
 }
 
+TEST_F(AIProjectPipelineTest, AggregateDefaultProviderExecutesMultipleRoundsThroughProductionDispatcher) {
+    set_query_deadline_ns(120'000'000'000);
+    auto processor_or = create_aggregate_processor("fail");
+    ASSERT_TRUE(processor_or.ok()) << processor_or.status();
+    auto processor = std::move(processor_or).value();
+    ASSERT_OK(processor->prepare(_runtime_state.get(), 1));
+    auto admitted = processor->input_buffer()->try_put(0, make_aggregate_chunk());
+    ASSERT_TRUE(admitted.ok()) << admitted.status();
+    ASSERT_TRUE(admitted.value());
+    ASSERT_OK(processor->input_buffer()->set_sink_eos(0));
+    ASSERT_OK(processor->try_process(_runtime_state.get(), 0));
+    _control.run_until_idle();
+    ASSERT_EQ(4, _http.pending_count());
+    for (size_t i = 0; i < 4; ++i) {
+        const auto& request = _http.request(i);
+        EXPECT_EQ(kEndpointSentinel, request.url);
+        EXPECT_NE(std::string::npos, request.body.find(kModelSentinel));
+        EXPECT_NE(std::string::npos, request.body.find("Input records"));
+        const std::string key{kSecretSentinel};
+        EXPECT_NE(request.headers.end(),
+                  std::find_if(request.headers.begin(), request.headers.end(), [&](const AIHttpHeader& header) {
+                      return header.name == "Authorization" && header.value == "Bearer " + key;
+                  }));
+    }
+    while (_http.pending_count() != 0) {
+        _http.complete_next(R"({"choices":[{"message":{"content":"leaf summary"}}],"usage":{"total_tokens":3}})");
+        _completion.run_until_idle();
+        _control.run_until_idle();
+    }
+    ASSERT_OK(processor->try_process(_runtime_state.get(), 0));
+    _control.run_until_idle();
+    ASSERT_EQ(1, _http.pending_count());
+    EXPECT_NE(std::string::npos, _http.request().body.find("Intermediate summaries"));
+    EXPECT_NE(std::string::npos, _http.request().body.find("Produce the final result"));
+    _http.complete_next(R"({"choices":[{"message":{"content":"final answer"}}],"usage":{"total_tokens":5}})");
+    _completion.run_until_idle();
+    _control.run_until_idle();
+    auto output = processor->pull_chunk(_runtime_state.get(), 0);
+    ASSERT_TRUE(output.ok()) << output.status();
+    ASSERT_NE(nullptr, output.value());
+    ASSERT_EQ(2, output.value()->num_rows());
+    EXPECT_EQ("final answer", nullable_string(output.value(), kAnswerSlotId, 0));
+    EXPECT_EQ(std::nullopt, nullable_string(output.value(), kAnswerSlotId, 1));
+    EXPECT_EQ(5, processor->statistics(0).request_count);
+    EXPECT_EQ(17, processor->statistics(0).total_tokens);
+    EXPECT_EQ(2, processor->aggregate_statistics(0).groups);
+    EXPECT_EQ(1, processor->aggregate_statistics(0).empty_groups);
+    EXPECT_EQ(2, processor->aggregate_statistics(0).rounds);
+    EXPECT_FALSE(processor->pending_finish(0));
+    processor->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, AggregateModelFailureUsesGroupPolicyThroughProductionDispatcher) {
+    set_query_deadline_ns(120'000'000'000);
+    for (const std::string on_error : {"ignore", "fail"}) {
+        SCOPED_TRACE(on_error);
+        auto processor_or = create_aggregate_processor(on_error);
+        ASSERT_TRUE(processor_or.ok()) << processor_or.status();
+        auto processor = std::move(processor_or).value();
+        ASSERT_OK(processor->prepare(_runtime_state.get(), 1));
+        auto admitted = processor->input_buffer()->try_put(0, make_aggregate_chunk());
+        ASSERT_TRUE(admitted.ok()) << admitted.status();
+        ASSERT_TRUE(admitted.value());
+        ASSERT_OK(processor->input_buffer()->set_sink_eos(0));
+        ASSERT_OK(processor->try_process(_runtime_state.get(), 0));
+        _control.run_until_idle();
+        ASSERT_EQ(4, _http.pending_count());
+        _http.complete_next(R"({"choices":[{"message":{"content":"successful partial summary"}}]})");
+        _http.complete_next("invalid response");
+        _completion.run_until_idle();
+        _control.run_until_idle();
+        auto output = processor->pull_chunk(_runtime_state.get(), 0);
+        if (on_error == "ignore") {
+            ASSERT_TRUE(output.ok()) << output.status();
+            ASSERT_NE(nullptr, output.value());
+            EXPECT_EQ(std::nullopt, nullable_string(output.value(), kAnswerSlotId, 0));
+            EXPECT_EQ(std::nullopt, nullable_string(output.value(), kAnswerSlotId, 1));
+        } else {
+            EXPECT_FALSE(output.ok());
+        }
+        ASSERT_OK(processor->set_source_finished(0));
+        while (_http.pending_count() != 0) {
+            _http.complete_next(AIHttpNoResponseCode::CANCELLATION);
+            _completion.run_until_idle();
+            _control.run_until_idle();
+        }
+        EXPECT_EQ(4, processor->statistics(0).request_count);
+        EXPECT_FALSE(processor->pending_finish(0));
+        processor->close(_runtime_state.get());
+    }
+}
+
+TEST_F(AIProjectPipelineTest, AggregateCompletionQueueExhaustionPreservesSanitizedResourceCategory) {
+    set_query_deadline_ns(120'000'000'000);
+    auto processor_or = create_aggregate_processor("ignore");
+    ASSERT_TRUE(processor_or.ok()) << processor_or.status();
+    auto processor = std::move(processor_or).value();
+    ASSERT_OK(processor->prepare(_runtime_state.get(), 1));
+    auto admitted = processor->input_buffer()->try_put(0, make_aggregate_chunk());
+    ASSERT_TRUE(admitted.ok()) << admitted.status();
+    ASSERT_TRUE(admitted.value());
+    ASSERT_OK(processor->input_buffer()->set_sink_eos(0));
+    ASSERT_OK(processor->try_process(_runtime_state.get(), 0));
+    _control.run_until_idle();
+    ASSERT_EQ(4, _http.pending_count());
+    _completion.reject_next = true;
+    _http.complete_next(R"({"choices":[{"message":{"content":"leaf summary"}}]})");
+    _control.run_until_idle();
+    auto output = processor->pull_chunk(_runtime_state.get(), 0);
+    ASSERT_FALSE(output.ok());
+    EXPECT_EQ(TStatusCode::RUNTIME_ERROR, output.status().code()) << output.status();
+    EXPECT_FALSE(output.status().is_mem_limit_exceeded());
+    ASSERT_OK(processor->set_source_finished(0));
+    while (_http.pending_count() != 0) {
+        _http.complete_next(AIHttpNoResponseCode::CANCELLATION);
+        _completion.run_until_idle();
+        _control.run_until_idle();
+    }
+    EXPECT_FALSE(processor->pending_finish(0));
+    processor->close(_runtime_state.get());
+}
+
 TEST_F(AIProjectPipelineTest, OpenAITextAndImageRoutesPreserveRequestsAndNulls) {
     set_query_deadline_ns(120'000'000'000);
     auto configs = provider_model_configs();
@@ -1820,12 +2201,12 @@ TEST_F(AIProjectPipelineTest, FileProjectionKeepsCapturedInputLimitAcrossRuntime
     ASSERT_TRUE(rejected.ok()) << rejected.status();
     ASSERT_EQ(1, accepted->ai_outputs.size());
     ASSERT_EQ(1, rejected->ai_outputs.size());
-    const auto& accepted_row = accepted->ai_outputs.front().input.rows.front();
+    const auto& accepted_row = std::get<AIFunctionInputBatch>(accepted->ai_outputs.front().input).rows.front();
     EXPECT_EQ(AIFunctionRowAction::DISPATCH, accepted_row.action);
     ASSERT_TRUE(accepted_row.media.has_value());
     input.reset();
     EXPECT_EQ(png, accepted_row.media->bytes);
-    const auto& rejected_row = rejected->ai_outputs.front().input.rows.front();
+    const auto& rejected_row = std::get<AIFunctionInputBatch>(rejected->ai_outputs.front().input).rows.front();
     EXPECT_EQ(AIFunctionRowAction::TERMINAL_ROW_FAILURE, rejected_row.action);
     EXPECT_FALSE(rejected_row.media.has_value());
     original.value()->close(_runtime_state.get());

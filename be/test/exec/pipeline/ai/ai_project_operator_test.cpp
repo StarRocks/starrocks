@@ -77,13 +77,13 @@ public:
         AIProjectPreparedOutput output;
         output.slot_id = kAIOutputSlot;
         const auto& prompts = down_cast<const BinaryColumn&>(*input->get_column_by_slot_id(kPromptSlot));
-        output.input.rows.reserve(input->num_rows());
+        std::get<AIFunctionInputBatch>(output.input).rows.reserve(input->num_rows());
         for (size_t row = 0; row < input->num_rows(); ++row) {
             AIFunctionRowInput input_row;
             input_row.action = _dispatch ? AIFunctionRowAction::DISPATCH : AIFunctionRowAction::SQL_NULL;
             input_row.model = "model";
             input_row.prompt = prompts.get_slice(row).to_string();
-            output.input.rows.emplace_back(std::move(input_row));
+            std::get<AIFunctionInputBatch>(output.input).rows.emplace_back(std::move(input_row));
         }
         prepared.ai_outputs.emplace_back(std::move(output));
         return prepared;

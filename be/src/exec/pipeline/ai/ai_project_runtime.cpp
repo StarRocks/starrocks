@@ -419,28 +419,35 @@ StatusOr<AIProjectPreparedSubchunk> AIProjectExpressionProjection::prepare_subch
             }
             const auto& model_config = _spec.model_configs().at(std::string(ai_expression->provider_id()));
             ASSIGN_OR_RETURN(
-                    AIFunctionInputBatch batch,
+                    AIProjectInputBatch batch,
                     ai_expression->build_input_batch(context, input.get(), model_config.model, _max_input_file_bytes));
-            if (batch.rows.size() != rows) {
-                return Status::InternalError("AI project expression returned an invalid input batch");
-            }
             RETURN_IF_ERROR(context->get_udf_error());
 
-            // Provider defaults are constant for this expression. Merge once for the
-            // subchunk and let every dispatched row borrow the immutable result.
-            if (model_config.dimensions.has_value() &&
-                (batch.options == nullptr ||
-                 std::none_of(batch.options->members().begin(), batch.options->members().end(),
-                              [](const auto& member) { return member.key == "dimensions"; })) &&
-                std::any_of(batch.rows.begin(), batch.rows.end(),
-                            [](const auto& row) { return row.action == AIFunctionRowAction::DISPATCH; })) {
-                AIProviderOptions::Members members =
-                        batch.options == nullptr ? AIProviderOptions::Members{} : batch.options->members();
-                members.emplace_back(AIProviderOption{.key = "dimensions",
-                                                      .serialized_json = std::to_string(*model_config.dimensions),
-                                                      .kind = AIProviderOptionKind::NUMBER});
-                ASSIGN_OR_RETURN(auto options, AIProviderOptions::create(std::move(members)));
-                batch.options = std::make_shared<const AIProviderOptions>(std::move(options));
+            if (auto* scalar = std::get_if<AIFunctionInputBatch>(&batch)) {
+                if (scalar->rows.size() != rows) {
+                    return Status::InternalError("AI project expression returned an invalid input batch");
+                }
+                // Provider defaults are constant for this expression. Merge once for the
+                // subchunk and let every dispatched row borrow the immutable result.
+                if (model_config.dimensions.has_value() &&
+                    (scalar->options == nullptr ||
+                     std::none_of(scalar->options->members().begin(), scalar->options->members().end(),
+                                  [](const auto& member) { return member.key == "dimensions"; })) &&
+                    std::any_of(scalar->rows.begin(), scalar->rows.end(),
+                                [](const auto& row) { return row.action == AIFunctionRowAction::DISPATCH; })) {
+                    AIProviderOptions::Members members =
+                            scalar->options == nullptr ? AIProviderOptions::Members{} : scalar->options->members();
+                    members.emplace_back(AIProviderOption{.key = "dimensions",
+                                                          .serialized_json = std::to_string(*model_config.dimensions),
+                                                          .kind = AIProviderOptionKind::NUMBER});
+                    ASSIGN_OR_RETURN(auto options, AIProviderOptions::create(std::move(members)));
+                    scalar->options = std::make_shared<const AIProviderOptions>(std::move(options));
+                }
+            } else {
+                const auto& aggregate = std::get<AIAggregateReduceInputBatch>(batch);
+                if (aggregate.states == nullptr || aggregate.states->size() != rows) {
+                    return Status::InternalError("AI project expression returned an invalid input batch");
+                }
             }
 
             MutableColumnPtr placeholder = ColumnHelper::create_column(context->root()->type(), true);

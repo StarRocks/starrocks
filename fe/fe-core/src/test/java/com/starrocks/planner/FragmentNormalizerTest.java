@@ -17,10 +17,14 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
@@ -30,20 +34,112 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.List;
 
 public class FragmentNormalizerTest {
+    private static final FunctionSet FUNCTION_SET = new FunctionSet();
+
+    @BeforeAll
+    public static void setUpFunctions() {
+        FUNCTION_SET.init();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ordinary_udf", "ai_agg", "ai_complete"})
+    public void testNormalizeResolvedUdfDoesNotInheritAIName(String name) {
+        FunctionCallExpr udf = udfCall(name, new StringLiteral("text"));
+        Assertions.assertFalse(udf.getFn().isAI());
+        assertUncacheable(udf, false);
+        assertUncacheable(udfCall("ordinary_udf", udf), false);
+    }
+
+    @Test
+    public void testNormalizeRegisteredAIFunctions() {
+        FunctionCallExpr complete = builtinCall("ai_complete", new StringLiteral("text"),
+                new StringLiteral("provider"), new StringLiteral("model"), NullLiteral.create(JsonType.JSON));
+        FunctionCallExpr branchAI = builtinCall("ai_agg", new StringLiteral("text"),
+                new StringLiteral("instruction"), new StringLiteral("provider"), new StringLiteral("model"),
+                NullLiteral.create(JsonType.JSON));
+        for (FunctionCallExpr expr : List.of(complete, branchAI)) {
+            Assertions.assertTrue(expr.getFn().isAI());
+            assertUncacheable(expr, true);
+            assertUncacheable(udfCall("ordinary_udf", expr), true);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource(value = {"now()|true", "now(3)|true", "unix_timestamp()|true",
+            "unix_timestamp('2022-12-01 00:00:00')|false"}, delimiter = '|')
+    public void testNormalizeTimeFunctionCacheability(String expression, boolean expected) {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(
+                "select " + expression, ctx.getSessionVariable()).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(statement, ctx);
+        SelectRelation select = (SelectRelation) ((QueryStatement) statement).getQueryRelation();
+        assertUncacheable(select.getSelectList().getItems().get(0).getExpr(), expected);
+    }
+
+    @Test
+    public void testNormalizeDateLiteralIsCacheable() {
+        assertUncacheable(new DateLiteral(2022, 12, 1), false);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"rand", "uuid"})
+    public void testNormalizeNonDeterministicBuiltins(String name) {
+        FunctionCallExpr expr = builtinCall(name);
+        assertUncacheable(expr, true);
+        assertUncacheable(udfCall("ordinary_udf", expr), true);
+    }
+
+    private static FunctionCallExpr builtinCall(String name, Expr... args) {
+        Type[] argTypes = Arrays.stream(args).map(Expr::getType).toArray(Type[]::new);
+        Function fn = FUNCTION_SET.getFunction(new Function(new FunctionName(name), argTypes, InvalidType.INVALID, false),
+                Function.CompareMode.IS_IDENTICAL);
+        Assertions.assertNotNull(fn, "Missing registered function: " + name + Arrays.toString(argTypes));
+        return resolvedCall(fn, args);
+    }
+
+    private static FunctionCallExpr udfCall(String name, Expr... args) {
+        Type[] argTypes = Arrays.stream(args).map(Expr::getType).toArray(Type[]::new);
+        ScalarFunction fn = ScalarFunction.createUdf(new FunctionName("test", name), argTypes, VarcharType.VARCHAR,
+                false, TFunctionBinaryType.SRJAR, "file:///test.jar", "test.Udf", null, null, null);
+        return resolvedCall(fn, args);
+    }
+
+    private static FunctionCallExpr resolvedCall(Function fn, Expr... args) {
+        FunctionCallExpr expr = new FunctionCallExpr(fn.functionName(), Arrays.asList(args));
+        expr.setFn(fn);
+        expr.setType(fn.getReturnType());
+        return expr;
+    }
+
+    private static void assertUncacheable(Expr expr, boolean expected) {
+        FragmentNormalizer normalizer = new FragmentNormalizer(null, null);
+        Assertions.assertNotNull(normalizer.normalizeExpr(expr));
+        Assertions.assertEquals(expected, normalizer.isUncacheable(), AstToStringBuilder.toString(expr));
+    }
 
     private void testHelper(Column partitionColumn, LiteralExpr lower, LiteralExpr lowerSucc, LiteralExpr upper,
                             LiteralExpr upperSucc)

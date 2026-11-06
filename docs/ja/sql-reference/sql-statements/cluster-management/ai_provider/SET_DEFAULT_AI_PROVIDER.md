@@ -11,6 +11,8 @@ description: "AI プロバイダーをそのタイプのデフォルトとして
 
 `provider` と `model` は VARCHAR 型の定数式である必要があります。`provider` を省略するか、空文字列または SQL NULL を指定すると、補完とテキスト補助関数は `chat`、埋め込み関数は `embedding` のクラスターデフォルト Provider を使います。`model` を省略するか、空文字列または SQL NULL を指定すると、選択した Provider のデフォルトモデルを使います。明示したモデルが優先されます。空白文字のみを含む値は無効です。明示 Provider の呼び出しにはクラスターデフォルトの設定は不要です。
 
+`ai_agg` は `chat` Provider を使用し、同じ `provider` と `model` の選択規則に従います。
+
 ## 構文
 
 ```SQL

@@ -43,7 +43,10 @@ enum class AIArgumentType : uint8_t {
     OPTIONS,
     STRING_ARRAY,
     FILE,
+    AGG_STATE,
 };
+
+enum class AIExecutionKind : uint8_t { SINGLE_REQUEST, AGGREGATE_REDUCE };
 
 enum class AIPromptKind : uint8_t {
     NONE,
@@ -121,6 +124,10 @@ bool is_options_type(const TTypeDesc& type) {
 }
 
 bool matches_argument_type(const TTypeDesc& type, AIArgumentType expected) {
+    if (expected == AIArgumentType::AGG_STATE) {
+        return is_valid_type(type) && type.types.size() == 1 && type.types[0].type == TTypeNodeType::SCALAR &&
+               type.types[0].scalar_type.type == TPrimitiveType::VARBINARY;
+    }
     if (expected == AIArgumentType::FILE) {
         return is_valid_type(type) && type.types.size() == 1 && type.types[0].type == TTypeNodeType::SCALAR &&
                type.types[0].scalar_type.type == TPrimitiveType::FILE;
@@ -156,6 +163,9 @@ bool is_fe_string_type(const TypeDescriptor& type) {
 
 bool matches_runtime_argument_type(const TypeDescriptor& declared, const TypeDescriptor& child,
                                    AIArgumentType expected) {
+    if (expected == AIArgumentType::AGG_STATE) {
+        return declared.type == TYPE_VARBINARY && child.type == TYPE_VARBINARY;
+    }
     if (expected == AIArgumentType::FILE) {
         return declared.type == TYPE_FILE && child.type == TYPE_FILE;
     }
@@ -447,9 +457,9 @@ Status AIFunctionCallExpr::open(RuntimeState* state, ExprContext* context, Funct
     return Status::OK();
 }
 
-StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext* context, Chunk* chunk,
-                                                                     std::string_view default_model,
-                                                                     size_t max_input_file_bytes) const {
+StatusOr<AIProjectInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext* context, Chunk* chunk,
+                                                                    std::string_view default_model,
+                                                                    size_t max_input_file_bytes) const {
     RETURN_IF_ERROR(_validate_children());
     if (context == nullptr || chunk == nullptr || chunk->num_rows() == 0) {
         return invalid_ai_expression();
@@ -492,6 +502,7 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
             break;
         }
         case AIArgumentType::FILE:
+        case AIArgumentType::AGG_STATE:
             break;
         }
     }
@@ -502,6 +513,42 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
              contains_only_ascii_whitespace(strings[index]->value(0)))) {
             return invalid_ai_expression();
         }
+    }
+    if (spec.execution_kind == AIExecutionKind::AGGREGATE_REDUCE) {
+        const size_t instruction = spec.input_arguments[1];
+        if (!_children[instruction]->is_constant() || strings[instruction]->is_null(0) ||
+            contains_only_ascii_whitespace(strings[instruction]->value(0))) {
+            return invalid_ai_expression();
+        }
+        const Column* data = columns[0].get();
+        if (const auto* constant = dynamic_cast<const ConstColumn*>(data)) {
+            data = constant->data_column().get();
+        }
+        if (const auto* nullable = dynamic_cast<const NullableColumn*>(data)) {
+            data = nullable->data_column().get();
+        }
+        // only_null() legitimately uses a non-binary backing column.
+        if (!columns[0]->only_null() && !data->is_binary()) {
+            return invalid_ai_expression();
+        }
+        std::string model(default_model);
+        if (spec.model_argument >= 0) {
+            const size_t index = spec.model_argument;
+            if (!_children[index]->is_constant() || !columns[index]->is_constant()) {
+                return invalid_ai_expression();
+            }
+            if (!strings[index]->is_null(0) && !strings[index]->value(0).empty()) {
+                model = strings[index]->value(0).to_string();
+            }
+        }
+        if (contains_only_ascii_whitespace(Slice(model))) {
+            return invalid_ai_expression();
+        }
+        return AIProjectInputBatch(
+                AIAggregateReduceInputBatch{.states = std::move(columns[0]),
+                                            .instruction = strings[instruction]->value(0).to_string(),
+                                            .model = std::move(model),
+                                            .options = std::move(batch.options)});
     }
     batch.rows.reserve(chunk->num_rows());
     for (size_t row = 0; row < chunk->num_rows(); ++row) {
@@ -585,7 +632,7 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
                 .media = std::move(media),
         });
     }
-    return batch;
+    return AIProjectInputBatch(std::move(batch));
 }
 
 StatusOr<ColumnPtr> AIFunctionCallExpr::evaluate_checked(ExprContext*, Chunk*) {

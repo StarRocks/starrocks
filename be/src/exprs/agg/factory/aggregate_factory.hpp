@@ -19,6 +19,7 @@
 #include "column/runtime_type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/ai_collect_text.h"
 #include "exprs/agg/any_value.h"
 #include "exprs/agg/approx_top_k.h"
 #include "exprs/agg/array_agg.h"
@@ -68,6 +69,8 @@ namespace starrocks {
 // TODO(murphy) refactor the factory into a shim style
 class AggregateFactory {
 public:
+    static AggregateFunctionPtr MakeAICollectTextAggregateFunction();
+
     // The function should be placed by alphabetical order
     template <LogicalType LT>
     static auto MakeAvgAggregateFunction() {
