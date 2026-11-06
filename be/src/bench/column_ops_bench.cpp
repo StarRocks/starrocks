@@ -524,12 +524,46 @@ BENCHMARK_TEMPLATE(BM_AppendWithMask_Binary, kClustered, false)
         ->Arg(90)
         ->Arg(100);
 
+static void GenerateAppendInt32MatrixArgs(benchmark::Benchmark* b) {
+    for (int64_t n : {16, 64, 512, 4096, 65536}) {
+        for (int64_t permille : {0, 1, 10, 50, 500, 950, 1000}) {
+            b->Args({n, permille});
+        }
+    }
+}
+
+static void BM_AppendWithMask_Int32_Matrix(benchmark::State& state) {
+    const size_t n = static_cast<size_t>(state.range(0));
+    const int permille = static_cast<int>(state.range(1));
+    auto src = Int32Column::create();
+    src->resize_uninitialized(n);
+    for (size_t i = 0; i < n; ++i) {
+        src->get_data()[i] = static_cast<int32_t>(i);
+    }
+    std::vector<uint8_t> mask(n, 0);
+    std::mt19937_64 rng(0x514DF17E);
+    std::uniform_int_distribution<int> dist(0, 999);
+    for (size_t i = 0; i < n; ++i) {
+        mask[i] = (dist(rng) < permille) ? 1 : 0;
+    }
+    auto dst = Int32Column::create();
+    for (auto _ : state) {
+        dst->resize(0);
+        Status st = append_with_mask<true>(dst.get(), *src, mask.data(), n);
+        benchmark::DoNotOptimize(st);
+        benchmark::DoNotOptimize(dst->size());
+    }
+    state.SetItemsProcessed(state.iterations() * n);
+}
+
+BENCHMARK(BM_AppendWithMask_Int32_Matrix)->Apply(GenerateAppendInt32MatrixArgs);
+
 // =====================================================================
 // SIMD::count_zero on selection and index vectors
 // =====================================================================
 
 static void GenerateCountZeroArgs(benchmark::Benchmark* b) {
-    for (int64_t bytes : {64, 256, 4096, 65536}) {
+    for (int64_t bytes : {16, 32, 48, 64, 256, 4096, 65536}) {
         for (int64_t zero_pct : {0, 1, 10, 50, 90, 100}) {
             b->Args({bytes, zero_pct});
         }
