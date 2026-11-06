@@ -1,0 +1,73 @@
+-- name: test_ivm_bootstrap_concurrent_new_partition @cloud
+CREATE TABLE base_np_${uuid0} (dt DATE NOT NULL, k INT, v BIGINT) DUPLICATE KEY(dt, k)
+PARTITION BY (dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO base_np_${uuid0} SELECT date_add('2030-01-01', INTERVAL generate_series DAY), generate_series, 1
+FROM TABLE(generate_series(1, 200));
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_np_${uuid0}
+PARTITION BY (dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL", "partition_refresh_number" = "-1")
+AS SELECT dt, k, v FROM base_np_${uuid0};
+-- result:
+-- !result
+
+CONCURRENCY {
+-- inserter(3):
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-01', 1001, 1);
+-- result:
+-- !result
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-02', 1002, 1);
+-- result:
+-- !result
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-03', 1003, 1);
+-- result:
+-- !result
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-04', 1004, 1);
+-- result:
+-- !result
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-05', 1005, 1);
+-- result:
+-- !result
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-06', 1006, 1);
+-- result:
+-- !result
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-07', 1007, 1);
+-- result:
+-- !result
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-08', 1008, 1);
+-- result:
+-- !result
+
+-- refresher:
+REFRESH MATERIALIZED VIEW mv_np_${uuid0} WITH SYNC MODE;
+-- result:
+-- !result
+
+} END CONCURRENCY
+
+REFRESH MATERIALIZED VIEW mv_np_${uuid0} WITH SYNC MODE;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_np_${uuid0} WITH SYNC MODE;
+-- result:
+-- !result
+SELECT CASE WHEN (SELECT COUNT(*) FROM base_np_${uuid0}) > 200 THEN 'inserts_landed' ELSE 'no_inserts' END AS sanity;
+-- result:
+inserts_landed
+-- !result
+SELECT (SELECT COUNT(*) FROM base_np_${uuid0}) - (SELECT COUNT(*) FROM mv_np_${uuid0}) AS deficit;
+-- result:
+0
+-- !result
+DROP MATERIALIZED VIEW mv_np_${uuid0};
+-- result:
+-- !result
+DROP TABLE base_np_${uuid0};
+-- result:
+-- !result
