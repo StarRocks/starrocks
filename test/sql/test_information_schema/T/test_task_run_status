@@ -1,4 +1,9 @@
--- name: test_task_run_status
+-- name: test_task_run_status @sequential
+-- Test Point: Preserve MV task metadata and successful INSERT/CTAS task lifecycle.
+-- Method: Assert exact metadata/counts, wait for task terminal states, and compare MV/base data.
+-- Scope: information_schema.materialized_views and task_runs; restore the original FE config.
+
+[UC]function: orig_task_run_fe_evaluation=execute_sql("ADMIN SHOW FRONTEND CONFIG LIKE 'enable_task_run_fe_evaluation'", True)["result"][0][2]
 
 create database db_${uuid0};
 use db_${uuid0};
@@ -9,12 +14,13 @@ insert into ss values('2020-01-14', 1), ('2020-01-14', 3), ('2020-01-15', 2);
 CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) 
 REFRESH DEFERRED MANUAL
 AS SELECT event_day, sum(pv) as sum_pv FROM ss GROUP BY event_day;
-[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode ;
+function: refresh_mv_manual("db_${uuid0}", "mv1")
+[UC]SHOW CREATE MATERIALIZED VIEW mv1;
 SELECT * FROM mv1 ORDER BY event_day;
 
-SELECT TABLE_NAME, REFRESH_TYPE, IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv1' and TABLE_SCHEMA='db_${uuid0}';
-SELECT TABLE_NAME, REFRESH_TYPE, IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_NAME = 'mv1' and TABLE_SCHEMA='db_${uuid0}';
-SELECT TABLE_NAME, REFRESH_TYPE, IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}';
+SELECT TABLE_NAME, REFRESH_TYPE, REFRESH_TRIGGER, REFRESH_POLICY, IS_ACTIVE, concat('[', INACTIVE_REASON, ']') FROM information_schema.materialized_views WHERE table_name = 'mv1' and TABLE_SCHEMA='db_${uuid0}';
+SELECT TABLE_NAME, REFRESH_TYPE, REFRESH_TRIGGER, REFRESH_POLICY, IS_ACTIVE, concat('[', INACTIVE_REASON, ']') FROM information_schema.materialized_views WHERE TABLE_NAME = 'mv1' and TABLE_SCHEMA='db_${uuid0}';
+SELECT TABLE_NAME, REFRESH_TYPE, REFRESH_TRIGGER, REFRESH_POLICY, IS_ACTIVE, concat('[', INACTIVE_REASON, ']') FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}';
 SELECT count(1) FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}';
 
 [UC]task_name=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='mv1';
@@ -22,20 +28,34 @@ SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name
 SELECT count(1) FROM information_schema.task_runs WHERE task_name = '${task_name}';
 SELECT TASK_SOURCE FROM information_schema.task_runs WHERE task_name = '${task_name}';
 
-function: assert_query_contains("submit task task_src_insert_${uuid0} as insert into ss select * from ss;", "SUBMITTED")
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ event_day, sum(pv) FROM ss GROUP BY event_day ORDER BY event_day;
+
+function: execute_sql("submit task task_src_insert_${uuid0} as insert into ss select * from ss", True)["result"] == (("task_src_insert_${uuid0}", "SUBMITTED"),)
 LOOP {
   PROPERTY: {"timeout": 30, "interval": 2, "desc": "wait for INSERT task run to appear"}
   result=select count(*) from information_schema.task_runs where task_name='task_src_insert_${uuid0}';
   CHECK: int(${result}[-1][0]) > 0
 } END LOOP
 select distinct TASK_SOURCE from information_schema.task_runs where task_name='task_src_insert_${uuid0}';
-function: assert_query_contains("submit task task_src_ctas_${uuid0} as create table ss_ctas as select event_day, pv from ss;", "SUBMITTED")
+LOOP {
+  PROPERTY: {"timeout": 30, "interval": 2, "desc": "wait for INSERT task run to finish"}
+  result=select STATE from information_schema.task_runs where task_name='task_src_insert_${uuid0}';
+  CHECK: len(to_array(${result})) > 0 and all(row[0] in ("SUCCESS", "FAILED", "CANCELLED") for row in to_array(${result}))
+} END LOOP
+select STATE, COALESCE(NULLIF(ERROR_MESSAGE, ''), 'NO_ERROR') from information_schema.task_runs where task_name='task_src_insert_${uuid0}';
+function: execute_sql("submit task task_src_ctas_${uuid0} as create table ss_ctas as select event_day, pv from ss", True)["result"] == (("task_src_ctas_${uuid0}", "SUBMITTED"),)
 LOOP {
   PROPERTY: {"timeout": 30, "interval": 2, "desc": "wait for CTAS task run to appear"}
   result=select count(*) from information_schema.task_runs where task_name='task_src_ctas_${uuid0}';
   CHECK: int(${result}[-1][0]) > 0
 } END LOOP
 select distinct TASK_SOURCE from information_schema.task_runs where task_name='task_src_ctas_${uuid0}';
+LOOP {
+  PROPERTY: {"timeout": 30, "interval": 2, "desc": "wait for CTAS task run to finish"}
+  result=select STATE from information_schema.task_runs where task_name='task_src_ctas_${uuid0}';
+  CHECK: len(to_array(${result})) > 0 and all(row[0] in ("SUCCESS", "FAILED", "CANCELLED") for row in to_array(${result}))
+} END LOOP
+select STATE, COALESCE(NULLIF(ERROR_MESSAGE, ''), 'NO_ERROR') from information_schema.task_runs where task_name='task_src_ctas_${uuid0}';
 
 admin set frontend config('enable_task_run_fe_evaluation'='false');
 [UC]query_id=SELECT `QUERY_ID` FROM information_schema.task_runs WHERE task_name = '${task_name}' limit 1;
@@ -52,8 +72,8 @@ set enable_evaluate_schema_scan_rule=false;
 [UC] select count(*) from information_schema.task_runs;
 select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
 
-create database if not exists test_information_schema_task_runs;
-use test_information_schema_task_runs;
+create database if not exists task_runs_${uuid0};
+use task_runs_${uuid0};
 
 set enable_evaluate_schema_scan_rule=true;
 [UC] select count(*) from information_schema.task_runs;
@@ -62,5 +82,11 @@ set enable_evaluate_schema_scan_rule=false;
 [UC] select count(*) from information_schema.task_runs;
 select if (count(*) > 0, "OK", "FAILED") from information_schema.task_runs;
 
-drop database if exists test_information_schema_task_runs;
+drop database if exists task_runs_${uuid0};
 drop database db_${uuid0};
+
+admin set frontend config('enable_task_run_fe_evaluation'='${orig_task_run_fe_evaluation}');
+
+CLEANUP {
+  admin set frontend config('enable_task_run_fe_evaluation'='${orig_task_run_fe_evaluation}');
+} END CLEANUP

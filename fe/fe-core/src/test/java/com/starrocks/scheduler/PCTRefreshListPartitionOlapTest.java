@@ -24,6 +24,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.mv.pct.BaseToMVPartitionMapping;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
@@ -31,6 +32,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.common.ListPartitionDiffer;
 import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -46,8 +49,7 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -1405,14 +1407,21 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
      * post-rollover boundary is 2026-09-01 -- still outside, and still flaky.
      */
     private void addRetainedPartitions(String tableName) {
-        LocalDateTime now = LocalDateTime.now();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-        addListPartition(tableName, "p5", "guangdong", now.format(formatter), true);
+        addRetainedPartitions(tableName, LocalDate.now());
+    }
+
+    private void addRetainedPartitions(String tableName, LocalDate fixtureDate) {
+        addListPartition(tableName, "p5", "guangdong", fixtureDate.toString(), true);
         addListPartition(tableName, "p6", "guangdong",
-                now.plusDays(1).minusMonths(1).format(formatter), true);
+                fixtureDate.plusDays(1).minusMonths(1).toString(), true);
     }
 
     private void testMVRefreshWithTTLCondition(String tableName) {
+        testMVRefreshWithTTLCondition(tableName, null, null, null, null);
+    }
+
+    private void testMVRefreshWithTTLCondition(String tableName, LocalDate fixtureDate, LocalDate queryDate,
+                                              String expectedLowerBound, CalendarDateInput dateInput) {
         withTablePartitions(tableName);
         String mvCreateDdl = String.format("create materialized view test_mv1\n" +
                 "partition by (dt) \n" +
@@ -1427,7 +1436,11 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     String query = String.format("select * from %s ", tableName);
                     {
                         // all partitions are expired, no need to create partitions for mv
+                        int dateReads = dateInput == null ? 0 : dateInput.reads;
                         MVPCTRefreshProcessor processor = refreshMV("test", mv);
+                        if (dateInput != null) {
+                            dateInput.assertReadSince(dateReads, true);
+                        }
                         Assertions.assertEquals(0, mv.getVisiblePartitions().size());
                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
@@ -1440,7 +1453,11 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
                     {
                         // add new partitions
-                        addRetainedPartitions(tableName);
+                        if (fixtureDate == null) {
+                            addRetainedPartitions(tableName);
+                        } else {
+                            addRetainedPartitions(tableName, fixtureDate);
+                        }
                         String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -1472,7 +1489,19 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
                     }
 
+                    int dateReads = dateInput == null ? 0 : dateInput.reads;
                     refreshMV("test", mv);
+                    if (dateInput != null) {
+                        dateInput.assertReadSince(dateReads, true);
+                        Assertions.assertEquals(2, mv.getVisiblePartitions().size());
+                        Set<String> retainedDates = mv.getListPartitionItems().getPartitions().stream()
+                                .flatMap(cell -> ((PListCell) cell.cell()).getPartitionItems().stream())
+                                .map(values -> values.get(0))
+                                .collect(Collectors.toSet());
+                        Assertions.assertEquals(ImmutableSet.of(fixtureDate.toString(), expectedLowerBound), retainedDates);
+                        // The query-only rollover must not execute a second refresh.
+                        dateInput.setDate(queryDate);
+                    }
                     {
                         String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, ":UNION");
@@ -1486,11 +1515,97 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     {
                         String query2 = String.format("select * from %s where dt >= current_date() - interval 1 month ",
                                 tableName);
+                        dateReads = dateInput == null ? 0 : dateInput.reads;
+                        String plan = getFragmentPlan(query2);
+                        if (dateInput != null) {
+                            dateInput.assertReadSince(dateReads, false);
+                        }
+                        PlanTestBase.assertNotContains(plan, ":UNION");
+                        PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n");
+                    }
+                    if (dateInput != null) {
+                        // This explicit calendar bound is independent of the fixture's month arithmetic.
+                        String query2 = String.format("select * from %s where dt >= DATE '%s'",
+                                tableName, expectedLowerBound);
                         String plan = getFragmentPlan(query2);
                         PlanTestBase.assertNotContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n");
                     }
                 });
+    }
+
+    private static class CalendarDateInput extends MockUp<ScalarOperatorFunctions> {
+        private final Thread testThread = Thread.currentThread();
+        private final ThreadLocal<LocalDate> date = new ThreadLocal<>();
+        private int reads;
+        private ConnectContext lastContext;
+
+        private void setDate(LocalDate value) {
+            date.set(value);
+        }
+
+        @Mock
+        public ConstantOperator curDate(Invocation invocation) {
+            if (Thread.currentThread() != testThread) {
+                return invocation.proceed();
+            }
+            LocalDate value = date.get();
+            if (value == null) {
+                return invocation.proceed();
+            }
+            reads++;
+            lastContext = ConnectContext.get();
+            return ConstantOperator.createDateOrNull(value.atStartOfDay());
+        }
+
+        private void assertReadSince(int previousReads, boolean isRefresh) {
+            Assertions.assertTrue(reads > previousReads,
+                    "current_date must consume " + date.get() + " during " + (isRefresh ? "refresh" : "query"));
+            Assertions.assertNotNull(lastContext);
+            if (isRefresh) {
+                Assertions.assertNotSame(connectContext, lastContext, "refresh must use its own TaskRun context");
+            } else {
+                Assertions.assertSame(connectContext, lastContext, "query must use the test connection context");
+            }
+        }
+    }
+
+    private void testMVRefreshWithTTLConditionCalendarBoundary(String tableDdl) {
+        String[][] boundaries = {
+                {"2026-09-15", "2026-09-16", "2026-08-16"},
+                {"2026-09-30", "2026-10-01", "2026-09-01"},
+                {"2028-02-29", "2028-03-01", "2028-02-01"}
+        };
+        ConnectContext previousContext = ConnectContext.get();
+        CalendarDateInput dateInput = new CalendarDateInput();
+        try {
+            for (String[] boundary : boundaries) {
+                LocalDate fixtureDate = LocalDate.parse(boundary[0]);
+                LocalDate queryDate = LocalDate.parse(boundary[1]);
+                for (boolean refreshAfterRollover : new boolean[] {true, false}) {
+                    dateInput.setDate(refreshAfterRollover ? queryDate : fixtureDate);
+                    starRocksAssert.withTable(tableDdl, obj -> testMVRefreshWithTTLCondition(
+                            (String) obj, fixtureDate, queryDate, boundary[2], dateInput));
+                }
+            }
+        } finally {
+            dateInput.date.remove();
+            if (previousContext == null) {
+                ConnectContext.remove();
+            } else {
+                previousContext.setThreadLocalInfo();
+            }
+        }
+    }
+
+    @Test
+    public void testMVRefreshWithTTLConditionCalendarBoundaryTT1() {
+        testMVRefreshWithTTLConditionCalendarBoundary(TT1);
+    }
+
+    @Test
+    public void testMVRefreshWithTTLConditionCalendarBoundaryTT2() {
+        testMVRefreshWithTTLConditionCalendarBoundary(TT2);
     }
 
     @Test
