@@ -297,6 +297,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：bRPC 的端口，可以查看 bRPC 的一些网络统计信息。
 - 引入版本：-
 
+### brpc_retry_backoff_ms
+
+- 默认值：2000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：bRPC 在“请求尚未写出”即失败（`EHOSTDOWN` 或 `ECONNREFUSED`）后，重试前的等待时间。这类失败表明对端 BE 正在重启或不可达，bRPC 会把缓存的连接标记为失败，并且只每隔 `health_check_interval`（默认 3 秒）重新探测一次。没有退避时，一次失败 RPC 的全部重试会在微秒级耗尽，从而在对端已经重新监听的情况下仍然失败。bRPC 在每次重试前都等待这个值（不按重试次数递增），因此一次失败 RPC 的重试分别落在 1 倍、2 倍、3 倍该值之后，累计延迟足以覆盖一次健康检查周期。请求已经写出之后才发生的错误（例如 `ECONNRESET`）不会退避，因为对端可能已经收到请求。小于或等于 `0` 表示关闭退避。
+- 引入版本：-
+
 ### brpc_socket_max_unwritten_bytes
 
 - 默认值：1073741824
