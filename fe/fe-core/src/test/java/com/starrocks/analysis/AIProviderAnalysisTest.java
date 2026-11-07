@@ -59,6 +59,8 @@ public class AIProviderAnalysisTest {
             case CHAT -> validChat();
             case EMBEDDING -> validEmbedding();
             case RERANK -> validRerank();
+            case DECISION -> new LinkedHashMap<>(Map.of("endpoint", "https://example.test/v1/systemone",
+                    "model", "decision-model"));
         };
         CreateAIProviderStmt statement = create(type.name(), properties);
         AIProviderAnalyzer.analyze(statement, context());
@@ -145,6 +147,21 @@ public class AIProviderAnalysisTest {
         Map<String, String> p = validRerank();
         p.put("max_documents", "500");
         AIProviderAnalyzer.analyze(create("rerank", p), context());
+    }
+
+    @Test
+    public void testCreateDecisionUsesDecisionProtocolAndCommonProperties() {
+        Map<String, String> parameters = new LinkedHashMap<>();
+        parameters.put("endpoint", "https://example.test/v1/systemone");
+        parameters.put("model", "decision-model");
+        parameters.put("api_key", "decision-key");
+        parameters.put("timeout_ms", "1000");
+        CreateAIProviderStmt statement = create("decision", parameters);
+        AIProviderAnalyzer.analyze(statement, new ConnectContext());
+        Assertions.assertEquals("bailian_decision", statement.getProperties().get("protocol"));
+        parameters.put("dimensions", "128");
+        Assertions.assertThrows(SemanticException.class,
+                () -> AIProviderAnalyzer.analyze(create("decision", parameters), new ConnectContext()));
     }
 
     @Test

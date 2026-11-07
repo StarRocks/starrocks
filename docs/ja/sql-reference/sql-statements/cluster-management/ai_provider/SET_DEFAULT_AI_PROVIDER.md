@@ -6,10 +6,12 @@ description: "AI プロバイダーをそのタイプのデフォルトとして
 # SET DEFAULT AI PROVIDER
 
 プロバイダーを**そのプロバイダー自身のタイプ**のデフォルトとして設定します。レジストリはタイプごと
-(`embedding` / `rerank` / `chat`) に 1 つのデフォルトを保持するため、embedding プロバイダーをデフォルトに
+(`embedding` / `rerank` / `chat` / `decision`) に 1 つのデフォルトを保持するため、embedding プロバイダーをデフォルトに
 設定しても rerank のデフォルトには影響せず、その逆も同様です。
 
 `provider` と `model` は VARCHAR 型の定数式である必要があります。`provider` を省略するか、空文字列または SQL NULL を指定すると、補完とテキスト補助関数は `chat`、埋め込み関数は `embedding` のクラスターデフォルト Provider を使います。`model` を省略するか、空文字列または SQL NULL を指定すると、選択した Provider のデフォルトモデルを使います。明示したモデルが優先されます。空白文字のみを含む値は無効です。明示 Provider の呼び出しにはクラスターデフォルトの設定は不要です。
+
+`ai_decide` は `provider` の省略、空文字列、SQL NULL でデフォルト `decision` Provider を使用します。モデルの選択にも上記と同じ規則が適用されます。
 
 ## 構文
 

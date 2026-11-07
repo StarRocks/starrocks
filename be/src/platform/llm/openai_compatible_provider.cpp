@@ -191,7 +191,8 @@ StatusOr<AIProviderHttpRequest> OpenAICompatibleProvider::build_request(const AI
     return result;
 }
 
-AIProviderParseResult OpenAICompatibleProvider::parse_response(std::string_view body, AICapability capability) const {
+AIProviderParseResult OpenAICompatibleProvider::parse_response(std::string_view body, AICapability capability,
+                                                               const AIProviderResponseContext&) const {
     if (body.find('\0') != std::string_view::npos) {
         return AIProviderMalformed{};
     }

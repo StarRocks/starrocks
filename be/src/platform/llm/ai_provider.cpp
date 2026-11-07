@@ -14,12 +14,14 @@
 
 #include "platform/llm/ai_provider.h"
 
+#include "platform/llm/bailian_decision_provider.h"
 #include "platform/llm/dashscope_multimodal_provider.h"
 #include "platform/llm/openai_compatible_provider.h"
 
 namespace starrocks {
 
 Status validate_ai_protocol(AIProviderProtocol protocol, AICapability capability) {
+    if (protocol == AIProviderProtocol::BAILIAN_DECISION && capability == AICapability::DECISION) return Status::OK();
     if (protocol == AIProviderProtocol::OPENAI &&
         (capability == AICapability::CHAT || capability == AICapability::EMBEDDING)) {
         return Status::OK();
@@ -33,6 +35,9 @@ Status validate_ai_protocol(AIProviderProtocol protocol, AICapability capability
 StatusOr<std::unique_ptr<AIProvider>> create_ai_provider(AIProviderProtocol protocol, AICapability capability) {
     auto status = validate_ai_protocol(protocol, capability);
     if (!status.ok()) return status;
+    if (protocol == AIProviderProtocol::BAILIAN_DECISION) {
+        return std::unique_ptr<AIProvider>(std::make_unique<BailianDecisionProvider>());
+    }
     if (protocol == AIProviderProtocol::DASHSCOPE_MULTIMODAL) {
         return std::unique_ptr<AIProvider>(std::make_unique<DashScopeMultimodalProvider>());
     }

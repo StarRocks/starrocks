@@ -46,6 +46,8 @@ CONF_mInt32(ai_function_rate_limit_qps_chat, "128");
 
 CONF_mInt32(ai_function_rate_limit_qps_embedding, "128");
 
+CONF_mInt32(ai_function_rate_limit_qps_decision, "20");
+
 CONF_mInt32(ai_function_max_inflight, "512");
 
 } // namespace starrocks::config
