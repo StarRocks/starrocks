@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
+import com.starrocks.catalog.AnalyzedConnectorView;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
@@ -167,6 +168,7 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
 import static com.starrocks.sql.ast.CTERelation.CTEMaterializationHint.MATERIALIZED;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class RelationTransformer implements AstVisitorExtendInterface<LogicalPlan, ExpressionMapping> {
@@ -911,6 +913,14 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
         boolean isInlineView = isInlineView();
         boolean isEnableViewBasedRewrite = isEnableViewBasedRewrite(node.getView());
+        if ((isEnableViewBasedRewrite || !isInlineView) && AnalyzerUtils.hasPolicyRewrite(node.getQueryStatement())) {
+            // A view scan only represents the stored definition. Collapsing an expansion with row filters or
+            // column masks would hide those policies from MV matching, including policies inside nested views.
+            isInlineView = true;
+            isEnableViewBasedRewrite = false;
+            logMVPrepare(session, "[ViewBasedRewrite] Skip view {} because its expansion contains a security policy rewrite",
+                    node.getName());
+        }
         if (isInlineView) {
             // expand views in logical plan
             OptExprBuilder builder = new OptExprBuilder(
@@ -950,7 +960,11 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
 
         List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
-        List<Column> viewSchema = node.getView().getBaseSchema();
+        View view = node.getView();
+        if (view instanceof AnalyzedConnectorView connectorView) {
+            view = connectorView.withReferencedViewDefinitions(node.getQueryStatement());
+        }
+        List<Column> viewSchema = view.getBaseSchema();
         Preconditions.checkState(outputColumns.size() == viewSchema.size());
         // should add a new relationid for view instead of using original outputColumns directly here,
         // because the original columns are related to the base tables(maybe olap table or others),
@@ -967,7 +981,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                 outputVariables.add(columnRef);
             }
             columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
-            columnRefFactory.updateColumnRefToColumns(columnRef, column, node.getView());
+            columnRefFactory.updateColumnRefToColumns(columnRef, column, view);
             colRefToColumnMetaMapBuilder.put(columnRef, viewSchema.get(i));
             columnMetaToColRefMapBuilder.put(viewSchema.get(i), columnRef);
             projectionMap.put(outputColumns.get(i), columnRef);
@@ -995,7 +1009,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         }
 
         LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(relationId,
-                node.getView(), columnRefOperatorToColumn, columnMetaToColRefMap,
+                view, columnRefOperatorToColumn, columnMetaToColRefMap,
                 new ColumnRefSet(logicalPlan.getOutputColumn()), newExprMapping, projectionMap);
         if (isInlineView) {
             // add a projection to make sure output columns keep the same,

@@ -54,13 +54,21 @@ public class IcebergView extends ConnectorView {
                 // iceberg view's default-catalog is optional
                 // When default-catalog is null or not set, the catalog in which the view is stored must
                 // be used as the default catalog.
-                name.setCatalog(Strings.isNullOrEmpty(defaultCatalogName) ? this.catalogName : defaultCatalogName);
+                name.setCatalog(getDefaultCatalogName());
             }
 
             if (Strings.isNullOrEmpty(tableRelation.getName().getDb())) {
                 name.setDb(defaultDbName);
             }
         }
+    }
+
+    public String getDefaultCatalogName() {
+        return Strings.isNullOrEmpty(defaultCatalogName) ? catalogName : defaultCatalogName;
+    }
+
+    public String getDefaultDbName() {
+        return defaultDbName;
     }
 
     @Override

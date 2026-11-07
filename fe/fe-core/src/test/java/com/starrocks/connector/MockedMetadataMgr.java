@@ -17,6 +17,7 @@ package com.starrocks.connector;
 
 import com.google.common.base.Strings;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
@@ -30,7 +31,10 @@ public class MockedMetadataMgr extends MetadataMgr {
     private final LocalMetastore localMetastore;
 
     public MockedMetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
-        super(localMetastore, new TemporaryTableMgr(), connectorMgr, new ConnectorTblMetaInfoMgr());
+        // Share GlobalStateMgr's registry as production does: MVs register their connector base tables there,
+        // and table lookups restore the MV relations from it.
+        super(localMetastore, new TemporaryTableMgr(), connectorMgr,
+                GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr());
         this.localMetastore = localMetastore;
     }
 

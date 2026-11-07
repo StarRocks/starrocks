@@ -17,19 +17,23 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.TableRelation;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class IcebergViewTest {
 
     private IcebergView newView(String defaultCatalogName, String defaultDbName) {
         return new IcebergView(1L, "iceberg_catalog", "sales", "test_view",
-                Collections.emptyList(), "ignored", defaultCatalogName, defaultDbName,
+                Collections.emptyList(), "SELECT * FROM orders", defaultCatalogName, defaultDbName,
                 "hdfs://path/to/view", null);
     }
 
@@ -84,5 +88,35 @@ public class IcebergViewTest {
         assertNull(cteRelation.getName().getDb());
         assertEquals("iceberg_catalog", tableRelation.getName().getCatalog());
         assertEquals("sales", tableRelation.getName().getDb());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"other_catalog, sales", "iceberg_catalog, other_namespace"})
+    public void testBindingChangesDoNotMatchCachedView(String catalog, String namespace) {
+        AnalyzedConnectorView cachedView = new AnalyzedConnectorView(newView("iceberg_catalog", "sales"));
+        IcebergView changedView = newView(catalog, namespace);
+        TableRelation relation = new TableRelation(new TableName(null, null, "orders"));
+        changedView.formatRelations(Lists.newArrayList(relation), List.of());
+        assertEquals(catalog, relation.getName().getCatalog());
+        assertEquals(namespace, relation.getName().getDb());
+
+        // SQL and view identity remain unchanged, but a cached matching key must reject the new binding.
+        AnalyzedConnectorView currentView = new AnalyzedConnectorView(changedView);
+        assertFalse(Set.of(cachedView).contains(currentView));
+    }
+
+    @Test
+    public void testEquivalentDefaultCatalogsMatchAfterExpansionSnapshot() {
+        IcebergView implicit = newView(null, "sales");
+        IcebergView empty = newView("", "sales");
+        IcebergView explicit = newView("iceberg_catalog", "sales");
+        AnalyzedConnectorView expected = new AnalyzedConnectorView(explicit)
+                .withReferencedViewDefinitions(explicit.getQueryStatement());
+        for (IcebergView view : List.of(implicit, empty, explicit)) {
+            AnalyzedConnectorView actual = new AnalyzedConnectorView(view)
+                    .withReferencedViewDefinitions(view.getQueryStatement());
+            assertEquals(expected, actual);
+            assertEquals(expected.hashCode(), actual.hashCode());
+        }
     }
 }
