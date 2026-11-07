@@ -46,6 +46,7 @@ import org.junit.jupiter.api.Test;
 import org.openjdk.jol.info.GraphLayout;
 
 import java.io.File;
+import java.lang.ref.Reference;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
@@ -154,6 +155,20 @@ public class IcebergCacheMemoryAccuracyTest extends TableTestBase {
         return cache.policy().eviction().orElseThrow().weightedSize().orElseThrow();
     }
 
+    private static long retainedSize(List<?> roots, List<?> sharedRoots) {
+        // GraphLayout.subtract matches heap addresses, so a GC between its two address walks can count
+        // relocated shared objects as private. Subtract sizes instead: the union contains every shared
+        // object once, and its size is independent of where the GC moved those objects.
+        // Keep the shared graph alive while measuring the union so its records also pin weak referents:
+        // otherwise GC could shrink only one side of the subtraction.
+        GraphLayout sharedGraph = GraphLayout.parseInstance(sharedRoots.toArray());
+        List<Object> allRoots = new ArrayList<>(sharedRoots);
+        allRoots.addAll(roots);
+        long retained = GraphLayout.parseInstance(allRoots.toArray()).totalSize() - sharedGraph.totalSize();
+        Reference.reachabilityFence(sharedGraph);
+        return retained;
+    }
+
     private static PartitionData day(PartitionSpec spec, int day) {
         PartitionData pd = new PartitionData(spec.partitionType());
         pd.set(0, day);
@@ -260,8 +275,7 @@ public class IcebergCacheMemoryAccuracyTest extends TableTestBase {
         for (int t = 0; t < tableCount; t++) {
             List<Table> others = new ArrayList<>(loaded);
             others.remove(t);
-            actual += GraphLayout.parseInstance(loaded.get(t))
-                    .subtract(GraphLayout.parseInstance(others.toArray())).totalSize();
+            actual += retainedSize(List.of(loaded.get(t)), others);
         }
         if (planAfterCaching) {
             System.out.printf("MEMACC %s | ledger (not checked) estimated=%d actual=%d ratio=%.3f%n", label,
@@ -401,7 +415,7 @@ public class IcebergCacheMemoryAccuracyTest extends TableTestBase {
             tasks.forEach(task -> { });
         }
         // The cached files reference the table's schema and specs, which the table cache pays for.
-        GraphLayout tableGraph = GraphLayout.parseInstance(table, ((BaseTable) table).operations().current());
+        List<Object> tableRoots = List.of(table, ((BaseTable) table).operations().current());
         List<Object> allRoots = new ArrayList<>();
         String cacheName = dataStats || (!positionDeletes && !equalityDeletes) ? "dataFileCache" : "deleteFileCache";
         for (String each : new String[] {"dataFileCache", "deleteFileCache"}) {
@@ -414,11 +428,11 @@ public class IcebergCacheMemoryAccuracyTest extends TableTestBase {
             allRoots.addAll(roots);
             if (each.equals(cacheName)) {
                 Assertions.assertFalse(roots.isEmpty(), label + ": " + each + " is empty");
-                long actual = GraphLayout.parseInstance(roots.toArray()).subtract(tableGraph).totalSize();
+                long actual = retainedSize(roots, tableRoots);
                 check(label, each + " ledger", ledger(cache), actual);
             }
         }
-        long actual = GraphLayout.parseInstance(allRoots.toArray()).subtract(tableGraph).totalSize();
+        long actual = retainedSize(allRoots, tableRoots);
         check(label, "estimateSize()", catalog.estimateSize(), actual);
     }
 }
