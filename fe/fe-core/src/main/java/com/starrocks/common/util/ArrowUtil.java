@@ -22,6 +22,8 @@ import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 
+import java.nio.charset.StandardCharsets;
+
 public class ArrowUtil {
 
     private static final BufferAllocator ALLOCATOR = new RootAllocator(Long.MAX_VALUE);
@@ -33,7 +35,7 @@ public class ArrowUtil {
         VarCharVector varCharVector = new VarCharVector(fieldName, ALLOCATOR);
 
         varCharVector.allocateNew();
-        varCharVector.setSafe(0, fieldValue.getBytes());
+        varCharVector.setSafe(0, fieldValue.getBytes(StandardCharsets.UTF_8));
         varCharVector.setValueCount(1);
 
         return VectorSchemaRoot.of(varCharVector);
