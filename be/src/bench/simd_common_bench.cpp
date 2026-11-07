@@ -32,6 +32,7 @@
 
 #include <benchmark/benchmark.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <random>
@@ -518,6 +519,200 @@ static void BM_FilterRange_Width(benchmark::State& state) {
 
 BENCHMARK_TEMPLATE(BM_FilterRange_Width, uint32_t)->Name("BM_FilterRange_4B")->Apply(GenerateFilterRangeMatrixArgs);
 BENCHMARK_TEMPLATE(BM_FilterRange_Width, uint64_t)->Name("BM_FilterRange_8B")->Apply(GenerateFilterRangeMatrixArgs);
+
+// =====================================================================
+// 3-state Streaming Pre-Aggregation Selection Dispatch:
+//   PrePR     : SSE2/NEON count_zero (scanned twice in ADJUST middle range)
+//   CurrentPR : !SIMD::contain_zero + SIMD::all_zeros (scanned up to 3x in ADJUST)
+//   Future    : AVX2/NEON single-pass SIMD::count_zero + reuse hit_count in ADJUST
+// =====================================================================
+
+static size_t pre_pr_count_zero_u8(const uint8_t* data, size_t size) {
+    size_t count = 0;
+    const uint8_t* end = data + size;
+#if defined(__SSE2__) && defined(__POPCNT__)
+    const __m128i zero16 = _mm_setzero_si128();
+    const uint8_t* end64 = data + (size / 64 * 64);
+    for (; data < end64; data += 64) {
+        count += __builtin_popcountll(static_cast<uint64_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(
+                                              _mm_loadu_si128(reinterpret_cast<const __m128i*>(data)), zero16))) |
+                                      (static_cast<uint64_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(
+                                               _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 16)), zero16)))
+                                       << 16u) |
+                                      (static_cast<uint64_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(
+                                               _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 32)), zero16)))
+                                       << 32u) |
+                                      (static_cast<uint64_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(
+                                               _mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 48)), zero16)))
+                                       << 48u));
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    const uint8_t* end16 = data + (size / 16 * 16);
+    for (; data < end16; data += 16) {
+        uint8x16_t vdata = vld1q_u8(data);
+        uint8x16_t result = vceqq_u8(vdata, vdupq_n_u8(0));
+        result = vandq_u8(result, vdupq_n_u8(1));
+        count += vaddvq_u8(result);
+    }
+#endif
+    for (; data < end; ++data) {
+        count += (*data == 0);
+    }
+    return count;
+}
+
+static void FillStreamingSelection(std::vector<uint8_t>& sel, size_t n, int hit_pct, int dist_mode) {
+    sel.resize(n);
+    if (hit_pct == 0) {
+        std::fill(sel.begin(), sel.end(), 1);
+        return;
+    }
+    if (hit_pct == 100) {
+        std::fill(sel.begin(), sel.end(), 0);
+        return;
+    }
+    if (dist_mode == 0) {
+        std::mt19937_64 rng(0x5E1EC700);
+        std::uniform_int_distribution<int> d(0, 99);
+        for (size_t i = 0; i < n; ++i) {
+            sel[i] = (d(rng) < hit_pct) ? 0 : 1;
+        }
+    } else if (dist_mode == 1) {
+        size_t k = (n * static_cast<size_t>(hit_pct)) / 100;
+        std::fill(sel.begin(), sel.begin() + k, 0);
+        std::fill(sel.begin() + k, sel.end(), 1);
+    } else {
+        size_t k = (n * static_cast<size_t>(hit_pct)) / 100;
+        std::fill(sel.begin(), sel.begin() + (n - k), 1);
+        std::fill(sel.begin() + (n - k), sel.end(), 0);
+    }
+}
+
+static void GenerateStreamingAggDispatchArgs(benchmark::Benchmark* b) {
+    for (int64_t dist_mode : {0, 1, 2}) {
+        for (int64_t hit_pct : {0, 1, 10, 25, 50, 75, 95, 100}) {
+            b->Args({dist_mode, hit_pct});
+        }
+    }
+}
+
+static void BM_StreamingAggSelectiveDispatch_PrePR(benchmark::State& state) {
+    const int dist_mode = static_cast<int>(state.range(0));
+    const int hit_pct = static_cast<int>(state.range(1));
+    const size_t n = kBatch;
+    std::vector<uint8_t> sel;
+    FillStreamingSelection(sel, n, hit_pct, dist_mode);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(sel.data());
+        size_t zero_count = pre_pr_count_zero_u8(sel.data(), n);
+        int branch = (zero_count == 0) ? 0 : (zero_count == n ? 1 : 2);
+        benchmark::DoNotOptimize(branch);
+    }
+    state.SetBytesProcessed(state.iterations() * n);
+}
+
+static void BM_StreamingAggSelectiveDispatch_CurrentPR(benchmark::State& state) {
+    const int dist_mode = static_cast<int>(state.range(0));
+    const int hit_pct = static_cast<int>(state.range(1));
+    const size_t n = kBatch;
+    std::vector<uint8_t> sel;
+    FillStreamingSelection(sel, n, hit_pct, dist_mode);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(sel.data());
+        int branch = !SIMD::contain_zero(sel) ? 0 : (SIMD::all_zeros(sel) ? 1 : 2);
+        benchmark::DoNotOptimize(branch);
+    }
+    state.SetBytesProcessed(state.iterations() * n);
+}
+
+static void BM_StreamingAggSelectiveDispatch_Future(benchmark::State& state) {
+    const int dist_mode = static_cast<int>(state.range(0));
+    const int hit_pct = static_cast<int>(state.range(1));
+    const size_t n = kBatch;
+    std::vector<uint8_t> sel;
+    FillStreamingSelection(sel, n, hit_pct, dist_mode);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(sel.data());
+        size_t zero_count = SIMD::count_zero(sel);
+        int branch = (zero_count == 0) ? 0 : (zero_count == n ? 1 : 2);
+        benchmark::DoNotOptimize(branch);
+    }
+    state.SetBytesProcessed(state.iterations() * n);
+}
+
+static void BM_StreamingAggAutoAdjust_PrePR(benchmark::State& state) {
+    const int dist_mode = static_cast<int>(state.range(0));
+    const int hit_pct = static_cast<int>(state.range(1));
+    const size_t n = kBatch;
+    std::vector<uint8_t> sel;
+    FillStreamingSelection(sel, n, hit_pct, dist_mode);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(sel.data());
+        size_t hit_count = pre_pr_count_zero_u8(sel.data(), n);
+        int branch = 0;
+        if (hit_count * 5 <= n) {
+            branch = 10;
+        } else if (hit_count * 10 >= n * 9) {
+            branch = 11;
+        } else {
+            size_t zero_count = pre_pr_count_zero_u8(sel.data(), n);
+            branch = (zero_count == 0) ? 0 : (zero_count == n ? 1 : 2);
+        }
+        benchmark::DoNotOptimize(branch);
+    }
+    state.SetBytesProcessed(state.iterations() * n);
+}
+
+static void BM_StreamingAggAutoAdjust_CurrentPR(benchmark::State& state) {
+    const int dist_mode = static_cast<int>(state.range(0));
+    const int hit_pct = static_cast<int>(state.range(1));
+    const size_t n = kBatch;
+    std::vector<uint8_t> sel;
+    FillStreamingSelection(sel, n, hit_pct, dist_mode);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(sel.data());
+        size_t hit_count = SIMD::count_zero(sel);
+        int branch = 0;
+        if (hit_count * 5 <= n) {
+            branch = 10;
+        } else if (hit_count * 10 >= n * 9) {
+            branch = 11;
+        } else {
+            branch = !SIMD::contain_zero(sel) ? 0 : (SIMD::all_zeros(sel) ? 1 : 2);
+        }
+        benchmark::DoNotOptimize(branch);
+    }
+    state.SetBytesProcessed(state.iterations() * n);
+}
+
+static void BM_StreamingAggAutoAdjust_Future(benchmark::State& state) {
+    const int dist_mode = static_cast<int>(state.range(0));
+    const int hit_pct = static_cast<int>(state.range(1));
+    const size_t n = kBatch;
+    std::vector<uint8_t> sel;
+    FillStreamingSelection(sel, n, hit_pct, dist_mode);
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(sel.data());
+        size_t hit_count = SIMD::count_zero(sel);
+        int branch = 0;
+        if (hit_count * 5 <= n) {
+            branch = 10;
+        } else if (hit_count * 10 >= n * 9) {
+            branch = 11;
+        } else {
+            branch = (hit_count == 0) ? 0 : (hit_count == n ? 1 : 2);
+        }
+        benchmark::DoNotOptimize(branch);
+    }
+    state.SetBytesProcessed(state.iterations() * n);
+}
+
+BENCHMARK(BM_StreamingAggSelectiveDispatch_PrePR)->Apply(GenerateStreamingAggDispatchArgs);
+BENCHMARK(BM_StreamingAggSelectiveDispatch_CurrentPR)->Apply(GenerateStreamingAggDispatchArgs);
+BENCHMARK(BM_StreamingAggSelectiveDispatch_Future)->Apply(GenerateStreamingAggDispatchArgs);
+BENCHMARK(BM_StreamingAggAutoAdjust_PrePR)->Apply(GenerateStreamingAggDispatchArgs);
+BENCHMARK(BM_StreamingAggAutoAdjust_CurrentPR)->Apply(GenerateStreamingAggDispatchArgs);
+BENCHMARK(BM_StreamingAggAutoAdjust_Future)->Apply(GenerateStreamingAggDispatchArgs);
 
 } // namespace starrocks
 
