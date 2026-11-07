@@ -280,6 +280,17 @@ public class OlapTableTest {
         meta.setSyncMvDefinition(SyncMaterializedViewDefinition.capture(meta.getSchema(), null));
         OlapTable recovered = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(table), OlapTable.class);
         Assertions.assertThrows(SemanticException.class, recovered::onReload);
+        String persisted = GsonUtils.GSON.toJson(recovered);
+        ConnectContext previous = ConnectContext.get();
+        ConnectContext.remove();
+        try {
+            recovered.analyzeRollupIndexMetasBestEffort();
+            recovered.analyzeRollupIndexMetasBestEffort();
+            Assertions.assertNull(ConnectContext.get());
+            Assertions.assertEquals(persisted, GsonUtils.GSON.toJson(recovered));
+        } finally {
+            previous.setThreadLocalInfo();
+        }
         // Legacy definitions retain the previous best-effort reload policy.
         meta.setSyncMvDefinition(null);
         Assertions.assertDoesNotThrow(table::onReload);

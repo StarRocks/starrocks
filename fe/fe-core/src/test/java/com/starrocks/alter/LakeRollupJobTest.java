@@ -33,6 +33,7 @@ import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.proto.AggregatePublishVersionRequest;
@@ -46,6 +47,8 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
@@ -64,6 +67,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -859,6 +864,37 @@ public class LakeRollupJobTest {
                     java.util.List<com.starrocks.proto.VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
             }
         };
+    }
+
+    @ParameterizedTest
+    @CsvSource(value = {
+            "add; id, id + 1 v;",
+            "length; id, length(txt) v;",
+            "bitmap; id, bitmap_union(to_bitmap(x)) v; GROUP BY id",
+            "hll; id, hll_union(hll_hash(x)) v; GROUP BY id",
+            "slot; id, x;",
+            "predicate; id, txt; WHERE txt || 'x' = 'ax'",
+            "pending; id, length(txt) v;",
+            "legacy; id, length(txt) v;"
+    }, delimiter = ';')
+    public void testJournalReplayAnalyzesSyncMv(String name, String projection, String groupBy) throws Exception {
+        completeTasksAndPublishOnSend();
+        List<OriginStatementInfo> parsed = new ArrayList<>();
+        if (name.equals("legacy")) {
+            new MockUp<MetaUtils>() {
+                @Mock
+                public Map<String, Expr> parseColumnNameToDefineExpr(OriginStatementInfo stmt) {
+                    parsed.add(stmt);
+                    throw new IllegalArgumentException("legacy definition");
+                }
+            };
+        }
+        long sqlMode = connectContext.getSessionVariable().getSqlMode();
+        RollupJobV2Test.assertSyncMvReplay(starRocksAssert, name, projection, groupBy);
+        Assertions.assertEquals(sqlMode, connectContext.getSessionVariable().getSqlMode());
+        if (name.equals("legacy")) {
+            Assertions.assertEquals(2, parsed.size());
+        }
     }
 
     private static void runToFinished(AlterJobV2 job) throws Exception {

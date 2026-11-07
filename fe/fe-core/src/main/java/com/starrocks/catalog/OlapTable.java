@@ -3217,6 +3217,23 @@ public class OlapTable extends Table {
         }
     }
 
+    public void analyzeRollupIndexMetasBestEffort() {
+        indexMetaIdToMeta.values().forEach(this::analyzeRollupIndexMetaBestEffort);
+    }
+
+    /** Recover a journaled rollup without preventing replay of the remaining metadata. */
+    public void analyzeRollupIndexMetaBestEffort(MaterializedIndexMeta indexMeta) {
+        if (indexMeta.getIndexMetaId() == baseIndexMetaId) {
+            return;
+        }
+        try {
+            analyzeRollupIndexMeta(indexMeta);
+        } catch (Exception e) {
+            LOG.warn("Analyze rollup index meta failed, index id: {}, table:{}",
+                    indexMeta.getIndexMetaId(), getName(), e);
+        }
+    }
+
     /** Strictly recover and analyze a particular rollup against the registered base schema. */
     public void analyzeRollupIndexMeta(MaterializedIndexMeta indexMeta) {
         analyzeRollupIndexMeta(indexMeta, null);
