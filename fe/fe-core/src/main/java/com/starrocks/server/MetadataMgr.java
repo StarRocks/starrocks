@@ -866,7 +866,6 @@ public class MetadataMgr {
         if (internalStatistics == null ||
                 internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             // Get basic stats from connector metadata.
-            session.setObtainedFromInternalStatistics(false);
             // Avoid `analyze table` to collect table statistics from metadata.
             if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
                 return internalStatistics;
@@ -897,16 +896,12 @@ public class MetadataMgr {
                             .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
                 } else {
                     // A connector serving ANALYZE statistics (query dump replay) keeps the partition predicate in the
-                    // selectivity, exactly like the internal-statistics branch below.
-                    if (connectorBasicStats != null
-                            && connectorBasicStats.getStatsSource() == Statistics.StatsSource.ANALYZE) {
-                        session.setObtainedFromInternalStatistics(true);
-                    }
+                    // selectivity, exactly like the internal-statistics branch below: StatisticsCalculator decides
+                    // per scan from the statistics' StatsSource.
                     return connectorBasicStats;
                 }
             }
         } else {
-            session.setObtainedFromInternalStatistics(true);
             captureAnalyzedColumnRowCountsToDump(session, catalogName, table, columns);
             return internalStatistics;
         }

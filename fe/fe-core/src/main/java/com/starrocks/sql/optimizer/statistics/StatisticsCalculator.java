@@ -277,8 +277,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         PredicateColumnsMgr.getInstance().recordPredicateColumns(predicate, optimizerContext.getColumnRefFactory(),
                 context.getOptExpression());
 
-        predicate = removePartitionPredicate(predicate, node, optimizerContext);
         Statistics statistics = context.getStatistics();
+        predicate = removePartitionPredicate(predicate, node, statistics);
         if (null != predicate && !predicate.isNotEvalEstimate()) {
             statistics = estimateStatistics(ImmutableList.of(predicate), statistics);
         }
@@ -469,7 +469,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         // This block is reentrant. This is the first cardinality estimation of the scan node.
         // we need to ensure that the state of each predicate is reset before each entry.
         Utils.extractConjuncts(predicate).forEach(op -> op.setNotEvalEstimate(false));
-        predicate = removePartitionPredicate(predicate, node, optimizerContext);
+        // list-partitioned OLAP table: the decision does not depend on statistics
+        predicate = removePartitionPredicate(predicate, node, null);
         for (var entry : partitionStatistics.entrySet()) {
             Statistics partitionStat = estimateStatistics(ImmutableList.of(predicate), entry.getValue());
             long partitionSelectedRows = (long) partitionStat.getOutputRowCount();
@@ -2512,12 +2513,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     // avoid use partition cols filter rows twice
     @VisibleForTesting
     public ScalarOperator removePartitionPredicate(ScalarOperator predicate, Operator operator,
-                                                   OptimizerContext optimizerContext) {
-        boolean isTableTypeSupported = operator instanceof LogicalIcebergScanOperator ||
-                isOlapScanListPartitionTable(operator);
-        if (isTableTypeSupported && !optimizerContext.isObtainedFromInternalStatistics()) {
+                                                   Statistics scanStatistics) {
+        if (isRowCountPartitionPruned(operator, scanStatistics)) {
             LogicalScanOperator scanOperator = operator.cast();
-            List<String> partitionColNames = scanOperator.getTable().getPartitionColumnNames();
+            // copy: some tables (e.g. DeltaLakeTable) return their own partition column list
+            List<String> partitionColNames = Lists.newArrayList(scanOperator.getTable().getPartitionColumnNames());
             partitionColNames.addAll(ListPartitionPruner.deduceGenerateColumns(scanOperator));
 
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
@@ -2533,6 +2533,21 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             return newPredicates.isEmpty() ? ConstantOperator.TRUE : Utils.compoundAnd(newPredicates);
         }
         return predicate;
+    }
+
+    // Whether the scan's row count already counts only the partitions left after partition pruning, judged from
+    // the scan's own statistics rather than from any other table in the query.
+    // - OLAP list partitions: the row count is summed over the selected partitions.
+    // - Iceberg / Delta Lake: connector metadata counts the rows of the files planned with the scan predicate.
+    //   ANALYZE statistics are table-wide, so the partition predicate must still be estimated for them.
+    private boolean isRowCountPartitionPruned(Operator operator, Statistics scanStatistics) {
+        if (isOlapScanListPartitionTable(operator)) {
+            return true;
+        }
+        if (operator instanceof LogicalIcebergScanOperator || operator instanceof LogicalDeltaLakeScanOperator) {
+            return scanStatistics != null && scanStatistics.getStatsSource() != Statistics.StatsSource.ANALYZE;
+        }
+        return false;
     }
 
     // NOTE: Why list partition ?
