@@ -1,4 +1,4 @@
--- name: test_pk_large_rowset_split_basic @cloud @sequential
+-- name: test_pk_large_rowset_split_basic @cloud @sequential @slow
 -- Test PK table large rowset split feature
 
 create database test_pk_large_rowset_split_${uuid0};
@@ -9,8 +9,10 @@ use test_pk_large_rowset_split_${uuid0};
 [UC]orig_max_bytes_per_subtask=SELECT VALUE from information_schema.be_configs where name='lake_compaction_max_bytes_per_subtask' limit 1;
 [UC]orig_write_buffer_size=SELECT VALUE from information_schema.be_configs where name='write_buffer_size' limit 1;
 [UC]orig_enable_load_spill=SELECT VALUE from information_schema.be_configs where name='enable_load_spill' limit 1;
+[UC]function: orig_max_tasks=execute_sql("ADMIN SHOW FRONTEND CONFIG LIKE 'lake_compaction_max_tasks'", True)["result"][0][2]
 
--- Disable global compaction FIRST to prevent background compaction
+-- Pause scheduling before loading. Unlike lake_compaction_disable_ids, this is
+-- read directly by the scheduler, without waiting for the config refresh daemon.
 ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "0");
 
 -- Set write config for multiple segments
@@ -60,19 +62,18 @@ SELECT sleep(2);
 ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 [UC]ALTER TABLE pk_large_split COMPACT;
 
-SELECT sleep(30);
-
--- Show compaction status
-[UC]SHOW PROC '/compactions';
+function: wait_compaction_committed("pk_large_split", ${version_before})
+function: wait_parallel_compaction_finished("pk_large_split")
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "0");
 
 -- Check after compaction
 [UC]version_after=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
 SELECT ${version_after} > ${version_before} as compaction_happened;
 
--- Parallel compaction produces multiple rowsets (one per subtask)
--- Check NUM_ROWSET > 1 indicates parallel compaction was triggered
+-- The split subtasks merge into one output rowset. The completed profile above
+-- proves parallel execution; the output rowset count alone cannot prove it.
 [UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
-SELECT ${rowset_after} > 1 as parallel_compaction_triggered;
+SELECT ${rowset_after} = 1 as split_outputs_merged;
 
 [UC]seg_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
 SELECT ${seg_after} < ${seg_before} as segments_reduced;
@@ -80,10 +81,13 @@ SELECT ${seg_after} < ${seg_before} as segments_reduced;
 SELECT COUNT(*) FROM pk_large_split;
 SELECT k1, k2, LENGTH(v1), v2 FROM pk_large_split WHERE k1 IN (1, 10000, 20000, 30000, 40000, 50000) ORDER BY k1;
 
--- Restore configs
-UPDATE information_schema.be_configs SET VALUE = '${orig_max_rowset_size}' WHERE name = 'lake_compaction_max_rowset_size';
-UPDATE information_schema.be_configs SET VALUE = '${orig_max_bytes_per_subtask}' WHERE name = 'lake_compaction_max_bytes_per_subtask';
-UPDATE information_schema.be_configs SET VALUE = '${orig_write_buffer_size}' WHERE name = 'write_buffer_size';
-UPDATE information_schema.be_configs SET VALUE = '${orig_enable_load_spill}' WHERE name = 'enable_load_spill';
-
 DROP DATABASE test_pk_large_rowset_split_${uuid0} FORCE;
+
+-- Restore configs even when an assertion fails.
+CLEANUP {
+  UPDATE information_schema.be_configs SET VALUE = '${orig_max_rowset_size}' WHERE name = 'lake_compaction_max_rowset_size';
+  UPDATE information_schema.be_configs SET VALUE = '${orig_max_bytes_per_subtask}' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+  UPDATE information_schema.be_configs SET VALUE = '${orig_write_buffer_size}' WHERE name = 'write_buffer_size';
+  UPDATE information_schema.be_configs SET VALUE = '${orig_enable_load_spill}' WHERE name = 'enable_load_spill';
+  ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "${orig_max_tasks}");
+} END CLEANUP
