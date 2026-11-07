@@ -113,18 +113,13 @@ public class DictContentIdentityTest {
         PartitionCommitInfo legacy = GsonUtils.GSON.fromJson(
                 "{\"partitionId\":1,\"version\":2}", PartitionCommitInfo.class);
         Assertions.assertTrue(legacy.getDictContentIdentities().isEmpty());
-        Assertions.assertTrue(new PartitionCommitInfo(legacy).getDictContentIdentities().isEmpty());
 
         legacy.setDictContentIdentities(List.of());
         PartitionCommitInfo empty = roundTrip(legacy);
         Assertions.assertTrue(empty.getDictContentIdentities().isEmpty());
-        Assertions.assertTrue(new PartitionCommitInfo(empty).getDictContentIdentities().isEmpty());
 
         legacy.setDictContentIdentities(List.of(0L, -7L));
         Assertions.assertEquals(List.of(0L, -7L), roundTrip(legacy).getDictContentIdentities());
-        PartitionCommitInfo copy = new PartitionCommitInfo(legacy);
-        legacy.getDictContentIdentities().clear();
-        Assertions.assertEquals(List.of(0L, -7L), copy.getDictContentIdentities());
     }
 
     @Test

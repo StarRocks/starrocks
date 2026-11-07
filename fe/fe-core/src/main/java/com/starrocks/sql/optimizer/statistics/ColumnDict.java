@@ -24,11 +24,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.nio.ByteBuffer;
-<<<<<<< HEAD
-=======
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
 import java.util.Comparator;
 
 public final class ColumnDict extends StatsVersion {
@@ -56,12 +52,7 @@ public final class ColumnDict extends StatsVersion {
     };
 
     private final ImmutableMap<ByteBuffer, Integer> dict;
-<<<<<<< HEAD
-=======
-    // Serialized dict bytes, precomputed so the cache weigher is O(1).
-    private final int byteSize;
     private final long contentIdentity;
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
     // olap table use time info as version info.
     // table on lake use num as version, collectedVersion means historical version num,
     // while version means version in current period.
@@ -72,29 +63,13 @@ public final class ColumnDict extends StatsVersion {
         Preconditions.checkState(!dict.isEmpty() && dict.size() <= Config.low_cardinality_threshold + 1,
                 "dict size %s is illegal", dict.size());
         this.dict = dict;
-<<<<<<< HEAD
-=======
-        this.byteSize = computeByteSize(dict);
         this.contentIdentity = computeContentIdentity(dict);
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
     }
 
     public ColumnDict(ImmutableMap<ByteBuffer, Integer> dict, long collectedVersion, long version) {
         super(collectedVersion, version);
         this.dict = dict;
-<<<<<<< HEAD
-=======
-        this.byteSize = computeByteSize(dict);
         this.contentIdentity = computeContentIdentity(dict);
-    }
-
-    private static int computeByteSize(ImmutableMap<ByteBuffer, Integer> dict) {
-        int size = 0;
-        for (ByteBuffer buf : dict.keySet()) {
-            size += buf.limit() - buf.position() + Integer.BYTES; // string bytes + offset id
-        }
-        return size;
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
     }
 
     private static long computeContentIdentity(ImmutableMap<ByteBuffer, Integer> dict) {

@@ -23,6 +23,8 @@
 #include "exec/tablet_info.h"
 #include "exec/tablet_sink.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
@@ -598,10 +600,42 @@ TEST_F(TabletSinkIndexChannelTest, ConcurrentSendAndIncrementalInit) {
     (void)sink->close(runtime_state.get(), Status::OK());
 }
 
+TEST_F(TabletSinkIndexChannelTest, LoadDictIdentityIsOptionalAndDoesNotReplaceVersion) {
+    auto make_global_dict = [](int32_t column_id, int64_t version, std::vector<int32_t> ids,
+                               std::vector<std::string> strings) {
+        TGlobalDict dict;
+        dict.__set_columnId(column_id);
+        dict.__set_version(version);
+        dict.__set_ids(std::move(ids));
+        dict.__set_strings(std::move(strings));
+        return dict;
+    };
+    RuntimeState state;
+    state._obj_pool = std::make_shared<ObjectPool>();
+    state._instance_mem_pool = std::make_unique<MemPool>();
+    auto legacy = make_global_dict(1, 100, {1}, {"A"});
+    auto zero = make_global_dict(2, 200, {1}, {"B"});
+    auto negative = make_global_dict(3, 300, {1}, {"C"});
+    zero.__set_content_identity(0);
+    negative.__set_content_identity(-7);
+    ASSERT_OK(state.init_load_global_dict({legacy, zero, negative}));
+    EXPECT_EQ(0, state.load_dict_content_identities().count(1));
+    EXPECT_EQ(0, state.load_dict_content_identities().at(2));
+    EXPECT_EQ(-7, state.load_dict_content_identities().at(3));
+    EXPECT_EQ(100, state.load_dict_versions().at(1));
+    EXPECT_EQ(200, state.load_dict_versions().at(2));
+    EXPECT_EQ(300, state.load_dict_versions().at(3));
+}
+
 TEST_F(TabletSinkIndexChannelTest, DictionaryIdentityAggregationPreservesColumnOrder) {
     TQueryOptions options;
     auto state = _build_runtime_state(options);
-    auto sink = _build_prepared_sink(state.get());
+    DescriptorTbl* desc_tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(state.get(), _object_pool.get(), _desc_tbl, &desc_tbl, config::vector_chunk_size));
+    state->set_desc_tbl(desc_tbl);
+    auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, state.get());
+    ASSERT_OK(sink->init(_data_sink, state.get()));
+    ASSERT_OK(sink->prepare(state.get()));
     SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_join", [](void* arg) {
         auto* rpc = static_cast<std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>*>(arg);
         *rpc->second = true;

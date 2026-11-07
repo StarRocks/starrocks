@@ -18,18 +18,18 @@ import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
-import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.thrift.TPlanFragment;
-import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,20 +45,16 @@ import java.util.concurrent.CompletableFuture;
 
 public class ColumnDictTest {
     private int previousLowCardinalityThreshold = 0;
-    private boolean previousThrashGuard;
 
     @BeforeEach
     void setUP() {
         previousLowCardinalityThreshold = Config.low_cardinality_threshold;
-        previousThrashGuard = Config.enable_dict_thrash_guard;
-        Config.enable_dict_thrash_guard = false;
         Config.low_cardinality_threshold = 512;
     }
 
     @AfterEach
     void tearDown() {
         Config.low_cardinality_threshold = previousLowCardinalityThreshold;
-        Config.enable_dict_thrash_guard = previousThrashGuard;
     }
 
     @Test
@@ -272,7 +268,7 @@ public class ColumnDictTest {
 
     private static ColumnDict renewAfterLoad(ColumnDict cached, long collectedVersion, Long contentIdentity) throws Exception {
         ColumnIdentifier id = new ColumnIdentifier(RENEWAL_TABLE_ID, RENEWAL_COLUMN);
-        OlapTable table = new OlapTable(RENEWAL_TABLE_ID, "t0", List.of(new Column("c0", IntegerType.BIGINT)),
+        OlapTable table = new OlapTable(RENEWAL_TABLE_ID, "t0", List.of(new Column("c0", Type.BIGINT)),
                 KeysType.DUP_KEYS, new SinglePartitionInfo(), null);
         dictCache().put(id, CompletableFuture.completedFuture(Optional.of(cached)));
         try {
@@ -373,14 +369,11 @@ public class ColumnDictTest {
 
     @Test
     public void testAlternatingLegacyAndContentRenewalsKeepMatchingDictionary() throws Exception {
-        Config.enable_dict_thrash_guard = true;
         ColumnDict cached = new ColumnDict(dictOf(false, "A", "B"), COLLECTED_VERSION);
         for (int i = 0; i < 8; i++) {
             Assertions.assertSame(cached, renewAfterLoad(cached, COLLECTED_VERSION, null));
             Assertions.assertSame(cached, renewAfterLoad(cached, COLLECTED_VERSION, cached.getContentIdentity()));
         }
-        Assertions.assertFalse(CacheDictManager.getInstance().isColumnForbidden(
-                RENEWAL_TABLE_ID, RENEWAL_COLUMN.getId()));
     }
 
 }

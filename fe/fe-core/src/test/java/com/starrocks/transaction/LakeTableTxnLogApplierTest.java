@@ -15,24 +15,11 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
-=======
-import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.ColumnId;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.OlapTable;
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
-<<<<<<< HEAD
-=======
-import com.starrocks.proto.TabletStatPB;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-import com.starrocks.thrift.TStorageMedium;
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
@@ -41,11 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
-<<<<<<< HEAD
-=======
 import java.util.Arrays;
-import java.util.HashMap;
->>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511))
 import java.util.List;
 
 public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
