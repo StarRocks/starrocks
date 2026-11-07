@@ -148,7 +148,6 @@ public class DataSourceCacheTest {
         context.setUser("test");
         context.setPassword("");
         context.setSql("SELECT 1");
-        context.setQueryTimeZone("UTC");
         context.setStatementFetchSize(1);
         String key = context.getUser() + "/" + context.getPassword() + "/" + context.getJdbcURL();
         SQLException loginError = new SQLException("role \"test\" is not permitted to log in");
