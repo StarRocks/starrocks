@@ -34,6 +34,9 @@
 
 #include "base/simd/simd.h"
 
+#include <algorithm>
+#include <random>
+
 #include "gtest/gtest.h"
 
 namespace starrocks {
@@ -617,6 +620,116 @@ TEST_F(SIMDTest, CountZero8BitTailAccumulatorBoundaries) {
             if (alternating[i] == 0) ++expected;
         }
         EXPECT_EQ(expected, SIMD::count_zero(alternating.data(), sz)) << "alternating failed at sz=" << sz;
+    }
+}
+
+TEST_F(SIMDTest, streaming_agg_three_way_dispatch_equivalence) {
+    auto pre_pr_count_zero_u8 = [](const uint8_t* data, size_t size) -> size_t {
+        size_t count = 0;
+        const uint8_t* end = data + size;
+#if defined(__SSE2__) && defined(__POPCNT__)
+        const __m128i zero16 = _mm_setzero_si128();
+        const uint8_t* end64 = data + (size / 64 * 64);
+        for (; data < end64; data += 64) {
+            count += __builtin_popcountll(
+                    static_cast<uint64_t>(_mm_movemask_epi8(
+                            _mm_cmpeq_epi8(_mm_loadu_si128(reinterpret_cast<const __m128i*>(data)), zero16))) |
+                    (static_cast<uint64_t>(_mm_movemask_epi8(
+                             _mm_cmpeq_epi8(_mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 16)), zero16)))
+                     << 16u) |
+                    (static_cast<uint64_t>(_mm_movemask_epi8(
+                             _mm_cmpeq_epi8(_mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 32)), zero16)))
+                     << 32u) |
+                    (static_cast<uint64_t>(_mm_movemask_epi8(
+                             _mm_cmpeq_epi8(_mm_loadu_si128(reinterpret_cast<const __m128i*>(data + 48)), zero16)))
+                     << 48u));
+        }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+        const uint8_t* end16 = data + (size / 16 * 16);
+        for (; data < end16; data += 16) {
+            uint8x16_t vdata = vld1q_u8(data);
+            uint8x16_t result = vceqq_u8(vdata, vdupq_n_u8(0));
+            result = vandq_u8(result, vdupq_n_u8(1));
+            count += vaddvq_u8(result);
+        }
+#endif
+        for (; data < end; ++data) {
+            count += (*data == 0);
+        }
+        return count;
+    };
+
+    auto fill_streaming_selection = [](std::vector<uint8_t>& sel, size_t n, int hit_pct, int dist_mode) {
+        sel.resize(n);
+        if (hit_pct == 0) {
+            std::fill(sel.begin(), sel.end(), 1);
+            return;
+        }
+        if (hit_pct == 100) {
+            std::fill(sel.begin(), sel.end(), 0);
+            return;
+        }
+        if (dist_mode == 0) {
+            std::mt19937_64 rng(0x5E1EC700);
+            std::uniform_int_distribution<int> d(0, 99);
+            for (size_t i = 0; i < n; ++i) {
+                sel[i] = (d(rng) < hit_pct) ? 0 : 1;
+            }
+        } else if (dist_mode == 1) {
+            size_t k = (n * static_cast<size_t>(hit_pct)) / 100;
+            std::fill(sel.begin(), sel.begin() + k, 0);
+            std::fill(sel.begin() + k, sel.end(), 1);
+        } else {
+            size_t k = (n * static_cast<size_t>(hit_pct)) / 100;
+            std::fill(sel.begin(), sel.begin() + (n - k), 1);
+            std::fill(sel.begin() + (n - k), sel.end(), 0);
+        }
+    };
+
+    constexpr size_t n = 4096;
+    const std::vector<int> hit_pcts = {0, 1, 10, 25, 50, 75, 95, 100};
+    const std::vector<int> dist_modes = {0, 1, 2};
+    std::vector<uint8_t> sel;
+
+    for (int dist_mode : dist_modes) {
+        for (int hit_pct : hit_pcts) {
+            fill_streaming_selection(sel, n, hit_pct, dist_mode);
+
+            const size_t pre_pr_zero_count = pre_pr_count_zero_u8(sel.data(), n);
+            const size_t future_zero_count = SIMD::count_zero(sel);
+            EXPECT_EQ(pre_pr_zero_count, future_zero_count) << "dist_mode=" << dist_mode << " hit_pct=" << hit_pct;
+
+            const int decision_pre_pr = (pre_pr_zero_count == 0) ? 0 : (pre_pr_zero_count == n ? 1 : 2);
+            const int decision_current_pr = !SIMD::contain_zero(sel) ? 0 : (SIMD::all_zeros(sel) ? 1 : 2);
+            const int decision_future = (future_zero_count == 0) ? 0 : (future_zero_count == n ? 1 : 2);
+
+            EXPECT_EQ(decision_pre_pr, decision_current_pr) << "dist_mode=" << dist_mode << " hit_pct=" << hit_pct;
+            EXPECT_EQ(decision_pre_pr, decision_future) << "dist_mode=" << dist_mode << " hit_pct=" << hit_pct;
+
+            // Verify ADJUST-stage decision equivalence when Future reuses hit_count directly
+            auto adjust_pre_pr = [&]() -> int {
+                size_t hit_count = pre_pr_count_zero_u8(sel.data(), n);
+                if (hit_count * 5 <= n) return 10;
+                if (hit_count * 10 >= n * 9) return 11;
+                size_t zc = pre_pr_count_zero_u8(sel.data(), n);
+                return (zc == 0) ? 0 : (zc == n ? 1 : 2);
+            };
+            auto adjust_current_pr = [&]() -> int {
+                size_t hit_count = SIMD::count_zero(sel);
+                if (hit_count * 5 <= n) return 10;
+                if (hit_count * 10 >= n * 9) return 11;
+                return !SIMD::contain_zero(sel) ? 0 : (SIMD::all_zeros(sel) ? 1 : 2);
+            };
+            auto adjust_future = [&]() -> int {
+                size_t hit_count = SIMD::count_zero(sel);
+                if (hit_count * 5 <= n) return 10;
+                if (hit_count * 10 >= n * 9) return 11;
+                return (hit_count == 0) ? 0 : (hit_count == n ? 1 : 2);
+            };
+
+            EXPECT_EQ(adjust_pre_pr(), adjust_current_pr()) << "dist_mode=" << dist_mode << " hit_pct=" << hit_pct;
+            EXPECT_EQ(adjust_pre_pr(), adjust_future()) << "dist_mode=" << dist_mode << " hit_pct=" << hit_pct;
+        }
     }
 }
 
