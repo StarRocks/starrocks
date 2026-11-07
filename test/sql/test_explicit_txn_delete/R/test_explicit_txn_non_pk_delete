@@ -1,0 +1,135 @@
+-- name: test_explicit_txn_non_pk_delete_rejected
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_dup (k BIGINT NOT NULL, v BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t_uniq (k BIGINT NOT NULL, v BIGINT) UNIQUE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t_agg (k BIGINT NOT NULL, v BIGINT SUM) AGGREGATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_dup select g, g from table(generate_series(1, 10)) t(g);
+-- result:
+-- !result
+insert into t_uniq select g, g from table(generate_series(1, 10)) t(g);
+-- result:
+-- !result
+insert into t_agg select g, g from table(generate_series(1, 10)) t(g);
+-- result:
+-- !result
+set enable_sql_transaction = true;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+delete from t_dup where k in (1, 2);
+-- result:
+E: (5309, "Getting analyzing error. Detail message: DELETE on non-Primary-Key table 't_dup' is not supported in an explicit transaction.")
+-- !result
+delete from t_uniq where k in (1, 2);
+-- result:
+E: (5309, "Getting analyzing error. Detail message: DELETE on non-Primary-Key table 't_uniq' is not supported in an explicit transaction.")
+-- !result
+delete from t_agg where k in (1, 2);
+-- result:
+E: (5309, "Getting analyzing error. Detail message: DELETE on non-Primary-Key table 't_agg' is not supported in an explicit transaction.")
+-- !result
+rollback;
+-- result:
+-- !result
+select count(*) from t_dup where k in (1, 2);
+-- result:
+2
+-- !result
+select count(*) from t_uniq where k in (1, 2);
+-- result:
+2
+-- !result
+select count(*) from t_agg where k in (1, 2);
+-- result:
+2
+-- !result
+delete from t_dup where k in (1, 2);
+-- result:
+-- !result
+select count(*) from t_dup where k in (1, 2);
+-- result:
+0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_explicit_txn_pk_delete_with_rejected_non_pk_delete @cloud
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_pk (k BIGINT NOT NULL, v BIGINT) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t_dup (k BIGINT NOT NULL, v BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_pk select g, g from table(generate_series(1, 10)) t(g);
+-- result:
+-- !result
+insert into t_dup select g, g from table(generate_series(1, 10)) t(g);
+-- result:
+-- !result
+set enable_sql_transaction = true;
+-- result:
+-- !result
+begin;
+-- result:
+-- !result
+delete from t_pk where k in (1, 2);
+-- result:
+-- !result
+delete from t_dup where k in (1, 2);
+-- result:
+E: (5309, "Getting analyzing error. Detail message: DELETE on non-Primary-Key table 't_dup' is not supported in an explicit transaction.")
+-- !result
+rollback;
+-- result:
+-- !result
+select count(*) from t_pk where k in (1, 2);
+-- result:
+2
+-- !result
+select count(*) from t_dup where k in (1, 2);
+-- result:
+2
+-- !result
+begin;
+-- result:
+-- !result
+delete from t_pk where k in (1, 2);
+-- result:
+-- !result
+delete from t_dup where k in (1, 2);
+-- result:
+E: (5309, "Getting analyzing error. Detail message: DELETE on non-Primary-Key table 't_dup' is not supported in an explicit transaction.")
+-- !result
+commit;
+-- result:
+-- !result
+select count(*) from t_pk where k in (1, 2);
+-- result:
+0
+-- !result
+select count(*) from t_dup where k in (1, 2);
+-- result:
+2
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
