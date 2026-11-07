@@ -15,11 +15,16 @@
 
 #include <gtest/gtest.h>
 
+#include <optional>
+
+#include "column/chunk.h"
+#include "column/fixed_length_column.h"
 #include "common/config_exec_flow_fwd.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_streaming_sink_operator.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -178,6 +183,67 @@ TEST_F(StreamingAggSinkExecuteModeTest, distinct_sink_floors_zero_usage_budget_t
 
     auto* sink = static_cast<AggregateDistinctStreamingSinkOperator*>(op.get());
     EXPECT_EQ(1u, sink->_limited_mem_state.limited_memory_size);
+}
+
+TEST_F(StreamingAggSinkExecuteModeTest,
+       selective_preaggregation_reuses_precomputed_zero_count_and_dispatches_all_branches) {
+    auto aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+    AggregateStreamingSinkOperatorFactory factory(1, 1, aggregator_factory, _no_runtime_filters);
+    auto op = factory.create(1, 0);
+    auto* sink = static_cast<AggregateStreamingSinkOperator*>(op.get());
+    auto aggregator = aggregator_factory->get_or_create(0);
+
+    aggregator->_agg_stat = &_agg_stat;
+    aggregator->_hash_map_variant.init(&_state, AggHashMapVariant::Type::phase1_int32, &_agg_stat);
+    aggregator->_limited_buffer =
+            std::make_unique<LimitedPipelineChunkBuffer<AggStatistics>>(&_agg_stat, 1, 64 * 1024 * 1024, 4096 * 4);
+
+    SlotDescriptor slot_desc(1, "k", TypeDescriptor(TYPE_INT));
+    TTupleDescriptor ttuple;
+    ttuple.__set_id(1);
+    TupleDescriptor tuple_desc(ttuple);
+    tuple_desc.add_slot(&slot_desc);
+    aggregator->_intermediate_tuple_desc = &tuple_desc;
+    aggregator->_group_by_types = {{TypeDescriptor(TYPE_INT), false}};
+
+    auto make_chunk = [&]() {
+        auto col = Int32Column::create();
+        col->append(10);
+        col->append(20);
+        col->append(30);
+        col->append(40);
+        aggregator->_group_by_columns = {col};
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(col, 1);
+        return chunk;
+    };
+
+    // 1. All misses (_streaming_selection = {1, 1, 1, 1}, precomputed = 0u)
+    aggregator->_streaming_selection.assign({1, 1, 1, 1});
+    ASSERT_TRUE(sink->_push_chunk_by_selective_preaggregation(make_chunk(), 4, false, 0u).ok());
+    ASSERT_FALSE(aggregator->is_chunk_buffer_empty());
+    auto out_all_miss = aggregator->poll_chunk_buffer();
+    ASSERT_NE(nullptr, out_all_miss);
+    EXPECT_EQ(4u, out_all_miss->num_rows());
+    EXPECT_TRUE(aggregator->is_chunk_buffer_empty());
+
+    // 2. All hits (_streaming_selection = {0, 0, 0, 0}, precomputed = 4u)
+    aggregator->_streaming_selection.assign({0, 0, 0, 0});
+    ASSERT_TRUE(sink->_push_chunk_by_selective_preaggregation(make_chunk(), 4, false, 4u).ok());
+    EXPECT_TRUE(aggregator->is_chunk_buffer_empty());
+
+    // 3. Mixed hits/misses (_streaming_selection = {0, 1, 0, 1}, precomputed = 2u and default std::nullopt)
+    for (std::optional<size_t> precomputed : {std::optional<size_t>(2u), std::optional<size_t>(std::nullopt)}) {
+        aggregator->_streaming_selection.assign({0, 1, 0, 1});
+        ASSERT_TRUE(sink->_push_chunk_by_selective_preaggregation(make_chunk(), 4, false, precomputed).ok());
+        ASSERT_FALSE(aggregator->is_chunk_buffer_empty());
+        auto out_mixed = aggregator->poll_chunk_buffer();
+        ASSERT_NE(nullptr, out_mixed);
+        ASSERT_EQ(2u, out_mixed->num_rows());
+        const auto* out_col = down_cast<const Int32Column*>(out_mixed->get_column_by_slot_id(1).get());
+        EXPECT_EQ(20, out_col->get_data()[0]);
+        EXPECT_EQ(40, out_col->get_data()[1]);
+    }
 }
 
 } // namespace starrocks::pipeline
