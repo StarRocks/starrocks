@@ -527,7 +527,7 @@ BENCHMARK_TEMPLATE(BM_FilterRange_Width, uint64_t)->Name("BM_FilterRange_8B")->A
 //   Future    : AVX2/NEON single-pass SIMD::count_zero + reuse hit_count in ADJUST
 // =====================================================================
 
-static size_t pre_pr_count_zero_u8(const uint8_t* data, size_t size) {
+static inline size_t pre_pr_count_zero_u8(const uint8_t* data, size_t size) {
     size_t count = 0;
     const uint8_t* end = data + size;
 #if defined(__SSE2__) && defined(__POPCNT__)
@@ -619,7 +619,7 @@ static void BM_StreamingAggSelectiveDispatch_CurrentPR(benchmark::State& state) 
     FillStreamingSelection(sel, n, hit_pct, dist_mode);
     for (auto _ : state) {
         benchmark::DoNotOptimize(sel.data());
-        int branch = !SIMD::contain_zero(sel) ? 0 : (SIMD::all_zeros(sel) ? 1 : 2);
+        int branch = !SIMD::contain_zero(sel.data(), n) ? 0 : (SIMD::all_zeros(sel.data(), n) ? 1 : 2);
         benchmark::DoNotOptimize(branch);
     }
     state.SetBytesProcessed(state.iterations() * n);
@@ -633,7 +633,7 @@ static void BM_StreamingAggSelectiveDispatch_Future(benchmark::State& state) {
     FillStreamingSelection(sel, n, hit_pct, dist_mode);
     for (auto _ : state) {
         benchmark::DoNotOptimize(sel.data());
-        size_t zero_count = SIMD::count_zero(sel);
+        size_t zero_count = SIMD::count_zero(sel.data(), n);
         int branch = (zero_count == 0) ? 0 : (zero_count == n ? 1 : 2);
         benchmark::DoNotOptimize(branch);
     }
@@ -655,6 +655,7 @@ static void BM_StreamingAggAutoAdjust_PrePR(benchmark::State& state) {
         } else if (hit_count * 10 >= n * 9) {
             branch = 11;
         } else {
+            benchmark::ClobberMemory();
             size_t zero_count = pre_pr_count_zero_u8(sel.data(), n);
             branch = (zero_count == 0) ? 0 : (zero_count == n ? 1 : 2);
         }
@@ -671,14 +672,15 @@ static void BM_StreamingAggAutoAdjust_CurrentPR(benchmark::State& state) {
     FillStreamingSelection(sel, n, hit_pct, dist_mode);
     for (auto _ : state) {
         benchmark::DoNotOptimize(sel.data());
-        size_t hit_count = SIMD::count_zero(sel);
+        size_t hit_count = SIMD::count_zero(sel.data(), n);
         int branch = 0;
         if (hit_count * 5 <= n) {
             branch = 10;
         } else if (hit_count * 10 >= n * 9) {
             branch = 11;
         } else {
-            branch = !SIMD::contain_zero(sel) ? 0 : (SIMD::all_zeros(sel) ? 1 : 2);
+            benchmark::ClobberMemory();
+            branch = !SIMD::contain_zero(sel.data(), n) ? 0 : (SIMD::all_zeros(sel.data(), n) ? 1 : 2);
         }
         benchmark::DoNotOptimize(branch);
     }
@@ -693,7 +695,7 @@ static void BM_StreamingAggAutoAdjust_Future(benchmark::State& state) {
     FillStreamingSelection(sel, n, hit_pct, dist_mode);
     for (auto _ : state) {
         benchmark::DoNotOptimize(sel.data());
-        size_t hit_count = SIMD::count_zero(sel);
+        size_t hit_count = SIMD::count_zero(sel.data(), n);
         int branch = 0;
         if (hit_count * 5 <= n) {
             branch = 10;
