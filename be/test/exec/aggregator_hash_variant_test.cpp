@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "common/config_exec_flow_fwd.h"
@@ -222,6 +224,95 @@ TEST_F(AggregatorHashVariantTest, TwoLevelInt32SetConversionRefreshesReportedVar
     aggregator->try_convert_to_two_level_set();
     EXPECT_STREQ("phase1_int32_two_level", aggregator->_hash_set_variant.type_name());
     EXPECT_EQ("phase1_int32_two_level", reported_variant());
+}
+
+// Exercises AggHashMapWithSerializedKeyFixedSize::compute_agg_prefetch through Aggregator's
+// translation unit (be/src/exec/aggregator.cpp) across nullable and non-nullable fixed-size
+// keys and all HTBuildOp instantiations (allocate, process_limit < limit and >= limit, and
+// fill_not_found).
+TEST_F(AggregatorHashVariantTest, FixedSizePrefetchAllBuildPaths) {
+    constexpr size_t kRows = 32;
+    const double saved_ratio = config::agg_prefetch_l2_ratio;
+    DeferOp restore_ratio([&]() { config::agg_prefetch_l2_ratio = saved_ratio; });
+    config::agg_prefetch_l2_ratio = 0.0;
+
+    auto run_case = [&](const std::vector<ColumnType>& types, const char* expected_variant) {
+        auto aggregator = make_aggregator(types);
+        aggregator->_init_agg_hash_variant(aggregator->_hash_map_variant);
+        ASSERT_STREQ(expected_variant, aggregator->_hash_map_variant.type_name());
+
+        aggregator->_mem_pool = std::make_unique<MemPool>();
+        aggregator->_state_allocator.pool = aggregator->_mem_pool.get();
+        aggregator->_state_allocator.aggregate_key_size = 32;
+        aggregator->_tmp_agg_states.resize(kRows);
+
+        Columns group_by_columns;
+        for (size_t col_idx = 0; col_idx < types.size(); ++col_idx) {
+            auto col = ColumnHelper::create_column(types[col_idx].result_type, types[col_idx].is_nullable);
+            for (size_t row = 0; row < kRows; ++row) {
+                if (types[col_idx].is_nullable && row == 0 && col_idx == 0) {
+                    col->append_nulls(1);
+                } else {
+                    const int64_t val = static_cast<int64_t>(row * 3 + col_idx * 2 + 1);
+                    switch (types[col_idx].result_type.type) {
+                    case TYPE_TINYINT:
+                        col->append_datum(Datum(static_cast<int8_t>(val)));
+                        break;
+                    case TYPE_SMALLINT:
+                        col->append_datum(Datum(static_cast<int16_t>(val)));
+                        break;
+                    case TYPE_INT:
+                        col->append_datum(Datum(static_cast<int32_t>(val)));
+                        break;
+                    case TYPE_BIGINT:
+                        col->append_datum(Datum(static_cast<int64_t>(val)));
+                        break;
+                    default:
+                        FAIL() << "Unexpected column type in test";
+                    }
+                }
+            }
+            group_by_columns.emplace_back(std::move(col));
+        }
+        aggregator->_group_by_columns = group_by_columns;
+
+        // 1. HTBuildOp::allocate (inserts first kRows / 2 distinct groups via compute_agg_prefetch).
+        aggregator->build_hash_map(kRows / 2, false);
+        EXPECT_EQ(kRows / 2, aggregator->_hash_map_variant.size());
+
+        // 2. HTBuildOp::process_limit (rows 0..23 hit hash_table_size < extra->limits, rows 24..31 hit >= limits).
+        constexpr size_t kLimit = (kRows * 3) / 4;
+        aggregator->_params->enable_pipeline_share_limit = true;
+        aggregator->_limit = kLimit;
+        std::atomic<int64_t> shared_limit_countdown{static_cast<int64_t>(kRows)};
+        aggregator->build_hash_map(kRows, shared_limit_countdown, true);
+        EXPECT_EQ(kLimit, aggregator->_hash_map_variant.size());
+        for (size_t i = 0; i < kLimit; ++i) {
+            EXPECT_EQ(0, aggregator->_streaming_selection[i]);
+        }
+        for (size_t i = kLimit; i < kRows; ++i) {
+            EXPECT_EQ(1, aggregator->_streaming_selection[i]);
+        }
+
+        // 3. HTBuildOp::fill_not_found (build_hash_map_with_selection).
+        aggregator->build_hash_map_with_selection(kRows);
+        for (size_t i = 0; i < kLimit; ++i) {
+            EXPECT_EQ(0, aggregator->_streaming_selection[i]);
+        }
+        for (size_t i = kLimit; i < kRows; ++i) {
+            EXPECT_EQ(1, aggregator->_streaming_selection[i]);
+        }
+
+        // 4. HTBuildOp<true, true, false> (build_hash_map_with_selection_and_allocation allocates remaining rows).
+        aggregator->build_hash_map_with_selection_and_allocation(kRows, false);
+        EXPECT_EQ(kRows, aggregator->_hash_map_variant.size());
+    };
+
+    run_case({column_type(TYPE_TINYINT, true), column_type(TYPE_TINYINT, false)}, "phase1_slice_fx4");
+    run_case({column_type(TYPE_INT, true), column_type(TYPE_SMALLINT, false)}, "phase1_slice_fx8");
+    run_case({column_type(TYPE_INT, true), column_type(TYPE_INT, true), column_type(TYPE_INT, true)},
+             "phase1_slice_fx16");
+    run_case({column_type(TYPE_BIGINT, false), column_type(TYPE_INT, false)}, "phase1_slice_fx16");
 }
 
 // An aggregate with no grouping keys accumulates into a single state and never touches the hash
