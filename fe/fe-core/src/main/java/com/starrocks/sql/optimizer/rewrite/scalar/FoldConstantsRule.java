@@ -444,9 +444,11 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             }
             Type arrayElemType = ((ArrayType) operator.getType()).getItemType();
             ScalarOperatorRewriteContext subContext = new ScalarOperatorRewriteContext();
-            // Element adaptation is not an explicit scalar CHAR cast; preserve the BE array-cast semantics.
+            // Element adaptation is not an explicit scalar CHAR cast; preserve the BE array-cast semantics. A DECIMAL
+            // element of an explicit cast is checked against its precision, as the BE does.
+            boolean implicitElements = operator.isImplicit() || !arrayElemType.isDecimalV3();
             List<ScalarOperator> newArguments = arg0.getChildren().stream()
-                    .map(arg -> visitCastOperator(new CastOperator(arrayElemType, arg, true), subContext))
+                    .map(arg -> visitCastOperator(new CastOperator(arrayElemType, arg, implicitElements), subContext))
                     .collect(Collectors.toList());
             if (newArguments.stream().allMatch(arg -> arg != null && arg.isConstantRef())) {
                 return new ArrayOperator(operator.getType(), operator.isNullable(), newArguments);

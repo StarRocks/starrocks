@@ -133,6 +133,15 @@ enum DecimalRoundRule {
 
 class DecimalV3Cast {
 public:
+    // Whether an unscaled value has more digits than `precision`. A decimal's storage type holds more than its
+    // precision (a DECIMAL32 holds 2147483647, ten digits, where DECIMAL(9, s) holds nine), so the casts that
+    // check the storage type's range alone give a DECIMAL(5, 2) 1000.00.
+    template <typename T>
+    static inline bool exceeds_precision(T value, int precision) {
+        const T limit = get_scale_factor<T>(precision);
+        return value >= limit || value <= -limit;
+    }
+
     template <typename T>
     static inline bool from_string(DecimalType<T>* value, int precision, int scale, const char* s, size_t n) {
         StringParser::ParseResult result = StringParser::PARSE_SUCCESS;

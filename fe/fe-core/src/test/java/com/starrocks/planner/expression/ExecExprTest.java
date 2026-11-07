@@ -343,6 +343,19 @@ public class ExecExprTest {
     }
 
     @Test
+    public void testExecCastChecksDecimalPrecisionOnlyWhenExplicit() {
+        DecimalType decimal52 = new DecimalType(com.starrocks.type.PrimitiveType.DECIMAL32, 5, 2);
+        ExecSlotRef bigint = makeSlotRef(1, 0, IntegerType.BIGINT, true);
+        TExprNode explicit = new TExprNode();
+        new ExecCast(decimal52, bigint, false).toThrift(explicit);
+        assertTrue(explicit.isCast_decimal_check_precision());
+
+        TExprNode implicit = new TExprNode();
+        new ExecCast(decimal52, bigint, true).toThrift(implicit);
+        assertFalse(implicit.isSetCast_decimal_check_precision());
+    }
+
+    @Test
     public void testExecCastIsSelfMonotonic() {
         // Cast is NOT self-monotonic: narrowing casts can overflow to NULL, breaking order
         ExecLiteral child = makeIntLiteral(1);

@@ -79,6 +79,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TAnalyticWindow;
 import com.starrocks.thrift.TAnalyticWindowBoundary;
@@ -586,6 +587,10 @@ public final class ExprToThrift {
                         SqlModeHelper.MODE_STRUCT_CAST_BY_NAME)) {
                     msg.setCast_struct_by_name(true);
                 }
+            }
+            if (CastOperator.checksDecimalPrecision(childType, node.getType(), node.isImplicit(),
+                    msg.isCast_struct_by_name())) {
+                msg.setCast_decimal_check_precision(true);
             }
             return null;
         }

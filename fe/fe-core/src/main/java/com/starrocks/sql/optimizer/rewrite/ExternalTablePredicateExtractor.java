@@ -183,6 +183,11 @@ public class ExternalTablePredicateExtractor {
             if (!op.isImplicit() && isMySQL && !MYSQL_CAST_TYPE.contains(op.getType().getPrimitiveType())) {
                 return false;
             }
+            // A cast that turns a DECIMAL past its precision into NULL means something else in the remote database
+            // (PostgreSQL raises an error), so a predicate with it stays with StarRocks
+            if (op.checksDecimalPrecision()) {
+                return false;
+            }
             return visitAllChildren(op, context);
         }
     }
