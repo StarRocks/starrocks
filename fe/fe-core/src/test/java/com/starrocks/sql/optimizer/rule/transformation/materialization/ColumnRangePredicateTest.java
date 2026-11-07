@@ -19,6 +19,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.TreeRangeSet;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -226,4 +227,54 @@ public class ColumnRangePredicateTest {
         Assertions.assertEquals("1: col > 9223372036854775807", s, s);
     }
 
+    @Test
+    public void testToScalarOperatorDoesNotConsumeInRanges() {
+        ColumnRefOperator k1 = new ColumnRefOperator(1, VarcharType.VARCHAR, "k1", true);
+        ColumnRefOperator k2 = new ColumnRefOperator(2, IntegerType.INT, "k2", true);
+        TreeRangeSet<ConstantOperator> intRanges = TreeRangeSet.create();
+        intRanges.add(Range.singleton(ConstantOperator.createInt(1)));
+        intRanges.add(Range.singleton(ConstantOperator.createInt(3)));
+
+        for (ColumnRangePredicate predicate : List.of(points(k1, "a", "b"), new ColumnRangePredicate(k2, intRanges))) {
+            ScalarOperator first = predicate.toScalarOperator();
+            ScalarOperator second = predicate.toScalarOperator();
+
+            Assertions.assertEquals(first, second);
+            Assertions.assertEquals(2, predicate.getColumnRanges().asRanges().size());
+        }
+    }
+
+    // simplify() renders the AND branch twice: on its own, then again when rebuilding the OR.
+    @Test
+    public void testSimplifyKeepsInRangeInsideOrBranch() {
+        ColumnRefOperator k1 = new ColumnRefOperator(1, VarcharType.VARCHAR, "k1", true);
+        ColumnRefOperator k2 = new ColumnRefOperator(2, VarcharType.VARCHAR, "k2", true);
+        ColumnRefOperator k3 = new ColumnRefOperator(3, VarcharType.VARCHAR, "k3", true);
+        ColumnRefOperator dt = new ColumnRefOperator(4, DateType.DATE, "dt", true);
+
+        AndRangePredicate conjunction = new AndRangePredicate(
+                Lists.<RangePredicate>newArrayList(points(k2, "x"), points(k3, "a", "b")));
+        OrRangePredicate disjunction = new OrRangePredicate(
+                Lists.<RangePredicate>newArrayList(conjunction, points(k1, "a", "b", "c")));
+
+        TreeRangeSet<ConstantOperator> dtRange = TreeRangeSet.create();
+        dtRange.add(Range.closed(ConstantOperator.createDate(LocalDateTime.of(2024, 1, 1, 0, 0)),
+                ConstantOperator.createDate(LocalDateTime.of(2024, 1, 28, 0, 0))));
+        AndRangePredicate query = new AndRangePredicate(
+                Lists.<RangePredicate>newArrayList(disjunction, new ColumnRangePredicate(dt, dtRange)));
+
+        ScalarOperator compensation = query.simplify(new ColumnRangePredicate(dt, TreeRangeSet.create(dtRange)));
+
+        Assertions.assertNotNull(compensation);
+        Assertions.assertTrue(Utils.collect(compensation, ColumnRefOperator.class).contains(k3),
+                compensation.toString());
+    }
+
+    private static ColumnRangePredicate points(ColumnRefOperator column, String... values) {
+        TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
+        for (String value : values) {
+            rangeSet.add(Range.singleton(ConstantOperator.createVarchar(value)));
+        }
+        return new ColumnRangePredicate(column, rangeSet);
+    }
 }
