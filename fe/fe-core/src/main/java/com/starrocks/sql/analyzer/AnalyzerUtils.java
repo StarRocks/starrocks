@@ -147,6 +147,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
@@ -1882,6 +1883,16 @@ public class AnalyzerUtils {
         }
         Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
+        // This branch has no maintained range index. Build one once per clause, only for the
+        // load-time temporary partition path; each value then needs just an O(log n) lookup.
+        NavigableMap<PartitionKey, Map.Entry<Long, Range<PartitionKey>>> coveringPartitions = new TreeMap<>();
+        if (adoptCoveringPartition) {
+            expressionRangePartitionInfo.getIdToRange(false).forEach((id, range) -> {
+                if (!range.isEmpty()) {
+                    coveringPartitions.put(range.lowerEndpoint(), Maps.immutableEntry(id, range));
+                }
+            });
+        }
         List<PartitionDesc> partitionDescs = Lists.newArrayList();
         List<String> partitionColNames = Lists.newArrayList();
         for (List<String> partitionValue : partitionValues) {
@@ -1917,7 +1928,7 @@ public class AnalyzerUtils {
                 // re-introduce the finer partitions the merge had removed.
                 if (adoptCoveringPartition) {
                     Pair<String, PartitionKeyDesc> covering =
-                            findCoveringPartition(olapTable, expressionRangePartitionInfo, partitionItem);
+                            findCoveringPartition(olapTable, expressionRangePartitionInfo, coveringPartitions, partitionItem);
                     if (covering != null) {
                         partitionName = covering.first;
                         partitionKeyDesc = covering.second;
@@ -1956,12 +1967,13 @@ public class AnalyzerUtils {
      * request may fall into the same covering partition, and they must collapse into a single
      * partition desc instead of producing overlapping ranges under different names.
      *
-     * <p>One O(log n) lookup in the table's range index per value, with nothing copied or sorted:
-     * the RPC holds the table READ lock while it goes through every value of a request, and tablet
-     * pre-split analyzes each sampled value as a request of its own, without the table lock.
+     * <p>One O(log n) lookup per value in the index built once for this clause. The RPC holds the
+     * table READ lock while it goes through every value of a request; tablet pre-split analyzes
+     * each sampled value as a request of its own, without the table lock.
      */
     private static Pair<String, PartitionKeyDesc> findCoveringPartition(
-            OlapTable olapTable, ExpressionRangePartitionInfo partitionInfo, String partitionItem)
+            OlapTable olapTable, ExpressionRangePartitionInfo partitionInfo,
+            NavigableMap<PartitionKey, Map.Entry<Long, Range<PartitionKey>>> coveringPartitions, String partitionItem)
             throws AnalysisException {
         PartitionKey key;
         try {
@@ -1973,10 +1985,13 @@ public class AnalyzerUtils {
             LOG.warn("failed to look up the partition covering value {}", partitionItem, e);
             return null;
         }
-        Map.Entry<Long, Range<PartitionKey>> covering = partitionInfo.getFormalPartitionContaining(key);
-        if (covering == null) {
+        Map.Entry<PartitionKey, Map.Entry<Long, Range<PartitionKey>>> floor = coveringPartitions.floorEntry(key);
+        // A floor match can lie in a gap. Check the entry's own range, keeping its id and bounds together
+        // even if pre-existing overlapping partitions share a lower endpoint.
+        if (floor == null || !floor.getValue().getValue().contains(key)) {
             return null;
         }
+        Map.Entry<Long, Range<PartitionKey>> covering = floor.getValue();
         Partition partition = olapTable.getPartition(covering.getKey());
         if (partition == null) {
             // Only possible without the table lock (pre-split): the partition went away after the lookup.

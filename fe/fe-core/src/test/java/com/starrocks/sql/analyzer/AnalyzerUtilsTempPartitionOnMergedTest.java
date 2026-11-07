@@ -17,29 +17,29 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.sql.ast.AddPartitionClause;
-import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.type.DateType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -68,7 +68,7 @@ public class AnalyzerUtilsTempPartitionOnMergedTest {
 
     /** A day-partitioned table that already holds one monthly partition, as a merge would leave it. */
     private static OlapTable mergedTable() throws Exception {
-        Column dt = new Column("dt", DateType.DATE);
+        Column dt = new Column("dt", Type.DATE);
         List<Column> schema = Lists.newArrayList(dt);
 
         Expr dayExpr = new FunctionCallExpr("date_trunc",
@@ -146,6 +146,40 @@ public class AnalyzerUtilsTempPartitionOnMergedTest {
         Assertions.assertEquals("2026-03-08", keyDesc.getUpperValues().get(0).getStringValue());
     }
 
+    @Test
+    public void tempPartitionInGapKeepsExpressionGranularity() throws Exception {
+        OlapTable table = mergedTable();
+        ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) table.getPartitionInfo();
+        partitionInfo.setRange(MERGED_PARTITION_ID + 1, false, dateRange("2026-03-01", "2026-04-01"));
+        table.addPartition(new Partition(MERGED_PARTITION_ID + 1, "p202603", table.getDefaultDistributionInfo()));
+
+        PartitionKeyDesc keyDesc = onlyKeyDesc(AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
+                table, values("2026-02-10"), true, "txn1"));
+        Assertions.assertEquals("2026-02-10", keyDesc.getLowerValues().get(0).getStringValue());
+        Assertions.assertEquals("2026-02-11", keyDesc.getUpperValues().get(0).getStringValue());
+    }
+
+    @Test
+    public void tempPartitionAtExclusiveUpperBoundKeepsExpressionGranularity() throws Exception {
+        PartitionKeyDesc keyDesc = onlyKeyDesc(AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
+                mergedTable(), values("2026-02-01"), true, "txn1"));
+        Assertions.assertEquals("2026-02-01", keyDesc.getLowerValues().get(0).getStringValue());
+        Assertions.assertEquals("2026-02-02", keyDesc.getUpperValues().get(0).getStringValue());
+    }
+
+    @Test
+    public void emptyAndTemporaryRangesDoNotHideCoveringPartition() throws Exception {
+        OlapTable table = mergedTable();
+        ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) table.getPartitionInfo();
+        partitionInfo.setRange(MERGED_PARTITION_ID + 1, false, dateRange("2026-01-05", "2026-01-05"));
+        addTempPartition(table, MERGED_PARTITION_ID + 2, "other_temp", dateRange("2026-01-04", "2026-01-06"));
+
+        PartitionKeyDesc keyDesc = onlyKeyDesc(AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
+                table, values("2026-01-05"), true, "txn1"));
+        Assertions.assertEquals("2026-01-01", keyDesc.getLowerValues().get(0).getStringValue());
+        Assertions.assertEquals("2026-02-01", keyDesc.getUpperValues().get(0).getStringValue());
+    }
+
     /** Control: ordinary (non-temporary) automatic partitioning is untouched by this rule. */
     @Test
     public void ordinaryAutoPartitionKeepsExpressionGranularity() throws Exception {
@@ -180,9 +214,9 @@ public class AnalyzerUtilsTempPartitionOnMergedTest {
 
     /**
      * A table that dynamic overwrite broke before this fix holds a daily partition inside the merged month, both
-     * starting on 2026-01-01, so the range index keeps one entry for the two. The lookup checks that entry's own
-     * range and never pairs one partition's name with the other's bounds: 2026-01-05 follows the expression. The
-     * commit then refuses to promote the temporary partition next to the month instead of adding one more overlap.
+     * starting on 2026-01-01. The per-clause index keeps one entry for the two, checking its own range
+     * without pairing one partition's name with the other's bounds. The commit refuses to promote a daily
+     * temporary partition next to the month instead of adding one more overlap.
      */
     @Test
     public void commitRefusesTempPartitionOverlappingAnotherPartition() throws Exception {
@@ -192,10 +226,19 @@ public class AnalyzerUtilsTempPartitionOnMergedTest {
         partitionInfo.setRange(dayPartitionId, false, dateRange("2026-01-01", "2026-01-02"));
         table.addPartition(new Partition(dayPartitionId, "p20260101", table.getDefaultDistributionInfo()));
 
-        PartitionKeyDesc keyDesc = onlyKeyDesc(AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
-                table, values("2026-01-05"), true, "txn1"));
-        Assertions.assertEquals("2026-01-05", keyDesc.getLowerValues().get(0).getStringValue());
-        Assertions.assertEquals("2026-01-06", keyDesc.getUpperValues().get(0).getStringValue());
+        AddPartitionClause clause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
+                table, values("2026-01-05"), true, "txn1");
+        SingleRangePartitionDesc desc = ((RangePartitionDesc) clause.getPartitionDesc())
+                .getSingleRangePartitionDescs().get(0);
+        PartitionKeyDesc keyDesc = desc.getPartitionKeyDesc();
+        if ("txn1_p202601".equals(desc.getPartitionName())) {
+            Assertions.assertEquals("2026-01-01", keyDesc.getLowerValues().get(0).getStringValue());
+            Assertions.assertEquals("2026-02-01", keyDesc.getUpperValues().get(0).getStringValue());
+        } else {
+            Assertions.assertEquals("txn1_p20260105", desc.getPartitionName());
+            Assertions.assertEquals("2026-01-05", keyDesc.getLowerValues().get(0).getStringValue());
+            Assertions.assertEquals("2026-01-06", keyDesc.getUpperValues().get(0).getStringValue());
+        }
 
         addTempPartition(table, MERGED_PARTITION_ID + 2, "txn1_p20260105", dateRange("2026-01-05", "2026-01-06"));
         DdlException e = Assertions.assertThrows(DdlException.class,
@@ -205,7 +248,7 @@ public class AnalyzerUtilsTempPartitionOnMergedTest {
     }
 
     private static Range<PartitionKey> dateRange(String lower, String upper) throws Exception {
-        List<Column> columns = Lists.newArrayList(new Column("dt", DateType.DATE));
+        List<Column> columns = Lists.newArrayList(new Column("dt", Type.DATE));
         return Range.closedOpen(
                 PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue(lower)), columns),
                 PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue(upper)), columns));
