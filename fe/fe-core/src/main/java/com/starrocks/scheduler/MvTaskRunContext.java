@@ -16,15 +16,19 @@ package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
 import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.plan.ExecPlan;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -70,6 +74,13 @@ public class MvTaskRunContext extends TaskRunContext {
     // Set when auto_refresh_partitions_limit excluded older changed partitions from a complete refresh
     // this batch: the batch then does not cover the whole MV and must not confirm whole-MV freshness.
     private boolean partitionLimitExcludedPartitions = false;
+    // Partitions created by a shape change to replace dropped partitions. They must be materialized
+    // in this task run; otherwise the dropped partition's history would turn into an empty partition.
+    private PCellSortedSet replacementAddPartitions = PCellSortedSet.of();
+    // Ranges of partition shape changes this run left untouched because the requested range does not
+    // cover them. When the refresh scope ends up empty, the request must be reported as unsatisfiable
+    // instead of "already up to date".
+    private List<Range<PartitionKey>> deferredShapeChangeRanges = List.of();
     // MaterializedView#getVersionMapResetEpoch as this run saw it before reading anything, -1 when not recorded.
     private long versionMapResetEpoch = -1;
 
@@ -159,6 +170,19 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setPartitionLimitExcludedPartitions(boolean partitionLimitExcludedPartitions) {
         this.partitionLimitExcludedPartitions = partitionLimitExcludedPartitions;
+    }
+
+    public PCellSortedSet getReplacementAddPartitions() {
+        return replacementAddPartitions;
+    }
+
+    public List<Range<PartitionKey>> getDeferredShapeChangeRanges() {
+        return deferredShapeChangeRanges;
+    }
+
+    public void setDeferredShapeChangeRanges(List<Range<PartitionKey>> deferredShapeChangeRanges) {
+        this.deferredShapeChangeRanges = deferredShapeChangeRanges == null
+                ? List.of() : List.copyOf(deferredShapeChangeRanges);
     }
 
     /**

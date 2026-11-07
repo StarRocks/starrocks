@@ -29,10 +29,30 @@ import java.util.Map;
 public class PartitionDiff {
     private final PCellSortedSet adds;
     private final PCellSortedSet deletes;
+    // Partitions created by a shape change to replace dropped partitions. They must be materialized
+    // before the old partitions' data can be considered gone; refresh planning uses this set to make
+    // sure they are not excluded by auto_refresh_partitions_limit.
+    private final PCellSortedSet replacementAdds;
+    // Shape-change components this diff deliberately left untouched because the requested range does
+    // not cover them (or this refresh cannot rebuild their history). A refresh bounded by a range that
+    // intersects one of them cannot satisfy the request and must not report the range as up to date.
+    private final List<Range<PartitionKey>> deferredReplacementRanges;
 
     public PartitionDiff(PCellSortedSet adds, PCellSortedSet deletes) {
+        this(adds, deletes, PCellSortedSet.of());
+    }
+
+    public PartitionDiff(PCellSortedSet adds, PCellSortedSet deletes, PCellSortedSet replacementAdds) {
+        this(adds, deletes, replacementAdds, List.of());
+    }
+
+    public PartitionDiff(PCellSortedSet adds, PCellSortedSet deletes, PCellSortedSet replacementAdds,
+                         List<Range<PartitionKey>> deferredReplacementRanges) {
         this.adds = adds;
         this.deletes = deletes;
+        this.replacementAdds = replacementAdds == null ? PCellSortedSet.of() : replacementAdds;
+        this.deferredReplacementRanges = deferredReplacementRanges == null
+                ? List.of() : List.copyOf(deferredReplacementRanges);
     }
 
     public PCellSortedSet getAdds() {
@@ -41,6 +61,14 @@ public class PartitionDiff {
 
     public PCellSortedSet getDeletes() {
         return deletes;
+    }
+
+    public PCellSortedSet getReplacementAdds() {
+        return replacementAdds;
+    }
+
+    public List<Range<PartitionKey>> getDeferredReplacementRanges() {
+        return deferredReplacementRanges;
     }
 
     /**

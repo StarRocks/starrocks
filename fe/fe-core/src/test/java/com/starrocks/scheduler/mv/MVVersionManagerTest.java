@@ -23,6 +23,8 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersion;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionUtil;
@@ -438,6 +440,60 @@ public class MVVersionManagerTest {
         MaterializedView mv = buildMv(1000L);
         Map<String, MaterializedView.BasePartitionInfo> entries = refreshP1AcrossAReset(mv, () -> { });
         Assertions.assertEquals(Set.of("p1"), entries.keySet());
+    }
+
+    // A shape change drops populated partitions and creates their empty replacements before the insert that
+    // fills them commits. IVM would otherwise skip the rebuild (base tables did not change), leaving the
+    // replacements empty forever, so the IVM checkpoint is dropped and journaled.
+    @Test
+    public void invalidateIvmCheckpointClearsBaselineAndLogsOnce() {
+        MaterializedView mv = buildMv(1000L);
+        BaseTableInfo baseTableInfo = mock(BaseTableInfo.class);
+        mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap()
+                .put(baseTableInfo, TvrTableSnapshot.of(TvrVersion.of(1L)));
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+
+        manager.invalidateIvmCheckpointForPendingReplacement();
+
+        Assertions.assertTrue(mv.getRefreshScheme().getAsyncRefreshContext()
+                        .getBaseTableInfoTvrVersionRangeMap().isEmpty(),
+                "the IVM checkpoint must be dropped so the next run rebuilds the replacement partitions");
+        Assertions.assertEquals(1, editLogCount.get(), "the dropped checkpoint must be journaled");
+    }
+
+    @Test
+    public void invalidateIvmCheckpointIsNoopWithoutBaseline() {
+        MaterializedView mv = buildMv(1000L);
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+
+        manager.invalidateIvmCheckpointForPendingReplacement();
+
+        Assertions.assertEquals(0, editLogCount.get(), "no checkpoint means nothing to invalidate");
+    }
+
+    // The lock-timeout fallback still drops the checkpoint in memory, so the retries in this process cannot skip
+    // the rebuild; only the journaled scheme keeps the old checkpoint (a failover window).
+    @Test
+    public void invalidateIvmCheckpointClearsMemoryWhenLockTimedOut() {
+        MaterializedView mv = buildMv(1000L);
+        BaseTableInfo baseTableInfo = mock(BaseTableInfo.class);
+        mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap()
+                .put(baseTableInfo, TvrTableSnapshot.of(TvrVersion.of(1L)));
+        new MockUp<Locker>() {
+            @Mock
+            public boolean tryLockTableWithIntensiveDbLock(Long dbId, Long tableId, LockType lockType,
+                                                           long timeout, TimeUnit unit) {
+                return false;
+            }
+        };
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+
+        manager.invalidateIvmCheckpointForPendingReplacement();
+
+        Assertions.assertTrue(mv.getRefreshScheme().getAsyncRefreshContext()
+                        .getBaseTableInfoTvrVersionRangeMap().isEmpty(),
+                "the in-process checkpoint must still be dropped");
+        Assertions.assertEquals(0, editLogCount.get(), "no journal write without the mv lock");
     }
 
     private static void mockGetPartitionNames(AtomicInteger resolveCount) {
