@@ -688,6 +688,10 @@ public class FunctionSet {
     public static final String BOOL_OR = "bool_or";
     public static final String BOOLOR_AGG = "boolor_agg";
 
+    // file function
+    public static final String TO_FILE = "to_file";
+    public static final String TRY_TO_FILE = "try_to_file";
+
     public static final ImmutableList<ScalarType> NUMERIC_TYPES = ImmutableList.<ScalarType>builder()
             .addAll(IntegerType.INTEGER_TYPES)
             .addAll(FloatType.FLOAT_TYPES)

@@ -9,9 +9,9 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 <Experimental />
 
-FILE は、ファイルまたはファイル内部のバイト範囲を表すスカラー型です。FILE 値は全体として読み取られ、全体として返されます。固定されたフィールドの組を持ちますが、各フィールドを SQL で個別に参照することはできません。
+FILE は、ファイルまたはファイル内部のバイト範囲を表すスカラー型です。FILE 値は固定されたフィールドの組を持ち、`FL_GET_*` 関数で各フィールドを取得できます。
 
-現時点では FILE 型は永続化をサポートしておらず、FILE 値は External Catalog からのみ取得できます。
+現時点では FILE 型は永続化をサポートしていません。FILE 値は External Catalog から取得するほか、`TO_FILE` または `TRY_TO_FILE` で構築できます。構文と例については、[FILE 関数](../../sql-functions/file-functions/file-functions.mdx)を参照してください。
 
 ## 構造
 
@@ -29,7 +29,7 @@ FILE は、ファイルまたはファイル内部のバイト範囲を表すス
 FILE 値は次のいずれかの形をとります。
 
 - **参照**: `uri` が設定され、通常は `offset` と `size` も伴います。`inline` は NULL です。
-- **インライン内容**: `inline` が内容のバイト列を保持し、`uri`、`offset`、`size` は NULL です。
+- **インライン内容**: `inline` が内容のバイト列を保持し、`uri` は NULL です。`offset` と `size` は省略可能です。
 
 ## 出力形式
 

@@ -66,6 +66,7 @@ import com.starrocks.sql.spm.SPMFunctions;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.FileType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.IntegerType;
@@ -76,6 +77,7 @@ import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 
 import java.math.BigInteger;
@@ -1218,6 +1220,8 @@ public class FunctionAnalyzer {
                 sf.add(new StructField(literal.getStringValue(), node.getChild(i + 1).getType()));
             }
             fn.setRetType(new StructType(sf));
+        } else if (FunctionSet.TO_FILE.equalsIgnoreCase(fnName) || FunctionSet.TRY_TO_FILE.equalsIgnoreCase(fnName)) {
+            fn = getToFileFunction(fnName, argumentTypes);
         } else if (FunctionSet.STR_TO_DATE.equals(fnName)) {
             fn = getStrToDateFunction(node, argumentTypes);
         } else if (FunctionSet.ARRAY_GENERATE.equals(fnName)) {
@@ -1345,6 +1349,54 @@ public class FunctionAnalyzer {
         // add new argument types
         Arrays.stream(argumentTypes).forEach(newArgumentTypes::add);
         return fn;
+    }
+
+    /**
+     * Resolves the to_file and try_to_file overloads that need more than the regular builtin lookup, returning null
+     * for other overloads. For the STRUCT overload, each field is widened to its FILE field type so the
+     * planner casts the argument, and an untyped NULL field takes that type instead of the generic BOOLEAN.
+     */
+    private static Function getToFileFunction(String functionName, Type[] argumentTypes) {
+        if (argumentTypes.length != 1 || !(argumentTypes[0].isStructType() || argumentTypes[0].isNull())) {
+            return null;
+        }
+        Type inputType = argumentTypes[0];
+        StructType targetType;
+        if (inputType.isNull()) {
+            // Give a bare NULL a concrete STRUCT type; the value remains NULL.
+            targetType = new StructType(Lists.newArrayList(new StructField(FileType.URI, VarcharType.VARCHAR)));
+        } else {
+            ArrayList<StructField> fields = new ArrayList<>();
+            for (StructField field : ((StructType) inputType).getFields()) {
+                Type source = field.getType();
+                Type target;
+                boolean valid = switch (field.getName().toLowerCase(Locale.ROOT)) {
+                    case FileType.URI, FileType.CONTENT_TYPE, FileType.CHECKSUM -> {
+                        target = VarcharType.VARCHAR;
+                        yield source.isStringType();
+                    }
+                    case FileType.OFFSET, FileType.SIZE -> {
+                        target = IntegerType.BIGINT;
+                        yield source.isIntegerType();
+                    }
+                    case FileType.INLINE -> {
+                        target = VarbinaryType.VARBINARY;
+                        yield source.isBinaryType();
+                    }
+                    default -> throw new SemanticException("%s has unknown field '%s'",
+                            functionName.toUpperCase(Locale.ROOT), field.getName());
+                };
+                if (!source.isNull() && !valid) {
+                    throw new SemanticException("%s field '%s' has unsupported type %s; expected %s",
+                            functionName.toUpperCase(Locale.ROOT), field.getName(), source.toSql(), target.toSql());
+                }
+                fields.add(new StructField(field.getName(), target));
+            }
+            // StructType also enforces case-insensitive field-name uniqueness.
+            targetType = new StructType(fields);
+        }
+        return ExprUtils.getBuiltinFunction(functionName, new Type[] {targetType},
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
     }
 
     private static Function getRegexpPositionFunction(FunctionCallExpr node) {
