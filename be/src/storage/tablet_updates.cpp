@@ -5353,7 +5353,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                                         bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                                         vector<MutableColumnPtr>* columns, void* state,
                                         const TabletSchemaCSPtr& read_tablet_schema,
-                                        const std::map<string, string>* column_to_expr_value) {
+                                        const std::map<string, string>* column_to_expr_value, bool pad_char) {
     std::vector<uint32_t> unique_column_ids;
     for (unsigned int column_id : column_ids) {
         const TabletColumn& tablet_column = read_tablet_schema->column(column_id);
@@ -5493,7 +5493,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                 RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
                 // padding char columns
                 const auto& field = read_tablet_schema->schema()->field(column_ids[i]);
-                if (field->type()->type() == TYPE_CHAR) {
+                if (pad_char && field->type()->type() == TYPE_CHAR) {
                     ChunkHelper::padding_char_column(read_tablet_schema, *field, (*columns)[i].get());
                 }
             }
@@ -5549,7 +5549,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
             // padding char columns
             const auto& field = read_tablet_schema->schema()->field(column_ids[i]);
-            if (field->type()->type() == TYPE_CHAR) {
+            if (pad_char && field->type()->type() == TYPE_CHAR) {
                 ChunkHelper::padding_char_column(read_tablet_schema, *field, (*columns)[i].get());
             }
         }
