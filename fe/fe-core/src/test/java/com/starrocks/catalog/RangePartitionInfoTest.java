@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc.PartitionRangeType;
@@ -36,6 +37,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -539,6 +541,65 @@ public class RangePartitionInfoTest {
 
         Assertions.assertEquals(1L, partitionInfo.getEnclosingPartitionId(
                 MetaUtils.buildIdToColumn(partitionColumns), monthlyDesc, false));
+    }
+
+    @Test
+    public void testFormalPartitionLookupBoundariesAndUpdates() throws Exception {
+        partitionColumns.add(new Column("k", new ScalarType(PrimitiveType.INT)));
+        RangePartitionInfo info = new RangePartitionInfo(partitionColumns);
+        PartitionKey zero = intKey(0);
+        PartitionKey ten = intKey(10);
+        PartitionKey twenty = intKey(20);
+        PartitionKey thirty = intKey(30);
+        info.setRange(1L, false, Range.closedOpen(zero, zero)); // automatic partition shadow
+        info.setRange(2L, false, Range.closedOpen(zero, ten));
+        info.setRange(3L, false, Range.closedOpen(twenty, thirty));
+        info.setRange(4L, true, Range.closedOpen(ten, twenty));
+
+        Assertions.assertNull(info.getFormalPartitionContaining(intKey(-1)));
+        Assertions.assertEquals(2L, info.getFormalPartitionContaining(zero).getKey());
+        Assertions.assertNull(info.getFormalPartitionContaining(ten)); // gap, temp partitions do not cover it
+        Assertions.assertEquals(3L, info.getFormalPartitionContaining(twenty).getKey());
+        Assertions.assertNull(info.getFormalPartitionContaining(thirty)); // exclusive upper bound
+
+        info.setRange(2L, false, Range.closedOpen(ten, twenty));
+        Assertions.assertNull(info.getFormalPartitionContaining(zero));
+        Assertions.assertEquals(2L, info.getFormalPartitionContaining(ten).getKey());
+        info.dropPartition(2L);
+        Assertions.assertNull(info.getFormalPartitionContaining(ten));
+    }
+
+    @Test
+    public void testFormalPartitionLookupSurvivesCopyLoadAndRestore() throws Exception {
+        partitionColumns.add(new Column("k", new ScalarType(PrimitiveType.INT)));
+        RangePartitionInfo info = new RangePartitionInfo(partitionColumns);
+        PartitionKey zero = intKey(0);
+        PartitionKey ten = intKey(10);
+        PartitionKey twenty = intKey(20);
+        info.setRange(1L, false, Range.closedOpen(zero, ten));
+        info.setRange(2L, true, Range.closedOpen(ten, twenty));
+        RangePartitionInfo clone = (RangePartitionInfo) info.clone();
+        RangePartitionInfo copy = new RangePartitionInfo(info);
+        String json = GsonUtils.GSON.toJson(info);
+        Assertions.assertFalse(json.contains("rangeIndex"));
+        RangePartitionInfo loaded = GsonUtils.GSON.fromJson(json, RangePartitionInfo.class);
+        info.dropPartition(1L);
+
+        for (RangePartitionInfo independent : List.of(clone, copy, loaded)) {
+            Assertions.assertEquals(1L, independent.getFormalPartitionContaining(zero).getKey());
+            Assertions.assertNull(independent.getFormalPartitionContaining(ten));
+            independent.moveRangeFromTempToFormal(2L);
+            Assertions.assertEquals(2L, independent.getFormalPartitionContaining(ten).getKey());
+            independent.setPartitionIdsForRestore(Map.of(1L, 101L, 2L, 102L));
+            Assertions.assertEquals(101L, independent.getFormalPartitionContaining(zero).getKey());
+            Assertions.assertEquals(102L, independent.getFormalPartitionContaining(ten).getKey());
+        }
+        Assertions.assertNull(info.getFormalPartitionContaining(zero));
+        Assertions.assertNull(info.getFormalPartitionContaining(ten));
+    }
+
+    private PartitionKey intKey(int value) throws AnalysisException {
+        return PartitionKey.createPartitionKey(List.of(new PartitionValue(String.valueOf(value))), partitionColumns);
     }
 
     @Test

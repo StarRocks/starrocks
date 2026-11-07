@@ -32,12 +32,8 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.DdlException;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.RangeUtils;
->>>>>>> 8085390 ([BugFix] Let a temporary partition adopt the bounds of the partition it overwrites (#78707))
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskRunManager;
@@ -45,14 +41,11 @@ import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
->>>>>>> 8085390 ([BugFix] Let a temporary partition adopt the bounds of the partition it overwrites (#78707))
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -77,14 +70,11 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
-<<<<<<< HEAD
-=======
 import java.util.Arrays;
-import java.util.Collection;
->>>>>>> 8085390 ([BugFix] Let a temporary partition adopt the bounds of the partition it overwrites (#78707))
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class MergePartitionJobTest extends DDLTestBase {
 
@@ -250,8 +240,6 @@ public class MergePartitionJobTest extends DDLTestBase {
         Assertions.assertEquals(JobState.RUNNING, job.getJobState());
     }
 
-<<<<<<< HEAD
-=======
     /**
      * Marks every rewrite task as succeeded and drives the job to FINISHED through run(), the scheduler's entry point.
      */
@@ -261,208 +249,6 @@ public class MergePartitionJobTest extends DDLTestBase {
         }
         job.run();
         Assertions.assertEquals(JobState.FINISHED, job.getJobState(), job.errMsg);
-    }
-
-    private static AlterJobV2 nextJobEntry(long jobId) throws Exception {
-        AlterJobV2 entry =
-                (AlterJobV2) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_JOB_V2);
-        Assertions.assertEquals(jobId, entry.getJobId());
-        return entry;
-    }
-
-    /**
-     * Reads the journal entries of the job, from the one that submitted it to the one of its final state.
-     */
-    private static List<MergePartitionJob> readJournaledEntries(long jobId) throws Exception {
-        List<MergePartitionJob> entries = new ArrayList<>();
-        AlterJobV2 entry;
-        do {
-            entry = nextJobEntry(jobId);
-            entries.add((MergePartitionJob) entry);
-        } while (!entry.isDone());
-        Assertions.assertEquals(JobState.PENDING, entries.get(0).getJobState());
-        return entries;
-    }
-
-    /**
-     * Replays what the leader journaled for the job on a follower, in journal order: the PENDING entry, the temp
-     * partitions, the WAITING_TXN entry and the given number of partition swaps. Returns the entry of the final
-     * state without replaying it.
-     */
-    private static AlterJobV2 replayUpToFinalEntry(LocalMetastore metastore, SchemaChangeHandler handler, long jobId,
-                                                   int partitionSwaps) throws Exception {
-        AlterJobV2 pending = nextJobEntry(jobId);
-        Assertions.assertEquals(JobState.PENDING, pending.getJobState());
-        replayOn(metastore, handler, pending);
-        AddPartitionsInfoV2 tempPartitions = (AddPartitionsInfoV2) UtFrameUtils.PseudoJournalReplayer
-                .replayNextJournal(OperationType.OP_ADD_PARTITIONS_V2);
-        for (PartitionPersistInfoV2 info : tempPartitions.getAddPartitionInfos()) {
-            Assertions.assertTrue(info.isTempPartition());
-            metastore.replayAddPartition(info);
-        }
-        AlterJobV2 waitingTxn = nextJobEntry(jobId);
-        Assertions.assertEquals(JobState.WAITING_TXN, waitingTxn.getJobState());
-        replayOn(metastore, handler, waitingTxn);
-        for (int i = 0; i < partitionSwaps; i++) {
-            ReplacePartitionOperationLog swap = (ReplacePartitionOperationLog) UtFrameUtils.PseudoJournalReplayer
-                    .replayNextJournal(OperationType.OP_REPLACE_TEMP_PARTITION);
-            forgetRecycledSourcePartitions(metastore, swap);
-            metastore.replayReplaceTempPartition(swap);
-        }
-        AlterJobV2 finalEntry = nextJobEntry(jobId);
-        Assertions.assertTrue(finalEntry.isDone());
-        return finalEntry;
-    }
-
-    /**
-     * The swap moves the source partitions to the recycle bin, which the leader already did in the one recycle bin
-     * the test has; take them out so that the follower can move them there again.
-     */
-    private static void forgetRecycledSourcePartitions(LocalMetastore metastore, ReplacePartitionOperationLog swap) {
-        OlapTable olapTable = (OlapTable) metastore.getTable(swap.getDbId(), swap.getTblId());
-        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
-        for (String partitionName : swap.getPartitions()) {
-            long partitionId = olapTable.getPartition(partitionName).getId();
-            if (recycleBin.getPartition(partitionId) != null) {
-                recycleBin.removePartitionFromRecycleBin(partitionId);
-            }
-        }
-    }
-
-    /**
-     * Replays the journal entry into the handler against the given catalog, as a follower does.
-     */
-    private static void replayOn(LocalMetastore metastore, SchemaChangeHandler handler, AlterJobV2 entry) {
-        LocalMetastore leaderMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
-        GlobalStateMgr.getCurrentState().setLocalMetastore(metastore);
-        try {
-            handler.replayAlterJobV2(entry);
-        } finally {
-            GlobalStateMgr.getCurrentState().setLocalMetastore(leaderMetastore);
-        }
-    }
-
-    private static UtFrameUtils.PseudoImage saveMetastore() throws Exception {
-        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getLocalMetastore().save(image.getImageWriter());
-        return image;
-    }
-
-    private static LocalMetastore loadMetastore(UtFrameUtils.PseudoImage image) throws Exception {
-        LocalMetastore metastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
-        metastore.load(reader);
-        reader.close();
-        return metastore;
-    }
-
-    private static OlapTable tableIn(LocalMetastore metastore, OlapTable table) {
-        return (OlapTable) metastore.getTable(GlobalStateMgrTestUtil.testDb1, table.getName());
-    }
-
-    private static AlterJobV2 gsonCopy(AlterJobV2 job) {
-        return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(job, AlterJobV2.class), AlterJobV2.class);
-    }
-
-    private static AlterJobMgr newAlterJobMgr() {
-        return new AlterJobMgr(new SchemaChangeHandler(), new MaterializedViewHandler(), new SystemHandler());
-    }
-
-    private static AlterJobMgr loadAlterJobMgr(UtFrameUtils.PseudoImage image) throws Exception {
-        AlterJobMgr alterJobMgr = newAlterJobMgr();
-        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
-        alterJobMgr.load(reader);
-        reader.close();
-        return alterJobMgr;
-    }
-
-    /**
-     * What the job changes in the catalog: the table state, its partitions and temp partitions.
-     */
-    private static List<Object> catalogSnapshot(OlapTable olapTable) {
-        Map<String, Long> partitions = new TreeMap<>();
-        for (Partition partition : olapTable.getPartitions()) {
-            partitions.put(partition.getName(), partition.getId());
-        }
-        return List.of(olapTable.getState(), partitions, partitionIds(olapTable.getTempPartitions()));
-    }
-
-    private static Set<Long> partitionIds(Collection<Partition> partitions) {
-        return partitions.stream().map(Partition::getId).collect(Collectors.toSet());
-    }
-
-    private static List<Long> tabletIds(Collection<Partition> partitions) {
-        List<Long> tabletIds = new ArrayList<>();
-        for (Partition partition : partitions) {
-            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                    .getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                index.getTablets().forEach(tablet -> tabletIds.add(tablet.getId()));
-            }
-        }
-        return tabletIds;
-    }
-
-    /**
-     * The table holds the merged temp partition of the job and none of the daily partitions it merged.
-     */
-    private static void assertMergedPartitionReplacedDailyOnes(OlapTable olapTable, MergePartitionJob finishedJob) {
-        Set<Long> partitionIds = partitionIds(olapTable.getPartitions());
-        Assertions.assertTrue(partitionIds.containsAll(finishedJob.getTmpPartitionIds()), partitionIds.toString());
-        for (long dailyPartitionId : finishedJob.getTempPartitionIdToSourcePartitionIds().values()) {
-            Assertions.assertFalse(partitionIds.contains(dailyPartitionId), partitionIds.toString());
-        }
-    }
-
-    private static void assertInInvertedIndex(List<Long> tabletIds) {
-        Assertions.assertFalse(tabletIds.isEmpty());
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        for (long tabletId : tabletIds) {
-            Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId), "tablet " + tabletId);
-        }
-    }
-
-    private static void assertNotMarkedForceDelete(List<Long> tabletIds) {
-        Assertions.assertFalse(tabletIds.isEmpty());
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        for (long tabletId : tabletIds) {
-            Assertions.assertFalse(invertedIndex.getForceDeleteTablets().containsKey(tabletId), "tablet " + tabletId);
-        }
-    }
-
-    private static void assertTempPartitionsDropped(OlapTable olapTable, List<Long> tempTabletIds) {
-        Assertions.assertTrue(olapTable.getTempPartitions().isEmpty());
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        for (long tabletId : tempTabletIds) {
-            Assertions.assertNull(invertedIndex.getTabletMeta(tabletId), "tablet " + tabletId);
-        }
-        Assertions.assertEquals(OlapTableState.NORMAL, olapTable.getState());
-    }
-
-    /**
-     * SHOW ALTER of a done job reads none of the data the prune drops.
-     */
-    private static void assertShowAlterUnchangedByPrune(MergePartitionJob doneJob) {
-        List<List<Comparable>> rowsBefore = new ArrayList<>();
-        doneJob.getInfo(rowsBefore);
-        doneJob.pruneMeta();
-        assertPruned(doneJob);
-        List<List<Comparable>> rowsAfter = new ArrayList<>();
-        doneJob.getInfo(rowsAfter);
-        Assertions.assertEquals(1, rowsBefore.size());
-        Assertions.assertEquals(rowsBefore, rowsAfter);
-    }
-
-    /**
-     * The numbers of rewrite tasks, temp to source partition ids and temp to source partition names of the job.
-     */
-    private static List<Integer> partitionMapSizes(MergePartitionJob job) {
-        return List.of(job.getOptimizeTasks().size(), job.tempPartitionIdToSourcePartitionIds.size(),
-                job.tempPartitionNameToSourcePartitionNames.size());
-    }
-
-    private static void assertPruned(MergePartitionJob job) {
-        Assertions.assertEquals(List.of(0, 0, 0), partitionMapSizes(job));
-        Assertions.assertNull(Deencapsulation.getField(job, "optimizeClause"));
     }
 
     // ---- dynamic overwrite into a merged table --------------------------------------------------
@@ -603,7 +389,8 @@ public class MergePartitionJobTest extends DDLTestBase {
     }
 
     private static List<String> partitionNames(AddPartitionClause clause) {
-        return ((RangePartitionDesc) clause.getPartitionDesc()).getPartitionNames();
+        return ((RangePartitionDesc) clause.getPartitionDesc()).getSingleRangePartitionDescs().stream()
+                .map(SingleRangePartitionDesc::getPartitionName).collect(Collectors.toList());
     }
 
     private static void assertPartitionBounds(AddPartitionClause clause, String partitionName, String lower,
@@ -623,7 +410,7 @@ public class MergePartitionJobTest extends DDLTestBase {
     }
 
     /**
-     * No two formal partitions overlap, and the sorted range index that SHOW PARTITIONS reads lists every one of them.
+     * No two formal partitions overlap, and the sorted range map that SHOW PARTITIONS reads lists every one of them.
      */
     private static void assertFormalRangesDoNotOverlap(OlapTable table) {
         RangePartitionInfo rangeInfo = (RangePartitionInfo) table.getPartitionInfo();
@@ -638,7 +425,6 @@ public class MergePartitionJobTest extends DDLTestBase {
         }
     }
 
->>>>>>> 8085390 ([BugFix] Let a temporary partition adopt the bounds of the partition it overwrites (#78707))
     // ---- helpers for the publish wait -----------------------------------------------------------
 
     /**

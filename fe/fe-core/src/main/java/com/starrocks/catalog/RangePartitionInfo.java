@@ -66,11 +66,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 public class RangePartitionInfo extends PartitionInfo {
@@ -87,6 +89,15 @@ public class RangePartitionInfo extends PartitionInfo {
     protected Map<Long, Range<PartitionKey>> idToRange = Maps.newConcurrentMap();
     // temp partition id -> partition range
     private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newConcurrentMap();
+
+    // Separate the empty shadow range from a non-empty range with the same lower endpoint.
+    private static final Comparator<Range<PartitionKey>> BY_LOWER_THEN_EMPTY =
+            Comparator.comparing((Range<PartitionKey> range) -> range.lowerEndpoint())
+                    .thenComparing(Range::isEmpty, Comparator.reverseOrder());
+
+    // Formal ranges only: a transient lookup index, rebuilt after load and restore.
+    private transient ConcurrentSkipListMap<Range<PartitionKey>, Map.Entry<Long, Range<PartitionKey>>> rangeIndex =
+            new ConcurrentSkipListMap<>(BY_LOWER_THEN_EMPTY);
 
     // partitionId -> serialized Range<PartitionKey>
     // because Range<PartitionKey> and PartitionKey can not be serialized by gson
@@ -117,6 +128,7 @@ public class RangePartitionInfo extends PartitionInfo {
         this.deprecatedColumns = Lists.newArrayList(other.deprecatedColumns);
         this.partitionColumnIds = deprecatedColumns.stream().map(Column::getColumnId).collect(Collectors.toList());
         this.idToRange.putAll(other.idToRange);
+        rebuildRangeIndex();
         this.idToTempRange.putAll(other.idToTempRange);
         this.isMultiColumnPartition = deprecatedColumns.size() > 1;
     }
@@ -134,8 +146,8 @@ public class RangePartitionInfo extends PartitionInfo {
     @Override
     public void dropPartition(long partitionId) {
         super.dropPartition(partitionId);
-        idToRange.remove(partitionId);
-        idToTempRange.remove(partitionId);
+        removeRangeInternal(partitionId, false);
+        removeRangeInternal(partitionId, true);
     }
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
@@ -477,8 +489,6 @@ public class RangePartitionInfo extends PartitionInfo {
         return -1;
     }
 
-<<<<<<< HEAD
-=======
     /**
      * The formal partition whose range contains {@code key}, as (partition id, its range), or null when no formal
      * partition contains it. O(log n) on the concurrent range index, so it may run without the table lock, where it
@@ -497,23 +507,20 @@ public class RangePartitionInfo extends PartitionInfo {
         return floor != null && floor.getValue().getValue().contains(key) ? floor.getValue() : null;
     }
 
-    private NavigableMap<Range<PartitionKey>, Map.Entry<Long, Range<PartitionKey>>> rangeIndex(boolean isTemp) {
-        return isTemp ? tempRangeIndex : rangeIndex;
-    }
-
-    private void rebuildRangeIndexes() {
+    private void rebuildRangeIndex() {
         rangeIndex.clear();
-        tempRangeIndex.clear();
         idToRange.forEach((id, range) -> rangeIndex.put(range, Maps.immutableEntry(id, range)));
-        idToTempRange.forEach((id, range) -> tempRangeIndex.put(range, Maps.immutableEntry(id, range)));
     }
 
->>>>>>> 8085390 ([BugFix] Let a temporary partition adopt the bounds of the partition it overwrites (#78707))
     private void setRangeInternal(long partitionId, boolean isTemp, Range<PartitionKey> range) {
         if (isTemp) {
             idToTempRange.put(partitionId, range);
         } else {
-            idToRange.put(partitionId, range);
+            Range<PartitionKey> previous = idToRange.put(partitionId, range);
+            if (previous != null) {
+                rangeIndex.remove(previous);
+            }
+            rangeIndex.put(range, Maps.immutableEntry(partitionId, range));
         }
     }
 
@@ -521,14 +528,17 @@ public class RangePartitionInfo extends PartitionInfo {
         if (isTemp) {
             idToTempRange.remove(partitionId);
         } else {
-            idToRange.remove(partitionId);
+            Range<PartitionKey> removed = idToRange.remove(partitionId);
+            if (removed != null) {
+                rangeIndex.remove(removed);
+            }
         }
     }
 
     public void moveRangeFromTempToFormal(long tempPartitionId) {
         Range<PartitionKey> range = idToTempRange.remove(tempPartitionId);
         if (range != null) {
-            idToRange.put(tempPartitionId, range);
+            setRangeInternal(tempPartitionId, false, range);
         }
     }
 
@@ -579,6 +589,7 @@ public class RangePartitionInfo extends PartitionInfo {
             }
             serializedIdToTempRange = null;
         }
+        rebuildRangeIndex();
         if (partitionColumnIds == null || partitionColumnIds.size() <= 0) {
             partitionColumnIds = deprecatedColumns.stream().map(Column::getColumnId).collect(Collectors.toList());
         }
@@ -656,6 +667,7 @@ public class RangePartitionInfo extends PartitionInfo {
         info.partitionColumnIds = Lists.newArrayList(this.partitionColumnIds);
         info.idToRange = new ConcurrentHashMap<>(this.idToRange);
         info.idToTempRange = new ConcurrentHashMap<>(this.idToTempRange);
+        info.rangeIndex = new ConcurrentSkipListMap<>(this.rangeIndex);
         info.isMultiColumnPartition = partitionColumnIds.size() > 1;
         return info;
     }
@@ -683,5 +695,6 @@ public class RangePartitionInfo extends PartitionInfo {
                 this.idToTempRange.put(newId, tempRange);
             }
         }
+        rebuildRangeIndex();
     }
 }
