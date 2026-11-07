@@ -37,6 +37,7 @@ import java.util.Objects;
 
 public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private DistributionSpec distributionSpec;
+    private boolean parallelRangeScan;
     private long selectedIndexMetaId;
     private List<Long> selectedPartitionId;
     private PartitionNames partitionNames;
@@ -113,6 +114,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private LogicalOlapScanOperator() {
         super(OperatorType.LOGICAL_OLAP_SCAN);
         this.prunedPartitionPredicates = ImmutableList.of();
+    }
+
+    public boolean isParallelRangeScan() {
+        return parallelRangeScan;
     }
 
     public DistributionSpec getDistributionSpec() {
@@ -205,7 +210,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         }
 
         LogicalOlapScanOperator that = (LogicalOlapScanOperator) o;
-        return selectedIndexMetaId == that.selectedIndexMetaId &&
+        return parallelRangeScan == that.parallelRangeScan &&
+                selectedIndexMetaId == that.selectedIndexMetaId &&
                 gtid == that.gtid &&
                 Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
@@ -218,7 +224,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), selectedIndexMetaId, gtid, selectedPartitionId,
+        return Objects.hash(super.hashCode(), parallelRangeScan, selectedIndexMetaId, gtid, selectedPartitionId,
                 selectedTabletId, hintsTabletIds, hintsReplicaIds, sample);
     }
 
@@ -238,6 +244,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             super.withOperator(scanOperator);
 
             builder.distributionSpec = scanOperator.distributionSpec;
+            builder.parallelRangeScan = scanOperator.parallelRangeScan;
             builder.selectedIndexMetaId = scanOperator.selectedIndexMetaId;
             builder.gtid = scanOperator.gtid;
             builder.selectedPartitionId = scanOperator.selectedPartitionId;
@@ -251,6 +258,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             builder.fromSplitOR = scanOperator.fromSplitOR;
             builder.vectorSearchOptions = scanOperator.vectorSearchOptions;
             builder.sample = scanOperator.getSample();
+            return this;
+        }
+
+        public Builder setParallelRangeScan(boolean parallelRangeScan) {
+            builder.parallelRangeScan = parallelRangeScan;
             return this;
         }
 
