@@ -427,6 +427,7 @@ import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStateSnapshot;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.warehouse.Warehouse;
@@ -2765,6 +2766,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return errorResult;
         }
 
+        if (isTemp && txnState.getTransactionStatus() != TransactionStatus.PREPARE) {
+            return buildErrorResult("Dynamic overwrite transaction " + txnId
+                    + " is no longer allowed to create temporary partitions");
+        }
         ConcurrentMap<String, TOlapTablePartition> cachedPartitions = txnState.getPartitionNameToTPartition(tableId);
 
         // Step 3: Fast path - if all partitions are already cached, skip creation
@@ -2995,7 +3000,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         cancelConflictingAlterJobs(state, db, olapTable, txnId, willCreateNewPartition, timeoutMs);
 
         if (willCreateNewPartition) {
-            state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
+            if (addPartitionClause.isTempPartition()) {
+                state.getLocalMetastore().addPartitionsForDynamicOverwrite(ctx, db, olapTable.getId(),
+                        addPartitionClause, txnState);
+            } else {
+                state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
+            }
         } else {
             LOG.info("skip addPartitions for automatic create partition txn_id={}, no new partition after analyze",
                     txnId);
@@ -3125,6 +3135,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             txnState.writeLock();
             try {
+                if (isTemp && !GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .canCreateDynamicOverwritePartition(db.getId(), olapTable.getId(), txnState)) {
+                    return buildErrorResult("Dynamic overwrite transaction " + txnState.getTransactionId()
+                            + " is no longer allowed to create temporary partitions");
+                }
                 return buildCreatePartitionResponse(olapTable, txnState, partitions, tablets, partitionNameList, isTemp);
             } finally {
                 txnState.writeUnlock();
