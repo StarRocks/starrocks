@@ -626,7 +626,7 @@ INSTANTIATE_TEST_SUITE_P(JsonBoolExtractionCases, JsonBoolExtractionTest,
 
 TEST(JsonMergerTest, NonObjectRootDoesNotMatchParentPath) {
     const std::vector<std::string> values = {"null", "[]", "[1,2]", "1", "1.5", R"("text")", "true", "false"};
-    for (const auto& path : {"o", "o.n", "\"o.x\""}) {
+    for (const auto& path : {"o", "o.n"}) {
         auto leaf = NullableColumn::create(Int64Column::create(), NullColumn::create());
         auto remain = JsonColumn::create();
         for (const auto& value : values) {
@@ -686,7 +686,8 @@ TEST(JsonMergerTest, ParentObjectMergesFlatAndRemainingFields) {
 TEST(JsonMergerTest, ParentPathPreservesRemainingValue) {
     const std::vector<std::string> values = {"{}",        "[]",   "[1,2]", R"([{"v":1},null])", "null", "123", "1.5",
                                              R"("text")", "true", "false", R"({"s":"x"})"};
-    for (const auto& path : {"o", "o.n", "\"o.x\""}) {
+    // Quoted Flat JSON path levels are not supported on 3.5.
+    for (const auto& path : {"o", "o.n"}) {
         auto leaf = NullableColumn::create(Int64Column::create(), NullColumn::create());
         auto other = NullableColumn::create(Int64Column::create(), NullColumn::create());
         auto remain = JsonColumn::create();
@@ -696,8 +697,6 @@ TEST(JsonMergerTest, ParentPathPreservesRemainingValue) {
             std::string json;
             if (std::string_view(path) == "o.n") {
                 json = R"({"o":{"n":)" + value + "}}";
-            } else if (std::string_view(path) == "\"o.x\"") {
-                json = R"({"o.x":)" + value + "}";
             } else {
                 json = R"({"o":)" + value + "}";
             }
@@ -763,7 +762,7 @@ TEST(JsonMergerTest, ParentPathDoesNotCrossNonObjectPrefix) {
 }
 
 TEST(JsonMergerTest, ParentPathWithoutRemainPreservesMissingValues) {
-    for (const auto& path : {"o", "o.n", "\"o.x\""}) {
+    for (const auto& path : {"o", "o.n"}) {
         auto leaf = NullableColumn::create(Int64Column::create(), NullColumn::create());
         leaf->append_datum(Datum(int64_t{10}));
         leaf->append_nulls(1);
