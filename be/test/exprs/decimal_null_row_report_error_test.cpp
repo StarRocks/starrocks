@@ -28,7 +28,7 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
-#include "column/runtime_type_traits.h"
+#include "column/type_traits.h"
 #include "exprs/arithmetic_operation.h"
 #include "exprs/decimal_binary_function.h"
 #include "exprs/decimal_cast_expr.h"
@@ -97,7 +97,7 @@ void expect_nulls(const ColumnPtr& result, const std::vector<bool>& expected) {
 template <LogicalType Type>
 RunTimeCppType<Type> value_at(const ColumnPtr& result, size_t row) {
     const auto* data = ColumnHelper::get_data_column(result.get());
-    return down_cast<const RunTimeColumnType<Type>*>(data)->immutable_data()[row];
+    return down_cast<const RunTimeColumnType<Type>*>(data)->get_data()[row];
 }
 
 template <LogicalType From, LogicalType To, typename... Args>
@@ -140,7 +140,7 @@ TEST_F(DecimalNullRowReportErrorTest, cast_result_owns_its_null_column) {
     auto input = make_strings({"", "1.25"}, {1, 0});
     ColumnPtr result = cast_from<TYPE_VARCHAR, TYPE_DECIMAL128>(input, 38, 18);
     const auto* in = down_cast<const NullableColumn*>(input.get());
-    auto* out = down_cast<NullableColumn*>(result->as_mutable_raw_ptr());
+    auto* out = down_cast<NullableColumn*>(result.get());
     ASSERT_NE(in->null_column().get(), out->null_column().get());
     out->set_null(1);
     EXPECT_FALSE(input->is_null(1));

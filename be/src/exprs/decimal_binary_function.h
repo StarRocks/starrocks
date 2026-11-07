@@ -312,7 +312,7 @@ public:
         const ColumnPtr& data2 = FunctionHelper::get_data_column_of_nullable(v2);
         if constexpr (!std::is_void_v<PRODUCE_NULL_FN>) {
             ColumnPtr produce_null = PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(data1, data2);
-            _union_nulls(down_cast<const NullColumn*>(produce_null.get())->immutable_data(), nulls.get());
+            _union_nulls(down_cast<const NullColumn*>(produce_null.get())->get_data(), nulls.get());
         }
         if (SIMD::count_nonzero(nulls->get_data()) == num_rows) {
             return ColumnHelper::create_const_null_column(num_rows);

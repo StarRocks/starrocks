@@ -19,13 +19,8 @@
 #include "column/column_builder.h"
 #include "exprs/function_helper.h"
 #include "exprs/overflow.h"
-<<<<<<< HEAD
-#include "runtime/decimalv3.h"
-=======
 #include "exprs/unary_function.h"
-#include "types/decimalv3.h"
-#include "types/variant.h"
->>>>>>> 84536d8 ([BugFix] Never raise a decimal overflow error from a NULL row's data under ERROR_IF_OVERFLOW (#82254))
+#include "runtime/decimalv3.h"
 
 namespace starrocks {
 
@@ -490,7 +485,7 @@ public:
         // without copy-on-write, so sharing it would let a later in-place write to the result's nulls reach the input.
         NullColumnPtr null_column = NullColumn::static_pointer_cast(nullable->null_column()->clone());
         ColumnPtr result = CastOp::template evaluate<Type, ResultType>(nullable->data_column(), args...,
-                                                                       null_column->immutable_data().data());
+                                                                       null_column->get_data().data());
         return FunctionHelper::merge_column_and_null_column(std::move(result), std::move(null_column));
     }
 };
