@@ -28,6 +28,7 @@ ALTER MATERIALIZED VIEW can:
   - `foreign_key_constraints`
   - `colocate_with`
   - `excluded_refresh_tables`
+  - `file_bundling` (shared-data clusters only, from v26.2 onwards)
   - All session variable-related properties. For information on session variables, see [System variables](../../System_variable.md).
 
 :::tip
@@ -132,4 +133,10 @@ Example 11: Change the sort key of a range-distributed materialized view to `(k2
 
 ```SQL
 ALTER MATERIALIZED VIEW order_mv ORDER BY (k2, k1);
+```
+
+Example 12: Enable File Bundling for a materialized view in a shared-data cluster (from v26.2 onwards). `file_bundling` must be the only property in the statement. The change runs as an asynchronous job, and you can check its progress with [SHOW ALTER TABLE COLUMN](../table_bucket_part_index/SHOW_ALTER.md). The restrictions on changing `file_bundling` are the same as for tables. See the `file_bundling` property in [CREATE TABLE](../table_bucket_part_index/CREATE_TABLE.md).
+
+```SQL
+ALTER MATERIALIZED VIEW order_mv SET ("file_bundling" = "true");
 ```
