@@ -66,11 +66,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 public class RangePartitionInfo extends PartitionInfo {
@@ -87,6 +89,15 @@ public class RangePartitionInfo extends PartitionInfo {
     protected Map<Long, Range<PartitionKey>> idToRange = Maps.newConcurrentMap();
     // temp partition id -> partition range
     private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newConcurrentMap();
+
+    // Separate the empty shadow range from a non-empty range with the same lower endpoint.
+    private static final Comparator<Range<PartitionKey>> BY_LOWER_THEN_EMPTY =
+            Comparator.comparing((Range<PartitionKey> range) -> range.lowerEndpoint())
+                    .thenComparing(Range::isEmpty, Comparator.reverseOrder());
+
+    // Formal ranges only: a transient lookup index, rebuilt after load and restore.
+    private transient ConcurrentSkipListMap<Range<PartitionKey>, Map.Entry<Long, Range<PartitionKey>>> rangeIndex =
+            new ConcurrentSkipListMap<>(BY_LOWER_THEN_EMPTY);
 
     // partitionId -> serialized Range<PartitionKey>
     // because Range<PartitionKey> and PartitionKey can not be serialized by gson
@@ -117,6 +128,7 @@ public class RangePartitionInfo extends PartitionInfo {
         this.deprecatedColumns = Lists.newArrayList(other.deprecatedColumns);
         this.partitionColumnIds = deprecatedColumns.stream().map(Column::getColumnId).collect(Collectors.toList());
         this.idToRange.putAll(other.idToRange);
+        rebuildRangeIndex();
         this.idToTempRange.putAll(other.idToTempRange);
         this.isMultiColumnPartition = deprecatedColumns.size() > 1;
     }
@@ -134,8 +146,8 @@ public class RangePartitionInfo extends PartitionInfo {
     @Override
     public void dropPartition(long partitionId) {
         super.dropPartition(partitionId);
-        idToRange.remove(partitionId);
-        idToTempRange.remove(partitionId);
+        removeRangeInternal(partitionId, false);
+        removeRangeInternal(partitionId, true);
     }
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
@@ -477,11 +489,38 @@ public class RangePartitionInfo extends PartitionInfo {
         return -1;
     }
 
+    /**
+     * The formal partition whose range contains {@code key}, as (partition id, its range), or null when no formal
+     * partition contains it. O(log n) on the concurrent range index, so it may run without the table lock, where it
+     * can miss a partition that changes meanwhile.
+     */
+    public Map.Entry<Long, Range<PartitionKey>> getFormalPartitionContaining(PartitionKey key) {
+        // Ranges never overlap, so only the range starting at or right below the key can contain it. The probe
+        // [key, key] sorts with a non-empty range that starts at the key, and after an empty (shadow) one there.
+        Map.Entry<Range<PartitionKey>, Map.Entry<Long, Range<PartitionKey>>> floor =
+                rangeIndex.floorEntry(Range.closed(key, key));
+        // Check the entry's own range: on a table whose ranges already overlap, two of them can share a lower
+        // endpoint, and then the index keeps the key of one and the entry of the other.
+        while (floor != null && floor.getValue().getValue().isEmpty()) {
+            floor = rangeIndex.lowerEntry(floor.getKey());
+        }
+        return floor != null && floor.getValue().getValue().contains(key) ? floor.getValue() : null;
+    }
+
+    private void rebuildRangeIndex() {
+        rangeIndex.clear();
+        idToRange.forEach((id, range) -> rangeIndex.put(range, Maps.immutableEntry(id, range)));
+    }
+
     private void setRangeInternal(long partitionId, boolean isTemp, Range<PartitionKey> range) {
         if (isTemp) {
             idToTempRange.put(partitionId, range);
         } else {
-            idToRange.put(partitionId, range);
+            Range<PartitionKey> previous = idToRange.put(partitionId, range);
+            if (previous != null) {
+                rangeIndex.remove(previous);
+            }
+            rangeIndex.put(range, Maps.immutableEntry(partitionId, range));
         }
     }
 
@@ -489,14 +528,17 @@ public class RangePartitionInfo extends PartitionInfo {
         if (isTemp) {
             idToTempRange.remove(partitionId);
         } else {
-            idToRange.remove(partitionId);
+            Range<PartitionKey> removed = idToRange.remove(partitionId);
+            if (removed != null) {
+                rangeIndex.remove(removed);
+            }
         }
     }
 
     public void moveRangeFromTempToFormal(long tempPartitionId) {
         Range<PartitionKey> range = idToTempRange.remove(tempPartitionId);
         if (range != null) {
-            idToRange.put(tempPartitionId, range);
+            setRangeInternal(tempPartitionId, false, range);
         }
     }
 
@@ -547,6 +589,7 @@ public class RangePartitionInfo extends PartitionInfo {
             }
             serializedIdToTempRange = null;
         }
+        rebuildRangeIndex();
         if (partitionColumnIds == null || partitionColumnIds.size() <= 0) {
             partitionColumnIds = deprecatedColumns.stream().map(Column::getColumnId).collect(Collectors.toList());
         }
@@ -624,6 +667,7 @@ public class RangePartitionInfo extends PartitionInfo {
         info.partitionColumnIds = Lists.newArrayList(this.partitionColumnIds);
         info.idToRange = new ConcurrentHashMap<>(this.idToRange);
         info.idToTempRange = new ConcurrentHashMap<>(this.idToTempRange);
+        info.rangeIndex = new ConcurrentSkipListMap<>(this.rangeIndex);
         info.isMultiColumnPartition = partitionColumnIds.size() > 1;
         return info;
     }
@@ -651,5 +695,6 @@ public class RangePartitionInfo extends PartitionInfo {
                 this.idToTempRange.put(newId, tempRange);
             }
         }
+        rebuildRangeIndex();
     }
 }
