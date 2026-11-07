@@ -47,6 +47,9 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.load.InsertOverwriteJob;
+import com.starrocks.load.InsertOverwriteJobRunner;
+import com.starrocks.load.InsertOverwriteJobState;
 import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestLoadResult;
 import com.starrocks.load.batchwrite.TableId;
@@ -55,6 +58,9 @@ import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.persist.AddPartitionsInfoV2;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -62,6 +68,7 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -146,12 +153,16 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.thrift.TException;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
@@ -160,6 +171,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -167,9 +179,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -752,6 +771,168 @@ public class FrontendServiceImplTest {
 
         partition = impl.createPartition(request);
         Assertions.assertEquals(1, partition.partitions.size());
+    }
+
+    @Test
+    public void testDynamicOverwriteRejectsCreateAfterCleanupBeforeAbort() throws Exception {
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        LocalMetastore metastore = state.getLocalMetastore();
+        Database db = metastore.getDb("test");
+        OlapTable table = (OlapTable) metastore.getTable(db.getFullName(), "site_access_day");
+        GlobalTransactionMgr manager = state.getGlobalTransactionMgr();
+        long txnId = manager.beginTransaction(db.getId(), List.of(table.getId()), UUID.randomUUID().toString(),
+                TxnCoordinator.fromThisFE(), TransactionState.LoadJobSourceType.INSERT_STREAMING, 600);
+        InsertOverwriteJob job = new InsertOverwriteJob(state.getNextId(), db.getId(), table.getId(), List.of(), true);
+        job.setTxnId(txnId);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        Assertions.assertTrue(state.getInsertOverwriteJobMgr().registerOverwriteJob(job));
+
+        CountDownLatch built = new CountDownLatch(1);
+        CountDownLatch afterCleanup = new CountDownLatch(1);
+        CountDownLatch allowAdd = new CountDownLatch(1);
+        CountDownLatch allowAbort = new CountDownLatch(1);
+        String name = "txn" + txnId + "_p19900426";
+        AtomicInteger addLogs = new AtomicInteger();
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public void buildPartitions(Invocation invocation, Database database, OlapTable target,
+                                        List<PhysicalPartition> partitions, ComputeResource resource) throws Exception {
+                invocation.proceed(database, target, partitions, resource);
+                if (target.getId() == table.getId()) {
+                    built.countDown();
+                    Assertions.assertTrue(allowAdd.await(15, TimeUnit.SECONDS));
+                }
+            }
+        };
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public void abortTransaction(Invocation invocation, long dbId, long id, String reason) throws Exception {
+                if (id == txnId && reason.equals("insert overwrite job failed")) {
+                    afterCleanup.countDown();
+                    Assertions.assertTrue(allowAbort.await(15, TimeUnit.SECONDS));
+                }
+                invocation.proceed(dbId, id, reason);
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAddPartitions(Invocation invocation, AddPartitionsInfoV2 info, WALApplier applier) {
+                if (info.getAddPartitionInfos().stream().anyMatch(p -> p.getPartition().getName().equals(name))) {
+                    addLogs.incrementAndGet();
+                }
+                invocation.proceed(info, applier);
+            }
+        };
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setTxn_id(txnId);
+        request.setIs_temp(true);
+        request.setPartition_values(List.of(List.of("1990-04-26")));
+        FutureTask<TCreatePartitionResult> add = new FutureTask<>(
+                () -> new FrontendServiceImpl(exeEnv).createPartition(request));
+        FutureTask<Void> cleanup = new FutureTask<>(() -> {
+            new InsertOverwriteJobRunner(job).cancel();
+            return null;
+        });
+        new Thread(add).start();
+        try {
+            Assertions.assertTrue(built.await(15, TimeUnit.SECONDS));
+            new Thread(cleanup).start();
+            Assertions.assertTrue(afterCleanup.await(15, TimeUnit.SECONDS));
+            Assertions.assertEquals(TransactionStatus.PREPARE,
+                    manager.getTransactionState(db.getId(), txnId).getTransactionStatus());
+            allowAdd.countDown();
+            Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, add.get(15, TimeUnit.SECONDS).getStatus().getStatus_code());
+            Assertions.assertEquals(0, addLogs.get());
+            Assertions.assertNull(table.getPartition(name, true));
+        } finally {
+            allowAdd.countDown();
+            allowAbort.countDown();
+            if (afterCleanup.getCount() == 0) {
+                cleanup.get(15, TimeUnit.SECONDS);
+            }
+            state.getInsertOverwriteJobMgr().deregisterOverwriteJob(job.getJobId());
+            table.dropTempPartition(name, true);
+        }
+    }
+
+    @Test
+    public void testCreateTempPartitionJournalPrecedesConcurrentAbortJournal() throws Exception {
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        Database db = state.getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) state.getLocalMetastore().getTable(db.getFullName(), "site_access_day");
+        GlobalTransactionMgr transactionMgr = state.getGlobalTransactionMgr();
+        long txnId = transactionMgr.beginTransaction(db.getId(), List.of(table.getId()), UUID.randomUUID().toString(),
+                TxnCoordinator.fromThisFE(), TransactionState.LoadJobSourceType.INSERT_STREAMING, 600);
+        TransactionState txnState = transactionMgr.getTransactionState(db.getId(), txnId);
+        InsertOverwriteJob job = new InsertOverwriteJob(state.getNextId(), db.getId(), table.getId(), List.of(), true);
+        job.setTxnId(txnId);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        Assertions.assertTrue(state.getInsertOverwriteJobMgr().registerOverwriteJob(job));
+        String name = "txn" + txnId + "_p19900428";
+        Field lockField = TransactionState.class.getDeclaredField("txnLock");
+        lockField.setAccessible(true);
+        ReentrantReadWriteLock txnLock = (ReentrantReadWriteLock) lockField.get(txnState);
+        CountDownLatch addJournalEntered = new CountDownLatch(1);
+        AtomicReference<Thread> abortThread = new AtomicReference<>();
+        AtomicInteger journalOrder = new AtomicInteger();
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAddPartitions(Invocation invocation, AddPartitionsInfoV2 info, WALApplier applier) {
+                if (info.getAddPartitionInfos().stream().anyMatch(partitionInfo ->
+                        partitionInfo.getTableId() == table.getId() && partitionInfo.getPartition().getName().equals(name))) {
+                    addJournalEntered.countDown();
+                    Assertions.assertTrue(txnLock.isWriteLockedByCurrentThread());
+                    Awaitility.await().atMost(10, TimeUnit.SECONDS).until(() -> abortThread.get() != null
+                            && txnLock.hasQueuedThread(abortThread.get()));
+                    Assertions.assertEquals(TransactionStatus.PREPARE, txnState.getTransactionStatus());
+                    invocation.proceed(info, applier);
+                    Assertions.assertEquals(1, journalOrder.incrementAndGet());
+                } else {
+                    invocation.proceed(info, applier);
+                }
+            }
+
+            @Mock
+            public void logInsertTransactionState(Invocation invocation, TransactionState stateToLog, WALApplier applier) {
+                if (stateToLog.getTransactionId() == txnId && stateToLog.getTransactionStatus() == TransactionStatus.ABORTED) {
+                    Assertions.assertEquals(2, journalOrder.incrementAndGet());
+                }
+                invocation.proceed(stateToLog, applier);
+            }
+        };
+
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setTxn_id(txnId);
+        request.setIs_temp(true);
+        request.setPartition_values(List.of(List.of("1990-04-28")));
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<TCreatePartitionResult> create = executor.submit(() ->
+                    new FrontendServiceImpl(exeEnv).createPartition(request));
+            Assertions.assertTrue(addJournalEntered.await(20, TimeUnit.SECONDS));
+            Future<?> abort = executor.submit(() -> {
+                abortThread.set(Thread.currentThread());
+                transactionMgr.abortTransaction(db.getId(), txnId, "test abort while add journal is in progress");
+                return null;
+            });
+            create.get(30, TimeUnit.SECONDS);
+            abort.get(30, TimeUnit.SECONDS);
+            Assertions.assertEquals(2, journalOrder.get());
+            Assertions.assertEquals(TransactionStatus.ABORTED,
+                    transactionMgr.getTransactionState(db.getId(), txnId).getTransactionStatus());
+            Assertions.assertNotNull(table.getPartition(name, true));
+        } finally {
+            executor.shutdownNow();
+            Assertions.assertTrue(executor.awaitTermination(30, TimeUnit.SECONDS));
+            state.getInsertOverwriteJobMgr().deregisterOverwriteJob(job.getJobId());
+            table.dropTempPartition(name, true);
+        }
     }
 
     @Test

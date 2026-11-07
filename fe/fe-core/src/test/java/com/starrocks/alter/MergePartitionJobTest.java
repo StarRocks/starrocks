@@ -39,6 +39,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.load.InsertOverwriteJob;
+import com.starrocks.load.InsertOverwriteJobState;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfoV2;
@@ -833,7 +835,17 @@ public class MergePartitionJobTest extends DDLTestBase {
         request.setTxn_id(txnId);
         request.setIs_temp(true);
         request.setPartition_values(Arrays.stream(values).map(Collections::singletonList).collect(Collectors.toList()));
-        TCreatePartitionResult result = new FrontendServiceImpl(ExecuteEnv.getInstance()).createPartition(request);
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        InsertOverwriteJob job = new InsertOverwriteJob(state.getNextId(), db.getId(), table.getId(), List.of(), true);
+        job.setTxnId(txnId);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        Assertions.assertTrue(state.getInsertOverwriteJobMgr().registerOverwriteJob(job));
+        TCreatePartitionResult result;
+        try {
+            result = new FrontendServiceImpl(ExecuteEnv.getInstance()).createPartition(request);
+        } finally {
+            state.getInsertOverwriteJobMgr().deregisterOverwriteJob(job.getJobId());
+        }
         Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code(), result.getStatus().toString());
 
         String prefix = "txn" + txnId + AnalyzerUtils.PARTITION_NAME_PREFIX_SPLIT;
