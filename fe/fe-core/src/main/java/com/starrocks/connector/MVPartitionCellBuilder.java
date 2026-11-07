@@ -29,6 +29,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.iceberg.IcebergPartitionKeyResolver;
 import com.starrocks.mv.pct.BaseToMVPartitionMapping;
+import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.PCellSortedSet;
