@@ -163,6 +163,7 @@ set(EXEC_FILES
         ./exprs/decimal_cast_expr_float_test.cpp
         ./exprs/decimal_cast_expr_time_test.cpp
         ./exprs/decimal_cast_expr_decimalv2_test.cpp
+        ./exprs/decimal_null_row_report_error_test.cpp
         ./exprs/coalesce_expr_test.cpp
         ./exprs/compound_predicate_test.cpp
         ./exprs/condition_expr_test.cpp

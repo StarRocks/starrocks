@@ -17,7 +17,9 @@
 #include <gutil/strings/fastmem.h>
 
 #include "column/column_builder.h"
+#include "exprs/function_helper.h"
 #include "exprs/overflow.h"
+#include "exprs/unary_function.h"
 #include "runtime/decimalv3.h"
 
 namespace starrocks {
@@ -28,7 +30,8 @@ UNION_VALUE_GUARD(LogicalType, FixedNonDecimalTypeGuard, lt_is_fixed_non_decimal
 
 template <OverflowMode overflow_mode, LogicalType Type, LogicalType ResultType>
 struct DecimalDecimalCast {
-    static inline ColumnPtr evaluate(const ColumnPtr& column, int to_precision, int to_scale) {
+    static inline ColumnPtr evaluate(const ColumnPtr& column, int to_precision, int to_scale,
+                                     const uint8_t* input_nulls = nullptr) {
         using FromCppType = RunTimeCppType<Type>;
         using FromColumnType = RunTimeColumnType<Type>;
         using ToCppType = RunTimeCppType<ResultType>;
@@ -72,7 +75,9 @@ struct DecimalDecimalCast {
                     if constexpr (check_overflow<overflow_mode>) {
                         if (overflow) {
                             if constexpr (error_if_overflow<overflow_mode>) {
-                                throw std::overflow_error("The type cast from decimal to decimal overflows");
+                                if (!is_null_input_row(input_nulls, i)) {
+                                    throw std::overflow_error("The type cast from decimal to decimal overflows");
+                                }
                             } else {
                                 static_assert(null_if_overflow<overflow_mode>);
                                 has_null = true;
@@ -91,7 +96,9 @@ struct DecimalDecimalCast {
                 if constexpr (check_overflow<overflow_mode>) {
                     if (overflow) {
                         if constexpr (error_if_overflow<overflow_mode>) {
-                            throw std::overflow_error("The type cast from decimal to decimal overflows");
+                            if (!is_null_input_row(input_nulls, i)) {
+                                throw std::overflow_error("The type cast from decimal to decimal overflows");
+                            }
                         } else {
                             static_assert(null_if_overflow<overflow_mode>);
                             has_null = true;
@@ -109,7 +116,9 @@ struct DecimalDecimalCast {
                 if constexpr (check_overflow<overflow_mode>) {
                     if (overflow) {
                         if constexpr (error_if_overflow<overflow_mode>) {
-                            throw std::overflow_error("The type cast from decimal to decimal overflows");
+                            if (!is_null_input_row(input_nulls, i)) {
+                                throw std::overflow_error("The type cast from decimal to decimal overflows");
+                            }
                         } else {
                             static_assert(null_if_overflow<overflow_mode>);
                             has_null = true;
@@ -139,16 +148,18 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, NonDecimalType, Decimal
     using NonDecimalCppType = RunTimeCppType<NonDecimalType>;
     using NonDecimalColumnType = RunTimeColumnType<NonDecimalType>;
 
-    static inline ColumnPtr decimal_from(const ColumnPtr& column, int precision, int scale) {
+    static inline ColumnPtr decimal_from(const ColumnPtr& column, int precision, int scale,
+                                         const uint8_t* input_nulls = nullptr) {
         if (scale == 0) {
-            return _decimal_from<true>(column, precision, scale);
+            return _decimal_from<true>(column, precision, scale, input_nulls);
         } else {
-            return _decimal_from<false>(column, precision, scale);
+            return _decimal_from<false>(column, precision, scale, input_nulls);
         }
     }
 
     template <bool ZeroScale>
-    static inline ColumnPtr _decimal_from(const ColumnPtr& column, int precision, int scale) {
+    static inline ColumnPtr _decimal_from(const ColumnPtr& column, int precision, int scale,
+                                          const uint8_t* input_nulls) {
         const auto num_rows = column->size();
         typename DecimalColumnType::MutablePtr result = DecimalColumnType::create(precision, scale, num_rows);
         const auto data = &ColumnHelper::cast_to_raw<NonDecimalType>(column.get())->get_data().front();
@@ -225,7 +236,9 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, NonDecimalType, Decimal
             if constexpr (check_overflow<overflow_mode>) {
                 if (overflow) {
                     if constexpr (error_if_overflow<overflow_mode>) {
-                        throw std::overflow_error("The type cast from other types to decimal overflows");
+                        if (!is_null_input_row(input_nulls, i)) {
+                            throw std::overflow_error("The type cast from other types to decimal overflows");
+                        }
                     } else {
                         static_assert(null_if_overflow<overflow_mode>);
                         has_null = true;
@@ -243,7 +256,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, NonDecimalType, Decimal
         }
     }
 
-    static inline ColumnPtr decimal_to(const ColumnPtr& column) {
+    static inline ColumnPtr decimal_to(const ColumnPtr& column, const uint8_t* input_nulls = nullptr) {
         const auto num_rows = column->size();
         typename NonDecimalColumnType::MutablePtr result = NonDecimalColumnType::create();
         result->resize(num_rows);
@@ -333,7 +346,9 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, NonDecimalType, Decimal
             if (check_overflow<overflow_mode>) {
                 if (overflow) {
                     if constexpr (error_if_overflow<overflow_mode>) {
-                        throw std::overflow_error("The type cast from decimal to other types overflows");
+                        if (!is_null_input_row(input_nulls, i)) {
+                            throw std::overflow_error("The type cast from decimal to other types overflows");
+                        }
                     } else {
                         static_assert(null_if_overflow<overflow_mode>);
                         nulls[i] = DATUM_NULL;
@@ -360,7 +375,8 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, StringType, DecimalLTGu
     using StringCppType = RunTimeCppType<StringType>;
     using StringColumnType = RunTimeColumnType<StringType>;
 
-    static inline ColumnPtr decimal_from(const ColumnPtr& column, int precision, int scale) {
+    static inline ColumnPtr decimal_from(const ColumnPtr& column, int precision, int scale,
+                                         const uint8_t* input_nulls = nullptr) {
         const auto num_rows = column->size();
         typename DecimalColumnType::MutablePtr result = DecimalColumnType::create(precision, scale, num_rows);
         auto result_data = &ColumnHelper::cast_to_raw<DecimalType>(result.get())->get_data().front();
@@ -380,7 +396,9 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, StringType, DecimalLTGu
             if constexpr (check_overflow<overflow_mode>) {
                 if (overflow) {
                     if constexpr (error_if_overflow<overflow_mode>) {
-                        throw std::overflow_error("The type cast from string to decimal overflows");
+                        if (!is_null_input_row(input_nulls, i)) {
+                            throw std::overflow_error("The type cast from string to decimal overflows");
+                        }
                     } else {
                         static_assert(null_if_overflow<overflow_mode>);
                         has_null = true;
@@ -397,7 +415,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, StringType, DecimalLTGu
         }
     }
 
-    static inline ColumnPtr decimal_to(const ColumnPtr& column) {
+    static inline ColumnPtr decimal_to(const ColumnPtr& column, const uint8_t* /*input_nulls*/ = nullptr) {
         const auto num_rows = column->size();
         auto result = BinaryColumn::create();
         auto& bytes = result->get_bytes();
@@ -444,10 +462,37 @@ struct DecimalFrom {
 // cast: convert to other types from decimal type
 template <OverflowMode overflow_mode>
 struct DecimalTo {
-    template <LogicalType Type, LogicalType ResultType>
-    static inline ColumnPtr evaluate(const ColumnPtr& column) {
-        return DecimalNonDecimalCast<overflow_mode, Type, ResultType>::decimal_to(column);
+    template <LogicalType Type, LogicalType ResultType, typename... Args>
+    static inline ColumnPtr evaluate(const ColumnPtr& column, Args&&... args) {
+        return DecimalNonDecimalCast<overflow_mode, Type, ResultType>::decimal_to(column, std::forward<Args>(args)...);
     }
 };
+
+// Drives a decimal cast op (DecimalFrom, DecimalTo, DecimalToDecimal) under REPORT_ERROR.
+// VectorizedUnaryFunction hands the op only the data column of a nullable input, so the op would also check the
+// undefined data slot of a null row and raise a spurious overflow error. Pass the input's null flags down instead,
+// so the op reports an overflow only for a non-null row.
+template <typename CastOp>
+class NullAwareReportErrorDecimalCastFunction {
+public:
+    template <LogicalType Type, LogicalType ResultType, typename... Args>
+    static ColumnPtr evaluate(const ColumnPtr& column, const Args&... args) {
+        if (column->is_constant() || !column->has_null()) {
+            return VectorizedUnaryFunction<CastOp>::template evaluate<Type, ResultType>(column, args...);
+        }
+        const auto* nullable = down_cast<const NullableColumn*>(column.get());
+        // Copy the null flags as DealNullableColumnUnaryFunction does: NullableColumn::create takes the null column
+        // without copy-on-write, so sharing it would let a later in-place write to the result's nulls reach the input.
+        NullColumnPtr null_column = NullColumn::static_pointer_cast(nullable->null_column()->clone());
+        ColumnPtr result = CastOp::template evaluate<Type, ResultType>(nullable->data_column(), args...,
+                                                                       null_column->get_data().data());
+        return FunctionHelper::merge_column_and_null_column(std::move(result), std::move(null_column));
+    }
+};
+
+template <template <OverflowMode> class CastOp, OverflowMode overflow_mode>
+using VectorizedDecimalCastFunction = std::conditional_t<error_if_overflow<overflow_mode>,
+                                                         NullAwareReportErrorDecimalCastFunction<CastOp<overflow_mode>>,
+                                                         VectorizedUnaryFunction<CastOp<overflow_mode>>>;
 
 } // namespace starrocks
