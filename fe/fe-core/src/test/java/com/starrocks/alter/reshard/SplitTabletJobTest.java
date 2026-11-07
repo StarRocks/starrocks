@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard;
 
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.starrocks.alter.ConcurrentLoad;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -54,11 +55,8 @@ import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
-<<<<<<< HEAD
-=======
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
->>>>>>> c65d4db ([BugFix][RB-723] Journal a reshard job's version reservation before releasing its lock (#81922))
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -80,6 +78,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -87,6 +86,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
 
 public class SplitTabletJobTest {
     protected static ConnectContext connectContext;
@@ -173,8 +173,6 @@ public class SplitTabletJobTest {
         }
     }
 
-<<<<<<< HEAD
-=======
     /**
      * A load that commits while the job creates the new shards takes a version below the one the job commits,
      * so the gtid that labels the job's version must be drawn after the load's, when the job reserves the
@@ -329,7 +327,6 @@ public class SplitTabletJobTest {
         return response;
     }
 
->>>>>>> c65d4db ([BugFix][RB-723] Journal a reshard job's version reservation before releasing its lock (#81922))
     @Test
     public void testPkOrderByFactoryLeavesBoundarySelectionToBePkIndex() throws Exception {
         starRocksAssert.withTable("CREATE TABLE pk_order_by_split "

@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard;
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.starrocks.alter.ConcurrentLoad;
 import com.starrocks.catalog.ColocateRangeUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -52,6 +53,7 @@ import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
 import com.starrocks.proto.ReshardingTabletInfoPB;
 import com.starrocks.proto.StatusPB;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.qe.ConnectContext;
@@ -65,11 +67,8 @@ import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.transaction.GlobalTransactionMgr;
-<<<<<<< HEAD
-=======
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
->>>>>>> c65d4db ([BugFix][RB-723] Journal a reshard job's version reservation before releasing its lock (#81922))
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -90,12 +89,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 public class MergeTabletJobTest {
     protected static ConnectContext connectContext;
@@ -245,8 +246,6 @@ public class MergeTabletJobTest {
                 .isMaterializedIndexRecycled(beforeMergeIndex.getId()));
     }
 
-<<<<<<< HEAD
-=======
     /**
      * A load that commits while the job creates the merged shards takes a version below the one the job
      * commits, so the gtid that labels the job's version must be drawn after the load's, when the job reserves
@@ -360,7 +359,6 @@ public class MergeTabletJobTest {
     }
 
 
->>>>>>> c65d4db ([BugFix][RB-723] Journal a reshard job's version reservation before releasing its lock (#81922))
     @Test
     public void testRunMergeBumpsOptimisticVersion() throws Exception {
         TabletReshardJob splitJob = createSplitTabletReshardJob();
