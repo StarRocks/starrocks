@@ -24,15 +24,20 @@ import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import io.delta.kernel.Snapshot;
+import io.delta.kernel.internal.SnapshotImpl;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
+import java.util.List;
 import java.util.Optional;
 
 public class MvRewriteDeltaLakeTest extends MVTestBase {
@@ -43,50 +48,67 @@ public class MvRewriteDeltaLakeTest extends MVTestBase {
         ConnectorPlanTestBase.mockCatalog(connectContext, "deltalake_catalog");
     }
 
+    private static MvUpdateInfo.MvToRefreshType timeliness(MaterializedView mv) {
+        return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, MVTimelinessArbiter.QueryRewriteParams.ofRefresh())
+                .getMVToRefreshType();
+    }
+
     /**
-     * Regression guard for the Delta Lake un-partitioned MV query rewrite bug (issue #11409).
-     *
-     * <p>{@code DeltaLakePartitionTraits#getUpdatedPartitionNames} used to return {@code null}. The MV timeliness
-     * arbiter interprets a null base-table update info as "unknown", returns {@link MvUpdateInfo.MvToRefreshType#FULL}
-     * and therefore treats the MV as stale, disabling query rewrite in the default CHECKED consistency mode.
-     *
-     * <p>After the fix it returns an empty set ("no updated partitions detected"), so the arbiter returns
-     * {@link MvUpdateInfo.MvToRefreshType#NO_REFRESH} and the MV stays eligible for rewrite. This test asserts that
-     * timeliness decision directly, which is exactly the signal that gates the rewrite (a full end-to-end EXPLAIN
-     * assertion is covered by the SQL test {@code test_mv_deltalake_rewrite}).
+     * In the default CHECKED consistency mode an MV over a Delta Lake table is fresh only while the table is at the
+     * Delta version the MV was last refreshed from.
      */
     @Test
-    public void testDeltaLakeUnPartitionedMvIsNotStaleInCheckedMode() throws Exception {
+    public void testDeltaLakeMvIsFreshOnlyAtTheRefreshedVersion() throws Exception {
         // The mocked Delta Lake table has no snapshot, so stub a stable table identifier (used for base-table
-        // matching) to avoid an NPE and keep the query/MV base-table identifiers consistent.
+        // matching) and, once the MV exists, a snapshot at a controllable version.
         new MockUp<DeltaLakeTable>() {
             @Mock
             public String getTableIdentifier() {
                 return Joiner.on(":").join("tbl", "mocked-delta-uuid");
             }
         };
+        Table deltaTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(connectContext, "deltalake_catalog", "deltalake_db", "tbl");
         new MockUp<MetadataMgr>() {
             @Mock
             public Optional<Table> getTableWithIdentifier(ConnectContext context, BaseTableInfo baseTableInfo) {
-                return Optional.of(new DeltaLakeTable());
+                return Optional.of(deltaTable);
             }
         };
 
         String mvName = "mv_delta_checked";
-        // No query_rewrite_consistency property => defaults to CHECKED, the mode in which the bug manifested.
         starRocksAssert.withMaterializedView("create materialized view " + mvName +
                 " refresh deferred manual " +
                 " as select col1, col2 from deltalake_catalog.deltalake_db.tbl");
-
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(testDb.getFullName(), mvName);
 
-        MvUpdateInfo info = MvRefreshArbiter.getMVTimelinessUpdateInfo(
-                mv, MVTimelinessArbiter.QueryRewriteParams.ofRefresh());
-        // Before the fix this was FULL (stale => no rewrite); after the fix it must be NO_REFRESH (rewriteable).
-        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, info.getMVToRefreshType());
-        Assertions.assertTrue(info.isValidRewrite());
+        long[] version = {7};
+        SnapshotImpl snapshot = Mockito.mock(SnapshotImpl.class);
+        Mockito.when(snapshot.getVersion()).thenAnswer(invocation -> version[0]);
+        new MockUp<DeltaLakeTable>() {
+            @Mock
+            public Snapshot getDeltaSnapshot() {
+                return snapshot;
+            }
+        };
+
+        // never refreshed
+        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.FULL, timeliness(mv));
+
+        // refreshed at version 7
+        BaseTableInfo baseTableInfo = mv.getBaseTableInfos().get(0);
+        PCTTableSnapshotInfo refreshed = new PCTTableSnapshotInfo(baseTableInfo, deltaTable);
+        refreshed.updatePartitionInfos(List.of("tbl"));
+        Assertions.assertEquals(7, refreshed.getRefreshedPartitionInfos().get("tbl").getVersion());
+        mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableRefreshInfo(baseTableInfo)
+                .putAll(refreshed.getRefreshedPartitionInfos());
+        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, timeliness(mv));
+
+        // a new Delta commit
+        version[0] = 8;
+        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.FULL, timeliness(mv));
 
         starRocksAssert.dropMaterializedView(mvName);
     }
