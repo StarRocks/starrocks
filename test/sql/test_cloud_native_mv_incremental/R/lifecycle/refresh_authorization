@@ -1,0 +1,237 @@
+-- name: test_ivm_refresh_needs_creator_select @cloud
+CREATE TABLE ra_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO ra_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20);
+-- result:
+-- !result
+DROP USER IF EXISTS ra_creator_${uuid0};
+-- result:
+-- !result
+CREATE USER ra_creator_${uuid0};
+-- result:
+-- !result
+GRANT IMPERSONATE ON USER root TO ra_creator_${uuid0};
+-- result:
+-- !result
+GRANT CREATE MATERIALIZED VIEW ON DATABASE ${db[0]} TO USER ra_creator_${uuid0};
+-- result:
+-- !result
+GRANT SELECT ON TABLE ${db[0]}.ra_base TO USER ra_creator_${uuid0};
+-- result:
+-- !result
+EXECUTE AS ra_creator_${uuid0} WITH NO REVERT;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW ${db[0]}.mv_ra_inc
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM ${db[0]}.ra_base GROUP BY dt, k;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW ${db[0]}.mv_ra_auto
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM ${db[0]}.ra_base GROUP BY dt, k;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW ${db[0]}.mv_ra_pct
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'pct', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM ${db[0]}.ra_base GROUP BY dt, k;
+-- result:
+-- !result
+EXECUTE AS root WITH NO REVERT;
+-- result:
+-- !result
+USE ${db[0]};
+-- result:
+-- !result
+[UC]TASK_INC=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ra_inc';
+[UC]TASK_AUTO=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ra_auto';
+[UC]TASK_PCT=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ra_pct';
+REFRESH MATERIALIZED VIEW mv_ra_inc WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_ra_auto WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_ra_pct WITH SYNC MODE;
+REVOKE SELECT ON TABLE ${db[0]}.ra_base FROM USER ra_creator_${uuid0};
+-- result:
+-- !result
+INSERT INTO ra_base VALUES ('2026-10-01',3,30),('2026-10-03',4,40);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_ra_inc WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_ra_auto WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_ra_pct WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode'), COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_INC}' AND STATE = 'FAILED' AND ERROR_MESSAGE LIKE '%Access denied%SELECT privilege(s) on TABLE ra_base %' GROUP BY 1;
+-- result:
+INCREMENTAL	1
+-- !result
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode'), COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_AUTO}' AND STATE = 'FAILED' AND ERROR_MESSAGE LIKE '%Access denied%SELECT privilege(s) on TABLE ra_base %' GROUP BY 1;
+-- result:
+PCT	1
+-- !result
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode'), COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_PCT}' AND STATE = 'FAILED' AND ERROR_MESSAGE LIKE '%Access denied%SELECT privilege(s) on TABLE ra_base %' GROUP BY 1;
+-- result:
+PCT	1
+-- !result
+SELECT TABLE_NAME, IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME LIKE 'mv_ra_%' ORDER BY TABLE_NAME;
+-- result:
+mv_ra_auto	true
+mv_ra_inc	true
+mv_ra_pct	true
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT dt, k, v, c FROM mv_ra_inc ORDER BY dt, k;
+-- result:
+2026-10-01	1	10	1
+2026-10-02	2	20	1
+-- !result
+SELECT dt, k, v, c FROM mv_ra_auto ORDER BY dt, k;
+-- result:
+2026-10-01	1	10	1
+2026-10-02	2	20	1
+-- !result
+SELECT dt, k, v, c FROM mv_ra_pct ORDER BY dt, k;
+-- result:
+2026-10-01	1	10	1
+2026-10-02	2	20	1
+-- !result
+GRANT SELECT ON TABLE ${db[0]}.ra_base TO USER ra_creator_${uuid0};
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ra_inc WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_ra_auto WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_ra_pct WITH SYNC MODE;
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_INC}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+-- result:
+SUCCESS	INCREMENTAL
+-- !result
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_AUTO}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+-- result:
+SUCCESS	PCT
+-- !result
+SELECT dt, k, v, c FROM mv_ra_inc ORDER BY dt, k;
+-- result:
+2026-10-01	1	10	1
+2026-10-01	3	30	1
+2026-10-02	2	20	1
+2026-10-03	4	40	1
+-- !result
+SELECT dt, k, v, c FROM mv_ra_auto ORDER BY dt, k;
+-- result:
+2026-10-01	1	10	1
+2026-10-01	3	30	1
+2026-10-02	2	20	1
+2026-10-03	4	40	1
+-- !result
+SELECT dt, k, v, c FROM mv_ra_pct ORDER BY dt, k;
+-- result:
+2026-10-01	1	10	1
+2026-10-01	3	30	1
+2026-10-02	2	20	1
+2026-10-03	4	40	1
+-- !result
+SELECT dt, k, SUM(v), COUNT(*) FROM ra_base GROUP BY dt, k ORDER BY dt, k;
+-- result:
+2026-10-01	1	10	1
+2026-10-01	3	30	1
+2026-10-02	2	20	1
+2026-10-03	4	40	1
+-- !result
+DROP USER ra_creator_${uuid0};
+-- result:
+-- !result
+-- name: test_ivm_refresh_fails_after_creator_is_dropped @cloud
+CREATE TABLE rd_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO rd_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20);
+-- result:
+-- !result
+DROP USER IF EXISTS rd_creator_${uuid0};
+-- result:
+-- !result
+CREATE USER rd_creator_${uuid0};
+-- result:
+-- !result
+GRANT IMPERSONATE ON USER root TO rd_creator_${uuid0};
+-- result:
+-- !result
+GRANT CREATE MATERIALIZED VIEW ON DATABASE ${db[0]} TO USER rd_creator_${uuid0};
+-- result:
+-- !result
+GRANT SELECT ON TABLE ${db[0]}.rd_base TO USER rd_creator_${uuid0};
+-- result:
+-- !result
+EXECUTE AS rd_creator_${uuid0} WITH NO REVERT;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW ${db[0]}.mv_rd_inc
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM ${db[0]}.rd_base GROUP BY dt, k;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW ${db[0]}.mv_rd_auto
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM ${db[0]}.rd_base GROUP BY dt, k;
+-- result:
+-- !result
+EXECUTE AS root WITH NO REVERT;
+-- result:
+-- !result
+USE ${db[0]};
+-- result:
+-- !result
+[UC]TASK_INC=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_rd_inc';
+[UC]TASK_AUTO=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_rd_auto';
+REFRESH MATERIALIZED VIEW mv_rd_inc WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_rd_auto WITH SYNC MODE;
+DROP USER rd_creator_${uuid0};
+-- result:
+-- !result
+INSERT INTO rd_base VALUES ('2026-10-02',5,50);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_rd_inc WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_rd_auto WITH SYNC MODE;
+SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_INC}' AND STATE = 'FAILED' AND ERROR_MESSAGE LIKE '%Access denied%SELECT privilege(s) on TABLE rd_base %';
+-- result:
+1
+-- !result
+SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_AUTO}' AND STATE = 'FAILED' AND ERROR_MESSAGE LIKE '%Access denied%SELECT privilege(s) on TABLE rd_base %';
+-- result:
+1
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT dt, k, v, c FROM mv_rd_inc ORDER BY dt, k;
+-- result:
+2026-10-01	1	10	1
+2026-10-02	2	20	1
+-- !result
+SELECT dt, k, v, c FROM mv_rd_auto ORDER BY dt, k;
+-- result:
+2026-10-01	1	10	1
+2026-10-02	2	20	1
+-- !result
