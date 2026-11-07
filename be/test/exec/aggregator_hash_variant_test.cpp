@@ -188,6 +188,42 @@ TEST_F(AggregatorHashVariantTest, TwoLevelSetConversionRefreshesReportedVariant)
     EXPECT_EQ("phase1_slice_two_level", reported_variant());
 }
 
+TEST_F(AggregatorHashVariantTest, TwoLevelInt32ConversionRefreshesReportedVariant) {
+    auto aggregator = make_aggregator({column_type(TYPE_INT, false)});
+    aggregator->_init_agg_hash_variant(aggregator->_hash_map_variant);
+    ASSERT_EQ("phase1_int32", reported_variant());
+
+    aggregator->_mem_pool = std::make_unique<MemPool>();
+
+    const int64_t saved_threshold = config::two_level_memory_threshold;
+    DeferOp restore([&]() { config::two_level_memory_threshold = saved_threshold; });
+    config::two_level_memory_threshold = 0;
+
+    aggregator->try_convert_to_two_level_map();
+    EXPECT_STREQ("phase1_int32_two_level", aggregator->_hash_map_variant.type_name());
+    EXPECT_EQ("phase1_int32_two_level", reported_variant());
+
+    aggregator->try_convert_to_two_level_map();
+    EXPECT_EQ("phase1_int32_two_level", reported_variant());
+}
+
+TEST_F(AggregatorHashVariantTest, TwoLevelInt32SetConversionRefreshesReportedVariant) {
+    auto aggregator = make_aggregator({column_type(TYPE_INT, false)});
+    aggregator->_is_only_group_by_columns = true;
+    aggregator->_init_agg_hash_variant(aggregator->_hash_set_variant);
+    ASSERT_EQ("phase1_int32", reported_variant());
+
+    aggregator->_mem_pool = std::make_unique<MemPool>();
+
+    const int64_t saved_threshold = config::two_level_memory_threshold;
+    DeferOp restore([&]() { config::two_level_memory_threshold = saved_threshold; });
+    config::two_level_memory_threshold = 0;
+
+    aggregator->try_convert_to_two_level_set();
+    EXPECT_STREQ("phase1_int32_two_level", aggregator->_hash_set_variant.type_name());
+    EXPECT_EQ("phase1_int32_two_level", reported_variant());
+}
+
 // An aggregate with no grouping keys accumulates into a single state and never touches the hash
 // table, so its variant field holds nothing but the enum's default. Reporting that would read as
 // a missed optimization on exactly the nodes where none was possible.

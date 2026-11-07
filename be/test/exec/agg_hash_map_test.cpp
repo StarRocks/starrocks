@@ -227,6 +227,14 @@ static_assert(
         agg_key_state_is_convertible<NullOneStringAggHashSet<PhmapSeed1>, NullOneStringTwoLevelAggHashSet<PhmapSeed1>>);
 static_assert(
         agg_key_state_is_convertible<NullOneStringAggHashSet<PhmapSeed2>, NullOneStringTwoLevelAggHashSet<PhmapSeed2>>);
+static_assert(agg_key_state_is_convertible<Int32AggHashMapWithOneNumberKey<PhmapSeed1>,
+                                           Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>>);
+static_assert(agg_key_state_is_convertible<Int32AggHashMapWithOneNumberKey<PhmapSeed2>,
+                                           Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed2>>);
+static_assert(agg_key_state_is_convertible<Int32AggHashSetOfOneNumberKey<PhmapSeed1>,
+                                           Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed1>>);
+static_assert(agg_key_state_is_convertible<Int32AggHashSetOfOneNumberKey<PhmapSeed2>,
+                                           Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed2>>);
 
 // ...and every way of silently dropping out-of-table state has to be rejected. Without these the
 // guard could be vacuously true and nobody would notice.
@@ -240,6 +248,15 @@ static_assert(!agg_key_state_is_convertible<SerializedKeyAggHashSetFixedSize16<P
                                             SerializedTwoLevelKeyAggHashSet<PhmapSeed1>>); // fixed_byte_size
 static_assert(!agg_key_state_is_convertible<CompressedFixedSize8AggHashMap<PhmapSeed1>,
                                             Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>>); // compression ctx
+
+template <typename KeyType>
+KeyType make_two_level_test_key(int i, const std::vector<std::string>& key_storage) {
+    if constexpr (std::is_integral_v<KeyType>) {
+        return static_cast<KeyType>(i);
+    } else {
+        return KeyType(Slice(key_storage[i]));
+    }
+}
 
 // Drives one declared (src, dst) pair end to end: fill the single-level container, convert, then
 // require that the active alternative really is the two-level one and that nothing was lost.
@@ -265,7 +282,7 @@ void check_map_converts_to_two_level(const char* what, AggHashMapVariant::Type s
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         if constexpr (std::is_same_v<MapType, SrcWithKey>) {
             for (int i = 0; i < kNumKeys; i++) {
-                hash_map_with_key->hash_map.emplace(typename MapType::KeyType(Slice(key_storage[i])),
+                hash_map_with_key->hash_map.emplace(make_two_level_test_key<typename MapType::KeyType>(i, key_storage),
                                                     (AggDataPtr)(&values[i]));
             }
             if constexpr (MapType::has_single_null_key) {
@@ -285,7 +302,8 @@ void check_map_converts_to_two_level(const char* what, AggHashMapVariant::Type s
         if constexpr (std::is_same_v<MapType, DstWithKey>) {
             ASSERT_EQ(static_cast<size_t>(kNumKeys), hash_map_with_key->hash_map.size());
             for (int i = 0; i < kNumKeys; i++) {
-                auto it = hash_map_with_key->hash_map.find(typename MapType::KeyType(Slice(key_storage[i])));
+                auto it = hash_map_with_key->hash_map.find(
+                        make_two_level_test_key<typename MapType::KeyType>(i, key_storage));
                 ASSERT_TRUE(it != hash_map_with_key->hash_map.end()) << "missing key " << key_storage[i];
                 EXPECT_EQ(values[i], *(int64_t*)it->second);
             }
@@ -318,7 +336,7 @@ void check_set_converts_to_two_level(const char* what, AggHashSetVariant::Type s
         using SetType = std::remove_reference_t<decltype(*hash_set_with_key)>;
         if constexpr (std::is_same_v<SetType, SrcWithKey>) {
             for (int i = 0; i < kNumKeys; i++) {
-                hash_set_with_key->hash_set.emplace(typename SetType::KeyType(Slice(key_storage[i])));
+                hash_set_with_key->hash_set.emplace(make_two_level_test_key<typename SetType::KeyType>(i, key_storage));
             }
             if constexpr (SetType::has_single_null_key) {
                 hash_set_with_key->has_null_key = true;
@@ -337,7 +355,8 @@ void check_set_converts_to_two_level(const char* what, AggHashSetVariant::Type s
         if constexpr (std::is_same_v<SetType, DstWithKey>) {
             ASSERT_EQ(static_cast<size_t>(kNumKeys), hash_set_with_key->hash_set.size());
             for (int i = 0; i < kNumKeys; i++) {
-                EXPECT_TRUE(hash_set_with_key->hash_set.contains(typename SetType::KeyType(Slice(key_storage[i]))));
+                EXPECT_TRUE(hash_set_with_key->hash_set.contains(
+                        make_two_level_test_key<typename SetType::KeyType>(i, key_storage)));
             }
             if constexpr (SetType::has_single_null_key) {
                 EXPECT_TRUE(hash_set_with_key->has_null_key);
@@ -362,6 +381,12 @@ TEST(HashMapTest, ConvertToTwoLevelPreservesEveryDeclaredMapPair) {
             "phase1_null_string", Type::phase1_null_string);
     check_map_converts_to_two_level<NullOneStringAggHashMap<PhmapSeed2>, NullOneStringTwoLevelAggHashMap<PhmapSeed2>>(
             "phase2_null_string", Type::phase2_null_string);
+    check_map_converts_to_two_level<Int32AggHashMapWithOneNumberKey<PhmapSeed1>,
+                                    Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>>("phase1_int32",
+                                                                                         Type::phase1_int32);
+    check_map_converts_to_two_level<Int32AggHashMapWithOneNumberKey<PhmapSeed2>,
+                                    Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed2>>("phase2_int32",
+                                                                                         Type::phase2_int32);
 }
 
 TEST(HashMapTest, ConvertToTwoLevelPreservesEveryDeclaredSetPair) {
@@ -378,6 +403,76 @@ TEST(HashMapTest, ConvertToTwoLevelPreservesEveryDeclaredSetPair) {
             "phase1_null_string", Type::phase1_null_string);
     check_set_converts_to_two_level<NullOneStringAggHashSet<PhmapSeed2>, NullOneStringTwoLevelAggHashSet<PhmapSeed2>>(
             "phase2_null_string", Type::phase2_null_string);
+    check_set_converts_to_two_level<Int32AggHashSetOfOneNumberKey<PhmapSeed1>,
+                                    Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed1>>("phase1_int32",
+                                                                                       Type::phase1_int32);
+    check_set_converts_to_two_level<Int32AggHashSetOfOneNumberKey<PhmapSeed2>,
+                                    Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed2>>("phase2_int32",
+                                                                                       Type::phase2_int32);
+}
+
+TEST(HashMapTest, ConvertToTwoLevelInt32IdempotentAndPreservesNullKeyData) {
+    constexpr int kNumKeys = 1000;
+    std::vector<int64_t> values(kNumKeys);
+    for (int i = 0; i < kNumKeys; i++) {
+        values[i] = 2000 + i;
+    }
+    int64_t null_key_value = 987654321;
+
+    RuntimeState state;
+    RuntimeProfile profile("dummy");
+    AggStatistics statis(&profile);
+
+    AggHashMapVariant variant;
+    variant.init(&state, AggHashMapVariant::Type::phase1_int32, &statis);
+    variant.visit([&](auto& hash_map_with_key) {
+        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (std::is_same_v<MapType, Int32AggHashMapWithOneNumberKey<PhmapSeed1>>) {
+            for (int32_t i = 0; i < kNumKeys; i++) {
+                hash_map_with_key->hash_map.emplace(i, reinterpret_cast<AggDataPtr>(&values[i]));
+            }
+            hash_map_with_key->set_null_key_data(reinterpret_cast<AggDataPtr>(&null_key_value));
+        } else {
+            FAIL() << "unexpected initial map alternative";
+        }
+    });
+
+    variant.convert_to_two_level(&state);
+    ASSERT_EQ(AggHashMapVariant::Type::phase1_int32_two_level, variant.type());
+
+    const void* first_two_level_ptr = nullptr;
+    variant.visit([&](auto& hash_map_with_key) {
+        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (std::is_same_v<MapType, Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>>) {
+            first_two_level_ptr = hash_map_with_key.get();
+            ASSERT_NE(nullptr, hash_map_with_key->get_null_key_data());
+            EXPECT_EQ(null_key_value, *reinterpret_cast<int64_t*>(hash_map_with_key->get_null_key_data()));
+        } else {
+            FAIL() << "expected phase1_int32_two_level after first conversion";
+        }
+    });
+
+    // Calling convert_to_two_level a second time on phase1_int32_two_level must be a no-op
+    // that preserves the wrapper instance, null_key_data, and all entries.
+    variant.convert_to_two_level(&state);
+    ASSERT_EQ(AggHashMapVariant::Type::phase1_int32_two_level, variant.type());
+    ASSERT_EQ(static_cast<size_t>(kNumKeys) + 1, variant.size());
+    variant.visit([&](auto& hash_map_with_key) {
+        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (std::is_same_v<MapType, Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>>) {
+            EXPECT_EQ(first_two_level_ptr, hash_map_with_key.get());
+            ASSERT_EQ(static_cast<size_t>(kNumKeys), hash_map_with_key->hash_map.size());
+            for (int32_t i = 0; i < kNumKeys; i++) {
+                auto it = hash_map_with_key->hash_map.find(i);
+                ASSERT_TRUE(it != hash_map_with_key->hash_map.end()) << "missing key " << i;
+                EXPECT_EQ(values[i], *reinterpret_cast<int64_t*>(it->second));
+            }
+            ASSERT_NE(nullptr, hash_map_with_key->get_null_key_data());
+            EXPECT_EQ(null_key_value, *reinterpret_cast<int64_t*>(hash_map_with_key->get_null_key_data()));
+        } else {
+            FAIL() << "expected phase1_int32_two_level after idempotent second conversion";
+        }
+    });
 }
 
 // Guards the latent trap: a combined fixed-size key whose has_null_column is dropped stops
@@ -456,6 +551,266 @@ TEST(HashMapTest, CopyAggKeyStateSkipsStateTheDestinationCannotHold) {
     // Nothing to assert on plain_dst -- it has no such fields. The point is that this compiles
     // and does not touch the destination.
     EXPECT_EQ(0u, plain_dst.hash_map.size());
+}
+
+// Regression test: non-nullable FixedSize16 keys shorter than 16 bytes (e.g. BIGINT + INT = 12B)
+// must not leave dirty bytes in bytes 12..15 of caches[i].key when transitioning from compute_agg_noprefetch
+// to compute_agg_prefetch.
+TEST(HashMapTest, FixedSize16NonNullSub16ByteNoprefetchToPrefetchTransition) {
+    constexpr int kChunkRows = 64;
+    const double saved_ratio = config::agg_prefetch_l2_ratio;
+    DeferOp restore_ratio([&]() { config::agg_prefetch_l2_ratio = saved_ratio; });
+
+    RuntimeState state;
+    state.set_chunk_size(kChunkRows);
+    RuntimeProfile profile("FixedSize16NonNullSub16ByteNoprefetchToPrefetchTransition");
+    AggStatistics statis(&profile);
+    MemPool pool;
+    Buffer<AggDataPtr> agg_states(kChunkRows);
+
+    auto c0 = Int64Column::create();
+    auto c1 = Int32Column::create();
+    using RowPair = std::pair<int64_t, int32_t>;
+    std::set<RowPair> expected;
+    for (int i = 0; i < kChunkRows; ++i) {
+        const int64_t v0 = static_cast<int64_t>(0x1122334455667700ULL + i);
+        const int32_t v1 = static_cast<int32_t>(0x12345600 + i * 7);
+        c0->append(v0);
+        c1->append(v1);
+        expected.emplace(v0, v1);
+    }
+    Columns key_columns{c0, c1};
+
+    SerializedKeyFixedSize16AggHashMap<PhmapSeed1> map(kChunkRows, &statis);
+    map.has_null_column = false;
+    map.fixed_byte_size = 12;
+
+    // Empty chunk (0 rows) and single-element chunk (1 row) must be safe.
+    map.build_hash_map(
+            0, key_columns, &pool, [&](const auto&) { return pool.allocate(sizeof(int64_t)); }, &agg_states);
+    EXPECT_EQ(0u, map.hash_map.size());
+    map.build_hash_map(
+            1, key_columns, &pool, [&](const auto&) { return pool.allocate(sizeof(int64_t)); }, &agg_states);
+    EXPECT_EQ(1u, map.hash_map.size());
+
+    // Chunk 1: force compute_agg_noprefetch.
+    config::agg_prefetch_l2_ratio = 1e9;
+    map.build_hash_map(
+            kChunkRows, key_columns, &pool, [&](const auto&) { return pool.allocate(sizeof(int64_t)); }, &agg_states);
+    EXPECT_EQ(static_cast<size_t>(kChunkRows), map.hash_map.size());
+
+    // Chunk 2: force compute_agg_prefetch on the exact same 12-byte keys.
+    config::agg_prefetch_l2_ratio = 0.0;
+    map.build_hash_map(
+            kChunkRows, key_columns, &pool, [&](const auto&) { return pool.allocate(sizeof(int64_t)); }, &agg_states);
+    EXPECT_EQ(static_cast<size_t>(kChunkRows), map.hash_map.size());
+
+    Filter not_founds;
+    map.build_hash_map_with_selection(
+            kChunkRows, key_columns, &pool, [&](const auto&) { return pool.allocate(sizeof(int64_t)); }, &agg_states,
+            &not_founds);
+    for (int i = 0; i < kChunkRows; ++i) {
+        EXPECT_EQ(0, not_founds[i]);
+    }
+
+    map.results.clear();
+    for (const auto& kv : map.hash_map) {
+        map.results.push_back(kv.first);
+    }
+    ASSERT_EQ(static_cast<size_t>(kChunkRows), map.results.size());
+    MutableColumns out_cols;
+    out_cols.push_back(Int64Column::create());
+    out_cols.push_back(Int32Column::create());
+    map.insert_keys_to_columns(map.results, out_cols, kChunkRows);
+    std::set<RowPair> actual;
+    const auto* out0 = down_cast<const Int64Column*>(out_cols[0].get());
+    const auto* out1 = down_cast<const Int32Column*>(out_cols[1].get());
+    for (int i = 0; i < kChunkRows; ++i) {
+        actual.emplace(out0->get_data()[i], out1->get_data()[i]);
+    }
+    EXPECT_EQ(expected, actual);
+}
+
+static_assert(SerializedKeyFixedSize4AggHashMap<PhmapSeed1>::max_fixed_size == sizeof(SliceKey4));
+static_assert(SerializedKeyFixedSize8AggHashMap<PhmapSeed1>::max_fixed_size == sizeof(SliceKey8));
+static_assert(SerializedKeyFixedSize16AggHashMap<PhmapSeed1>::max_fixed_size == sizeof(SliceKey16));
+
+TEST(HashMapTest, FixedSizeSoALayoutAndSubWidthTransitionAllKeyWidths) {
+    constexpr int kChunkRows = 64;
+    const double saved_ratio = config::agg_prefetch_l2_ratio;
+    DeferOp restore_ratio([&]() { config::agg_prefetch_l2_ratio = saved_ratio; });
+
+    RuntimeProfile profile("FixedSizeSoALayoutAndSubWidthTransitionAllKeyWidths");
+    AggStatistics statis(&profile);
+    MemPool pool;
+    Buffer<AggDataPtr> agg_states(kChunkRows);
+
+    // 1. Verify SliceKey16 SoA buffer sizing, 16B stride, and 16B alignment on every row (even & odd).
+    {
+        SerializedKeyFixedSize16AggHashMap<PhmapSeed1> map16(kChunkRows, &statis);
+        ASSERT_EQ(static_cast<size_t>(kChunkRows), map16.keys.size());
+        ASSERT_EQ(static_cast<size_t>(kChunkRows), map16.hashes.size());
+        for (int i = 0; i < kChunkRows; ++i) {
+            EXPECT_EQ(0u, reinterpret_cast<uintptr_t>(&map16.keys[i]) % alignof(SliceKey16)) << "row " << i;
+            if (i + 1 < kChunkRows) {
+                EXPECT_EQ(sizeof(SliceKey16), reinterpret_cast<uintptr_t>(&map16.keys[i + 1]) -
+                                                      reinterpret_cast<uintptr_t>(&map16.keys[i]));
+            }
+        }
+    }
+
+    // 2. Verify SliceKey4 (3B sub-width: INT16 + INT8) and SliceKey8 (6B sub-width: INT32 + INT16)
+    // across partial chunks (1 row) and full chunks transitioning noprefetch -> prefetch.
+    {
+        auto c0 = Int16Column::create();
+        auto c1 = Int8Column::create();
+        for (int i = 0; i < kChunkRows; ++i) {
+            c0->append(static_cast<int16_t>(1000 + i));
+            c1->append(static_cast<int8_t>(i));
+        }
+        Columns cols4{c0, c1};
+        SerializedKeyFixedSize4AggHashMap<PhmapSeed1> map4(kChunkRows, &statis);
+        map4.has_null_column = false;
+        map4.fixed_byte_size = 3;
+
+        config::agg_prefetch_l2_ratio = 1e9; // noprefetch (partial 1-row chunk then full chunk)
+        map4.build_hash_map(
+                1, cols4, &pool, [&](const auto&) { return pool.allocate(8); }, &agg_states);
+        EXPECT_EQ(1u, map4.hash_map.size());
+        map4.build_hash_map(
+                kChunkRows, cols4, &pool, [&](const auto&) { return pool.allocate(8); }, &agg_states);
+        EXPECT_EQ(static_cast<size_t>(kChunkRows), map4.hash_map.size());
+
+        config::agg_prefetch_l2_ratio = 0.0; // prefetch on identical 3B keys
+        map4.build_hash_map(
+                kChunkRows, cols4, &pool, [&](const auto&) { return pool.allocate(8); }, &agg_states);
+        EXPECT_EQ(static_cast<size_t>(kChunkRows), map4.hash_map.size());
+    }
+    {
+        auto c0 = Int32Column::create();
+        auto c1 = Int16Column::create();
+        for (int i = 0; i < kChunkRows; ++i) {
+            c0->append(static_cast<int32_t>(0x10203000 + i));
+            c1->append(static_cast<int16_t>(0x0400 + i));
+        }
+        Columns cols8{c0, c1};
+        SerializedKeyFixedSize8AggHashMap<PhmapSeed1> map8(kChunkRows, &statis);
+        map8.has_null_column = false;
+        map8.fixed_byte_size = 6;
+
+        config::agg_prefetch_l2_ratio = 1e9; // noprefetch
+        map8.build_hash_map(
+                kChunkRows, cols8, &pool, [&](const auto&) { return pool.allocate(8); }, &agg_states);
+        EXPECT_EQ(static_cast<size_t>(kChunkRows), map8.hash_map.size());
+
+        config::agg_prefetch_l2_ratio = 0.0; // prefetch on identical 6B keys
+        map8.build_hash_map(
+                kChunkRows, cols8, &pool, [&](const auto&) { return pool.allocate(8); }, &agg_states);
+        EXPECT_EQ(static_cast<size_t>(kChunkRows), map8.hash_map.size());
+    }
+
+    // 3. Full-width 16B key (4 x INT32 = 16B, Q35 shape) where byte 15 (u.size) holds key payload data.
+    {
+        Columns cols16;
+        for (int col = 0; col < 4; ++col) {
+            auto c = Int32Column::create();
+            for (int i = 0; i < kChunkRows; ++i) {
+                c->append(static_cast<int32_t>((col << 24) | (0x00550000 + i * 3 + col)));
+            }
+            cols16.push_back(std::move(c));
+        }
+        SerializedKeyFixedSize16AggHashMap<PhmapSeed1> map16(kChunkRows, &statis);
+        map16.has_null_column = false;
+        map16.fixed_byte_size = 16;
+
+        config::agg_prefetch_l2_ratio = 1e9;
+        map16.build_hash_map(
+                kChunkRows, cols16, &pool, [&](const auto&) { return pool.allocate(8); }, &agg_states);
+        EXPECT_EQ(static_cast<size_t>(kChunkRows), map16.hash_map.size());
+
+        config::agg_prefetch_l2_ratio = 0.0;
+        map16.build_hash_map(
+                kChunkRows, cols16, &pool, [&](const auto&) { return pool.allocate(8); }, &agg_states);
+        EXPECT_EQ(static_cast<size_t>(kChunkRows), map16.hash_map.size());
+    }
+}
+
+// Regression test: non-nullable FixedSize8 keys shorter than 8 bytes (e.g. INT + SMALLINT = 6B)
+// must not leave dirty bytes in bytes 6..7 of caches[i].key when transitioning from compute_agg_noprefetch
+// to compute_agg_prefetch, and FixedSize8 hash sets must cleanly release previous staging buffers on resize.
+TEST(HashMapTest, FixedSize8NonNullSub8ByteNoprefetchToPrefetchTransitionAndSetResize) {
+    constexpr int kChunkRows = 64;
+    const double saved_ratio = config::agg_prefetch_l2_ratio;
+    DeferOp restore_ratio([&]() { config::agg_prefetch_l2_ratio = saved_ratio; });
+
+    RuntimeProfile profile("FixedSize8NonNullSub8ByteNoprefetchToPrefetchTransitionAndSetResize");
+    AggStatistics statis(&profile);
+    MemPool pool;
+    Buffer<AggDataPtr> agg_states(kChunkRows);
+
+    auto c0 = Int32Column::create();
+    auto c1 = Int16Column::create();
+    using RowPair = std::pair<int32_t, int16_t>;
+    std::set<RowPair> expected;
+    for (int i = 0; i < kChunkRows; ++i) {
+        const int32_t v0 = static_cast<int32_t>(0x12345600 + i);
+        const int16_t v1 = static_cast<int16_t>(0x1200 + i * 3);
+        c0->append(v0);
+        c1->append(v1);
+        expected.emplace(v0, v1);
+    }
+    Columns key_columns{c0, c1};
+
+    SerializedKeyFixedSize8AggHashMap<PhmapSeed1> map(kChunkRows, &statis);
+    map.has_null_column = false;
+    map.fixed_byte_size = 6;
+
+    // Chunk 1: force compute_agg_noprefetch.
+    config::agg_prefetch_l2_ratio = 1e9;
+    map.build_hash_map(
+            kChunkRows, key_columns, &pool, [&](const auto&) { return pool.allocate(sizeof(int64_t)); }, &agg_states);
+    EXPECT_EQ(static_cast<size_t>(kChunkRows), map.hash_map.size());
+
+    // Chunk 2: force compute_agg_prefetch on the exact same 6-byte keys.
+    config::agg_prefetch_l2_ratio = 0.0;
+    map.build_hash_map(
+            kChunkRows, key_columns, &pool, [&](const auto&) { return pool.allocate(sizeof(int64_t)); }, &agg_states);
+    EXPECT_EQ(static_cast<size_t>(kChunkRows), map.hash_map.size());
+
+    map.results.clear();
+    for (const auto& kv : map.hash_map) {
+        map.results.push_back(kv.first);
+    }
+    ASSERT_EQ(static_cast<size_t>(kChunkRows), map.results.size());
+    MutableColumns out_cols;
+    out_cols.push_back(Int32Column::create());
+    out_cols.push_back(Int16Column::create());
+    map.insert_keys_to_columns(map.results, out_cols, kChunkRows);
+    std::set<RowPair> actual;
+    const auto* out0 = down_cast<const Int32Column*>(out_cols[0].get());
+    const auto* out1 = down_cast<const Int16Column*>(out_cols[1].get());
+    for (int i = 0; i < kChunkRows; ++i) {
+        actual.emplace(out0->get_data()[i], out1->get_data()[i]);
+    }
+    EXPECT_EQ(expected, actual);
+
+    // Also verify SerializedKeyAggHashSetFixedSize8 prefetch and deserialization.
+    SerializedKeyAggHashSetFixedSize8<PhmapSeed1> hash_set(kChunkRows, &statis);
+    hash_set.has_null_column = false;
+    hash_set.fixed_byte_size = 6;
+    Filter not_founds;
+    config::agg_prefetch_l2_ratio = 0.0;
+    hash_set.build_set<true>(kChunkRows, key_columns, &pool, &not_founds);
+    EXPECT_EQ(static_cast<size_t>(kChunkRows), hash_set.hash_set.size());
+    hash_set.results.clear();
+    for (const auto& key : hash_set.hash_set) {
+        hash_set.results.push_back(key);
+    }
+    MutableColumns set_out_cols;
+    set_out_cols.push_back(Int32Column::create());
+    set_out_cols.push_back(Int16Column::create());
+    hash_set.insert_keys_to_columns(hash_set.results, set_out_cols, kChunkRows);
+    EXPECT_EQ(static_cast<size_t>(kChunkRows), set_out_cols[0]->size());
 }
 
 class AggHashMapKeyNotFoundsTest : public ::testing::Test {
