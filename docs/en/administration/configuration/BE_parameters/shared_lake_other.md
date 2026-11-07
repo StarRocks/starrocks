@@ -684,7 +684,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: No
-- Description: The length of time after which an idle connection in the JDBC connection pool expires. If the connection idle time in the JDBC connection pool exceeds this value, the connection pool closes idle connections beyond the number specified in the configuration item `jdbc_minimum_idle_connections`.
+- Description: The length of time after which an idle connection in the JDBC connection pool expires. If the connection idle time in the JDBC connection pool exceeds this value, the connection pool closes idle connections beyond the number specified in the configuration item `jdbc_minimum_idle_connections`. If no query uses a connection pool for this length of time, the BE closes the whole connection pool, including the connections kept by `jdbc_minimum_idle_connections`, and creates a new one on the next query. This releases the connection pools of dropped or altered JDBC catalogs and resources.
 - Introduced in: -
 
 ### jdbc_connection_pool_size
