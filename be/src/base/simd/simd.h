@@ -57,14 +57,14 @@ inline size_t count_zero(const T* data, size_t size) {
         count += __builtin_popcountll(static_cast<uint64_t>(m0) | (static_cast<uint64_t>(m1) << 32u));
     }
 
-    if (data + 32 <= end) {
+    if (end - data >= 32) {
         const __m256i v = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data));
         const uint32_t m = static_cast<uint32_t>(_mm256_movemask_epi8(_mm256_cmpeq_epi8(v, zero256)));
         count += __builtin_popcount(m);
         data += 32;
     }
 
-    if (data + 16 <= end) {
+    if (end - data >= 16) {
         const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(data));
         const uint32_t m = static_cast<uint32_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(v, _mm_setzero_si128())));
         count += __builtin_popcount(m);
@@ -161,7 +161,7 @@ inline size_t count_zero(const T* data, size_t size) {
         count += __builtin_popcount(m0 | (m1 << 8u));
     }
 
-    if (data + 8 <= end) {
+    if (end - data >= 8) {
         const __m256i v = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data));
         const uint32_t m =
                 static_cast<uint32_t>(_mm256_movemask_ps(_mm256_castsi256_ps(_mm256_cmpeq_epi32(v, zero256))));
@@ -169,7 +169,7 @@ inline size_t count_zero(const T* data, size_t size) {
         data += 8;
     }
 
-    if (data + 4 <= end) {
+    if (end - data >= 4) {
         const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(data));
         const uint32_t m =
                 static_cast<uint32_t>(_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(v, _mm_setzero_si128()))));

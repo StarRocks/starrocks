@@ -48,6 +48,11 @@ public:
 };
 
 TEST_F(SIMDTest, count_zeros) {
+    std::vector<uint8_t> empty_vec;
+    EXPECT_EQ(0, SIMD::count_zero(empty_vec));
+    EXPECT_EQ(0, SIMD::count_zero(static_cast<const uint8_t*>(nullptr), 0));
+    EXPECT_EQ(0, SIMD::count_zero(static_cast<const int8_t*>(nullptr), 0));
+
     EXPECT_EQ(0u, SIMD::count_zero(std::vector<int8_t>{}));
     EXPECT_EQ(3u, SIMD::count_zero(std::vector<int8_t>{0, 0, 0}));
     EXPECT_EQ(1u, SIMD::count_zero(std::vector<int8_t>{0, 1, 2}));
@@ -93,6 +98,11 @@ TEST_F(SIMDTest, count_nonzero) {
 }
 
 TEST_F(SIMDTest, count_zeros_int32) {
+    std::vector<uint32_t> empty_vec;
+    EXPECT_EQ(0, SIMD::count_zero(empty_vec));
+    EXPECT_EQ(0, SIMD::count_zero(static_cast<const uint32_t*>(nullptr), 0));
+    EXPECT_EQ(0, SIMD::count_zero(static_cast<const int32_t*>(nullptr), 0));
+
     EXPECT_EQ(0u, SIMD::count_zero(std::vector<uint32_t>{}));
     EXPECT_EQ(3u, SIMD::count_zero(std::vector<uint32_t>{0, 0, 0}));
     EXPECT_EQ(1u, SIMD::count_zero(std::vector<uint32_t>{0, 1, 2}));
