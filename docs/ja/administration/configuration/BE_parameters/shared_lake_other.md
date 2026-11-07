@@ -513,7 +513,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: ミリ秒
 - 変更可能: いいえ
-- 説明: JDBC 接続プール内のアイドル接続が期限切れになるまでの時間。JDBC 接続プール内の接続アイドル時間がこの値を超えると、接続プールは設定項目 `jdbc_minimum_idle_connections` で指定された数を超えるアイドル接続を閉じます。
+- 説明: JDBC 接続プール内のアイドル接続が期限切れになるまでの時間。JDBC 接続プール内の接続アイドル時間がこの値を超えると、接続プールは設定項目 `jdbc_minimum_idle_connections` で指定された数を超えるアイドル接続を閉じます。接続プールがこの時間内にどのクエリにも使用されない場合、BE は `jdbc_minimum_idle_connections` で保持されている接続を含む接続プール全体を閉じ、次のクエリで新しく作成します。これにより、削除または変更された JDBC Catalog およびリソースの接続プールが解放されます。
 - 導入バージョン: -
 
 ### jdbc_connection_pool_size

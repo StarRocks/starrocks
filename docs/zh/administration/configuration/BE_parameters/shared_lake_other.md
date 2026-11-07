@@ -519,7 +519,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：毫秒
 - 是否动态：否
-- 描述：JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。
+- 描述：JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。如果某个连接池在此时间内没有被任何查询使用，BE 会关闭整个连接池（包括 `jdbc_minimum_idle_connections` 保留的连接），并在下一次查询时重新创建。这样可以释放已删除或已修改的 JDBC Catalog 和资源所对应的连接池。
 - 引入版本：-
 
 ### jdbc_connection_pool_size
