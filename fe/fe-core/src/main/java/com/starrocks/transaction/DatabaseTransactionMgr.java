@@ -2227,6 +2227,14 @@ public class DatabaseTransactionMgr {
             TransactionLogApplier applier = txnLogApplierFactory.create(table);
             ((LakeTableTxnLogApplier) applier).applyVisibleLogBatch(transactionStateBatch, db);
         }
+        // same per-transaction load row accounting as updateCatalogAfterVisible
+        for (TransactionState transactionState : transactionStateBatch.getTransactionStates()) {
+            try {
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateLoadRows(transactionState);
+            } catch (Throwable t) {
+                LOG.warn("update load rows failed for txn: {}", transactionState, t);
+            }
+        }
         return true;
     }
 
