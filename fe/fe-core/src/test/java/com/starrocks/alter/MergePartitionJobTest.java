@@ -41,7 +41,6 @@ import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
