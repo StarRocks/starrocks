@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <optional>
 #include <utility>
 
 #include "exec/aggregator.h"
@@ -67,7 +68,8 @@ private:
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::AUTO
     Status _push_chunk_by_auto(RuntimeState* state, const ChunkPtr& chunk, const size_t chunk_size);
 
-    Status _push_chunk_by_selective_preaggregation(const ChunkPtr& chunk, const size_t chunk_size, bool need_build);
+    Status _push_chunk_by_selective_preaggregation(const ChunkPtr& chunk, const size_t chunk_size, bool need_build,
+                                                   std::optional<size_t> precomputed_zero_count = std::nullopt);
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::LIMITED
     Status _push_chunk_by_limited_memory(RuntimeState* state, const ChunkPtr& chunk, const size_t chunk_size);
