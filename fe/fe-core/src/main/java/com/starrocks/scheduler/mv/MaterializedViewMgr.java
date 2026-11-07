@@ -23,6 +23,7 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -110,5 +111,9 @@ public class MaterializedViewMgr {
 
     public void triggerTimelessInfoEvent(MaterializedView mv, MVTimelinessMgr.MVChangeEvent event) {
         mvTimelinessMgr.triggerEvent(mv, event);
+        // Called on the leader after a refresh and on followers when replaying it.
+        if (event == MVTimelinessMgr.MVChangeEvent.MV_REFRESHED) {
+            CachingMvPlanContextBuilder.getInstance().evictFailedPlanContext(mv);
+        }
     }
 }
