@@ -61,6 +61,7 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
     RawDataVisitor rv;
     CHECK(src.accept(&rv).ok());
     const T* src_data = reinterpret_cast<const T*>(rv.result());
+    // dest_data (appended region beyond orig_size) and src_data are disjoint; indexes address only existing src rows.
     SIMDGather::gather(dest_data, src_data, indexes, size);
 }
 

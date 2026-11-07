@@ -1247,6 +1247,230 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, BucketChainedLookupInitNullableWithNulls) {
+    JoinHashTableItems table_items;
+    HashTableProbeState probe_state;
+
+    auto type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    auto build_column = ColumnHelper::create_column(type, true);
+    build_column->append_default();
+    build_column->append(*JoinHashMapTest::create_int32_nullable_column(20, 0), 0, 20);
+
+    auto probe_column = JoinHashMapTest::create_int32_nullable_column(20, 0);
+    table_items.first.resize(32, 0);
+    table_items.key_columns.emplace_back(std::move(build_column));
+    table_items.bucket_size = 32;
+    table_items.row_count = 20;
+    table_items.next.resize(21);
+    probe_state.probe_row_count = 20;
+    probe_state.buckets.resize(config::vector_chunk_size);
+    probe_state.next.resize(config::vector_chunk_size, 0);
+    Columns probe_columns{probe_column};
+    probe_state.key_columns = &probe_columns;
+
+    using BuildKeyConstructor = BuildKeyConstructorForOneKey<LogicalType::TYPE_INT>;
+    using ProbeKeyConstructor = ProbeKeyConstructorForOneKey<LogicalType::TYPE_INT>;
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_INT>;
+
+    BuildKeyConstructor::prepare(nullptr, &table_items);
+    BuildKeyConstructor::build_key(nullptr, &table_items);
+    JoinHashMapMethod::build_prepare(nullptr, &table_items);
+    JoinHashMapMethod::construct_hash_table(&table_items, BuildKeyConstructor().get_key_data(table_items),
+                                            BuildKeyConstructor().get_is_nulls(table_items));
+
+    ProbeKeyConstructor::prepare(nullptr, &probe_state);
+    ProbeKeyConstructor::build_key(table_items, &probe_state);
+    ASSERT_TRUE(probe_state.null_array.has_value());
+
+    // Directly test lookup_init with nulls present, verifying line 118 in join_hash_map_method.hpp
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, BuildKeyConstructor().get_key_data(table_items),
+                                   ProbeKeyConstructor().get_key_data(probe_state), probe_state.null_array);
+
+    const auto* is_nulls_data = probe_state.null_array->data();
+    for (size_t i = 0; i < probe_state.probe_row_count; i++) {
+        if (is_nulls_data[i] != 0) {
+            // Filtered null row must be zero-initialized
+            ASSERT_EQ(probe_state.next[i], 0);
+        } else {
+            // Non-null row must gather from table_items.first[bucket]
+            uint32_t bucket = probe_state.buckets[i];
+            ASSERT_EQ(probe_state.next[i], table_items.first[bucket]);
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, BucketChainedLookupInitLargePoolPrefetch) {
+    JoinHashTableItems table_items;
+    HashTableProbeState probe_state;
+
+    // 4M buckets = 16 MiB for uint32_t first array, meeting kPrefetchPoolBytes threshold
+    constexpr size_t kBucketSize = 4 * 1024 * 1024;
+    constexpr size_t kProbeRows = 512; // meets kPrefetchMinRows
+
+    table_items.first.assign(kBucketSize, 0);
+    // Mark bucket 0 with build row 1, rest empty
+    table_items.first[0] = 1;
+    table_items.bucket_size = kBucketSize;
+    table_items.log_bucket_size = 22; // 2^22 = 4M
+
+    probe_state.probe_row_count = kProbeRows;
+    probe_state.buckets.resize(config::vector_chunk_size);
+    probe_state.next.resize(config::vector_chunk_size, 0);
+
+    // Create high-cardinality probe keys to trigger should_prefetch_indexes == true
+    auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    MutableColumnPtr probe_col = ColumnHelper::create_column(int_type, false);
+    for (size_t i = 0; i < kProbeRows; i++) {
+        probe_col->append_datum(static_cast<int32_t>(i * 8192));
+    }
+    ColumnPtr const_probe_col = std::move(probe_col);
+    Columns probe_columns{const_probe_col};
+    probe_state.key_columns = &probe_columns;
+
+    using JoinHashMapMethod = BucketChainedJoinHashMap<LogicalType::TYPE_INT>;
+    ImmBuffer<int32_t> empty_build_keys{};
+    const auto* data_col = ColumnHelper::as_raw_column<Int32Column>(const_probe_col);
+    ImmBuffer<int32_t> probe_keys(data_col->get_data().data(), kProbeRows);
+
+    // Direct call exercising large-pool prefetch path through lookup_init
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, empty_build_keys, probe_keys, std::nullopt);
+
+    // Verify all gathered next entries match first[bucket]
+    for (size_t i = 0; i < kProbeRows; i++) {
+        uint32_t bucket = probe_state.buckets[i];
+        ASSERT_EQ(probe_state.next[i], table_items.first[bucket]);
+    }
+
+    // Also exercise nullable large-pool path with nulls present
+    auto nullable_probe_col = JoinHashMapTest::create_int32_nullable_column(kProbeRows, 0);
+    Columns nullable_probe_columns{nullable_probe_col};
+    probe_state.key_columns = &nullable_probe_columns;
+
+    using ProbeKeyConstructor = ProbeKeyConstructorForOneKey<LogicalType::TYPE_INT>;
+    ProbeKeyConstructor::prepare(nullptr, &probe_state);
+    ProbeKeyConstructor::build_key(table_items, &probe_state);
+    ASSERT_TRUE(probe_state.null_array.has_value());
+
+    const auto& nullable_data_col = ColumnHelper::as_raw_column<NullableColumn>(nullable_probe_col)->data_column();
+    const auto* int_data = ColumnHelper::as_raw_column<Int32Column>(nullable_data_col.get());
+    ImmBuffer<int32_t> nullable_probe_keys(int_data->get_data().data(), kProbeRows);
+
+    JoinHashMapMethod::lookup_init(table_items, &probe_state, empty_build_keys, nullable_probe_keys,
+                                   probe_state.null_array);
+
+    const auto* is_nulls_data = probe_state.null_array->data();
+    for (size_t i = 0; i < kProbeRows; i++) {
+        if (is_nulls_data[i] != 0) {
+            ASSERT_EQ(probe_state.next[i], 0);
+        } else {
+            uint32_t bucket = probe_state.buckets[i];
+            ASSERT_EQ(probe_state.next[i], table_items.first[bucket]);
+        }
+    }
+
+    // Also exercise the end-to-end JoinHashMap::probe() path in libExecJoinCore
+    // for both non-null and nullable probe chunks
+    table_items.join_type = TJoinOp::INNER_JOIN;
+    table_items.row_count = 1;
+    table_items.next.resize(2, 0);
+    auto build_col = ColumnHelper::create_column(int_type, false);
+    build_col->append_default();
+    build_col->append_datum(static_cast<int32_t>(0));
+    table_items.key_columns.clear();
+    table_items.key_columns.emplace_back(std::move(build_col));
+    table_items.build_chunk = std::make_shared<Chunk>();
+    table_items.build_chunk->append_column(table_items.key_columns[0], 0);
+    table_items.build_column_count = 1;
+
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false, 1);
+    auto record_desc = create_probe_desc(&row_desc_builder);
+
+    std::vector<HashTableSlotDescriptor> hash_table_slot_vec;
+    for (auto* slot : record_desc->slots()) {
+        HashTableSlotDescriptor hash_table_slot{};
+        hash_table_slot.slot = slot;
+        hash_table_slot.need_output = true;
+        hash_table_slot_vec.emplace_back(hash_table_slot);
+    }
+    table_items.build_slots = hash_table_slot_vec;
+    table_items.probe_slots = hash_table_slot_vec;
+
+    // 1. Non-null high-cardinality probe chunk exercising line 102 and the 8-way prefetch loop in libExecJoinCore
+    HashTableProbeState high_card_probe_state;
+    auto high_card_join_hash_map =
+            std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &high_card_probe_state);
+    high_card_join_hash_map->probe_prepare(_runtime_state.get());
+    auto non_null_chunk = std::make_shared<Chunk>();
+    non_null_chunk->append_column(const_probe_col, 0);
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
+    bool has_remain = false;
+    high_card_join_hash_map->probe(_runtime_state.get(), probe_columns, &non_null_chunk, &result_chunk, &has_remain);
+
+    // 2. Low-cardinality non-null probe chunk exercising the rejection path (fallback to gather_buffered) in libExecJoinCore
+    HashTableProbeState low_card_probe_state;
+    auto low_card_join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &low_card_probe_state);
+    low_card_join_hash_map->probe_prepare(_runtime_state.get());
+    MutableColumnPtr low_card_col = ColumnHelper::create_column(int_type, false);
+    for (size_t i = 0; i < kProbeRows; i++) {
+        low_card_col->append_datum(static_cast<int32_t>(0));
+    }
+    ColumnPtr low_card_probe_col = std::move(low_card_col);
+    Columns low_card_probe_columns{low_card_probe_col};
+    auto low_card_chunk = std::make_shared<Chunk>();
+    low_card_chunk->append_column(low_card_probe_col, 0);
+    ChunkPtr low_card_result = std::make_shared<Chunk>();
+    bool low_card_has_remain = false;
+    low_card_join_hash_map->probe(_runtime_state.get(), low_card_probe_columns, &low_card_chunk, &low_card_result,
+                                  &low_card_has_remain);
+
+    // 3. Nullable probe chunk with nulls exercising line 118 and gather_filtered_buffered in libExecJoinCore
+    HashTableProbeState null_probe_state;
+    auto null_join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &null_probe_state);
+    null_join_hash_map->probe_prepare(_runtime_state.get());
+    auto nullable_chunk = std::make_shared<Chunk>();
+    nullable_chunk->append_column(nullable_probe_col, 0);
+    ChunkPtr null_result_chunk = std::make_shared<Chunk>();
+    bool null_has_remain = false;
+    null_join_hash_map->probe(_runtime_state.get(), nullable_probe_columns, &nullable_chunk, &null_result_chunk,
+                              &null_has_remain);
+
+    // 4. Unaligned probe chunks (515 rows) exercising the scalar tails (gather_scalar) in libExecJoinCore
+    HashTableProbeState unaligned_probe_state;
+    auto unaligned_join_hash_map =
+            std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &unaligned_probe_state);
+    unaligned_join_hash_map->probe_prepare(_runtime_state.get());
+    constexpr size_t kUnalignedRows = 515;
+    MutableColumnPtr unaligned_col = ColumnHelper::create_column(int_type, false);
+    for (size_t i = 0; i < kUnalignedRows; i++) {
+        unaligned_col->append_datum(static_cast<int32_t>(i * 8192));
+    }
+    ColumnPtr unaligned_probe_col = std::move(unaligned_col);
+    Columns unaligned_probe_columns{unaligned_probe_col};
+    auto unaligned_chunk = std::make_shared<Chunk>();
+    unaligned_chunk->append_column(unaligned_probe_col, 0);
+    ChunkPtr unaligned_result = std::make_shared<Chunk>();
+    bool unaligned_has_remain = false;
+    unaligned_join_hash_map->probe(_runtime_state.get(), unaligned_probe_columns, &unaligned_chunk, &unaligned_result,
+                                   &unaligned_has_remain);
+
+    // 5. Unaligned nullable probe chunk (515 rows) exercising line 118 and gather_filtered_scalar in libExecJoinCore
+    HashTableProbeState unaligned_null_probe_state;
+    auto unaligned_null_join_hash_map =
+            std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &unaligned_null_probe_state);
+    unaligned_null_join_hash_map->probe_prepare(_runtime_state.get());
+    auto unaligned_nullable_probe_col = JoinHashMapTest::create_int32_nullable_column(kUnalignedRows, 0);
+    Columns unaligned_null_probe_columns{unaligned_nullable_probe_col};
+    auto unaligned_null_chunk = std::make_shared<Chunk>();
+    unaligned_null_chunk->append_column(unaligned_nullable_probe_col, 0);
+    ChunkPtr unaligned_null_result = std::make_shared<Chunk>();
+    bool unaligned_null_has_remain = false;
+    unaligned_null_join_hash_map->probe(_runtime_state.get(), unaligned_null_probe_columns, &unaligned_null_chunk,
+                                        &unaligned_null_result, &unaligned_null_has_remain);
+}
+
+// NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
     TDescriptorTableBuilder row_desc_builder;
     add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, false, 1);
