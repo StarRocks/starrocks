@@ -15,14 +15,21 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.statistic.StatisticUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.List;
 import java.util.stream.Stream;
 
 import static java.util.stream.Stream.of;
@@ -40,6 +47,48 @@ public class JsonPathRewriteTest extends PlanTestBase {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testJsonSubfieldPreservesOrdinaryColumnStatistics(boolean jsonDictOpt) throws Exception {
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        StatisticStorage original = state.getStatisticStorage();
+        boolean jsonRewrite = connectContext.getSessionVariable().isEnableJSONV2Rewrite();
+        boolean originalJsonDictOpt = connectContext.getSessionVariable().isEnableJSONV2DictOpt();
+        boolean lowCardinalityOpt = connectContext.getSessionVariable().isUseLowCardinalityOptimizeV2();
+        try {
+            connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+            connectContext.getSessionVariable().setEnableJSONV2DictOpt(jsonDictOpt);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
+            state.setStatisticStorage(new StatisticStorage() {
+                @Override
+                public ColumnStatistic getColumnStatistic(Table table, String column) {
+                    // Use the same type resolution as the real statistics loader.
+                    StatisticUtils.getQueryStatisticsColumnType(table, column);
+                    return column.equals("c1") ? new ColumnStatistic(1, 10, 0, 4, 10) : ColumnStatistic.unknown();
+                }
+
+                @Override
+                public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                    return columns.stream().map(column -> getColumnStatistic(table, column)).toList();
+                }
+
+                @Override
+                public void addColumnStatistic(Table table, String column, ColumnStatistic statistic) {
+                }
+            });
+            String plan = getCostExplain("select count(*) from extend_predicate " +
+                    "where c1 = 1 and get_json_string(c2, '$.a') = 'x'");
+            Assertions.assertTrue(plan.contains("c2.a"), plan);
+            Assertions.assertTrue(plan.lines().anyMatch(line ->
+                    line.contains("* c1-->") && line.contains("ESTIMATE")), plan);
+        } finally {
+            state.setStatisticStorage(original);
+            connectContext.getSessionVariable().setEnableJSONV2Rewrite(jsonRewrite);
+            connectContext.getSessionVariable().setEnableJSONV2DictOpt(originalJsonDictOpt);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(lowCardinalityOpt);
+        }
     }
 
     @ParameterizedTest
