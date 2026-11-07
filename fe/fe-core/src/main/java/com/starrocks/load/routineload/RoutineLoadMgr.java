@@ -479,6 +479,21 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
+    public Map<Long, WarehouseTaskSlots> getWarehouseSlotNums() {
+        slotLock.lock();
+        try {
+            Map<Long, WarehouseTaskSlots> result = Maps.newHashMap();
+            for (Map.Entry<Long, Map<Long, Integer>> entry : warehouseNodeTasksNum.entrySet()) {
+                int used = entry.getValue().values().stream().reduce(0, Integer::sum);
+                int total = entry.getValue().size() * Config.max_routine_load_task_num_per_be;
+                result.put(entry.getKey(), new WarehouseTaskSlots(used, total));
+            }
+            return result;
+        } finally {
+            slotLock.unlock();
+        }
+    }
+
     public int getClusterIdleSlotNum() {
         slotLock.lock();
         try {

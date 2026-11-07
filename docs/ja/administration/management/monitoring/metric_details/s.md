@@ -831,43 +831,43 @@ description: "Alphabetical s"
 
 - 単位: ms
 - タイプ: 概要
-- 説明: トランザクションが`VISIBLE`としてマークされたときの、`ready-to-finish`時間から最終的な`finish`時間までの最終確認レイテンシ。このメトリックには、トランザクションが完了準備ができた後の最終確認ステップが含まれます。
+- 説明: トランザクションが`VISIBLE`としてマークされたときの、`ready-to-finish`時間から最終的な`finish`時間までの最終確認レイテンシ。このメトリックには、トランザクションが完了準備ができた後の最終確認ステップが含まれます。`status` ラベル（`visible` または `aborted`）が付与されており、`commit` 後に中止されたトランザクションは `status="aborted"` として記録されます。 その type グループが `txn_latency_metric_report_groups` で有効化されている場合、クラスタ全体の系列に加えて、warehouse ごとに `warehouse_name` ラベル（トランザクションがロードした warehouse）付きの系列が 1 つずつ出力されます。`all` type には warehouse ラベルは付きません。
 
 ## `starrocks_fe_txn_publish_can_finish_latency_ms`
 
 - 単位: ms
 - タイプ: 概要
-- 説明: `publish`タスクの完了から`canTxnFinish()`が最初にtrueを返す瞬間までのレイテンシで、`publish version finish`時間から`ready-to-finish`時間までで測定されます。
+- 説明: `publish`タスクの完了から`canTxnFinish()`が最初にtrueを返す瞬間までのレイテンシで、`publish version finish`時間から`ready-to-finish`時間までで測定されます。`status` ラベル（`visible` または `aborted`）が付与されており、`commit` 後に中止されたトランザクションは `status="aborted"` として記録されます。 その type グループが `txn_latency_metric_report_groups` で有効化されている場合、クラスタ全体の系列に加えて、warehouse ごとに `warehouse_name` ラベル（トランザクションがロードした warehouse）付きの系列が 1 つずつ出力されます。`all` type には warehouse ラベルは付きません。
 
 ## `starrocks_fe_txn_publish_execute_latency_ms`
 
 - 単位: ms
 - タイプ: 概要
-- 説明: `publish`タスクのアクティブな実行時間で、タスクが選択されてから完了するまでです。このメトリックは、トランザクションの変更を可視化するために実際に費やされた時間を表します。
+- 説明: `publish`タスクのアクティブな実行時間で、タスクが選択されてから完了するまでです。このメトリックは、トランザクションの変更を可視化するために実際に費やされた時間を表します。`status` ラベル（`visible` または `aborted`）が付与されており、`commit` 後に中止されたトランザクションは `status="aborted"` として記録されます。 その type グループが `txn_latency_metric_report_groups` で有効化されている場合、クラスタ全体の系列に加えて、warehouse ごとに `warehouse_name` ラベル（トランザクションがロードした warehouse）付きの系列が 1 つずつ出力されます。`all` type には warehouse ラベルは付きません。
 
 ## `starrocks_fe_txn_publish_latency_ms`
 
 - 単位: ms
 - タイプ: 概要
-- 説明: `publish`フェーズのレイテンシで、`commit`時間から`finish`時間までです。これは、コミットされたトランザクションがクエリに対して可視になるまでの期間です。`schedule`、`execute`、`can_finish`、および`ack`のサブフェーズの合計です。
+- 説明: `publish`フェーズのレイテンシで、`commit`時間から`finish`時間までです。これは、コミットされたトランザクションがクエリに対して可視になるまでの期間です。`schedule`、`execute`、`can_finish`、および`ack`のサブフェーズの合計です。`status` ラベル（`visible` または `aborted`）が付与されており、`commit` 後に中止されたトランザクションは `status="aborted"` として記録されます。 その type グループが `txn_latency_metric_report_groups` で有効化されている場合、クラスタ全体の系列に加えて、warehouse ごとに `warehouse_name` ラベル（トランザクションがロードした warehouse）付きの系列が 1 つずつ出力されます。`all` type には warehouse ラベルは付きません。
 
 ## `starrocks_fe_txn_publish_schedule_latency_ms`
 
 - 単位: ms
 - タイプ: 概要
-- 説明: トランザクションがコミットされてから公開されるのを待つ時間で、`commit`時間から公開タスクが選択されるまで測定されます。このメトリックは、`publish`パイプラインにおけるスケジューリング遅延またはキューイング時間を反映します。
+- 説明: トランザクションがコミットされてから公開されるのを待つ時間で、`commit`時間から公開タスクが選択されるまで測定されます。このメトリックは、`publish`パイプラインにおけるスケジューリング遅延またはキューイング時間を反映します。`status` ラベル（`visible` または `aborted`）が付与されており、`commit` 後に中止されたトランザクションは `status="aborted"` として記録されます。 その type グループが `txn_latency_metric_report_groups` で有効化されている場合、クラスタ全体の系列に加えて、warehouse ごとに `warehouse_name` ラベル（トランザクションがロードした warehouse）付きの系列が 1 つずつ出力されます。`all` type には warehouse ラベルは付きません。
 
 ## `starrocks_fe_txn_total_latency_ms`
 
 - 単位: ms
 - タイプ: 概要
-- 説明: トランザクションが完了するまでの合計レイテンシで、`prepare`時間から`finish`時間まで測定されます。このメトリックは、トランザクションの完全なエンドツーエンドの期間を表します。
+- 説明: トランザクションが完了するまでの合計レイテンシで、`prepare`時間から`finish`時間まで測定されます。このメトリックは、トランザクションの完全なエンドツーエンドの期間を表します。`status` ラベル（`visible` または `aborted`）が付与されており、中止されたトランザクション（たとえばタイムアウト後に中止されたもの）は分布から除外されず、`status="aborted"` として記録されます。 その type グループが `txn_latency_metric_report_groups` で有効化されている場合、クラスタ全体の系列に加えて、warehouse ごとに `warehouse_name` ラベル（トランザクションがロードした warehouse）付きの系列が 1 つずつ出力されます。`all` type には warehouse ラベルは付きません。
 
 ## `starrocks_fe_txn_write_latency_ms`
 
 - 単位: ms
 - タイプ: 概要
-- 説明: トランザクションの`write`フェーズのレイテンシで、`prepare`時間から`commit`時間までです。このメトリックは、トランザクションが公開準備が整う前のデータ書き込みおよび準備段階のパフォーマンスを分離します。
+- 説明: トランザクションの`write`フェーズのレイテンシで、`prepare`時間から`commit`時間までです。このメトリックは、トランザクションが公開準備が整う前のデータ書き込みおよび準備段階のパフォーマンスを分離します。`status` ラベル（`visible` または `aborted`）が付与されています。`commit` に到達する前に中止されたトランザクションでは、このフェーズは中止時刻で終了するため、書き込み中にタイムアウトしたロードも含まれます。 その type グループが `txn_latency_metric_report_groups` で有効化されている場合、クラスタ全体の系列に加えて、warehouse ごとに `warehouse_name` ラベル（トランザクションがロードした warehouse）付きの系列が 1 つずつ出力されます。`all` type には warehouse ラベルは付きません。
 
 ## `starrocks_fe_unfinished_backup_job`
 

@@ -303,6 +303,32 @@ public class RoutineLoadManagerTest {
     }
 
     @Test
+    public void testGetWarehouseSlotNums() {
+        List<Long> beIds = Lists.newArrayList(1L, 2L);
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendIds(true);
+                minTimes = 0;
+                result = beIds;
+            }
+        };
+
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        routineLoadManager.updateBeTaskSlot();
+        WarehouseTaskSlots slots = routineLoadManager.getWarehouseSlotNums().get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Assertions.assertEquals(2 * Config.max_routine_load_task_num_per_be, slots.total);
+        Assertions.assertEquals(0, slots.used);
+        Assertions.assertFalse(slots.isFull());
+
+        routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1L);
+        slots = routineLoadManager.getWarehouseSlotNums().get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        Assertions.assertEquals(1, slots.used);
+        Assertions.assertEquals(slots.total - slots.used, routineLoadManager.getClusterIdleSlotNum());
+        Assertions.assertTrue(new WarehouseTaskSlots(slots.total, slots.total).isFull());
+    }
+
+    @Test
     public void testTakeBeTaskSlot() throws Exception {
         List<Long> beIds = Lists.newArrayList(1L, 2L);
 

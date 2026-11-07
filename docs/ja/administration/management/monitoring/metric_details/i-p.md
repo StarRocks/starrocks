@@ -354,6 +354,12 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: 件数
 - 説明: 成功したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
 
+## `lake_ingest_slowdown_active`
+
+- 単位: 件数
+- タイプ: 瞬間的
+- 説明: ストレージ・コンピュート分離（lake）テーブルのパーティションのうち、現在のコンパクションスコアがそのパーティションへのコミットを遅延または拒否させているものの数。つまり、スコアが `lake_ingest_slowdown_threshold`（遅延）または `lake_compaction_score_upper_bound`（拒否）を超えているパーティションの数です。`0` は、現在インジェストスローダウン（ingestion slowdown）によって減速されているロードがないことを意味し、`lake_enable_ingest_slowdown` が `false` の場合は常に `0` です。`is_leader` ラベルが付与されており、Follower FE は `is_leader="false"` で値 0 を出力するため、ダッシュボードでは `is_leader="true"` でフィルタしてください。
+
 ## `lake_pk_index_cache_delvec_bytes`
 
 - 単位: バイト

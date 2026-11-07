@@ -200,10 +200,22 @@ description: "Alphabetical q - r"
 - Unit: Count
 - Description: Number of blocks in the result buffer.
 
+## `routine_load_schedule_blocked`
+
+- Unit: Count
+- Labels: `warehouse_name`
+- Description: The number of Routine Load scheduling attempts that found no free BE/CN task slot in the warehouse (`max_routine_load_task_num_per_be` per node). A task can only run in the warehouse of its job, so a warehouse that is full blocks its jobs even when other warehouses have room. A rising value means Routine Load throughput in that warehouse is capped by task slots, not by the load path.
+
 ## `routine_load_task_count`
 
 - Unit: Count
 - Description: Number of currently running Routine Load tasks.
+
+## `routine_load_task_slots`
+
+- Unit: Count
+- Labels: `warehouse_name`, `state` (`used` or `total`)
+- Description: Routine Load task slots on the BE/CN nodes of each warehouse. `total` is the number of alive nodes in the warehouse multiplied by `max_routine_load_task_num_per_be`; `used` is the number of slots taken by running tasks. When `used` reaches `total`, new tasks of that warehouse cannot be scheduled.
 
 ## `rowset_count_generated_and_in_use`
 

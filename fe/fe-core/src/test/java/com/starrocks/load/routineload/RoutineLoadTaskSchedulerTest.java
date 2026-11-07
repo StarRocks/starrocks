@@ -34,13 +34,17 @@
 
 package com.starrocks.load.routineload;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.metric.LongCounterMetric;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -99,6 +103,42 @@ public class RoutineLoadTaskSchedulerTest {
             // Clear the flag so it cannot leak into other tests on this worker thread.
             Thread.interrupted();
         }
+    }
+
+    @Test
+    public void testProcessCountsScheduleBlockedWhenNoSlot() throws Exception {
+        MetricRepo.init();
+        // The counter is labelled by warehouse name, resolved through the warehouse manager.
+        GlobalStateMgr.getCurrentState().initDefaultWarehouse();
+        new Expectations() {
+            {
+                routineLoadManager.getClusterIdleSlotNum();
+                minTimes = 0;
+                result = 0;
+                routineLoadManager.getWarehouseSlotNums();
+                minTimes = 0;
+                result = ImmutableMap.of(WarehouseManager.DEFAULT_WAREHOUSE_ID, new WarehouseTaskSlots(2, 2),
+                        1L, new WarehouseTaskSlots(0, 2));
+                routineLoadManager.updateBeTaskSlot();
+                minTimes = 0;
+            }
+        };
+        RoutineLoadTaskScheduler scheduler = new RoutineLoadTaskScheduler(routineLoadManager);
+        LongCounterMetric blocked = MetricRepo.COUNTER_ROUTINE_LOAD_SCHEDULE_BLOCKED
+                .getMetric(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        LongCounterMetric otherWarehouse = MetricRepo.COUNTER_ROUTINE_LOAD_SCHEDULE_BLOCKED.getMetric("1");
+        long before = blocked.getValue();
+        long otherBefore = otherWarehouse.getValue();
+        try {
+            // The scheduler counts the blocked cycle, then sleeps 10s; a pending interrupt cuts the sleep short.
+            Thread.currentThread().interrupt();
+            Assertions.assertThrows(InterruptedException.class, scheduler::process);
+        } finally {
+            Thread.interrupted();
+        }
+        // Only the full warehouse is counted.
+        Assertions.assertEquals(before + 1, blocked.getValue());
+        Assertions.assertEquals(otherBefore, otherWarehouse.getValue());
     }
 
     @Test

@@ -49,6 +49,21 @@ description: "Alphabetical t - z"
 - 単位: バイト
 - 説明: タブレットスキーマが使用するメモリ。
 
+## `tablet_sink_rpc_failed_total`
+
+- 単位: カウント
+- 説明: ロードのコーディネーター BE が発行した tablet writer RPC（open と add_chunk）のうち、受信側の load channel が返したエラーではなく、タイムアウトや接続リセットなど RPC 層で失敗した数。bvar として公開されます。sink はリトライしないため、各失敗はレプリカの多数決ルールによりロードを失敗させる可能性があります。RPC の完了時に記録されるため、別の RPC が失敗した後に sink が待機をやめた add_chunk RPC もカウントされます。コーディネーター自身がキャンセルした RPC はカウントされません。
+
+## `tablet_sink_rpc_pending`
+
+- 単位: カウント
+- 説明: ロードのコーディネーター BE が tablet writer に発行し、まだ応答を受け取っていない add_chunk RPC の数。bvar として公開されます。高い値が続く場合は、受信側の BE またはそこへのネットワークがデータの受け取りに時間がかかっています。
+
+## `tablet_sink_send_chunk_latency`
+
+- 単位: us
+- 説明: ロードのコーディネーター BE から tablet writer への add_chunk RPC 1 件の、発行から応答までの時間。bvar のレイテンシ系列（平均、パーセンタイル、最大、qps、件数）として公開されます。RPC の完了時に記録されるため、別の RPC が失敗した後に sink が待機をやめた RPC もサンプリングされます。コーディネーター自身がキャンセルした RPC はサンプリングされません。
+
 ## `tablet_update_max_compaction_score`
 
 - 単位: -
@@ -128,10 +143,28 @@ description: "Alphabetical t - z"
 - 単位: カウント
 - 説明: トランザクションロードリクエストの合計数。
 
+## `txn_commit_throttle_delay_ms_total`
+
+- 単位: ms
+- タイプ: 累積
+- 説明: ストレージ・コンピュート分離（lake）テーブルへのトランザクションのコミットが、インジェストスローダウン（ingestion slowdown）によって実際に待機した合計時間（ミリ秒）。インジェストスローダウンは、トランザクションが書き込むパーティションのコンパクションスコアが `lake_ingest_slowdown_threshold` を超えている間、コミットを保留します。各待機は、コミットが許可されるまでに残っている時間だけが計上されるため、リトライで同じ区間が二重に計上されることはなく、待機せずに諦めたリクエストは何も計上しません。`warehouse_name` ラベルは遅延されたロードが実行された warehouse を示し、warehouse ごとに 1 系列を出力します。同じ `warehouse_name` の `txn_commit_throttled_total` で割ると、スロットリングされたコミット 1 件あたりの平均待機時間が得られます。Leader FE ノード（`is_leader="true"`）のみがカウントします。
+
+## `txn_commit_throttled_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: ストレージ・コンピュート分離（lake）テーブルへのコミットが、インジェストスローダウン（ingestion slowdown）によって実際に待機した回数。つまり、書き込み先パーティションのコンパクションスコアが `lake_ingest_slowdown_threshold` を超えていた回数です。待機が実際に発生する場所でカウントされるため、タイムアウトが遅延をカバーできないコミットリクエストは待機せずに失敗し、カウントされません。スコアが `lake_compaction_score_upper_bound` を超えて即座に拒否されたコミットもカウントされません。いずれの場合もロードは失敗します。`warehouse_name` ラベルは遅延されたロードが実行された warehouse を示し、warehouse ごとに 1 系列を出力します。Leader FE ノード（`is_leader="true"`）のみがカウントします。
+
 ## `txn_request`
 
 - 単位: -
 - 説明: BEGIN、COMMIT、ROLLBACK、EXECのトランザクションリクエスト。
+
+## `txn_running_routine_load`
+
+- 単位: カウント
+- ラベル: `db`, `warehouse_name`
+- 説明: 各データベースで実行中の Routine Load トランザクション数。タスクが実行されている warehouse ごとに分割され、そのようなトランザクションを持つ warehouse ごとに 1 系列が出力されます。`sum by (db)` でデータベースごとの合計になります。Routine Load のトランザクションは `max_running_txn_num_per_db` の対象外のため `txn_running` には含まれず、その並行数は BE/CN のタスクスロットで制限されます（`routine_load_task_slots` を参照）。
 
 ## `uint8_column_pool_bytes`
 
