@@ -376,11 +376,11 @@ TEST_F(TableReaderTest, test_multi_get_char_is_not_padded) {
 
     Schema key_schema = ChunkHelper::convert_schema(tablet->tablet_schema(), {0});
     Schema value_schema = ChunkHelper::convert_schema(tablet->tablet_schema(), {1});
-    ChunkPtr key_chunk = ChunkFactory::new_chunk(key_schema, 2);
+    ChunkPtr key_chunk = ChunkHelper::new_chunk(key_schema, 2);
     key_chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum((int64_t)1));
     key_chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum((int64_t)2));
     std::vector<bool> found;
-    ChunkPtr value_chunk = ChunkFactory::new_chunk(value_schema, 2);
+    ChunkPtr value_chunk = ChunkHelper::new_chunk(value_schema, 2);
     ASSERT_OK(table_reader->multi_get(*key_chunk, {"c"}, found, *value_chunk));
     ASSERT_EQ(2, found.size());
     ASSERT_TRUE(found[0]);
