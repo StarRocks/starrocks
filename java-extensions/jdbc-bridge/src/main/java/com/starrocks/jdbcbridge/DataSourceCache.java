@@ -91,10 +91,6 @@ public class DataSourceCache {
     private final Map<String, ClassLoader> driverClassLoaders = new ConcurrentHashMap<>();
     private static final DataSourceCache INSTANCE = new DataSourceCache();
 
-<<<<<<< HEAD
-    // presumed existing private constructor
-    private DataSourceCache(){}
-=======
     private DataSourceCache() {
         ScheduledExecutorService evictor = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "jdbc-datasource-evictor");
@@ -109,7 +105,6 @@ public class DataSourceCache {
             }
         }, EVICT_INTERVAL_MS, EVICT_INTERVAL_MS, TimeUnit.MILLISECONDS);
     }
->>>>>>> f082180 ([BugFix][RB-1259] Close idle JDBC connection pools on BE/CN (#82532))
 
     public static DataSourceCache getInstance() {
         return INSTANCE;
