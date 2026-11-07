@@ -131,15 +131,13 @@ public class DistinctAggTest extends PlanTestBase {
 
     @Test
     void testArrayAggDistinctOnTypeWithoutArrayAggDistinctOverload() throws Exception {
-        // array_agg_distinct has no VARIANT or VARBINARY overload. The non-strict lookup used to return the DECIMALV2
+        // array_agg_distinct has no VARBINARY overload. The non-strict lookup used to return the DECIMALV2
         // overload without casting the argument, and the BE then read the column as DECIMALV2 and crashed.
         String[] sqls = {
-                "select array_agg(distinct cast(t1a as variant)) from test_all_type",
-                "select array_agg(distinct cast(t1a as variant)) from test_all_type group by t1b",
-                "select count(distinct t1b), array_agg(distinct cast(t1a as variant)) from test_all_type",
-                "select array_agg(distinct cast(t1a as variant)), array_agg(distinct t1b) from test_all_type group by t1c",
                 "select array_agg(distinct to_binary(t1a)) from test_all_type",
+                "select array_agg(distinct to_binary(t1a)) from test_all_type group by t1b",
                 "select count(distinct t1b), array_agg(distinct to_binary(t1a)) from test_all_type",
+                "select array_agg(distinct to_binary(t1a)), array_agg(distinct t1b) from test_all_type group by t1c",
         };
         try {
             // 0: auto, 1: one phase (PlanFragmentBuilder), 2: two phase (SplitTwoPhaseAggRule)
@@ -158,9 +156,6 @@ public class DistinctAggTest extends PlanTestBase {
             for (int stage : new int[] {1, 2}) {
                 connectContext.getSessionVariable().setNewPlanerAggStage(stage);
                 StarRocksPlannerException e = assertThrows(StarRocksPlannerException.class,
-                        () -> getVerboseExplain("select array_agg(distinct cast(t1a as variant)) from test_all_type"));
-                assertContains(e.getMessage(), "array_agg(distinct) does not support type VARIANT");
-                e = assertThrows(StarRocksPlannerException.class,
                         () -> getVerboseExplain("select array_agg(distinct to_binary(t1a)) from test_all_type"));
                 assertContains(e.getMessage(), "array_agg(distinct) does not support type VARBINARY");
             }

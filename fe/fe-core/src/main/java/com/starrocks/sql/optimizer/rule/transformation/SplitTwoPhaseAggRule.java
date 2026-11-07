@@ -136,19 +136,12 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
         } else if (functionName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
             if (fnCall.getUsedColumns().isEmpty() && fnCall.getChild(0).getType().isDecimalOfAnyVersion()) {
                 return fnCall;
-<<<<<<< HEAD
-            } else {
-                return new CallOperator(FunctionSet.ARRAY_AGG_DISTINCT, fnCall.getType(), fnCall.getChildren(),
-                        Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT, new Type[] {fnCall.getChild(0).getType()},
-                                IS_NONSTRICT_SUPERTYPE_OF), false);
-=======
->>>>>>> 6bfe78e ([BugFix][RB-967] Keep array_agg(distinct) when array_agg_distinct has no overload for the argument type (#82531))
             }
             Type argType = fnCall.getChild(0).getType();
-            Function arrayAggDistinctFn = ExprUtils.getArrayAggDistinctFunction(new Type[] {argType});
+            Function arrayAggDistinctFn = Expr.getArrayAggDistinctFunction(new Type[] {argType});
             if (arrayAggDistinctFn == null) {
                 if (argType.isScalarType() || fnCall.getUsedColumns().isEmpty()) {
-                    // e.g. VARIANT, VARBINARY, or a constant like map(2, 3): the one-phase path rejects them too and
+                    // e.g. VARBINARY or a constant like map(2, 3): the one-phase path rejects them too and
                     // a constant has no column to split by, so fail with a clear message instead of leaving the
                     // optimizer without a plan
                     throw new StarRocksPlannerException(ErrorType.UNSUPPORTED,
