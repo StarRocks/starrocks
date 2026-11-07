@@ -242,7 +242,7 @@ public:
 
     JsonMerger(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain = false);
 
-    // for read, only read some leaf node
+    // For reads, reconstruct a parent path from its descendants.
     void set_root_path(const std::string& base_path);
 
     // for read, must return nullable column
@@ -259,7 +259,6 @@ public:
     ColumnPtr merge(const Columns& columns);
 
 private:
-    template <bool IN_TREE>
     void _merge_impl(size_t rows, JsonColumn& json_result, NullColumn& null_result);
 
     template <bool IN_TREE>
@@ -277,6 +276,8 @@ private:
     bool _has_remain = false;
 
     std::shared_ptr<JsonFlatPath> _src_root;
+    const JsonFlatPath* _merge_root = nullptr;
+    std::vector<std::string> _root_path;
     std::vector<const Column*> _src_columns;
     std::vector<std::string> _exclude_paths;
     std::vector<std::string> _level_paths;
