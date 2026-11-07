@@ -230,6 +230,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         ScanBuilderImpl scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder();
         ScanImpl scan = (ScanImpl) scanBuilder.withFilter(deltaLakePredicate).build();
         long estimateRowSize = table.getColumns().stream().mapToInt(column -> column.getType().getTypeSize()).sum();
+        Tracers ownerTracers = Tracers.get();
         CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> baseIterator = new CloseableIterator<>() {
             CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches;
             CloseableIterator<Row> scanFileRows;
@@ -246,29 +247,47 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             @Override
             public Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> next() {
                 ensureOpen();
-                Row scanFileRow = scanFileRows.next();
-
-                DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFileRow);
-                return ScanFileUtils.convertFromRowToFileScanTask(enableCollectColumnStats, scanFileRow, metadata,
-                        estimateRowSize, dv);
+                long start = System.nanoTime();
+                boolean converted = false;
+                try {
+                    Row scanFileRow = scanFileRows.next();
+                    DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFileRow);
+                    Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> task =
+                            ScanFileUtils.convertFromRowToFileScanTask(enableCollectColumnStats, scanFileRow, metadata,
+                                    estimateRowSize, dv);
+                    converted = true;
+                    return task;
+                } finally {
+                    long elapsed = System.nanoTime() - start;
+                    // Update existing counters without a per-file Timer. Do not defer until close(): query
+                    // profiles may be collected before asynchronous resource cleanup closes a partial batch.
+                    if (converted) {
+                        Tracers.count(ownerTracers, EXTERNAL, "DELTA_LAKE.convertedFiles", 1);
+                    }
+                    Tracers.count(ownerTracers, EXTERNAL, "DELTA_LAKE.fileTaskConversionTimeNanos", elapsed);
+                }
             }
 
             private void ensureOpen() {
                 try {
                     if (scanFilesAsBatches == null) {
-                        scanFilesAsBatches = scan.getScanFiles(engine, true);
+                        try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.openScanFiles")) {
+                            scanFilesAsBatches = scan.getScanFiles(engine, true);
+                        }
                     }
                     while (scanFileRows == null || !scanFileRows.hasNext()) {
-                        if (!scanFilesAsBatches.hasNext()) {
-                            scanFilesAsBatches.close();
-                            hasMore = false;
-                            break;
+                        try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.readScanFileBatch")) {
+                            if (!scanFilesAsBatches.hasNext()) {
+                                scanFilesAsBatches.close();
+                                hasMore = false;
+                                break;
+                            }
+                            if (scanFileRows != null) {
+                                scanFileRows.close();
+                            }
+                            FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
+                            scanFileRows = scanFileBatch.getRows();
                         }
-                        if (scanFileRows != null) {
-                            scanFileRows.close();
-                        }
-                        FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
-                        scanFileRows = scanFileBatch.getRows();
                     }
                 } catch (IOException e) {
                     LOG.error("Failed to get delta lake scan files", e);
