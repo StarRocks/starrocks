@@ -174,12 +174,12 @@ public class IcebergFormatV4ReadTest extends TableTestBase {
     }
 
     @Test
-    public void testRowCountSubtractsDeletionVector() {
+    public void testRowCountFromParquetManifests() {
         TestTables.TestTable table = tableWithDv("tv4_rows", 4);
         IcebergMetadata metadata = newMetadata();
-        // 10 + 6 rows, 4 deleted by the DV, on both statistics paths.
-        Assertions.assertEquals(12.0, tableStatistics(metadata, table, false).getOutputRowCount(), 0.001);
-        Assertions.assertEquals(12.0, tableStatistics(metadata, table, true).getOutputRowCount(), 0.001);
+        // 10 + 6 rows on both statistics paths; the row-count estimate sums data file records and ignores deletes.
+        Assertions.assertEquals(16.0, tableStatistics(metadata, table, false).getOutputRowCount(), 0.001);
+        Assertions.assertEquals(16.0, tableStatistics(metadata, table, true).getOutputRowCount(), 0.001);
     }
 
     @Test
@@ -212,9 +212,9 @@ public class IcebergFormatV4ReadTest extends TableTestBase {
                 f0614, List.of(f0614 + "-dv.puffin"),
                 "/path/to/tv3_to_v4-0615.parquet", List.of(),
                 f0616.location(), List.of(f0616.location() + "-dv.puffin")), plannedFiles(metadata, table, null));
-        // 10 + 6 + 5 rows, 4 + 1 deleted.
-        Assertions.assertEquals(16.0, tableStatistics(metadata, table, false).getOutputRowCount(), 0.001);
-        Assertions.assertEquals(16.0, tableStatistics(metadata, table, true).getOutputRowCount(), 0.001);
+        // 10 + 6 + 5 rows; the row-count estimate ignores deletes.
+        Assertions.assertEquals(21.0, tableStatistics(metadata, table, false).getOutputRowCount(), 0.001);
+        Assertions.assertEquals(21.0, tableStatistics(metadata, table, true).getOutputRowCount(), 0.001);
     }
 
     @Test

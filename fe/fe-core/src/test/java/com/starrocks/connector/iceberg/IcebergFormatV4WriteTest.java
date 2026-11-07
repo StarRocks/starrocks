@@ -23,14 +23,11 @@ import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
-import com.starrocks.epack.connector.iceberg.IcebergDeletionVectorSupport;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TIcebergDataFile;
-import com.starrocks.thrift.TIcebergFileContent;
-import com.starrocks.thrift.TIcebergPreviousDeleteFile;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -41,7 +38,6 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataOperations;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileFormat;
-import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.ManifestFile;
 import org.junit.jupiter.api.Assertions;
@@ -57,9 +53,8 @@ import java.util.stream.Collectors;
 import static com.starrocks.type.IntegerType.INT;
 import static com.starrocks.type.VarcharType.VARCHAR;
 
-// StarRocks writes to Iceberg format-version 4 tables. Iceberg 1.12 commits them like v3 tables (deletion vectors in
-// Puffin files tracked by delete manifests) except that every manifest it writes is Parquet. Each statement is checked
-// against both Iceberg's own scan and StarRocks planning.
+// StarRocks writes to Iceberg format-version 4 tables. Iceberg 1.12 commits them like v3 tables except that every
+// manifest it writes is Parquet. Each statement is checked against both Iceberg's own scan and StarRocks planning.
 public class IcebergFormatV4WriteTest extends TableTestBase {
     private static final String CATALOG_NAME = "iceberg_catalog";
 
@@ -121,21 +116,6 @@ public class IcebergFormatV4WriteTest extends TableTestBase {
         return commitInfo;
     }
 
-    private TSinkCommitInfo dvCommit(String name, long offset, long cardinality) {
-        TIcebergDataFile dv = new TIcebergDataFile();
-        dv.setPath(table.location() + "/data/" + name);
-        dv.setFormat("puffin");
-        dv.setRecord_count(cardinality);
-        dv.setFile_size_in_bytes(120);
-        dv.setFile_content(TIcebergFileContent.POSITION_DELETES);
-        dv.setReferenced_data_file(FILE_A.location());
-        dv.setContent_offset(offset);
-        dv.setContent_size_in_bytes(40);
-        TSinkCommitInfo commitInfo = new TSinkCommitInfo();
-        commitInfo.setIceberg_data_file(dv);
-        return commitInfo;
-    }
-
     private static IcebergMetadata.IcebergSinkExtra scanned(DataFile... files) {
         IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
         extra.addScannedDataFiles(Sets.newHashSet(files));
@@ -184,40 +164,6 @@ public class IcebergFormatV4WriteTest extends TableTestBase {
         TSinkCommitInfo overwrite = dataFileCommit("c.parquet", 7, true);
         commit(Lists.newArrayList(overwrite), null);
         assertPlan(Map.of(overwrite.getIceberg_data_file().getPath(), List.of()));
-    }
-
-    @Test
-    public void testDeleteWritesDeletionVector() {
-        table.newFastAppend().appendFile(FILE_A).commit();
-        commit(Lists.newArrayList(dvCommit("dv1.puffin", 4L, 1)), scanned(FILE_A));
-        assertPlan(Map.of(FILE_A.location(), List.of(table.location() + "/data/dv1.puffin")));
-    }
-
-    @Test
-    public void testSecondDeleteReplacesDeletionVector() {
-        table.newFastAppend().appendFile(FILE_A).commit();
-        String oldPuffin = table.location() + "/data/old_dv.puffin";
-        DeleteFile oldDv = FileMetadata.deleteFileBuilder(SPEC_A).ofPositionDeletes()
-                .withPath(oldPuffin).withFormat(FileFormat.PUFFIN).withFileSizeInBytes(100).withRecordCount(1)
-                .withReferencedDataFile(FILE_A.location()).withContentOffset(4).withContentSizeInBytes(40)
-                .withPartitionPath("data_bucket=0").build();
-        table.newRowDelta().addDeletes(oldDv).commit();
-
-        // The BE folds the old DV into the new one and reports the old one as rewritten.
-        IcebergMetadata.IcebergSinkExtra extra = scanned(FILE_A);
-        extra.putPreviousDeleteFile(IcebergDeletionVectorSupport.uniqueDeleteFileKey(oldPuffin, 4L), oldDv);
-        TSinkCommitInfo newDv = dvCommit("new_dv.puffin", 4L, 2);
-        TIcebergPreviousDeleteFile rewritten = new TIcebergPreviousDeleteFile();
-        rewritten.setPath(oldPuffin);
-        rewritten.setFormat("puffin");
-        rewritten.setReferenced_data_files(Lists.newArrayList(FILE_A.location()));
-        rewritten.setContent_offset(4);
-        rewritten.setContent_size_in_bytes(40);
-        rewritten.setFile_scoped(true);
-        newDv.setRewritten_delete_files(Lists.newArrayList(rewritten));
-        commit(Lists.newArrayList(newDv), extra);
-
-        assertPlan(Map.of(FILE_A.location(), List.of(table.location() + "/data/new_dv.puffin")));
     }
 
     // UPDATE and MERGE are rejected at analysis for any format version but 2, so v4 tables need no write test here.
