@@ -577,7 +577,7 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
 }
 
 bool NodeChannel::is_full() {
-    if (_request_queue.size() >= _max_request_queue_size || _mem_tracker->limit()) {
+    if (_request_queue.size() >= _max_request_queue_size || _mem_tracker->limit_exceeded()) {
         if (!_check_prev_request_done()) {
             return true;
         }
@@ -775,10 +775,9 @@ void NodeChannel::_enqueue_current_batch() {
 
 Status NodeChannel::_send_request(bool eos, bool finished) {
     if (eos || finished) {
-        if (_request_queue.empty()) {
-            // No queued batch and eos arrived: flush whatever is pending into a
-            // final BatchPayload that will carry the eos signal. If no chunk has
-            // been built yet, push an empty Chunk as the carrier.
+        if (_request_queue.empty() || (_cur_chunk != nullptr && _cur_chunk->num_rows() > 0)) {
+            // Drain the current batch even when earlier batches are queued. EOS/finished
+            // must follow all buffered rows. An empty queue still needs an EOS carrier.
             if (_cur_chunk.get() == nullptr) {
                 _cur_chunk = std::make_unique<Chunk>();
             }
