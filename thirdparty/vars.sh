@@ -166,10 +166,10 @@ RAPIDJSON_SOURCE=rapidjson-1.1.0
 RAPIDJSON_MD5SUM="badd12c511e081fec6c89c43a7027bce"
 
 # simdjson
-SIMDJSON_DOWNLOAD="https://github.com/simdjson/simdjson/archive/refs/tags/v3.9.4.tar.gz"
-SIMDJSON_NAME=simdjson-v3.9.4.tar.gz
-SIMDJSON_SOURCE=simdjson-3.9.4
-SIMDJSON_MD5SUM="bdc1dfcb2a89dc0c09e8370808a946f5"
+SIMDJSON_DOWNLOAD="https://github.com/simdjson/simdjson/archive/refs/tags/v5.1.1.tar.gz"
+SIMDJSON_NAME=simdjson-v5.1.1.tar.gz
+SIMDJSON_SOURCE=simdjson-5.1.1
+SIMDJSON_MD5SUM="0e2c1592f5712896334fb24f7a96bc60"
 
 # curl
 CURL_DOWNLOAD="https://curl.se/download/curl-8.4.0.tar.gz"

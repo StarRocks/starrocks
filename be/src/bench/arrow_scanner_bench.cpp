@@ -20,11 +20,14 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <memory>
 #include <utility>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "common/simdjson_util.h"
 #include "connector/file/scanner/arrow_scanner.h"
 #include "connector/file/scanner/json_scanner.h"
 #include "exec/exec_env.h"
@@ -36,7 +39,9 @@
 
 namespace starrocks {
 
-static void generate_test_files(const std::string& arrow_path, const std::string& json_path, int64_t num_rows) {
+static void generate_test_files(const std::string& arrow_path, const std::string& json_path,
+                                const std::string& json_unicode_path, const std::string& json_number_path,
+                                const std::string& json_wide_path, int64_t num_rows) {
     // 1. Generate Arrow IPC Stream File
     arrow::Int32Builder int_builder;
     arrow::StringBuilder str_builder;
@@ -87,6 +92,58 @@ static void generate_test_files(const std::string& arrow_path, const std::string
                   << "\",\"c2_double\":" << (static_cast<double>(i) * 1.5) << "}\n";
     }
     json_file.close();
+
+    // 3. Generate Unicode-escape-heavy NDJSON File
+    std::ofstream json_unicode_file(json_unicode_path);
+    if (!json_unicode_file.is_open()) {
+        LOG(FATAL) << "Failed to open JSON unicode file for writing: " << json_unicode_path;
+    }
+    for (int64_t i = 0; i < num_rows; ++i) {
+        json_unicode_file << "{\"c0_int\":" << i << ",\"c1_str\":\"prefix_\\u6C49\\u5B57\\u4E2D\\u6587\\u6D4B\\u8BD5_"
+                          << (i % 100) << "\",\"c2_double\":" << (static_cast<double>(i) * 1.5) << "}\n";
+    }
+    json_unicode_file.close();
+
+    // 4. Generate Number-heavy NDJSON File
+    std::ofstream json_number_file(json_number_path);
+    if (!json_number_file.is_open()) {
+        LOG(FATAL) << "Failed to open JSON number file for writing: " << json_number_path;
+    }
+    json_number_file << std::fixed << std::setprecision(6);
+    for (int64_t i = 0; i < num_rows; ++i) {
+        json_number_file << "{\"c0_int\":" << (100000000 + i)
+                         << ",\"c1_str\":\"n\",\"c2_double\":" << (123456.789012 + static_cast<double>(i) * 0.125)
+                         << "}\n";
+    }
+    json_number_file.close();
+
+    // 5. Generate Wide-record NDJSON File (16 unprojected fields followed by 3 projected table columns)
+    std::ofstream json_wide_file(json_wide_path);
+    if (!json_wide_file.is_open()) {
+        LOG(FATAL) << "Failed to open JSON wide file for writing: " << json_wide_path;
+    }
+    static constexpr const char* kWidePrefix =
+            "{\"f01\":\"payload_padding_string_0123456789\","
+            "\"f02\":\"payload_padding_string_0123456789\","
+            "\"f03\":\"payload_padding_string_0123456789\","
+            "\"f04\":\"payload_padding_string_0123456789\","
+            "\"f05\":\"payload_padding_string_0123456789\","
+            "\"f06\":\"payload_padding_string_0123456789\","
+            "\"f07\":\"payload_padding_string_0123456789\","
+            "\"f08\":\"payload_padding_string_0123456789\","
+            "\"f09\":\"payload_padding_string_0123456789\","
+            "\"f10\":\"payload_padding_string_0123456789\","
+            "\"f11\":\"payload_padding_string_0123456789\","
+            "\"f12\":\"payload_padding_string_0123456789\","
+            "\"f13\":\"payload_padding_string_0123456789\","
+            "\"f14\":\"payload_padding_string_0123456789\","
+            "\"f15\":\"payload_padding_string_0123456789\","
+            "\"f16\":\"payload_padding_string_0123456789\",";
+    for (int64_t i = 0; i < num_rows; ++i) {
+        json_wide_file << kWidePrefix << "\"c0_int\":" << i << ",\"c1_str\":\"varchar_str_" << (i % 100)
+                       << "\",\"c2_double\":" << (static_cast<double>(i) * 1.5) << "}\n";
+    }
+    json_wide_file.close();
 }
 
 static DescriptorTbl* create_descriptor_table(RuntimeState* state, ObjectPool* pool) {
@@ -194,6 +251,9 @@ static TBrokerScanRange* create_scan_range(ObjectPool* pool, const std::string& 
 
 static std::string g_arrow_file_path;
 static std::string g_json_file_path;
+static std::string g_json_unicode_file_path;
+static std::string g_json_number_file_path;
+static std::string g_json_wide_file_path;
 static constexpr int64_t kNumRows = 100000;
 
 static void setup_global_files() {
@@ -215,13 +275,44 @@ static void setup_global_files() {
         g_json_file_path = "/tmp/json_bench.json";
     }
 
-    generate_test_files(g_arrow_file_path, g_json_file_path, kNumRows);
+    char json_unicode_pattern[] = "/tmp/json_unicode_bench_XXXXXX.json";
+    int fd_json_unicode = mkstemps(json_unicode_pattern, 5);
+    if (fd_json_unicode != -1) {
+        close(fd_json_unicode);
+        g_json_unicode_file_path = json_unicode_pattern;
+    } else {
+        g_json_unicode_file_path = "/tmp/json_unicode_bench.json";
+    }
+
+    char json_number_pattern[] = "/tmp/json_number_bench_XXXXXX.json";
+    int fd_json_number = mkstemps(json_number_pattern, 5);
+    if (fd_json_number != -1) {
+        close(fd_json_number);
+        g_json_number_file_path = json_number_pattern;
+    } else {
+        g_json_number_file_path = "/tmp/json_number_bench.json";
+    }
+
+    char json_wide_pattern[] = "/tmp/json_wide_bench_XXXXXX.json";
+    int fd_json_wide = mkstemps(json_wide_pattern, 5);
+    if (fd_json_wide != -1) {
+        close(fd_json_wide);
+        g_json_wide_file_path = json_wide_pattern;
+    } else {
+        g_json_wide_file_path = "/tmp/json_wide_bench.json";
+    }
+
+    generate_test_files(g_arrow_file_path, g_json_file_path, g_json_unicode_file_path, g_json_number_file_path,
+                        g_json_wide_file_path, kNumRows);
 }
 
 static void cleanup_global_files() {
     std::error_code ec;
     std::filesystem::remove(g_arrow_file_path, ec);
     std::filesystem::remove(g_json_file_path, ec);
+    std::filesystem::remove(g_json_unicode_file_path, ec);
+    std::filesystem::remove(g_json_number_file_path, ec);
+    std::filesystem::remove(g_json_wide_file_path, ec);
 }
 
 static void BM_ArrowScanner(benchmark::State& state) {
@@ -269,7 +360,20 @@ static void BM_ArrowScanner(benchmark::State& state) {
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * kNumRows);
 }
 
-static void BM_JsonScanner(benchmark::State& state) {
+static void run_json_scanner_benchmark(benchmark::State& state, const std::string& json_path,
+                                       const char* requested_impl = nullptr) {
+    const simdjson::implementation* original_impl = simdjson::get_active_implementation();
+    DeferOp restore_impl([original_impl]() { simdjson::get_active_implementation() = original_impl; });
+    if (requested_impl != nullptr) {
+        const simdjson::implementation* target_impl = simdjson::get_available_implementations()[requested_impl];
+        if (target_impl == nullptr || !target_impl->supported_by_runtime_system()) {
+            state.SkipWithError("Requested simdjson implementation is not available on this host");
+            return;
+        }
+        simdjson::get_active_implementation() = target_impl;
+    }
+    state.SetLabel(std::string(SIMDJSON_VERSION) + "/" + simdjson::get_active_implementation()->name());
+
     ObjectPool pool;
     TQueryOptions query_options;
     TQueryGlobals query_globals;
@@ -279,7 +383,7 @@ static void BM_JsonScanner(benchmark::State& state) {
     auto* desc_tbl = create_descriptor_table(runtime_state, &pool);
     runtime_state->set_desc_tbl(desc_tbl);
 
-    auto* scan_range = create_scan_range(&pool, g_json_file_path, TFileFormatType::FORMAT_JSON, desc_tbl);
+    auto* scan_range = create_scan_range(&pool, json_path, TFileFormatType::FORMAT_JSON, desc_tbl);
 
     for (auto _ : state) {
         auto profile = pool.add(new RuntimeProfile("json_bench_prof"));
@@ -314,7 +418,54 @@ static void BM_JsonScanner(benchmark::State& state) {
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * kNumRows);
 }
 
-BENCHMARK(BM_JsonScanner)->Unit(benchmark::kMillisecond);
+static void BM_JsonScanner(benchmark::State& state) {
+    run_json_scanner_benchmark(state, g_json_file_path);
+}
+
+static void BM_JsonScanner_UnicodeEscapes(benchmark::State& state) {
+    run_json_scanner_benchmark(state, g_json_unicode_file_path);
+}
+
+static void BM_JsonScanner_NumberHeavy(benchmark::State& state) {
+    run_json_scanner_benchmark(state, g_json_number_file_path);
+}
+
+static void BM_JsonScanner_Icelake(benchmark::State& state) {
+    run_json_scanner_benchmark(state, g_json_file_path, "icelake");
+}
+
+static void BM_JsonScanner_Haswell(benchmark::State& state) {
+    run_json_scanner_benchmark(state, g_json_file_path, "haswell");
+}
+
+static void BM_JsonScanner_Westmere(benchmark::State& state) {
+    run_json_scanner_benchmark(state, g_json_file_path, "westmere");
+}
+
+static void BM_JsonScanner_WideRecord_Icelake(benchmark::State& state) {
+    run_json_scanner_benchmark(state, g_json_wide_file_path, "icelake");
+}
+
+static void BM_JsonScanner_WideRecord_Haswell(benchmark::State& state) {
+    run_json_scanner_benchmark(state, g_json_wide_file_path, "haswell");
+}
+
+static void BM_JsonScanner_WideRecord_Westmere(benchmark::State& state) {
+    run_json_scanner_benchmark(state, g_json_wide_file_path, "westmere");
+}
+
+#define STARROCKS_JSON_BENCH(name) \
+    BENCHMARK(name)->Unit(benchmark::kMillisecond)->Iterations(10)->Repetitions(7)->ReportAggregatesOnly(true)
+STARROCKS_JSON_BENCH(BM_JsonScanner);
+STARROCKS_JSON_BENCH(BM_JsonScanner_UnicodeEscapes);
+STARROCKS_JSON_BENCH(BM_JsonScanner_NumberHeavy);
+STARROCKS_JSON_BENCH(BM_JsonScanner_Icelake);
+STARROCKS_JSON_BENCH(BM_JsonScanner_Haswell);
+STARROCKS_JSON_BENCH(BM_JsonScanner_Westmere);
+STARROCKS_JSON_BENCH(BM_JsonScanner_WideRecord_Icelake);
+STARROCKS_JSON_BENCH(BM_JsonScanner_WideRecord_Haswell);
+STARROCKS_JSON_BENCH(BM_JsonScanner_WideRecord_Westmere);
+#undef STARROCKS_JSON_BENCH
 BENCHMARK(BM_ArrowScanner)->Unit(benchmark::kMillisecond);
 
 } // namespace starrocks
