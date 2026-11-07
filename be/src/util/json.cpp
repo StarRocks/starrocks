@@ -163,6 +163,27 @@ static inline int cmpDouble(double left, double right) {
     return 0;
 }
 
+<<<<<<< HEAD:be/src/util/json.cpp
+=======
+static inline int cmpInt64(int64_t left, int64_t right) {
+    if (left < right) {
+        return -1;
+    } else if (left > right) {
+        return 1;
+    }
+    return 0;
+}
+
+static inline int cmpUInt64(uint64_t left, uint64_t right) {
+    if (left < right) {
+        return -1;
+    } else if (left > right) {
+        return 1;
+    }
+    return 0;
+}
+
+>>>>>>> dafc864 ([BugFix] Compare JSON numbers above INT64_MAX without throwing (#78969)):be/src/types/json_value.cpp
 static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
     if (left.isObject() && right.isObject()) {
         for (auto it : vpack::ObjectIterator(left)) {
@@ -199,8 +220,13 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
                 return left.getBool() - right.getBool();
             case vpack::ValueType::SmallInt:
             case vpack::ValueType::Int:
+                return cmpInt64(left.getIntUnchecked(), right.getIntUnchecked());
             case vpack::ValueType::UInt:
+<<<<<<< HEAD:be/src/util/json.cpp
                 return left.getInt() - right.getInt();
+=======
+                return cmpUInt64(left.getUIntUnchecked(), right.getUIntUnchecked());
+>>>>>>> dafc864 ([BugFix] Compare JSON numbers above INT64_MAX without throwing (#78969)):be/src/types/json_value.cpp
             case vpack::ValueType::Double: {
                 return cmpDouble(left.getDouble(), right.getDouble());
             }
@@ -210,10 +236,14 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
                 // other types like illegal, none, min, max are considered equal
                 return 0;
             }
+<<<<<<< HEAD:be/src/util/json.cpp
         } else if (left.isInteger() && right.isInteger()) {
             return left.getInt() - right.getInt();
+=======
+>>>>>>> dafc864 ([BugFix] Compare JSON numbers above INT64_MAX without throwing (#78969)):be/src/types/json_value.cpp
         } else {
-            return cmpDouble(left.getNumber<double>(), right.getNumber<double>());
+            // mixed number encodings (Int vs UInt, integer vs Double)
+            return cmpDouble(left.getNumericValue<double>(), right.getNumericValue<double>());
         }
     } else {
         if (left.type() == vpack::ValueType::MinKey) {
