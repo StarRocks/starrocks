@@ -652,7 +652,7 @@ FROM test;
 
 ### enable_gather_fragment_child_affinity
 
-* 描述：是否将 Gather Fragment（`DataPartition = UNPARTITIONED` 的单实例结果 Fragment）调度到其子 Fragment 已使用的 BE 上，而不是通过全局轮询（round-robin）从所有 BE 中选择。在使用 `labels.location` 的存算一体集群中，开启后 Gather Fragment 不会被调度到查询其他部分未使用的 BE 上。但该参数本身并不保证标签隔离：如果查询的任一其他 Fragment 运行在标签范围外，Gather Fragment 也可能运行在该处。已知情况包括：扫描外部 Catalog 表（如 Hive 或 Iceberg）、`choose_execute_instances_mode` 不为 `LOCALITY`、`prefer_compute_node=true`，以及存在分桶裁剪的 Right/Full Bucket Shuffle Join。如果 Gather Fragment 没有子 Fragment 实例，则回退到轮询方式。
+* 描述：是否将 Gather Fragment（`DataPartition = UNPARTITIONED` 的单实例结果 Fragment）调度到其子 Fragment 已使用的 BE 上，而不是通过全局轮询（round-robin）从所有 BE 中选择。在使用 `labels.location` 的存算一体集群中，开启后 Gather Fragment 不会被调度到查询其他部分未使用的 BE 上。但该参数本身并不保证标签隔离：如果查询的任一其他 Fragment 运行在标签范围外，Gather Fragment 也可能运行在该处。已知情况包括：`choose_execute_instances_mode` 不为 `LOCALITY`、`prefer_compute_node=true`，以及存在分桶裁剪的 Right/Full Bucket Shuffle Join。当外部 Catalog（如 Hive 或 Iceberg）设置了 Catalog 属性 `labels.location`，且 FE 配置 [`enable_connector_location_worker_restriction`](../administration/configuration/FE_parameters/user_query_loading.md#enable_connector_location_worker_restriction) 已开启时，外部 Catalog 扫描会受到 Worker 范围限制；若未设置该属性或关闭了该配置，外部 Catalog 扫描仍可能运行在预期标签之外。如果 Gather Fragment 没有子 Fragment 实例，则回退到轮询方式。
 * 默认值：false
 * 引入版本：v4.2
 

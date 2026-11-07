@@ -127,3 +127,33 @@ ALTER TABLE example_mv1
 
 :::
 
+### Use labels to pin external catalog query scheduling
+
+In shared-nothing clusters, you can set the catalog property `"labels.location"` on an external catalog (such as Hive or Iceberg) so that queries that scan that catalog prefer backends matching the label.
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "iceberg.catalog.hive.metastore.uris" = "thrift://127.0.0.1:9083",
+    "labels.location" = "rack:rack1"
+);
+```
+
+When a query scans such a catalog and the FE configuration [`enable_connector_location_worker_restriction`](../../configuration/FE_parameters/user_query_loading.md#enable_connector_location_worker_restriction) is enabled (default: `true`):
+
+- **L**: Schedulable backends whose labels match the external catalog's `labels.location` (alive and available to the query worker provider, so blacklisted nodes are excluded).
+- **N**: Backends required by fixed-location non-connector scans in the same query (OlapScan replicas, MetaScan, BE-local SchemaScan, Kudu, etc.).
+- Allowed workers for the query are **L ∪ N**. Connector scans prefer **L**.
+- If no schedulable backend matches the catalog label (**L** is empty), scheduling falls back to unrestricted workers.
+- Shared-data mode is unaffected. Set `enable_connector_location_worker_restriction` to `false` to disable this behavior without removing the catalog property.
+
+:::note
+
+- If the same query joins an external catalog table with a native table whose replicas live on other labels, workers from both **L** and **N** may participate; connector splits still prefer **L**.
+- Multiple external catalogs with different `labels.location` values in one query contribute a union of their matched backends to **L**.
+
+:::
+

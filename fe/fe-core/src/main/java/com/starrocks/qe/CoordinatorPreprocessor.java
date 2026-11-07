@@ -32,8 +32,10 @@ import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
+import com.starrocks.qe.scheduler.ConnectorLocationWorkerRestrictor;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.qe.scheduler.LazyWorkerProvider;
+import com.starrocks.qe.scheduler.LocationRestrictedWorkerProvider;
 import com.starrocks.qe.scheduler.SkipBlacklistWorkerProvider;
 import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
 import com.starrocks.qe.scheduler.WorkerProvider;
@@ -70,6 +72,7 @@ import java.util.stream.Collectors;
 public class CoordinatorPreprocessor {
     private static final Logger LOG = LogManager.getLogger(CoordinatorPreprocessor.class);
     private static final String LOCAL_IP = FrontendOptions.getLocalHostAddress();
+    private static final String WORKER_NOT_FOUND_MSG = "Worker %s not found";
     public static final int BUCKET_ABSENT = 2147483647;
 
     static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -93,11 +96,7 @@ public class CoordinatorPreprocessor {
         this.enablePhasedSchedule = enablePhasedSchedule;
         this.executionDAG = ExecutionDAG.build(jobSpec);
         workerProviderFactory = newWorkerProviderFactory();
-        SessionVariable sessionVariable = connectContext.getSessionVariable();
-        this.lazyWorkerProvider = LazyWorkerProvider.of(() -> workerProviderFactory.captureAvailableWorkers(
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
-                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getComputeResource()));
+        this.lazyWorkerProvider = LazyWorkerProvider.of(this::captureWorkerProvider);
 
         this.fragmentAssignmentStrategyFactory = new FragmentAssignmentStrategyFactory(connectContext, jobSpec, executionDAG);
 
@@ -112,11 +111,7 @@ public class CoordinatorPreprocessor {
         this.executionDAG = ExecutionDAG.build(jobSpec);
         workerProviderFactory = newWorkerProviderFactory();
 
-        SessionVariable sessionVariable = connectContext.getSessionVariable();
-        this.lazyWorkerProvider = LazyWorkerProvider.of(() -> workerProviderFactory.captureAvailableWorkers(
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
-                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getComputeResource()));
+        this.lazyWorkerProvider = LazyWorkerProvider.of(this::captureWorkerProvider);
 
         Map<PlanFragmentId, PlanFragment> fragmentMap =
                 fragments.stream().collect(Collectors.toMap(PlanFragment::getFragmentId, Function.identity()));
@@ -194,15 +189,20 @@ public class CoordinatorPreprocessor {
     }
 
     public TNetworkAddress getBrpcAddress(long workerId) {
-        return getWorkerProvider().getWorkerById(workerId).getBrpcAddress();
+        ComputeNode worker = getWorkerProvider().getWorkerById(workerId);
+        Preconditions.checkNotNull(worker, WORKER_NOT_FOUND_MSG, workerId);
+        return worker.getBrpcAddress();
     }
 
     public TNetworkAddress getBrpcIpAddress(long workerId) {
-        return getWorkerProvider().getWorkerById(workerId).getBrpcIpAddress();
+        ComputeNode worker = getWorkerProvider().getWorkerById(workerId);
+        Preconditions.checkNotNull(worker, WORKER_NOT_FOUND_MSG, workerId);
+        return worker.getBrpcIpAddress();
     }
 
     public TNetworkAddress getAddress(long workerId) {
         ComputeNode worker = getWorkerProvider().getWorkerById(workerId);
+        Preconditions.checkNotNull(worker, WORKER_NOT_FOUND_MSG, workerId);
         return worker.getAddress();
     }
 
@@ -232,13 +232,29 @@ public class CoordinatorPreprocessor {
      * Reset state of all the fragments set in Coordinator, when retrying the same query with the fragments.
      */
     private void resetExec() {
-        SessionVariable sessionVariable = connectContext.getSessionVariable();
-        lazyWorkerProvider = LazyWorkerProvider.of(() -> workerProviderFactory.captureAvailableWorkers(
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
-                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getComputeResource()));
+        lazyWorkerProvider = LazyWorkerProvider.of(this::captureWorkerProvider);
 
         jobSpec.getFragments().forEach(PlanFragment::reset);
+    }
+
+    /**
+     * Capture available workers and optionally restrict to connector-catalog label backends
+     * (L) union fixed-location scan backends (N). Shared-data mode is left unrestricted.
+     */
+    private WorkerProvider captureWorkerProvider() {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        WorkerProvider provider = workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getComputeResource());
+        if (RunMode.isSharedDataMode() || !Config.enable_connector_location_worker_restriction) {
+            return provider;
+        }
+        ConnectorLocationWorkerRestrictor.Restriction restriction =
+                ConnectorLocationWorkerRestrictor.resolve(jobSpec.getScanNodes(),
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        provider);
+        return LocationRestrictedWorkerProvider.maybeWrap(provider, restriction);
     }
 
     private void traceInstance() {
