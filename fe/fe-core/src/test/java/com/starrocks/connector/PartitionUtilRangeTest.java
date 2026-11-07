@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 
-public class MVPartitionCellBuilderRangeTest {
+public class PartitionUtilRangeTest {
 
     private static PartitionKey key(LocalDateTime value, PrimitiveType type) throws Exception {
         PartitionKey key = new PartitionKey();
@@ -35,13 +35,13 @@ public class MVPartitionCellBuilderRangeTest {
 
     private static LocalDateTime upper(LocalDateTime lower, PartitionUtil.DateTimeInterval interval,
                                        PrimitiveType type) throws Exception {
-        PartitionKey next = MVPartitionCellBuilder.nextPartitionKey(key(lower, type), interval, type);
+        PartitionKey next = PartitionUtil.nextPartitionKey(key(lower, type), interval, type);
         return ((DateLiteral) next.getKeys().get(0)).toLocalDateTime();
     }
 
     private static Range<PartitionKey> range(LocalDateTime lower) throws Exception {
         PartitionKey lowerKey = key(lower, PrimitiveType.DATETIME);
-        return Range.closedOpen(lowerKey, MVPartitionCellBuilder.nextPartitionKey(
+        return Range.closedOpen(lowerKey, PartitionUtil.nextPartitionKey(
                 lowerKey, PartitionUtil.DateTimeInterval.NONE, PrimitiveType.DATETIME));
     }
 
