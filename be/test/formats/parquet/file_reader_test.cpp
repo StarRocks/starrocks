@@ -4026,7 +4026,7 @@ TEST_F(FileReaderTest, boolean_rle_dictionary) {
     Utils::SlotDesc slot_descs[] = {{"id", TYPE_INT_DESC}, {"b", TYPE_BOOLEAN_DESC}, {""}};
     auto ctx = _create_file_random_read_context(file, slot_descs);
     auto file_reader = _create_file_reader(file);
-    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+    ASSERT_OK(file_reader->init(ctx));
 
     ASSERT_OK(file_reader->get_next(&chunk));
     ASSERT_EQ(10, chunk->num_rows());
