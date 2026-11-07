@@ -244,6 +244,14 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     @Override
+    public void prefetchTableMetadataForAnalyze(String dbName, String tableName, ConnectContext connectContext) {
+        ConnectorMetadata metadata = metadataOfTable(tableName);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+        metadata.prefetchTableMetadataForAnalyze(dbName, tableName, connectContext);
+    }
+
     public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
                                                     long snapshotId, String serializedPredicate, MetadataTableType type) {
         return normal.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);

@@ -281,6 +281,12 @@ public interface ConnectorMetadata {
         return true;
     }
 
+    /**
+     * Prefetch the metadata needed to resolve a table during analysis.
+     */
+    default void prefetchTableMetadataForAnalyze(String dbName, String tableName, ConnectContext connectContext) {
+    }
+
     // return true if the connector has self info schema
     default boolean hasSelfInfoSchema() {
         return false;
