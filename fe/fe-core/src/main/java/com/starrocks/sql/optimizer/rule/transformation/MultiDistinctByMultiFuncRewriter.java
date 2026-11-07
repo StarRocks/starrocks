@@ -20,6 +20,7 @@ import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -68,11 +69,16 @@ public class MultiDistinctByMultiFuncRewriter {
                     newAggOperator = buildMultiSumDistinct(oldFunctionCall);
                     changed = true;
                 } else if (oldFunctionCall.getFnName().equals(FunctionSet.ARRAY_AGG)) {
+                    CallOperator arrayAggDistinct = null;
                     if (oldFunctionCall.getColumnRefs().size() == 1 &&
                             !oldFunctionCall.getColumnRefs().get(0).getType().isDecimalOfAnyVersion()) {
-                        newAggOperator = buildArrayAggDistinct(oldFunctionCall);
+                        arrayAggDistinct = buildArrayAggDistinct(oldFunctionCall);
+                    }
+                    if (arrayAggDistinct != null) {
+                        newAggOperator = arrayAggDistinct;
                         changed = true;
                     } else {
+                        // no array_agg_distinct overload for this type, keep array_agg(distinct)
                         newAggOperator = oldFunctionCall;
                     }
                 } else {
@@ -190,9 +196,10 @@ public class MultiDistinctByMultiFuncRewriter {
     }
 
     private CallOperator buildArrayAggDistinct(CallOperator oldFunctionCall) {
-        Function searchDesc = new Function(new FunctionName(FunctionSet.ARRAY_AGG_DISTINCT),
-                oldFunctionCall.getFunction().getArgs(), InvalidType.INVALID, false);
-        Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
+        Function fn = ExprUtils.getArrayAggDistinctFunction(oldFunctionCall.getFunction().getArgs());
+        if (fn == null) {
+            return null;
+        }
 
         return (CallOperator) scalarRewriter.rewrite(
                 new CallOperator(FunctionSet.ARRAY_AGG_DISTINCT, fn.getReturnType(), oldFunctionCall.getChildren(),
