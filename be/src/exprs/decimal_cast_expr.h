@@ -19,15 +19,10 @@
 #include "column/column_builder.h"
 #include "exprs/function_helper.h"
 #include "exprs/overflow.h"
-<<<<<<< HEAD
+#include "exprs/unary_function.h"
 #include "runtime/decimalv3.h"
 #include "util/decimal_types.h"
 #include "util/variant.h"
-=======
-#include "exprs/unary_function.h"
-#include "types/decimalv3.h"
-#include "types/variant.h"
->>>>>>> 84536d8 ([BugFix] Never raise a decimal overflow error from a NULL row's data under ERROR_IF_OVERFLOW (#82254))
 
 namespace starrocks {
 
