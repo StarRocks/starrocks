@@ -929,9 +929,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本: v4.2.0
 - 描述: 是否对大部分外部 FE HTTP 接口启用 Basic Auth。凭证通过 `AuthenticationHandler.authenticate()` 校验，因此 LDAP / security integration 在 HTTP 路径上的工作方式与 MySQL 协议一致。以下接口始终豁免:
   - 公开探针 / 可观测性: `/api/bootstrap`、`/api/oauth2`。
-  - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
+  - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/get_small_file`。
 
-  特权接口还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
+  `/api/_meta_replay_state` 不在豁免范围内：无论该参数如何设置，都要求使用以下用户进行 HTTP Basic 认证：`root` 用户、拥有 `root` 角色的用户，或同时拥有 `db_admin` 和 `user_admin` 角色的用户。仅拥有 `NODE` 权限不足以访问该接口。
+
+  受该参数控制的其他特权接口（不包括 `/api/_meta_replay_state`）还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
 
 ### `http_web_page_display_hardware`
 
