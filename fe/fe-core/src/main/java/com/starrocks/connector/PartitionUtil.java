@@ -56,6 +56,7 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
@@ -91,6 +92,7 @@ import org.apache.iceberg.util.StructProjection;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -107,7 +109,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.zip.CRC32;
 
 import static org.apache.hadoop.hive.common.FileUtils.escapePathName;
 import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
@@ -123,6 +127,9 @@ public class PartitionUtil {
     }
 
     private static final Logger LOG = LogManager.getLogger(PartitionUtil.class);
+
+    // Digits first, then digits and the separators of a date or time: 2024-01-01, 2024/01/01 10:00:00.5.
+    private static final Pattern DATE_LIKE_STRING = Pattern.compile("\\d[\\d\\-:/. T]*");
     public static final String ICEBERG_DEFAULT_PARTITION = "ICEBERG_DEFAULT_PARTITION";
 
     public static final String MYSQL_PARTITION_MAXVALUE = "MAXVALUE";
@@ -396,7 +403,40 @@ public class PartitionUtil {
     }
 
     private static String generateLiteralPartitionName(LiteralExpr literalExpr) {
-        return literalExpr.getStringValue().replaceAll("[^a-zA-Z0-9_]*", "");
+        String value = literalExpr.getStringValue();
+        String name = value.replaceAll("[^a-zA-Z0-9_]*", "");
+        if (name.equals(value) || isDateLike(literalExpr, value)) {
+            return name;
+        }
+        // Stripping lost something that told this value apart: -1 and 1 both become "1", 'a-b' and 'ab'
+        // both "ab". Two base partitions would then share one view partition name, one would replace the
+        // other, and its rows would never reach the view. A digest of the full value keeps them apart.
+        CRC32 crc = new CRC32();
+        crc.update(value.getBytes(StandardCharsets.UTF_8));
+        return name + "_" + String.format("%08x", crc.getValue());
+    }
+
+    /**
+     * A date, or a string holding one, keeps its stripped name. Its separators sit in fixed places, so
+     * dropping them loses nothing, and this is the name every existing view over such a column already
+     * uses -- a Hive table partitioned on a string '2024-01-01' among them.
+     */
+    private static boolean isDateLike(LiteralExpr literalExpr, String value) {
+        return literalExpr instanceof DateLiteral
+                || (literalExpr instanceof StringLiteral && DATE_LIKE_STRING.matcher(value).matches());
+    }
+
+    /**
+     * Refuse two different partition values under one view partition name. The later one would replace the
+     * earlier, whose rows would then never reach the view: a refresh that fails is the lesser harm.
+     */
+    private static void checkNameUnclaimed(String mvPartitionName, PartitionKey previous, PartitionKey current)
+            throws AnalysisException {
+        if (previous != null && !previous.equals(current)) {
+            throw new AnalysisException(String.format(
+                    "Partition values %s and %s map to the same materialized view partition name %s",
+                    previous, current, mvPartitionName));
+        }
     }
 
     public static Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(Table table) {
@@ -753,8 +793,7 @@ public class PartitionUtil {
                 table);
         partitionKeys.add(partitionKey);
         String mvPartitionName = generateMVPartitionName(partitionKey);
-        // TODO: check `mvPartitionName` existed.
-        mvPartitionKeyMap.put(mvPartitionName, partitionKey);
+        checkNameUnclaimed(mvPartitionName, mvPartitionKeyMap.put(mvPartitionName, partitionKey), partitionKey);
     }
 
     /**
@@ -774,6 +813,7 @@ public class PartitionUtil {
         }
 
         List<PartitionKey> partitionKeys = new ArrayList<>();
+        Map<String, PartitionKey> mvPartitionKeyMap = Maps.newHashMap();
         for (String partitionName : partitionNames) {
             List<String> partitionNameValues = toPartitionValues(partitionName);
             PartitionKey partitionKey = createPartitionKey(
@@ -782,6 +822,7 @@ public class PartitionUtil {
                     table);
             partitionKeys.add(partitionKey);
             String mvPartitionName = generateMVPartitionName(partitionKey);
+            checkNameUnclaimed(mvPartitionName, mvPartitionKeyMap.put(mvPartitionName, partitionKey), partitionKey);
             List<List<String>> partitionKeyList = generateMVPartitionList(partitionKey);
             partitionListMap.add(PCellWithName.of(mvPartitionName, new PListCell(partitionKeyList)));
         }
