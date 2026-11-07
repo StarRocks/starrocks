@@ -16,15 +16,27 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <condition_variable>
+#include <thread>
+
 #include "column/datum_tuple.h"
+#include "column/fixed_length_column.h"
+#include "connector/connector.h"
+#include "connector/lake_connector.h"
 #include "exec/exec_node.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/workgroup/scan_executor.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_pipe.h"
+#include "storage/rowset/rowid_range_option.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -563,6 +575,509 @@ TEST_F(ConnectorScanNodeTest, test_exec_factory_mysql_scan_node) {
     ASSERT_NE(nullptr, root);
     auto* scan = static_cast<ConnectorScanNode*>(root);
     ASSERT_EQ("mysql", scan->catalog_type());
+}
+
+namespace {
+// Only leaf I/O is controlled here. Queue pickup, source retention, split publication,
+// buffer routing, status propagation and EOS all use the production implementation.
+struct GroupedLeafIO {
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool release_roots = false;
+    bool release_children = false;
+    Status root_status = Status::OK();
+    Status child_status = Status::OK();
+    int roots_entered = 0;
+    int children_entered = 0;
+    int opened = 0;
+    int closed = 0;
+    int child_sequence[2] = {};
+    std::vector<std::pair<int, TScanRange>> inputs;
+    std::vector<std::weak_ptr<RowidRangeOption>> child_ranges;
+
+    void release_all() {
+        std::lock_guard lock(mutex);
+        release_roots = release_children = true;
+        cv.notify_all();
+    }
+};
+
+class GroupedLeafDataSource final : public connector::DataSource {
+public:
+    GroupedLeafDataSource(std::shared_ptr<GroupedLeafIO> io, TScanRange range)
+            : _io(std::move(io)), _range(std::move(range)) {}
+    std::string name() const override { return "GroupedLifecycleLeaf"; }
+    Status open(RuntimeState*) override {
+        std::lock_guard lock(_io->mutex);
+        ++_io->opened;
+        int driver = runtime_membership_filter_eval_context.driver_sequence;
+        _io->inputs.emplace_back(driver, _range);
+        if (_split_context != nullptr) _marker = 100 * driver + ++_io->child_sequence[driver];
+        return Status::OK();
+    }
+    Status get_next(RuntimeState* state, ChunkPtr* chunk) override {
+        const bool child = _split_context != nullptr;
+        if (_read) return Status::EndOfFile("");
+        _read = true;
+        std::unique_lock lock(_io->mutex);
+        ++(child ? _io->children_entered : _io->roots_entered);
+        _io->cv.notify_all();
+        if (!_io->cv.wait_for(lock, std::chrono::seconds(10),
+                              [&] { return child ? _io->release_children : _io->release_roots; })) {
+            return Status::InternalError("test leaf I/O latch timed out");
+        }
+        if (state->is_cancelled()) return Status::Cancelled("held grouped read cancelled");
+        const auto& status = child ? _io->child_status : _io->root_status;
+        if (status.is_mem_limit_exceeded()) {
+            // Fail a real query memory check at the controlled leaf allocation boundary.
+            auto* tracker = state->query_ctx()->mem_tracker().get();
+            const auto bytes = tracker->limit() + 1;
+            tracker->consume(bytes);
+            DeferOp release([&] { tracker->release(bytes); });
+            return tracker->check_mem_limit("grouped leaf allocation");
+        }
+        RETURN_IF_ERROR(status);
+        if (!child) return Status::EndOfFile("");
+        auto column = Int64Column::create();
+        column->append(_marker);
+        *chunk = std::make_shared<Chunk>();
+        (*chunk)->append_column(std::move(column), 0);
+        _rows = 1;
+        return Status::OK();
+    }
+    void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* tasks) override {
+        if (_split_context != nullptr || _published) return;
+        _published = true;
+        std::lock_guard lock(_io->mutex);
+        for (int i = 0; i < 2; ++i) {
+            auto child = std::make_unique<pipeline::LakeSplitContext>();
+            child->rowid_range = std::make_shared<RowidRangeOption>();
+            _io->child_ranges.emplace_back(child->rowid_range);
+            tasks->emplace_back(std::move(child));
+        }
+    }
+    void close(RuntimeState*) override {
+        std::lock_guard lock(_io->mutex);
+        ++_io->closed;
+        _io->cv.notify_all();
+    }
+    int64_t raw_rows_read() const override { return _rows; }
+    int64_t num_rows_read() const override { return _rows; }
+    int64_t num_bytes_read() const override { return _rows * sizeof(int64_t); }
+    int64_t cpu_time_spent() const override { return 0; }
+
+private:
+    std::shared_ptr<GroupedLeafIO> _io;
+    TScanRange _range;
+    bool _read = false;
+    bool _published = false;
+    int64_t _marker = 0;
+    int64_t _rows = 0;
+};
+
+class GroupedLeafProvider final : public connector::DataSourceProvider {
+public:
+    GroupedLeafProvider(std::shared_ptr<GroupedLeafIO> io, ConnectorScanNode* node, const TPlanNode& plan)
+            : _io(std::move(io)), _lake(node, plan) {}
+    connector::DataSourcePtr create_data_source(const TScanRange& range) override {
+        return std::make_unique<GroupedLeafDataSource>(_io, range);
+    }
+    const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override {
+        return state->desc_tbl().get_tuple_descriptor(0);
+    }
+    bool always_shared_scan() const override { return false; }
+    StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(const std::vector<TScanRangeParams>& ranges,
+                                                                          int node, int32_t dop, bool parallel,
+                                                                          TTabletInternalParallelMode::type mode,
+                                                                          size_t total,
+                                                                          size_t scan_parallelism) override {
+        return _lake.convert_scan_range_to_morsel_queue(ranges, node, dop, parallel, mode, total, scan_parallelism);
+    }
+
+private:
+    std::shared_ptr<GroupedLeafIO> _io;
+    connector::LakeDataSourceProvider _lake;
+};
+
+class GroupedLeafConnector final : public connector::Connector {
+public:
+    explicit GroupedLeafConnector(std::shared_ptr<GroupedLeafIO> io) : _io(std::move(io)) {}
+    connector::ConnectorType connector_type() const override { return connector::LAKE; }
+    connector::DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* node,
+                                                                 const TPlanNode& plan) const override {
+        return std::make_unique<GroupedLeafProvider>(_io, node, plan);
+    }
+
+private:
+    std::shared_ptr<GroupedLeafIO> _io;
+};
+} // namespace
+
+class GroupedConnectorLifecycleTest : public ConnectorScanNodeTest {
+protected:
+    void init(int groups = 1) {
+        TQueryOptions options;
+        options.__set_connector_io_tasks_per_scan_operator(2);
+        // Initialize the query/instance tracker hierarchy only once on the older RuntimeState API.
+        state = std::make_shared<RuntimeState>(TUniqueId(), options, TQueryGlobals(), _exec_env);
+        state->set_chunk_size(1);
+        query = std::make_shared<pipeline::QueryContext>();
+        // Production query initialization receives a finite process/warehouse parent limit.
+        _mem_tracker = std::make_shared<MemTracker>(2L << 30, "grouped lifecycle parent");
+        query->init_mem_tracker(1L << 30, _mem_tracker.get());
+        ASSERT_EQ(1L << 30, query->get_static_query_mem_limit());
+        query->extend_query_lifetime();
+        state->set_query_ctx(query.get());
+        state->init_mem_trackers(query->mem_tracker());
+        state->set_enable_pipeline_engine(true);
+        auto* desc = create_table_desc(state.get(), {TypeDescriptor(TYPE_BIGINT)});
+        io = std::make_shared<GroupedLeafIO>();
+        // Registry entries own the leaf state; use a distinct name for each fixture.
+        static std::atomic<int> sequence = 0;
+        auto connector_name = "grouped_lifecycle_" + std::to_string(sequence++);
+        connector::ConnectorManager::default_instance()->put(connector_name,
+                                                             std::make_unique<GroupedLeafConnector>(io));
+        auto plan = create_tplan_node_cloud();
+        plan->__set_node_type(TPlanNodeType::LAKE_GROUPED_SCAN_NODE);
+        plan->connector_scan_node.__set_connector_name(connector_name);
+        TLakeScanNode lake;
+        lake.__set_tuple_id(0);
+        plan->__set_lake_scan_node(lake);
+        node = std::make_shared<ConnectorScanNode>(state->obj_pool(), *plan, *desc);
+        ASSERT_OK(node->init(*plan, state.get()));
+        std::map<int32_t, std::vector<TScanRangeParams>> ranges;
+        for (int group = 0; group < groups; ++group) {
+            auto range = create_scan_ranges_cloud(1)[0];
+            range.scan_range.internal_scan_range.__set_tablet_id(77); // Same source, distinct group envelope.
+            range.scan_range.internal_scan_range.__set_bucket_sequence(group);
+            TGroupedRangeTask task;
+            task.__set_group_id(group);
+            TTuple bound;
+            for (int i = 0; i < 3; ++i) {
+                TScalarType scalar;
+                scalar.__set_type(TPrimitiveType::BIGINT);
+                TTypeNode type_node;
+                type_node.__set_type(TTypeNodeType::SCALAR);
+                type_node.__set_scalar_type(scalar);
+                TTypeDesc type;
+                type.__set_types({type_node});
+                type.__isset.types = true;
+                TVariant value;
+                value.__set_type(type);
+                value.__set_variant_type(TVariantType::NORMAL_VALUE);
+                value.__set_value("0");
+                bound.values.emplace_back(std::move(value));
+            }
+            TTabletRange clip;
+            if (group == 0) {
+                clip.__set_upper_bound(bound);
+                clip.__set_upper_bound_included(false);
+            } else {
+                clip.__set_lower_bound(bound);
+                clip.__set_lower_bound_included(true);
+            }
+            task.__set_key_range(clip);
+            task.__set_sort_key_unique_ids({100, 101, 102});
+            range.scan_range.__set_grouped_range_task(task);
+            roots.emplace_back(range.scan_range);
+            ranges[group] = {range};
+        }
+        TScanRangeParams padding;
+        padding.__set_empty(true);
+        ranges[groups] = {padding};
+        ASSIGN_OR_ABORT(queues,
+                        node->convert_scan_range_to_morsel_queue_factory({}, ranges, node->id(), groups + 1, true, true,
+                                                                         TTabletInternalParallelMode::AUTO, false));
+        ASSERT_FALSE(queues->is_shared());
+        ASSERT_FALSE(queues->could_local_shuffle());
+        ASSERT_FALSE(queues->enable_random_append_split_morsel());
+        factory = std::make_shared<pipeline::ConnectorScanOperatorFactory>(
+                1, node.get(), state.get(), groups + 1,
+                std::make_unique<pipeline::DynamicChunkBufferLimiter>(64, 64, 1L << 26, 1));
+        factory->set_morsel_queue_factory(queues.get());
+        factory->set_degree_of_parallelism(groups + 1);
+        auto* arb = query->connector_scan_operator_mem_share_arbitrator();
+        factory->set_mem_share_arb(arb);
+        factory->set_scan_mem_limit(arb->scan_mem_limit);
+        factory->set_data_source_mem_bytes(connector::DataSourceProvider::MIN_DATA_SOURCE_MEM_BYTES);
+        factory->set_chunk_source_mem_bytes(connector::DataSourceProvider::MIN_DATA_SOURCE_MEM_BYTES + sizeof(int64_t));
+        ASSERT_OK(factory->prepare(state.get()));
+        std::unique_ptr<ThreadPool> pool;
+        ASSERT_OK(ThreadPoolBuilder("grouped_lifecycle").set_min_threads(0).set_max_threads(4).build(&pool));
+        executor = std::make_unique<workgroup::ScanExecutor>(
+                std::move(pool), std::make_unique<workgroup::PriorityScanTaskQueue>(100), &metrics);
+        executor->initialize(4);
+        for (int driver = 0; driver <= groups; ++driver) {
+            auto op = std::static_pointer_cast<pipeline::ConnectorScanOperator>(factory->create(groups + 1, driver));
+            op->add_morsel_queue(queues->create(driver));
+            op->set_scan_executor(executor.get());
+            op->set_query_ctx(query);
+            ASSERT_OK(op->prepare(state.get()));
+            ASSERT_TRUE(op->enable_adaptive_io_tasks());
+            ops.emplace_back(std::move(op));
+            EXPECT_FALSE(queues->create(driver)->has_more_scan_ranges());
+            EXPECT_FALSE(queues->create(driver)->has_more_from_split());
+        }
+        EXPECT_TRUE(queues->create(groups)->empty());
+        EXPECT_TRUE(ops.back()->is_finished()); // Padding has no synthetic root or producer.
+    }
+    void TearDown() override {
+        if (io != nullptr) io->release_all();
+        if (executor != nullptr) executor->close(); // Join every real I/O task before destroying its operator.
+        for (auto& op : ops) {
+            ASSERT_OK(op->set_finishing(state.get()));
+            op->close(state.get());
+        }
+        ops.clear();
+        if (factory != nullptr) factory->close(state.get());
+        if (io != nullptr) EXPECT_EQ(io->opened, io->closed);
+        if (factory != nullptr) EXPECT_TRUE(factory->get_active_inputs().empty());
+        if (query != nullptr) {
+            EXPECT_EQ(0, query->connector_scan_mem_tracker()->consumption());
+            EXPECT_EQ(0, query->mem_tracker()->consumption());
+        }
+        factory.reset();
+        queues.reset();
+        if (io != nullptr) {
+            for (const auto& child : io->child_ranges) EXPECT_TRUE(child.expired());
+        }
+        ConnectorScanNodeTest::TearDown();
+    }
+    bool wait_io(const std::function<bool()>& predicate) {
+        std::unique_lock lock(io->mutex);
+        return io->cv.wait_for(lock, std::chrono::seconds(5), predicate);
+    }
+    bool wait_idle() {
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (metrics.running_tasks.value() == 0 && metrics.pending_tasks.value() == 0) return true;
+            std::this_thread::yield();
+        }
+        return false;
+    }
+    void release_roots() {
+        std::lock_guard lock(io->mutex);
+        io->release_roots = true;
+        io->cv.notify_all();
+    }
+    bool drain(int driver, std::vector<int64_t>* rows) {
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (std::chrono::steady_clock::now() < deadline) {
+            auto& op = ops[driver];
+            if (op->is_finished()) return true;
+            if (op->has_output()) {
+                auto result = op->pull_chunk(state.get());
+                if (!result.ok()) return false;
+                auto chunk = std::move(result).value();
+                if (chunk != nullptr && !chunk->is_empty()) {
+                    rows->emplace_back(chunk->get_column_by_index(0)->get(0).get_int64());
+                }
+            }
+            std::this_thread::yield();
+        }
+        return false;
+    }
+    void check_failure(const Status& failure, bool after_publication) {
+        init();
+        ASSERT_FALSE(HasFatalFailure());
+        ASSERT_TRUE(ops[0]->pull_chunk(state.get()).ok());
+        ASSERT_TRUE(wait_io([&] { return io->roots_entered == 1; }));
+        EXPECT_TRUE(queues->create(0)->empty());
+        EXPECT_FALSE(ops[0]->is_finished());
+        if (after_publication) {
+            release_roots();
+            ASSERT_TRUE(wait_io([&] { return io->closed == 1; }));
+            ASSERT_TRUE(wait_idle());
+            EXPECT_FALSE(queues->create(0)->empty());
+            std::lock_guard lock(io->mutex);
+            io->child_status = failure;
+        } else {
+            std::lock_guard lock(io->mutex);
+            io->root_status = failure;
+        }
+        io->release_all();
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        Status observed;
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (ops[0]->has_output()) {
+                auto result = ops[0]->pull_chunk(state.get());
+                if (!result.ok()) {
+                    observed = result.status();
+                    break;
+                }
+            }
+            std::this_thread::yield();
+        }
+        EXPECT_EQ(failure.code(), observed.code()) << observed;
+        if (failure.is_mem_limit_exceeded()) {
+            EXPECT_NE(std::string::npos, observed.to_string().find("grouped leaf allocation"));
+            EXPECT_NE(std::string::npos, observed.to_string().find("query_mem_limit"));
+        }
+        ASSERT_OK(ops[0]->set_finishing(state.get()));
+        EXPECT_TRUE(ops[0]->is_finished());
+        ASSERT_TRUE(wait_io([&] { return io->opened == io->closed; }));
+    }
+
+    std::shared_ptr<RuntimeState> state;
+    pipeline::QueryContextPtr query;
+    std::shared_ptr<GroupedLeafIO> io;
+    std::shared_ptr<ConnectorScanNode> node;
+    std::unique_ptr<pipeline::MorselQueueFactory> queues;
+    std::shared_ptr<pipeline::ConnectorScanOperatorFactory> factory;
+    pipeline::ScanExecutorMetrics metrics;
+    std::unique_ptr<workgroup::ScanExecutor> executor;
+    std::vector<std::shared_ptr<pipeline::ConnectorScanOperator>> ops;
+    std::vector<TScanRange> roots;
+};
+
+TEST_F(GroupedConnectorLifecycleTest, GroupedLastRootCanPublishChildrenBeforeEos) {
+    init();
+    ASSERT_FALSE(HasFatalFailure());
+    ASSERT_TRUE(ops[0]->pull_chunk(state.get()).ok());
+    ASSERT_TRUE(wait_io([&] { return io->roots_entered == 1; }));
+    EXPECT_TRUE(queues->create(0)->empty());
+    EXPECT_FALSE(queues->create(0)->has_more());
+    EXPECT_FALSE(ops[0]->is_finished());
+    EXPECT_FALSE(factory->get_active_inputs().empty());
+    release_roots();
+    ASSERT_TRUE(wait_io([&] { return io->closed == 1; }));
+    ASSERT_TRUE(wait_idle());
+    EXPECT_FALSE(queues->create(0)->empty());
+    EXPECT_FALSE(ops[0]->is_finished());
+    ASSERT_TRUE(ops[0]->pull_chunk(state.get()).ok());
+    ASSERT_TRUE(wait_io([&] { return io->children_entered == 2; }));
+    EXPECT_TRUE(queues->create(0)->empty());
+    EXPECT_FALSE(ops[0]->is_finished());
+    io->release_all();
+    ASSERT_TRUE(wait_io([&] { return io->closed == 3; }));
+    ASSERT_TRUE(wait_idle());
+    EXPECT_TRUE(factory->get_active_inputs().empty());
+    EXPECT_FALSE(factory->get_chunk_buffer().empty(0));
+    EXPECT_FALSE(ops[0]->is_finished()); // Buffered rows are part of the EOS contract.
+    std::vector<int64_t> rows;
+    ASSERT_TRUE(drain(0, &rows));
+    std::sort(rows.begin(), rows.end());
+    EXPECT_EQ((std::vector<int64_t>{1, 2}), rows);
+    EXPECT_EQ(3, ops[0]->unique_metrics()->get_counter("MorselsCount")->value());
+    EXPECT_EQ(2, ops[0]->unique_metrics()->get_counter("PeakIOTasks")->value());
+}
+
+TEST_F(GroupedConnectorLifecycleTest, GroupedChildrenRetainDriverAndEnvelope) {
+    init(2);
+    ASSERT_FALSE(HasFatalFailure());
+    for (int driver = 0; driver < 2; ++driver) ASSERT_TRUE(ops[driver]->pull_chunk(state.get()).ok());
+    ASSERT_TRUE(wait_io([&] { return io->roots_entered == 2; }));
+    release_roots();
+    ASSERT_TRUE(wait_io([&] { return io->closed == 2; }));
+    ASSERT_TRUE(wait_idle());
+    for (int driver = 0; driver < 2; ++driver) ASSERT_TRUE(ops[driver]->pull_chunk(state.get()).ok());
+    ASSERT_TRUE(wait_io([&] { return io->children_entered == 4; }));
+    io->release_all();
+    ASSERT_TRUE(wait_io([&] { return io->closed == 6; }));
+    ASSERT_TRUE(wait_idle());
+    for (int driver = 0; driver < 2; ++driver) {
+        std::vector<int64_t> rows;
+        ASSERT_TRUE(drain(driver, &rows));
+        std::sort(rows.begin(), rows.end());
+        EXPECT_EQ((std::vector<int64_t>{100 * driver + 1, 100 * driver + 2}), rows);
+    }
+    for (const auto& [driver, range] : io->inputs) EXPECT_EQ(roots[driver], range);
+    EXPECT_TRUE(queues->create(2)->empty());
+}
+
+TEST_F(GroupedConnectorLifecycleTest, GroupedHeldRootErrorCleansUp) {
+    check_failure(Status::InternalError("held grouped root failed"), false);
+}
+TEST_F(GroupedConnectorLifecycleTest, GroupedPublishedChildrenErrorCleansUp) {
+    check_failure(Status::InternalError("grouped child failed"), true);
+}
+TEST_F(GroupedConnectorLifecycleTest, GroupedHeldRootMemoryLimitCleansUp) {
+    check_failure(Status::MemoryLimitExceeded("held grouped root exceeded query memory"), false);
+}
+TEST_F(GroupedConnectorLifecycleTest, GroupedPublishedChildrenMemoryLimitCleansUp) {
+    check_failure(Status::MemoryLimitExceeded("grouped child exceeded query memory"), true);
+}
+TEST_F(GroupedConnectorLifecycleTest, GroupedCancelHeldRoot) {
+    init();
+    ASSERT_FALSE(HasFatalFailure());
+    ASSERT_TRUE(ops[0]->pull_chunk(state.get()).ok());
+    ASSERT_TRUE(wait_io([&] { return io->roots_entered == 1; }));
+    state->set_is_cancelled(true);
+    ASSERT_OK(ops[0]->set_finishing(state.get()));
+    io->release_all();
+    ASSERT_TRUE(wait_io([&] { return io->closed == 1; }));
+    ASSERT_TRUE(wait_idle());
+    EXPECT_TRUE(ops[0]->is_finished());
+    EXPECT_TRUE(factory->get_active_inputs().empty());
+    EXPECT_TRUE(queues->create(0)->empty());
+}
+
+TEST_F(GroupedConnectorLifecycleTest, GroupedCancelQueuedChildren) {
+    init();
+    ASSERT_FALSE(HasFatalFailure());
+    ASSERT_TRUE(ops[0]->pull_chunk(state.get()).ok());
+    ASSERT_TRUE(wait_io([&] { return io->roots_entered == 1; }));
+    release_roots();
+    ASSERT_TRUE(wait_io([&] { return io->closed == 1; }));
+    ASSERT_TRUE(wait_idle());
+    EXPECT_FALSE(queues->create(0)->empty());
+    state->set_is_cancelled(true);
+    ASSERT_OK(ops[0]->set_finishing(state.get()));
+    EXPECT_TRUE(ops[0]->is_finished());
+    EXPECT_TRUE(factory->get_active_inputs().empty());
+    EXPECT_EQ(1, io->opened); // Queued children never acquire readers.
+}
+
+TEST_F(GroupedConnectorLifecycleTest, GroupedCancelRunningChildren) {
+    init();
+    ASSERT_FALSE(HasFatalFailure());
+    ASSERT_TRUE(ops[0]->pull_chunk(state.get()).ok());
+    ASSERT_TRUE(wait_io([&] { return io->roots_entered == 1; }));
+    release_roots();
+    ASSERT_TRUE(wait_io([&] { return io->closed == 1; }));
+    ASSERT_TRUE(wait_idle());
+    ASSERT_TRUE(ops[0]->pull_chunk(state.get()).ok());
+    ASSERT_TRUE(wait_io([&] { return io->children_entered == 2; }));
+    state->set_is_cancelled(true);
+    ASSERT_OK(ops[0]->set_finishing(state.get()));
+    io->release_all();
+    ASSERT_TRUE(wait_io([&] { return io->closed == 3; }));
+    ASSERT_TRUE(wait_idle());
+    EXPECT_TRUE(ops[0]->is_finished());
+    EXPECT_TRUE(factory->get_active_inputs().empty());
+    EXPECT_TRUE(factory->get_chunk_buffer().empty(0));
+}
+
+TEST_F(GroupedConnectorLifecycleTest, GroupedLimitFinishesWithHeldRoot) {
+    init();
+    ASSERT_FALSE(HasFatalFailure());
+    ASSERT_TRUE(ops[0]->pull_chunk(state.get()).ok());
+    ASSERT_TRUE(wait_io([&] { return io->roots_entered == 1; }));
+    ASSERT_OK(ops[0]->set_finishing(state.get()));
+    EXPECT_TRUE(ops[0]->is_finished());
+    EXPECT_TRUE(factory->get_active_inputs().empty());
+    io->release_all();
+    ASSERT_TRUE(wait_io([&] { return io->closed == 1; }));
+    ASSERT_TRUE(wait_idle());
+    EXPECT_TRUE(factory->get_chunk_buffer().empty(0));
+    EXPECT_EQ(1, io->opened);
+}
+
+TEST_F(GroupedConnectorLifecycleTest, GroupedLimitFinishesWithQueuedChildren) {
+    init();
+    ASSERT_FALSE(HasFatalFailure());
+    ASSERT_TRUE(ops[0]->pull_chunk(state.get()).ok());
+    ASSERT_TRUE(wait_io([&] { return io->roots_entered == 1; }));
+    release_roots();
+    ASSERT_TRUE(wait_io([&] { return io->closed == 1; }));
+    ASSERT_TRUE(wait_idle());
+    // A downstream LIMIT uses set_finishing without consuming the queued children.
+    EXPECT_FALSE(queues->create(0)->empty());
+    ASSERT_OK(ops[0]->set_finishing(state.get()));
+    EXPECT_TRUE(ops[0]->is_finished());
+    EXPECT_TRUE(factory->get_active_inputs().empty());
+    EXPECT_TRUE(factory->get_chunk_buffer().empty(0));
+    EXPECT_EQ(1, io->opened);
 }
 
 } // namespace starrocks

@@ -44,6 +44,8 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.util.List;
 
@@ -101,14 +103,18 @@ public class AnalyzeInsertTest {
         analyzeFail("insert into tmc (id,name,mc) values (1,2,3)", "generated column 'mc' can not be specified.");
     }
 
-    @Test
-    public void testInsertOverwriteWhenSchemaChange() throws Exception {
+    @ParameterizedTest
+    @EnumSource(value = OlapTable.OlapTableState.class, names = {"SCHEMA_CHANGE", "ROLLUP", "TABLET_RESHARD"})
+    public void testInsertOverwriteWhenSchemaChange(OlapTable.OlapTableState state) throws Exception {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
                 .getLocalMetastore().getDb("test").getTable("t0");
-        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
-        analyzeFail("insert overwrite t0 select * from t0;",
-                "table state is SCHEMA_CHANGE, please wait to insert overwrite until table state is normal");
-        table.setState(OlapTable.OlapTableState.NORMAL);
+        table.setState(state);
+        try {
+            analyzeFail("insert overwrite t0 select * from t0;",
+                    "table state is " + state + ", please wait to insert overwrite until table state is normal");
+        } finally {
+            table.setState(OlapTable.OlapTableState.NORMAL);
+        }
     }
 
     @Test

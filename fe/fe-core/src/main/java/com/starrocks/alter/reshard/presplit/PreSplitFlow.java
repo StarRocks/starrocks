@@ -248,6 +248,11 @@ final class PreSplitFlow {
         LOG.info("Sample-Based Tablet Pre-Split ({}, multi-partition) outcome for table {}: {}",
                 loadKind, table.getName(), outcome);
         if (outcome instanceof PreSplitOutcome.SubmittedCombined submittedCombined) {
+            if (overwriteTransactionId > 0) {
+                TabletPreSplitCoordinator.awaitCombinedJobLayoutReadyAllowingFallback(
+                        loadKind, table, submittedCombined.combinedJob(), shouldAbort);
+                return;
+            }
             try {
                 TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
                         loadKind, table, submittedCombined.combinedJob(), shouldAbort);

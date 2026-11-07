@@ -89,10 +89,13 @@ import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.DistributionSpecHelper;
+import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.base.QueryGroupDistributionSpec;
 import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -651,7 +654,22 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
         LogicalScanOperator scanOperator;
         if (node.getTable().isNativeTableOrMaterializedView()) {
-            DistributionSpec distributionSpec = getTableDistributionSpec(node, columnMetaToColRefMap);
+            boolean parallelRangeScan = session.getSessionVariable().isParallelRangeScan();
+            boolean groupedRangeScan = session.getSessionVariable().isGroupedRangeScan();
+            DistributionSpec distributionSpec = (parallelRangeScan || groupedRangeScan)
+                    ? DistributionSpec.createAnyDistributionSpec() : getTableDistributionSpec(node, columnMetaToColRefMap);
+            List<Integer> physicalCIds = List.of();
+            if (groupedRangeScan) {
+                OlapTable table = (OlapTable) node.getTable();
+                List<Column> keys = MetaUtils.getRangeDistributionColumns(table);
+                physicalCIds = keys.stream().map(Column::getUniqueId).toList();
+                List<DistributionCol> columns = keys.stream()
+                        .map(column -> new DistributionCol(
+                                columnMetaToColRefMap.get(column).getId(), true)).toList();
+                EquivalentDescriptor descriptor = new EquivalentDescriptor(table.getId(), List.of());
+                descriptor.initDistributionUnionFind(columns);
+                distributionSpec = new QueryGroupDistributionSpec(table.getId(), columns, physicalCIds, descriptor);
+            }
             if (node.isMetaQuery()) {
                 scanOperator = LogicalMetaScanOperator.builder().setTable(node.getTable())
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
@@ -673,6 +691,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .build();
             } else if (!isMVPlanner) {
                 scanOperator = LogicalOlapScanOperator.builder()
+                        .setParallelRangeScan(parallelRangeScan)
+                        .setGroupedRangeScan(groupedRangeScan)
+                        .setOrderedPhysicalCUniqueIds(physicalCIds)
                         .setTable(node.getTable())
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
                         .setColumnMetaToColRefMap(columnMetaToColRefMap)

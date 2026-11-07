@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <optional>
 #include <unordered_set>
 
@@ -147,10 +148,15 @@ public:
 
     [[nodiscard]] std::vector<SegmentSharedPtr> get_segments() override;
     [[nodiscard]] StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked() override;
+    [[nodiscard]] StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked(const LakeIOOptions& lake_io_opts,
+                                                                               OlapReaderStatistics* stats,
+                                                                               const std::atomic<bool>* is_cancelled);
 
     StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
-    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts);
+    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts,
+                                                             OlapReaderStatistics* stats = nullptr,
+                                                             const std::atomic<bool>* is_cancelled = nullptr);
 
     // Pairs a loaded segment with its position in _metadata->segment_metas(). load_segments() packs
     // its result densely (segment-range start, partial-compaction trim, lost segments), so an
@@ -169,7 +175,7 @@ public:
     [[nodiscard]] Status load_segments(
             std::vector<LoadedSegment>* segments, SegmentReadOptions& seg_options,
             std::pair<std::vector<LoadedSegment>, std::vector<LoadedSegment>>* not_used_segments,
-            const std::unordered_set<int>* skip_segment_idxs = nullptr);
+            const std::unordered_set<int>* skip_segment_idxs = nullptr, OlapReaderStatistics* footer_stats = nullptr);
 
     int64_t tablet_id() const { return _tablet_id; }
 
@@ -184,7 +190,8 @@ public:
     int64_t end_version() const override { return 0; }
 
 private:
-    StatusOr<std::optional<SeekRange>> get_seek_range() const;
+    // Defaults to archived ordinals. Grouped readers may use their validated reader schema.
+    StatusOr<std::optional<SeekRange>> get_seek_range(const TabletSchemaCSPtr& decoding_schema = nullptr) const;
 
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;

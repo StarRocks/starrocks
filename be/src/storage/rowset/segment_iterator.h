@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -31,6 +32,7 @@ class ColumnPredicate;
 class Schema;
 class SegmentReadOptions;
 struct LakeIOOptions;
+struct OlapReaderStatistics;
 
 ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const Schema& schema,
                                       const SegmentReadOptions& options);
@@ -40,8 +42,9 @@ ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, c
 // iterator scan path can convert a TabletRangePB-derived SeekRange into a
 // contiguous [lower, upper) rowid window.
 // Returns std::nullopt when the range is empty on this segment.
-StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const std::shared_ptr<Segment>& segment,
-                                                                          const SeekRange& range,
-                                                                          const LakeIOOptions& lake_io_opts);
+StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(
+        const std::shared_ptr<Segment>& segment, const SeekRange& range, const LakeIOOptions& lake_io_opts,
+        OlapReaderStatistics* stats = nullptr, bool use_page_cache = false,
+        const std::atomic<bool>* is_cancelled = nullptr);
 
 } // namespace starrocks
