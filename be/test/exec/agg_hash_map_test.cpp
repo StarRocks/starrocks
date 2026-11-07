@@ -33,7 +33,9 @@
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/serialized_key_buffer.h"
+#include "exec/aggregator.h"
 #include "exec/partition/partition_hash_map.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/datum.h"
@@ -1803,6 +1805,181 @@ TEST(SliceWithHash32Test, NullableAndNonNullableSelectionAndLimitPaths) {
             }
         }
         EXPECT_EQ(10, found_non_null);
+    }
+
+    auto make_serialized_cols = [](int offset) {
+        auto strings = BinaryColumn::create();
+        auto ints = Int32Column::create();
+        for (int i = 0; i < kRows; ++i) {
+            strings->append("ser-sel-key-" + std::to_string(offset + (i % 32)));
+            ints->append(offset + (i % 32));
+        }
+        return Columns{std::move(strings), std::move(ints)};
+    };
+
+    RuntimeState state;
+    state.set_chunk_size(kRows);
+    TPlanNode tnode;
+    tnode.__set_node_id(1);
+    tnode.__set_node_type(TPlanNodeType::AGGREGATION_NODE);
+    tnode.__set_num_children(1);
+    tnode.__set_limit(-1);
+    TAggregationNode agg_node;
+    agg_node.__set_use_streaming_preaggregation(true);
+    tnode.__set_agg_node(agg_node);
+
+    auto make_test_aggregator = [&](bool only_group_by) {
+        auto factory = std::make_shared<AggregatorFactory>(tnode);
+        auto aggregator = factory->get_or_create(0);
+        aggregator->_state = &state;
+        aggregator->_agg_stat = &statistics;
+        aggregator->_runtime_profile = &profile;
+        aggregator->_is_only_group_by_columns = only_group_by;
+        aggregator->_mem_pool = std::make_unique<MemPool>();
+        aggregator->_state_allocator.aggregate_key_size = sizeof(Slice);
+        aggregator->_state_allocator.pool = aggregator->_mem_pool.get();
+        aggregator->_tmp_agg_states.resize(kRows, nullptr);
+        aggregator->_streaming_selection.resize(kRows, 0);
+        aggregator->_new_group_selection.resize(kRows, 0);
+        aggregator->_is_closed = true;
+        return aggregator;
+    };
+
+    // 4. Aggregator-dispatched hash set paths (noprefetch, prefetch, selection, and per-row serialized fallback).
+    // Exercise both phase1 (PhmapSeed1) and phase2 (PhmapSeed2) so that out-of-line COMDAT methods in aggregator.cpp.o
+    // are executed even when the test object precedes libExec.a on the linker command line.
+    for (double ratio : {1e9, 0.0}) {
+        config::agg_prefetch_l2_ratio = ratio;
+
+        for (auto str_type : {AggHashSetVariant::Type::phase1_string, AggHashSetVariant::Type::phase2_string}) {
+            auto agg = make_test_aggregator(true);
+            agg->_hash_set_variant.init(&state, str_type, &statistics);
+            agg->_hash_set_variant.visit([](auto& set) {
+                if constexpr (requires { set->_escape_pool; }) {
+                    set->_escape_pool.allocate(1);
+                }
+            });
+            agg->_group_by_columns = make_non_null_cols(0);
+            agg->build_hash_set(kRows);
+            EXPECT_EQ(32u, agg->_hash_set_variant.size());
+            agg->_hash_set_variant.visit([](auto& set) {
+                if constexpr (requires { set->_escape_pool; }) {
+                    EXPECT_EQ(0u, set->_escape_pool.total_reserved_bytes());
+                }
+            });
+
+            agg->_group_by_columns = make_non_null_cols(16);
+            agg->build_hash_set_with_selection(kRows);
+            for (int i = 0; i < kRows; ++i) {
+                EXPECT_EQ((i % 32) < 16 ? 0 : 1, agg->_streaming_selection[i]);
+            }
+
+            agg->_hash_set_variant.convert_to_two_level(&state);
+            agg->build_hash_set(kRows);
+            agg->build_hash_set_with_selection(kRows);
+            for (int i = 0; i < kRows; ++i) {
+                EXPECT_EQ(0, agg->_streaming_selection[i]);
+            }
+        }
+
+        for (auto null_str_type :
+             {AggHashSetVariant::Type::phase1_null_string, AggHashSetVariant::Type::phase2_null_string}) {
+            auto agg = make_test_aggregator(true);
+            agg->_hash_set_variant.init(&state, null_str_type, &statistics);
+            agg->_group_by_columns = make_nullable_cols(0, false);
+            agg->build_hash_set(kRows);
+            EXPECT_EQ(32u, agg->_hash_set_variant.size());
+
+            agg->_group_by_columns = make_nullable_cols(16, false);
+            agg->build_hash_set_with_selection(kRows);
+            for (int i = 0; i < kRows; ++i) {
+                EXPECT_EQ((i % 32) < 16 ? 0 : 1, agg->_streaming_selection[i]);
+            }
+
+            agg->_group_by_columns = make_nullable_cols(0, true);
+            agg->build_hash_set(kRows);
+            agg->_group_by_columns = make_nullable_cols(16, true);
+            agg->build_hash_set_with_selection(kRows);
+            for (int i = 0; i < kRows; ++i) {
+                if (i % 8 == 0) {
+                    EXPECT_EQ(0, agg->_streaming_selection[i]);
+                } else {
+                    EXPECT_EQ((i % 32) < 16 ? 0 : 1, agg->_streaming_selection[i]);
+                }
+            }
+        }
+
+        for (auto slice_type : {AggHashSetVariant::Type::phase1_slice, AggHashSetVariant::Type::phase2_slice}) {
+            auto agg = make_test_aggregator(true);
+            agg->_hash_set_variant.init(&state, slice_type, &statistics);
+            agg->_group_by_columns = make_serialized_cols(0);
+            agg->build_hash_set(kRows);
+            EXPECT_EQ(32u, agg->_hash_set_variant.size());
+
+            agg->_group_by_columns = make_serialized_cols(16);
+            agg->build_hash_set_with_selection(kRows);
+            for (int i = 0; i < kRows; ++i) {
+                EXPECT_EQ((i % 32) < 16 ? 0 : 1, agg->_streaming_selection[i]);
+            }
+
+            // Force per-row fallback (build_set_by_rows)
+            agg->_hash_set_variant.visit([](auto& set) {
+                if constexpr (requires { set->_key_buffer; }) {
+                    set->_key_buffer.set_max_batch_bytes_for_test(1);
+                }
+            });
+            agg->_group_by_columns = make_serialized_cols(32);
+            agg->build_hash_set(kRows);
+            EXPECT_EQ(64u, agg->_hash_set_variant.size());
+            agg->build_hash_set_with_selection(kRows);
+            for (int i = 0; i < kRows; ++i) {
+                EXPECT_EQ(0, agg->_streaming_selection[i]);
+            }
+        }
+
+        // Aggregator-dispatched OneStringAggHashMap noprefetch, prefetch, selection, and shared limit
+        for (auto map_str_type : {AggHashMapVariant::Type::phase1_string, AggHashMapVariant::Type::phase2_string}) {
+            auto agg_str = make_test_aggregator(false);
+            agg_str->_hash_map_variant.init(&state, map_str_type, &statistics);
+            agg_str->_limit = 16;
+            agg_str->_group_by_columns = make_non_null_cols(0);
+            std::atomic<int64_t> str_countdown{16};
+            agg_str->_build_hash_map_with_shared_limit(kRows, str_countdown);
+            EXPECT_EQ(16u, agg_str->_hash_map_variant.size());
+
+            agg_str->build_hash_map(kRows, false);
+            EXPECT_EQ(32u, agg_str->_hash_map_variant.size());
+            agg_str->build_hash_map_with_selection(kRows);
+            EXPECT_EQ(0, agg_str->_streaming_selection[0]);
+        }
+    }
+
+    // 5. Aggregator-dispatched nullable string hash map mark_null_key, selection, and process_limit paths
+    for (auto map_null_type :
+         {AggHashMapVariant::Type::phase1_null_string, AggHashMapVariant::Type::phase2_null_string}) {
+        auto agg_mark = make_test_aggregator(false);
+        agg_mark->_hash_map_variant.init(&state, map_null_type, &statistics);
+        agg_mark->_num_first_value_only_funcs = 1;
+        agg_mark->_group_by_columns = make_nullable_cols(0, true);
+        agg_mark->build_hash_map(kRows, false);
+        EXPECT_TRUE(agg_mark->_new_group_selection_ready);
+        // Row 0 is the first NULL row and creates the null group, so after ^= 1 flip it is selected (0).
+        EXPECT_EQ(0, agg_mark->_new_group_selection[0]);
+        // Row 8 is the second NULL row and hits the existing null group, so after ^= 1 flip it is filtered (1).
+        EXPECT_EQ(1, agg_mark->_new_group_selection[8]);
+
+        agg_mark->_group_by_columns = make_nullable_cols(16, true);
+        agg_mark->build_hash_map_with_selection(kRows);
+        EXPECT_EQ(0, agg_mark->_streaming_selection[0]);
+
+        auto agg_limit = make_test_aggregator(false);
+        agg_limit->_hash_map_variant.init(&state, map_null_type, &statistics);
+        agg_limit->_limit = 10;
+        agg_limit->_group_by_columns = make_nullable_cols(0, true);
+        std::atomic<int64_t> shared_countdown{10};
+        agg_limit->_build_hash_map_with_shared_limit(kRows, shared_countdown);
+        // 10 non-null groups in the hash table + 1 null group out-of-table = 11 total groups in variant.size().
+        EXPECT_EQ(11u, agg_limit->_hash_map_variant.size());
     }
 }
 
