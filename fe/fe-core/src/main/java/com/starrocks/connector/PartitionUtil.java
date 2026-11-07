@@ -525,7 +525,20 @@ public class PartitionUtil {
     public static PartitionKey nextPartitionKey(PartitionKey lastPartitionKey,
                                                 DateTimeInterval dateTimeInterval,
                                                 PrimitiveType partitionColPrimType) throws AnalysisException {
-        LiteralExpr literalExpr = addOffsetForLiteral(lastPartitionKey.getKeys().get(0), 1, dateTimeInterval);
+        LiteralExpr lowerBound = lastPartitionKey.getKeys().get(0);
+        LiteralExpr literalExpr;
+        if (dateTimeInterval == DateTimeInterval.NONE
+                && partitionColPrimType == PrimitiveType.DATETIME && lowerBound instanceof DateLiteral) {
+            // An identity partition on a DATETIME column (Iceberg's, which has no granularity) holds one
+            // instant, so its range ends just past it. Stretched to a day, as for a DATE, two values on the
+            // same day overlapped and every refresh of a view partitioned on the column failed. One second,
+            // not one microsecond: a view partition bound keeps whole seconds, and a microsecond later
+            // would read back equal to the lower bound.
+            literalExpr = new DateLiteral(((DateLiteral) lowerBound).toLocalDateTime().plusSeconds(1),
+                    lowerBound.getType());
+        } else {
+            literalExpr = addOffsetForLiteral(lowerBound, 1, dateTimeInterval);
+        }
         PartitionKey partitionKey = new PartitionKey();
         partitionKey.pushColumn(literalExpr, partitionColPrimType);
         return partitionKey;

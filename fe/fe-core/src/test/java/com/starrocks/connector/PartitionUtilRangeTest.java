@@ -15,33 +15,33 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.Range;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.sql.ast.expression.DateLiteral;
-import com.starrocks.type.DateType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.Type;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 
-public class MVPartitionCellBuilderRangeTest {
+public class PartitionUtilRangeTest {
 
     private static PartitionKey key(LocalDateTime value, PrimitiveType type) throws Exception {
         PartitionKey key = new PartitionKey();
-        key.pushColumn(new DateLiteral(value, type == PrimitiveType.DATE ? DateType.DATE : DateType.DATETIME),
+        key.pushColumn(new DateLiteral(value, type == PrimitiveType.DATE ? Type.DATE : Type.DATETIME),
                 type);
         return key;
     }
 
     private static LocalDateTime upper(LocalDateTime lower, PartitionUtil.DateTimeInterval interval,
                                        PrimitiveType type) throws Exception {
-        PartitionKey next = MVPartitionCellBuilder.nextPartitionKey(key(lower, type), interval, type);
+        PartitionKey next = PartitionUtil.nextPartitionKey(key(lower, type), interval, type);
         return ((DateLiteral) next.getKeys().get(0)).toLocalDateTime();
     }
 
     private static Range<PartitionKey> range(LocalDateTime lower) throws Exception {
         PartitionKey lowerKey = key(lower, PrimitiveType.DATETIME);
-        return Range.closedOpen(lowerKey, MVPartitionCellBuilder.nextPartitionKey(
+        return Range.closedOpen(lowerKey, PartitionUtil.nextPartitionKey(
                 lowerKey, PartitionUtil.DateTimeInterval.NONE, PrimitiveType.DATETIME));
     }
 
