@@ -1,10 +1,13 @@
--- name: test_flat_json_parent_values @native
+-- name: test_flat_json_parent_values @native @sequential
+UPDATE information_schema.be_configs SET value = "true" WHERE name = "enable_json_flat";
+-- result:
+-- !result
 SET enable_query_cache=false;
 -- result:
 -- !result
 CREATE TABLE t(id INT, j JSON) DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1
-PROPERTIES("replication_num"="1", "flat_json.enable"="true",
+PROPERTIES("replication_num"="1",
            "base_compaction_forbidden_time_ranges"="* * * * *");
 -- result:
 -- !result
@@ -20,9 +23,6 @@ INSERT INTO t VALUES
 SET cbo_prune_json_subfield=false;
 -- result:
 -- !result
-SET cbo_json_v2_rewrite=false;
--- result:
--- !result
 SELECT id,json_query(j,'$.e'),json_query(j,'$.a'),json_query(j,'$.d.p'),json_query(j,'$.a0') FROM t ORDER BY id;
 -- result:
 1	{}	[1, 2]	[]	[]
@@ -50,41 +50,6 @@ SELECT id,get_json_int(j,'$.e.v'),get_json_int(j,'$.a.v') FROM t ORDER BY id;
 3	11	21
 -- !result
 SET cbo_prune_json_subfield=true;
--- result:
--- !result
-SET cbo_json_v2_rewrite=false;
--- result:
--- !result
-SELECT id,json_query(j,'$.e'),json_query(j,'$.a'),json_query(j,'$.d.p'),json_query(j,'$.a0') FROM t ORDER BY id;
--- result:
-1	{}	[1, 2]	[]	[]
-2	{"v": 10}	{"v": 20}	{"v": 30}	{"v": 40}
-3	{"v": 11}	{"v": 21}	{"v": 31}	{"v": 41}
--- !result
-SELECT id,get_json_string(j,'$.e'),get_json_string(j,'$.a') FROM t ORDER BY id;
--- result:
-1	{}	[1, 2]
-2	{"v": 10}	{"v": 20}
-3	{"v": 11}	{"v": 21}
--- !result
-SELECT count(json_query(j,'$.e')),sum(json_exists(j,'$.e')),count(json_query(j,'$.missing')) FROM t;
--- result:
-3	3	0
--- !result
-SELECT id FROM t WHERE json_length(j,'$.a')=2 AND json_exists(j,'$.e') ORDER BY id;
--- result:
-1
--- !result
-SELECT id,get_json_int(j,'$.e.v'),get_json_int(j,'$.a.v') FROM t ORDER BY id;
--- result:
-1	None	None
-2	10	20
-3	11	21
--- !result
-SET cbo_prune_json_subfield=true;
--- result:
--- !result
-SET cbo_json_v2_rewrite=true;
 -- result:
 -- !result
 SELECT id,json_query(j,'$.e'),json_query(j,'$.a'),json_query(j,'$.d.p'),json_query(j,'$.a0') FROM t ORDER BY id;
@@ -126,9 +91,6 @@ None
 SET cbo_prune_json_subfield=false;
 -- result:
 -- !result
-SET cbo_json_v2_rewrite=false;
--- result:
--- !result
 SELECT id,json_query(j,'$.e'),json_query(j,'$.a'),json_query(j,'$.d.p'),json_query(j,'$.a0') FROM t ORDER BY id;
 -- result:
 1	{}	[1, 2]	[]	[]
@@ -156,41 +118,6 @@ SELECT id,get_json_int(j,'$.e.v'),get_json_int(j,'$.a.v') FROM t ORDER BY id;
 3	11	21
 -- !result
 SET cbo_prune_json_subfield=true;
--- result:
--- !result
-SET cbo_json_v2_rewrite=false;
--- result:
--- !result
-SELECT id,json_query(j,'$.e'),json_query(j,'$.a'),json_query(j,'$.d.p'),json_query(j,'$.a0') FROM t ORDER BY id;
--- result:
-1	{}	[1, 2]	[]	[]
-2	{"v": 10}	{"v": 20}	{"v": 30}	{"v": 40}
-3	{"v": 11}	{"v": 21}	{"v": 31}	{"v": 41}
--- !result
-SELECT id,get_json_string(j,'$.e'),get_json_string(j,'$.a') FROM t ORDER BY id;
--- result:
-1	{}	[1, 2]
-2	{"v": 10}	{"v": 20}
-3	{"v": 11}	{"v": 21}
--- !result
-SELECT count(json_query(j,'$.e')),sum(json_exists(j,'$.e')),count(json_query(j,'$.missing')) FROM t;
--- result:
-3	3	0
--- !result
-SELECT id FROM t WHERE json_length(j,'$.a')=2 AND json_exists(j,'$.e') ORDER BY id;
--- result:
-1
--- !result
-SELECT id,get_json_int(j,'$.e.v'),get_json_int(j,'$.a.v') FROM t ORDER BY id;
--- result:
-1	None	None
-2	10	20
-3	11	21
--- !result
-SET cbo_prune_json_subfield=true;
--- result:
--- !result
-SET cbo_json_v2_rewrite=true;
 -- result:
 -- !result
 SELECT id,json_query(j,'$.e'),json_query(j,'$.a'),json_query(j,'$.d.p'),json_query(j,'$.a0') FROM t ORDER BY id;
@@ -220,5 +147,8 @@ SELECT id,get_json_int(j,'$.e.v'),get_json_int(j,'$.a.v') FROM t ORDER BY id;
 3	11	21
 -- !result
 DROP TABLE t;
+-- result:
+-- !result
+UPDATE information_schema.be_configs SET value = "false" WHERE name = "enable_json_flat";
 -- result:
 -- !result
