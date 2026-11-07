@@ -1063,22 +1063,18 @@ struct AggHashMapWithSerializedKeyFixedSize
     // TODO: make has_null_column as a constexpr
     bool has_null_column = false;
     int fixed_byte_size = -1; // unset state
-    struct CacheEntry {
-        FixedSizeSliceKey key;
-        size_t hashval;
-    };
 
-    static constexpr size_t max_fixed_size = sizeof(CacheEntry);
+    static constexpr size_t max_fixed_size = sizeof(FixedSizeSliceKey);
 
-    std::vector<CacheEntry> caches;
+    Buffer<FixedSizeSliceKey> keys;
+    Buffer<size_t> hashes;
 
     template <class... Args>
     AggHashMapWithSerializedKeyFixedSize(int chunk_size, Args&&... args)
-            : Base(chunk_size, std::forward<Args>(args)...),
-              mem_pool(std::make_unique<MemPool>()),
-              _chunk_size(chunk_size) {
-        caches.resize(chunk_size);
-        auto* buffer = reinterpret_cast<uint8_t*>(caches.data());
+            : Base(chunk_size, std::forward<Args>(args)...), _chunk_size(chunk_size) {
+        keys.resize(chunk_size);
+        hashes.resize(chunk_size);
+        auto* buffer = reinterpret_cast<uint8_t*>(keys.data());
         memset(buffer, 0x0, max_fixed_size * _chunk_size);
     }
 
@@ -1091,17 +1087,17 @@ struct AggHashMapWithSerializedKeyFixedSize
                                               ExtraAggParam* extra) {
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
-        auto* buffer = reinterpret_cast<uint8_t*>(caches.data());
+        auto* buffer = reinterpret_cast<uint8_t*>(keys.data());
         for (const auto& key_column : key_columns) {
             key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_fixed_size);
         }
         if (has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
-                caches[i].key.u.size = slice_sizes[i];
+                keys[i].u.size = slice_sizes[i];
             }
         }
         for (size_t i = 0; i < chunk_size; i++) {
-            caches[i].hashval = this->hash_map.hash_function()(caches[i].key);
+            hashes[i] = this->hash_map.hash_function()(keys[i]);
         }
 
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
@@ -1109,46 +1105,42 @@ struct AggHashMapWithSerializedKeyFixedSize
 
         for (size_t i = 0; i < chunk_size; ++i) {
             if (__prefetch_dist != 0 && __prefetch_index < chunk_size) {
-                this->hash_map.prefetch_hash(caches[__prefetch_index++].hashval);
+                this->hash_map.prefetch_hash(hashes[__prefetch_index++]);
             }
-            FixedSizeSliceKey& key = caches[i].key;
+            FixedSizeSliceKey& key = keys[i];
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
-                    _emplace_key_with_hash(key, caches[i].hashval, (*agg_states)[i], allocate_func,
+                    _emplace_key_with_hash(key, hashes[i], (*agg_states)[i], allocate_func,
                                            [&]() { hash_table_size++; });
                 } else {
-                    _find_key((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
+                    _find_key((*agg_states)[i], (*not_founds)[i], key, hashes[i]);
                 }
             } else if constexpr (HTBuildOp::allocate) {
-                _emplace_key_with_hash(key, caches[i].hashval, (*agg_states)[i], allocate_func,
+                _emplace_key_with_hash(key, hashes[i], (*agg_states)[i], allocate_func,
                                        FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
             } else if constexpr (HTBuildOp::fill_not_found) {
-                _find_key((*agg_states)[i], (*not_founds)[i], key, caches[i].hashval);
+                _find_key((*agg_states)[i], (*not_founds)[i], key, hashes[i]);
             }
         }
     }
 
-    // NOTE: Both noprefetch and prefetch paths must serialize at stride `max_fixed_size = sizeof(CacheEntry)`
-    // and index `caches[i].key`. When `has_null_column == false`, trailing unused bytes in each `CacheEntry`
-    // are zeroed once in the constructor; serializing at a tighter stride would overwrite those zeroed bytes
-    // and corrupt keys when transitioning from noprefetch to prefetch.
     template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_noprefetch(size_t chunk_size, const Columns& key_columns,
                                                 Buffer<AggDataPtr>* agg_states, Func&& allocate_func,
                                                 ExtraAggParam* extra) {
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
-        auto* buffer = reinterpret_cast<uint8_t*>(caches.data());
+        auto* buffer = reinterpret_cast<uint8_t*>(keys.data());
         for (const auto& key_column : key_columns) {
             key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_fixed_size);
         }
         if (has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
-                caches[i].key.u.size = slice_sizes[i];
+                keys[i].u.size = slice_sizes[i];
             }
         }
         for (size_t i = 0; i < chunk_size; ++i) {
-            FixedSizeSliceKey& key = caches[i].key;
+            FixedSizeSliceKey& key = keys[i];
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     _emplace_key(key, (*agg_states)[i], allocate_func, [&] { hash_table_size++; });
@@ -1168,10 +1160,10 @@ struct AggHashMapWithSerializedKeyFixedSize
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
         DCHECK(has_null_column || fixed_byte_size != -1);
-        DCHECK_LE(chunk_size, caches.size());
+        DCHECK_LE(chunk_size, keys.size());
         slice_sizes.assign(chunk_size, 0);
 
-        auto* buffer = reinterpret_cast<uint8_t*>(caches.data());
+        auto* buffer = reinterpret_cast<uint8_t*>(keys.data());
         if (has_null_column) {
             memset(buffer, 0x0, max_fixed_size * chunk_size);
         }
@@ -1243,7 +1235,6 @@ struct AggHashMapWithSerializedKeyFixedSize
     static constexpr bool has_single_null_key = false;
 
     Buffer<uint32_t> slice_sizes;
-    std::unique_ptr<MemPool> mem_pool;
     ResultVector results;
     Buffer<Slice> tmp_slices;
     int32_t _chunk_size;

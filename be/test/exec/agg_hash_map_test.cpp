@@ -631,6 +631,110 @@ TEST(HashMapTest, FixedSize16NonNullSub16ByteNoprefetchToPrefetchTransition) {
     EXPECT_EQ(expected, actual);
 }
 
+static_assert(SerializedKeyFixedSize4AggHashMap<PhmapSeed1>::max_fixed_size == sizeof(SliceKey4));
+static_assert(SerializedKeyFixedSize8AggHashMap<PhmapSeed1>::max_fixed_size == sizeof(SliceKey8));
+static_assert(SerializedKeyFixedSize16AggHashMap<PhmapSeed1>::max_fixed_size == sizeof(SliceKey16));
+
+TEST(HashMapTest, FixedSizeSoALayoutAndSubWidthTransitionAllKeyWidths) {
+    constexpr int kChunkRows = 64;
+    const double saved_ratio = config::agg_prefetch_l2_ratio;
+    DeferOp restore_ratio([&]() { config::agg_prefetch_l2_ratio = saved_ratio; });
+
+    RuntimeProfile profile("FixedSizeSoALayoutAndSubWidthTransitionAllKeyWidths");
+    AggStatistics statis(&profile);
+    MemPool pool;
+    Buffer<AggDataPtr> agg_states(kChunkRows);
+
+    // 1. Verify SliceKey16 SoA buffer sizing, 16B stride, and 16B alignment on every row (even & odd).
+    {
+        SerializedKeyFixedSize16AggHashMap<PhmapSeed1> map16(kChunkRows, &statis);
+        ASSERT_EQ(static_cast<size_t>(kChunkRows), map16.keys.size());
+        ASSERT_EQ(static_cast<size_t>(kChunkRows), map16.hashes.size());
+        for (int i = 0; i < kChunkRows; ++i) {
+            EXPECT_EQ(0u, reinterpret_cast<uintptr_t>(&map16.keys[i]) % alignof(SliceKey16)) << "row " << i;
+            if (i + 1 < kChunkRows) {
+                EXPECT_EQ(sizeof(SliceKey16), reinterpret_cast<uintptr_t>(&map16.keys[i + 1]) -
+                                                      reinterpret_cast<uintptr_t>(&map16.keys[i]));
+            }
+        }
+    }
+
+    // 2. Verify SliceKey4 (3B sub-width: INT16 + INT8) and SliceKey8 (6B sub-width: INT32 + INT16)
+    // across partial chunks (1 row) and full chunks transitioning noprefetch -> prefetch.
+    {
+        auto c0 = Int16Column::create();
+        auto c1 = Int8Column::create();
+        for (int i = 0; i < kChunkRows; ++i) {
+            c0->append(static_cast<int16_t>(1000 + i));
+            c1->append(static_cast<int8_t>(i));
+        }
+        Columns cols4{c0, c1};
+        SerializedKeyFixedSize4AggHashMap<PhmapSeed1> map4(kChunkRows, &statis);
+        map4.has_null_column = false;
+        map4.fixed_byte_size = 3;
+
+        config::agg_prefetch_l2_ratio = 1e9; // noprefetch (partial 1-row chunk then full chunk)
+        map4.build_hash_map(
+                1, cols4, &pool, [&](const auto&) { return pool.allocate(8); }, &agg_states);
+        EXPECT_EQ(1u, map4.hash_map.size());
+        map4.build_hash_map(
+                kChunkRows, cols4, &pool, [&](const auto&) { return pool.allocate(8); }, &agg_states);
+        EXPECT_EQ(static_cast<size_t>(kChunkRows), map4.hash_map.size());
+
+        config::agg_prefetch_l2_ratio = 0.0; // prefetch on identical 3B keys
+        map4.build_hash_map(
+                kChunkRows, cols4, &pool, [&](const auto&) { return pool.allocate(8); }, &agg_states);
+        EXPECT_EQ(static_cast<size_t>(kChunkRows), map4.hash_map.size());
+    }
+    {
+        auto c0 = Int32Column::create();
+        auto c1 = Int16Column::create();
+        for (int i = 0; i < kChunkRows; ++i) {
+            c0->append(static_cast<int32_t>(0x10203000 + i));
+            c1->append(static_cast<int16_t>(0x0400 + i));
+        }
+        Columns cols8{c0, c1};
+        SerializedKeyFixedSize8AggHashMap<PhmapSeed1> map8(kChunkRows, &statis);
+        map8.has_null_column = false;
+        map8.fixed_byte_size = 6;
+
+        config::agg_prefetch_l2_ratio = 1e9; // noprefetch
+        map8.build_hash_map(
+                kChunkRows, cols8, &pool, [&](const auto&) { return pool.allocate(8); }, &agg_states);
+        EXPECT_EQ(static_cast<size_t>(kChunkRows), map8.hash_map.size());
+
+        config::agg_prefetch_l2_ratio = 0.0; // prefetch on identical 6B keys
+        map8.build_hash_map(
+                kChunkRows, cols8, &pool, [&](const auto&) { return pool.allocate(8); }, &agg_states);
+        EXPECT_EQ(static_cast<size_t>(kChunkRows), map8.hash_map.size());
+    }
+
+    // 3. Full-width 16B key (4 x INT32 = 16B, Q35 shape) where byte 15 (u.size) holds key payload data.
+    {
+        Columns cols16;
+        for (int col = 0; col < 4; ++col) {
+            auto c = Int32Column::create();
+            for (int i = 0; i < kChunkRows; ++i) {
+                c->append(static_cast<int32_t>((col << 24) | (0x00550000 + i * 3 + col)));
+            }
+            cols16.push_back(std::move(c));
+        }
+        SerializedKeyFixedSize16AggHashMap<PhmapSeed1> map16(kChunkRows, &statis);
+        map16.has_null_column = false;
+        map16.fixed_byte_size = 16;
+
+        config::agg_prefetch_l2_ratio = 1e9;
+        map16.build_hash_map(
+                kChunkRows, cols16, &pool, [&](const auto&) { return pool.allocate(8); }, &agg_states);
+        EXPECT_EQ(static_cast<size_t>(kChunkRows), map16.hash_map.size());
+
+        config::agg_prefetch_l2_ratio = 0.0;
+        map16.build_hash_map(
+                kChunkRows, cols16, &pool, [&](const auto&) { return pool.allocate(8); }, &agg_states);
+        EXPECT_EQ(static_cast<size_t>(kChunkRows), map16.hash_map.size());
+    }
+}
+
 // Regression test: non-nullable FixedSize8 keys shorter than 8 bytes (e.g. INT + SMALLINT = 6B)
 // must not leave dirty bytes in bytes 6..7 of caches[i].key when transitioning from compute_agg_noprefetch
 // to compute_agg_prefetch, and FixedSize8 hash sets must cleanly release previous staging buffers on resize.
