@@ -155,8 +155,15 @@ class OAuth2SecurityConfigBuilder {
             config = config.setServerUri(URI.create(serverUri));
         }
 
-        // check OAuth2SecurityConfig is valid
-        if (!config.credentialOrTokenPresent() || !config.scopePresentOnlyWithCredential()) {
+        // check OAuth2SecurityConfig is valid. JWT is exempt from the
+        // credential/token-present check: in JWT mode there is deliberately no static
+        // token or credential in the catalog properties. The token is the logged-in
+        // user's JWT, supplied per session at request time (see
+        // IcebergRESTCatalog.buildContext). Applying the OAUTH2 guard here would
+        // discard the JWT security mode entirely and fall back to NONE, so the
+        // per-session token would never be attached to REST calls.
+        if (config.getSecurity() != JWT
+                && (!config.credentialOrTokenPresent() || !config.scopePresentOnlyWithCredential())) {
             return new OAuth2SecurityConfig();
         }
 
