@@ -93,48 +93,36 @@ struct SliceWithHash32 {
     static constexpr uint32_t kEscape = std::numeric_limits<uint32_t>::max();
     static constexpr size_t kEscapeHeader = sizeof(uint64_t);
 
-    const char* data = nullptr;
-    uint32_t size = 0;
-    uint32_t hash = 0;
+    const char* data;
+    uint32_t size;
+    uint32_t hash;
 
-    SliceWithHash32() = default;
+    ALWAYS_INLINE
+    SliceWithHash32(const char* d = nullptr, uint32_t s = 0, uint32_t h = 0) : data(d), size(s), hash(h) {}
     // Only for keys shorter than kEscape.
-    explicit SliceWithHash32(const Slice& s) : data(s.data), size(static_cast<uint32_t>(s.size)), hash(hash_of(s)) {
+    ALWAYS_INLINE
+    explicit SliceWithHash32(const Slice& s) : SliceWithHash32(s.data, static_cast<uint32_t>(s.size), hash_of(s)) {
         DCHECK_LT(s.size, kEscape);
     }
 
-    static uint32_t hash_of(const Slice& s) {
-        if (LIKELY(s.size <= kMaxHashPiece)) {
-            return static_cast<uint32_t>(SliceHashWithSeed<seed>()(s));
+    ALWAYS_INLINE static uint32_t hash_of(const Slice& s) {
+        size_t h = SliceHashWithSeed<seed>()(Slice(s.data, std::min(s.size, kMaxHashPiece)));
+        for (size_t offset = kMaxHashPiece; UNLIKELY(offset < s.size); offset += kMaxHashPiece) {
+            h = crc_hash_64(s.data + offset, static_cast<int32_t>(std::min(kMaxHashPiece, s.size - offset)), h);
         }
-        return hash_of_huge(s);
+        return static_cast<uint32_t>(h);
     }
 
     ALWAYS_INLINE size_t real_size() const {
-        if (LIKELY(size != kEscape)) {
-            return size;
-        }
-        uint64_t v;
-        memcpy(&v, data - kEscapeHeader, sizeof(v));
-        return v;
+        return LIKELY(size != kEscape) ? size : unaligned_load<uint64_t>(data - kEscapeHeader);
     }
     ALWAYS_INLINE Slice slice() const { return {data, real_size()}; }
     // convert_hash_map_to_chunk copies the key into a Buffer<Slice>.
-    operator Slice() const { return slice(); }
+    ALWAYS_INLINE operator Slice() const { return slice(); }
 
 private:
     // SliceHashWithSeed takes an int32 length.
     static constexpr size_t kMaxHashPiece = std::numeric_limits<int32_t>::max();
-
-    // Hashes the key in int32-sized pieces, chaining each piece's hash into the next one's seed.
-    static ALWAYS_NOINLINE uint32_t hash_of_huge(const Slice& s) {
-        size_t h = SliceHashWithSeed<seed>()(Slice(s.data, kMaxHashPiece));
-        for (size_t offset = kMaxHashPiece; offset < s.size; offset += kMaxHashPiece) {
-            const size_t piece = std::min(kMaxHashPiece, s.size - offset);
-            h = crc_hash_64(s.data + offset, static_cast<int32_t>(piece), h);
-        }
-        return static_cast<uint32_t>(h);
-    }
 };
 static_assert(sizeof(SliceWithHash32<PhmapSeed1>) == sizeof(Slice));
 static_assert(alignof(SliceWithHash32<PhmapSeed1>) == alignof(Slice));
@@ -142,12 +130,14 @@ static_assert(alignof(SliceWithHash32<PhmapSeed1>) == alignof(Slice));
 template <PhmapSeed seed>
 struct SliceWithHash32Hash {
     // The crc has 32 bits of entropy, the mix spreads them over 64 bits so H1 keeps its high bits.
-    size_t operator()(const SliceWithHash32<seed>& s) const { return phmap_mix_with_seed<8, seed>()(s.hash); }
+    ALWAYS_INLINE size_t operator()(const SliceWithHash32<seed>& s) const {
+        return phmap_mix_with_seed<8, seed>()(s.hash);
+    }
 };
 
 template <PhmapSeed seed>
 struct SliceWithHash32Equal {
-    bool operator()(const SliceWithHash32<seed>& x, const SliceWithHash32<seed>& y) const {
+    ALWAYS_INLINE bool operator()(const SliceWithHash32<seed>& x, const SliceWithHash32<seed>& y) const {
         return x.hash == y.hash && memequal(x.data, x.real_size(), y.data, y.real_size());
     }
 };
@@ -156,47 +146,34 @@ struct SliceWithHash32Equal {
 // header, because the bytes in front of `data` are not ours to write.
 template <typename Key>
 ALWAYS_INLINE Key make_agg_slice_key(const char* data, size_t size, uint32_t hash, MemPool* scratch) {
-    Key key;
     if (LIKELY(size < Key::kEscape)) {
-        key.data = data;
-        key.size = static_cast<uint32_t>(size);
-    } else {
-        uint8_t* pos = scratch->allocate_with_reserve(Key::kEscapeHeader + size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-        uint64_t real_size = size;
-        memcpy(pos, &real_size, sizeof(real_size));
-        strings::memcpy_inlined(pos + Key::kEscapeHeader, data, size);
-        key.data = reinterpret_cast<const char*>(pos + Key::kEscapeHeader);
-        key.size = Key::kEscape;
+        return {data, static_cast<uint32_t>(size), hash};
     }
-    key.hash = hash;
-    return key;
+    uint8_t* pos = scratch->allocate_with_reserve(Key::kEscapeHeader + size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+    unaligned_store<uint64_t>(pos, size);
+    strings::memcpy_inlined(pos + Key::kEscapeHeader, data, size);
+    return {reinterpret_cast<const char*>(pos + Key::kEscapeHeader), Key::kEscape, hash};
 }
 
 template <typename Key>
 ALWAYS_INLINE Key make_agg_slice_key(const Slice& s, MemPool* scratch) {
-    return make_agg_slice_key<Key>(s.data, s.size, Key::hash_of(s), scratch);
+    return LIKELY(s.size < Key::kEscape) ? Key(s) : make_agg_slice_key<Key>(s.data, s.size, Key::hash_of(s), scratch);
 }
 
 // Copies the key bytes into `pool` so the key can live in the hash map or set.
 template <typename Key>
 ALWAYS_INLINE Key persist_agg_slice_key(const Key& key, MemPool* pool) {
-    const size_t size = key.real_size();
-    Key pk = key;
-    if (LIKELY(key.size != Key::kEscape)) {
-        uint8_t* pos = pool->allocate_with_reserve(size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-        strings::memcpy_inlined(pos, key.data, size);
-        pk.data = reinterpret_cast<const char*>(pos);
-    } else {
-        uint8_t* pos = pool->allocate_with_reserve(Key::kEscapeHeader + size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-        strings::memcpy_inlined(pos, key.data - Key::kEscapeHeader, Key::kEscapeHeader + size);
-        pk.data = reinterpret_cast<const char*>(pos + Key::kEscapeHeader);
-    }
-    return pk;
+    const Slice s = key;
+    const size_t header = UNLIKELY(key.size == Key::kEscape) ? Key::kEscapeHeader : 0;
+    const size_t total = header + s.size;
+    uint8_t* pos = pool->allocate_with_reserve(total, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+    strings::memcpy_inlined(pos, s.data - header, total);
+    return {reinterpret_cast<const char*>(pos + header), key.size, key.hash};
 }
 
 // Frees the escaped probe keys once the chunk is probed: a single one holds 4 GiB or more, which must not outlive the
 // chunk that needed it.
-inline void reset_agg_escape_pool(MemPool* pool) {
+ALWAYS_INLINE inline void reset_agg_escape_pool(MemPool* pool) {
     if (UNLIKELY(pool->total_reserved_bytes() > 0)) {
         pool->free_all();
     }
@@ -265,6 +242,16 @@ struct AggHashSet {
         CancelableDefer defer = [this]() { hash_set.clear(); };
         static_cast<Impl*>(this)->template build_set<false>(chunk_size, key_columns, pool, not_founds);
         defer.cancel();
+    }
+
+    template <bool compute_and_allocate>
+    ALWAYS_INLINE void probe_or_insert_slice_key(const typename HashSet::key_type& key, MemPool* pool,
+                                                 Filter* not_founds, size_t i) {
+        if constexpr (compute_and_allocate) {
+            this->hash_set.lazy_emplace(key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
+        } else {
+            (*not_founds)[i] = !this->hash_set.contains(key);
+        }
     }
 };
 
@@ -492,12 +479,8 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
             const auto* off = offsets.data();
             for (size_t i = 0; i < chunk_size; ++i) {
                 const Slice s(base + off[i], off[i + 1] - off[i]);
-                const KeyType key = make_agg_slice_key<KeyType>(s, &_escape_pool);
-                if constexpr (compute_and_allocate) {
-                    this->hash_set.lazy_emplace(key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
-                } else {
-                    (*not_founds)[i] = !this->hash_set.contains(key);
-                }
+                this->template probe_or_insert_slice_key<compute_and_allocate>(
+                        make_agg_slice_key<KeyType>(s, &_escape_pool), pool, not_founds, i);
             }
         });
         reset_agg_escape_pool(&_escape_pool);
@@ -521,12 +504,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_STRING_HASH_SET_PREFETCH_HASH_VAL();
-            const auto& key = cache[i];
-            if constexpr (compute_and_allocate) {
-                this->hash_set.lazy_emplace(key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
-            } else {
-                (*not_founds)[i] = !this->hash_set.contains(key);
-            }
+            this->template probe_or_insert_slice_key<compute_and_allocate>(cache[i], pool, not_founds, i);
         }
         reset_agg_escape_pool(&_escape_pool);
     }
@@ -592,25 +570,15 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
                         has_null_key = true;
                     } else {
                         const Slice s(base + off[i], off[i + 1] - off[i]);
-                        const KeyType key = make_agg_slice_key<KeyType>(s, &_escape_pool);
-                        if constexpr (compute_and_allocate) {
-                            this->hash_set.lazy_emplace(
-                                    key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
-                        } else {
-                            (*not_founds)[i] = !this->hash_set.contains(key);
-                        }
+                        this->template probe_or_insert_slice_key<compute_and_allocate>(
+                                make_agg_slice_key<KeyType>(s, &_escape_pool), pool, not_founds, i);
                     }
                 }
             } else {
                 for (size_t i = 0; i < chunk_size; ++i) {
                     const Slice s(base + off[i], off[i + 1] - off[i]);
-                    const KeyType key = make_agg_slice_key<KeyType>(s, &_escape_pool);
-                    if constexpr (compute_and_allocate) {
-                        this->hash_set.lazy_emplace(key,
-                                                    [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
-                    } else {
-                        (*not_founds)[i] = !this->hash_set.contains(key);
-                    }
+                    this->template probe_or_insert_slice_key<compute_and_allocate>(
+                            make_agg_slice_key<KeyType>(s, &_escape_pool), pool, not_founds, i);
                 }
             }
         });
@@ -636,12 +604,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_STRING_HASH_SET_PREFETCH_HASH_VAL();
-            const auto& key = cache[i];
-            if constexpr (compute_and_allocate) {
-                this->hash_set.lazy_emplace(key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
-            } else {
-                (*not_founds)[i] = !this->hash_set.contains(key);
-            }
+            this->template probe_or_insert_slice_key<compute_and_allocate>(cache[i], pool, not_founds, i);
         }
         reset_agg_escape_pool(&_escape_pool);
     }
@@ -723,12 +686,8 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
 
     template <bool compute_and_allocate>
     ALWAYS_INLINE void _probe_or_insert(size_t i, const Slice& tmp, MemPool* pool, Filter* not_founds) {
-        const KeyType key = make_agg_slice_key<KeyType>(tmp, &_escape_pool);
-        if constexpr (compute_and_allocate) {
-            this->hash_set.lazy_emplace(key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
-        } else {
-            (*not_founds)[i] = !this->hash_set.contains(key);
-        }
+        this->template probe_or_insert_slice_key<compute_and_allocate>(make_agg_slice_key<KeyType>(tmp, &_escape_pool),
+                                                                       pool, not_founds, i);
     }
 
     template <bool compute_and_allocate>
@@ -742,12 +701,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_STRING_HASH_SET_PREFETCH_HASH_VAL();
-            const auto& key = cache[i];
-            if constexpr (compute_and_allocate) {
-                this->hash_set.lazy_emplace(key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
-            } else {
-                (*not_founds)[i] = !this->hash_set.contains(key);
-            }
+            this->template probe_or_insert_slice_key<compute_and_allocate>(cache[i], pool, not_founds, i);
         }
         reset_agg_escape_pool(&_escape_pool);
     }
