@@ -22,6 +22,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -67,11 +68,16 @@ public class MultiDistinctByMultiFuncRewriter {
                     newAggOperator = buildMultiSumDistinct(oldFunctionCall);
                     changed = true;
                 } else if (oldFunctionCall.getFnName().equals(FunctionSet.ARRAY_AGG)) {
+                    CallOperator arrayAggDistinct = null;
                     if (oldFunctionCall.getColumnRefs().size() == 1 &&
                             !oldFunctionCall.getColumnRefs().get(0).getType().isDecimalOfAnyVersion()) {
-                        newAggOperator = buildArrayAggDistinct(oldFunctionCall);
+                        arrayAggDistinct = buildArrayAggDistinct(oldFunctionCall);
+                    }
+                    if (arrayAggDistinct != null) {
+                        newAggOperator = arrayAggDistinct;
                         changed = true;
                     } else {
+                        // no array_agg_distinct overload for this type, keep array_agg(distinct)
                         newAggOperator = oldFunctionCall;
                     }
                 } else {
@@ -189,9 +195,16 @@ public class MultiDistinctByMultiFuncRewriter {
     }
 
     private CallOperator buildArrayAggDistinct(CallOperator oldFunctionCall) {
+<<<<<<< HEAD
         Function searchDesc = new Function(new FunctionName(FunctionSet.ARRAY_AGG_DISTINCT),
                 oldFunctionCall.getFunction().getArgs(), Type.INVALID, false);
         Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
+=======
+        Function fn = ExprUtils.getArrayAggDistinctFunction(oldFunctionCall.getFunction().getArgs());
+        if (fn == null) {
+            return null;
+        }
+>>>>>>> 6bfe78e ([BugFix][RB-967] Keep array_agg(distinct) when array_agg_distinct has no overload for the argument type (#82531))
 
         return (CallOperator) scalarRewriter.rewrite(
                 new CallOperator(FunctionSet.ARRAY_AGG_DISTINCT, fn.getReturnType(), oldFunctionCall.getChildren(),
