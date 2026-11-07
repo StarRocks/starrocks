@@ -17,8 +17,9 @@ AI 函数支持在 SQL 中调用模型服务，对文本进行生成、分类、
 AI Provider 是集群中统一管理的模型服务配置，保存端点、协议、默认模型和可选的访问凭证。AI 函数通过 Provider 获取这些配置，SQL 中不需要重复填写端点和凭证。
 
 - `ai_embed` 使用 `embedding` 类型的 Provider。
+- [ai_rerank](ai_rerank.md) 使用 `rerank` Provider，支持 `cohere` 或 `dashscope_rerank` 协议。
 - `ai_complete` 及其他文本辅助函数使用 `chat` 类型的 Provider。
-- 这些 AI 函数当前要求 Provider 使用 `openai` 协议，端点和模型也需要支持对应的聊天或向量能力。
+- Chat 和文本 embedding 函数当前要求 Provider 使用 `openai` 协议，端点和模型也需要支持对应的聊天或向量能力。
 
 调用函数时，可以通过 `provider` 指定 Provider，也可以使用对应类型的集群默认 Provider。不同类型的默认值独立维护。省略 `model` 时使用所选 Provider 的默认模型，也可以显式指定该服务支持的其他模型。
 

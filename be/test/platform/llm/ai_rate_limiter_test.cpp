@@ -26,6 +26,7 @@
 
 #include "base/testutil/sync_point.h"
 #include "base/utility/scoped_cleanup.h"
+#include "platform/llm/ai_runtime.h"
 
 namespace starrocks {
 
@@ -103,6 +104,33 @@ protected:
     MutableAIRateLimitSource _limits;
     AIRateLimiter _limiter;
 };
+
+TEST(AIRateLimiterRerankTest, SharesExistingLimiterWithIndependentCapabilityAndLiveLimit) {
+    ManualAIClock clock;
+    auto source = AIRuntimeConfigSource::create();
+    ASSERT_TRUE(source.ok());
+    AIRateLimiter limiter(&clock, source->get());
+    const auto rerank = AIRateLimitKey::create("endpoint", "credential", AICapability::RERANK);
+    const auto chat = AIRateLimitKey::create("endpoint", "credential", AICapability::CHAT);
+    const auto embedding = AIRateLimitKey::create("endpoint", "credential", AICapability::EMBEDDING);
+    for (int i = 0; i < 4; ++i) {
+        auto token = limiter.try_reserve(rerank);
+        ASSERT_TRUE(token.has_value());
+        token->commit();
+    }
+    EXPECT_FALSE(limiter.try_reserve(rerank).has_value());
+    EXPECT_TRUE(limiter.try_reserve(chat).has_value());
+    EXPECT_TRUE(limiter.try_reserve(embedding).has_value());
+    auto config = (*source)->snapshot();
+    config.rate_limit_qps_rerank = 8;
+    ASSERT_TRUE((*source)->update(config).ok());
+    EXPECT_FALSE(limiter.try_reserve(rerank).has_value());
+    clock.advance_ns(kSecond / 8);
+    auto refilled = limiter.try_reserve(rerank);
+    ASSERT_TRUE(refilled.has_value());
+    refilled->commit();
+    EXPECT_FALSE(limiter.try_reserve(rerank).has_value());
+}
 
 TEST_F(AIRateLimiterTest, UsesFullOpaqueCredentialDigestAndSharesOnlyTheExactBucket) {
     static_assert(AIRateLimitKey::kCredentialDigestBytes == 32);

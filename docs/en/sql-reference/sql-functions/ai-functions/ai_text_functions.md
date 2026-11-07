@@ -13,6 +13,7 @@ This page describes all AI functions for text processing. Before calling them, c
 | --- | --- | --- |
 | [ai_complete](#ai_complete) | Generate text from a prompt | VARCHAR |
 | [ai_embed](#ai_embed) | Generate a text embedding | `ARRAY<FLOAT>` |
+| [ai_rerank](ai_rerank.md) | Rerank candidate documents for a query | `ARRAY<STRUCT<index INT, relevance_score DOUBLE>>` |
 | [ai_sentiment](#ai_sentiment) | Analyze text sentiment | VARCHAR |
 | [ai_classify](#ai_classify) | Classify text into given categories | JSON |
 | [ai_extract](#ai_extract) | Extract specified information | JSON |
@@ -51,13 +52,13 @@ All functions have optional `provider` and `model` arguments. Both must be const
 | `provider` | Use the cluster default Provider of the corresponding type | Use the named Provider; no cluster default is required |
 | `model` | Use the selected Provider's default model | Use the specified model offered by the selected service |
 
-`ai_embed` requires an embedding Provider. All other functions require a chat Provider.
+`ai_embed` requires an embedding Provider; `ai_rerank` requires a rerank Provider. The remaining functions require a chat Provider.
 
 Provider configuration includes an endpoint and optional credentials, and supports HTTP and HTTPS. Each execution plan captures a snapshot of the selected Provider's configuration. Changing a Provider or switching the default affects newly planned queries. For management syntax, see [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md) and [SET DEFAULT AI PROVIDER](../../sql-statements/cluster-management/ai_provider/SET_DEFAULT_AI_PROVIDER.md).
 
 ### JSON options {/* #json-options */}
 
-Only `ai_complete` and `ai_embed` support the optional `options` argument. It must be a constant JSON expression, and any value other than SQL NULL must be a JSON object. When omitted, it defaults to an empty object. Both `json_object()` and SQL NULL mean that no additional options are passed.
+`ai_complete`, `ai_embed`, and `ai_rerank` support the optional `options` argument. It must be a constant JSON expression, and any value other than SQL NULL must be a JSON object. When omitted, it defaults to an empty object. Both `json_object()` and SQL NULL mean that no additional options are passed.
 
 ```sql
 SELECT ai_complete(

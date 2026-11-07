@@ -19,6 +19,8 @@ description: "将 chat、embedding 或 rerank 类型的外部 AI 服务注册为
 
 [ai_complete](../../../sql-functions/ai-functions/ai_text_functions.md#ai_complete) 和 [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) 当前要求 `openai` 协议。使用其他已注册协议调用这些函数时，会在查询规划阶段报错。
 
+[ai_rerank](../../../sql-functions/ai-functions/ai_rerank.md) 使用 `rerank` Provider，支持 `cohere` 或 `dashscope_rerank`；后者用于 SQL 调用 DashScope 原生文本重排协议。SQL 行级失败遵循 `ai_function_on_error`，不降级为原始候选顺序。下文的 context-search 行为与此不同。
+
 provider 对象（含 `api_key` 属性）持久化在 FE 元数据 journal 与 image 中，重启和升级后凭证仍保留。
 这些设置没有 `fe.conf` 开关。
 
@@ -43,7 +45,7 @@ TYPE { embedding | rerank | chat }
 PROPERTIES (
     "endpoint"   = "<url>",
     "model"      = "<model_name>"
-    [, "protocol" = "{ openai | anthropic | cohere }" ]
+    [, "protocol" = "{ openai | anthropic | cohere | dashscope_rerank }" ]
     [, "dimensions" = "<int>" ]      -- 仅 embedding
     [, "max_documents" = "<int>" ]   -- 仅 rerank（可选）
     [, "deadline_ms" = "<int>" ]     -- 仅 rerank（可选）
@@ -67,10 +69,10 @@ PROPERTIES (
 | --------------- | -------------- | ---- | ------------------------------------------------------------------------------------ |
 | `endpoint`      | 全部           | 是   | HTTP(S) 端点 URL，必须以 `http://` 或 `https://` 开头。                               |
 | `model`         | 全部           | 是   | 请求体 `model` 字段的模型名（如 `text-embedding-3-small`、`cohere/rerank-4-fast`）。 |
-| `protocol`      | 全部           | 否   | 端点使用的协议：`openai`、`anthropic` 或 `cohere`。默认值：`embedding` 和 `chat` 为 `openai`，`rerank` 为 `cohere`。|
+| `protocol`      | 全部           | 否   | 端点使用的协议：`openai`、`anthropic` 或 `cohere` / `dashscope_rerank`。默认值：`embedding` 和 `chat` 为 `openai`，`rerank` 为 `cohere`。|
 | `dimensions`    | embedding      | 否   | embedding 向量维度（正整数）。必须与 provider 输出及向量索引维度一致。                |
-| `max_documents` | rerank         | 否   | 每次 rerank 请求发送的最大文档数（正整数；默认 1000）。                               |
-| `deadline_ms`   | rerank         | 否   | 整个 rerank 调用（含所有重试）的总时间预算（毫秒，正整数；默认 10000）。用于限制慢/不可达的 rerank 服务最多拖慢搜索多久,超过后降级为融合排序。超时不重试,仅连接失败或 HTTP 5xx 才重试。 |
+| `max_documents` | rerank         | 否   | SQL rerank 请求候选数的可选上限（正整数）。省略时 SQL 不增加 Provider 专属候选数限制，也不会截断候选。 |
+| `deadline_ms`   | rerank         | 否   | SQL rerank 调用及重试的可选总时间预算，单位毫秒（正整数）。省略时仅使用现有 AI 运行时及查询预算；显式配置只能缩短这些预算。SQL 失败遵循 AI 错误策略，不降级为融合排序。 |
 | `timeout_ms`    | 全部           | 否   | 单次请求 HTTP 超时（毫秒，正整数）。对 rerank 而言,实际会被剩余的 `deadline_ms` 预算进一步限制。 |
 | `api_key`       | 全部           | 否   | `Authorization` 头的 Bearer token。本地免鉴权 provider 可省略。                       |
 

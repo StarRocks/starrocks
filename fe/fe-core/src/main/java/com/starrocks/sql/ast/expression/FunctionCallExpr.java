@@ -364,7 +364,7 @@ public class FunctionCallExpr extends Expr {
     }
 
     public boolean isNondeterministicBuiltinFnName() {
-        return FunctionSet.nonDeterministicFunctions.contains(fnRef.getFunctionName().toLowerCase());
+        return FunctionSet.isNonDeterministicFunction(fn, fnRef.getFunctionName());
     }
 
     @Override

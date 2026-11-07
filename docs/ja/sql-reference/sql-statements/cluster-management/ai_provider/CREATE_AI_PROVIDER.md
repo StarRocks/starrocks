@@ -19,6 +19,8 @@ description: "chat、embedding、rerank タイプの外部 AI サービスを、
 
 [ai_complete](../../../sql-functions/ai-functions/ai_text_functions.md#ai_complete) と [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) は現在 `openai` プロトコルを必要とします。これらの関数に他の登録済みプロトコルを指定すると、クエリの計画時にエラーになります。
 
+[ai_rerank](../../../sql-functions/ai-functions/ai_rerank.md) は `cohere` または `dashscope_rerank` の `rerank` Provider を使用します。後者は SQL で DashScope ネイティブテキストリランキングを呼び出します。SQL の行レベルの失敗は `ai_function_on_error` に従い、元の候補順序へフォールバックしません。以下の context-search の動作とは異なります。
+
 プロバイダーオブジェクトは `api_key` プロパティを含めて FE のメタデータジャーナルとイメージに永続化されるため、
 クラスターの再起動やアップグレード後も認証情報は保持されます。これらの設定に対応する `fe.conf` の項目はありません。
 
@@ -44,7 +46,7 @@ TYPE { embedding | rerank | chat }
 PROPERTIES (
     "endpoint"   = "<url>",
     "model"      = "<model_name>"
-    [, "protocol" = "{ openai | anthropic | cohere }" ]
+    [, "protocol" = "{ openai | anthropic | cohere | dashscope_rerank }" ]
     [, "dimensions" = "<int>" ]      -- embedding only
     [, "max_documents" = "<int>" ]   -- rerank only (optional)
     [, "deadline_ms" = "<int>" ]     -- rerank only (optional)
@@ -68,10 +70,10 @@ PROPERTIES (
 | --------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `endpoint`      | すべて         | はい     | HTTP(S) エンドポイントの URL。`http://` または `https://` で始まる必要があります。                    |
 | `model`         | すべて         | はい     | リクエストの `model` フィールドに渡されるモデル名 (例: `text-embedding-3-small`、`cohere/rerank-4-fast`)。 |
-| `protocol`      | すべて         | いいえ   | エンドポイントのプロトコル: `openai`、`anthropic`、または `cohere`。デフォルト: `embedding` と `chat` は `openai`、`rerank` は `cohere`。 |
+| `protocol`      | すべて         | いいえ   | エンドポイントのプロトコル: `openai`、`anthropic`、または `cohere` / `dashscope_rerank`。デフォルト: `embedding` と `chat` は `openai`、`rerank` は `cohere`。 |
 | `dimensions`    | embedding      | いいえ   | 埋め込みベクトルの次元数 (正の整数)。プロバイダーの出力およびベクトルインデックスの次元と一致する必要があります。 |
-| `max_documents` | rerank         | いいえ   | 1 回の rerank リクエストで送信するドキュメントの最大数 (正の整数、デフォルト 1000)。                  |
-| `deadline_ms`   | rerank         | いいえ   | すべてのリトライを含む rerank 呼び出し全体の実時間の上限 (ミリ秒、正の整数、デフォルト 10000)。応答の遅い、または到達不能なリランカーが検索をどれだけ長く停止させられるかを制限し、超過した場合はフュージョン順にフォールバックします。タイムアウトはリトライされません。リトライされるのは接続失敗または HTTP 5xx のみです。 |
+| `max_documents` | rerank         | いいえ   | SQL rerank 要求の候補数のオプション上限 (正の整数)。省略すると Provider 固有の候補数上限を追加しません。候補を切り捨てません。 |
+| `deadline_ms`   | rerank         | いいえ   | リトライを含む SQL rerank 呼び出しのオプションの時間上限 (ミリ秒、正の整数)。省略時は既存の AI ランタイムとクエリの時間制限が適用されます。設定値はその制限を短縮できます。SQL の失敗は AI エラーポリシーに従い、フュージョン順へフォールバックしません。 |
 | `timeout_ms`    | すべて         | いいえ   | リクエストごとの HTTP タイムアウト (ミリ秒、正の整数)。rerank の場合、実質的に残りの `deadline_ms` によって上限が決まります。 |
 | `api_key`       | すべて         | いいえ   | `Authorization` ヘッダーに使用する Bearer トークン。認証が不要なローカルプロバイダーの場合は省略します。 |
 

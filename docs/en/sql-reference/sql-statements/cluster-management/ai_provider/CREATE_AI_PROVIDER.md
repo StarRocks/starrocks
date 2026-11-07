@@ -20,6 +20,8 @@ When omitted it defaults to the protocol the type implies: `openai` for `embeddi
 
 [ai_complete](../../../sql-functions/ai-functions/ai_text_functions.md#ai_complete) and [ai_embed](../../../sql-functions/ai-functions/ai_text_functions.md#ai_embed) currently require the `openai` protocol. Other registered protocols are rejected when these functions are planned.
 
+[ai_rerank](../../../sql-functions/ai-functions/ai_rerank.md) uses a `rerank` Provider with `cohere` or `dashscope_rerank`. The latter selects the native DashScope text reranking protocol for SQL calls. SQL row failures follow `ai_function_on_error` and do not fall back to the original candidate order. The context-search behavior described below is separate.
+
 The provider object — including the `api_key` property — is persisted on the FE metadata journal and
 image, so cluster restarts and upgrades retain the credential. There is no `fe.conf` knob for these
 settings.
@@ -46,7 +48,7 @@ TYPE { embedding | rerank | chat }
 PROPERTIES (
     "endpoint"   = "<url>",
     "model"      = "<model_name>"
-    [, "protocol" = "{ openai | anthropic | cohere }" ]
+    [, "protocol" = "{ openai | anthropic | cohere | dashscope_rerank }" ]
     [, "dimensions" = "<int>" ]      -- embedding only
     [, "max_documents" = "<int>" ]   -- rerank only (optional)
     [, "deadline_ms" = "<int>" ]     -- rerank only (optional)
@@ -70,10 +72,10 @@ PROPERTIES (
 | --------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `endpoint`      | all            | Yes      | HTTP(S) endpoint URL. Must start with `http://` or `https://`.                                       |
 | `model`         | all            | Yes      | Model name passed in the request `model` field (e.g. `text-embedding-3-small`, `cohere/rerank-4-fast`). |
-| `protocol`      | all            | No       | Wire protocol of the endpoint: `openai`, `anthropic`, or `cohere`. Default: `openai` for `embedding` and `chat`, `cohere` for `rerank`. |
+| `protocol`      | all            | No       | Wire protocol of the endpoint: `openai`, `anthropic`, or `cohere` / `dashscope_rerank`. Default: `openai` for `embedding` and `chat`, `cohere` for `rerank`. |
 | `dimensions`    | embedding      | No       | Embedding vector dimension (positive int). Must match the provider output and the vector index dim. |
-| `max_documents` | rerank         | No       | Max documents sent per rerank request (positive int; default 1000).                                  |
-| `deadline_ms`   | rerank         | No       | Overall wall-clock budget in ms for the whole rerank call across all retry attempts (positive int; default 10000). Bounds how long a slow/unreachable reranker can stall a search before it degrades to fusion order. A timeout is never retried; only a connection failure or HTTP 5xx is. |
+| `max_documents` | rerank         | No       | Optional positive integer limit on candidates per SQL rerank request. If omitted, SQL adds no Provider-specific candidate limit; it does not truncate candidates. |
+| `deadline_ms`   | rerank         | No       | Optional positive integer total budget in milliseconds across a SQL rerank call and retries. If omitted, only existing AI runtime/query budgets apply. A configured value can shorten those budgets. SQL failures follow the AI error policy without falling back to fusion order. |
 | `timeout_ms`    | all            | No       | Per-request HTTP timeout in milliseconds (positive int). For rerank, effectively capped by the remaining `deadline_ms` budget. |
 | `api_key`       | all            | No       | Bearer token for the `Authorization` header. Omit for local providers that don't require auth.       |
 

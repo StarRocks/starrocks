@@ -226,6 +226,20 @@ public class AIProviderAnalysisTest {
     }
 
     @Test
+    public void testNativeRerankProtocolAndExistingDefault() {
+        Map<String, String> nativeProperties = validRerank();
+        nativeProperties.put("protocol", "dashscope_rerank");
+        CreateAIProviderStmt nativeProvider = create("rerank", nativeProperties);
+        AIProviderAnalyzer.analyze(nativeProvider, context());
+        Assertions.assertEquals("dashscope_rerank", nativeProvider.getProperties().get("protocol"));
+        Map<String, String> defaults = validRerank();
+        defaults.remove("protocol");
+        CreateAIProviderStmt defaultProvider = create("rerank", defaults);
+        AIProviderAnalyzer.analyze(defaultProvider, context());
+        Assertions.assertEquals("cohere", defaultProvider.getProperties().get("protocol"));
+    }
+
+    @Test
     public void testCreateMissingEndpoint() {
         Map<String, String> p = new LinkedHashMap<>();
         p.put("model", "m");

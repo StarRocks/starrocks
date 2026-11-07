@@ -101,7 +101,26 @@ bool same_runtime_config(const AIRuntimeConfig& lhs, const AIRuntimeConfig& rhs)
            lhs.worker_thread_num == rhs.worker_thread_num && lhs.sub_chunk_size == rhs.sub_chunk_size &&
            lhs.max_retries == rhs.max_retries && lhs.max_retries_on_throttle == rhs.max_retries_on_throttle &&
            lhs.on_error == rhs.on_error && lhs.rate_limit_qps_chat == rhs.rate_limit_qps_chat &&
-           lhs.rate_limit_qps_embedding == rhs.rate_limit_qps_embedding && lhs.max_inflight == rhs.max_inflight;
+           lhs.rate_limit_qps_embedding == rhs.rate_limit_qps_embedding &&
+           lhs.rate_limit_qps_rerank == rhs.rate_limit_qps_rerank && lhs.max_inflight == rhs.max_inflight;
+}
+
+TEST(AIRuntimeConfigSourceTest, RerankHasIndependentPositiveLiveLimit) {
+    auto source_or = AIRuntimeConfigSource::create();
+    ASSERT_TRUE(source_or.ok());
+    auto source = std::move(source_or).value();
+    EXPECT_EQ(4, source->qps(AICapability::RERANK));
+    auto candidate = source->snapshot();
+    candidate.rate_limit_qps_rerank = 9;
+    ASSERT_TRUE(source->update(candidate).ok());
+    EXPECT_EQ(9, source->qps(AICapability::RERANK));
+    EXPECT_EQ(128, source->qps(AICapability::CHAT));
+    EXPECT_EQ(128, source->qps(AICapability::EMBEDDING));
+    for (int32_t invalid : {0, -1}) {
+        candidate.rate_limit_qps_rerank = invalid;
+        EXPECT_TRUE(source->update(candidate).is_invalid_argument());
+        EXPECT_EQ(9, source->qps(AICapability::RERANK));
+    }
 }
 
 TEST(AIRuntimeConfigSourceTest, EmbeddingRateLimitIsIndependentAndDynamicallyValidated) {

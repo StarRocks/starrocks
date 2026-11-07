@@ -51,6 +51,7 @@ AIRuntimeConfig config_from_globals() {
     config.on_error = config::ai_function_on_error.value();
     config.rate_limit_qps_chat = config::ai_function_rate_limit_qps_chat;
     config.rate_limit_qps_embedding = config::ai_function_rate_limit_qps_embedding;
+    config.rate_limit_qps_rerank = config::ai_function_rate_limit_qps_rerank;
     config.max_inflight = config::ai_function_max_inflight;
     return config;
 }
@@ -69,6 +70,7 @@ void set_config_globals(const AIRuntimeConfig& config) {
     EXPECT_OK(config::set_config("ai_function_rate_limit_qps_chat", std::to_string(config.rate_limit_qps_chat)));
     EXPECT_OK(config::set_config("ai_function_rate_limit_qps_embedding",
                                  std::to_string(config.rate_limit_qps_embedding)));
+    EXPECT_OK(config::set_config("ai_function_rate_limit_qps_rerank", std::to_string(config.rate_limit_qps_rerank)));
     EXPECT_OK(config::set_config("ai_function_max_inflight", std::to_string(config.max_inflight)));
 }
 
@@ -156,6 +158,7 @@ TEST_F(AIConfigUpdateHooksTest, UpdatesAllRuntimeConfigs) {
     ASSERT_OK(registry->update_config("ai_function_on_error", "fail"));
     ASSERT_OK(registry->update_config("ai_function_rate_limit_qps_chat", "17"));
     ASSERT_OK(registry->update_config("ai_function_rate_limit_qps_embedding", "23"));
+    ASSERT_OK(registry->update_config("ai_function_rate_limit_qps_rerank", "7"));
     ASSERT_OK(registry->update_config("ai_function_max_inflight", "19"));
 
     const AIRuntimeConfig snapshot = executor()->config_snapshot();
@@ -170,6 +173,7 @@ TEST_F(AIConfigUpdateHooksTest, UpdatesAllRuntimeConfigs) {
     EXPECT_EQ("fail", snapshot.on_error);
     EXPECT_EQ(17, snapshot.rate_limit_qps_chat);
     EXPECT_EQ(23, snapshot.rate_limit_qps_embedding);
+    EXPECT_EQ(7, snapshot.rate_limit_qps_rerank);
     EXPECT_EQ(19, snapshot.max_inflight);
 
     EXPECT_EQ(1234, config::ai_function_request_timeout_ms);
@@ -183,6 +187,7 @@ TEST_F(AIConfigUpdateHooksTest, UpdatesAllRuntimeConfigs) {
     EXPECT_EQ("fail", config::ai_function_on_error.value());
     EXPECT_EQ(17, config::ai_function_rate_limit_qps_chat);
     EXPECT_EQ(23, config::ai_function_rate_limit_qps_embedding);
+    EXPECT_EQ(7, config::ai_function_rate_limit_qps_rerank);
     EXPECT_EQ(19, config::ai_function_max_inflight);
 }
 
@@ -194,6 +199,7 @@ TEST_F(AIConfigUpdateHooksTest, InvalidUpdatesRollbackGlobalsAndRuntimeSnapshot)
     Status inflight_status = registry->update_config("ai_function_max_inflight", "0");
     Status on_error_status = registry->update_config("ai_function_on_error", "continue");
     Status embedding_status = registry->update_config("ai_function_rate_limit_qps_embedding", "0");
+    Status rerank_status = registry->update_config("ai_function_rate_limit_qps_rerank", "0");
     for (const char* invalid : {"0", "-1"}) {
         Status file_status = registry->update_config("ai_function_max_input_file_bytes", invalid);
         EXPECT_TRUE(file_status.is_invalid_argument()) << file_status;
@@ -205,16 +211,19 @@ TEST_F(AIConfigUpdateHooksTest, InvalidUpdatesRollbackGlobalsAndRuntimeSnapshot)
     EXPECT_TRUE(inflight_status.is_invalid_argument()) << inflight_status;
     EXPECT_TRUE(on_error_status.is_invalid_argument()) << on_error_status;
     EXPECT_TRUE(embedding_status.is_invalid_argument()) << embedding_status;
+    EXPECT_TRUE(rerank_status.is_invalid_argument()) << rerank_status;
     EXPECT_EQ(before.worker_thread_num, config::ai_function_worker_thread_num);
     EXPECT_EQ(before.max_inflight, config::ai_function_max_inflight);
     EXPECT_EQ(before.on_error, config::ai_function_on_error.value());
     EXPECT_EQ(before.rate_limit_qps_embedding, config::ai_function_rate_limit_qps_embedding);
+    EXPECT_EQ(before.rate_limit_qps_rerank, config::ai_function_rate_limit_qps_rerank);
 
     const AIRuntimeConfig after = executor()->config_snapshot();
     EXPECT_EQ(before.worker_thread_num, after.worker_thread_num);
     EXPECT_EQ(before.max_inflight, after.max_inflight);
     EXPECT_EQ(before.on_error, after.on_error);
     EXPECT_EQ(before.rate_limit_qps_embedding, after.rate_limit_qps_embedding);
+    EXPECT_EQ(before.rate_limit_qps_rerank, after.rate_limit_qps_rerank);
 }
 
 TEST_F(AIConfigUpdateHooksTest, ShutdownRejectsUpdateAndRollsBackGlobal) {

@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <limits>
 #include <optional>
 #include <utility>
 
@@ -135,6 +136,14 @@ bool matches_argument_type(const TTypeDesc& type, AIArgumentType expected) {
 bool matches_result_type(const TTypeDesc& type, AIFunctionResultKind kind) {
     if (!is_valid_type(type)) {
         return false;
+    }
+    if (kind == AIFunctionResultKind::RERANK) {
+        return type.types.size() == 4 && type.types[0].type == TTypeNodeType::ARRAY &&
+               type.types[1].type == TTypeNodeType::STRUCT && type.types[1].struct_fields.size() == 2 &&
+               type.types[1].struct_fields[0].name == "index" &&
+               type.types[1].struct_fields[1].name == "relevance_score" &&
+               type.types[2].type == TTypeNodeType::SCALAR && type.types[2].scalar_type.type == TPrimitiveType::INT &&
+               type.types[3].type == TTypeNodeType::SCALAR && type.types[3].scalar_type.type == TPrimitiveType::DOUBLE;
     }
     if (kind == AIFunctionResultKind::EMBEDDING) {
         return type.types.size() == 2 && type.types[0].type == TTypeNodeType::ARRAY &&
@@ -432,6 +441,18 @@ Status AIFunctionCallExpr::open(RuntimeState* state, ExprContext* context, Funct
 
     // Native constant evaluation preserves CAST semantics and validates arrays even when no input rows arrive.
     for (size_t index = 0; index < _descriptor->argument_count; ++index) {
+        if (_descriptor->capability == AICapability::RERANK) {
+            if (_descriptor->argument_types[index] == AIArgumentType::OPTIONS) {
+                if (!_children[index]->is_constant()) {
+                    return Status::InvalidArgument("AI function options must be constant");
+                }
+                ASSIGN_OR_RETURN(ColumnPtr column, _children[index]->evaluate_const(context));
+                if (column == nullptr) return invalid_ai_expression();
+                RETURN_IF_ERROR(build_ai_provider_options(*column, _children[index]->type(), 0, _descriptor->capability)
+                                        .status());
+            }
+            continue;
+        }
         if (_descriptor->argument_types[index] != AIArgumentType::STRING_ARRAY) {
             continue;
         }
@@ -485,6 +506,7 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
             break;
         }
         case AIArgumentType::STRING_ARRAY: {
+            if (spec.capability == AICapability::RERANK) break;
             if (!_children[index]->is_constant()) {
                 return Status::InvalidArgument("AI function categories or keys must be constant");
             }
@@ -518,6 +540,11 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
                            contains_only_ascii_whitespace(strings[index]->value(row));
             }
         }
+        Datum documents;
+        if (spec.capability == AICapability::RERANK) {
+            documents = columns[spec.input_arguments[1]]->get(row);
+            is_null |= documents.is_null();
+        }
         Datum file;
         if (spec.file_argument >= 0) {
             file = columns[spec.file_argument]->get(row);
@@ -533,6 +560,27 @@ StatusOr<AIFunctionInputBatch> AIFunctionCallExpr::build_input_batch(ExprContext
                 use_default_model ? std::string(default_model) : strings[spec.model_argument]->value(row).to_string();
         if (contains_only_ascii_whitespace(Slice(model))) {
             batch.rows.emplace_back(AIFunctionRowInput{.action = AIFunctionRowAction::TERMINAL_ROW_FAILURE});
+            continue;
+        }
+        if (spec.capability == AICapability::RERANK) {
+            const auto& values = documents.get_array();
+            if (values.size() > static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
+                return Status::CapacityLimitExceed("AI rerank candidate count exceeds index capacity");
+            }
+            if (std::any_of(values.begin(), values.end(), [](const Datum& value) { return value.is_null(); })) {
+                batch.rows.emplace_back(AIFunctionRowInput{.action = AIFunctionRowAction::TERMINAL_ROW_FAILURE});
+                continue;
+            }
+            if (values.empty()) {
+                batch.rows.emplace_back(AIFunctionRowInput{.action = AIFunctionRowAction::LOCAL_RESULT,
+                                                           .local_result = AIRerankResult{}});
+                continue;
+            }
+            AIRerankInput input{.query = strings[spec.input_arguments[0]]->value(row).to_string()};
+            input.documents.reserve(values.size());
+            for (const auto& value : values) input.documents.emplace_back(value.get_slice().to_string());
+            batch.rows.emplace_back(AIFunctionRowInput{
+                    .action = AIFunctionRowAction::DISPATCH, .model = std::move(model), .rerank = std::move(input)});
             continue;
         }
         std::optional<AIMediaInput> media;

@@ -594,6 +594,31 @@ TEST(AIExecutorTest, AllFragmentSnapshotFieldsHaveTypedMutationPaths) {
     EXPECT_EQ(8, snapshot.max_inflight);
 }
 
+TEST(AIExecutorTest, RerankLimitUpdatesNotifyAdmissionAndRejectInvalidValuesAndShutdown) {
+    auto executor = create_executor();
+    ASSERT_NE(nullptr, executor);
+    EXPECT_EQ(4, executor->config_source()->qps(AICapability::RERANK));
+    auto* sync_point = SyncPoint::GetInstance();
+    std::atomic<int> posts = 0;
+    sync_point->SetCallBack("AIControlThreadScheduler::post:before_ready_emplace", [&](void*) { ++posts; });
+    sync_point->EnableProcessing();
+    SCOPED_CLEANUP({
+        sync_point->ClearAllCallBacks();
+        sync_point->DisableProcessing();
+    });
+    ASSERT_TRUE(executor->update_rate_limit_qps_rerank(17).ok());
+    EXPECT_GT(posts.load(), 0);
+    EXPECT_EQ(17, executor->config_source()->qps(AICapability::RERANK));
+    EXPECT_EQ(128, executor->config_source()->qps(AICapability::CHAT));
+    EXPECT_EQ(128, executor->config_source()->qps(AICapability::EMBEDDING));
+    for (int invalid : {0, -1}) {
+        EXPECT_TRUE(executor->update_rate_limit_qps_rerank(invalid).is_invalid_argument());
+        EXPECT_EQ(17, executor->config_snapshot().rate_limit_qps_rerank);
+    }
+    executor->shutdown();
+    EXPECT_TRUE(executor->update_rate_limit_qps_rerank(8).is_shutdown());
+}
+
 TEST(AIExecutorTest, EmbeddingLimitRejectsInvalidUpdatesAndShutdown) {
     auto executor = create_executor();
     ASSERT_NE(nullptr, executor);

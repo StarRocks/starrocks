@@ -96,6 +96,7 @@ private:
         std::shared_ptr<const ResolvedHttpEndpoint> resolved_endpoint;
         AICapability capability = AICapability::CHAT;
         int64_t attempt_timeout_ms = 0;
+        int64_t deadline_ms = 0;
         // Destroy the dispatcher before the provider whose address its core retains.
         std::unique_ptr<AIProvider> provider;
         std::unique_ptr<AITaskDispatcher> dispatcher;

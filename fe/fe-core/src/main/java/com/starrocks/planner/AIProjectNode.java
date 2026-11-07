@@ -33,7 +33,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -170,8 +169,7 @@ public final class AIProjectNode extends ProjectNode {
     private static boolean isNonReusableExpression(Expr expression) {
         if (expression instanceof FunctionCallExpr call && call.getFn() != null) {
             Function function = call.getFn();
-            if (function.isAI() || FunctionSet.allNonDeterministicFunctions.contains(
-                    function.functionName().toLowerCase(Locale.ROOT))) {
+            if (FunctionSet.isNonDeterministicFunctionIncludingTime(function, function.functionName())) {
                 return true;
             }
         }
