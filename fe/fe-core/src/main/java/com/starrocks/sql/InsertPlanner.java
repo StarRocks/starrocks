@@ -14,6 +14,7 @@
 
 package com.starrocks.sql;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
@@ -1169,6 +1170,7 @@ public class InsertPlanner {
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         List<ScalarOperatorRewriteRule> rewriteRules = Arrays.asList(new FoldConstantsRule());
         for (int columnIdx = 0; columnIdx < outputFullSchema.size(); ++columnIdx) {
+            checkGeoAssignment(outputColumns.get(columnIdx).getType(), outputFullSchema.get(columnIdx));
             if (!outputFullSchema.get(columnIdx).getType().matchesType(outputColumns.get(columnIdx).getType())) {
                 Column c = outputFullSchema.get(columnIdx);
                 ColumnRefOperator k = columnRefFactory.create(c.getName(), c.getType(), c.isAllowNull());
@@ -1181,6 +1183,20 @@ public class InsertPlanner {
             }
         }
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
+
+    @VisibleForTesting
+    static void checkGeoAssignment(Type sourceType, Column targetColumn) {
+        Type targetType = targetColumn.getType();
+        if (!sourceType.equals(targetType) &&
+                (sourceType.isGeoType() || sourceType.hasNestedGeoType() ||
+                        targetType.isGeoType() || targetType.hasNestedGeoType())) {
+            throw new SemanticException("Cannot assign %s to column '%s' of type %s in INSERT: " +
+                    "native geo assignments require identical types (including geo descriptors). " +
+                    "Use ST_AsText/ST_AsBinary for VARCHAR/VARBINARY targets",
+                    sourceType.toSql(), targetColumn.getName(), targetType.toSql());
+        }
     }
 
 
