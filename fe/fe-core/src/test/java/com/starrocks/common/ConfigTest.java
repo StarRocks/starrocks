@@ -144,6 +144,39 @@ public class ConfigTest {
     }
 
     @Test
+    public void testEmptyLakeCompactionAdmissionModeSurvivesRestart(@TempDir Path tempDir) throws Exception {
+        String key = "lake_compaction_admission_mode";
+        Path confFile = tempDir.resolve("fe.conf");
+        Files.createFile(confFile);
+        Field configPathField = ConfigBase.class.getDeclaredField("configPath");
+        Field isPersistedField = ConfigBase.class.getDeclaredField("isPersisted");
+        configPathField.setAccessible(true);
+        isPersistedField.setAccessible(true);
+        String oldConfigPath = (String) configPathField.get(null);
+        boolean oldIsPersisted = isPersistedField.getBoolean(null);
+        String oldMode = Config.lake_compaction_admission_mode;
+        try {
+            Config.lake_compaction_admission_mode = "NORMAL";
+            config.init(confFile.toString());
+            Assertions.assertEquals("NORMAL", Config.lake_compaction_admission_mode);
+
+            // Enable persistence for this temporary file even when CI runs in a container.
+            isPersistedField.setBoolean(null, true);
+            Config.setMutableConfig(key, "   ", true, "root");
+            Assertions.assertEquals("", Config.lake_compaction_admission_mode);
+
+            // Start from the same default as a new FE before loading the persisted property.
+            Config.lake_compaction_admission_mode = "NORMAL";
+            config.init(confFile.toString());
+            Assertions.assertEquals("", Config.lake_compaction_admission_mode);
+        } finally {
+            configPathField.set(null, oldConfigPath);
+            isPersistedField.setBoolean(null, oldIsPersisted);
+            Config.lake_compaction_admission_mode = oldMode;
+        }
+    }
+
+    @Test
     public void testDisableStoreConfig() throws Exception {
         Config.setMutableConfig("adaptive_choose_instances_threshold", "98", false, "");
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("adaptive_choose_instances_threshold", false);
