@@ -1,0 +1,233 @@
+-- name: test_pipe_conditional_update
+
+-- Synthetic fixtures only. Load newer events before older events, then replay.
+-- The mixed batch also checks distinct versions and identical duplicate events.
+create database db_pipe_${uuid0};
+-- result:
+-- !result
+
+use db_pipe_${uuid0};
+-- result:
+-- !result
+
+create table current_state (
+    id int not null,
+    source_order_key decimal(38, 0) not null,
+    status varchar(32),
+    is_deleted boolean not null
+)
+primary key(id)
+distributed by hash(id)
+properties("replication_num" = "1");
+-- result:
+-- !result
+
+[UC]insert into files(
+    "path" = "s3://${oss_bucket}/test_pipe/conditional_update/${uuid0}/new/",
+    "format" = "parquet",
+    "single" = "true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}")
+select cast(1 as int) as id,
+       cast('20000000000000000000000000000000000000' as decimal(38, 0)) as source_order_key,
+       cast('CREATED' as varchar(32)) as status,
+       false as is_deleted
+union all
+select cast(2 as int) as id,
+       cast('20000000000000000000000000000000000000' as decimal(38, 0)) as source_order_key,
+       cast('DELETED' as varchar(32)) as status,
+       true as is_deleted;
+
+[UC]insert into files(
+    "path" = "s3://${oss_bucket}/test_pipe/conditional_update/${uuid0}/old/",
+    "format" = "parquet",
+    "single" = "true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}")
+select cast(1 as int) as id,
+       cast('10000000000000000000000000000000000000' as decimal(38, 0)) as source_order_key,
+       cast('PENDING' as varchar(32)) as status,
+       false as is_deleted
+union all
+select cast(2 as int) as id,
+       cast('10000000000000000000000000000000000000' as decimal(38, 0)) as source_order_key,
+       cast('ACTIVE' as varchar(32)) as status,
+       false as is_deleted;
+
+[UC]insert into files(
+    "path" = "s3://${oss_bucket}/test_pipe/conditional_update/${uuid0}/mixed/",
+    "format" = "parquet",
+    "single" = "true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}")
+select cast(3 as int) as id,
+       cast('20000000000000000000000000000000000000' as decimal(38, 0)) as source_order_key,
+       cast('CREATED' as varchar(32)) as status,
+       false as is_deleted
+union all
+select cast(3 as int) as id,
+       cast('10000000000000000000000000000000000000' as decimal(38, 0)) as source_order_key,
+       cast('PENDING' as varchar(32)) as status,
+       false as is_deleted
+union all
+select cast(4 as int) as id,
+       cast('20000000000000000000000000000000000000' as decimal(38, 0)) as source_order_key,
+       cast('CREATED' as varchar(32)) as status,
+       false as is_deleted
+union all
+select cast(4 as int) as id,
+       cast('20000000000000000000000000000000000000' as decimal(38, 0)) as source_order_key,
+       cast('CREATED' as varchar(32)) as status,
+       false as is_deleted;
+
+create pipe p_new
+properties("auto_ingest" = "false", "poll_interval" = "1", "task.time_zone" = "UTC")
+as insert into current_state (id, source_order_key, status, is_deleted)
+properties(
+    "merge_condition" = "source_order_key",
+    "strict_mode" = "true",
+    "max_filter_ratio" = "0"
+)
+select id, source_order_key, status, is_deleted
+from files(
+    "path" = "s3://${oss_bucket}/test_pipe/conditional_update/${uuid0}/new/*.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+
+function: wait_for_pipe_finish('db_pipe_${uuid0}', 'p_new')
+-- result:
+None
+-- !result
+
+[ORDER]select id, source_order_key, status, cast(is_deleted as int) from current_state order by id;
+-- result:
+1	20000000000000000000000000000000000000	CREATED	0
+2	20000000000000000000000000000000000000	DELETED	1
+-- !result
+
+create pipe p_old
+properties("auto_ingest" = "false", "poll_interval" = "1", "task.time_zone" = "UTC")
+as insert into current_state (id, source_order_key, status, is_deleted)
+properties(
+    "merge_condition" = "source_order_key",
+    "strict_mode" = "true",
+    "max_filter_ratio" = "0"
+)
+select id, source_order_key, status, is_deleted
+from files(
+    "path" = "s3://${oss_bucket}/test_pipe/conditional_update/${uuid0}/old/*.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+
+function: wait_for_pipe_finish('db_pipe_${uuid0}', 'p_old')
+-- result:
+None
+-- !result
+
+[ORDER]select id, source_order_key, status, cast(is_deleted as int) from current_state order by id;
+-- result:
+1	20000000000000000000000000000000000000	CREATED	0
+2	20000000000000000000000000000000000000	DELETED	1
+-- !result
+
+create pipe p_replay
+properties("auto_ingest" = "false", "poll_interval" = "1", "task.time_zone" = "UTC")
+as insert into current_state (id, source_order_key, status, is_deleted)
+properties(
+    "merge_condition" = "source_order_key",
+    "strict_mode" = "true",
+    "max_filter_ratio" = "0"
+)
+select id, source_order_key, status, is_deleted
+from files(
+    "path" = "s3://${oss_bucket}/test_pipe/conditional_update/${uuid0}/new/*.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+
+function: wait_for_pipe_finish('db_pipe_${uuid0}', 'p_replay')
+-- result:
+None
+-- !result
+
+[ORDER]select id, source_order_key, status, cast(is_deleted as int) from current_state order by id;
+-- result:
+1	20000000000000000000000000000000000000	CREATED	0
+2	20000000000000000000000000000000000000	DELETED	1
+-- !result
+
+create pipe p_mixed
+properties("auto_ingest" = "false", "poll_interval" = "1", "task.time_zone" = "UTC")
+as insert into current_state (id, source_order_key, status, is_deleted)
+properties(
+    "merge_condition" = "source_order_key",
+    "strict_mode" = "true",
+    "max_filter_ratio" = "0"
+)
+select id, source_order_key, status, is_deleted
+from files(
+    "path" = "s3://${oss_bucket}/test_pipe/conditional_update/${uuid0}/mixed/*.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+
+function: wait_for_pipe_finish('db_pipe_${uuid0}', 'p_mixed')
+-- result:
+None
+-- !result
+
+[ORDER]select id, source_order_key, status, cast(is_deleted as int) from current_state order by id;
+-- result:
+1	20000000000000000000000000000000000000	CREATED	0
+2	20000000000000000000000000000000000000	DELETED	1
+3	20000000000000000000000000000000000000	CREATED	0
+4	20000000000000000000000000000000000000	CREATED	0
+-- !result
+
+select count(*) from information_schema.pipes
+where database_name = 'db_pipe_${uuid0}' and state = 'FINISHED';
+-- result:
+4
+-- !result
+
+drop pipe p_new;
+-- result:
+-- !result
+
+drop pipe p_old;
+-- result:
+-- !result
+
+drop pipe p_replay;
+-- result:
+-- !result
+
+drop pipe p_mixed;
+-- result:
+-- !result
+
+drop database db_pipe_${uuid0};
+-- result:
+-- !result
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_pipe/conditional_update/${uuid0}/ > /dev/null
+-- result:
+0
+-- !result
