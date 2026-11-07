@@ -57,22 +57,32 @@ public class ScanNode extends SkeletonNode {
         return tableIdentifier;
     }
 
-    public boolean isEnableParameterizedMode() {
-        return parameterizedPredicate.isEnableParameterizedMode();
-    }
-
-    public void enableParameterizedMode() {
-        parameterizedPredicate.enableParameterizedMode();
-    }
-
-    public void disableParameterizedMode() {
-        parameterizedPredicate.disableParameterizedMode();
-    }
-
     public void mergeColumnRangePredicate(ScanNode scanNode) {
         parameterizedPredicate.mergeColumnRange(scanNode.parameterizedPredicate);
     }
 
+    /**
+     * Whether this node equals {@code other} and its predicate ranges are enclosed by the ones of {@code other},
+     * i.e. a tuning guide collected for {@code other} also applies to this node. Unlike equals, it is directional.
+     */
+    public boolean isCoveredBy(ScanNode other) {
+        if (!equals(other)) {
+            return false;
+        }
+
+        if (Objects.equals(predicate, other.predicate)) {
+            return true;
+        }
+
+        try {
+            return parameterizedPredicate.isEnclosedBy(other.parameterizedPredicate);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    // Only the shape of the predicate is compared, so that queries differing only in range constants are equal.
+    // Whether the ranges match is checked separately by isCoveredBy.
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -95,7 +105,7 @@ public class ScanNode extends SkeletonNode {
         }
 
         try {
-            return this.parameterizedPredicate.match(other.parameterizedPredicate);
+            return parameterizedPredicate.hasSameShape(other.parameterizedPredicate);
         } catch (Exception e) {
             return false;
         }

@@ -44,7 +44,6 @@ import java.util.StringJoiner;
 public class ParameterizedPredicate {
     // Whether the predicate has a structure suitable for comparison operations
     private boolean isValidForComparison;
-    private boolean enableParameterizedMode = false;
     private final ScalarOperator originPredicate;
 
     // The part of the predicate that couldn't be converted to range predicates
@@ -107,32 +106,31 @@ public class ParameterizedPredicate {
     }
 
 
-    public boolean match(ParameterizedPredicate other) {
+    /**
+     * Whether both predicates have the same residual predicate and range predicates on the same columns,
+     * ignoring the range constants. This relation is symmetric, so it can back equals.
+     */
+    public boolean hasSameShape(ParameterizedPredicate other) {
         if (!isValidForComparison || !other.isValidForComparison) {
             return false;
         }
 
-        if (!Objects.equals(residualPredicate, other.residualPredicate)) {
-            return false;
-        }
+        return Objects.equals(residualPredicate, other.residualPredicate) &&
+                columnRangePredicates.keySet().equals(other.columnRangePredicates.keySet());
+    }
 
-        if (columnRangePredicates.isEmpty() && other.columnRangePredicates.isEmpty()) {
-            return true;
-        }
-
-        if (columnRangePredicates.size() != other.columnRangePredicates.size()) {
+    /**
+     * Whether both predicates have the same shape and every column range of this predicate is enclosed by
+     * the corresponding range of {@code other}. This relation is directional.
+     */
+    public boolean isEnclosedBy(ParameterizedPredicate other) {
+        if (!hasSameShape(other)) {
             return false;
         }
 
         for (Map.Entry<ColumnRefOperator, ColumnRangePredicate> entry : columnRangePredicates.entrySet()) {
-            ColumnRefOperator columnRefOperator = entry.getKey();
-            ColumnRangePredicate columnRangePredicate = entry.getValue();
-            ColumnRangePredicate otherColumnRangePredicate = other.columnRangePredicates.get(columnRefOperator);
-            if (otherColumnRangePredicate == null) {
-                return false;
-            }
-
-            if (!enableParameterizedMode && !otherColumnRangePredicate.enclose(columnRangePredicate)) {
+            ColumnRangePredicate otherColumnRangePredicate = other.columnRangePredicates.get(entry.getKey());
+            if (otherColumnRangePredicate == null || !otherColumnRangePredicate.enclose(entry.getValue())) {
                 return false;
             }
         }
@@ -437,18 +435,6 @@ public class ParameterizedPredicate {
         }
     }
 
-    public boolean isEnableParameterizedMode() {
-        return enableParameterizedMode;
-    }
-
-    public void enableParameterizedMode() {
-        this.enableParameterizedMode = true;
-    }
-
-    public void disableParameterizedMode() {
-        this.enableParameterizedMode = false;
-    }
-
     public Map<ColumnRefOperator, ColumnRangePredicate> getColumnRangePredicates() {
         return columnRangePredicates;
     }
@@ -457,7 +443,6 @@ public class ParameterizedPredicate {
     public String toString() {
         return new StringJoiner(", ", ParameterizedPredicate.class.getSimpleName() + "[", "]")
                 .add("isValidForComparison=" + isValidForComparison)
-                .add("enableParameterizedMode=" + enableParameterizedMode)
                 .add("originPredicate=" + originPredicate.toString())
                 .add("residualPredicate=" + residualPredicate.toString())
                 .add("columnRangePredicates=" + columnRangePredicates)

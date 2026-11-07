@@ -34,6 +34,7 @@ import com.starrocks.qe.feedback.skeleton.SkeletonBuilder;
 import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.DistributedEnvPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
@@ -277,6 +278,103 @@ class PlanTuningAnalyzerTest extends DistributedEnvPlanTestBase {
                                 "(Reason: Right child statistics of JoinNode 5 had been underestimated.) " +
                                 "(Advice: Adjust the distribution join execution type " +
                                 "and join plan to improve the performance.)", fullTuneGuidesInfo);
+    }
+
+    private static final String JOIN_SQL_TEMPLATE = "select * from (select * from customer where c_acctbal > %d) c " +
+            "join (select * from supplier where s_acctbal = 1) s on abs(c_custkey) = abs(s_suppkey)";
+
+    // ApplyTuningGuideRule looks the guides up with the plan before it applies them, and the guides are analyzed from
+    // a plan that was not tuned. Plan with the advisor off, so that a cached guide does not change the plan first.
+    private ExecPlan getUntunedExecPlan(String sql) throws Exception {
+        boolean enablePlanAdvisor = connectContext.getSessionVariable().isEnablePlanAdvisor();
+        connectContext.getSessionVariable().setEnablePlanAdvisor(false);
+        try {
+            return getExecPlan(sql);
+        } finally {
+            connectContext.getSessionVariable().setEnablePlanAdvisor(enablePlanAdvisor);
+        }
+    }
+
+    private OperatorTuningGuides putJoinTuningGuides(int acctbal) throws Exception {
+        String sql = String.format(JOIN_SQL_TEMPLATE, acctbal);
+        ExecPlan execPlan = getUntunedExecPlan(sql);
+        Map<Integer, NodeExecStats> map = Maps.newHashMap();
+        map.put(0, new NodeExecStats(0, 500000, 500000, 0, 0, 0));
+        map.put(4, new NodeExecStats(4, 20000000, 20000000, 0, 0, 0));
+        Pair<SkeletonNode, Map<Integer, SkeletonNode>> pair =
+                new SkeletonBuilder(map).buildSkeleton(execPlan.getPhysicalPlan());
+        OperatorTuningGuides tuningGuides = new OperatorTuningGuides(UUID.randomUUID(), 50);
+        PlanTuningAnalyzer.getInstance().analyzePlan(execPlan.getPhysicalPlan(), pair.second, tuningGuides);
+        Assertions.assertFalse(tuningGuides.isEmpty());
+        PlanTuningAdvisor.getInstance().putTuningGuides(sql, pair.first, tuningGuides);
+        return tuningGuides;
+    }
+
+    private OperatorTuningGuides getJoinTuningGuides(int acctbal) throws Exception {
+        String sql = String.format(JOIN_SQL_TEMPLATE, acctbal);
+        SkeletonNode root = new SkeletonBuilder().buildSkeleton(getUntunedExecPlan(sql).getPhysicalPlan()).first;
+        return PlanTuningAdvisor.getInstance().getTuningGuides(sql, root);
+    }
+
+    @Test
+    void testTuningGuidesReusedForEnclosedRanges() throws Exception {
+        PlanTuningAdvisor advisor = PlanTuningAdvisor.getInstance();
+        advisor.clearAllAdvisor();
+        try {
+            OperatorTuningGuides tuningGuides = putJoinTuningGuides(5000);
+
+            // c_acctbal > 6000 is enclosed by c_acctbal > 5000, c_acctbal > 4000 is not
+            Assertions.assertSame(tuningGuides, getJoinTuningGuides(6000));
+            Assertions.assertNull(getJoinTuningGuides(4000));
+
+            // ApplyTuningGuideRule applies them to the enclosed query as well
+            getExecPlan(String.format(JOIN_SQL_TEMPLATE, 6000));
+            Assertions.assertSame(tuningGuides, advisor.getOperatorTuningGuides(connectContext.getQueryId()));
+
+            // the same guides found for c_acctbal > 4000 widen the cached range instead of adding an entry
+            putJoinTuningGuides(4000);
+            Assertions.assertEquals(1, advisor.getShowResult().size());
+            Assertions.assertSame(tuningGuides, getJoinTuningGuides(4500));
+
+            // the blacklisted entry only blocks the ranges it covered
+            advisor.deleteTuningGuides(tuningGuides.getOriginalQueryId(), true);
+            Assertions.assertNull(getJoinTuningGuides(4500));
+            putJoinTuningGuides(4500);
+            Assertions.assertNull(getJoinTuningGuides(4500));
+            OperatorTuningGuides outsideBlacklist = putJoinTuningGuides(3000);
+            Assertions.assertSame(outsideBlacklist, getJoinTuningGuides(3000));
+        } finally {
+            advisor.clearAllAdvisor();
+        }
+    }
+
+    @Test
+    void testOptimizedQueryRecordRemovedWhenStatementEnds() throws Exception {
+        PlanTuningAdvisor advisor = PlanTuningAdvisor.getInstance();
+        advisor.clearAllAdvisor();
+        try {
+            putJoinTuningGuides(5000);
+            String sql = String.format(JOIN_SQL_TEMPLATE, 5000);
+
+            // planning with the cached guides adds the record of the query; every test plan gets a new query id
+            getExecPlan(sql);
+            UUID queryId = connectContext.getQueryId();
+            Assertions.assertNotNull(advisor.getOptimizedRecord(queryId));
+
+            // EXPLAIN plans with the guides again but never reports exec stats, so only the end of the statement
+            // can remove the record
+            long appliedBefore = getMetricValue("plan_advisor_guide_applied_total", PlanAdvisorMetrics.JOIN_OPERATOR_TYPE);
+            StatementBase stmt = SqlParser.parse("explain " + sql, connectContext.getSessionVariable()).get(0);
+            connectContext.getState().reset();
+            new StmtExecutor(connectContext, stmt).execute();
+            Assertions.assertFalse(connectContext.getState().isError(), connectContext.getState().getErrorMessage());
+            Assertions.assertEquals(appliedBefore + 1,
+                    getMetricValue("plan_advisor_guide_applied_total", PlanAdvisorMetrics.JOIN_OPERATOR_TYPE));
+            Assertions.assertEquals(queryId, connectContext.getQueryId());
+            Assertions.assertNull(advisor.getOptimizedRecord(queryId));
+        } finally {
+            advisor.clearAllAdvisor();
+        }
     }
 
     @Test
