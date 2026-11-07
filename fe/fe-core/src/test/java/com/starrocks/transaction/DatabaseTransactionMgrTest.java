@@ -81,11 +81,7 @@ import com.starrocks.sql.OptimisticVersion;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
-<<<<<<< HEAD
-=======
 import com.starrocks.statistic.AnalyzeMgr;
-import com.starrocks.system.ComputeNode;
->>>>>>> 7f57ba5 ([BugFix][RB-949] Count load rows for batch-published lake transactions (#82298))
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadSourceType;
 import com.starrocks.thrift.TPulsarRLTaskProgress;
@@ -1382,28 +1378,15 @@ public class DatabaseTransactionMgrTest {
 
         assertEquals(3, masterDbTransMgr.getRunningTxnNums());
         assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
-<<<<<<< HEAD
         assertEquals(TransactionStatus.VISIBLE, transactionState6.getTransactionStatus());
         assertEquals(TransactionStatus.VISIBLE, transactionState7.getTransactionStatus());
         assertEquals(TransactionStatus.VISIBLE, transactionState8.getTransactionStatus());
-
-        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
-        slaveTransMgr.replayUpsertTransactionStateBatch(stateBatch);
-=======
-        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId6).getTransactionStatus());
-        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId7).getTransactionStatus());
-        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId8).getTransactionStatus());
         // every txn of the batch updates load rows, as an individually published txn does
         assertEquals(Lists.newArrayList(txnId6, txnId7, txnId8), loadRowsTxnIds);
 
         FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
-        TransactionStateBatch replayStateBatch = new TransactionStateBatch(List.of(
-                fakeEditLog.getTransaction(txnId6),
-                fakeEditLog.getTransaction(txnId7),
-                fakeEditLog.getTransaction(txnId8)));
         loadRowsTxnIds.clear();
-        slaveTransMgr.replayUpsertTransactionStateBatch(replayStateBatch);
->>>>>>> 7f57ba5 ([BugFix][RB-949] Count load rows for batch-published lake transactions (#82298))
+        slaveTransMgr.replayUpsertTransactionStateBatch(stateBatch);
         assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
         // the follower counts them too when replaying the batch
         assertEquals(Lists.newArrayList(txnId6, txnId7, txnId8), loadRowsTxnIds);
