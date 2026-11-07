@@ -1958,6 +1958,45 @@ DEFINE_UNARY_FN_WITH_IMPL(lengthImpl, str) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::length(FunctionContext* context, const Columns& columns) {
+    if (columns.empty() || columns[0] == nullptr) {
+        return Status::InvalidArgument("first column is null or empty");
+    }
+    const auto& col = columns[0];
+    if (col->is_constant()) {
+        auto const_col = down_cast<const ConstColumn*>(col.get());
+        ASSIGN_OR_RETURN(auto res, length(context, {const_col->data_column()}));
+        return ConstColumn::create(res, const_col->size());
+    }
+
+    const Column* data_col = col.get();
+    const NullColumnPtr* null_col = nullptr;
+    if (col->is_nullable()) {
+        const auto* nullable_col = down_cast<const NullableColumn*>(col.get());
+        data_col = nullable_col->data_column().get();
+        null_col = &nullable_col->null_column();
+    }
+
+    if (data_col->is_binary() && !data_col->is_view()) {
+        const auto* bin_col = down_cast<const BinaryColumn*>(data_col);
+        const size_t num_rows = bin_col->size();
+        auto result_data = Int32Column::create();
+        result_data->resize_uninitialized(num_rows);
+        auto* __restrict dst = result_data->get_data().data();
+
+        const auto& offsets = bin_col->get_offset();
+        offsets.visit_storage([&](const auto& off_buf) {
+            const auto* __restrict off_ptr = off_buf.data();
+            for (size_t i = 0; i < num_rows; ++i) {
+                dst[i] = static_cast<int32_t>(off_ptr[i + 1] - off_ptr[i]);
+            }
+        });
+
+        if (null_col != nullptr) {
+            return NullableColumn::create(std::move(result_data), (*null_col)->clone());
+        }
+        return result_data;
+    }
+
     return VectorizedStrictUnaryFunction<lengthImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(columns[0]);
 }
 
@@ -1966,6 +2005,44 @@ DEFINE_UNARY_FN_WITH_IMPL(utf8LengthImpl, str) {
 }
 
 StatusOr<ColumnPtr> StringFunctions::utf8_length(FunctionContext* context, const starrocks::Columns& columns) {
+    if (columns.empty() || columns[0] == nullptr) {
+        return Status::InvalidArgument("first column is null or empty");
+    }
+    const auto& col = columns[0];
+    if (col->is_constant()) {
+        auto const_col = down_cast<const ConstColumn*>(col.get());
+        ASSIGN_OR_RETURN(auto res, utf8_length(context, {const_col->data_column()}));
+        return ConstColumn::create(res, const_col->size());
+    }
+
+    const Column* data_col = col.get();
+    if (col->is_nullable()) {
+        const auto* nullable_col = down_cast<const NullableColumn*>(col.get());
+        data_col = nullable_col->data_column().get();
+    }
+
+    if (data_col->is_binary() && !data_col->is_view()) {
+        const auto* bin_col = down_cast<const BinaryColumn*>(data_col);
+        const auto bytes = bin_col->get_immutable_bytes();
+        const char* raw_ptr = reinterpret_cast<const char*>(bytes.data());
+        const size_t total_bytes = bytes.size();
+        if (total_bytes == 0) {
+            return length(context, columns);
+        }
+        // For large buffers (> 4096 bytes), probe 64-byte windows at the midpoint and tail first
+        // so columns with late or periodic UTF-8 characters bail out in O(1) without a full-buffer double scan.
+        constexpr size_t kAsciiProbeThreshold = 4096;
+        constexpr size_t kAsciiProbeWindow = 64;
+        bool probe_ok = true;
+        if (total_bytes > kAsciiProbeThreshold) {
+            probe_ok = validate_ascii_fast(raw_ptr + (total_bytes / 2), kAsciiProbeWindow) &&
+                       validate_ascii_fast(raw_ptr + (total_bytes - kAsciiProbeWindow), kAsciiProbeWindow);
+        }
+        if (probe_ok && validate_ascii_fast(raw_ptr, total_bytes)) {
+            return length(context, columns);
+        }
+    }
+
     return VectorizedStrictUnaryFunction<utf8LengthImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(columns[0]);
 }
 
