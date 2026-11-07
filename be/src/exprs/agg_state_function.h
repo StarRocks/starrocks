@@ -67,7 +67,11 @@ public:
         new_columns.reserve(columns.size());
         for (auto i = 0; i < columns.size(); i++) {
             bool arg_nullable = _arg_nullables[i];
-            auto& column = columns[i];
+            // Follow Aggregator::evaluate_agg_input_column: expand the data argument before
+            // aggregate implementations down_cast it, but keep trailing parameters constant
+            // for functions such as percentile_approx.
+            auto column = i == 0 ? ColumnHelper::unpack_and_duplicate_const_column(columns[i]->size(), columns[i])
+                                 : columns[i];
             if (!arg_nullable && column->is_nullable()) {
                 return Status::InternalError(
                         "AggStateFunction input column is nullable but agg function is not nullable");
