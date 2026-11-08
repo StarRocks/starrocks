@@ -2704,4 +2704,118 @@ TEST_F(SegmentIteratorTest, DictColumnRuntimeFilterStaticMaskAndNullableSemantic
     EXPECT_TRUE(rf_preds.has_always_false_dict_filter());
 }
 
+TEST_F(SegmentIteratorTest, TopNDictBoundsSegmentPruneTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+
+    std::string file_name = kSegmentDir + "/topn_dict_bounds_prune";
+    TabletSchemaBuilder schema_builder;
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(32)
+                                                          .create(2, /*nullable=*/false, TYPE_INT)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, 1000);
+    const std::vector<std::string> non_empty_words = {"m_0", "m_1", "z_0"};
+    for (int i = 0; i < 1000; ++i) {
+        if (i >= 500 && i < 510) {
+            write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(Slice("")));
+        } else {
+            write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(
+                    Datum(Slice(non_empty_words[i % non_empty_words.size()])));
+        }
+        write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, 1000);
+
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.chunk_size = 100;
+    seg_opts.enable_join_runtime_filter_pushdown = true;
+
+    auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{ne_empty});
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("a_9"), true, false);
+    RuntimeFilterProbeDescriptor rf_desc;
+    rf_desc.set_runtime_filter(rf);
+    seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&rf_desc, 0)));
+
+    ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+    auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+    Status st = iter->get_next(read_chunk.get());
+    EXPECT_TRUE(st.is_end_of_file()) << st;
+    EXPECT_EQ(stats.blocks_load, 0);
+    EXPECT_EQ(stats.raw_rows_read, 0);
+    EXPECT_EQ(stats.decode_dict_count, 0);
+    EXPECT_EQ(stats.runtime_stats_filtered, 1000);
+    iter->close();
+}
+
+TEST_F(SegmentIteratorTest, TopNDictBoundsVersionUpdateTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+
+    std::string file_name = kSegmentDir + "/topn_dict_bounds_version_update";
+    TabletSchemaBuilder schema_builder;
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(32)
+                                                          .create(2, /*nullable=*/false, TYPE_INT)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, 1000);
+    const std::vector<std::string> non_empty_words = {"m_0", "m_1", "z_0"};
+    for (int i = 0; i < 1000; ++i) {
+        if (i >= 500 && i < 510) {
+            write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(Slice("")));
+        } else {
+            write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(
+                    Datum(Slice(non_empty_words[i % non_empty_words.size()])));
+        }
+        write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, 1000);
+
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.chunk_size = 100;
+    seg_opts.enable_join_runtime_filter_pushdown = true;
+
+    auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{ne_empty});
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("z_9"), true, false);
+    RuntimeFilterProbeDescriptor rf_desc;
+    rf_desc.set_runtime_filter(rf);
+    seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&rf_desc, 0)));
+
+    ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+    auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+    ASSERT_OK(iter->get_next(read_chunk.get()));
+    EXPECT_EQ(read_chunk->num_rows(), 100);
+    EXPECT_EQ(stats.raw_rows_read, 100);
+
+    // Tighten RF mid-scan to <= "a_9": intersection with c0 <> '' leaves 0 valid dict words.
+    auto* narrower = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("a_9"), true, false);
+    rf->intersect(narrower);
+    EXPECT_GT(rf->rf_version(), 0);
+
+    read_chunk->reset();
+    Status st = iter->get_next(read_chunk.get());
+    EXPECT_TRUE(st.is_end_of_file()) << st;
+    EXPECT_EQ(stats.raw_rows_read, 100);
+    EXPECT_EQ(stats.runtime_stats_filtered, 900);
+    iter->close();
+}
+
 } // namespace starrocks

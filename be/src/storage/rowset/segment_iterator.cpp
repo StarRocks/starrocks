@@ -424,6 +424,7 @@ private:
                                           uint16_t to);
 
     void _init_column_predicates();
+    bool _prune_by_dict_runtime_filter_bounds();
 
     StatusOr<size_t> trigger_sample_if_necessary(vector<rowid_t>* rowid);
 
@@ -1110,6 +1111,7 @@ Status SegmentIterator::_init_scan_range_and_context() {
         RETURN_IF_ERROR(_apply_data_sampling());
     }
     _init_column_predicates();
+    (void)_prune_by_dict_runtime_filter_bounds();
     RETURN_IF_ERROR(_init_context());
 
     // Finalize: turn the filtered range into the form the read loop consumes. Not a function of its
@@ -1841,6 +1843,9 @@ Status SegmentIterator::_get_row_ranges_by_row_ids(std::vector<int64_t>* result_
 }
 
 Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
+    if (_prune_by_dict_runtime_filter_bounds()) {
+        return Status::OK();
+    }
     return _opts.runtime_range_pruner.update_range_if_arrived(
             _opts.global_dictmaps,
             [this](auto cid, const PredicateList& predicates) {
@@ -2160,6 +2165,27 @@ void SegmentIterator::_init_column_predicates() {
     _expr_pred_tree = PredicateTree::create(std::move(expr_pred_root));
     _non_expr_pred_tree = PredicateTree::create(std::move(non_expr_pred_root));
     _runtime_filter_preds = _opts.runtime_filter_preds;
+}
+
+bool SegmentIterator::_prune_by_dict_runtime_filter_bounds() {
+    if (!_opts.enable_join_runtime_filter_pushdown || _runtime_filter_preds.empty()) {
+        return false;
+    }
+    Status st = _runtime_filter_preds.refresh_dict_filters();
+    if (!st.ok()) {
+        return false;
+    }
+    if (_runtime_filter_preds.has_always_false_dict_filter()) {
+        size_t remaining =
+                _range_iter.has_more() ? _range_iter.remaining_rows() : (!_inited ? _scan_range.span_size() : 0);
+        if (_opts.stats != nullptr) {
+            _opts.stats->runtime_stats_filtered += remaining;
+        }
+        _scan_range.clear();
+        _range_iter.set_range(&_scan_range);
+        return true;
+    }
+    return false;
 }
 
 StatusOr<size_t> SegmentIterator::trigger_sample_if_necessary(vector<rowid_t>* rowid) {
@@ -2672,6 +2698,7 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
     size_t prev_size = _scan_range.span_size();
     _scan_range = _scan_range.intersection(zm_range);
     _opts.stats->rows_stats_filtered += (prev_size - _scan_range.span_size());
+    (void)_prune_by_dict_runtime_filter_bounds();
     return Status::OK();
 }
 
@@ -2832,6 +2859,9 @@ Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t
 
 inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size_t n,
                                      bool predicate_col_late_materialize_read) {
+    if (_prune_by_dict_runtime_filter_bounds()) {
+        return Status::OK();
+    }
     size_t read_num = 0;
     SparseRange<> range;
 
@@ -3250,9 +3280,15 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize_read_firs
 
     size_t original_chunk_size = chunk_start;
     while ((chunk_start < return_chunk_threshold) && _range_iter.has_more()) {
+        if (chunk_start == 0 && _prune_by_dict_runtime_filter_bounds()) {
+            break;
+        }
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start, true));
         // chunk->check_or_die();
         size_t next_start = first_col->size();
+        if (next_start == chunk_start) {
+            break;
+        }
 
         // Count how many rowids were read by this _read() call
         if (!_context->_is_filtered) {
@@ -3371,9 +3407,15 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_without_late_materialize(v
     Chunk* chunk = _context->_read_chunk.get();
     uint16_t chunk_start = chunk->num_rows();
     while ((chunk_start < return_chunk_threshold) & _range_iter.has_more()) {
+        if (chunk_start == 0 && _prune_by_dict_runtime_filter_bounds()) {
+            break;
+        }
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start, false));
         chunk->check_or_die();
         size_t next_start = chunk->num_rows();
+        if (next_start == chunk_start) {
+            break;
+        }
 
         if (has_non_expr_predicate) {
             ASSIGN_OR_RETURN(next_start, _filter_by_non_expr_predicates(chunk, rowid, chunk_start, next_start));
@@ -4299,6 +4341,9 @@ Status SegmentIterator::_rewrite_predicates() {
 
 Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
     SCOPED_RAW_TIMER(&_opts.stats->decode_dict_ns);
+    if (_opts.enable_join_runtime_filter_pushdown && !_runtime_filter_preds.empty()) {
+        RETURN_IF_ERROR(_runtime_filter_preds.refresh_dict_filters());
+    }
     DCHECK_NE(ctx->_read_chunk, ctx->_dict_chunk);
     if (ctx->_read_chunk->num_rows() == 0) {
         ctx->_dict_chunk->set_num_rows(0);
