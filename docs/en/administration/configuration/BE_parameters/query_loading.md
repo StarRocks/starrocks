@@ -309,6 +309,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to enable ZoneMap for string (CHAR/VARCHAR) columns using prefix-based min/max. For non-key string columns, the min/max values are truncated to a fixed prefix length configured by `string_prefix_zonemap_prefix_len`.
 - Introduced in: -
 
+### enable_topn_runtime_filter_storage_pushdown
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to push Top-N runtime filters (`ORDER BY ... LIMIT N`) down to the storage layer (`SegmentIterator`) for segment and page ZoneMap pruning, dictionary bounds pruning, and early predicate-column filtering before late materialization. `true` enables this storage pushdown, and `false` disables it. This behavior is also gated at the session level by the system variable `enable_join_runtime_filter_pushdown`.
+- Introduced in: -
+
 ### enable_zonemap_index_memory_page_cache
 
 - Default: true

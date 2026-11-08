@@ -306,6 +306,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否为字符串（CHAR/VARCHAR）列启用基于前缀的 Zonemap 索引。对于非键列，最小值/最大值会截断到由 `string_prefix_zonemap_prefix_len` 配置的前缀长度。
 - 引入版本：-
 
+### enable_topn_runtime_filter_storage_pushdown
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否将 Top-N 运行时过滤器（`ORDER BY ... LIMIT N`）下推至存储层（`SegmentIterator`），用于 Segment 和 Page 级别的 Zonemap 裁剪、字典边界裁剪以及延迟物化前的谓词列提前过滤。`true` 表示启用该存储层下推，`false` 表示禁用。该行为同时受会话级系统变量 `enable_join_runtime_filter_pushdown` 控制。
+- 引入版本：-
+
 ### enable_zonemap_index_memory_page_cache
 
 - 默认值：true
