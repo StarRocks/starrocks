@@ -51,6 +51,7 @@ package com.starrocks.connector.iceberg.io;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
@@ -312,16 +313,19 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     // Entries idle for an hour (typically expired vended tokens) are closed.
     private static final Cache<String, FileSystem> GCS_FILE_SYSTEMS = Caffeine.newBuilder()
             .expireAfterAccess(1, TimeUnit.HOURS)
-            .<String, FileSystem>removalListener((key, fs, cause) -> {
-                try {
-                    if (fs != null) {
-                        fs.close();
-                    }
-                } catch (IOException e) {
-                    LOG.warn("Failed to close an idle GCS FileSystem", e);
-                }
-            })
+            .<String, FileSystem>removalListener((key, fs, cause) -> closeQuietly(fs))
             .build();
+
+    @VisibleForTesting
+    static void closeQuietly(FileSystem fs) {
+        try {
+            if (fs != null) {
+                fs.close();
+            }
+        } catch (IOException e) {
+            LOG.warn("Failed to close an idle GCS FileSystem", e);
+        }
+    }
 
     static FileSystem sharedGcsFileSystem(String path, Configuration conf) {
         URI uri = new Path(path).toUri();

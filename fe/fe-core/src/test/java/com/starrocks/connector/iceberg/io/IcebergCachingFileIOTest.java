@@ -35,6 +35,7 @@ import org.junit.jupiter.api.Test;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -257,6 +258,39 @@ public class IcebergCachingFileIOTest {
                 .get(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY));
     }
 
+    @Test
+    public void testGcsFileSystemForPathWithoutScheme() {
+        Configuration conf = new Configuration();
+        conf.set("fs.gs.impl", FakeGcsFileSystem.class.getName());
+        conf.set("fs.defaultFS", "gs://bucket-d/");
+
+        FileSystem fs = IcebergCachingFileIO.sharedGcsFileSystem("/t/metadata/v1.metadata.json", conf);
+        Assertions.assertEquals(URI.create("gs://bucket-d"), fs.getUri());
+    }
+
+    @Test
+    public void testGcsFileSystemCreationFailure() {
+        Configuration conf = new Configuration();
+        conf.set("fs.gs.impl", FailingGcsFileSystem.class.getName());
+
+        Assertions.assertThrows(UncheckedIOException.class,
+                () -> IcebergCachingFileIO.sharedGcsFileSystem("gs://bucket-e/t", conf));
+    }
+
+    @Test
+    public void testEvictedGcsFileSystemIsClosedQuietly() {
+        TrackingGcsFileSystem fs = new TrackingGcsFileSystem(false);
+        IcebergCachingFileIO.closeQuietly(fs);
+        Assertions.assertTrue(fs.closeCalled);
+
+        // A failing close is logged, not thrown, so eviction never breaks the cache.
+        TrackingGcsFileSystem failing = new TrackingGcsFileSystem(true);
+        Assertions.assertDoesNotThrow(() -> IcebergCachingFileIO.closeQuietly(failing));
+        Assertions.assertTrue(failing.closeCalled);
+
+        Assertions.assertDoesNotThrow(() -> IcebergCachingFileIO.closeQuietly(null));
+    }
+
     private static IcebergCachingFileIO newFileIO(Configuration conf, Map<String, String> properties) {
         IcebergCachingFileIO fileIO = new IcebergCachingFileIO();
         fileIO.setConf(conf);
@@ -281,6 +315,30 @@ public class IcebergCachingFileIOTest {
         public URI getUri() {
             // RawLocalFileSystem's constructor asks for the URI before initialize() sets it.
             return uri != null ? uri : super.getUri();
+        }
+    }
+
+    public static class FailingGcsFileSystem extends RawLocalFileSystem {
+        @Override
+        public void initialize(URI name, Configuration conf) throws IOException {
+            throw new IOException("cannot reach GCS");
+        }
+    }
+
+    private static class TrackingGcsFileSystem extends RawLocalFileSystem {
+        private final boolean failClose;
+        private boolean closeCalled;
+
+        TrackingGcsFileSystem(boolean failClose) {
+            this.failClose = failClose;
+        }
+
+        @Override
+        public void close() throws IOException {
+            closeCalled = true;
+            if (failClose) {
+                throw new IOException("close failed");
+            }
         }
     }
 
