@@ -16,6 +16,7 @@ package com.starrocks.planner.expression;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -85,6 +86,9 @@ public class ExecCast extends ExecExpr {
                     SqlModeHelper.MODE_STRUCT_CAST_BY_NAME)) {
                 node.setCast_struct_by_name(true);
             }
+        }
+        if (CastOperator.checksDecimalPrecision(childType, type, isImplicit, node.isCast_struct_by_name())) {
+            node.setCast_decimal_check_precision(true);
         }
     }
 

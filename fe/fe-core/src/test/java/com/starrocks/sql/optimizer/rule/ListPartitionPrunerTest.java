@@ -48,6 +48,7 @@ import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.StringType;
+import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
@@ -138,6 +139,27 @@ public class ListPartitionPrunerTest {
             Assertions.assertEquals(List.of(predicate), charPruner.getNoEvalConjuncts());
             Assertions.assertFalse(ListPartitionPruner.canPruneWithConjunct(predicate));
         }
+    }
+
+    @Test
+    public void testDecimalPrecisionCastPredicatesRemainForExecution() throws AnalysisException {
+        // A cast to DECIMAL(3, 0) turns 9999 into NULL, so the IS NULL is true in partition 1, which holds no NULL
+        ColumnRefOperator bigintColumn = new ColumnRefOperator(4, IntegerType.BIGINT, "k", true);
+        ConcurrentNavigableMap<LiteralExpr, Set<Long>> values = new ConcurrentSkipListMap<>();
+        values.put(new IntLiteral(9999, IntegerType.BIGINT), Sets.newHashSet(1L));
+        values.put(new IntLiteral(999, IntegerType.BIGINT), Sets.newHashSet(2L));
+        Type decimal3 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0);
+        ScalarOperator isNull = new IsNullPredicateOperator(new CastOperator(decimal3, bigintColumn));
+        ListPartitionPruner decimalPruner = new ListPartitionPruner(Map.of(bigintColumn, values),
+                Map.of(bigintColumn, Set.of(3L)), List.of(isNull), null);
+        Assertions.assertNull(decimalPruner.prune());
+        Assertions.assertEquals(List.of(isNull), decimalPruner.getNoEvalConjuncts());
+        Assertions.assertFalse(ListPartitionPruner.canPruneWithConjunct(isNull));
+
+        // An implicit cast keeps 9999, so the IS NULL selects the NULL partition only
+        ScalarOperator implicitIsNull = new IsNullPredicateOperator(new CastOperator(decimal3, bigintColumn, true));
+        Assertions.assertEquals(List.of(3L), new ListPartitionPruner(Map.of(bigintColumn, values),
+                Map.of(bigintColumn, Set.of(3L)), List.of(implicitIsNull), null).prune());
     }
 
     @Test

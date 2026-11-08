@@ -812,19 +812,17 @@ PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromFloatToDecimal32p7
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromFloatToDecimal32p7s4Normal) {
     CastTestCaseArray test_cases = {
-            {-1, -1, "91617.46", 7, 4, "91617.4609", "false"}, //
-            {-1, -1, "-13741.9795", 7, 4, "-13741.9795", "false"},
-            {-1, -1, "2805.812", 7, 4, "2805.8120", "false"},
-            {-1, -1, "6.9628773", 7, 4, "6.9629", "false"},
-            {-1, -1, "-123.74408", 7, 4, "-123.7441", "false"},
-            {-1, -1, "-144.42905", 7, 4, "-144.4290", "false"}, // string to double -144.429046630859
-            {-1, -1, "-77489.55", 7, 4, "-77489.5469", "false"},
-            {-1, -1, "-4.8811874", 7, 4, "-4.8812", "false"},
-            {-1, -1, "0.0", 7, 4, "0.0000", "false"},
-            {-1, -1, "-2.724122", 7, 4, "-2.7241", "false"},
-            {-1, -1, "534.44507", 7, 4, "534.4451", "false"},
-            {-1, -1, "1.1364293", 7, 4, "1.1364", "false"}};
+            {-1, -1, "6.9628773", 7, 4, "6.9629", "false"},     {-1, -1, "-123.74408", 7, 4, "-123.7441", "false"},
+            {-1, -1, "-144.42905", 7, 4, "-144.4290", "false"}, {-1, -1, "-4.8811874", 7, 4, "-4.8812", "false"},
+            {-1, -1, "0.0", 7, 4, "0.0000", "false"},           {-1, -1, "-2.724122", 7, 4, "-2.7241", "false"},
+            {-1, -1, "534.44507", 7, 4, "534.4451", "false"},   {-1, -1, "1.1364293", 7, 4, "1.1364", "false"}};
     test_cast_all<TYPE_FLOAT, TYPE_DECIMAL32>(test_cases);
+    // More digits than the target's precision: NULL
+    CastTestCaseArray past_precision = {{-1, -1, "91617.46", 7, 4, "", "true"},
+                                        {-1, -1, "-13741.9795", 7, 4, "", "true"},
+                                        {-1, -1, "2805.812", 7, 4, "", "true"},
+                                        {-1, -1, "-77489.55", 7, 4, "", "true"}};
+    test_cast_all_fail<TYPE_FLOAT, TYPE_DECIMAL32>(past_precision);
 }
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromFloatToDecimal64p18s0Normal) {
@@ -914,10 +912,11 @@ PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromFloatToDecimal64p1
 }
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromFloatToDecimal64p18s18Normal) {
-    CastTestCaseArray test_cases = {{-1, -1, "-1.6450195", 18, 18, "-1.645019531249999872", "false"},
-                                    {-1, -1, "-1.9657545", 18, 18, "-1.965754508972167936", "false"},
-                                    {-1, -1, "-4.394038", 18, 18, "-4.394038200378418176", "false"}};
-    test_cast_all<TYPE_FLOAT, TYPE_DECIMAL64>(test_cases);
+    // More digits than the target's precision: NULL
+    CastTestCaseArray past_precision = {{-1, -1, "-1.6450195", 18, 18, "", "true"},
+                                        {-1, -1, "-1.9657545", 18, 18, "", "true"},
+                                        {-1, -1, "-4.394038", 18, 18, "", "true"}};
+    test_cast_all_fail<TYPE_FLOAT, TYPE_DECIMAL64>(past_precision);
 }
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromFloatToDecimal64p15s13Abnormal) {
@@ -930,21 +929,20 @@ PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromFloatToDecimal64p1
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromFloatToDecimal64p15s13Normal) {
     CastTestCaseArray test_cases = {{-1, -1, "-0.89487344", 15, 13, "-0.8948734402657", "false"},
-                                    {-1, -1, "-131614.89", 15, 13, "-131614.8906249999872", "false"},
-                                    {-1, -1, "24832.969", 15, 13, "24832.9687500000000", "false"},
-                                    {-1, -1, "-467690.0", 15, 13, "-467690", "false"},
-                                    {-1, -1, "2047.9398", 15, 13, "2047.9398193359376", "false"},
                                     {-1, -1, "4.805915", 15, 13, "4.8059148788452", "false"},
                                     {-1, -1, "0.0", 15, 13, "0", "false"},
                                     {-1, -1, "-0.3382293", 15, 13, "-0.3382292985916", "false"},
-                                    {-1, -1, "67966.195", 15, 13, "67966.1953124999936", "false"},
                                     {-1, -1, "58.239567", 15, 13, "58.2395668029785", "false"},
-                                    {-1, -1, "-372493.8", 15, 13, "-372493.8125000000000", "false"},
                                     {-1, -1, "-84.3005", 15, 13, "-84.3004989624024", "false"},
-                                    {-1, -1, "-2425.594", 15, 13, "-2425.5939941406248", "false"},
-                                    {-1, -1, "-251.13904", 15, 13, "-251.1390380859375", "false"},
                                     {-1, -1, "-1.1857784", 15, 13, "-1.1857783794403", "false"}};
     test_cast_all<TYPE_FLOAT, TYPE_DECIMAL64>(test_cases);
+    // More digits than the target's precision: NULL
+    CastTestCaseArray past_precision = {
+            {-1, -1, "-131614.89", 15, 13, "", "true"}, {-1, -1, "24832.969", 15, 13, "", "true"},
+            {-1, -1, "-467690.0", 15, 13, "", "true"},  {-1, -1, "2047.9398", 15, 13, "", "true"},
+            {-1, -1, "67966.195", 15, 13, "", "true"},  {-1, -1, "-372493.8", 15, 13, "", "true"},
+            {-1, -1, "-2425.594", 15, 13, "", "true"},  {-1, -1, "-251.13904", 15, 13, "", "true"}};
+    test_cast_all_fail<TYPE_FLOAT, TYPE_DECIMAL64>(past_precision);
 }
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromFloatToDecimal128p38s0Normal) {
@@ -1076,23 +1074,22 @@ PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromFloatToDecimal128p
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromFloatToDecimal128p35s30Normal) {
     CastTestCaseArray test_cases = {{-1, -1, "74.02252", 35, 30, "74.022521972656250000000000000000", "false"},
                                     {-1, -1, "17.681469", 35, 30, "17.681468963623048000000000000000", "false"},
-                                    {-1, -1, "1.1429209E7", 35, 30, "11429209.000000010000000000000000000000", "false"},
                                     {-1, -1, "-3669.0103", 35, 30, "-3669.010253906250000000000000000000", "false"},
                                     {-1, -1, "10841.191", 35, 30, "10841.191406250000000000000000000000", "false"},
-                                    {-1, -1, "228161.14", 35, 30, "228161.140625000000000000000000000000", "false"},
-                                    {-1, -1, "2443088.5", 35, 30, "2443088.500000000000000000000000000000", "false"},
                                     {-1, -1, "22.013708", 35, 30, "22.013708114624023000000000000000", "false"},
                                     {-1, -1, "38.653866", 35, 30, "38.653865814208986000000000000000", "false"},
-                                    {-1, -1, "9.7068088E7", 35, 30, "97068088.000000010000000000000000000000", "false"},
-                                    {-1, -1, "3225200.0", 35, 30, "3225200", "false"},
                                     {-1, -1, "659.6253", 35, 30, "659.625305175781300000000000000000", "false"},
                                     {-1, -1, "689.80096", 35, 30, "689.800964355468800000000000000000", "false"},
-                                    {-1, -1, "7508718.5", 35, 30, "7508718.500000000000000000000000000000", "false"},
-                                    {-1, -1, "360013.8", 35, 30, "360013.812500000000000000000000000000", "false"},
-                                    {-1, -1, "-174694.33", 35, 30, "-174694.328125000000000000000000000000", "false"},
                                     {-1, -1, "659.4308", 35, 30, "659.430786132812500000000000000000", "false"},
                                     {-1, -1, "-0.3675406", 35, 30, "-0.367540597915649400000000000000", "false"}};
     test_cast_all<TYPE_FLOAT, TYPE_DECIMAL128>(test_cases);
+    // More digits than the target's precision: NULL
+    CastTestCaseArray past_precision = {
+            {-1, -1, "1.1429209E7", 35, 30, "", "true"}, {-1, -1, "228161.14", 35, 30, "", "true"},
+            {-1, -1, "2443088.5", 35, 30, "", "true"},   {-1, -1, "9.7068088E7", 35, 30, "", "true"},
+            {-1, -1, "3225200.0", 35, 30, "", "true"},   {-1, -1, "7508718.5", 35, 30, "", "true"},
+            {-1, -1, "360013.8", 35, 30, "", "true"},    {-1, -1, "-174694.33", 35, 30, "", "true"}};
+    test_cast_all_fail<TYPE_FLOAT, TYPE_DECIMAL128>(past_precision);
 }
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal32p9s0Abnormal) {
@@ -1174,13 +1171,15 @@ PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal32p
 }
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal32p7s4Normal) {
-    CastTestCaseArray test_cases = {{-1, -1, "143776.60554854575", 7, 4, "143776.6055", "false"},
-                                    {-1, -1, "2694.351143497504", 7, 4, "2694.3511", "false"},
-                                    {-1, -1, "-191.72954195056855", 7, 4, "-191.7295", "false"},
-                                    {-1, -1, "-173013.22289658818", 7, 4, "-173013.2229", "false"},
-                                    {-1, -1, "-156.31590386474818", 7, 4, "-156.3159", "false"},
-                                    {-1, -1, "3436.6964533578057", 7, 4, "3436.6965", "false"}};
+    CastTestCaseArray test_cases = {{-1, -1, "-191.72954195056855", 7, 4, "-191.7295", "false"},
+                                    {-1, -1, "-156.31590386474818", 7, 4, "-156.3159", "false"}};
     test_cast_all<TYPE_DOUBLE, TYPE_DECIMAL32>(test_cases);
+    // More digits than the target's precision: NULL
+    CastTestCaseArray past_precision = {{-1, -1, "143776.60554854575", 7, 4, "", "true"},
+                                        {-1, -1, "2694.351143497504", 7, 4, "", "true"},
+                                        {-1, -1, "-173013.22289658818", 7, 4, "", "true"},
+                                        {-1, -1, "3436.6964533578057", 7, 4, "", "true"}};
+    test_cast_all_fail<TYPE_DOUBLE, TYPE_DECIMAL32>(past_precision);
 }
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal64p18s0Normal) {
@@ -1220,15 +1219,17 @@ PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal64p
                                     {-1, -1, "4.775415077179906E12", 18, 2, "4775415077179.91", "false"},
                                     {-1, -1, "-2256543.8222294822", 18, 2, "-2256543.82", "false"},
                                     {-1, -1, "6.563079548502338E15", 18, 2, "6563079548502338.56", "false"},
-                                    {-1, -1, "-1.1592463515597104E16", 18, 2, "-11592463515597104.64", "false"},
                                     {-1, -1, "9.665540935334528E13", 18, 2, "96655409353345.28", "false"},
                                     {-1, -1, "4.958182160185259E15", 18, 2, "4958182160185258.88", "false"},
                                     {-1, -1, "-0.6477467697829751", 18, 2, "-0.65", "false"},
-                                    {-1, -1, "-4.5188474726005912E16", 18, 2, "-45188474726005913.60", "false"},
                                     {-1, -1, "-3.079070294077179E8", 18, 2, "-307907029.41", "false"},
                                     {-1, -1, "6.663719925607033E10", 18, 2, "66637199256.07", "false"},
                                     {-1, -1, "-424.59722096926293", 18, 2, "-424.60", "false"}};
     test_cast_all<TYPE_DOUBLE, TYPE_DECIMAL64>(test_cases);
+    // More digits than the target's precision: NULL
+    CastTestCaseArray past_precision = {{-1, -1, "-1.1592463515597104E16", 18, 2, "", "true"},
+                                        {-1, -1, "-4.5188474726005912E16", 18, 2, "", "true"}};
+    test_cast_all_fail<TYPE_DOUBLE, TYPE_DECIMAL64>(past_precision);
 }
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal64p18s9Abnormal) {
@@ -1248,14 +1249,16 @@ PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal64p
     CastTestCaseArray test_cases = {{-1, -1, "1733.7087045048174", 18, 9, "1733.708704505", "false"},
                                     {-1, -1, "0.0", 18, 9, "0.000000000", "false"},
                                     {-1, -1, "1807.8675646121148", 18, 9, "1807.867564612", "false"},
-                                    {-1, -1, "1.229329234315488E9", 18, 9, "1229329234.315488000", "false"},
                                     {-1, -1, "695677.935797574", 18, 9, "695677.935797574", "false"},
                                     {-1, -1, "-84.99021368087908", 18, 9, "-84.990213681", "false"},
                                     {-1, -1, "3.1462101885655445E8", 18, 9, "314621018.856554432", "false"},
                                     {-1, -1, "19384.57971881629", 18, 9, "19384.579718816", "false"},
-                                    {-1, -1, "-7.430524469366291E9", 18, 9, "-7430524469.366291456", "false"},
                                     {-1, -1, "-9.473604044945098E8", 18, 9, "-947360404.494509824", "false"}};
     test_cast_all<TYPE_DOUBLE, TYPE_DECIMAL64>(test_cases);
+    // More digits than the target's precision: NULL
+    CastTestCaseArray past_precision = {{-1, -1, "1.229329234315488E9", 18, 9, "", "true"},
+                                        {-1, -1, "-7.430524469366291E9", 18, 9, "", "true"}};
+    test_cast_all_fail<TYPE_DOUBLE, TYPE_DECIMAL64>(past_precision);
 }
 
 // The product must be rounded before adding 0.5; a fused multiply-add (e.g. on aarch64) gives a different result.
@@ -1289,9 +1292,10 @@ PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal64p
 }
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal64p18s18Normal) {
-    CastTestCaseArray test_cases = {{-1, -1, "7.2171801328074", 18, 18, "7.217180132807399424", "false"},
-                                    {-1, -1, "2.054735646406635", 18, 18, "2.054735646406634752", "false"}};
-    test_cast_all<TYPE_DOUBLE, TYPE_DECIMAL64>(test_cases);
+    // More digits than the target's precision: NULL
+    CastTestCaseArray past_precision = {{-1, -1, "7.2171801328074", 18, 18, "", "true"},
+                                        {-1, -1, "2.054735646406635", 18, 18, "", "true"}};
+    test_cast_all_fail<TYPE_DOUBLE, TYPE_DECIMAL64>(past_precision);
 }
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal64p15s13Abnormal) {
@@ -1313,13 +1317,15 @@ PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal64p
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal64p15s13Normal) {
     CastTestCaseArray test_cases = {{-1, -1, "-11.634502483694337", 15, 13, "-11.6345024836943", "false"},
-                                    {-1, -1, "1012.1739979915868", 15, 13, "1012.1739979915868", "false"},
                                     {-1, -1, "-97.32205029180439", 15, 13, "-97.3220502918044", "false"},
-                                    {-1, -1, "201.32818746648948", 15, 13, "201.3281874664895", "false"},
-                                    {-1, -1, "-2553.250982941662", 15, 13, "-2553.2509829416620", "false"},
-                                    {-1, -1, "-0.2020401057276776", 15, 13, "-0.2020401057277", "false"},
-                                    {-1, -1, "-550.1934096087264", 15, 13, "-550.1934096087264", "false"}};
+                                    {-1, -1, "-0.2020401057276776", 15, 13, "-0.2020401057277", "false"}};
     test_cast_all<TYPE_DOUBLE, TYPE_DECIMAL64>(test_cases);
+    // More digits than the target's precision: NULL
+    CastTestCaseArray past_precision = {{-1, -1, "1012.1739979915868", 15, 13, "", "true"},
+                                        {-1, -1, "201.32818746648948", 15, 13, "", "true"},
+                                        {-1, -1, "-2553.250982941662", 15, 13, "", "true"},
+                                        {-1, -1, "-550.1934096087264", 15, 13, "", "true"}};
+    test_cast_all_fail<TYPE_DOUBLE, TYPE_DECIMAL64>(past_precision);
 }
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal128p38s0Normal) {
@@ -1462,12 +1468,14 @@ PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal128
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal128p35s30Normal) {
     CastTestCaseArray test_cases = {
             {-1, -1, "-5906.042759601254", 35, 30, "-5906.042759601254000000000000000000", "false"},
-            {-1, -1, "-9.150943025230598E7", 35, 30, "-91509430.252306000000000000000000000000", "false"},
             {-1, -1, "-1217.1972618717286", 35, 30, "-1217.197261871728600000000000000000", "false"},
             {-1, -1, "-635.9380055546139", 35, 30, "-635.938005554614000000000000000000", "false"},
             {-1, -1, "57.85686418676329", 35, 30, "57.856864186763290000000000000000", "false"},
-            {-1, -1, "-1.1891199696317304E7", 35, 30, "-11891199.696317305000000000000000000000", "false"},
             {-1, -1, "0.28365040966259847", 35, 30, "0.283650409662598470000000000000", "false"}};
     test_cast_all<TYPE_DOUBLE, TYPE_DECIMAL128>(test_cases);
+    // More digits than the target's precision: NULL
+    CastTestCaseArray past_precision = {{-1, -1, "-9.150943025230598E7", 35, 30, "", "true"},
+                                        {-1, -1, "-1.1891199696317304E7", 35, 30, "", "true"}};
+    test_cast_all_fail<TYPE_DOUBLE, TYPE_DECIMAL128>(past_precision);
 }
 } // namespace starrocks
