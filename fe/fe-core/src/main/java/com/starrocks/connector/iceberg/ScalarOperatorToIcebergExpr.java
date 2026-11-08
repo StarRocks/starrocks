@@ -330,6 +330,15 @@ public class ScalarOperatorToIcebergExpr {
             if (literalValue == null) {
                 return null;
             }
+            LocalDateTime ambiguous = ambiguousLocalTime(operator.getChild(1), icebergType);
+            if (ambiguous != null) {
+                // The constant names two instants (DST overlap) or none (DST gap), so no single instant compares the
+                // same. Lower bounds take the earlier candidate and upper bounds the later one, a pruning-only
+                // superset: not valid under NOT, for NE or for strict conversion.
+                return context.isStrict() || context.isInsideNot() ? null : IcebergFunctionPreimage.compare(
+                        new IcebergFunctionPreimage.Column(columnName, icebergType),
+                        operator.getBinaryType(), ambiguous);
+            }
             if (typeID == Type.TypeID.BOOLEAN) {
                 literalValue = convertBoolLiteralValue(literalValue);
             }
@@ -401,6 +410,10 @@ public class ScalarOperatorToIcebergExpr {
             if (literalValues.stream().anyMatch(Objects::isNull)) {
                 return null;
             }
+            // a constant in a DST overlap or gap has no single instant, see visitBinaryPredicate
+            if (operator.getListChildren().stream().anyMatch(child -> ambiguousLocalTime(child, icebergType) != null)) {
+                return null;
+            }
 
             if (operator.isNotIn()) {
                 return notIn(columnName, literalValues);
@@ -469,6 +482,24 @@ public class ScalarOperatorToIcebergExpr {
             Type type = columnName == null ? null : IcebergExprVisitor.getResultType(columnName, context);
             return type == null ? null : new IcebergFunctionPreimage.Column(columnName, type);
         };
+    }
+
+    /**
+     * The local time of a constant compared with a timestamptz column, when it falls in a DST overlap or gap of the
+     * session time zone; null otherwise.
+     */
+    private static LocalDateTime ambiguousLocalTime(ScalarOperator operator, Type icebergType) {
+        if (!Types.TimestampType.withZone().equals(icebergType) || !(operator instanceof ConstantOperator constant)
+                || constant.isNull()) {
+            return null;
+        }
+        Optional<ConstantOperator> datetime = constant.getType().isDatetime() ? Optional.of(constant)
+                : constant.castTo(DateType.DATETIME);
+        if (datetime.isEmpty() || datetime.get().isNull()) {
+            return null;
+        }
+        LocalDateTime local = datetime.get().getDatetime();
+        return TimeUtils.getTimeZone().toZoneId().getRules().getValidOffsets(local).size() == 1 ? null : local;
     }
 
     private static Object getLiteralValue(ScalarOperator operator, Type icebergType) {
