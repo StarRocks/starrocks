@@ -3224,4 +3224,226 @@ TEST_F(SegmentIteratorTest, TopNLateMaterializationPruneTest) {
     }
 }
 
+TEST_F(SegmentIteratorTest, TopNPlainVarcharRuntimeFilterPruneTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+    RuntimeState runtime_state;
+
+    int32_t old_data_page_size = config::data_page_size;
+    config::data_page_size = 256;
+    DeferOp restore_page_size([&] { config::data_page_size = old_data_page_size; });
+
+    std::string file_name = kSegmentDir + "/topn_plain_varchar_prune";
+    TabletSchemaBuilder schema_builder;
+    // Column 0 (id=1, name="1"): high-cardinality VARCHAR (plain/mixed-encoded across pages)
+    // Column 1 (id=2, name="2"): nullable high-cardinality VARCHAR
+    // Column 2 (id=3, name="3"): lazy payload column (TYPE_INT)
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(64)
+                                                          .create(2, /*nullable=*/true, TYPE_VARCHAR)
+                                                          .set_length(64)
+                                                          .create(3, /*nullable=*/false, TYPE_INT)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, 1000);
+    for (int i = 0; i < 1000; ++i) {
+        // Interleave "a_..." and "z_..." within every page so page ZoneMaps span ["a_...", "z_..."]
+        // and cannot prune whole pages when the Top-N bound tightens to <= "b_000", forcing row-level
+        // RuntimeFilterPredicate::evaluate on plain-encoded BinaryColumn data.
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%s_%04d_unique_suffix_%04d", (i % 2 == 0 ? "a" : "z"), i, i * 17);
+        write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(Slice(buf)));
+        if (i % 10 == 0) {
+            write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_nulls(1);
+        } else {
+            write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(Slice(buf)));
+        }
+        write_chunk->get_column_by_index(2)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, 100);
+
+    // 1. Direct unit test of both RuntimeFilterPredicate::evaluate overloads (selection uint8_t* and branchless
+    // uint16_t*) on non-null and nullable BinaryColumn with MinMaxRuntimeFilter<TYPE_VARCHAR>.
+    {
+        auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("b_0000"), true, false);
+        RuntimeFilterProbeDescriptor rf_desc;
+        rf_desc.set_runtime_filter(rf);
+
+        RuntimeFilterPredicate pred_c0(&rf_desc, 0);
+        ASSERT_TRUE(pred_c0.init(0));
+        RuntimeFilterPredicate pred_c1(&rf_desc, 1);
+        ASSERT_TRUE(pred_c1.init(0));
+
+        // Selection vector (uint8_t*) overload on non-null and nullable BinaryColumn
+        std::vector<uint8_t> sel_c0(100, 1);
+        ASSERT_OK(pred_c0.evaluate(write_chunk.get(), sel_c0.data(), 0, 100));
+        EXPECT_EQ(SIMD::count_nonzero(sel_c0), 50); // Only even rows ("a_...") <= "b_0000"
+
+        std::vector<uint8_t> sel_c1(100, 1);
+        ASSERT_OK(pred_c1.evaluate(write_chunk.get(), sel_c1.data(), 0, 100));
+        EXPECT_EQ(SIMD::count_nonzero(sel_c1), 40); // Even rows except multiples of 10 which are NULL
+
+        // Branchless (uint16_t*) overload on non-null and nullable BinaryColumn
+        std::vector<uint16_t> idx_in(100);
+        std::vector<uint16_t> idx_out(100);
+        for (uint16_t i = 0; i < 100; ++i) idx_in[i] = i;
+        ASSIGN_OR_ABORT(uint16_t out_c0, pred_c0.evaluate(write_chunk.get(), idx_in.data(), 100, idx_out.data()));
+        EXPECT_EQ(out_c0, 50);
+        ASSIGN_OR_ABORT(uint16_t out_c1, pred_c1.evaluate(write_chunk.get(), idx_in.data(), 100, idx_out.data()));
+        EXPECT_EQ(out_c1, 40);
+    }
+
+    // 2. End-to-end SegmentIterator scan on plain-encoded VARCHAR with mid-scan Top-N tightening and late
+    // materialization of payload column c2.
+    {
+        TRuntimeFilterDescription desc;
+        desc.__set_filter_id(1);
+        desc.__set_has_remote_targets(false);
+        desc.__set_build_plan_node_id(0);
+        desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+        desc.__set_filter_type(TRuntimeFilterBuildType::TOPN_FILTER);
+        desc.__isset.plan_node_id_to_target_expr = true;
+        desc.plan_node_id_to_target_expr.emplace(0, ExprsTestHelper::create_column_ref_t_expr<TYPE_VARCHAR>(0, false));
+        auto* rf_desc = pool.add(new RuntimeFilterProbeDescriptor());
+        ASSERT_OK(rf_desc->init(&pool, desc, 0, &runtime_state));
+
+        auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("z_9999"), true, false);
+        rf_desc->set_runtime_filter(rf);
+
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 100;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+        seg_opts.enable_predicate_col_late_materialize = true;
+
+        auto* placeholder_c0 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_VARCHAR), 0));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{placeholder_c0});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+        seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(rf_desc, 0)));
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+        // Chunk 0 (first 100 rows): bound is "z_9999", all 100 rows pass.
+        ASSERT_OK(iter->get_next(read_chunk.get()));
+        EXPECT_EQ(read_chunk->num_rows(), 100);
+
+        // Tighten Top-N bound mid-scan to <= "b_0000": for the remaining 900 rows (100..999), only the 450
+        // even-indexed "a_..." rows should pass and be late-materialized for column c2.
+        rf->update_min_max<false>(Slice("b_0000"));
+
+        size_t remaining_rows = 0;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            for (size_t r = 0; r < read_chunk->num_rows(); ++r) {
+                EXPECT_LE(read_chunk->get(r)[0].get_slice(), Slice("b_0000"));
+                EXPECT_EQ(read_chunk->get(r)[2].get_int32() % 2, 0);
+            }
+            remaining_rows += read_chunk->num_rows();
+        }
+        EXPECT_EQ(remaining_rows, 450);
+        EXPECT_EQ(stats.rows_vec_cond_filtered, 450);
+        iter->close();
+
+        // Also verify late materialization in the initial sampling chunk when the tightened bound (<= "b_0000")
+        // is active from chunk 0: only the 50 matching rows in chunk 0 (instead of all 100) are late-materialized
+        // for lazy payload columns c1 and c2, and 500 rows total are filtered across the segment.
+        OlapReaderStatistics stats_late;
+        seg_opts.stats = &stats_late;
+        ASSIGN_OR_ABORT(auto iter_late, segment->new_iterator(full_schema, seg_opts));
+        size_t total_late_rows = 0;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter_late->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            total_late_rows += read_chunk->num_rows();
+        }
+        EXPECT_EQ(total_late_rows, 500);
+        EXPECT_EQ(stats_late.rows_vec_cond_filtered, 500);
+        EXPECT_EQ(stats_late.late_materialize_rows, 50);
+        iter_late->close();
+    }
+}
+
+TEST_F(SegmentIteratorTest, TopNAndHighSelectivityJoinRuntimeFilterTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+    RuntimeState runtime_state;
+
+    int32_t old_sample_rows = config::rf_sample_rows;
+    int32_t old_sample_ratio = config::rf_sample_ratio;
+    config::rf_sample_rows = 10;
+    config::rf_sample_ratio = 100;
+    DeferOp restore_rf_cfg([&] {
+        config::rf_sample_rows = old_sample_rows;
+        config::rf_sample_ratio = old_sample_ratio;
+    });
+
+    TabletSchemaBuilder schema_builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            schema_builder.create(1, /*nullable=*/false, TYPE_INT).create(2, /*nullable=*/false, TYPE_INT).build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+
+    auto make_rf_desc = [&](int filter_id, TRuntimeFilterBuildType::type filter_type, MinMaxRuntimeFilter<TYPE_INT>* rf,
+                            SlotId slot_id) {
+        TRuntimeFilterDescription desc;
+        desc.__set_filter_id(filter_id);
+        desc.__set_has_remote_targets(false);
+        desc.__set_build_plan_node_id(0);
+        desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+        desc.__set_filter_type(filter_type);
+        desc.__isset.plan_node_id_to_target_expr = true;
+        desc.plan_node_id_to_target_expr.emplace(0,
+                                                 ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(slot_id, false));
+        auto* rf_desc = pool.add(new RuntimeFilterProbeDescriptor());
+        CHECK_OK(rf_desc->init(&pool, desc, 0, &runtime_state));
+        rf_desc->set_runtime_filter(rf);
+        return rf_desc;
+    };
+
+    // Join RF on c0 filters >= 95% of rows during SAMPLE (only c0 == 0 passes out of 0..99).
+    // Top-N RF on c1 starts loose (c1 <= 1000, 0% filtered during SAMPLE), then tightens to c1 < 0 before NORMAL.
+    auto* join_rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 0, true, false);
+    auto* join_desc = make_rf_desc(1, TRuntimeFilterBuildType::JOIN_FILTER, join_rf, 0);
+
+    auto* topn_rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 1000, true, false);
+    auto* topn_desc = make_rf_desc(2, TRuntimeFilterBuildType::TOPN_FILTER, topn_rf, 1);
+
+    RuntimeFilterPredicates rf_preds;
+    rf_preds.add_predicate(pool.add(new RuntimeFilterPredicate(join_desc, 0)));
+    rf_preds.add_predicate(pool.add(new RuntimeFilterPredicate(topn_desc, 1)));
+
+    auto chunk = ChunkFactory::new_chunk(full_schema, 100);
+    for (int i = 0; i < 100; ++i) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+
+    // 1st evaluation (SAMPLE): join_rf filters 99/100 rows (filter_ratio = 0.99 >= 0.95), topn_rf filters 0/100 rows.
+    // _sample_rows (100) >= rf_sample_rows (10), transitioning rf_preds into NORMAL mode.
+    std::vector<uint8_t> sel1(100, 1);
+    ASSERT_OK(rf_preds.evaluate(chunk.get(), sel1.data(), 0, 100));
+    EXPECT_EQ(SIMD::count_nonzero(sel1), 1);
+
+    // Tighten topn_rf to c1 <= -1 so that even row 0 (where c0 == 0, c1 == 0) is rejected by topn_rf.
+    topn_rf->update_min_max<false>(-1);
+
+    // 2nd evaluation (NORMAL mode): even though join_rf had filter_ratio = 0.99 >= 0.95 during SAMPLE,
+    // topn_rf MUST still be evaluated in NORMAL mode and filter out row 0.
+    std::vector<uint8_t> sel2(100, 1);
+    ASSERT_OK(rf_preds.evaluate(chunk.get(), sel2.data(), 0, 100));
+    EXPECT_EQ(SIMD::count_nonzero(sel2), 0);
+}
+
 } // namespace starrocks

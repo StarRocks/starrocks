@@ -23,6 +23,85 @@
 
 namespace starrocks {
 
+namespace {
+
+void apply_slice_minmax_selection(const RuntimeFilter* rf, const Column* column, uint8_t* selection, uint16_t from,
+                                  uint16_t to) {
+    if (rf == nullptr || rf->get_min_max_filter() != rf || from >= to) {
+        return;
+    }
+    const auto* binary_col = dynamic_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
+    if (binary_col == nullptr) {
+        return;
+    }
+    const uint8_t* null_data = (column->is_nullable() && column->has_null())
+                                       ? down_cast<const NullableColumn*>(column)->immutable_null_column_data().data()
+                                       : nullptr;
+    auto eval_mm = [&](const auto* mm_rf) {
+        ObjectPool tmp_pool;
+        const Slice min_val = mm_rf->min_value(&tmp_pool);
+        const Slice max_val = mm_rf->max_value(&tmp_pool);
+        const bool left_close = mm_rf->left_close_interval();
+        const bool right_close = mm_rf->right_close_interval();
+        for (uint16_t i = from; i < to; ++i) {
+            if (!selection[i]) continue;
+            if (null_data != nullptr && null_data[i]) continue;
+            const Slice val = binary_col->get_slice(i);
+            const bool left_ok = left_close ? (val >= min_val) : (val > min_val);
+            const bool right_ok = right_close ? (val <= max_val) : (val < max_val);
+            selection[i] = static_cast<uint8_t>(left_ok && right_ok);
+        }
+    };
+    if (const auto* varchar_mm = dynamic_cast<const MinMaxRuntimeFilter<TYPE_VARCHAR>*>(rf)) {
+        eval_mm(varchar_mm);
+    } else if (const auto* char_mm = dynamic_cast<const MinMaxRuntimeFilter<TYPE_CHAR>*>(rf)) {
+        eval_mm(char_mm);
+    }
+}
+
+uint16_t apply_slice_minmax_branchless(const RuntimeFilter* rf, const Column* column, uint16_t* target_sel,
+                                       uint16_t sel_size) {
+    if (rf == nullptr || rf->get_min_max_filter() != rf || sel_size == 0) {
+        return sel_size;
+    }
+    const auto* binary_col = dynamic_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
+    if (binary_col == nullptr) {
+        return sel_size;
+    }
+    const uint8_t* null_data = (column->is_nullable() && column->has_null())
+                                       ? down_cast<const NullableColumn*>(column)->immutable_null_column_data().data()
+                                       : nullptr;
+    auto eval_mm = [&](const auto* mm_rf) -> uint16_t {
+        ObjectPool tmp_pool;
+        const Slice min_val = mm_rf->min_value(&tmp_pool);
+        const Slice max_val = mm_rf->max_value(&tmp_pool);
+        const bool left_close = mm_rf->left_close_interval();
+        const bool right_close = mm_rf->right_close_interval();
+        uint16_t new_size = 0;
+        for (uint16_t i = 0; i < sel_size; ++i) {
+            uint16_t idx = target_sel[i];
+            target_sel[new_size] = idx;
+            if (null_data != nullptr && null_data[idx]) {
+                new_size += 1;
+            } else {
+                const Slice val = binary_col->get_slice(idx);
+                const bool left_ok = left_close ? (val >= min_val) : (val > min_val);
+                const bool right_ok = right_close ? (val <= max_val) : (val < max_val);
+                new_size += static_cast<uint16_t>(left_ok && right_ok);
+            }
+        }
+        return new_size;
+    };
+    if (const auto* varchar_mm = dynamic_cast<const MinMaxRuntimeFilter<TYPE_VARCHAR>*>(rf)) {
+        return eval_mm(varchar_mm);
+    } else if (const auto* char_mm = dynamic_cast<const MinMaxRuntimeFilter<TYPE_CHAR>*>(rf)) {
+        return eval_mm(char_mm);
+    }
+    return sel_size;
+}
+
+} // namespace
+
 bool RuntimeFilterPredicate::init(int32_t driver_sequence) {
     if (_rf) {
         return true;
@@ -75,6 +154,7 @@ Status RuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16
     }
     if (!column->has_null()) {
         _rf->evaluate(column.get(), hash_values, selection, from, to);
+        apply_slice_minmax_selection(_rf, column.get(), selection, from, to);
         return Status::OK();
     }
     // A filter writes its has_null verdict for a NULL key without looking at selection[i], so a <=> join
@@ -84,6 +164,7 @@ Status RuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16
     for (uint16_t i = from; i < to; i++) {
         selection[i] &= _input_selection[i - from];
     }
+    apply_slice_minmax_selection(_rf, column.get(), selection, from, to);
     return Status::OK();
 }
 
@@ -111,7 +192,7 @@ StatusOr<uint16_t> RuntimeFilterPredicate::evaluate(Chunk* chunk, uint16_t* sel,
         }
     }
     uint16_t ret = _rf->evaluate(column.get(), hash_values, sel, sel_size, target_sel);
-    return ret;
+    return apply_slice_minmax_branchless(_rf, column.get(), target_sel, ret);
 }
 
 Status DictColumnRuntimeFilterPredicate::init() {
@@ -351,6 +432,24 @@ void RuntimeFilterPredicates::_update_selectivity_map() {
         if (filter_ratio >= 0.5 || pred->is_always_false() ||
             (pred->get_rf_desc() != nullptr && pred->get_rf_desc()->is_topn_filter())) {
             _selectivity_map.emplace(filter_ratio, pred);
+        }
+    }
+    // Always retain mutable Top-N runtime filters and always-false dictionary runtime filters in NORMAL mode,
+    // even when a selective join runtime filter triggered the >= 0.95 shortcut or 3-filter cap above.
+    for (const auto& ctx : _sampling_ctxs) {
+        auto* pred = ctx.pred;
+        if (pred->is_always_false() || (pred->get_rf_desc() != nullptr && pred->get_rf_desc()->is_topn_filter())) {
+            bool already_present = false;
+            for (const auto& [_, existing] : _selectivity_map) {
+                if (existing == pred) {
+                    already_present = true;
+                    break;
+                }
+            }
+            if (!already_present) {
+                double filter_ratio = ctx.filter_rows * 1.0 / _sample_rows;
+                _selectivity_map.emplace(filter_ratio, pred);
+            }
         }
     }
 }
