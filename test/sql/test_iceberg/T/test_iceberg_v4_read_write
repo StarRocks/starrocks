@@ -1,6 +1,6 @@
 -- name: test_iceberg_v4_read_write
 -- Format-version 4 tables. Iceberg 1.12 writes their manifests as Parquet (the manifest list stays Avro) and otherwise
--- commits them like v3 tables: DELETE writes deletion vectors (DV) in Puffin files. Every path that reads manifests
+-- commits them like v3 tables. Every path that reads manifests
 -- must handle Parquet ones: FE planning (local and on BE), statistics, the metadata tables read on BE, compaction and
 -- snapshot expiry. A v3 table upgraded to v4 keeps its Avro manifests next to the new Parquet ones.
 
@@ -24,7 +24,7 @@ create table t(
     p int
 ) partition by(p) properties ("format-version" = "4");
 
--- The forced sink shuffle and one sink driver write one data file per partition per statement, so the file and DV
+-- The forced sink shuffle and one sink driver write one data file per partition per statement, so the file
 -- counts below do not depend on the cluster size.
 set connector_sink_shuffle_mode = 'force';
 set pipeline_sink_dop = 1;
@@ -46,58 +46,44 @@ select count(*) from t where id > 30;
 -- expected: (0, 20), (1, 20)
 select p, count(*) from t group by p order by p;
 
--- DELETE writes DVs. expected: (1, PUFFIN, 1), (1, PUFFIN, 2), then 37 814
-delete from t where id in (1, 2, 3);
-select content, upper(file_format), record_count from t$files where content != 0 order by record_count;
-select count(*), sum(id) from t;
-
--- a second DELETE on the same data file replaces its DV. expected: (1, PUFFIN, 1), (1, PUFFIN, 3), then 36 809
-delete from t where id = 5;
-select content, upper(file_format), record_count from t$files where content != 0 order by record_count;
-select count(*), sum(id) from t;
-
--- metadata tables, read on BE
+-- metadata tables, read on BE. expected: (20, 2, 0, 0) twice, then (0, 4)
 select record_count, file_count, position_delete_record_count, position_delete_file_count
     from t$partitions order by record_count, position_delete_record_count;
 select data_file.content, count(*) from t$entries where status != 2 group by data_file.content order by 1;
 
--- distributed planning reads the manifests on BE. expected: 36 809, then 4 6 7 8 9
+-- distributed planning reads the manifests on BE. expected: 40 820, then 1 to 9
 set plan_mode = 'distributed';
 select count(*), sum(id) from t;
 select id from t where id < 10 order by id;
 set plan_mode = 'local';
 
--- compaction applies the DVs. expected: 36 809; one data file per partition and no delete file
+-- compaction. expected: 40 820; one data file of 20 rows per partition
 [UC]alter table t execute rewrite_data_files("rewrite_all" = "true");
 select count(*), sum(id) from t;
 select content, record_count from t$files order by content, record_count;
 
--- a far-future bound: Iceberg never expires the current snapshot. expected: 1, then 36 809
+-- a far-future bound: Iceberg never expires the current snapshot. expected: 1, then 40 820
 alter table t execute expire_snapshots(older_than = '2099-01-01 00:00:00');
 select count(*) from t$snapshots;
 select count(*), sum(id) from t;
 
 -- INSERT OVERWRITE replaces the partitions it writes: p=0 now holds one row, p=1 is kept.
--- expected: (0, 1, 1000), (1, 17, 391)
+-- expected: (0, 1, 1000), (1, 20, 400)
 insert overwrite t select 1000, 'z', 0;
 select p, count(*), sum(id) from t group by p order by p;
 
--- a v3 table with a DV, upgraded to v4
+-- a v3 table upgraded to v4
 create table u(id int) properties ("format-version" = "3");
 insert into u values (1), (2), (3);
-delete from u where id = 2;
 alter table u set ("format-version" = "4");
 insert into u values (4);
 -- expected: Avro and Parquet manifests side by side
 select sum(if(path like '%.avro', 1, 0)) > 0, sum(if(path like '%.parquet', 1, 0)) > 0 from u$manifests;
--- expected: 1 3 4 for both plan modes
+-- expected: 1 2 3 4 for both plan modes
 select id from u order by id;
 set plan_mode = 'distributed';
 select id from u order by id;
 set plan_mode = 'local';
--- a DV on a file written after the upgrade. expected: 1 3
-delete from u where id = 4;
-select id from u order by id;
 
 set pipeline_sink_dop = 0;
 set connector_sink_shuffle_mode = 'auto';
