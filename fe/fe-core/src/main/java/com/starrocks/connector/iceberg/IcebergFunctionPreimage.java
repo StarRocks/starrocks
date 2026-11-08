@@ -577,7 +577,7 @@ final class IcebergFunctionPreimage {
     /**
      * {@code c op bound} on a DATE or TIMESTAMP column; a superset when the column cannot hold {@code bound} exactly.
      */
-    private static Expression compare(Column column, BinaryType op, LocalDateTime bound) {
+    static Expression compare(Column column, BinaryType op, LocalDateTime bound) {
         if (bound.getYear() < 1 || bound.getYear() > 9999) {
             return null;
         }
@@ -625,6 +625,25 @@ final class IcebergFunctionPreimage {
             default:
                 return null;
         }
+    }
+
+    /**
+     * Whether a timestamptz constant, a local time in the session time zone, names other than exactly one instant:
+     * two at a DST overlap, none in a gap. A single instant is then neither a superset nor a subset of the matches.
+     */
+    static boolean isDstAmbiguous(Type icebergType, LocalDateTime bound) {
+        return Types.TimestampType.withZone().equals(icebergType)
+                && TimeUtils.getTimeZone().toZoneId().getRules().getValidOffsets(bound).size() != 1;
+    }
+
+    /**
+     * The instants a timestamptz column may hold where it equals {@code bound}: both at a DST overlap, and the gap's
+     * transition instant for a time in a gap (which no value equals, so any instant is a superset).
+     */
+    static List<Long> equalInstants(Type icebergType, LocalDateTime bound) {
+        long earlier = toMicros(icebergType, bound, true);
+        long later = toMicros(icebergType, bound, false);
+        return earlier == later ? List.of(earlier) : List.of(earlier, later);
     }
 
     private static boolean isInGap(Type icebergType, LocalDateTime bound) {
