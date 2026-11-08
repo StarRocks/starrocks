@@ -41,6 +41,8 @@ import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RewriteDataFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RewriteManifestsProcedure;
 import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
+import com.starrocks.connector.iceberg.procedure.RollbackToTimestampProcedure;
+import com.starrocks.connector.iceberg.procedure.SetCurrentSnapshotProcedure;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.expression.ExprToThrift;
@@ -799,6 +801,8 @@ public class IcebergTable extends Table {
             case EXPIRE_SNAPSHOTS -> ExpireSnapshotsProcedure.getInstance();
             case REMOVE_ORPHAN_FILES -> RemoveOrphanFilesProcedure.getInstance();
             case ROLLBACK_TO_SNAPSHOT -> RollbackToSnapshotProcedure.getInstance();
+            case ROLLBACK_TO_TIMESTAMP -> RollbackToTimestampProcedure.getInstance();
+            case SET_CURRENT_SNAPSHOT -> SetCurrentSnapshotProcedure.getInstance();
             case REWRITE_DATA_FILES -> RewriteDataFilesProcedure.getInstance();
             case REWRITE_MANIFESTS -> RewriteManifestsProcedure.getInstance();
             case ADD_FILES -> AddFilesProcedure.getInstance();
