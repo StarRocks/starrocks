@@ -15,6 +15,7 @@
 #include "storage/runtime_filter_predicate.h"
 
 #include <cstring>
+#include <limits>
 #include <mutex>
 #include <unordered_map>
 
@@ -25,6 +26,8 @@
 #include "gutil/strings/fastmem.h"
 #include "runtime/mem_tracker.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
+#include "storage/rowset/scalar_column_iterator.h"
 
 namespace starrocks {
 
@@ -54,6 +57,13 @@ void RuntimeFilterPredicatesRewriter::set_static_dict_mask(ObjectPool* obj_pool,
     if (obj_pool == nullptr) {
         return;
     }
+    if (column_id == std::numeric_limits<ColumnId>::max()) {
+        std::lock_guard<std::mutex> lock(g_pool_static_dict_masks_mutex);
+        if (auto it = g_pool_static_dict_masks.find(obj_pool); it != g_pool_static_dict_masks.end()) {
+            it->second.clear();
+        }
+        return;
+    }
     bool need_register_cleanup = false;
     {
         std::lock_guard<std::mutex> lock(g_pool_static_dict_masks_mutex);
@@ -69,16 +79,12 @@ void RuntimeFilterPredicatesRewriter::set_static_dict_mask(ObjectPool* obj_pool,
 Status RuntimeFilterPredicatesRewriter::rewrite(ObjectPool* obj_pool, RuntimeFilterPredicates& preds,
                                                 const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators,
                                                 const Schema& schema) {
+    PoolStaticDictMasks pool_masks;
     if (obj_pool != nullptr) {
-        PoolStaticDictMasks pool_masks;
-        {
-            std::lock_guard<std::mutex> lock(g_pool_static_dict_masks_mutex);
-            if (auto it = g_pool_static_dict_masks.find(obj_pool); it != g_pool_static_dict_masks.end()) {
-                pool_masks = it->second;
-            }
-        }
-        for (const auto& [cid, info] : pool_masks) {
-            preds.set_static_dict_mask(cid, info.mask, info.is_nullable);
+        std::lock_guard<std::mutex> lock(g_pool_static_dict_masks_mutex);
+        if (auto it = g_pool_static_dict_masks.find(obj_pool); it != g_pool_static_dict_masks.end()) {
+            pool_masks = std::move(it->second);
+            it->second.clear();
         }
     }
 
@@ -106,10 +112,18 @@ Status RuntimeFilterPredicatesRewriter::rewrite(ObjectPool* obj_pool, RuntimeFil
                 break;
             }
         }
+        if (is_nullable) {
+            if (auto* scalar_iter = dynamic_cast<ScalarColumnIterator*>(column_iterators[column_id].get());
+                scalar_iter != nullptr && scalar_iter->get_column_reader() != nullptr &&
+                scalar_iter->get_column_reader()->segment_zone_map() != nullptr &&
+                !scalar_iter->get_column_reader()->segment_zone_map()->has_null()) {
+                is_nullable = false;
+            }
+        }
         auto* dict_pred = obj_pool->add(
                 new DictColumnRuntimeFilterPredicate(rf_desc, column_id, std::move(dict_words), is_nullable));
-        if (pred->has_static_dict_mask()) {
-            dict_pred->set_static_dict_mask(pred->static_dict_mask(), pred->is_nullable());
+        if (auto it = pool_masks.find(column_id); it != pool_masks.end()) {
+            dict_pred->set_static_dict_mask(it->second.mask, is_nullable && it->second.is_nullable);
         }
         predicates[i] = dict_pred;
     }

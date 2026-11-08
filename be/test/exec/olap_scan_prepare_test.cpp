@@ -710,7 +710,8 @@ TEST_F(ChunkPredicateBuilderTest, topn_runtime_filter_pushdown_and_placeholder) 
         ASSERT_TRUE(rf_desc->has_push_down_to_storage());
     }
 
-    // Subcase 2: TOPN_FILTER already arrived at parse_conjuncts() time normalizes its bound AND emits placeholder.
+    // Subcase 2: TOPN_FILTER already arrived at parse_conjuncts() time normalizes its bound, registers in
+    // unarrived_runtime_filters for subsequent rf_version updates, AND emits placeholder.
     {
         ASSIGN_OR_ASSERT_FAIL(auto* rf_desc,
                               _gen_typed_runtime_filter_desc(slot_id, TRuntimeFilterBuildType::TOPN_FILTER));
@@ -723,6 +724,8 @@ TEST_F(ChunkPredicateBuilderTest, topn_runtime_filter_pushdown_and_placeholder) 
 
         ScanConjunctsManager mgr(_opts);
         ASSERT_OK(mgr.parse_conjuncts());
+        ASSERT_EQ(mgr.unarrived_runtime_filters().unarrived_runtime_filters.size(), 1);
+        ASSERT_EQ(mgr.unarrived_runtime_filters().unarrived_runtime_filters[0], rf_desc);
 
         ColumnPredicatePtrs pred_pool;
         ASSIGN_OR_ASSERT_FAIL(auto pred_tree, mgr.get_predicate_tree(_int_pred_parser, pred_pool));
