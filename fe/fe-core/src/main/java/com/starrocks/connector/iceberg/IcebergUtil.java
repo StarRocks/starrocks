@@ -353,10 +353,6 @@ public final class IcebergUtil {
         return true;
     }
 
-    private static Instant microsToInstant(long micros) {
-        return Instant.ofEpochSecond(Math.floorDiv(micros, 1_000_000L), Math.floorMod(micros, 1_000_000L) * 1000L);
-    }
-
     private static long adjustTimestampMicrosToSessionTz(long micros) {
         long seconds = Math.floorDiv(micros, 1_000_000L);
         long microsRemainder = Math.floorMod(micros, 1_000_000L);

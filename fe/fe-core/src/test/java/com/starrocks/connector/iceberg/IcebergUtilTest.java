@@ -315,6 +315,8 @@ public class IcebergUtilTest {
                 Map.of(5, Conversions.toByteBuffer(Types.TimestampType.withZone(), high));
         Map<Integer, Long> nullValueCounts = Map.of(5, 0L);
         Map<Integer, Long> valueCounts = Map.of(5, 2L);
+        long localOfHigh = java.time.LocalDateTime.parse("2024-11-03T01:10:00")
+                .toEpochSecond(java.time.ZoneOffset.UTC) * 1_000_000L;
 
         ConnectContext ctx = new ConnectContext();
         ctx.setThreadLocalInfo();

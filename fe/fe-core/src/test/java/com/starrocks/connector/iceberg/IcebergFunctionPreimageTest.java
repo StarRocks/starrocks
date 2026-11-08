@@ -494,8 +494,17 @@ public class IcebergFunctionPreimageTest {
                     convert(new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, eq)));
             Assertions.assertEquals(Expressions.alwaysTrue(), convert(
                     new BinaryPredicateOperator(BinaryType.NE, TZ, ConstantOperator.createDatetime(k))));
-            Assertions.assertEquals(Expressions.alwaysTrue(), convert(new InPredicateOperator(false, TZ,
-                    ConstantOperator.createDatetime(k), ConstantOperator.createDatetime(k.plusDays(1)))));
+            // IN keeps every candidate instant of the constant
+            Evaluator inEvaluator = new Evaluator(Types.StructType.of(SCHEMA.findField("tz")), convert(
+                    new InPredicateOperator(false, TZ, ConstantOperator.createDatetime(k),
+                            ConstantOperator.createDatetime(k.plusDays(1)))));
+            for (Instant instant : instants) {
+                LocalDateTime local = LocalDateTime.ofInstant(instant, zone);
+                if (local.equals(k) || local.equals(k.plusDays(1))) {
+                    Assertions.assertTrue(inEvaluator.eval(row(ChronoUnit.MICROS.between(Instant.EPOCH, instant))),
+                            "tz in " + k + " pruned " + instant);
+                }
+            }
             Assertions.assertNull(converter.convertStrict(List.of(eq), context));
         }
         // an unambiguous constant converts exactly as before
