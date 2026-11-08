@@ -119,6 +119,10 @@ Iceberg テーブルにロードされるクエリストートメントの結果
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+### Parquet データページバージョン
+
+Parquet データファイルでは、Iceberg テーブルプロパティ `write.parquet.page-version` に `v1` または `v2` を指定できます（大文字と小文字は区別されません）。未設定の場合、StarRocks は DataPage V1 を書き込みます。無効な値の場合は書き込みが失敗します。データファイルのスキーマに BOOLEAN カラムが含まれる場合（配列、マップ、構造体内にネストされている場合も含む）、StarRocks リーダーが RLE エンコードされた値を現在デコードできないため、DataPage V2 の書き込みは拒否されます。このプロパティは位置削除ファイルには適用されません。Parquet のデータページバージョンと Iceberg のテーブルフォーマットバージョンは別の設定です。
+
 ## DELETE
 
 指定された条件に基づいて Iceberg テーブルからデータを削除するには、DELETE ステートメントを使用できます。この機能は StarRocks v4.1 以降でサポートされています。
