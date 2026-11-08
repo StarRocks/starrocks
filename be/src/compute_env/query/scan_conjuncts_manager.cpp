@@ -913,10 +913,8 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
             if (slot_id != slot.id()) continue;
 
             // runtime filter existed and does not have null.
-            if (rf == nullptr || rf->get_in_filter() != nullptr || desc->is_stream_build_filter()) {
-                if (!desc->is_topn_filter() || config::enable_topn_runtime_filter_storage_pushdown) {
-                    rt_ranger_params.add_unarrived_rf(desc, &slot, _opts.driver_sequence);
-                }
+            if (rf == nullptr || rf->get_in_filter() != nullptr) {
+                rt_ranger_params.add_unarrived_rf(desc, &slot, _opts.driver_sequence);
                 continue;
             }
             // an arrived join filter that passes every row filters nothing. always_true() alone does not tell it: a
