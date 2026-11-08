@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -43,6 +44,7 @@ import io.delta.kernel.types.StructField;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.zone.ZoneOffsetTransition;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -95,6 +97,9 @@ public class ScalarOperationToDeltaLakeExpr {
     }
 
     private static class DeltaLakeExprVisitor extends ScalarOperatorVisitor<Predicate, DeltaLakeContext> {
+        // Under a NOT the converted predicate must be a subset of the original instead of a superset.
+        private boolean insideNot = false;
+
         private static DeltaDataType getResultType(String columnName, DeltaLakeContext context) {
             Preconditions.checkNotNull(context);
             return getColumnType(columnName, context);
@@ -118,7 +123,10 @@ public class ScalarOperationToDeltaLakeExpr {
                 if (operator.getChild(0) instanceof LikePredicateOperator) {
                     return null;
                 }
+                boolean outerInsideNot = insideNot;
+                insideNot = true;
                 Predicate predicate = operator.getChild(0).accept(this, context);
+                insideNot = outerInsideNot;
 
                 if (predicate != null) {
                     return new Predicate("NOT", predicate);
@@ -166,6 +174,14 @@ public class ScalarOperationToDeltaLakeExpr {
             }
 
             DeltaDataType resultType = getResultType(columnName, context);
+            if (resultType == DeltaDataType.TIMESTAMP && !context.isPartitionColumn(columnName)) {
+                LocalDateTime local = toLocalDateTime(operator.getChild(1));
+                ZoneOffsetTransition transition = local == null ? null :
+                        TimeUtils.getTimeZone().toZoneId().getRules().getTransition(local);
+                if (transition != null) {
+                    return convertAcrossTransition(column, operator.getBinaryType(), local, transition);
+                }
+            }
             Literal literal = getLiteral(operator.getChild(1), resultType, context.isPartitionColumn(columnName));
 
             if (literal == null) {
@@ -188,6 +204,51 @@ public class ScalarOperationToDeltaLakeExpr {
                 default:
                     return null;
             }
+        }
+
+        /**
+         * A TIMESTAMP constant is a local time in the session time zone. In a DST overlap it names two instants and in
+         * a gap none, so a single instant is neither a superset nor a subset of the original predicate: compare lower
+         * bounds with the earlier candidate instant and upper bounds with the later one, which keeps a superset.
+         * There is no subset to give under a NOT or for NE.
+         */
+        private Predicate convertAcrossTransition(Column column, BinaryType op, LocalDateTime local,
+                                                  ZoneOffsetTransition transition) {
+            if (insideNot) {
+                return null;
+            }
+            long before = toMicros(local, transition.getOffsetBefore());
+            long after = toMicros(local, transition.getOffsetAfter());
+            Literal earlier = Literal.ofTimestamp(Math.min(before, after));
+            Literal later = Literal.ofTimestamp(Math.max(before, after));
+            switch (op) {
+                case LT:
+                    return new Predicate("<", column, later);
+                case LE:
+                    return new Predicate("<=", column, later);
+                case GT:
+                    return new Predicate(">", column, earlier);
+                case GE:
+                    return new Predicate(">=", column, earlier);
+                case EQ:
+                    return new And(new Predicate(">=", column, earlier), new Predicate("<=", column, later));
+                default:
+                    return null;
+            }
+        }
+
+        private static long toMicros(LocalDateTime local, ZoneOffset offset) {
+            return local.toEpochSecond(offset) * 1000 * 1000 + local.getNano() / 1000;
+        }
+
+        private static LocalDateTime toLocalDateTime(ScalarOperator operator) {
+            if (!(operator instanceof ConstantOperator constant) || constant.isNull()) {
+                return null;
+            }
+            if (constant.getType().isDatetime()) {
+                return constant.getDatetime();
+            }
+            return constant.castTo(DateType.DATETIME).map(ConstantOperator::getDatetime).orElse(null);
         }
 
         @Override

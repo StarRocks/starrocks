@@ -248,16 +248,17 @@ public final class IcebergUtil {
                     // Iceberg TIMESTAMP WITH TIME ZONE stores instants in UTC, while StarRocks compares DATETIME
                     // values in the session timezone, so we convert file-level bounds into session-local micros
                     // before sending them to BE.
-                    //
-                    // Note that this is an endpoint conversion on file-level min/max only. For timezones whose
-                    // UTC offset changes over time (for example DST or historical rule changes), UTC->local is
-                    // not strictly monotonic over an arbitrary interval, so the converted low/high remain a
-                    // best-effort approximation rather than an exact local min/max for the full file.
                     if (widenTimestampTz) {
                         long[] bounds = widenedSessionTzBounds((Long) low, (Long) high);
                         minMaxValue.minValue = bounds[0];
                         minMaxValue.maxValue = bounds[1];
                     } else {
+                        // The min/max optimization answers MIN/MAX with these values, so they must be exact.
+                        // UTC->local is not monotonic across a DST fall-back: give up the whole file there, as
+                        // for a promoted date bound above.
+                        if (!sessionTzEndpointsExact((Long) low, (Long) high)) {
+                            return new HashMap<>();
+                        }
                         minMaxValue.minValue = adjustTimestampMicrosToSessionTz((Long) low);
                         minMaxValue.maxValue = adjustTimestampMicrosToSessionTz((Long) high);
                     }
@@ -314,6 +315,42 @@ public final class IcebergUtil {
             return a < 0 ? Long.MIN_VALUE : Long.MAX_VALUE;
         }
         return sum;
+    }
+
+    /**
+     * Whether the session-local times of {@code low} and {@code high} are the local min and max of every instant in
+     * [low, high]. UTC->local only steps back at a backward offset shift (a DST fall-back): a value just after the
+     * shift may read below local(low), or one just before it above local(high), only when the shift lies within its
+     * own size of that end, so only the transitions within the widest offset of either end are checked.
+     */
+    @VisibleForTesting
+    static boolean sessionTzEndpointsExact(long lowMicros, long highMicros) {
+        ZoneRules rules = TimeUtils.getTimeZone().toZoneId().getRules();
+        if (rules.isFixedOffset()) {
+            return true;
+        }
+        long localLow = adjustTimestampMicrosToSessionTz(lowMicros);
+        long localHigh = adjustTimestampMicrosToSessionTz(highMicros);
+        Instant low = microsToInstant(lowMicros);
+        Instant high = microsToInstant(highMicros);
+        long window = ZoneOffset.MAX.getTotalSeconds();
+        Instant highWindow = high.minusSeconds(window);
+        for (Instant from : List.of(low, highWindow.isAfter(low) ? highWindow : low)) {
+            Instant until = from.plusSeconds(window).isBefore(high) ? from.plusSeconds(window) : high;
+            for (ZoneOffsetTransition t = rules.nextTransition(from); t != null && !t.getInstant().isAfter(until);
+                    t = rules.nextTransition(t.getInstant())) {
+                if (!t.isOverlap()) {
+                    continue;
+                }
+                long at = t.getInstant().getEpochSecond() * 1_000_000L;
+                // the least local time after the shift, and the bound of those before it
+                if (at + t.getOffsetAfter().getTotalSeconds() * 1_000_000L < localLow
+                        || at + t.getOffsetBefore().getTotalSeconds() * 1_000_000L > localHigh) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private static long adjustTimestampMicrosToSessionTz(long micros) {
