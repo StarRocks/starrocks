@@ -50,6 +50,8 @@ public:
 protected:
     template <LogicalType Type>
     StatusOr<RuntimeFilterProbeDescriptor*> _gen_runtime_filter_desc(SlotId slot_id);
+    StatusOr<RuntimeFilterProbeDescriptor*> _gen_typed_runtime_filter_desc(SlotId slot_id,
+                                                                           TRuntimeFilterBuildType::type filter_type);
     StatusOr<RuntimeFilterProbeCollector*> _gen_runtime_filter_collector(SlotId slot_id, bool has_null);
     StatusOr<RuntimeFilterProbeCollector*> _gen_varchar_runtime_filter_collector(SlotId slot_id, bool has_null);
     template <bool IsMin>
@@ -172,6 +174,24 @@ StatusOr<RuntimeFilterProbeCollector*> ChunkPredicateBuilderTest::_gen_range_run
     rf_collector->add_descriptor(rf_desc);
 
     return rf_collector;
+}
+
+StatusOr<RuntimeFilterProbeDescriptor*> ChunkPredicateBuilderTest::_gen_typed_runtime_filter_desc(
+        SlotId slot_id, TRuntimeFilterBuildType::type filter_type) {
+    TRuntimeFilterDescription desc;
+    desc.__set_filter_id(1);
+    desc.__set_has_remote_targets(false);
+    desc.__set_build_plan_node_id(1);
+    desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+    desc.__set_filter_type(filter_type);
+
+    TExpr col_ref = ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(slot_id, true);
+    desc.__isset.plan_node_id_to_target_expr = true;
+    desc.__set_plan_node_id_to_target_expr({{1, col_ref}});
+
+    auto* rf_desc = _pool.add(new RuntimeFilterProbeDescriptor());
+    RETURN_IF_ERROR(rf_desc->init(&_pool, desc, 1, &_runtime_state));
+    return rf_desc;
 }
 
 TEST_F(ChunkPredicateBuilderTest, normalized_in_has_null) {
@@ -650,5 +670,37 @@ TEST_F(ChunkPredicateBuilderTest, in_runtime_filter_has_no_null) {
     auto ret2 = pred_builder.get_predicate_tree_root(_int_pred_parser, _predicate_free_pool);
     ASSERT_TRUE(ret2.ok());
     ASSERT_EQ(ret2.value().debug_string(), "{\"and\":[{\"pred\":\"((columnId=1)IN(9,5,1,7,3))\"}]}");
+}
+
+TEST_F(ChunkPredicateBuilderTest, topn_runtime_filter_pushdown_and_placeholder) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+    const_cast<TQueryOptions&>(_runtime_state.query_options()).__set_enable_join_runtime_filter_pushdown(true);
+
+    ASSIGN_OR_ASSERT_FAIL(auto* rf_desc, _gen_typed_runtime_filter_desc(slot_id, TRuntimeFilterBuildType::TOPN_FILTER));
+    auto* rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&_pool, 10, false);
+    rf_desc->set_runtime_filter(rf);
+
+    ASSERT_TRUE(rf_desc->is_stream_build_filter());
+    ASSERT_TRUE(rf_desc->is_topn_filter());
+
+    auto* rf_collector = _pool.add(new RuntimeFilterProbeCollector());
+    rf_collector->add_descriptor(rf_desc);
+    _opts.runtime_filters = rf_collector;
+
+    ScanConjunctsManager mgr(_opts);
+    ASSERT_OK(mgr.parse_conjuncts());
+
+    ASSIGN_OR_ASSERT_FAIL(auto pred_tree, mgr.get_predicate_tree(_int_pred_parser, _predicate_free_pool));
+    ASSERT_EQ(pred_tree.root().debug_string(), "{\"and\":[{\"pred\":\"placeholder (column_id=1)\"}]}");
+    ASSERT_TRUE(pred_tree.contains_column(1));
+
+    ASSIGN_OR_ASSERT_FAIL(auto rf_preds, mgr.get_runtime_filter_predicates(&_pool, _int_pred_parser));
+    ASSERT_FALSE(rf_preds.empty());
+    ASSERT_EQ(rf_preds.rf_predicates().size(), 1);
+    ASSERT_EQ(rf_preds.rf_predicates()[0]->get_column_id(), 1);
+    ASSERT_EQ(rf_preds.rf_predicates()[0]->get_rf_desc(), rf_desc);
+    ASSERT_TRUE(rf_desc->has_push_down_to_storage());
 }
 } // namespace starrocks
