@@ -58,11 +58,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
-<<<<<<< HEAD
-=======
 import com.starrocks.connector.iceberg.IcebergPreimageScanPredicates;
-import com.starrocks.connector.jdbc.JDBCPushDownSQLBuilder;
->>>>>>> 25e19da11cc... [Enhancement][RB-225] Prune Iceberg row groups on predicates over functions of a column (#68925)
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AIProjectNode;
