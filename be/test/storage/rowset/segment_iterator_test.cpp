@@ -33,15 +33,21 @@
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/object_pool.h"
+#include "compute_env/runtime_range_pruner.hpp"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_memory.h"
+#include "gen_cpp/RuntimeFilter_types.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gtest/gtest.h"
+#include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
+#include "storage/predicate_parser.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
@@ -50,6 +56,7 @@
 #include "storage/seek_range.h"
 #include "storage/seek_tuple.h"
 #include "storage/tablet_schema_helper.h"
+#include "testutil/exprs_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -2816,6 +2823,196 @@ TEST_F(SegmentIteratorTest, TopNDictBoundsVersionUpdateTest) {
     EXPECT_EQ(stats.raw_rows_read, 100);
     EXPECT_EQ(stats.runtime_stats_filtered, 900);
     iter->close();
+}
+
+TEST_F(SegmentIteratorTest, TopNRfOnlySortColumnAndZoneMapUpdateTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+    RuntimeState runtime_state;
+
+    int32_t old_data_page_size = config::data_page_size;
+    config::data_page_size = 400;
+    DeferOp restore_page_size([&] { config::data_page_size = old_data_page_size; });
+
+    std::string file_name = kSegmentDir + "/topn_rf_only_sort_col_zonemap";
+    TabletSchemaBuilder schema_builder;
+    // Column 0 (id=1, name="1"): SearchPhrase (TYPE_VARCHAR, dict-encoded)
+    // Column 1 (id=2, name="2"): EventTime (TYPE_INT, non-dict, 100 rows per page = 10 pages)
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(32)
+                                                          .create(2, /*nullable=*/false, TYPE_INT)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, 1000);
+    for (int i = 0; i < 1000; ++i) {
+        std::string phrase = "phrase_" + std::to_string(i % 50);
+        write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(Slice(phrase)));
+        write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, 100);
+
+    auto make_int_rf_desc = [&](MinMaxRuntimeFilter<TYPE_INT>* rf) {
+        TRuntimeFilterDescription desc;
+        desc.__set_filter_id(1);
+        desc.__set_has_remote_targets(false);
+        desc.__set_build_plan_node_id(0);
+        desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+        desc.__set_filter_type(TRuntimeFilterBuildType::TOPN_FILTER);
+        desc.__isset.plan_node_id_to_target_expr = true;
+        desc.plan_node_id_to_target_expr.emplace(0, ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(1, false));
+        auto* rf_desc = pool.add(new RuntimeFilterProbeDescriptor());
+        CHECK_OK(rf_desc->init(&pool, desc, 0, &runtime_state));
+        rf_desc->set_runtime_filter(rf);
+        return rf_desc;
+    };
+
+    SlotDescriptor slot_c1(1, "2", TYPE_INT_DESC);
+    OlapPredicateParser pred_parser(tablet_schema);
+
+    // Case 1: ClickBench Q25 shape: c0 != "" AND PlaceHolderPredicate(c1) + MinMaxRuntimeFilter(c1 <= 25).
+    // ZoneMap prunes pages 1..9 (900 rows) at segment init, and row-level RF filters rows 26..99 on page 0.
+    {
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 100;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+
+        auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+        auto* placeholder_c1 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_INT), 1));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{ne_empty});
+        pred_root.add_child(PredicateColumnNode{placeholder_c1});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        auto* rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 25, true, false);
+        auto* rf_desc = make_int_rf_desc(rf);
+        seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(rf_desc, 1)));
+
+        UnarrivedRuntimeFilterList unarrived_rfs;
+        unarrived_rfs.add_unarrived_rf(rf_desc, &slot_c1, -1);
+        seg_opts.runtime_range_pruner = RuntimeScanRangePruner(&pred_parser, unarrived_rfs);
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+        size_t total_rows = 0;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            for (size_t r = 0; r < read_chunk->num_rows(); ++r) {
+                EXPECT_EQ(read_chunk->get(r)[1].get_int32(), static_cast<int32_t>(total_rows + r));
+            }
+            total_rows += read_chunk->num_rows();
+        }
+        EXPECT_EQ(total_rows, 26);
+        EXPECT_EQ(stats.runtime_stats_filtered, 900);
+        EXPECT_EQ(stats.raw_rows_read, 100);
+        EXPECT_EQ(stats.decode_dict_count, 26);
+        iter->close();
+    }
+
+    // Case 2: RF-only column where ONLY PlaceHolderPredicate(c1) is in pred_tree (so _non_expr_pred_tree is
+    // empty after _init_column_predicates strips kPlaceHolder). Using chunk_size = 10 exercises both
+    // _sample_predicate_columns (chunk 0) and _predicate_evaluate_late_materialize_read_first_column (chunks 1..2)
+    // when late_mat=true, and _predicate_evaluate_without_late_materialize + _filter_by_non_expr_predicates when
+    // late_mat=false.
+    for (bool late_mat : {false, true}) {
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 10;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+        seg_opts.enable_predicate_col_late_materialize = late_mat;
+
+        auto* placeholder_c1 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_INT), 1));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{placeholder_c1});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        auto* rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 25, true, false);
+        auto* rf_desc = make_int_rf_desc(rf);
+        seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(rf_desc, 1)));
+
+        UnarrivedRuntimeFilterList unarrived_rfs;
+        unarrived_rfs.add_unarrived_rf(rf_desc, &slot_c1, -1);
+        seg_opts.runtime_range_pruner = RuntimeScanRangePruner(&pred_parser, unarrived_rfs);
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 10);
+        size_t total_rows = 0;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            total_rows += read_chunk->num_rows();
+        }
+        EXPECT_EQ(total_rows, 26) << "late_mat=" << late_mat;
+        EXPECT_EQ(stats.runtime_stats_filtered, 900) << "late_mat=" << late_mat;
+        EXPECT_EQ(stats.raw_rows_read, 100) << "late_mat=" << late_mat;
+        EXPECT_EQ(stats.late_materialize_rows, 10) << "late_mat=" << late_mat;
+        iter->close();
+    }
+
+    // Case 3: Mid-scan RF arrival prunes remaining pages via ZoneMap.
+    {
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 50;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+
+        auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+        auto* placeholder_c1 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_INT), 1));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{ne_empty});
+        pred_root.add_child(PredicateColumnNode{placeholder_c1});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        auto* rf_desc = make_int_rf_desc(nullptr);
+        seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(rf_desc, 1)));
+
+        UnarrivedRuntimeFilterList unarrived_rfs;
+        unarrived_rfs.add_unarrived_rf(rf_desc, &slot_c1, -1);
+        seg_opts.runtime_range_pruner = RuntimeScanRangePruner(&pred_parser, unarrived_rfs);
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 50);
+        ASSERT_OK(iter->get_next(read_chunk.get()));
+        EXPECT_EQ(read_chunk->num_rows(), 50);
+        EXPECT_EQ(stats.runtime_stats_filtered, 0);
+
+        // Now RF c1 <= 150 arrives mid-scan: pages 2..9 (rows 200..999, 800 rows) are pruned via ZoneMap.
+        auto* rf_150 = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 150, true, false);
+        rf_desc->set_runtime_filter(rf_150);
+
+        size_t total_rows = 50;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            total_rows += read_chunk->num_rows();
+        }
+        EXPECT_EQ(total_rows, 151);
+        EXPECT_EQ(stats.runtime_stats_filtered, 800);
+        EXPECT_EQ(stats.raw_rows_read, 200);
+        iter->close();
+    }
 }
 
 } // namespace starrocks
