@@ -823,6 +823,8 @@ TEST_F(ChunkPredicateBuilderTest, topn_runtime_filter_kill_switches_and_agg_filt
     // get_predicate_tree() and get_runtime_filter_predicates()) keeps one consistent pushdown decision
     // per ScanConjunctsManager instance.
     {
+        const bool old_val = config::enable_topn_runtime_filter_storage_pushdown;
+        DeferOp restore([&]() { config::enable_topn_runtime_filter_storage_pushdown = old_val; });
         const_cast<TQueryOptions&>(_runtime_state.query_options()).__set_enable_join_runtime_filter_pushdown(true);
 
         // D1: false -> true mid-preparation must NOT push a RuntimeFilterPredicate without a kPlaceHolder.
@@ -867,5 +869,6 @@ TEST_F(ChunkPredicateBuilderTest, topn_runtime_filter_kill_switches_and_agg_filt
         ASSERT_FALSE(rf_preds_d2.empty());
         ASSERT_TRUE(rf_desc_d2->has_push_down_to_storage());
     }
+    ASSERT_TRUE(config::enable_topn_runtime_filter_storage_pushdown);
 }
 } // namespace starrocks
