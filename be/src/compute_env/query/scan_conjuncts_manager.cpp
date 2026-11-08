@@ -285,7 +285,13 @@ StatusOr<ExprContext*> BoxedExprContext::expr_context(ObjectPool* obj_pool, Runt
 template <BoxedExprType E, CompoundNodeType Type>
 ChunkPredicateBuilder<E, Type>::ChunkPredicateBuilder(const ScanConjunctsManagerOptions& opts, std::vector<E> exprs,
                                                       bool is_root_builder)
-        : _opts(opts), _exprs(std::move(exprs)), _is_root_builder(is_root_builder), _normalized_exprs(_exprs.size()) {}
+        : _opts(opts),
+          _exprs(std::move(exprs)),
+          _is_root_builder(is_root_builder),
+          _enable_topn_filter_pushdown(
+                  config::enable_topn_runtime_filter_storage_pushdown &&
+                  (_opts.runtime_state == nullptr || _opts.runtime_state->enable_join_runtime_filter_pushdown())),
+          _normalized_exprs(_exprs.size()) {}
 
 template <BoxedExprType E, CompoundNodeType Type>
 StatusOr<bool> ChunkPredicateBuilder<E, Type>::parse_conjuncts() {
@@ -1331,10 +1337,7 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
             if (slot_desc == nullptr) {
                 continue;
             }
-            const bool enable_topn_pushdown =
-                    config::enable_topn_runtime_filter_storage_pushdown &&
-                    (_opts.runtime_state == nullptr || _opts.runtime_state->enable_join_runtime_filter_pushdown());
-            if (desc->is_stream_build_filter() && (!desc->is_topn_filter() || !enable_topn_pushdown)) {
+            if (desc->is_stream_build_filter() && (!desc->is_topn_filter() || !_enable_topn_filter_pushdown)) {
                 continue;
             }
 
@@ -1546,10 +1549,8 @@ StatusOr<RuntimeFilterPredicates> ScanConjunctsManager::get_runtime_filter_predi
         if (slot_desc == nullptr) {
             continue;
         }
-        const bool enable_topn_pushdown =
-                config::enable_topn_runtime_filter_storage_pushdown &&
-                (_opts.runtime_state == nullptr || _opts.runtime_state->enable_join_runtime_filter_pushdown());
-        if (desc->is_stream_build_filter() && (!desc->is_topn_filter() || !enable_topn_pushdown)) {
+        if (desc->is_stream_build_filter() &&
+            (!desc->is_topn_filter() || !_root_builder.enable_topn_filter_pushdown())) {
             continue;
         }
         // If the runtime filter's partition-by-exprs's size is greater than 1, skip to push it down to storage engine.

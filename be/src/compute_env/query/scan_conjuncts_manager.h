@@ -108,10 +108,13 @@ public:
 
     size_t num_predicates() const;
 
+    bool enable_topn_filter_pushdown() const { return _enable_topn_filter_pushdown; }
+
 private:
     const ScanConjunctsManagerOptions& _opts;
     const std::vector<E> _exprs;
     const bool _is_root_builder;
+    const bool _enable_topn_filter_pushdown;
 
     using ChunkPredicateBuilderVar = std::variant<ChunkPredicateBuilder<BoxedExpr, CompoundNodeType::AND>,
                                                   ChunkPredicateBuilder<BoxedExpr, CompoundNodeType::OR>>;
@@ -158,11 +161,11 @@ private:
     Status normalize_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
     template <LogicalType SlotType, typename RangeValueType, bool Negative>
-    requires(!lt_is_date<SlotType>) Status
-            normalize_in_or_equal_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
+        requires(!lt_is_date<SlotType>)
+    Status normalize_in_or_equal_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
     template <LogicalType SlotType, typename RangeValueType, bool Negative>
-    requires lt_is_date<SlotType> Status normalize_in_or_equal_predicate(const SlotDescriptor& slot,
-                                                                         ColumnValueRange<RangeValueType>* range);
+        requires lt_is_date<SlotType>
+    Status normalize_in_or_equal_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
     template <LogicalType SlotType, typename RangeValueType, bool Negative>
     Status normalize_binary_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
