@@ -27,6 +27,7 @@
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
 #include <parquet/platform.h>
+#include <parquet/properties.h>
 #include <parquet/schema.h>
 #include <parquet/types.h>
 #include <stddef.h>
@@ -93,6 +94,7 @@ struct ParquetWriterOptions : FileWriterOptions {
     bool use_legacy_decimal_encoding = false;
     bool use_int96_timestamp_encoding = false;
     ::parquet::ParquetVersion::type version = ::parquet::ParquetVersion::PARQUET_2_6;
+    ::parquet::ParquetDataPageVersion data_page_version = ::parquet::ParquetDataPageVersion::V1;
 
     // Column-level dictionary encoding configuration
     // key: column name, value: whether to enable dictionary encoding
@@ -116,6 +118,7 @@ struct ParquetWriterOptions : FileWriterOptions {
     inline static std::string DICT_SIZE_BYTES = "write.parquet.dict-size-bytes";
     inline static std::string ROW_GROUP_SIZE_BYTES = "write.parquet.row-group-size-bytes";
     inline static std::string COMPRESSION_LEVEL = "write.parquet.compression-level";
+    inline static std::string DATA_PAGE_VERSION = "write.parquet.page-version";
 };
 
 class ParquetFileWriter final : public FileWriter {
