@@ -15,6 +15,7 @@
 package com.starrocks.connector.delta;
 
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -29,6 +30,7 @@ import com.starrocks.type.VarcharType;
 import io.delta.kernel.expressions.AlwaysTrue;
 import io.delta.kernel.expressions.And;
 import io.delta.kernel.expressions.Column;
+import io.delta.kernel.expressions.Expression;
 import io.delta.kernel.expressions.Literal;
 import io.delta.kernel.expressions.Or;
 import io.delta.kernel.expressions.Predicate;
@@ -52,9 +54,11 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -467,5 +471,134 @@ public class ScalarOperationToDeltaLakeExprTest {
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("NOT", new Predicate("=", cDeltaIntCol, literal));
         Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
+    }
+
+    /**
+     * Evaluates a converted predicate on one value of c_timestamp (epoch micros); ALWAYS_TRUE keeps every file.
+     */
+    private static boolean eval(Expression expr, long micros) {
+        Predicate p = (Predicate) expr;
+        List<Expression> children = p.getChildren();
+        switch (p.getName()) {
+            case "ALWAYS_TRUE":
+                return true;
+            case "AND":
+                return eval(children.get(0), micros) && eval(children.get(1), micros);
+            case "OR":
+                return eval(children.get(0), micros) || eval(children.get(1), micros);
+            case "NOT":
+                return !eval(children.get(0), micros);
+            default:
+                int cmp = Long.compare(micros, (Long) ((Literal) children.get(1)).getValue());
+                return compare(p.getName(), cmp);
+        }
+    }
+
+    private static boolean compare(String op, int cmp) {
+        switch (op) {
+            case "=":
+                return cmp == 0;
+            case "<":
+                return cmp < 0;
+            case "<=":
+                return cmp <= 0;
+            case ">":
+                return cmp > 0;
+            case ">=":
+                return cmp >= 0;
+            case "!=":
+                return cmp != 0;
+            default:
+                throw new IllegalArgumentException(op);
+        }
+    }
+
+    private static String sqlOp(BinaryType op) {
+        switch (op) {
+            case EQ:
+                return "=";
+            case NE:
+                return "!=";
+            case LT:
+                return "<";
+            case LE:
+                return "<=";
+            case GT:
+                return ">";
+            default:
+                return ">=";
+        }
+    }
+
+    /**
+     * A non-partition TIMESTAMP constant is a local time in the session zone. Across a DST switch it names two
+     * instants or none, and data skipping must still keep every file holding a matching value.
+     */
+    @Test
+    public void testTimestampConstantAcrossDst() {
+        ConnectContext ctx = new ConnectContext();
+        ctx.getSessionVariable().setTimeZone("America/New_York");
+        ctx.setThreadLocalInfo();
+        try {
+            ZoneId zone = ZoneId.of("America/New_York");
+            ScalarOperationToDeltaLakeExpr converter = new ScalarOperationToDeltaLakeExpr();
+            ScalarOperationToDeltaLakeExpr.DeltaLakeContext context =
+                    new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, new HashSet<>());
+            List<Long> values = new ArrayList<>();
+            List<LocalDateTime> constants = new ArrayList<>();
+            for (List<String> range : List.of(List.of("2024-11-03T03:00:00Z", "2024-11-03T09:00:00Z"),
+                    List.of("2024-03-10T04:00:00Z", "2024-03-10T10:00:00Z"))) {
+                for (Instant t = Instant.parse(range.get(0)); t.isBefore(Instant.parse(range.get(1)));
+                        t = t.plusSeconds(300)) {
+                    values.add(ChronoUnit.MICROS.between(Instant.EPOCH, t));
+                }
+            }
+            for (LocalDateTime c = LocalDateTime.of(2024, 11, 3, 0, 30);
+                    c.isBefore(LocalDateTime.of(2024, 11, 3, 2, 45)); c = c.plusMinutes(15)) {
+                constants.add(c);
+            }
+            for (LocalDateTime c = LocalDateTime.of(2024, 3, 10, 1, 30);
+                    c.isBefore(LocalDateTime.of(2024, 3, 10, 3, 45)); c = c.plusMinutes(15)) {
+                constants.add(c);
+            }
+            BinaryType[] ops = {BinaryType.EQ, BinaryType.NE, BinaryType.LT, BinaryType.LE, BinaryType.GT,
+                    BinaryType.GE};
+            for (BinaryType op : ops) {
+                for (LocalDateTime c : constants) {
+                    ScalarOperator predicate = new BinaryPredicateOperator(op, cTimestampCol,
+                            ConstantOperator.createDatetime(c));
+                    for (boolean negate : new boolean[] {false, true}) {
+                        ScalarOperator original = negate ? new CompoundPredicateOperator(
+                                CompoundPredicateOperator.CompoundType.NOT, predicate) : predicate;
+                        Predicate converted = converter.convert(List.of(original), context);
+                        for (long v : values) {
+                            LocalDateTime local = LocalDateTime.ofInstant(
+                                    Instant.EPOCH.plus(v, ChronoUnit.MICROS), zone);
+                            boolean matches = compare(sqlOp(op), local.compareTo(c)) != negate;
+                            if (matches) {
+                                Assertions.assertTrue(eval(converted, v),
+                                        original + " matches " + local + " but " + converted + " skips it");
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 01:30 happens twice on 2024-11-03: both instants stay
+            Predicate eq = converter.convert(List.of(new BinaryPredicateOperator(BinaryType.EQ, cTimestampCol,
+                    ConstantOperator.createDatetime(LocalDateTime.of(2024, 11, 3, 1, 30)))), context);
+            long first = ChronoUnit.MICROS.between(Instant.EPOCH, Instant.parse("2024-11-03T05:30:00Z"));
+            long second = ChronoUnit.MICROS.between(Instant.EPOCH, Instant.parse("2024-11-03T06:30:00Z"));
+            Assertions.assertEquals(new And(new Predicate(">=", cDeltaTimestampCol, Literal.ofTimestamp(first)),
+                    new Predicate("<=", cDeltaTimestampCol, Literal.ofTimestamp(second))).toString(), eq.toString());
+            // an unambiguous constant converts as before
+            Predicate lt = converter.convert(List.of(new BinaryPredicateOperator(BinaryType.LT, cTimestampCol,
+                    ConstantOperator.createDatetime(LocalDateTime.of(2024, 11, 3, 3, 0)))), context);
+            Assertions.assertEquals(new Predicate("<", cDeltaTimestampCol, Literal.ofTimestamp(
+                    ChronoUnit.MICROS.between(Instant.EPOCH, Instant.parse("2024-11-03T08:00:00Z")))).toString(),
+                    lt.toString());
+        } finally {
+            ConnectContext.remove();
+        }
     }
 }

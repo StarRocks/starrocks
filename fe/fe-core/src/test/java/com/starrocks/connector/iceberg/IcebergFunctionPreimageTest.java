@@ -453,6 +453,66 @@ public class IcebergFunctionPreimageTest {
     }
 
     @Test
+    public void testPlainTimestampTzConstantAcrossDst() {
+        ConnectContext ctx = new ConnectContext();
+        ctx.getSessionVariable().setTimeZone("America/New_York");
+        ctx.setThreadLocalInfo();
+        ZoneId zone = ZoneId.of("America/New_York");
+        List<Instant> instants = new ArrayList<>();
+        for (Instant t = Instant.parse("2024-11-02T22:00:00Z"); t.isBefore(Instant.parse("2024-11-03T12:00:00Z"));
+                t = t.plusSeconds(300)) {
+            instants.add(t);
+        }
+        for (Instant t = Instant.parse("2024-03-10T03:00:00Z"); t.isBefore(Instant.parse("2024-03-10T12:00:00Z"));
+                t = t.plusSeconds(300)) {
+            instants.add(t);
+        }
+        List<LocalDateTime> constants = List.of(LocalDateTime.of(2024, 11, 3, 1, 30), LocalDateTime.of(2024, 11, 3, 1, 0),
+                LocalDateTime.of(2024, 11, 3, 2, 0), LocalDateTime.of(2024, 3, 10, 2, 30),
+                LocalDateTime.of(2024, 3, 10, 2, 0), LocalDateTime.of(2024, 3, 10, 3, 0));
+        for (LocalDateTime k : constants) {
+            for (BinaryType op : OPS) {
+                for (ConstantOperator constant : List.of(ConstantOperator.createDatetime(k),
+                        ConstantOperator.createVarchar(k.toString().replace('T', ' ') + ":00"))) {
+                    Expression derived = convert(new BinaryPredicateOperator(op, TZ, constant));
+                    Evaluator evaluator = new Evaluator(Types.StructType.of(SCHEMA.findField("tz")), derived);
+                    for (Instant instant : instants) {
+                        if (compare(op, LocalDateTime.ofInstant(instant, zone).compareTo(k))) {
+                            Assertions.assertTrue(
+                                    evaluator.eval(row(ChronoUnit.MICROS.between(Instant.EPOCH, instant))),
+                                    "tz " + op + " " + constant + " pruned " + instant);
+                        }
+                    }
+                }
+            }
+        }
+
+        // a constant in an overlap or gap has no exact form: not under NOT, for NE, for IN or for strict conversion
+        for (LocalDateTime k : List.of(LocalDateTime.of(2024, 11, 3, 1, 30), LocalDateTime.of(2024, 3, 10, 2, 30))) {
+            BinaryPredicateOperator eq = new BinaryPredicateOperator(BinaryType.EQ, TZ, ConstantOperator.createDatetime(k));
+            Assertions.assertEquals(Expressions.alwaysTrue(),
+                    convert(new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, eq)));
+            Assertions.assertEquals(Expressions.alwaysTrue(), convert(
+                    new BinaryPredicateOperator(BinaryType.NE, TZ, ConstantOperator.createDatetime(k))));
+            // IN keeps every candidate instant of the constant
+            Evaluator inEvaluator = new Evaluator(Types.StructType.of(SCHEMA.findField("tz")), convert(
+                    new InPredicateOperator(false, TZ, ConstantOperator.createDatetime(k),
+                            ConstantOperator.createDatetime(k.plusDays(1)))));
+            for (Instant instant : instants) {
+                LocalDateTime local = LocalDateTime.ofInstant(instant, zone);
+                if (local.equals(k) || local.equals(k.plusDays(1))) {
+                    Assertions.assertTrue(inEvaluator.eval(row(ChronoUnit.MICROS.between(Instant.EPOCH, instant))),
+                            "tz in " + k + " pruned " + instant);
+                }
+            }
+            Assertions.assertNull(converter.convertStrict(List.of(eq), context));
+        }
+        // an unambiguous constant converts exactly as before
+        Assertions.assertNotNull(converter.convertStrict(List.of(new BinaryPredicateOperator(BinaryType.EQ, TZ,
+                ConstantOperator.createDatetime(LocalDateTime.of(2024, 11, 3, 2, 0)))), context));
+    }
+
+    @Test
     public void testInList() {
         Expression derived = convert(new InPredicateOperator(false, year(D),
                 ConstantOperator.createInt(2023), ConstantOperator.createInt(2025)));
