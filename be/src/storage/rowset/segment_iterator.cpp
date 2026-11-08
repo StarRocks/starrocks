@@ -2324,8 +2324,8 @@ StatusOr<size_t> SegmentIterator::_sample_predicate_columns(vector<rowid_t>* row
     // Filter the entire chunk (including all columns and rowid) based on merged selection
     // _selection already contains the merged result, use it directly
     // This removes rows that don't pass all predicates
-    size_t filtered_chunk_size = 0;
-    {
+    size_t filtered_chunk_size = chunk_size;
+    if (!use_merged_selection) {
         SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
         filtered_chunk_size = _filter_chunk_by_selection(chunk, rowid, 0, chunk_size);
     }

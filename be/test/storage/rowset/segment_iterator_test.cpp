@@ -3444,6 +3444,88 @@ TEST_F(SegmentIteratorTest, TopNAndHighSelectivityJoinRuntimeFilterTest) {
     std::vector<uint8_t> sel2(100, 1);
     ASSERT_OK(rf_preds.evaluate(chunk.get(), sel2.data(), 0, 100));
     EXPECT_EQ(SIMD::count_nonzero(sel2), 0);
+
+    // 3. Two Top-N filters with equal sampled selectivity (both filter_ratio == 0.0 during SAMPLE)
+    // must both be retained in _selectivity_map so that when the second Top-N filter tightens before
+    // NORMAL mode, it still filters rows.
+    {
+        auto* topn_rf0 = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 1000, true, false);
+        auto* topn_desc0 = make_rf_desc(3, TRuntimeFilterBuildType::TOPN_FILTER, topn_rf0, 0);
+        auto* topn_rf1 = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 1000, true, false);
+        auto* topn_desc1 = make_rf_desc(4, TRuntimeFilterBuildType::TOPN_FILTER, topn_rf1, 1);
+
+        RuntimeFilterPredicates multi_topn_preds;
+        multi_topn_preds.add_predicate(pool.add(new RuntimeFilterPredicate(topn_desc0, 0)));
+        multi_topn_preds.add_predicate(pool.add(new RuntimeFilterPredicate(topn_desc1, 1)));
+
+        // SAMPLE mode: both filters pass all 100 rows (filter_ratio == 0.0 for both).
+        std::vector<uint8_t> sel_sample(100, 1);
+        ASSERT_OK(multi_topn_preds.evaluate(chunk.get(), sel_sample.data(), 0, 100));
+        EXPECT_EQ(SIMD::count_nonzero(sel_sample), 100);
+
+        // Tighten the second Top-N filter to c1 <= 9 before NORMAL mode.
+        topn_rf1->update_min_max<false>(9);
+
+        std::vector<uint8_t> sel_normal(100, 1);
+        ASSERT_OK(multi_topn_preds.evaluate(chunk.get(), sel_normal.data(), 0, 100));
+        EXPECT_EQ(SIMD::count_nonzero(sel_normal), 10);
+    }
+
+    // 4. When _enable_predicate_col_late_materialize is active and every column in _predicate_order has
+    // only kPlaceHolder / index-filter-only predicates and no active row-level runtime filters,
+    // _sample_predicate_columns() must not filter the chunk using an uninitialized _selection buffer.
+    {
+        const std::string file_name = kSegmentDir + "/sample_placeholder_only_late_materialize";
+        DeferOp defer([&] { (void)_fs->delete_file(file_name); });
+
+        TabletSchemaBuilder seg_schema_builder;
+        std::shared_ptr<TabletSchema> seg_tablet_schema = seg_schema_builder.create(1, /*nullable=*/false, TYPE_INT)
+                                                                  .create(2, /*nullable=*/false, TYPE_INT)
+                                                                  .create(3, /*nullable=*/false, TYPE_INT)
+                                                                  .build();
+        Schema seg_schema = ChunkHelper::convert_schema(seg_tablet_schema);
+        auto write_chunk = ChunkFactory::new_chunk(seg_schema, 200);
+        for (int i = 0; i < 200; ++i) {
+            write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i + 1000)));
+            write_chunk->get_column_by_index(2)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i + 2000)));
+        }
+        auto segment = write_and_open_segment(_fs, file_name, seg_tablet_schema, *write_chunk, 100);
+
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = seg_tablet_schema;
+        seg_opts.chunk_size = 100;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+        seg_opts.enable_predicate_col_late_materialize = true;
+
+        // c0 and c1 have only kPlaceHolder / index-only predicates and no runtime_filter_preds, while c2 is lazy.
+        auto* placeholder_c0 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_INT), 0));
+        auto* index_only_c1 = pool.add(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "0"));
+        index_only_c1->set_index_filter_only(true);
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{placeholder_c0});
+        pred_root.add_child(PredicateColumnNode{index_only_c1});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(seg_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(seg_schema, 100);
+        size_t total_rows = 0;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            total_rows += read_chunk->num_rows();
+        }
+        EXPECT_EQ(total_rows, 200);
+        EXPECT_EQ(stats.rows_vec_cond_filtered, 0);
+        iter->close();
+    }
 }
 
 } // namespace starrocks

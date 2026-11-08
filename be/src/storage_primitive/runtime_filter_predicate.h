@@ -187,7 +187,7 @@ private:
     size_t _skip_rows = 0;
     size_t _target_skip_rows = 0;
 
-    std::map<double, RuntimeFilterPredicate*, std::greater<double>> _selectivity_map;
+    std::multimap<double, RuntimeFilterPredicate*, std::greater<double>> _selectivity_map;
 
     int32_t _driver_sequence = -1;
 };
