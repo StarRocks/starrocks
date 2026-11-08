@@ -178,6 +178,10 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool, PredicateTre
         break;
     }
 
+    if (_rf_preds == nullptr || _rf_preds->empty()) {
+        return Status::OK();
+    }
+
     const auto& immediate_col_preds = pred_tree.get_immediate_column_predicate_map();
     for (size_t i = 0; i < _column_size; i++) {
         const FieldPtr& field = _schema.field(i);
@@ -185,7 +189,7 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool, PredicateTre
         if (!_need_rewrite[cid] || !_column_iterators[cid]->all_page_dict_encoded()) {
             continue;
         }
-        if (orig_cids.count(cid) == 0) {
+        if (orig_cids.count(cid) == 0 || _rf_preds->preds(cid).empty()) {
             continue;
         }
         const int dict_size = _column_iterators[cid]->dict_size();

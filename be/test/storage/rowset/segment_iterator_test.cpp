@@ -2695,18 +2695,41 @@ TEST_F(SegmentIteratorTest, DictColumnRuntimeFilterStaticMaskAndNullableSemantic
     std::vector<uint8_t> need_rewrite = {1};
     SparseRange<> scan_range(0, 30);
 
+    // 1. When ColumnPredicateRewriter is invoked without runtime filter predicates (rf_preds == nullptr),
+    // it must skip static dictionary-mask construction completely.
+    {
+        auto* ne_empty_no_rf = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+        PredicateAndNode pred_root_no_rf;
+        pred_root_no_rf.add_child(PredicateColumnNode{ne_empty_no_rf});
+        PredicateTree pred_tree_no_rf = PredicateTree::create(std::move(pred_root_no_rf));
+
+        ColumnPredicateRewriter pred_rewriter_no_rf(col_iters, vec_schema, need_rewrite, 1, scan_range);
+        ASSERT_OK(pred_rewriter_no_rf.rewrite_predicate(&pool, pred_tree_no_rf));
+
+        RuntimeFilterProbeDescriptor rf_desc_no_consumer;
+        rf_desc_no_consumer.set_runtime_filter(null_rf);
+        RuntimeFilterPredicates rf_preds_no_consumer;
+        rf_preds_no_consumer.add_predicate(pool.add(new RuntimeFilterPredicate(&rf_desc_no_consumer, 0)));
+        ASSERT_OK(RuntimeFilterPredicatesRewriter::rewrite(&pool, rf_preds_no_consumer, col_iters, vec_schema));
+        ASSERT_OK(rf_preds_no_consumer.refresh_dict_filters());
+        EXPECT_FALSE(rf_preds_no_consumer.has_always_false_dict_filter());
+    }
+
+    // 2. When ColumnPredicateRewriter is provided &rf_preds targeting c0, it constructs the static mask
+    // and propagates it to DictColumnRuntimeFilterPredicate.
     auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
     PredicateAndNode pred_root;
     pred_root.add_child(PredicateColumnNode{ne_empty});
     PredicateTree pred_tree = PredicateTree::create(std::move(pred_root));
 
-    ColumnPredicateRewriter pred_rewriter(col_iters, vec_schema, need_rewrite, 1, scan_range);
-    ASSERT_OK(pred_rewriter.rewrite_predicate(&pool, pred_tree));
-
     RuntimeFilterProbeDescriptor rf_desc;
     rf_desc.set_runtime_filter(null_rf); // null_rf is <= "a_word" with has_null() == true (ORDER BY ASC NULLS FIRST)
     RuntimeFilterPredicates rf_preds;
     rf_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&rf_desc, 0)));
+
+    ColumnPredicateRewriter pred_rewriter(col_iters, vec_schema, need_rewrite, 1, scan_range, &rf_preds);
+    ASSERT_OK(pred_rewriter.rewrite_predicate(&pool, pred_tree));
+
     ASSERT_OK(RuntimeFilterPredicatesRewriter::rewrite(&pool, rf_preds, col_iters, vec_schema));
     ASSERT_OK(rf_preds.refresh_dict_filters());
     EXPECT_TRUE(rf_preds.has_always_false_dict_filter());

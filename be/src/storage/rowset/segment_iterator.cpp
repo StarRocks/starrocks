@@ -4341,8 +4341,9 @@ Status SegmentIterator::_rewrite_predicates() {
     {
         // in normal case it can always rewrite the predicate,
         // but for JSON extended column, it might be a JsonExtractColumnIterator, so we need to fallback to the orignal predicate
-        ColumnPredicateRewriter rewriter(_column_iterators, _schema, _predicate_need_rewrite, _predicate_columns,
-                                         _scan_range);
+        ColumnPredicateRewriter rewriter(
+                _column_iterators, _schema, _predicate_need_rewrite, _predicate_columns, _scan_range,
+                _opts.enable_join_runtime_filter_pushdown ? &_opts.runtime_filter_preds : nullptr);
         auto st = (rewriter.rewrite_predicate(&_obj_pool, _opts.pred_tree));
         if (st.is_not_supported()) {
             VLOG(2) << "not supported predicate rewrite: " << _opts.pred_tree.root().debug_string() << " " << st;
