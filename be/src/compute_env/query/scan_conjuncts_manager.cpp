@@ -917,6 +917,11 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
                 rt_ranger_params.add_unarrived_rf(desc, &slot, _opts.driver_sequence);
                 continue;
             }
+            if (desc->is_topn_filter()) {
+                // Top-N filters are mutable (rf_version increases as the heap tightens), so register
+                // arrived Top-N filters with RuntimeScanRangePruner as well.
+                rt_ranger_params.add_unarrived_rf(desc, &slot, _opts.driver_sequence);
+            }
             // an arrived join filter that passes every row filters nothing. always_true() alone does not tell it: a
             // top-n filter is always true but has bounds.
             if (rf->always_true() && rf->is_pass_all()) {

@@ -1856,8 +1856,14 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter(bool force) {
                 del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
                 SparseRange<> r;
 
-                RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r,
-                                                                                   CompoundNodeType::AND));
+                Range<> src_range;
+                const Range<>* src_range_ptr = nullptr;
+                if (_inited && _scan_range.is_sorted() && !_scan_range.empty() && _cur_rowid < _scan_range.end()) {
+                    src_range = Range<>(_cur_rowid, _scan_range.end());
+                    src_range_ptr = &src_range;
+                }
+                RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(
+                        predicates, del_pred, &r, CompoundNodeType::AND, src_range_ptr));
                 if (!_inited) {
                     size_t prev_size = _scan_range.span_size();
                     _scan_range = _scan_range.intersection(r);
@@ -2706,7 +2712,6 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
     size_t prev_size = _scan_range.span_size();
     _scan_range = _scan_range.intersection(zm_range);
     _opts.stats->rows_stats_filtered += (prev_size - _scan_range.span_size());
-    (void)_prune_by_dict_runtime_filter_bounds();
     return Status::OK();
 }
 
@@ -5274,10 +5279,11 @@ static bool init_seek_range_iterator_schema(const SeekRange& range, Schema* iter
 }
 
 template <typename ResolveFn>
-static auto with_segment_seek_range_iterator(
-        const std::shared_ptr<Segment>& segment, const Schema& iterator_schema, const LakeIOOptions& lake_io_opts,
-        OlapReaderStatistics* stats, bool use_page_cache, const std::atomic<bool>* is_cancelled,
-        ResolveFn&& resolve_fn) -> decltype(std::declval<ResolveFn>()(std::declval<SegmentIterator&>())) {
+static auto with_segment_seek_range_iterator(const std::shared_ptr<Segment>& segment, const Schema& iterator_schema,
+                                             const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats,
+                                             bool use_page_cache, const std::atomic<bool>* is_cancelled,
+                                             ResolveFn&& resolve_fn)
+        -> decltype(std::declval<ResolveFn>()(std::declval<SegmentIterator&>())) {
     OlapReaderStatistics local_stats;
     if (stats == nullptr) {
         stats = &local_stats;

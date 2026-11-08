@@ -2659,13 +2659,14 @@ TEST_F(SegmentIteratorTest, DictColumnRuntimeFilterStaticMaskAndNullableSemantic
     EXPECT_EQ(nullable_sel[1], 0);
     EXPECT_EQ(nullable_sel[2], 1);
 
-    // End-to-end ColumnPredicateRewriter -> RuntimeFilterPredicatesRewriter static mask propagation:
+    // End-to-end ColumnPredicateRewriter -> RuntimeFilterPredicatesRewriter static mask propagation
+    // on a NULLABLE schema column with null-rejecting static predicate `c0 != ""` and `null_rf->has_null() == true`:
     using namespace starrocks::test;
     std::string file_name = kSegmentDir + "/dict_rf_rewriter_static_mask";
     ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
     TabletSchemaBuilder builder;
     std::shared_ptr<TabletSchema> tablet_schema =
-            builder.create(1, /*is_nullable=*/false, TYPE_VARCHAR).set_length(32).build();
+            builder.create(1, /*is_nullable=*/true, TYPE_VARCHAR).set_length(32).build();
     SegmentWriterOptions writer_opts;
     writer_opts.num_rows_per_block = 10;
     SegmentWriter writer(std::move(wfile), 0, tablet_schema, writer_opts);
@@ -2682,14 +2683,14 @@ TEST_F(SegmentIteratorTest, DictColumnRuntimeFilterStaticMaskAndNullableSemantic
     iter_opts.read_file = rfile.get();
     iter_opts.stats = &stats;
     iter_opts.check_dict_encoding = true;
-    iter_opts.is_nullable = false;
+    iter_opts.is_nullable = true;
     ASSERT_OK(col_iter->init(iter_opts));
     ASSERT_TRUE(col_iter->all_page_dict_encoded());
 
     std::vector<std::unique_ptr<ColumnIterator>> col_iters;
     col_iters.emplace_back(std::move(col_iter));
     VecSchemaBuilder schema_builder;
-    schema_builder.add(0, "c0", TYPE_VARCHAR, /*nullable=*/false);
+    schema_builder.add(0, "c0", TYPE_VARCHAR, /*nullable=*/true);
     auto vec_schema = schema_builder.build();
     std::vector<uint8_t> need_rewrite = {1};
     SparseRange<> scan_range(0, 30);
@@ -2703,7 +2704,7 @@ TEST_F(SegmentIteratorTest, DictColumnRuntimeFilterStaticMaskAndNullableSemantic
     ASSERT_OK(pred_rewriter.rewrite_predicate(&pool, pred_tree));
 
     RuntimeFilterProbeDescriptor rf_desc;
-    rf_desc.set_runtime_filter(rf); // rf is tightened to <= "a_word" (has_null == false)
+    rf_desc.set_runtime_filter(null_rf); // null_rf is <= "a_word" with has_null() == true (ORDER BY ASC NULLS FIRST)
     RuntimeFilterPredicates rf_preds;
     rf_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&rf_desc, 0)));
     ASSERT_OK(RuntimeFilterPredicatesRewriter::rewrite(&pool, rf_preds, col_iters, vec_schema));
@@ -2717,7 +2718,7 @@ TEST_F(SegmentIteratorTest, TopNDictBoundsSegmentPruneTest) {
 
     std::string file_name = kSegmentDir + "/topn_dict_bounds_prune";
     TabletSchemaBuilder schema_builder;
-    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/true, TYPE_VARCHAR)
                                                           .set_length(32)
                                                           .create(2, /*nullable=*/false, TYPE_INT)
                                                           .build();
@@ -2725,7 +2726,9 @@ TEST_F(SegmentIteratorTest, TopNDictBoundsSegmentPruneTest) {
     auto write_chunk = ChunkFactory::new_chunk(full_schema, 1000);
     const std::vector<std::string> non_empty_words = {"m_0", "m_1", "z_0"};
     for (int i = 0; i < 1000; ++i) {
-        if (i >= 500 && i < 510) {
+        if (i == 500) {
+            write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_nulls(1);
+        } else if (i > 500 && i < 510) {
             write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(Slice("")));
         } else {
             write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(
@@ -2748,7 +2751,10 @@ TEST_F(SegmentIteratorTest, TopNDictBoundsSegmentPruneTest) {
     pred_root.add_child(PredicateColumnNode{ne_empty});
     seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
 
-    auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("a_9"), true, false);
+    // Use need_null = true (simulating ORDER BY c0 ASC NULLS FIRST LIMIT N) on a nullable column with NULL rows.
+    // Because static predicate `c0 != ""` rejects NULLs, the whole segment must still be pruned!
+    auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("a_9"), true, true);
+    ASSERT_TRUE(rf->has_null());
     RuntimeFilterProbeDescriptor rf_desc;
     rf_desc.set_runtime_filter(rf);
     seg_opts.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&rf_desc, 0)));

@@ -50,14 +50,7 @@ public:
     bool init(int32_t driver_sequence);
     virtual Status init() { return Status::OK(); }
     virtual Status refresh_if_updated(int32_t driver_sequence = -1) { return Status::OK(); }
-    virtual void set_static_dict_mask(const Filter& mask, bool is_nullable) {
-        _static_dict_mask = mask;
-        _has_static_dict_mask = true;
-        _is_nullable = is_nullable;
-    }
-    bool has_static_dict_mask() const { return _has_static_dict_mask; }
-    const Filter& static_dict_mask() const { return _static_dict_mask; }
-    bool is_nullable() const { return _is_nullable; }
+    virtual void set_static_dict_mask(const Filter& mask, bool is_nullable) {}
     virtual bool is_always_false() const { return false; }
 
 protected:
@@ -79,9 +72,6 @@ protected:
     // mutable state is not shared between concurrent readers.
     RuntimeFilter::RunningContext _running_ctx;
     std::vector<uint8_t> _input_selection;
-    Filter _static_dict_mask;
-    bool _has_static_dict_mask = false;
-    bool _is_nullable = true;
 };
 
 class DictColumnRuntimeFilterPredicate : public RuntimeFilterPredicate {
@@ -90,14 +80,14 @@ public:
 
     DictColumnRuntimeFilterPredicate(RuntimeFilterProbeDescriptor* rf_desc, ColumnId column_id,
                                      std::vector<std::string> dict_words, bool is_nullable = true)
-            : RuntimeFilterPredicate(rf_desc, column_id), _dict_words(std::move(dict_words)) {
-        _is_nullable = is_nullable;
-    }
+            : RuntimeFilterPredicate(rf_desc, column_id),
+              _dict_words(std::move(dict_words)),
+              _is_nullable(is_nullable) {}
     DictColumnRuntimeFilterPredicate(ColumnId column_id, ColumnPtr dict_words, const RuntimeFilter* rf,
                                      bool is_nullable = true)
-            : RuntimeFilterPredicate(column_id, rf), _dict_words_col(std::move(dict_words)) {
-        _is_nullable = is_nullable;
-    }
+            : RuntimeFilterPredicate(column_id, rf),
+              _dict_words_col(std::move(dict_words)),
+              _is_nullable(is_nullable) {}
     ~DictColumnRuntimeFilterPredicate() override = default;
 
     Status init() override;
@@ -116,10 +106,13 @@ private:
 
     std::vector<std::string> _dict_words;
     ColumnPtr _dict_words_col;
+    Filter _static_dict_mask;
     size_t _rf_version = 0;
     bool _rf_has_null = false;
     bool _initialized = false;
     bool _is_always_false = false;
+    bool _has_static_dict_mask = false;
+    bool _is_nullable = true;
 };
 
 // RuntimeFilterPredicates is used to evaluate runtime filter predicates in the storage layer.

@@ -147,6 +147,7 @@ struct RewritePredicateTreeVisitor {
 };
 
 Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool, PredicateTree& pred_tree) {
+    RuntimeFilterPredicatesRewriter::set_static_dict_mask(pool, std::numeric_limits<ColumnId>::max(), Filter{}, false);
     std::unordered_map<ColumnId, const FieldPtr&> cid_to_field;
     for (size_t i = 0; i < _column_size; i++) {
         const FieldPtr& field = _schema.field(i);
@@ -191,11 +192,20 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool, PredicateTre
         if (dict_size < 0) {
             continue;
         }
+        bool can_contain_null = field->is_nullable();
+        if (can_contain_null) {
+            if (auto* scalar_iter = dynamic_cast<ScalarColumnIterator*>(_column_iterators[cid].get());
+                scalar_iter != nullptr && scalar_iter->get_column_reader() != nullptr &&
+                scalar_iter->get_column_reader()->segment_zone_map() != nullptr &&
+                !scalar_iter->get_column_reader()->segment_zone_map()->has_null()) {
+                can_contain_null = false;
+            }
+        }
         if (rewrite_status == RewriteStatus::ALWAYS_FALSE) {
             Filter static_mask(dict_size, 0);
-            RuntimeFilterPredicatesRewriter::set_static_dict_mask(pool, cid, static_mask, field->is_nullable());
+            RuntimeFilterPredicatesRewriter::set_static_dict_mask(pool, cid, static_mask, false);
             if (_rf_preds != nullptr) {
-                _rf_preds->set_static_dict_mask(cid, static_mask, field->is_nullable());
+                _rf_preds->set_static_dict_mask(cid, static_mask, false);
             }
             continue;
         }
@@ -208,6 +218,13 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool, PredicateTre
             code_col->resize(dict_size);
             std::iota(code_col->get_data().begin(), code_col->get_data().end(), 0);
             Filter static_mask(dict_size, 1);
+            MutableColumnPtr null_col;
+            uint8_t null_sel[1] = {1};
+            if (can_contain_null) {
+                auto nc = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                nc->append_nulls(1);
+                null_col = std::move(nc);
+            }
             bool evaluated_any = false;
             for (const auto* pred : it->second) {
                 if (pred->type() == PredicateType::kPlaceHolder || pred->type() == PredicateType::kGinFallback ||
@@ -216,12 +233,18 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool, PredicateTre
                 }
                 RETURN_IF_ERROR(
                         pred->evaluate_and(code_col.get(), static_mask.data(), 0, static_cast<uint16_t>(dict_size)));
+                if (can_contain_null && null_sel[0] != 0) {
+                    RETURN_IF_ERROR(pred->evaluate_and(null_col.get(), null_sel, 0, 1));
+                    if (null_sel[0] == 0) {
+                        can_contain_null = false;
+                    }
+                }
                 evaluated_any = true;
             }
             if (evaluated_any) {
-                RuntimeFilterPredicatesRewriter::set_static_dict_mask(pool, cid, static_mask, field->is_nullable());
+                RuntimeFilterPredicatesRewriter::set_static_dict_mask(pool, cid, static_mask, can_contain_null);
                 if (_rf_preds != nullptr) {
-                    _rf_preds->set_static_dict_mask(cid, static_mask, field->is_nullable());
+                    _rf_preds->set_static_dict_mask(cid, static_mask, can_contain_null);
                 }
             }
         }

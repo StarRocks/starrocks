@@ -28,7 +28,8 @@ bool RuntimeFilterPredicate::init(int32_t driver_sequence) {
         return true;
     }
     _rf = _rf_desc->runtime_filter(driver_sequence);
-    _pass_all = _rf != nullptr && _rf->always_true() && _rf->is_pass_all();
+    _pass_all = _rf != nullptr && (_rf_desc == nullptr || !_rf_desc->is_topn_filter()) && _rf->always_true() &&
+                _rf->is_pass_all();
     return _rf != nullptr;
 }
 
@@ -56,7 +57,7 @@ bool RuntimeFilterPredicate::init(int32_t driver_sequence) {
 // shared with the OLAP scan path.
 Status RuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) {
     // A join filter that passes every row filters nothing, also no row its min/max can not hold, e.g. NaN.
-    if (_pass_all) {
+    if (_pass_all || (_rf->always_true() && _rf->is_pass_all())) {
         return Status::OK();
     }
     auto column = chunk->get_column_by_id(_column_id);
@@ -91,7 +92,7 @@ StatusOr<uint16_t> RuntimeFilterPredicate::evaluate(Chunk* chunk, uint16_t* sel,
     if (sel_size == 0) {
         return sel_size;
     }
-    if (_pass_all) {
+    if (_pass_all || (_rf->always_true() && _rf->is_pass_all())) {
         if (target_sel != sel) {
             memcpy(target_sel, sel, sel_size * sizeof(uint16_t));
         }
@@ -224,7 +225,7 @@ Status DictColumnRuntimeFilterPredicate::evaluate(Column* column, uint8_t* selec
         const auto& dict_codes = down_cast<Int32Column*>(nullable_col->data_column_raw_ptr())->get_data();
         if (nullable_col->has_null()) {
             const auto& null_data = nullable_col->immutable_null_column_data();
-            const uint8_t rf_has_null = static_cast<uint8_t>(_rf->has_null());
+            const uint8_t rf_has_null = static_cast<uint8_t>(_is_nullable && _rf->has_null());
             for (uint16_t i = from; i < to; ++i) {
                 if (!selection[i]) continue;
                 selection[i] = null_data[i] ? rf_has_null : _dict_codes_selection[dict_codes[i]];
@@ -267,11 +268,12 @@ StatusOr<uint16_t> DictColumnRuntimeFilterPredicate::evaluate(Chunk* chunk, uint
         const auto& data = GetContainer<TYPE_INT>::get_data(nullable_column->data_column());
         if (nullable_column->has_null()) {
             const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
+            const uint8_t rf_has_null = static_cast<uint8_t>(_is_nullable && _rf->has_null());
             for (uint16_t i = 0; i < sel_size; i++) {
                 uint16_t idx = sel[i];
                 target_sel[new_size] = idx;
                 if (null_data[idx]) {
-                    new_size += _rf->has_null();
+                    new_size += rf_has_null;
                 } else {
                     new_size += _dict_codes_selection[data[idx]];
                 }
