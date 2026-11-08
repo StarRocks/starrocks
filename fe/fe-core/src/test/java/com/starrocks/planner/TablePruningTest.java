@@ -485,6 +485,32 @@ public class TablePruningTest extends TablePruningTestBase {
     }
 
     @Test
+    public void testRboJoinReorderSkipsExpressionEqualityPredicate() throws Exception {
+        String sql = "select count(1), 0 as seq from (" +
+                "select A0.task_id, A0.task_status_id, A1.task_status_id as joined_status " +
+                "from (select task_id, task_status_id, task_type_id, task_create_time, employee, relation_no, user_code " +
+                "from (select a_pk as task_id, a_c4 as task_status_id, a_c1 as task_type_id, " +
+                "a_c0 as task_create_time, a_c2 as employee, a_b_fk as relation_no, a_c3 as user_code " +
+                "from A) source_a where task_type_id = 24 and task_create_time > 0) A0 " +
+                "left join (select task_id, task_status_id, task_type_id, task_create_time, employee, relation_no, user_code " +
+                "from (select a_pk as task_id, a_c4 as task_status_id, a_c1 as task_type_id, " +
+                "a_c0 as task_create_time, a_c2 as employee, a_b_fk as relation_no, a_c3 as user_code " +
+                "from A) source_b where task_type_id = 24 and task_create_time < 100) A1 " +
+                "on A0.employee = A1.employee and A0.relation_no = A1.relation_no and A0.user_code = A1.user_code " +
+                "where CASE WHEN A0.task_id = A1.task_id THEN 1 ELSE 2 END = 2) analysis " +
+                "where joined_status in (2, 1) and task_status_id = 1 order by seq";
+        ctx.getSessionVariable().setEnableCboTablePrune(false);
+        ctx.getSessionVariable().setEnableRboTablePrune(true);
+        try {
+            String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+            Assert.assertNotNull(plan);
+        } finally {
+            ctx.getSessionVariable().setEnableRboTablePrune(false);
+            ctx.getSessionVariable().setEnableCboTablePrune(false);
+        }
+    }
+
+    @Test
     public void testFKReferencedMutually() throws Exception {
         Object[][] cases = {
                 {"select A.a_pk, D.d_pk from A join D on a_pk = d_pk", 0},
@@ -1006,7 +1032,6 @@ public class TablePruningTest extends TablePruningTestBase {
         starRocksAssert.dropTable("s2");
         starRocksAssert.dropTable("s3");
     }
-
     @Test
     public void testJoinMissingOtherConjuncts() throws Exception {
         String sql = "SELECT COUNT(col_a)\n" +
