@@ -2588,4 +2588,120 @@ TEST_F(SegmentIteratorTest, DictColumnRuntimeFilterPredicateVersionRefresh) {
     EXPECT_EQ(pred._dict_codes_selection[2], 0);
 }
 
+TEST_F(SegmentIteratorTest, DictColumnRuntimeFilterStaticMaskAndNullableSemantics) {
+    ObjectPool pool;
+    auto dict_words = BinaryColumn::create();
+    dict_words->append(Slice(""));
+    dict_words->append(Slice("m_word"));
+    dict_words->append(Slice("z_word"));
+
+    auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("z_word"), true, false);
+    DictColumnRuntimeFilterPredicate pred(0, dict_words, rf, /*is_nullable=*/false);
+    // Static dict mask representing `SearchPhrase <> ''` (excludes code 0 = "").
+    Filter static_mask = {0, 1, 1};
+    pred.set_static_dict_mask(static_mask, /*is_nullable=*/false);
+    ASSERT_OK(pred.init());
+    EXPECT_FALSE(pred.is_always_false());
+    ASSERT_EQ(pred._dict_codes_selection.size(), 3);
+    EXPECT_EQ(pred._dict_codes_selection[0], 0);
+    EXPECT_EQ(pred._dict_codes_selection[1], 1);
+    EXPECT_EQ(pred._dict_codes_selection[2], 1);
+
+    // Tighten RF to <= "a_word" (has_null == false).
+    // RF alone matches code 0 (""), and static_mask matches codes {1, 2}, so their intersection is [0, 0, 0].
+    auto* narrower = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("a_word"), true, false);
+    rf->intersect(narrower);
+    ASSERT_OK(pred.refresh_if_updated());
+    EXPECT_TRUE(pred.is_always_false());
+    EXPECT_EQ(pred._dict_codes_selection[0], 0);
+    EXPECT_EQ(pred._dict_codes_selection[1], 0);
+    EXPECT_EQ(pred._dict_codes_selection[2], 0);
+
+    auto code_col = Int32Column::create();
+    code_col->append(0);
+    code_col->append(1);
+    code_col->append(2);
+    Filter sel = {1, 1, 1};
+    ASSERT_OK(pred.evaluate(code_col.get(), sel.data(), 0, 3));
+    EXPECT_EQ(sel[0], 0);
+    EXPECT_EQ(sel[1], 0);
+    EXPECT_EQ(sel[2], 0);
+
+    // Nullable column with rf->insert_null() (rf->has_null() == true):
+    // Even when 0 dictionary words survive [0, 0, 0], is_always_false() MUST be false because NULL rows pass.
+    auto* null_rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("a_word"), true, true);
+    ASSERT_TRUE(null_rf->has_null());
+    DictColumnRuntimeFilterPredicate nullable_pred(0, dict_words, null_rf, /*is_nullable=*/true);
+    nullable_pred.set_static_dict_mask(static_mask, /*is_nullable=*/true);
+    ASSERT_OK(nullable_pred.init());
+    EXPECT_FALSE(nullable_pred.is_always_false());
+
+    auto nullable_codes = Int32Column::create();
+    nullable_codes->append(0);
+    nullable_codes->append(1);
+    nullable_codes->append(0); // backing code for NULL row
+    auto null_map = NullColumn::create();
+    null_map->append(0);
+    null_map->append(0);
+    null_map->append(1);
+    auto nullable_col = NullableColumn::create(std::move(nullable_codes), std::move(null_map));
+
+    Filter nullable_sel = {1, 1, 1};
+    ASSERT_OK(nullable_pred.evaluate(nullable_col.get(), nullable_sel.data(), 0, 3));
+    EXPECT_EQ(nullable_sel[0], 0);
+    EXPECT_EQ(nullable_sel[1], 0);
+    EXPECT_EQ(nullable_sel[2], 1);
+
+    // End-to-end ColumnPredicateRewriter -> RuntimeFilterPredicatesRewriter static mask propagation:
+    using namespace starrocks::test;
+    std::string file_name = kSegmentDir + "/dict_rf_rewriter_static_mask";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, /*is_nullable=*/false, TYPE_VARCHAR).set_length(32).build();
+    SegmentWriterOptions writer_opts;
+    writer_opts.num_rows_per_block = 10;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, writer_opts);
+    const std::vector<std::string> seg_words = {"", "m_word", "z_word"};
+    TabletDataBuilder data_builder(writer, tablet_schema, 32, 30);
+    ASSERT_OK(data_builder.append(0, [&](int32_t i) { return Slice(seg_words[i % seg_words.size()]); }));
+    ASSERT_OK(data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSIGN_OR_ABORT(auto col_iter, segment->new_column_iterator(tablet_schema->column(0), nullptr));
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    OlapReaderStatistics stats;
+    ColumnIteratorOptions iter_opts;
+    iter_opts.read_file = rfile.get();
+    iter_opts.stats = &stats;
+    iter_opts.check_dict_encoding = true;
+    iter_opts.is_nullable = false;
+    ASSERT_OK(col_iter->init(iter_opts));
+    ASSERT_TRUE(col_iter->all_page_dict_encoded());
+
+    std::vector<std::unique_ptr<ColumnIterator>> col_iters;
+    col_iters.emplace_back(std::move(col_iter));
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_VARCHAR, /*nullable=*/false);
+    auto vec_schema = schema_builder.build();
+    std::vector<uint8_t> need_rewrite = {1};
+    SparseRange<> scan_range(0, 30);
+
+    auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{ne_empty});
+    PredicateTree pred_tree = PredicateTree::create(std::move(pred_root));
+
+    ColumnPredicateRewriter pred_rewriter(col_iters, vec_schema, need_rewrite, 1, scan_range);
+    ASSERT_OK(pred_rewriter.rewrite_predicate(&pool, pred_tree));
+
+    RuntimeFilterProbeDescriptor rf_desc;
+    rf_desc.set_runtime_filter(rf); // rf is tightened to <= "a_word" (has_null == false)
+    RuntimeFilterPredicates rf_preds;
+    rf_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&rf_desc, 0)));
+    ASSERT_OK(RuntimeFilterPredicatesRewriter::rewrite(&pool, rf_preds, col_iters, vec_schema));
+    ASSERT_OK(rf_preds.refresh_dict_filters());
+    EXPECT_TRUE(rf_preds.has_always_false_dict_filter());
+}
+
 } // namespace starrocks

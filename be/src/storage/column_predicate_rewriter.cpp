@@ -154,6 +154,7 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool, PredicateTre
         cid_to_field.emplace(cid, field);
     }
 
+    const std::unordered_set<ColumnId> orig_cids = pred_tree.column_ids();
     auto root = pred_tree.release_root();
     PredicateAndNode new_root;
     ASSIGN_OR_RETURN(auto rewrite_status, root.visit(RewritePredicateTreeVisitor{*this, cid_to_field, pool}, new_root));
@@ -174,6 +175,53 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool, PredicateTre
     default:
         pred_tree = PredicateTree::create(std::move(root));
         break;
+    }
+
+    const auto& immediate_col_preds = pred_tree.get_immediate_column_predicate_map();
+    for (size_t i = 0; i < _column_size; i++) {
+        const FieldPtr& field = _schema.field(i);
+        const ColumnId cid = field->id();
+        if (!_need_rewrite[cid] || !_column_iterators[cid]->all_page_dict_encoded()) {
+            continue;
+        }
+        if (orig_cids.count(cid) == 0) {
+            continue;
+        }
+        const int dict_size = _column_iterators[cid]->dict_size();
+        if (dict_size < 0) {
+            continue;
+        }
+        if (rewrite_status == RewriteStatus::ALWAYS_FALSE) {
+            Filter static_mask(dict_size, 0);
+            RuntimeFilterPredicatesRewriter::set_static_dict_mask(pool, cid, static_mask, field->is_nullable());
+            if (_rf_preds != nullptr) {
+                _rf_preds->set_static_dict_mask(cid, static_mask, field->is_nullable());
+            }
+            continue;
+        }
+        auto it = immediate_col_preds.find(cid);
+        if (it == immediate_col_preds.end() || it->second.empty()) {
+            continue;
+        }
+        auto code_col = Int32Column::create();
+        code_col->resize(dict_size);
+        std::iota(code_col->get_data().begin(), code_col->get_data().end(), 0);
+        Filter static_mask(dict_size, 1);
+        bool evaluated_any = false;
+        for (const auto* pred : it->second) {
+            if (pred->type() == PredicateType::kPlaceHolder ||
+                (pred->is_index_filter_only() && pred->is_expr_predicate())) {
+                continue;
+            }
+            RETURN_IF_ERROR(pred->evaluate_and(code_col.get(), static_mask.data(), 0, dict_size));
+            evaluated_any = true;
+        }
+        if (evaluated_any) {
+            RuntimeFilterPredicatesRewriter::set_static_dict_mask(pool, cid, static_mask, field->is_nullable());
+            if (_rf_preds != nullptr) {
+                _rf_preds->set_static_dict_mask(cid, static_mask, field->is_nullable());
+            }
+        }
     }
     return Status::OK();
 }

@@ -22,6 +22,7 @@
 #include "storage/olap_common.h"
 #include "storage/rowset/column_decoder.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/runtime_filter_predicate.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/conjunctive_predicates.h"
 #include "storage_primitive/predicate_tree/predicate_tree.hpp"
@@ -43,12 +44,14 @@ public:
     using ColumnPredicateMap = std::unordered_map<ColumnId, PredicateList>;
 
     ColumnPredicateRewriter(const ColumnIterators& column_iterators, const Schema& schema,
-                            std::vector<uint8_t>& need_rewrite, int column_size, SparseRange<>& scan_range)
+                            std::vector<uint8_t>& need_rewrite, int column_size, SparseRange<>& scan_range,
+                            RuntimeFilterPredicates* rf_preds = nullptr)
             : _column_iterators(column_iterators),
               _schema(schema),
               _need_rewrite(need_rewrite),
               _column_size(column_size),
-              _scan_range(scan_range) {}
+              _scan_range(scan_range),
+              _rf_preds(rf_preds) {}
 
     Status rewrite_predicate(ObjectPool* pool, PredicateTree& pred_tree);
 
@@ -84,6 +87,7 @@ private:
 
     std::unordered_map<ColumnId, SortedDicts> _cid_to_sorted_dicts;
     std::unordered_map<ColumnId, DictAndCodes> _cid_to_vec_sorted_dicts;
+    RuntimeFilterPredicates* _rf_preds = nullptr;
 };
 
 // For global dictionary columns, predicates can be rewriten.
