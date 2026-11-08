@@ -134,7 +134,7 @@ Status DictColumnRuntimeFilterPredicate::refresh_if_updated(int32_t driver_seque
     if (_rf == nullptr) {
         return Status::OK();
     }
-    if (!_initialized || _rf->rf_version() != _rf_version) {
+    if (!_initialized || _rf->rf_version() != _rf_version || _rf->has_null() != _rf_has_null) {
         return _recompute_selection();
     }
     return Status::OK();
@@ -154,12 +154,13 @@ Status DictColumnRuntimeFilterPredicate::_recompute_selection() {
     }
 
     _rf_version = _rf->rf_version();
+    _rf_has_null = _rf->has_null();
     _initialized = true;
 
     const size_t size = _dict_words_col->size();
     if (size == 0) {
         _dict_codes_selection.clear();
-        _is_always_false = true;
+        _is_always_false = (!_is_nullable || !_rf->has_null());
         return Status::OK();
     }
 
@@ -201,37 +202,44 @@ Status DictColumnRuntimeFilterPredicate::_recompute_selection() {
     }
 
     _dict_codes_selection.swap(ctx.selection);
+    if (_has_static_dict_mask && _static_dict_mask.size() == size) {
+        for (size_t i = 0; i < size; ++i) {
+            _dict_codes_selection[i] &= _static_dict_mask[i];
+        }
+    }
+
     const size_t active = SIMD::count_nonzero(_dict_codes_selection);
-    _is_always_false = (active == 0);
+    _is_always_false = (active == 0) && (!_is_nullable || !_rf->has_null());
     return Status::OK();
 }
 
 Status DictColumnRuntimeFilterPredicate::evaluate(Column* column, uint8_t* selection, uint16_t from,
                                                   uint16_t to) const {
+    if (_is_always_false) {
+        memset(selection + from, 0, to - from);
+        return Status::OK();
+    }
     if (column->is_nullable()) {
-        const auto* nullable_column = down_cast<const NullableColumn*>(column);
-        const auto& data = GetContainer<TYPE_INT>::get_data(nullable_column->data_column());
-        if (nullable_column->has_null()) {
-            const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
-            for (uint16_t i = from; i < to; i++) {
+        auto* nullable_col = down_cast<NullableColumn*>(column);
+        const auto& dict_codes = down_cast<Int32Column*>(nullable_col->data_column_raw_ptr())->get_data();
+        if (nullable_col->has_null()) {
+            const auto& null_data = nullable_col->immutable_null_column_data();
+            const uint8_t rf_has_null = static_cast<uint8_t>(_rf->has_null());
+            for (uint16_t i = from; i < to; ++i) {
                 if (!selection[i]) continue;
-                if (null_data[i]) {
-                    selection[i] = _rf->has_null();
-                } else {
-                    selection[i] = _dict_codes_selection[data[i]];
-                }
+                selection[i] = null_data[i] ? rf_has_null : _dict_codes_selection[dict_codes[i]];
             }
         } else {
-            for (uint16_t i = from; i < to; i++) {
+            for (uint16_t i = from; i < to; ++i) {
                 if (!selection[i]) continue;
-                selection[i] = _dict_codes_selection[data[i]];
+                selection[i] = _dict_codes_selection[dict_codes[i]];
             }
         }
     } else {
-        const auto& data = GetContainer<TYPE_INT>::get_data(column);
-        for (uint16_t i = from; i < to; i++) {
+        const auto& dict_codes = down_cast<Int32Column*>(column)->get_data();
+        for (uint16_t i = from; i < to; ++i) {
             if (!selection[i]) continue;
-            selection[i] = _dict_codes_selection[data[i]];
+            selection[i] = _dict_codes_selection[dict_codes[i]];
         }
     }
     return Status::OK();
@@ -249,6 +257,9 @@ StatusOr<uint16_t> DictColumnRuntimeFilterPredicate::evaluate(Chunk* chunk, uint
         return sel_size;
     }
     RETURN_IF_ERROR(prepare());
+    if (_is_always_false) {
+        return 0;
+    }
     auto column = chunk->get_column_by_id(_column_id).get();
     uint16_t new_size = 0;
     if (column->is_nullable()) {
@@ -314,7 +325,6 @@ bool RuntimeFilterPredicates::has_always_false_dict_filter() const {
 }
 
 void RuntimeFilterPredicates::set_static_dict_mask(ColumnId column_id, const Filter& mask, bool is_nullable) {
-    _static_dict_masks[column_id] = StaticDictMaskInfo{mask, is_nullable};
     for (auto* pred : _rf_predicates) {
         if (pred->get_column_id() == column_id) {
             pred->set_static_dict_mask(mask, is_nullable);

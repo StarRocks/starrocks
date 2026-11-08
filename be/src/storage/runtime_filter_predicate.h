@@ -30,6 +30,8 @@ class RuntimeFilterPredicatesRewriter {
 public:
     static Status rewrite(ObjectPool* obj_pool, RuntimeFilterPredicates& preds,
                           const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators, const Schema& schema);
+
+    static void set_static_dict_mask(ObjectPool* obj_pool, ColumnId column_id, const Filter& mask, bool is_nullable);
 };
 
 } // namespace starrocks
