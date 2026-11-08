@@ -113,12 +113,103 @@ StatusOr<uint16_t> RuntimeFilterPredicate::evaluate(Chunk* chunk, uint16_t* sel,
     return ret;
 }
 
-Status DictColumnRuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) {
-    RETURN_IF_ERROR(prepare());
-    auto column = chunk->get_column_by_id(_column_id).get();
+Status DictColumnRuntimeFilterPredicate::init() {
+    if (_rf == nullptr) {
+        return Status::OK();
+    }
+    return _recompute_selection();
+}
+
+void DictColumnRuntimeFilterPredicate::set_static_dict_mask(const Filter& mask, bool is_nullable) {
+    _static_dict_mask = mask;
+    _has_static_dict_mask = true;
+    _is_nullable = is_nullable;
+    _initialized = false;
+}
+
+Status DictColumnRuntimeFilterPredicate::refresh_if_updated(int32_t driver_sequence) {
+    if (_rf == nullptr && _rf_desc != nullptr) {
+        RuntimeFilterPredicate::init(driver_sequence);
+    }
+    if (_rf == nullptr) {
+        return Status::OK();
+    }
+    if (!_initialized || _rf->rf_version() != _rf_version) {
+        return _recompute_selection();
+    }
+    return Status::OK();
+}
+
+Status DictColumnRuntimeFilterPredicate::_recompute_selection() {
+    DCHECK(_rf != nullptr);
+    if (_dict_words_col == nullptr) {
+        auto binary_column = BinaryColumn::create();
+        std::vector<Slice> data_slice;
+        data_slice.reserve(_dict_words.size());
+        for (const auto& word : _dict_words) {
+            data_slice.emplace_back(word.data(), word.size());
+        }
+        binary_column->append_strings(data_slice.data(), data_slice.size());
+        _dict_words_col = std::move(binary_column);
+    }
+
+    _rf_version = _rf->rf_version();
+    _initialized = true;
+
+    const size_t size = _dict_words_col->size();
+    if (size == 0) {
+        _dict_codes_selection.clear();
+        _is_always_false = true;
+        return Status::OK();
+    }
+
+    RuntimeFilter::RunningContext ctx;
+    ctx.use_merged_selection = false;
+    ctx.compatibility = false;
+    ctx.selection.assign(size, 1);
+    if (_rf_desc != nullptr) {
+        ctx.exchange_hash_function_version = _rf_desc->exchange_hash_function_version();
+        if (_rf->num_hash_partitions() > 0) {
+            ctx.hash_values.resize(size);
+            _rf->compute_partition_index(_rf_desc->layout(), {_dict_words_col.get()}, &ctx);
+        }
+    }
+    _rf->evaluate(_dict_words_col.get(), &ctx);
+
+    if (const RuntimeFilter* mm_base = _rf->get_min_max_filter(); mm_base == _rf) {
+        auto apply_slice_minmax = [&](const auto* mm_rf) {
+            ObjectPool tmp_pool;
+            const Slice min_val = mm_rf->min_value(&tmp_pool);
+            const Slice max_val = mm_rf->max_value(&tmp_pool);
+            const bool left_close = mm_rf->left_close_interval();
+            const bool right_close = mm_rf->right_close_interval();
+            const auto* binary_col =
+                    down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(_dict_words_col.get()));
+            for (size_t i = 0; i < size; ++i) {
+                if (!ctx.selection[i]) continue;
+                const Slice val = binary_col->get_slice(i);
+                const bool left_ok = left_close ? (val >= min_val) : (val > min_val);
+                const bool right_ok = right_close ? (val <= max_val) : (val < max_val);
+                ctx.selection[i] = static_cast<uint8_t>(left_ok && right_ok);
+            }
+        };
+        if (const auto* varchar_mm = dynamic_cast<const MinMaxRuntimeFilter<TYPE_VARCHAR>*>(mm_base)) {
+            apply_slice_minmax(varchar_mm);
+        } else if (const auto* char_mm = dynamic_cast<const MinMaxRuntimeFilter<TYPE_CHAR>*>(mm_base)) {
+            apply_slice_minmax(char_mm);
+        }
+    }
+
+    _dict_codes_selection.swap(ctx.selection);
+    const size_t active = SIMD::count_nonzero(_dict_codes_selection);
+    _is_always_false = (active == 0);
+    return Status::OK();
+}
+
+Status DictColumnRuntimeFilterPredicate::evaluate(Column* column, uint8_t* selection, uint16_t from,
+                                                  uint16_t to) const {
     if (column->is_nullable()) {
         const auto* nullable_column = down_cast<const NullableColumn*>(column);
-        // dict code column must be int column
         const auto& data = GetContainer<TYPE_INT>::get_data(nullable_column->data_column());
         if (nullable_column->has_null()) {
             const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
@@ -127,23 +218,29 @@ Status DictColumnRuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selecti
                 if (null_data[i]) {
                     selection[i] = _rf->has_null();
                 } else {
-                    selection[i] = _result[data[i]];
+                    selection[i] = _dict_codes_selection[data[i]];
                 }
             }
         } else {
             for (uint16_t i = from; i < to; i++) {
                 if (!selection[i]) continue;
-                selection[i] = _result[data[i]];
+                selection[i] = _dict_codes_selection[data[i]];
             }
         }
     } else {
         const auto& data = GetContainer<TYPE_INT>::get_data(column);
         for (uint16_t i = from; i < to; i++) {
             if (!selection[i]) continue;
-            selection[i] = _result[data[i]];
+            selection[i] = _dict_codes_selection[data[i]];
         }
     }
     return Status::OK();
+}
+
+Status DictColumnRuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) {
+    RETURN_IF_ERROR(prepare());
+    auto* column = chunk->get_column_raw_ptr_by_id(_column_id);
+    return evaluate(column, selection, from, to);
 }
 
 StatusOr<uint16_t> DictColumnRuntimeFilterPredicate::evaluate(Chunk* chunk, uint16_t* sel, uint16_t sel_size,
@@ -165,14 +262,14 @@ StatusOr<uint16_t> DictColumnRuntimeFilterPredicate::evaluate(Chunk* chunk, uint
                 if (null_data[idx]) {
                     new_size += _rf->has_null();
                 } else {
-                    new_size += _result[data[idx]];
+                    new_size += _dict_codes_selection[data[idx]];
                 }
             }
         } else {
             for (uint16_t i = 0; i < sel_size; i++) {
                 uint16_t idx = sel[i];
                 target_sel[new_size] = idx;
-                new_size += _result[data[idx]];
+                new_size += _dict_codes_selection[data[idx]];
             }
         }
     } else {
@@ -180,53 +277,49 @@ StatusOr<uint16_t> DictColumnRuntimeFilterPredicate::evaluate(Chunk* chunk, uint
         for (uint16_t i = 0; i < sel_size; i++) {
             uint16_t idx = sel[i];
             target_sel[new_size] = idx;
-            new_size += _result[data[idx]];
+            new_size += _dict_codes_selection[data[idx]];
         }
     }
     return new_size;
 }
 
 Status DictColumnRuntimeFilterPredicate::prepare() {
-    DCHECK(_rf != nullptr);
-    if (!_result.empty()) {
-        return Status::OK();
-    }
-    auto binary_column = BinaryColumn::create();
-    std::vector<Slice> data_slice;
-    data_slice.reserve(_dict_words.size());
-    for (const auto& word : _dict_words) {
-        data_slice.emplace_back(word.data(), word.size());
-    }
-    binary_column->append_strings(data_slice.data(), data_slice.size());
-
-    RuntimeFilter::RunningContext ctx;
-    ctx.use_merged_selection = false;
-    ctx.compatibility = false;
-    ctx.selection.assign(_dict_words.size(), 1);
-    ctx.exchange_hash_function_version = _rf_desc->exchange_hash_function_version();
-
-    if (_rf->num_hash_partitions() > 0) {
-        // compute hash
-        ctx.hash_values.resize(binary_column->size());
-        _rf->compute_partition_index(_rf_desc->layout(), {binary_column.get()}, &ctx);
-    }
-    _rf->evaluate(binary_column.get(), &ctx);
-    _result.resize(_dict_words.size());
-
-    for (size_t i = 0; i < _dict_words.size(); ++i) {
-        _result[i] = ctx.selection[i];
-    }
-
-    return Status::OK();
+    return refresh_if_updated();
 }
 
 bool RuntimeFilterPredicates::any_filter_ready() const {
     for (const auto* pred : _rf_predicates) {
-        if (pred->get_rf_desc()->runtime_filter(_driver_sequence) != nullptr) {
+        if ((pred->get_rf_desc() != nullptr && pred->get_rf_desc()->runtime_filter(_driver_sequence) != nullptr) ||
+            pred->has_rf()) {
             return true;
         }
     }
     return false;
+}
+
+Status RuntimeFilterPredicates::refresh_dict_filters() {
+    for (auto* pred : _rf_predicates) {
+        RETURN_IF_ERROR(pred->refresh_if_updated(_driver_sequence));
+    }
+    return Status::OK();
+}
+
+bool RuntimeFilterPredicates::has_always_false_dict_filter() const {
+    for (const auto* pred : _rf_predicates) {
+        if (pred->is_always_false()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void RuntimeFilterPredicates::set_static_dict_mask(ColumnId column_id, const Filter& mask, bool is_nullable) {
+    _static_dict_masks[column_id] = StaticDictMaskInfo{mask, is_nullable};
+    for (auto* pred : _rf_predicates) {
+        if (pred->get_column_id() == column_id) {
+            pred->set_static_dict_mask(mask, is_nullable);
+        }
+    }
 }
 
 void RuntimeFilterPredicates::_update_selectivity_map() {
@@ -243,7 +336,8 @@ void RuntimeFilterPredicates::_update_selectivity_map() {
             _selectivity_map.emplace(filter_ratio, pred);
             break;
         }
-        if (filter_ratio >= 0.5) {
+        if (filter_ratio >= 0.5 || pred->is_always_false() ||
+            (pred->get_rf_desc() != nullptr && pred->get_rf_desc()->is_topn_filter())) {
             _selectivity_map.emplace(filter_ratio, pred);
         }
     }

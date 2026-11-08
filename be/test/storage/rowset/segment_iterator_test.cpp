@@ -2557,4 +2557,35 @@ TEST_F(SegmentIteratorTest, GroupedRowidChildrenPreserveSparseQueryAndOwnershipI
     EXPECT_TRUE(read_rows().empty());
 }
 
+TEST_F(SegmentIteratorTest, DictColumnRuntimeFilterPredicateVersionRefresh) {
+    ObjectPool pool;
+    auto dict_words = BinaryColumn::create();
+    dict_words->append(Slice(""));
+    dict_words->append(Slice("m_word"));
+    dict_words->append(Slice("z_word"));
+
+    auto* rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("z_word"), true, false);
+    ASSERT_NE(rf, nullptr);
+    EXPECT_EQ(rf->rf_version(), 0);
+
+    DictColumnRuntimeFilterPredicate pred(0, dict_words, rf, /*is_nullable=*/false);
+    ASSERT_OK(pred.init());
+    EXPECT_FALSE(pred.is_always_false());
+    ASSERT_EQ(pred._dict_codes_selection.size(), 3);
+    EXPECT_EQ(pred._dict_codes_selection[0], 1);
+    EXPECT_EQ(pred._dict_codes_selection[1], 1);
+    EXPECT_EQ(pred._dict_codes_selection[2], 1);
+
+    auto* narrower = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("a_word"), true, false);
+    rf->intersect(narrower);
+    EXPECT_GT(rf->rf_version(), 0);
+
+    ASSERT_OK(pred.refresh_if_updated());
+    EXPECT_FALSE(pred.is_always_false());
+    ASSERT_EQ(pred._dict_codes_selection.size(), 3);
+    EXPECT_EQ(pred._dict_codes_selection[0], 1);
+    EXPECT_EQ(pred._dict_codes_selection[1], 0);
+    EXPECT_EQ(pred._dict_codes_selection[2], 0);
+}
+
 } // namespace starrocks
