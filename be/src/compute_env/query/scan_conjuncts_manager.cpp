@@ -914,7 +914,9 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
 
             // runtime filter existed and does not have null.
             if (rf == nullptr || rf->get_in_filter() != nullptr || desc->is_stream_build_filter()) {
-                rt_ranger_params.add_unarrived_rf(desc, &slot, _opts.driver_sequence);
+                if (!desc->is_topn_filter() || config::enable_topn_runtime_filter_storage_pushdown) {
+                    rt_ranger_params.add_unarrived_rf(desc, &slot, _opts.driver_sequence);
+                }
                 continue;
             }
             // an arrived join filter that passes every row filters nothing. always_true() alone does not tell it: a
@@ -1326,7 +1328,10 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
             if (slot_desc == nullptr) {
                 continue;
             }
-            if (desc->is_stream_build_filter() && !desc->is_topn_filter()) {
+            const bool enable_topn_pushdown =
+                    config::enable_topn_runtime_filter_storage_pushdown &&
+                    (_opts.runtime_state == nullptr || _opts.runtime_state->enable_join_runtime_filter_pushdown());
+            if (desc->is_stream_build_filter() && (!desc->is_topn_filter() || !enable_topn_pushdown)) {
                 continue;
             }
 
@@ -1538,7 +1543,10 @@ StatusOr<RuntimeFilterPredicates> ScanConjunctsManager::get_runtime_filter_predi
         if (slot_desc == nullptr) {
             continue;
         }
-        if (desc->is_stream_build_filter() && !desc->is_topn_filter()) {
+        const bool enable_topn_pushdown =
+                config::enable_topn_runtime_filter_storage_pushdown &&
+                (_opts.runtime_state == nullptr || _opts.runtime_state->enable_join_runtime_filter_pushdown());
+        if (desc->is_stream_build_filter() && (!desc->is_topn_filter() || !enable_topn_pushdown)) {
             continue;
         }
         // If the runtime filter's partition-by-exprs's size is greater than 1, skip to push it down to storage engine.
