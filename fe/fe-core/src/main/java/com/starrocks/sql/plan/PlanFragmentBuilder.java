@@ -58,6 +58,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.iceberg.IcebergPreimageScanPredicates;
+import com.starrocks.connector.jdbc.JDBCPushDownSQLBuilder;
+>>>>>>> 25e19da11cc... [Enhancement][RB-225] Prune Iceberg row groups on predicates over functions of a column (#68925)
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AIProjectNode;
@@ -2110,6 +2115,21 @@ public class PlanFragmentBuilder {
             return hasFilePath || hasPos;
         }
 
+        private List<ScalarOperator> deriveIcebergPreimagePredicates(PhysicalScanOperator node,
+                                                                     List<ScalarOperator> predicates) {
+            if (predicates.isEmpty() || !(node.getTable() instanceof IcebergTable icebergTable)) {
+                return List.of();
+            }
+            try {
+                return IcebergPreimageScanPredicates.derive(predicates,
+                        icebergTable.getNativeTable().schema().asStruct(), node.getColRefToColumnMetaMap());
+            } catch (RuntimeException e) {
+                // pruning only: never fail the query for it
+                LOG.debug("failed to derive iceberg preimage predicates", e);
+                return List.of();
+            }
+        }
+
         public PlanFragment buildIcebergScanNode(OptExpression expression, ExecPlan context) {
             PhysicalScanOperator node = expression.getOp().cast();
             Table referenceTable = node.getTable();
@@ -2174,6 +2194,14 @@ public class PlanFragmentBuilder {
                 for (ScalarOperator predicate : predicates) {
                     icebergScanNode.getConjuncts()
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                }
+                if (!isEqDeleteScan) {
+                    // column predicates implied by function predicates (year(c) = 2024 -> c >= ... and c < ...), so the
+                    // BE prunes row groups on them; BE-only, the optimizer never sees them
+                    for (ScalarOperator predicate : deriveIcebergPreimagePredicates(node, predicates)) {
+                        icebergScanNode.getConjuncts()
+                                .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                    }
                 }
 
                 ScalarOperator icebergPredicate = !isEqDeleteScan ? node.getPredicate() :
