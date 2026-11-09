@@ -1,4 +1,4 @@
--- name: test_vector_index_query_vector_overflow @sequential @native
+-- name: test_vector_index_query_vector_overflow @sequential
 -- A query-vector element that overflows float range (1e308 > FLT_MAX) used to
 -- reach an unguarded std::stof in OlapChunkSource::_init_reader_params and abort
 -- the BE. It must now be rejected with a clean error instead of crashing.
