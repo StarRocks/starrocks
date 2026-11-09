@@ -327,6 +327,12 @@ StatusOr<TabletMetadataPtr> PrimaryKeyManager::flush_pk_memtable(const TabletMet
     Tablet tablet(_tablet_mgr, tablet_id);
     MetaFileBuilder builder(tablet, mutable_metadata);
 
+    // The flush needs the index of exactly |metadata|, but prepare_primary_index uses a loaded index whatever version
+    // it holds. This node can cache the index at an older version: the tablet was published on another node since
+    // this one loaded it, or a publish that wrote no data moved the version on. Run the check a publish runs first:
+    // an older index is dropped so that it is rebuilt from |metadata|, and a newer one fails the flush.
+    RETURN_IF_ERROR(check_meta_version(tablet, base_version));
+
     std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> write_guard;
     ASSIGN_OR_RETURN(auto* index_entry, prepare_primary_index(metadata, &builder, base_version,
                                                               /*new_version=*/base_version, write_guard));

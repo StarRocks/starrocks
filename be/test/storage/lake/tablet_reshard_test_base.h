@@ -1877,6 +1877,31 @@ protected:
                                                                int32_t upsert_key, int32_t upsert_value,
                                                                int32_t delete_key, bool include_delete = true,
                                                                bool include_upsert = true) {
+        return publish_followup_upsert_delete_on(_tablet_manager.get(), tablet_id, base_version, upsert_key,
+                                                 upsert_value, delete_key, include_delete, include_upsert);
+    }
+
+    // A second compute node on the same storage: its own primary key index cache and metadata cache. The
+    // primary key manager is declared first so that it outlives the tablet manager that points at it.
+    struct OtherComputeNode {
+        std::unique_ptr<lake::PrimaryKeyManager> primary_key_manager;
+        std::unique_ptr<lake::TabletManager> tablet_manager;
+    };
+
+    OtherComputeNode make_other_compute_node() {
+        OtherComputeNode node;
+        node.primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        node.tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider, node.primary_key_manager.get(), 16384, 16384);
+        return node;
+    }
+
+    // publish_followup_upsert_delete, written and published through |tablet_manager|.
+    StatusOr<TabletMetadataPtr> publish_followup_upsert_delete_on(lake::TabletManager* tablet_manager,
+                                                                  int64_t tablet_id, int64_t base_version,
+                                                                  int32_t upsert_key, int32_t upsert_value,
+                                                                  int32_t delete_key, bool include_delete = true,
+                                                                  bool include_upsert = true) {
         std::vector<SlotDescriptor> slots;
         slots.emplace_back(0, "c0", TYPE_INT_DESC);
         slots.emplace_back(1, "c1", TYPE_INT_DESC);
@@ -1899,12 +1924,12 @@ protected:
         Chunk chunk(Columns{std::move(key_column), std::move(value_column), std::move(operation_column)}, slot_cid_map);
         const uint32_t indexes[] = {0, 1};
 
-        ASSIGN_OR_RETURN(auto metadata, _tablet_manager->get_tablet_metadata(tablet_id, base_version));
+        ASSIGN_OR_RETURN(auto metadata, tablet_manager->get_tablet_metadata(tablet_id, base_version));
         auto tablet_schema = TabletSchema::create(metadata->schema());
         RuntimeProfile profile("tablet-merge-lifecycle-dml");
         const int64_t txn_id = next_id();
         ASSIGN_OR_RETURN(auto delta_writer, lake::DeltaWriterBuilder()
-                                                    .set_tablet_manager(_tablet_manager.get())
+                                                    .set_tablet_manager(tablet_manager)
                                                     .set_tablet_id(tablet_id)
                                                     .set_txn_id(txn_id)
                                                     .set_partition_id(next_id())
@@ -1923,8 +1948,8 @@ protected:
         txn_info.set_txn_id(txn_id);
         txn_info.set_txn_type(TXN_NORMAL);
         txn_info.set_commit_time(1);
-        return lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), base_version,
-                                     base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
+        return lake::publish_version(tablet_manager, lake::PublishTabletInfo(tablet_id), base_version, base_version + 1,
+                                     std::span<const TxnInfoPB>(&txn_info, 1), false);
     }
 
     StatusOr<TabletMetadataPtr> publish_followup_delete(int64_t tablet_id, int64_t base_version, int32_t delete_key) {
