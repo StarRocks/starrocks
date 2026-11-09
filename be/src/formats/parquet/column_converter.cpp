@@ -719,6 +719,28 @@ Status Int96ToDateTimeConverter::convert(const Column* src, Column* dst) {
 
     size_t size = dst_null_data.size();
 
+<<<<<<< HEAD
+=======
+    // The offset of a value is the one in force at 00:00 UTC of its day.
+    auto day_seconds = [](Timestamp timestamp) -> int64_t {
+        return (static_cast<int64_t>(timestamp::to_julian(timestamp)) - date::UNIX_EPOCH_JULIAN) * SECS_PER_DAY;
+    };
+    auto to_timestamp = [&](size_t i) -> Timestamp {
+        // Arrow may encode pre-epoch INT96 with negative nanoseconds of day. Normalize
+        // the day and its remainder before packing, including sub-microsecond values.
+        constexpr int64_t nanos_per_day = SECS_PER_DAY * NANOSECS_PER_SEC;
+        int64_t nanos = static_cast<int64_t>(src_data[i].lo);
+        int64_t julian = static_cast<int64_t>(src_data[i].hi) + nanos / nanos_per_day;
+        nanos %= nanos_per_day;
+        if (nanos < 0) {
+            --julian;
+            nanos += nanos_per_day;
+        }
+        return timestamp::from_julian_and_time(static_cast<JulianDate>(julian), nanos / NANOSECS_PER_USEC);
+    };
+    int64_t fixed_offset = _offset;
+    const int64_t* offsets = nullptr;
+>>>>>>> 2eb019e ([BugFix] Fix Parquet INT96 timestamps with negative nanoseconds (#82573))
     auto fill_dst_fn = [&]<bool FAST_TZ>() {
         for (size_t i = 0; i < size; i++) {
             dst_null_data[i] = src_null_data[i];
