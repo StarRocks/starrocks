@@ -4,6 +4,8 @@ sidebar_position: 10
 description: "Analyze complex data with Claude and the StarRocks MCP server on a shared-data cluster."
 ---
 
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
+
 # Claude + StarRocks MCP
 
 Stand up a small StarRocks cluster on object storage, load a real public dataset, and ask **Claude** plain-English questions about it through the **StarRocks MCP server**. Claude discovers the schema, writes the SQL (including multi-table joins), and renders charts. All data lives in object storage on **MinIO**.
@@ -52,6 +54,10 @@ The **Olist dataset** is downloaded automatically when you load the data via `ka
 :::note
 Apple Silicon: StarRocks leans on AVX2 (x86); use an ARM build or expect slower emulation.
 :::
+
+### A MinIO AIStor license
+
+The instructions for acquiring a free tier license will be provided after you clone the demo repository.
 
 ---
 
@@ -127,6 +133,12 @@ This directory contains just enough to get you going. It deliberately contains *
 
 ---
 
+## Acquire a MinIO AIStor license
+
+<AIStorLicense />
+
+For this tutorial, that is the `demo/documentation-samples/MCP` directory in your local clone of the `StarRocks/demo` repository.
+
 ## Bring up StarRocks and MinIO
 
 ```bash
@@ -150,7 +162,7 @@ If the CN is not reporting healthy just wait a few seconds and check again — i
 
 ## Create a bucket in MinIO
 
-Open the MinIO console at [http://localhost:9001](http://localhost:9001) (login `miniouser` / `M!n10R0cks`), click **Create Bucket**, and create the bucket `my-starrocks-bucket`.
+Open the MinIO console at [http://localhost:9001](http://localhost:9001) (login `miniouser` / `M!n10R0cks`), click **Add Bucket**, and create the bucket `my-starrocks-bucket`.
 
 ---
 
