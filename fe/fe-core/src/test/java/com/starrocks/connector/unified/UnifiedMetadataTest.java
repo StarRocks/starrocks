@@ -50,6 +50,8 @@ import com.starrocks.connector.index.ConnectorIndexShard;
 import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.kudu.KuduMetadata;
+import com.starrocks.connector.metadata.TableMetaMetadata;
+import com.starrocks.connector.metadata.iceberg.IcebergSnapshotsTable;
 import com.starrocks.connector.paimon.PaimonIndexTable;
 import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.credential.CloudConfiguration;
@@ -65,11 +67,15 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.wildfly.common.Assert;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -88,6 +94,7 @@ import static com.starrocks.connector.unified.UnifiedMetadata.PAIMON_STORAGE_HAN
 import static com.starrocks.connector.unified.UnifiedMetadata.PAIMON_STORAGE_HANDLER_VALUE;
 import static com.starrocks.connector.unified.UnifiedMetadata.SPARK_TABLE_PROVIDER_KEY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -136,6 +143,79 @@ public class UnifiedMetadataTest {
                 .setTableVersionRange(TvrTableSnapshot.empty()).build();
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"snapshots", "manifests", "files", "partitions", "SNAPSHOTS"})
+    public void testRejectsPaimonSystemTableBeforeIcebergFactory(String suffix) {
+        String name = "orders$" + suffix;
+        HiveTable base = HiveTable.builder().setTableName("orders").setFullSchema(List.of())
+                .setProperties(Map.of(PAIMON_STORAGE_HANDLER_KEY, PAIMON_STORAGE_HANDLER_VALUE)).build();
+        new Expectations() {{
+                hiveMetadata.getTable((ConnectContext) any, "db", "orders");
+                result = base;
+                times = 2;
+                hiveMetadata.tableExists(connectContext, "db", name);
+                result = true;
+            }};
+        TableMetaMetadata tableMetadata = new TableMetaMetadata("unified", "unified") {
+            @Override
+            public Table getTable(ConnectContext context, String dbName, String tableName) {
+                throw new AssertionError("Paimon system tables must not reach the Iceberg factory");
+            }
+        };
+        CatalogConnectorMetadata wrapper = new CatalogConnectorMetadata(unifiedMetadata,
+                new InformationSchemaMetadata("unified"), tableMetadata);
+        StarRocksConnectorException failure = assertThrows(StarRocksConnectorException.class,
+                () -> wrapper.getTable(connectContext, "db", name));
+        assertTrue(failure.getMessage().contains("Use a Paimon catalog."));
+        assertThrows(StarRocksConnectorException.class, () -> wrapper.getTableComment(connectContext, "db", name));
+        // A real metastore entry with the same name is still visible to DDL existence checks.
+        assertTrue(wrapper.tableExists(connectContext, "db", name));
+    }
+
+    @Test
+    public void testKeepsIcebergSystemTableRouting() {
+        HiveTable base = HiveTable.builder().setTableName("orders").setFullSchema(List.of())
+                .setProperties(Map.of(ICEBERG_TABLE_TYPE_NAME, ICEBERG_TABLE_TYPE_VALUE)).build();
+        new Expectations() {{
+                hiveMetadata.getTable((ConnectContext) any, "db", "orders");
+                result = base;
+            }};
+        CatalogConnectorMetadata wrapper = new CatalogConnectorMetadata(unifiedMetadata,
+                new InformationSchemaMetadata("unified"), new TableMetaMetadata("unified", "unified"));
+        assertInstanceOf(IcebergSnapshotsTable.class, wrapper.getTable(connectContext, "db", "orders$snapshots"));
+    }
+
+    @Test
+    public void testHandlesMissingBaseWithoutMaskingMetastoreFailures() {
+        StarRocksConnectorException unavailable = new StarRocksConnectorException("Metastore unavailable");
+        new Expectations() {{
+                hiveMetadata.getTable((ConnectContext) any, "db", "missing");
+                result = new StarRocksConnectorException("Failed to get table",
+                        new InvocationTargetException(new NoSuchObjectException("missing")));
+                hiveMetadata.getTable((ConnectContext) any, "db", "unavailable");
+                result = unavailable;
+            }};
+        CatalogConnectorMetadata wrapper = new CatalogConnectorMetadata(unifiedMetadata,
+                new InformationSchemaMetadata("unified"), new TableMetaMetadata("unified", "unified"));
+        assertInstanceOf(IcebergSnapshotsTable.class, wrapper.getTable(connectContext, "db", "missing$snapshots"));
+        assertSame(unavailable, assertThrows(StarRocksConnectorException.class,
+                () -> wrapper.getTable(connectContext, "db", "unavailable$snapshots")));
+    }
+
+    @Test
+    public void testKeepsDedicatedPaimonSystemTableRouting() {
+        PaimonTable systemTable = new PaimonTable();
+        new Expectations() {{
+                paimonMetadata.getTableType();
+                result = PAIMON;
+                paimonMetadata.getTable(connectContext, "db", "orders$snapshots");
+                result = systemTable;
+            }};
+        CatalogConnectorMetadata wrapper = new CatalogConnectorMetadata(paimonMetadata,
+                new InformationSchemaMetadata("paimon"), new TableMetaMetadata("paimon", "paimon"));
+        assertSame(systemTable, wrapper.getTable(connectContext, "db", "orders$snapshots"));
+    }
+
     @Test
     public void testVirtualPaimonTableTakesPrecedenceThroughCatalogWrapper() {
         PaimonTable baseTable = new PaimonTable();
@@ -163,7 +243,7 @@ public class UnifiedMetadataTest {
                 result = version;
             }};
         CatalogConnectorMetadata wrapper = new CatalogConnectorMetadata(unifiedMetadata,
-                new InformationSchemaMetadata("unified"), null);
+                new InformationSchemaMetadata("unified"), new TableMetaMetadata("unified", "unified"));
         assertSame(virtual, wrapper.getTable(connectContext, "db", "orders$global_index"));
         assertTrue(wrapper.tableExists(connectContext, "db", "orders$global_index"));
         assertSame(version, wrapper.getTableVersionRange("db", virtual, Optional.empty(), Optional.empty()));

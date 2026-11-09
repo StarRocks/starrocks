@@ -44,6 +44,7 @@ import com.starrocks.connector.index.ConnectorIndexMetadata;
 import com.starrocks.connector.index.ConnectorIndexResult;
 import com.starrocks.connector.index.ConnectorIndexShard;
 import com.starrocks.connector.index.IndexCondition;
+import com.starrocks.connector.metadata.MetadataTableName;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.paimon.PaimonIndexTable;
 import com.starrocks.credential.CloudConfiguration;
@@ -58,10 +59,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.starrocks.catalog.Table.TableType.DELTALAKE;
@@ -79,6 +83,9 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     public static final String DELTA_LAKE_PROVIDER = "delta";
     public static final String PAIMON_STORAGE_HANDLER_KEY = "storage_handler";
     public static final String PAIMON_STORAGE_HANDLER_VALUE = "org.apache.paimon.hive.PaimonStorageHandler";
+
+    private static final Set<MetadataTableType> SHARED_PAIMON_SYSTEM_TABLE_TYPES = Set.of(
+            MetadataTableType.SNAPSHOTS, MetadataTableType.MANIFESTS, MetadataTableType.FILES, MetadataTableType.PARTITIONS);
 
     public static boolean isIcebergTable(Map<String, String> properties) {
         return ICEBERG_TABLE_TYPE_VALUE.equalsIgnoreCase(properties.get(ICEBERG_TABLE_TYPE_NAME));
@@ -127,6 +134,20 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
 
     private Table.TableType getTableType(Table table) {
         return table.getType();
+    }
+
+    public boolean isPaimonSystemTableConflict(String dbName, MetadataTableName name) {
+        if (!SHARED_PAIMON_SYSTEM_TABLE_TYPES.contains(name.getTableType())) {
+            return false;
+        }
+        try {
+            return getTableType(dbName, name.getTableName()) == PAIMON;
+        } catch (StarRocksConnectorException e) {
+            if (ExceptionUtils.indexOfType(e, NoSuchObjectException.class) >= 0) {
+                return false;
+            }
+            throw e;
+        }
     }
 
     private ConnectorMetadata metadataOfTable(String dbName, String tblName) {
