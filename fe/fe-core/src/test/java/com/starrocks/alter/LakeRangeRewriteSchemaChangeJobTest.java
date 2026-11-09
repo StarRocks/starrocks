@@ -1748,6 +1748,42 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testTimeoutWithACommittedRewriteTxnCancelsAndDropsShadow() throws Exception {
+        // The rewrite INSERT returns while its txn is still COMMITTED, so a publish that never finishes meets the job
+        // deadline in that state. That tick must still cancel the job and clean up, although the transaction manager
+        // refuses to abort a committed txn; the txn later publishes as a no-op.
+        LakeRangeRewriteSchemaChangeJob job = jobInRunning();
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+        job.setRewriteTxnIdForTest(physicalPartitionId, 777L);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                TransactionState state = new TransactionState();
+                state.setTransactionStatus(TransactionStatus.COMMITTED);
+                return state;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason)
+                    throws com.starrocks.common.StarRocksException {
+                throw new TransactionAlreadyCommitException("transaction " + transactionId + " is already committed");
+            }
+        };
+        List<Long> shadowTabletIds = job.getShadowIndex(physicalPartitionId).getTablets()
+                .stream().map(Tablet::getId).collect(Collectors.toList());
+        job.createTimeMs = System.currentTimeMillis() - job.timeoutMs - 1;
+
+        job.run();
+
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertTrue(job.errMsg.contains("Timeout"), job.errMsg);
+        assertShadowCleanedUp(job, physicalPartitionId, shadowTabletIds, 0);
+    }
+
+    @Test
+>>>>>>> 3797695c6b7... [UT] Fix LakeRangeRewriteSchemaChangeJobTest compile after the expected pin version parameter (#68951)
     public void testCancelInWaitingTxnBeforeShadowExposedIsClean() throws Exception {
         // runPendingJob() transitions to WAITING_TXN but does not expose the shadow to the partition
         // catalog map (exposure happens on the first runWaitingTxnJob run). So at this point the shadow
