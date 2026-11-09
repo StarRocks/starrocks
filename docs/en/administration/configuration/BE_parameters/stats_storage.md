@@ -475,6 +475,15 @@ This topic introduces the following types of BE configurations:
 - Description: When enabled, compaction will prefer a "lazy" strategy for delta columns produced by partial column updates: StarRocks will avoid eagerly merging delta-column files back into their main segment files to save compaction I/O. In practice the compaction selection code checks for partial column-update rowsets and multiple candidates; if found and this flag is true, the engine will either stop adding further inputs to the compaction or only merge empty rowsets (level -1), leaving delta columns separate. This reduces immediate I/O and CPU during compaction at the cost of delayed consolidation (potentially more segments and temporary storage overhead). Correctness and query semantics are unchanged.
 - Introduced in: v3.2.3
 
+### enable_light_pk_compaction_publish
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use light compaction publish for Primary Key tables in shared-nothing clusters. This setting only controls shared-nothing tables. Shared-data Primary Key tables always use light compaction publish, so setting this parameter to `false` does not disable it for shared-data tables.
+- Introduced in: -
+
 ### enable_new_load_on_memory_limit_exceeded
 
 - Default: false
