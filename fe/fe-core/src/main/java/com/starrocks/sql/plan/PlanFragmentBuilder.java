@@ -58,6 +58,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
+import com.starrocks.connector.delta.DeltaLakePreimagePredicates;
 import com.starrocks.connector.iceberg.IcebergPreimageScanPredicates;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
@@ -1777,6 +1778,17 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
+        private List<ScalarOperator> deriveDeltaLakePreimagePredicates(PhysicalScanOperator node,
+                                                                       List<ScalarOperator> predicates) {
+            try {
+                return DeltaLakePreimagePredicates.forScan(predicates, node.getColRefToColumnMetaMap());
+            } catch (RuntimeException e) {
+                // pruning only: never fail the query for it
+                LOG.debug("failed to derive delta lake preimage predicates", e);
+                return List.of();
+            }
+        }
+
         @Override
         public PlanFragment visitPhysicalDeltaLakeScan(OptExpression optExpression, ExecPlan context) {
             PhysicalDeltaLakeScanOperator node = (PhysicalDeltaLakeScanOperator) optExpression.getOp();
@@ -1805,6 +1817,11 @@ public class PlanFragmentBuilder {
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
                 List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
                 for (ScalarOperator predicate : predicates) {
+                    deltaLakeScanNode.getConjuncts()
+                            .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                }
+                // column predicates implied by function predicates, so the BE prunes row groups on them; BE-only
+                for (ScalarOperator predicate : deriveDeltaLakePreimagePredicates(node, predicates)) {
                     deltaLakeScanNode.getConjuncts()
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
