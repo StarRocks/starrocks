@@ -708,6 +708,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v3.5.1
 
+### enable_delta_lake_function_predicate_pruning
+
+* **Description**: Whether a predicate on a function of a Delta Lake column can skip data files. StarRocks converts such a predicate into a condition on the column itself, for example `year(dt) = 2024` into `dt >= '2024-01-01' AND dt < '2025-01-01'`, so that files are skipped through partition values and file column statistics, and Parquet row groups are skipped through their column statistics. It applies to the same functions as `enable_iceberg_function_predicate_pruning`. The original predicate is still evaluated on the rows. Set it to `false` to plan such queries as before, for example to compare results.
+* **Default**: true
+* **Introduced in**: v26.3
+
 ### enable_distinct_agg_over_window
 
 * **Description**: Controls the optimizer rewrite that transforms DISTINCT aggregate calls over WINDOW clauses into an equivalent join-based plan. When enabled (`true`, the default) QueryOptimizer.invoke convertDistinctAggOverWindowToNullSafeEqualJoin will:
@@ -797,6 +803,12 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Description**: Whether to enable resource group-level [query queue](../administration/management/resource_management/query_queues.md).
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v3.1.4
+
+### enable_hive_function_predicate_pruning
+
+* **Description**: Whether a predicate on a function of a date or datetime column of a Hive table can prune partitions. StarRocks converts such a predicate into a condition on the column itself, for example `year(dt) = 2024` into `dt >= '2024-01-01' AND dt < '2025-01-01'`, so that partitions are pruned on a partition column and row groups are skipped through their column statistics. It applies to the date and time functions listed for `enable_iceberg_function_predicate_pruning`. The original predicate is still evaluated on the rows. Set it to `false` to plan such queries as before, for example to compare results.
+* **Default**: true
+* **Introduced in**: v26.3
 
 ### enable_iceberg_eq_delete_runtime_filter_pruning
 

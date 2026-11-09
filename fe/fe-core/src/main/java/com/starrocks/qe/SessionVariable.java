@@ -729,6 +729,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_ICEBERG_FUNCTION_PREDICATE_PRUNING =
             "enable_iceberg_function_predicate_pruning";
     public static final String ENABLE_DELTA_LAKE_COLUMN_STATISTICS = "enable_delta_lake_column_statistics";
+    public static final String ENABLE_DELTA_LAKE_FUNCTION_PREDICATE_PRUNING =
+            "enable_delta_lake_function_predicate_pruning";
+    public static final String ENABLE_HIVE_FUNCTION_PREDICATE_PRUNING = "enable_hive_function_predicate_pruning";
 
     public static final String DISABLE_TABLE_STATS_FROM_METADATA_FOR_SINGLE_TABLE =
             "disable_table_stats_from_metadata_for_single_table";
@@ -3583,6 +3586,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_ICEBERG_FUNCTION_PREDICATE_PRUNING)
     private boolean enableIcebergFunctionPredicatePruning = true;
 
+    // Prune Delta Lake files and row groups on the column preimage of predicates on functions of it (year(), ...).
+    @VarAttr(name = ENABLE_DELTA_LAKE_FUNCTION_PREDICATE_PRUNING)
+    private boolean enableDeltaLakeFunctionPredicatePruning = true;
+
+    // Prune Hive partitions and row groups on the column preimage of predicates on functions of it (year(), ...).
+    @VarAttr(name = ENABLE_HIVE_FUNCTION_PREDICATE_PRUNING)
+    private boolean enableHiveFunctionPredicatePruning = true;
+
     @VarAttr(name = ENABLE_DELTA_LAKE_COLUMN_STATISTICS)
     private boolean enableDeltaLakeColumnStatistics = false;
 
@@ -3771,6 +3782,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableIcebergFunctionPredicatePruning(boolean enableIcebergFunctionPredicatePruning) {
         this.enableIcebergFunctionPredicatePruning = enableIcebergFunctionPredicatePruning;
+    }
+
+    public boolean isEnableDeltaLakeFunctionPredicatePruning() {
+        return enableDeltaLakeFunctionPredicatePruning;
+    }
+
+    public void setEnableDeltaLakeFunctionPredicatePruning(boolean enableDeltaLakeFunctionPredicatePruning) {
+        this.enableDeltaLakeFunctionPredicatePruning = enableDeltaLakeFunctionPredicatePruning;
+    }
+
+    public boolean isEnableHiveFunctionPredicatePruning() {
+        return enableHiveFunctionPredicatePruning;
+    }
+
+    public void setEnableHiveFunctionPredicatePruning(boolean enableHiveFunctionPredicatePruning) {
+        this.enableHiveFunctionPredicatePruning = enableHiveFunctionPredicatePruning;
     }
 
     public boolean enablePaimonColumnStatistics() {

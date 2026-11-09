@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.type.CharType;
 import com.starrocks.type.HLLType;
 import com.starrocks.type.VarcharType;
@@ -243,6 +244,41 @@ public class ScalarOperationToDeltaLakeExprTest {
         // Neither side convertible.
         and = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, unconvertible, unconvertible);
         Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(and), context));
+    }
+
+    @Test
+    public void testSubfieldNotBoundToDottedTopLevelColumn() {
+        // A struct s with field a, and a separate top-level partition column literally named "s.a".
+        StructType dottedSchema = new StructType()
+                .add("s", new StructType().add("a", IntegerType.INTEGER).add("b", StringType.STRING))
+                .add("s.a", IntegerType.INTEGER)
+                .add("s.b", StringType.STRING);
+        ScalarOperationToDeltaLakeExpr converter = new ScalarOperationToDeltaLakeExpr();
+        ScalarOperationToDeltaLakeExpr.DeltaLakeContext context =
+                new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(dottedSchema, Set.of("s.a", "s.b"));
+        ColumnRefOperator structCol = new ColumnRefOperator(20, com.starrocks.type.AnyStructType.ANY_STRUCT, "s",
+                true, false);
+        ScalarOperator subA = new SubfieldOperator(structCol, com.starrocks.type.IntegerType.INT, List.of("a"));
+        ScalarOperator subB = new SubfieldOperator(structCol, VarcharType.VARCHAR, List.of("b"));
+
+        List<ScalarOperator> predicates = List.of(
+                new BinaryPredicateOperator(BinaryType.EQ, subA, ConstantOperator.createInt(1)),
+                new InPredicateOperator(false, subA, ConstantOperator.createInt(1), ConstantOperator.createInt(2)),
+                new LikePredicateOperator(subB, ConstantOperator.createVarchar("abc%")));
+        for (ScalarOperator predicate : predicates) {
+            Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(predicate), context),
+                    predicate.toString());
+        }
+
+        // The top-level column named "s.a" itself is still pushed down.
+        ColumnRefOperator dottedCol = new ColumnRefOperator(21, com.starrocks.type.IntegerType.INT, "s.a", true,
+                false);
+        ScalarOperator in = new InPredicateOperator(false, dottedCol, ConstantOperator.createInt(1),
+                ConstantOperator.createInt(2));
+        Column column = new Column("s.a");
+        Predicate expected = new Or(new Predicate("=", column, Literal.ofInt(1)),
+                new Predicate("=", column, Literal.ofInt(2)));
+        Assertions.assertEquals(expected.toString(), converter.convert(List.of(in), context).toString());
     }
 
     @Test
