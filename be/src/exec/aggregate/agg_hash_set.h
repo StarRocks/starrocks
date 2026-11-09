@@ -39,13 +39,25 @@ DECLARE_FAIL_POINT(agg_hash_set_bad_alloc);
 // agg_prefetch_dist_bench across number/string keys, map and set; the crossover
 // sits right at the L2 size). So the prefetch path is gated on the resident
 // footprint vs L2 instead of the old fixed bucket_count >= 8192 threshold.
+#if defined(__x86_64__)
+inline constexpr double kArchPrefetchL2Scale = 2.0;
+inline constexpr size_t kArchDefaultAggPrefetchDist = 8;
+#else
+inline constexpr double kArchPrefetchL2Scale = 1.0;
+inline constexpr size_t kArchDefaultAggPrefetchDist = 16;
+#endif
+
 inline size_t agg_prefetch_min_bytes() {
     static const long l2 = []() {
         const long v = CpuInfo::get_l2_cache_size();
+#if defined(__x86_64__)
+        return v > 0 ? v : 2L * 1024 * 1024;
+#else
         return v > 0 ? v : 1L * 1024 * 1024;
+#endif
     }();
     // Ratio read live (mutable knob); L2 size is constant so it is cached.
-    return static_cast<size_t>(static_cast<double>(l2) * config::agg_prefetch_l2_ratio);
+    return static_cast<size_t>(static_cast<double>(l2) * kArchPrefetchL2Scale * config::agg_prefetch_l2_ratio);
 }
 
 // resident footprint = bucket_count * slot_bytes (+1 control byte per slot).
@@ -54,10 +66,15 @@ inline bool agg_should_prefetch_table(const Table& table) {
     return table.bucket_count() * (sizeof(typename Table::value_type) + 1) >= agg_prefetch_min_bytes();
 }
 
-// Read once per chunk from config::agg_hash_map_prefetch_dist (default 16).
-// The macros below capture it into __prefetch_dist so each inner-loop
-// iteration is a register read, not an atomic load.
+// Read once per chunk from config::agg_hash_map_prefetch_dist (arch default: 8 on x86_64, 16 on aarch64).
+// Clamp negative to 0 (disabled).
 inline size_t agg_hash_map_default_prefetch_dist() {
+    [[maybe_unused]] static const bool init_arch_default = []() {
+        if (config::agg_hash_map_prefetch_dist == 16) {
+            config::agg_hash_map_prefetch_dist = static_cast<int32_t>(kArchDefaultAggPrefetchDist);
+        }
+        return true;
+    }();
     const int32_t v = config::agg_hash_map_prefetch_dist;
     return v > 0 ? static_cast<size_t>(v) : 0;
 }

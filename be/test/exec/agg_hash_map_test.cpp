@@ -635,6 +635,43 @@ static_assert(SerializedKeyFixedSize4AggHashMap<PhmapSeed1>::max_fixed_size == s
 static_assert(SerializedKeyFixedSize8AggHashMap<PhmapSeed1>::max_fixed_size == sizeof(SliceKey8));
 static_assert(SerializedKeyFixedSize16AggHashMap<PhmapSeed1>::max_fixed_size == sizeof(SliceKey16));
 
+TEST(HashMapTest, ArchAwarePrefetchGateAndDistance) {
+    const double saved_ratio = config::agg_prefetch_l2_ratio;
+    const int32_t saved_dist = config::agg_hash_map_prefetch_dist;
+    DeferOp restore([&]() {
+        config::agg_prefetch_l2_ratio = saved_ratio;
+        config::agg_hash_map_prefetch_dist = saved_dist;
+    });
+
+#if defined(__x86_64__)
+    EXPECT_DOUBLE_EQ(2.0, kArchPrefetchL2Scale);
+    EXPECT_EQ(8u, kArchDefaultAggPrefetchDist);
+#else
+    EXPECT_DOUBLE_EQ(1.0, kArchPrefetchL2Scale);
+    EXPECT_EQ(16u, kArchDefaultAggPrefetchDist);
+#endif
+
+    // Default initialization sets arch-tuned distance, while explicit overrides (including 16 and 0) are respected.
+    EXPECT_EQ(kArchDefaultAggPrefetchDist, agg_hash_map_default_prefetch_dist());
+    config::agg_hash_map_prefetch_dist = 16;
+    EXPECT_EQ(16u, agg_hash_map_default_prefetch_dist());
+    config::agg_hash_map_prefetch_dist = 12;
+    EXPECT_EQ(12u, agg_hash_map_default_prefetch_dist());
+    config::agg_hash_map_prefetch_dist = 0;
+    EXPECT_EQ(0u, agg_hash_map_default_prefetch_dist());
+    config::agg_hash_map_prefetch_dist = -5;
+    EXPECT_EQ(0u, agg_hash_map_default_prefetch_dist());
+
+    // L2 gate scales by kArchPrefetchL2Scale at ratio 1.0, and preserves 0.0 (force prefetch) and 1e9 (force noprefetch).
+    config::agg_prefetch_l2_ratio = 0.0;
+    EXPECT_EQ(0u, agg_prefetch_min_bytes());
+    config::agg_prefetch_l2_ratio = 1.0;
+    const size_t min_at_one = agg_prefetch_min_bytes();
+    EXPECT_GT(min_at_one, 0u);
+    config::agg_prefetch_l2_ratio = 2.0;
+    EXPECT_EQ(min_at_one * 2, agg_prefetch_min_bytes());
+}
+
 TEST(HashMapTest, FixedSizeSoALayoutAndSubWidthTransitionAllKeyWidths) {
     constexpr int kChunkRows = 64;
     const double saved_ratio = config::agg_prefetch_l2_ratio;
