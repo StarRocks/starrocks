@@ -56,6 +56,8 @@ import java.util.Set;
  *   year(c) = 2024                         -> c >= 2024-01-01 and c < 2025-01-01
  *   date_trunc('month', c) <= D            -> c < date_trunc('month', D) + 1 month
  *   date_format(c, '%Y-%m') = '2024-03'    -> c >= 2024-03-01 and c < 2024-04-01
+ *   substr(cast(c as varchar), 1, 10) = '2024-03-01'
+ *                                          -> c >= 2024-03-01 and c < 2024-03-02
  *   datediff(now(), c) <= 30               -> c >= to_date(now()) - 30 days
  *   hours_add(c, 2) < T                    -> c < T - 2 hours
  *   left(s, 3) = 'abc'                     -> starts_with(s, 'abc')
@@ -105,13 +107,19 @@ public final class FunctionPreimage {
         for (String fn : List.of(FunctionSet.YEAR, FunctionSet.TO_DATE, FunctionSet.DATE, FunctionSet.DATE_TRUNC)) {
             builder.put(fn, TruncPreimage::derive);
         }
-        builder.put(FunctionSet.DATE_FORMAT, DateFormatPreimage::derive);
+        builder.put(FunctionSet.DATE_FORMAT, DateTextPreimage::derive);
+        builder.put(FunctionSet.REPLACE, DateTextPreimage::derive);
         builder.put(FunctionSet.DATEDIFF, DateDiffPreimage::derive);
         for (String fn : ShiftPreimage.UNITS.keySet()) {
             builder.put(fn, ShiftPreimage::derive);
         }
-        for (String fn : List.of(FunctionSet.LEFT, FunctionSet.SUBSTR, FunctionSet.SUBSTRING)) {
-            builder.put(fn, PrefixPreimage::derive);
+        builder.put(FunctionSet.LEFT, PrefixPreimage::derive);
+        for (String fn : List.of(FunctionSet.SUBSTR, FunctionSet.SUBSTRING)) {
+            // substr(s, 1, n) on a string column, or substr(cast(t as varchar), 1, 10) on a temporal one
+            builder.put(fn, (call, op, value, resolver) -> {
+                ScalarOperator prefix = PrefixPreimage.derive(call, op, value, resolver);
+                return prefix != null ? prefix : DateTextPreimage.derive(call, op, value, resolver);
+            });
         }
         return builder.build();
     }
@@ -281,10 +289,11 @@ public final class FunctionPreimage {
     }
 
     // ------------------------------------------------------------------------------------------------------------
-    // date_format(c, '%Y-%m') and the other zero-padded, most-significant-first formats
+    // date_format(c, '%Y-%m') and the other zero-padded, most-significant-first formats, and the date text shapes
+    // of DateTextShape (also rewritten in place by SimplifiedDateColumnPredicateRule where exact)
     // ------------------------------------------------------------------------------------------------------------
 
-    private static final class DateFormatPreimage {
+    private static final class DateTextPreimage {
         private static final Map<String, String[]> FORMATS = ImmutableMap.<String, String[]>builder()
                 .put("%Y", new String[] {"year", "uuuu"})
                 .put("%Y-%m", new String[] {"month", "uuuu-MM"})
@@ -298,13 +307,14 @@ public final class FunctionPreimage {
                 .build();
 
         static ScalarOperator derive(CallOperator call, BinaryType op, ConstantOperator value, ColumnResolver resolver) {
-            if (call.getChildren().size() != 2) {
+            // date_format(c, fmt), substr(cast(c as varchar), 1, 10) or replace(<that>, '-', '')
+            DateTextShape shape = DateTextShape.match(call);
+            if (shape == null) {
                 return null;
             }
-            String format = stringConstant(call.getChild(1));
-            String[] spec = format == null ? null : FORMATS.get(format);
+            String[] spec = FORMATS.get(shape.pattern);
             String text = stringConstant(value);
-            ScalarOperator column = temporalColumn(call.getChild(0), resolver);
+            ScalarOperator column = temporalColumn(shape.operand, resolver);
             if (spec == null || text == null || column == null) {
                 return null;
             }
