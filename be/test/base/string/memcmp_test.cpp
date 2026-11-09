@@ -244,4 +244,25 @@ TEST(MemcmpTest, PageBoundaryGuard) {
     munmap(map2, 2 * page_size);
 }
 
+TEST(MemcmpTest, MemequalSingleBitFlipAllPositionsAndLengths) {
+    for (size_t len = 1; len <= 96; ++len) {
+        std::vector<char> buf1(len);
+        std::vector<char> buf2(len);
+        for (size_t i = 0; i < len; ++i) {
+            buf1[i] = static_cast<char>((i * 131 + 17) & 0xFF);
+            buf2[i] = buf1[i];
+        }
+        ASSERT_TRUE(memequal(buf1.data(), len, buf2.data(), len)) << "len=" << len;
+        for (size_t pos = 0; pos < len; ++pos) {
+            for (int bit = 0; bit < 8; ++bit) {
+                const char mask = static_cast<char>(1U << bit);
+                buf2[pos] ^= mask;
+                ASSERT_FALSE(memequal(buf1.data(), len, buf2.data(), len))
+                        << "len=" << len << " pos=" << pos << " bit=" << bit;
+                buf2[pos] ^= mask;
+            }
+        }
+    }
+}
+
 } // namespace starrocks

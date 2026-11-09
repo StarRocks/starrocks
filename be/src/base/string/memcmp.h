@@ -98,8 +98,7 @@ inline bool memequal(const char* p1, size_t size1, const char* p2, size_t size2)
         while (p1 + 16 < end1) {
             uint8x16_t v1 = vld1q_u8(reinterpret_cast<const uint8_t*>(p1));
             uint8x16_t v2 = vld1q_u8(reinterpret_cast<const uint8_t*>(p2));
-            uint64x2_t diff = vreinterpretq_u64_u8(veorq_u8(v1, v2));
-            if ((vgetq_lane_u64(diff, 0) | vgetq_lane_u64(diff, 1)) != 0) {
+            if (vmaxvq_u32(vreinterpretq_u32_u8(veorq_u8(v1, v2))) != 0) {
                 return false;
             }
             p1 += 16;
@@ -107,8 +106,7 @@ inline bool memequal(const char* p1, size_t size1, const char* p2, size_t size2)
         }
         uint8x16_t t1 = vld1q_u8(reinterpret_cast<const uint8_t*>(end1 - 16));
         uint8x16_t t2 = vld1q_u8(reinterpret_cast<const uint8_t*>(end2 - 16));
-        uint64x2_t tdiff = vreinterpretq_u64_u8(veorq_u8(t1, t2));
-        return (vgetq_lane_u64(tdiff, 0) | vgetq_lane_u64(tdiff, 1)) == 0;
+        return vmaxvq_u32(vreinterpretq_u32_u8(veorq_u8(t1, t2))) == 0;
 #else
         return memcmp(p1, p2, size1) == 0;
 #endif
