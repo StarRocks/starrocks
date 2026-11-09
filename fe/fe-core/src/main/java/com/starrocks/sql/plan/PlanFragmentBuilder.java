@@ -59,12 +59,7 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.delta.DeltaLakePreimagePredicates;
-<<<<<<< HEAD
-import com.starrocks.connector.iceberg.IcebergPreimageScanPredicates;
-=======
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
-import com.starrocks.connector.jdbc.JDBCPushDownSQLBuilder;
->>>>>>> 6dd6febe1ed... [Enhancement][RB-225] Unify predicate normalization for external table scans (#69004)
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AIProjectNode;
