@@ -10,6 +10,18 @@ import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 
 Stand up a small StarRocks cluster on object storage, load a real public dataset, and ask **Claude** plain-English questions about it through the **StarRocks MCP server**. Claude discovers the schema, writes the SQL (including multi-table joins), and renders charts. All data lives in object storage on **MinIO**.
 
+## Follow along with the video if you prefer
+
+<iframe
+  width="560"
+  height="315"
+  src="https://www.youtube.com/embed/IKMDyt6Ht6A"
+  title="StarRocks MCP Server Demo: Query & Visualize Data with Claude"
+  frameborder="0"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+  allowfullscreen
+></iframe>
+
 This tutorial covers:
 
 - Running StarRocks in shared-data mode (1 FE + 1 CN) and MinIO in Docker
