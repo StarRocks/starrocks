@@ -896,11 +896,7 @@ SET ("key" = "value")
 - `bucket_size` (v3.2 以降でサポート)
 - `base_compaction_forbidden_time_ranges` (v3.2.13 以降でサポート)
 - `enable_statistic_auto_collect`
-<<<<<<< HEAD
-=======
 - `tablet_reshard_target_size` (Range 分散テーブルのみ。`""` に設定すると削除されます)。[Tablet サイズの調整](#tablet-サイズの調整) を参照してください。
-- 行レベル TTL 関連のプロパティ
->>>>>>> 389dfaac411... [Enhancement][RB-96] Add the tablet_reshard_target_size table property for range-distributed tables (#68535)
 
 :::note
 

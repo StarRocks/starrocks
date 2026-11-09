@@ -895,11 +895,7 @@ SET ("key" = "value")
 - `bucket_size`（从3.2起支持）
 - `base_compaction_forbidden_time_ranges`（从v3.2.13起支持）
 - `enable_statistic_auto_collect`
-<<<<<<< HEAD
-=======
 - `tablet_reshard_target_size`（仅适用于 Range 分布表；设置为 `""` 即可删除）。参见[调整 Tablet 大小](#调整-tablet-大小)。
-- 行级 TTL 相关属性
->>>>>>> 389dfaac411... [Enhancement][RB-96] Add the tablet_reshard_target_size table property for range-distributed tables (#68535)
 
 :::note
 

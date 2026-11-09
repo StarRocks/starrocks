@@ -895,11 +895,7 @@ Currently, StarRocks supports modifying the following table properties:
 - `bucket_size` (supported since 3.2)
 - `base_compaction_forbidden_time_ranges` (supported since v3.2.13)
 - `enable_statistic_auto_collect`
-<<<<<<< HEAD
-=======
 - `tablet_reshard_target_size` (range-distributed tables only; set it to `""` to remove it). See [Modify the tablet size](#modify-the-tablet-size).
-- Row TTL related properties
->>>>>>> 389dfaac411... [Enhancement][RB-96] Add the tablet_reshard_target_size table property for range-distributed tables (#68535)
 
 :::note
 
