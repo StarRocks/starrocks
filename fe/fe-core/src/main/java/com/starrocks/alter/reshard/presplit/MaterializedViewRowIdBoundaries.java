@@ -83,7 +83,7 @@ final class MaterializedViewRowIdBoundaries {
             // equal share of the tablets and of the bytes, both rounded up. The per-old-tablet cap applies to a
             // share, never to the whole refresh. The sizing is read here once, and the source plans the cuts once,
             // so every partition gets the same cuts.
-            int budget = TabletPreSplitCoordinator.selectPreSplitTabletBudget(estimates, activeComputeNodeCount);
+            int budget = TabletPreSplitCoordinator.selectPreSplitTabletBudget(estimates, activeComputeNodeCount, table);
             int partitionTabletCount = Math.min(IntMath.divide(budget, partitionCount, RoundingMode.CEILING),
                     Config.tablet_reshard_max_split_count);
             long partitionBytes = LongMath.divide(estimates.totalBytes(), partitionCount, RoundingMode.CEILING);

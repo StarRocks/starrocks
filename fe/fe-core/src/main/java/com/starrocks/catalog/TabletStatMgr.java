@@ -159,6 +159,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 // the floor above the bound -- the overlap that lets this scan emit a merge signal and
                 // an adaptive-split signal for the same index.
                 int maxSplitCount = Config.tablet_reshard_max_split_count;
+                long reshardTargetSize = reshardEligible ? olapTable.getTabletReshardTargetSize() : 0;
                 int parallelismFloor = computeNodeCount == 0 ? 0
                         : TabletReshardUtils.parallelismFloor(computeNodeCount, maxSplitCount);
                 int adaptiveBound = TabletReshardUtils.adaptiveSplitBound(computeNodeCount, maxSplitCount);
@@ -193,7 +194,7 @@ public class TabletStatMgr extends FrontendDaemon {
                                 // than the warehouse can drive, the steady-state target once it does.
                                 long indexTarget = underProvisioned
                                         ? TabletReshardUtils.adaptiveTargetSize(index.getDataSize(true),
-                                                Config.tablet_reshard_target_size, adaptiveBound)
+                                                reshardTargetSize, adaptiveBound)
                                         : 0;
                                 long prevFreshTabletSize = -1L;
                                 // NOTE: can take a rather long time to iterate lots of tablets

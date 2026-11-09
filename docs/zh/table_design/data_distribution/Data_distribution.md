@@ -805,6 +805,46 @@ DISTRIBUTED BY HASH(site_id,city_code);
 - 该语义从 v4.1 开始支持。在存算分离模式下默认启用，由 FE 配置 `enable_range_distribution` 控制。
 - 如需将其禁用并回退到此前的默认分布方式，请将 FE 配置项 `enable_range_distribution` 设置为 `false`。该配置在存算一体模式下无效。
 
+#### Tablet 目标大小
+
+基于范围分布的表在自动拆分、合并 Tablet 时，会让每个 Tablet 的大小保持在一个目标值附近。默认情况下，所有表都以 FE 配置项 `tablet_reshard_target_size`（默认值：10 GB）作为目标大小。如需为某张表单独指定目标大小，可以在建表时将表属性 `tablet_reshard_target_size`（单位：字节）设置为正整数，建表后也可以通过 `ALTER TABLE ... SET` 修改。该表属性与 FE 配置项同名，仅适用于基于范围分布的表；在其他表上设置时，语句会报错 `tablet_reshard_target_size is only supported for range-distributed tables`。
+
+```SQL
+CREATE TABLE orders (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int,
+    amount decimal(18, 2)
+)
+DUPLICATE KEY (tenant_id, created_time, id)
+PROPERTIES ("tablet_reshard_target_size" = "1073741824");
+
+-- 将该表的目标大小改为 4 GB。
+ALTER TABLE orders SET ("tablet_reshard_target_size" = "4294967296");
+
+-- 删除该属性，该表重新以 FE 配置项 tablet_reshard_target_size 作为目标大小。
+ALTER TABLE orders SET ("tablet_reshard_target_size" = "");
+```
+
+设置了该属性的表在以下场景中以属性值代替 FE 配置项：
+
+- 自动拆分：Tablet 达到属性值的 1.5 倍（向上取整）时触发拆分，拆分为若干个大小接近属性值的 Tablet。
+- 自动合并（需开启 FE 配置项 `tablet_reshard_enable_tablet_merge`）：相邻两个 Tablet 的大小之和小于属性值的 80%（向上取整）时触发合并，每组参与合并的 Tablet 大小总和不超过属性值。
+- 手动执行 `ALTER TABLE ... SPLIT TABLET` 或 `ALTER TABLE ... MERGE TABLET` 时，如果语句的 `PROPERTIES` 中未指定 `tablet_reshard_target_size`，则以属性值作为目标大小。
+- 导入时的 Tablet 预分裂、在线变更排序键（例如 `ALTER TABLE ... ORDER BY`）以及为该表创建 Rollup，同样以属性值作为新 Tablet 的目标大小。
+
+详细规则参见 [ALTER TABLE - 调整 Tablet 大小](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#调整-tablet-大小)。
+
+该表属性没有默认值。未设置该属性的表以 FE 配置项 `tablet_reshard_target_size` 作为目标大小，之后修改该配置项也会对其生效。将该属性设置为 `0`、负数或非数字时，语句会报错。
+
+如果将 FE 配置项 `tablet_reshard_target_size` 设置为 `0`，所有表的自动拆分和合并都会关闭，设置了该表属性的表也不例外。该配置项恢复为正数后，表属性重新生效。
+
+:::note
+
+如果表设置了 `tablet_reshard_target_size` 属性，`SHOW CREATE TABLE` 返回的建表语句会包含该属性。在默认分布方式不是基于范围分布的环境中（FE 配置项 `enable_range_distribution` 为 `false`，或存算一体模式），该语句会创建哈希分桶或随机分桶的表，而该属性仅适用于基于范围分布的表，因此语句会报错。不支持该属性的版本会将其视为未知属性并报错。在这些环境中执行该语句前，请先删除该属性。
+
+:::
+
 #### 示例
 
 ##### 创建具有基于范围的分布语义的新表
@@ -886,7 +926,7 @@ PROPERTIES(
 
 有关拆分或合并 Tablet 的详细指引，参考 [ALTER TABLE - Modify the tablet size](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#modify-the-tablet-size)。
 
-- 将表中所有符合条件的 Tablet 拆分，目标大小为 10 GB（默认值）。
+- 将表中所有符合条件的 Tablet 按表的目标大小（默认为 10 GB）拆分。
 
 ```SQL
 ALTER TABLE table1 SPLIT TABLETS;
@@ -976,6 +1016,7 @@ AS SELECT ... FROM range_table;
       user_name VARCHAR(32) DEFAULT '')
   DUPLICATE KEY (event_day,site_id,pv)
   PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY RANDOM
   -- 该表分区中的分桶数量由 StarRocks 自动设置，并且因为指定单个分桶的大小为 1 GB，分桶数量会按需动态增加。
   PROPERTIES("bucket_size"="1073741824")
   ;
@@ -988,6 +1029,7 @@ AS SELECT ... FROM range_table;
       user_name VARCHAR(32) DEFAULT '')
   DUPLICATE KEY (event_day,site_id,pv)
   PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY RANDOM
   -- 该表分区中的分桶数量由 StarRocks 自动设置，并且由于没有指定单个分桶的大小，分桶数量不会按需动态增加。
   ;
   ```

@@ -1006,6 +1006,20 @@ PROPERTIES (
 - `flat_json.sparsity.factor` (Optional): The proportion threshold of columns with the same name. A column will not be extracted by Flat JSON if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.3`.
 - `flat_json.column.max` (Optional): The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `100`.
 
+### Target tablet size of a range-distributed table
+
+*Available only on range-distributed tables*
+
+You can set the property `tablet_reshard_target_size` to give a range-distributed table its own target tablet size. Automatic tablet split and merge of the table use this value in place of the FE configuration `tablet_reshard_target_size` while that configuration is positive. Unit: bytes. The value must be a positive integer.
+
+```SQL
+PROPERTIES (
+    "tablet_reshard_target_size" = "4294967296"
+)
+```
+
+The property has no default value. A table without it follows the FE configuration `tablet_reshard_target_size`. On a table that is not range-distributed, the statement fails with `tablet_reshard_target_size is only supported for range-distributed tables`. You can change or remove this property with [ALTER TABLE](ALTER_TABLE.md). For details, see [Data distribution - Target tablet size](../../../table_design/data_distribution/Data_distribution.md#target-tablet-size).
+
 ### Skip a table in automatic statistics collection
 
 You can set `enable_statistic_auto_collect` to `false` to stop automatic statistics collection from collecting statistics on a table. Default: `true`.
