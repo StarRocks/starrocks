@@ -53,6 +53,7 @@
 #include "column/nullable_column.h"
 #include "column/storage_column_traits.h"
 #include "common/logging.h"
+#include "gutil/casts.h"
 #include "gutil/port.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/bitshuffle_wrapper.h"
@@ -446,7 +447,7 @@ inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_
     }
 
     if constexpr (!std::is_same_v<CppType, bool>) {
-        if (!column->is_constant()) {
+        if (LIKELY(!column->is_constant())) {
             NullableColumn* nullable_col = nullptr;
             Column* target_col = column;
             if (column->is_nullable()) {
@@ -456,10 +457,12 @@ inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_
                 DCHECK_EQ(target_col->size(), nullable_col->null_column()->size());
             }
 
-            auto try_direct_write = [&](auto* fc) -> bool {
-                if (!fc) {
-                    return false;
-                }
+            if (LIKELY(!target_col->is_nullable() && !target_col->is_constant())) {
+                using ValueType = typename StorageColumnType<Type>::ValueType;
+                using BaseCol = FixedLengthColumnBase<ValueType>;
+                static_assert(sizeof(ValueType) == sizeof(CppType), "ValueType and CppType size mismatch");
+
+                auto* fc = down_cast<BaseCol*>(target_col);
                 size_t orig_size = fc->size();
                 fc->resize_uninitialized(orig_size + total);
                 uint8_t* dst_raw = fc->mutable_raw_data() + orig_size * sizeof(CppType);
@@ -478,17 +481,7 @@ inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_
                     nullable_col->null_column_data().resize(orig_size + read_count, 0);
                 }
                 *count = read_count;
-                return true;
-            };
-
-            using StorageCol = StorageColumnType<Type>;
-            if (try_direct_write(dynamic_cast<StorageCol*>(target_col))) {
                 return Status::OK();
-            }
-            if constexpr (!std::is_same_v<StorageCol, FixedLengthColumnBase<CppType>>) {
-                if (try_direct_write(dynamic_cast<FixedLengthColumnBase<CppType>*>(target_col))) {
-                    return Status::OK();
-                }
             }
         }
     }
