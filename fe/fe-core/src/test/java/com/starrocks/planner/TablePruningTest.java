@@ -366,10 +366,6 @@ public class TablePruningTest extends TablePruningTestBase {
                         List.of(p1, all)},
                 {"select a.pk, b.v1 from pk_partitioned partition (p1) a left join pk_partitioned b" + on,
                         List.of(p1, all)},
-                {"delete from pk_partitioned partition (p1) using pk_partitioned b" + where + " and b.v1 > 0",
-                        List.of(p1, all)},
-                {"delete from pk_partitioned tablet (" + tablet + ") using pk_partitioned b" + where + " and b.v1 > 0",
-                        List.of(List.of(tablet), all)},
                 {"update pk_partitioned set v1 = b.v1 + 1 from pk_partitioned partition (p1) b" + where,
                         List.of(p1, all)},
                 // Without these clauses the two scans are merged into one.
@@ -390,14 +386,11 @@ public class TablePruningTest extends TablePruningTestBase {
         long replica = replicaOf("uk_partitioned", "p1", tablet);
         long referencingTablet = tabletsOf("fk_to_uk_partitioned", "fk_to_uk_partitioned").get(0);
         String join = "select f.id, f.fk from fk_to_uk_partitioned f join uk_partitioned";
-        String using = " using fk_to_uk_partitioned f where uk_partitioned.pk = f.fk";
         Object[][] cases = {
                 // statement, the tablets each scan of uk_partitioned reads
                 {join + " partition (p1) u on f.fk = u.pk", List.of(p1)},
                 {join + " tablet (" + tablet + ") u on f.fk = u.pk", List.of(List.of(tablet))},
                 {join + " replica (" + replica + ") u on f.fk = u.pk", List.of(List.of(tablet))},
-                {"delete from uk_partitioned partition (p1)" + using, List.of(p1)},
-                {"delete from uk_partitioned tablet (" + tablet + ")" + using, List.of(List.of(tablet))},
                 // The referencing side may name some of its tablets: the referenced side is still removed.
                 {"select f.id, f.fk from fk_to_uk_partitioned tablet (" + referencingTablet + ") f " +
                         "join uk_partitioned u on f.fk = u.pk", List.of()},

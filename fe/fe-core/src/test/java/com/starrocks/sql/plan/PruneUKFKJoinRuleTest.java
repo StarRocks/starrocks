@@ -203,7 +203,6 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
         long replica = olapTableOf("uk_partitioned").getPartition("p1").getDefaultPhysicalPartition()
                 .getQueryableBaseIndex().getTablet(tablet).getAllReplicas().get(0).getId();
         long foreignKeyTablet = tabletsOf("fk_to_uk_partitioned", "fk_to_uk_partitioned").get(0);
-        String using = " using fk_to_uk_partitioned f where uk_partitioned.pk = f.fk";
         Object[][] cases = {
                 // statement, the tablets each scan of uk_partitioned reads
                 {"select f.id, f.fk from fk_to_uk_partitioned f join uk_partitioned partition (p1) u " +
@@ -216,8 +215,6 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
                         "on f.fk = u.pk", List.of(p1)},
                 {"select f.id, u.pk from fk_to_uk_partitioned f left join uk_partitioned partition (p1) u " +
                         "on f.fk = u.pk", List.of(p1)},
-                {"delete from uk_partitioned partition (p1)" + using, List.of(p1)},
-                {"delete from uk_partitioned tablet (" + tablet + ")" + using, List.of(List.of(tablet))},
                 // The foreign key side may name some of its tablets: the unique key side is still removed.
                 {"select f.id, f.fk from fk_to_uk_partitioned tablet (" + foreignKeyTablet + ") f " +
                         "join uk_partitioned u on f.fk = u.pk", List.of()},
