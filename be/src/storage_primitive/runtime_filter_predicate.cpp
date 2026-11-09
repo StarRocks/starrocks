@@ -44,12 +44,17 @@ void apply_slice_minmax_selection(const RuntimeFilter* rf, const Column* column,
         const Slice max_val = mm_rf->max_value(&tmp_pool);
         const bool left_close = mm_rf->left_close_interval();
         const bool right_close = mm_rf->right_close_interval();
+        const bool has_lower_bound = !(left_close && min_val == Slice::min_value());
+        const bool has_upper_bound = !(right_close && max_val == Slice::max_value());
+        if (!has_lower_bound && !has_upper_bound) {
+            return;
+        }
         for (uint16_t i = from; i < to; ++i) {
             if (!selection[i]) continue;
             if (null_data != nullptr && null_data[i]) continue;
             const Slice val = binary_col->get_slice(i);
-            const bool left_ok = left_close ? (val >= min_val) : (val > min_val);
-            const bool right_ok = right_close ? (val <= max_val) : (val < max_val);
+            const bool left_ok = !has_lower_bound || (left_close ? (val >= min_val) : (val > min_val));
+            const bool right_ok = !has_upper_bound || (right_close ? (val <= max_val) : (val < max_val));
             selection[i] = static_cast<uint8_t>(left_ok && right_ok);
         }
     };
@@ -78,6 +83,11 @@ uint16_t apply_slice_minmax_branchless(const RuntimeFilter* rf, const Column* co
         const Slice max_val = mm_rf->max_value(&tmp_pool);
         const bool left_close = mm_rf->left_close_interval();
         const bool right_close = mm_rf->right_close_interval();
+        const bool has_lower_bound = !(left_close && min_val == Slice::min_value());
+        const bool has_upper_bound = !(right_close && max_val == Slice::max_value());
+        if (!has_lower_bound && !has_upper_bound) {
+            return sel_size;
+        }
         uint16_t new_size = 0;
         for (uint16_t i = 0; i < sel_size; ++i) {
             uint16_t idx = target_sel[i];
@@ -86,8 +96,8 @@ uint16_t apply_slice_minmax_branchless(const RuntimeFilter* rf, const Column* co
                 new_size += 1;
             } else {
                 const Slice val = binary_col->get_slice(idx);
-                const bool left_ok = left_close ? (val >= min_val) : (val > min_val);
-                const bool right_ok = right_close ? (val <= max_val) : (val < max_val);
+                const bool left_ok = !has_lower_bound || (left_close ? (val >= min_val) : (val > min_val));
+                const bool right_ok = !has_upper_bound || (right_close ? (val <= max_val) : (val < max_val));
                 new_size += static_cast<uint16_t>(left_ok && right_ok);
             }
         }
@@ -271,13 +281,18 @@ Status DictColumnRuntimeFilterPredicate::_recompute_selection() {
             const Slice max_val = mm_rf->max_value(&tmp_pool);
             const bool left_close = mm_rf->left_close_interval();
             const bool right_close = mm_rf->right_close_interval();
+            const bool has_lower_bound = !(left_close && min_val == Slice::min_value());
+            const bool has_upper_bound = !(right_close && max_val == Slice::max_value());
+            if (!has_lower_bound && !has_upper_bound) {
+                return;
+            }
             const auto* binary_col =
                     down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(_dict_words_col.get()));
             for (size_t i = 0; i < size; ++i) {
                 if (!ctx.selection[i]) continue;
                 const Slice val = binary_col->get_slice(i);
-                const bool left_ok = left_close ? (val >= min_val) : (val > min_val);
-                const bool right_ok = right_close ? (val <= max_val) : (val < max_val);
+                const bool left_ok = !has_lower_bound || (left_close ? (val >= min_val) : (val > min_val));
+                const bool right_ok = !has_upper_bound || (right_close ? (val <= max_val) : (val < max_val));
                 ctx.selection[i] = static_cast<uint8_t>(left_ok && right_ok);
             }
         };

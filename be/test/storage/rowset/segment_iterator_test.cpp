@@ -3952,4 +3952,61 @@ TEST_F(SegmentIteratorTest, DictRuntimeFilterRefreshTimingAttributionTest) {
     }
 }
 
+TEST_F(SegmentIteratorTest, DescendingTopNSliceMaxValueSentinelUnboundedTest) {
+    ObjectPool pool;
+
+    // 65,536 0xff bytes is 1 byte longer than Slice::max_value() (65,535 0xff bytes),
+    // so Slice(large_ff) > Slice::max_value().
+    const std::string large_ff(65536, '\xff');
+    ASSERT_GT(Slice(large_ff), Slice::max_value());
+
+    // A descending Top-N filter (ORDER BY s DESC LIMIT k) sets the lower bound (_min = "a")
+    // while leaving _max at Slice::max_value() with _right_close_interval = true.
+    auto* desc_topn_rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<true>(&pool, Slice("a"), true, false);
+    RuntimeFilterProbeDescriptor rf_desc;
+    rf_desc.set_runtime_filter(desc_topn_rf);
+
+    auto col = BinaryColumn::create();
+    col->append(Slice("0_below"));
+    col->append(Slice("b_mid"));
+    col->append(Slice(large_ff));
+
+    Chunk chunk;
+    chunk.append_column(col, 0, true);
+
+    // 1. Selection vector evaluation (apply_slice_minmax_selection)
+    {
+        RuntimeFilterPredicate pred(&rf_desc, 0);
+        ASSERT_TRUE(pred.init(-1));
+        std::vector<uint8_t> selection = {1, 1, 1};
+        ASSERT_OK(pred.evaluate(&chunk, selection.data(), 0, 3));
+        EXPECT_EQ(selection[0], 0);
+        EXPECT_EQ(selection[1], 1);
+        EXPECT_EQ(selection[2], 1);
+    }
+
+    // 2. Branchless index evaluation (apply_slice_minmax_branchless)
+    {
+        RuntimeFilterPredicate pred(&rf_desc, 0);
+        ASSERT_TRUE(pred.init(-1));
+        uint16_t sel[3] = {0, 1, 2};
+        uint16_t target_sel[3] = {0, 0, 0};
+        ASSIGN_OR_ABORT(uint16_t new_size, pred.evaluate(&chunk, sel, 3, target_sel));
+        ASSERT_EQ(new_size, 2);
+        EXPECT_EQ(target_sel[0], 1);
+        EXPECT_EQ(target_sel[1], 2);
+    }
+
+    // 3. Dictionary mask recomputation (DictColumnRuntimeFilterPredicate::_recompute_selection)
+    {
+        DictColumnRuntimeFilterPredicate dict_pred(0, col, desc_topn_rf, false);
+        ASSERT_OK(dict_pred.init());
+        EXPECT_FALSE(dict_pred.is_always_false());
+        ASSERT_EQ(dict_pred._dict_codes_selection.size(), 3u);
+        EXPECT_EQ(dict_pred._dict_codes_selection[0], 0);
+        EXPECT_EQ(dict_pred._dict_codes_selection[1], 1);
+        EXPECT_EQ(dict_pred._dict_codes_selection[2], 1);
+    }
+}
+
 } // namespace starrocks
