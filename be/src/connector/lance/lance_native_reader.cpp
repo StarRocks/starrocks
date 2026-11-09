@@ -94,8 +94,8 @@ Status validate_lance_type(const arrow::DataType* source, const TypeDescriptor& 
         return Status::OK();
     }
     const auto source_id = source->id();
-    const bool target_decimal =
-            target.type == TYPE_DECIMAL32 || target.type == TYPE_DECIMAL64 || target.type == TYPE_DECIMAL128;
+    const bool target_decimal = target.type == TYPE_DECIMALV2 || target.type == TYPE_DECIMAL32 ||
+                                target.type == TYPE_DECIMAL64 || target.type == TYPE_DECIMAL128;
     if (source_id == arrow::Type::DECIMAL128 && target_decimal) {
         const auto* decimal = static_cast<const arrow::Decimal128Type*>(source);
         if (decimal->scale() == target.scale && decimal->precision() <= target.precision) {
