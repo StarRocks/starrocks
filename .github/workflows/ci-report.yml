@@ -94,14 +94,15 @@ jobs:
           pr_state=$(echo ${pr_info} | jq -r .state)
           pr_title=$(echo ${pr_info} | jq -r .title)
           synced_from_cd=$(echo ${pr_info} | jq -r '[.labels[].name] | index("PAI-contributed") != null')
+          synced_from_ms=$(echo ${pr_info} | jq -r '[.labels[].name] | index("MS-contributed") != null')
           echo "BASE_REF=${base_ref}" >> $GITHUB_OUTPUT
           echo "HEAD_REF=${head_ref}" >> $GITHUB_OUTPUT
           echo "PR_STATE=${pr_state}" >> $GITHUB_OUTPUT
           echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_OUTPUT
 
-          # A PR synced from CelerData (label PAI-contributed) already passed coverage there;
+          # A PR synced from CelerData or Mirrorship already passed coverage at its source;
           # its code is not new here.
-          if [[ "${pr_title}" == *"[UT]"* || "${pr_title}" == *"[Doc]"* || "${synced_from_cd}" == "true" ]]; then
+          if [[ "${pr_title}" == *"[UT]"* || "${pr_title}" == *"[Doc]"* || "${synced_from_cd}" == "true" || "${synced_from_ms}" == "true" ]]; then
             echo "SKIP_COV=true" >> $GITHUB_OUTPUT
           else
             echo "SKIP_COV=false" >> $GITHUB_OUTPUT
