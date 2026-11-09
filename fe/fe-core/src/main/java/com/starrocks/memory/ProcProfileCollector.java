@@ -151,6 +151,7 @@ public class ProcProfileCollector extends FrontendDaemon {
                     GzipCompressorOutputStream gzipOutputStream = new GzipCompressorOutputStream(fileOutputStream);
                     TarArchiveOutputStream tarArchive = new TarArchiveOutputStream(gzipOutputStream);
                     FileInputStream fileInputStream = new FileInputStream(sourceFile)) {
+                tarArchive.setBigNumberMode(TarArchiveOutputStream.BIGNUMBER_POSIX);
                 TarArchiveEntry tarEntry = new TarArchiveEntry(sourceFile, sourceFile.getName());
                 tarArchive.putArchiveEntry(tarEntry);
 
