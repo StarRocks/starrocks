@@ -2879,9 +2879,6 @@ Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t
 
 inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size_t n,
                                      bool predicate_col_late_materialize_read) {
-    if (_prune_by_dict_runtime_filter_bounds()) {
-        return Status::OK();
-    }
     size_t read_num = 0;
     SparseRange<> range;
 
@@ -2925,12 +2922,11 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk) {
+    bool need_update_rf = _inited;
     if (!_inited) {
         RETURN_IF_ERROR(_init());
         _inited = true;
     }
-
-    RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
 
     DCHECK_EQ(0, chunk->num_rows());
 
@@ -2947,35 +2943,41 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
         p_rowids = &local_rowids;
     }
     do {
+        if (need_update_rf) {
+            RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
+        }
+        need_update_rf = true;
         st = _do_get_next(chunk, p_rowids);
     } while (st.ok() && chunk->num_rows() == 0);
     return st;
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
+    bool need_update_rf = _inited;
     if (!_inited) {
         RETURN_IF_ERROR(_init());
         _inited = true;
     }
 
-    RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
-
     DCHECK_EQ(0, chunk->num_rows());
 
     Status st;
     do {
+        if (need_update_rf) {
+            RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
+        }
+        need_update_rf = true;
         st = _do_get_next(chunk, rowid);
     } while (st.ok() && chunk->num_rows() == 0);
     return st;
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids) {
+    bool need_update_rf = _inited;
     if (!_inited) {
         RETURN_IF_ERROR(_init());
         _inited = true;
     }
-
-    RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
 
     DCHECK_EQ(0, chunk->num_rows());
 
@@ -2989,6 +2991,10 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids
         p_rowids = &_inverted_index_ctx->rowid_buffer;
     }
     do {
+        if (need_update_rf) {
+            RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
+        }
+        need_update_rf = true;
         st = _do_get_next(chunk, p_rowids);
     } while (st.ok() && chunk->num_rows() == 0);
     if (st.ok()) {
@@ -3303,13 +3309,19 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_late_materialize_read_firs
     uint16_t chunk_start = first_col->size();
 
     size_t original_chunk_size = chunk_start;
+    bool first_batch = true;
     while ((chunk_start < return_chunk_threshold) && _range_iter.has_more()) {
-        if (chunk_start == 0) {
-            RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter(false));
-            if (!_range_iter.has_more()) {
+        if (!first_batch) {
+            if (chunk_start == 0) {
+                RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter(false));
+                if (!_range_iter.has_more()) {
+                    break;
+                }
+            } else if (_prune_by_dict_runtime_filter_bounds()) {
                 break;
             }
         }
+        first_batch = false;
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start, true));
         // chunk->check_or_die();
         size_t next_start = first_col->size();
@@ -3437,13 +3449,19 @@ StatusOr<size_t> SegmentIterator::_predicate_evaluate_without_late_materialize(v
 
     Chunk* chunk = _context->_read_chunk.get();
     uint16_t chunk_start = chunk->num_rows();
+    bool first_batch = true;
     while ((chunk_start < return_chunk_threshold) & _range_iter.has_more()) {
-        if (chunk_start == 0) {
-            RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter(false));
-            if (!_range_iter.has_more()) {
+        if (!first_batch) {
+            if (chunk_start == 0) {
+                RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter(false));
+                if (!_range_iter.has_more()) {
+                    break;
+                }
+            } else if (_prune_by_dict_runtime_filter_bounds()) {
                 break;
             }
         }
+        first_batch = false;
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start, false));
         chunk->check_or_die();
         size_t next_start = chunk->num_rows();
