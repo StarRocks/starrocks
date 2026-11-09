@@ -424,7 +424,7 @@ private:
                                           uint16_t to);
 
     void _init_column_predicates();
-    ALWAYS_INLINE bool _prune_by_dict_runtime_filter_bounds();
+    inline ALWAYS_INLINE bool _prune_by_dict_runtime_filter_bounds();
 
     StatusOr<size_t> trigger_sample_if_necessary(vector<rowid_t>* rowid);
 
@@ -2187,7 +2187,7 @@ void SegmentIterator::_init_column_predicates() {
     _has_dict_runtime_filters = _opts.enable_join_runtime_filter_pushdown && _runtime_filter_preds.has_dict_filters();
 }
 
-ALWAYS_INLINE bool SegmentIterator::_prune_by_dict_runtime_filter_bounds() {
+inline ALWAYS_INLINE bool SegmentIterator::_prune_by_dict_runtime_filter_bounds() {
     if (LIKELY(!_has_dict_runtime_filters)) {
         return false;
     }
