@@ -191,12 +191,7 @@ public class ScalarOperationToDeltaLakeExprTest {
 
         // An implicit CHAR cast still changes the type, so it is not stripped either.
         ScalarOperator implicitEquality = new BinaryPredicateOperator(BinaryType.EQ,
-<<<<<<< HEAD
                 new CastOperator(ScalarType.createCharType(5), cVarcharCol, true), value);
-        expected = new Predicate("=", cDeltaVarcharCol, Literal.ofString("hello"));
-        Assertions.assertEquals(expected.toString(), converter.convert(List.of(implicitEquality), context).toString());
-=======
-                new CastOperator(new CharType(5), cVarcharCol, true), value);
         Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(implicitEquality), context));
     }
 
@@ -211,19 +206,19 @@ public class ScalarOperationToDeltaLakeExprTest {
         // which would prune c_date = 2020-01-01 although it satisfies the original predicate.
         for (BinaryType op : List.of(BinaryType.LT, BinaryType.LE, BinaryType.EQ, BinaryType.GE, BinaryType.GT)) {
             ScalarOperator predicate = new BinaryPredicateOperator(op,
-                    new CastOperator(com.starrocks.type.DateType.DATETIME, cDateCol), ts);
+                    new CastOperator(Type.DATETIME, cDateCol), ts);
             Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(predicate), context), op.toString());
         }
 
         // cast(c_date AS varchar) < '2020-01-01 00:00:01' compares strings, so '2020-01-01' matches;
         // it must not become c_date < 2020-01-01.
         ScalarOperator toVarchar = new BinaryPredicateOperator(BinaryType.LT,
-                new CastOperator(VarcharType.VARCHAR, cDateCol), ConstantOperator.createVarchar("2020-01-01 00:00:01"));
+                new CastOperator(Type.VARCHAR, cDateCol), ConstantOperator.createVarchar("2020-01-01 00:00:01"));
         Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(toVarchar), context));
 
         // cast(c_long AS int) = 5 must not become c_long = 5: values overflowing int also satisfy it.
         ScalarOperator narrowing = new BinaryPredicateOperator(BinaryType.EQ,
-                new CastOperator(com.starrocks.type.IntegerType.INT, cLongCol), ConstantOperator.createInt(5));
+                new CastOperator(Type.INT, cLongCol), ConstantOperator.createInt(5));
         Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(narrowing), context));
 
         // The other conjuncts are still pushed down.
@@ -235,7 +230,7 @@ public class ScalarOperationToDeltaLakeExprTest {
 
         // An identity cast is still stripped and pushed down.
         ScalarOperator identity = new BinaryPredicateOperator(BinaryType.EQ,
-                new CastOperator(com.starrocks.type.IntegerType.INT, cIntCol), ConstantOperator.createInt(5));
+                new CastOperator(Type.INT, cIntCol), ConstantOperator.createInt(5));
         Assertions.assertEquals(expected.toString(), converter.convert(List.of(identity), context).toString());
     }
 
@@ -245,19 +240,19 @@ public class ScalarOperationToDeltaLakeExprTest {
         ScalarOperationToDeltaLakeExpr.DeltaLakeContext context =
                 new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, new HashSet<>());
         ScalarOperator castToVarcharLt = new BinaryPredicateOperator(BinaryType.LT,
-                new CastOperator(VarcharType.VARCHAR, cDateCol), ConstantOperator.createVarchar("2020-01-01 00:00:01"));
+                new CastOperator(Type.VARCHAR, cDateCol), ConstantOperator.createVarchar("2020-01-01 00:00:01"));
         ScalarOperator safeEquality = new BinaryPredicateOperator(BinaryType.EQ, cIntCol, ConstantOperator.createInt(5));
         Predicate expected = new Predicate("=", cDeltaIntCol, Literal.ofInt(5));
 
         // Nested casts: a type change anywhere in the chain blocks pushdown; a chain of identity casts does not.
         ScalarOperator nestedNarrowing = new BinaryPredicateOperator(BinaryType.EQ,
-                new CastOperator(com.starrocks.type.IntegerType.INT,
-                        new CastOperator(com.starrocks.type.IntegerType.BIGINT, cIntCol)),
+                new CastOperator(Type.INT,
+                        new CastOperator(Type.BIGINT, cIntCol)),
                 ConstantOperator.createInt(5));
         Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(nestedNarrowing), context));
         ScalarOperator nestedIdentity = new BinaryPredicateOperator(BinaryType.EQ,
-                new CastOperator(com.starrocks.type.IntegerType.INT,
-                        new CastOperator(com.starrocks.type.IntegerType.INT, cIntCol)),
+                new CastOperator(Type.INT,
+                        new CastOperator(Type.INT, cIntCol)),
                 ConstantOperator.createInt(5));
         Assertions.assertEquals(expected.toString(), converter.convert(List.of(nestedIdentity), context).toString());
 
@@ -273,15 +268,14 @@ public class ScalarOperationToDeltaLakeExprTest {
         // IS NULL / IS NOT NULL through a type-changing cast stay residual; through an identity cast they are pushed.
         for (boolean isNotNull : List.of(false, true)) {
             ScalarOperator castNull = new IsNullPredicateOperator(isNotNull,
-                    new CastOperator(VarcharType.VARCHAR, cDateCol));
+                    new CastOperator(Type.VARCHAR, cDateCol));
             Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(castNull), context));
             ScalarOperator identityNull = new IsNullPredicateOperator(isNotNull,
-                    new CastOperator(com.starrocks.type.IntegerType.INT, cIntCol));
+                    new CastOperator(Type.INT, cIntCol));
             Predicate expectedNull = new Predicate(isNotNull ? "IS_NOT_NULL" : "IS_NULL", cDeltaIntCol);
             Assertions.assertEquals(expectedNull.toString(),
                     converter.convert(List.of(identityNull), context).toString());
         }
->>>>>>> d67954c ([BugFix][RB-225] Stop pushing down Delta Lake predicates through a type-changing cast (#82640))
     }
 
     @Test
