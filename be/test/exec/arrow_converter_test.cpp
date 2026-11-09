@@ -49,10 +49,27 @@ public:
 };
 
 TEST_F(ArrowConverterTest, NullStructDoesNotFilterHiddenDecimalOverflow) {
-    auto amounts = arrow::ArrayFromJSON(arrow::decimal128(38, 0),
-                                        R"(["42", "99999999999999999999999999999999999999", "7", null,
-                                           "99999999999999999999999999999999999999"])");
-    auto validity = arrow::ArrayFromJSON(arrow::boolean(), "[true, null, true, true, true]");
+    arrow::Decimal128Builder amounts_builder(arrow::decimal128(38, 0));
+    for (const char* value : std::vector<const char*>{"42", "99999999999999999999999999999999999999", "7", nullptr,
+                                                      "99999999999999999999999999999999999999"}) {
+        if (value == nullptr) {
+            ASSERT_OK(amounts_builder.AppendNull());
+        } else {
+            ASSERT_OK(amounts_builder.Append(arrow::Decimal128(value)));
+        }
+    }
+    std::shared_ptr<arrow::Array> amounts;
+    ASSERT_OK(amounts_builder.Finish(&amounts));
+    arrow::BooleanBuilder validity_builder;
+    for (bool valid : {true, false, true, true, true}) {
+        if (valid) {
+            ASSERT_OK(validity_builder.Append(true));
+        } else {
+            ASSERT_OK(validity_builder.AppendNull());
+        }
+    }
+    std::shared_ptr<arrow::Array> validity;
+    ASSERT_OK(validity_builder.Finish(&validity));
     auto array_result = arrow::StructArray::Make({amounts}, {arrow::field("amount", amounts->type())},
                                                  validity->null_bitmap(), validity->null_count());
     ASSERT_OK(array_result.status());
@@ -91,15 +108,41 @@ TEST_F(ArrowConverterTest, NullStructDoesNotFilterHiddenDecimalOverflow) {
 }
 
 TEST_F(ArrowConverterTest, NestedStructNullMasksDecimalOverflowAcrossSlices) {
-    auto amounts = arrow::ArrayFromJSON(arrow::decimal128(38, 0),
-                                        R"(["42", "99999999999999999999999999999999999999",
-                                           "99999999999999999999999999999999999999", null, "7"])");
-    auto inner_validity = arrow::ArrayFromJSON(arrow::boolean(), "[true, true, null, true, true]");
+    arrow::Decimal128Builder amounts_builder(arrow::decimal128(38, 0));
+    for (const char* value : std::vector<const char*>{"42", "99999999999999999999999999999999999999",
+                                                      "99999999999999999999999999999999999999", nullptr, "7"}) {
+        if (value == nullptr) {
+            ASSERT_OK(amounts_builder.AppendNull());
+        } else {
+            ASSERT_OK(amounts_builder.Append(arrow::Decimal128(value)));
+        }
+    }
+    std::shared_ptr<arrow::Array> amounts;
+    ASSERT_OK(amounts_builder.Finish(&amounts));
+    arrow::BooleanBuilder inner_validity_builder;
+    for (bool valid : {true, true, false, true, true}) {
+        if (valid) {
+            ASSERT_OK(inner_validity_builder.Append(true));
+        } else {
+            ASSERT_OK(inner_validity_builder.AppendNull());
+        }
+    }
+    std::shared_ptr<arrow::Array> inner_validity;
+    ASSERT_OK(inner_validity_builder.Finish(&inner_validity));
     auto inner_result = arrow::StructArray::Make({amounts}, {arrow::field("amount", amounts->type())},
                                                  inner_validity->null_bitmap(), inner_validity->null_count());
     ASSERT_OK(inner_result.status());
     auto inner = inner_result.ValueOrDie();
-    auto outer_validity = arrow::ArrayFromJSON(arrow::boolean(), "[true, null, true, true, true]");
+    arrow::BooleanBuilder outer_validity_builder;
+    for (bool valid : {true, false, true, true, true}) {
+        if (valid) {
+            ASSERT_OK(outer_validity_builder.Append(true));
+        } else {
+            ASSERT_OK(outer_validity_builder.AppendNull());
+        }
+    }
+    std::shared_ptr<arrow::Array> outer_validity;
+    ASSERT_OK(outer_validity_builder.Finish(&outer_validity));
     auto array_result = arrow::StructArray::Make({inner}, {arrow::field("inner", inner->type())},
                                                  outer_validity->null_bitmap(), outer_validity->null_count());
     ASSERT_OK(array_result.status());
