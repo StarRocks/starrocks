@@ -44,7 +44,7 @@ import java.util.Map;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-public class IcebergPreimageScanPredicatesTest {
+public class IcebergScanPreimagesTest {
     private static final Schema SCHEMA = new Schema(
             Types.NestedField.optional(1, "d", Types.DateType.get()),
             Types.NestedField.optional(2, "ts", Types.TimestampType.withoutZone()),
@@ -74,7 +74,7 @@ public class IcebergPreimageScanPredicatesTest {
     }
 
     private static List<ScalarOperator> derive(ScalarOperator... conjuncts) {
-        return IcebergPreimageScanPredicates.derive(List.of(conjuncts), SCHEMA.asStruct(), COLUMNS);
+        return ScalarOperatorToIcebergExpr.scanPreimages(List.of(conjuncts), SCHEMA.asStruct(), COLUMNS);
     }
 
     private static List<String> strings(List<ScalarOperator> predicates) {

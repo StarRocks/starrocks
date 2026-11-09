@@ -17,12 +17,12 @@ package com.starrocks.connector.iceberg;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.LocalTimeBounds;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.sql.optimizer.rewrite.ExternalScanPredicates;
 import com.starrocks.sql.optimizer.rewrite.FunctionPreimage;
 import com.starrocks.sql.optimizer.rule.tree.VariantPathRewriteRule;
 import com.starrocks.type.BooleanType;
@@ -61,6 +62,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -168,6 +170,21 @@ public class ScalarOperatorToIcebergExpr {
      */
     public static FunctionPreimage.ColumnResolver preimageResolver(Types.StructType schema) {
         return resolver(new IcebergContext(schema));
+    }
+
+    /**
+     * Plain {@code column op constant} predicates implied by the function predicates of an Iceberg scan, for the BE
+     * to prune row groups (Parquet statistics and page index) with: {@code year(c) = 2024} prunes Iceberg files
+     * through the preimage above but no row group inside them, since the BE only prunes on a bare column. Only DATE
+     * and DATETIME columns of the scan are handled; the bounds are local times, which is also how the BE reads a
+     * timestamptz column. See {@link ExternalScanPredicates#forBeConjuncts}.
+     */
+    public static List<ScalarOperator> scanPreimages(List<ScalarOperator> conjuncts, Types.StructType schema,
+                                                     Map<ColumnRefOperator, Column> colRefToColumn) {
+        FunctionPreimage.ColumnResolver scan = ExternalScanPredicates.scanTemporalColumns(colRefToColumn);
+        FunctionPreimage.ColumnResolver iceberg = preimageResolver(schema);
+        return ExternalScanPredicates.forBeConjuncts(ExternalScanPredicates.Connector.ICEBERG, conjuncts,
+                (operand, kind) -> scan.accepts(operand, kind) && iceberg.accepts(operand, kind));
     }
 
     public static class IcebergContext {
@@ -462,17 +479,8 @@ public class ScalarOperatorToIcebergExpr {
      * A preimage is a pruning-only superset, so it is not valid under NOT or for strict conversion.
      */
     private static boolean usePreimage(IcebergContext context) {
-        return !context.isStrict() && !context.isInsideNot() && isPreimageEnabled();
-    }
-
-    /**
-     * Whether function preimages are enabled for the current session.
-     */
-    public static boolean isPreimageEnabled() {
-        // Without a session (e.g. a metadata-prefetch thread) neither the switch nor the session time zone is known.
-        ConnectContext connectContext = ConnectContext.get();
-        return connectContext != null
-                && connectContext.getSessionVariable().isEnableIcebergFunctionPredicatePruning();
+        return !context.isStrict() && !context.isInsideNot()
+                && ExternalScanPredicates.isFunctionPruningEnabled(ExternalScanPredicates.Connector.ICEBERG);
     }
 
     /**
