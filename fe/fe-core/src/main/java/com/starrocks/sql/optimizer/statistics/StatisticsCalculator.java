@@ -189,6 +189,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.buildFrom;
@@ -2012,10 +2013,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return builder == null ? joinStats : builder.build();
     }
 
-    // The inner-join estimate caps every column's NDV at the inner-join row count and narrows the join keys' range
+    // The inner-join estimate caps every column's stats at the inner-join row count and narrows the join keys range
     // to the matched values. An outer join also keeps the unmatched rows of its preserved side, so every distinct
     // value and the range of a preserve side columns survive.
-    // Restore the original NDV (capped by the output row count), range and histogram of the preserved columns.
+    // Restore the original NDV, range and histogram (with matching MCV included) of the preserved columns.
     private static Statistics restorePreservedColumnsStats(Statistics joinStats, Statistics rawCrossJoinStats,
                                                            ColumnRefSet preservedColumns) {
         double outputRowCount = Math.max(1, joinStats.getOutputRowCount());
@@ -2028,12 +2029,20 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             if (raw == null || raw.isUnknown()) {
                 return;
             }
+
             double ndv = Math.min(raw.getDistinctValuesCount(), outputRowCount);
+            // For MCV we can take the unmatched values of the preserve side and the matched ones of the joined MCVs
+            // For Buckets we keep the values of the preserved side
+            Histogram rawHistogram = raw.getHistogram();
+            Map<String, Long> mcv = new HashMap<>(rawHistogram.getMCV());
+            mcv.putAll(current.getHistogram().getMCV());
+            Histogram histogram = new Histogram(raw.getHistogram().getBuckets(), mcv);
+
             restored.put(column, ColumnStatistic.buildFrom(current)
                     .setMinValue(raw.getMinValue())
                     .setMaxValue(raw.getMaxValue())
                     .setDistinctValuesCount(ndv)
-                    .setHistogram(raw.getHistogram())
+                    .setHistogram(histogram)
                     .build());
         });
         if (restored.isEmpty()) {
