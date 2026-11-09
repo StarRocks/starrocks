@@ -18,6 +18,7 @@
 #include <arrow/c/bridge.h>
 #include <arrow/record_batch.h>
 #include <arrow/util/byte_size.h>
+#include <arrow/util/float16.h>
 
 #include <algorithm>
 
@@ -73,11 +74,13 @@ StatusOr<std::shared_ptr<arrow::DataType>> project_lance_type(const std::shared_
     }
     return source;
 }
-// The generic load converter permits narrowing integer casts. A stale external
-// schema must fail a query instead of silently truncating dataset values.
-Status validate_integer_width(const arrow::DataType* source, const TypeDescriptor& target) {
-    if (target.type == TYPE_ARRAY && target.children.size() == 1 && source->num_fields() == 1) {
-        return validate_integer_width(source->field(0)->type().get(), target.children[0]);
+// Reject incompatible external schemas before the load converter can insert a
+// permissive fallback cast or hide a nested conversion failure in a child filter.
+Status validate_lance_type(const arrow::DataType* source, const TypeDescriptor& target) {
+    if (target.type == TYPE_ARRAY && target.children.size() == 1 &&
+        (source->id() == arrow::Type::LIST || source->id() == arrow::Type::LARGE_LIST ||
+         source->id() == arrow::Type::FIXED_SIZE_LIST)) {
+        return validate_lance_type(source->field(0)->type().get(), target.children[0]);
     }
     if (target.type == TYPE_STRUCT && source->id() == arrow::Type::STRUCT) {
         const auto* struct_type = static_cast<const arrow::StructType*>(source);
@@ -86,10 +89,52 @@ Status validate_integer_width(const arrow::DataType* source, const TypeDescripto
             if (field == nullptr) {
                 return Status::DataQualityError("Missing projected Lance struct field: " + target.field_names[i]);
             }
-            RETURN_IF_ERROR(validate_integer_width(field->type().get(), target.children[i]));
+            RETURN_IF_ERROR(validate_lance_type(field->type().get(), target.children[i]));
         }
         return Status::OK();
     }
+    const auto source_id = source->id();
+    const bool target_decimal =
+            target.type == TYPE_DECIMAL32 || target.type == TYPE_DECIMAL64 || target.type == TYPE_DECIMAL128;
+    if (source_id == arrow::Type::DECIMAL128 && target_decimal) {
+        const auto* decimal = static_cast<const arrow::Decimal128Type*>(source);
+        if (decimal->scale() == target.scale && decimal->precision() <= target.precision) {
+            return Status::OK();
+        }
+        return Status::DataQualityError("Lance decimal schema exceeds the projected precision or changes scale");
+    }
+    // FE widens UInt64 to DECIMAL(20,0) to retain its entire unsigned range.
+    if (source_id == arrow::Type::UINT64 && target_decimal && target.precision >= 20 && target.scale == 0) {
+        return Status::OK();
+    }
+    bool compatible = false;
+    switch (target.type) {
+    case TYPE_BOOLEAN:
+        compatible = source_id == arrow::Type::BOOL;
+        break;
+    case TYPE_FLOAT:
+        compatible = source_id == arrow::Type::HALF_FLOAT || source_id == arrow::Type::FLOAT;
+        break;
+    case TYPE_DOUBLE:
+        compatible = source_id == arrow::Type::HALF_FLOAT || source_id == arrow::Type::FLOAT ||
+                     source_id == arrow::Type::DOUBLE;
+        break;
+    case TYPE_VARCHAR:
+        compatible = source_id == arrow::Type::STRING || source_id == arrow::Type::LARGE_STRING;
+        break;
+    case TYPE_VARBINARY:
+        compatible = source_id == arrow::Type::BINARY || source_id == arrow::Type::LARGE_BINARY;
+        break;
+    case TYPE_DATE:
+    case TYPE_DATETIME:
+        compatible = source_id == arrow::Type::DATE32 || source_id == arrow::Type::DATE64 ||
+                     source_id == arrow::Type::TIMESTAMP;
+        break;
+    default:
+        break;
+    }
+    if (compatible) return Status::OK();
+    const auto incompatible = Status::DataQualityError("Lance source type does not match the projected column type");
     int target_bits;
     switch (target.type) {
     case TYPE_TINYINT:
@@ -108,7 +153,7 @@ Status validate_integer_width(const arrow::DataType* source, const TypeDescripto
         target_bits = 128;
         break;
     default:
-        return Status::OK();
+        return incompatible;
     }
     int source_bits;
     switch (source->id()) {
@@ -137,7 +182,7 @@ Status validate_integer_width(const arrow::DataType* source, const TypeDescripto
         source_bits = 65;
         break;
     default:
-        return Status::OK();
+        return incompatible;
     }
     if (source_bits > target_bits) {
         return Status::DataQualityError("Lance integer type exceeds the projected column width");
@@ -202,20 +247,41 @@ Status convert_lance_temporal(const arrow::Array* array, size_t start, size_t co
     return Status::OK();
 }
 
-void configure_lance_temporal(const arrow::DataType* source, const TypeDescriptor& target, ConvertFuncTree* plan) {
-    if (source->id() == arrow::Type::DATE32 || source->id() == arrow::Type::DATE64 ||
-        source->id() == arrow::Type::TIMESTAMP) {
+// HalfFloatArray::Value returns IEEE bits, not a numeric uint16 value.
+// Install this at every leaf so list/struct conversion keeps its null handling.
+template <LogicalType LT>
+Status convert_lance_half(const arrow::Array* array, size_t start, size_t count, Column* column, size_t destination,
+                          uint8_t* nulls, Filter*, ArrowConvertContext*, ConvertFuncTree*) {
+    const auto* source = static_cast<const arrow::HalfFloatArray*>(array);
+    auto& values = static_cast<RunTimeColumnType<LT>*>(column)->get_data();
+    values.resize(destination + count);
+    for (size_t i = 0; i < count; ++i) {
+        values[destination + i] = nulls != nullptr && nulls[i] != 0
+                                          ? 0
+                                          : arrow::util::Float16::FromBits(source->Value(start + i)).ToFloat();
+    }
+    return Status::OK();
+}
+
+void configure_lance_conversion(const arrow::DataType* source, const TypeDescriptor& target, ConvertFuncTree* plan) {
+    if (source->id() == arrow::Type::HALF_FLOAT) {
+        if (target.type == TYPE_FLOAT)
+            plan->func = convert_lance_half<TYPE_FLOAT>;
+        else if (target.type == TYPE_DOUBLE)
+            plan->func = convert_lance_half<TYPE_DOUBLE>;
+    } else if (source->id() == arrow::Type::DATE32 || source->id() == arrow::Type::DATE64 ||
+               source->id() == arrow::Type::TIMESTAMP) {
         if (target.type == TYPE_DATE)
             plan->func = convert_lance_temporal<TYPE_DATE>;
         else if (target.type == TYPE_DATETIME)
             plan->func = convert_lance_temporal<TYPE_DATETIME>;
     } else if (target.type == TYPE_ARRAY && plan->children.size() == 1) {
-        configure_lance_temporal(source->field(0)->type().get(), target.children[0], plan->children[0].get());
+        configure_lance_conversion(source->field(0)->type().get(), target.children[0], plan->children[0].get());
     } else if (target.type == TYPE_STRUCT && source->id() == arrow::Type::STRUCT) {
         const auto* struct_type = static_cast<const arrow::StructType*>(source);
         for (size_t i = 0; i < target.children.size(); ++i) {
             auto field = struct_type->GetFieldByName(target.field_names[i]);
-            configure_lance_temporal(field->type().get(), target.children[i], plan->children[i].get());
+            configure_lance_conversion(field->type().get(), target.children[i], plan->children[i].get());
         }
     }
 }
@@ -348,13 +414,13 @@ Status LanceNativeReader::convert_batch(RuntimeState* state, const TupleDescript
             return Status::DataQualityError("Null in non-nullable Lance column: " + std::string(slot_desc->col_name()));
         }
         ASSIGN_OR_RETURN(auto projected_type, project_lance_type(array->type(), slot_desc->type()));
-        RETURN_IF_ERROR(validate_integer_width(projected_type.get(), slot_desc->type()));
+        RETURN_IF_ERROR(validate_lance_type(projected_type.get(), slot_desc->type()));
         ConvertFuncTree conv_func;
         Expr* cast_expr = nullptr;
         MutableColumnPtr column;
         RETURN_IF_ERROR(
                 create_arrow_column(projected_type.get(), slot_desc, &column, &conv_func, &cast_expr, pool, true));
-        configure_lance_temporal(projected_type.get(), slot_desc->type(), &conv_func);
+        configure_lance_conversion(projected_type.get(), slot_desc->type(), &conv_func);
         conv_ctx.set_current_column(slot_desc->col_name(), slot_desc->type());
         RETURN_IF_ERROR(convert_arrow_array_to_column(&conv_func, batch->num_rows(), array.get(), column.get(), 0, 0,
                                                       &chunk_filter, &conv_ctx));
