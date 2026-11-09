@@ -674,7 +674,7 @@ struct ReadByRowidsPage {
     OwnedSlice owned;
     Slice encoded;
     std::unique_ptr<std::vector<uint8_t>> decoded_page;
-    std::unique_ptr<BitShufflePageDecoder<Type>> decoder;
+    std::unique_ptr<PageDecoder> decoder;
 
     void build(size_t rows) {
         src.resize(rows);
@@ -708,7 +708,14 @@ struct ReadByRowidsPage {
         footer.set_type(DATA_PAGE);
         footer.mutable_data_page_footer()->set_nullmap_size(0);
         ASSERT_TRUE(StoragePageDecoder::decode_page(&footer, 0, BIT_SHUFFLE, &decoded_page, &encoded).ok());
-        decoder = std::make_unique<BitShufflePageDecoder<Type>>(encoded);
+        const EncodingInfo* enc_info = nullptr;
+        if (EncodingInfo::get(Type, BIT_SHUFFLE, &enc_info).ok() && enc_info != nullptr) {
+            PageDecoder* raw_decoder = nullptr;
+            ASSERT_TRUE(enc_info->create_page_decoder(encoded, &raw_decoder).ok());
+            decoder.reset(raw_decoder);
+        } else {
+            decoder = std::make_unique<BitShufflePageDecoder<Type>>(encoded);
+        }
         ASSERT_TRUE(decoder->init().ok());
     }
 };
@@ -1560,6 +1567,26 @@ TEST_F(BitShufflePageTest, ConstColumnFallbackReadByRowids) {
         EXPECT_NE(std::string::npos, st.message().find("append_numbers failed")) << st.to_string();
         EXPECT_EQ(1u, const_nullable->size());
         EXPECT_TRUE(const_nullable->is_null(0));
+    }
+
+    // 3. Non-fixed-length column (BinaryColumn): BitShuffleRawDataVisitor::do_visit(const T&)
+    //    returns Status::NotSupported and falls back to BinaryColumn::append_numbers.
+    {
+        auto binary_col = BinaryColumn::create();
+        size_t count = 3;
+        Status st = page.decoder->read_by_rowids(0, rowids, &count, binary_col.get());
+        EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+        EXPECT_NE(std::string::npos, st.message().find("append_numbers failed")) << st.to_string();
+    }
+
+    // 4. Fixed-length column with mismatched element width (Int64Column on TYPE_INT page):
+    //    BitShuffleRawDataVisitor::visit_fixed rejects sizeof(int64_t) != sizeof(int32_t) and falls back.
+    {
+        auto int64_col = Int64Column::create();
+        size_t count = 2;
+        Status st = page.decoder->read_by_rowids(0, rowids, &count, int64_col.get());
+        EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+        EXPECT_NE(std::string::npos, st.message().find("append_numbers failed")) << st.to_string();
     }
 }
 

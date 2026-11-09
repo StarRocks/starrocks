@@ -48,6 +48,7 @@
 #include "base/coding.h"
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
+#include "column/column_visitor_adapter.h"
 #include "column/decimalv3_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -428,53 +429,31 @@ inline Status BitShufflePageDecoder<Type>::next_batch(const SparseRange<>& range
     return Status::OK();
 }
 
-class BitShuffleRawDataVisitor final : public ColumnVisitorMutable {
+class BitShuffleRawDataVisitor final : public ColumnVisitorMutableAdapter<BitShuffleRawDataVisitor> {
 public:
-    BitShuffleRawDataVisitor(size_t add_count, size_t elem_size) : _add_count(add_count), _elem_size(elem_size) {}
+    BitShuffleRawDataVisitor(size_t add_count, size_t elem_size)
+            : ColumnVisitorMutableAdapter(this), _add_count(add_count), _elem_size(elem_size) {}
 
     uint8_t* dst_raw() const { return _dst_raw; }
     size_t orig_size() const { return _orig_size; }
 
-    Status visit(Int8Column* col) override { return visit_fixed(col); }
-    Status visit(UInt8Column* col) override { return visit_fixed(col); }
-    Status visit(Int16Column* col) override { return visit_fixed(col); }
-    Status visit(UInt16Column* col) override { return visit_fixed(col); }
-    Status visit(Int32Column* col) override { return visit_fixed(col); }
-    Status visit(UInt32Column* col) override { return visit_fixed(col); }
-    Status visit(Int64Column* col) override { return visit_fixed(col); }
-    Status visit(UInt64Column* col) override { return visit_fixed(col); }
-    Status visit(Int128Column* col) override { return visit_fixed(col); }
-    Status visit(FloatColumn* col) override { return visit_fixed(col); }
-    Status visit(DoubleColumn* col) override { return visit_fixed(col); }
-    Status visit(DateColumn* col) override { return visit_fixed(col); }
-    Status visit(TimestampColumn* col) override { return visit_fixed(col); }
-    Status visit(DecimalColumn* col) override { return visit_fixed(col); }
-    Status visit(Decimal32Column* col) override { return visit_fixed(col); }
-    Status visit(Decimal64Column* col) override { return visit_fixed(col); }
-    Status visit(Decimal128Column* col) override { return visit_fixed(col); }
-    Status visit(Decimal256Column* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumn<int96_t>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumn<uint24_t>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumn<decimal12_t>* col) override { return visit_fixed(col); }
+    template <typename T>
+    Status do_visit(FixedLengthColumn<T>* col) {
+        return visit_fixed(col);
+    }
 
-    Status visit(FixedLengthColumnBase<int8_t>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<uint8_t>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<int16_t>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<uint16_t>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<int32_t>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<uint32_t>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<int64_t>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<uint64_t>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<int128_t>* col) override { return visit_fixed(col); }
+    template <typename T>
+    Status do_visit(DecimalV3Column<T>* col) {
+        return visit_fixed(col);
+    }
+
+    using ColumnVisitorMutableAdapter<BitShuffleRawDataVisitor>::visit;
     Status visit(FixedLengthColumnBase<int256_t>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<float>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<double>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<DateValue>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<DecimalV2Value>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<TimestampValue>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<int96_t>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<uint24_t>* col) override { return visit_fixed(col); }
-    Status visit(FixedLengthColumnBase<decimal12_t>* col) override { return visit_fixed(col); }
+
+    template <typename T>
+    static Status do_visit(const T&) {
+        return Status::NotSupported("unsupported column type");
+    }
 
 private:
     template <typename ColType>
