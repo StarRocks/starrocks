@@ -161,4 +161,19 @@ TEST_F(AdaptiveSliceHashSetTest, ClearRestoresTheSingleLevelSet) {
     EXPECT_TRUE(set.set != nullptr) << "a single key must not re-trigger the switch";
 }
 
+TEST_F(AdaptiveSliceHashSetTest, PerCoreTwoLevelMemoryThresholdNormalization) {
+    constexpr size_t kMiB = 1024ULL * 1024;
+    // 1. Intel Emerald Rapids n4-standard-32: 2 MiB L2, 60 MiB socket L3, 32 cores -> 4 * L2 = 8 MiB.
+    EXPECT_EQ(8 * kMiB, agg::compute_two_level_memory_threshold(2 * kMiB, 60 * kMiB, 32));
+    // 2. Large L3 per core (2 MiB L2, 320 MiB L3, 16 cores -> 20 MiB/core) -> clamped to 16 MiB ceiling.
+    EXPECT_EQ(16 * kMiB, agg::compute_two_level_memory_threshold(2 * kMiB, 320 * kMiB, 16));
+    // 3. Moderate per-core L3 between 4*L2 and 16 MiB (1 MiB L2, 96 MiB L3, 8 cores -> 12 MiB/core).
+    EXPECT_EQ(12 * kMiB, agg::compute_two_level_memory_threshold(1 * kMiB, 96 * kMiB, 8));
+    // 4. ARM64 Neoverse-V2 VM where L3 sysconf falls back to L2 (1 MiB L2, 1 MiB L3, 16 cores) -> 4 * L2 = 4 MiB.
+    EXPECT_EQ(4 * kMiB, agg::compute_two_level_memory_threshold(1 * kMiB, 1 * kMiB, 16));
+    // 5. Missing/unreported cache sizes (l2 <= 0, l3 <= 0, cores <= 0) -> 4 MiB floor.
+    EXPECT_EQ(4 * kMiB, agg::compute_two_level_memory_threshold(0, 0, 0));
+    EXPECT_EQ(4 * kMiB, agg::compute_two_level_memory_threshold(-1, -1, -1));
+}
+
 } // namespace starrocks
