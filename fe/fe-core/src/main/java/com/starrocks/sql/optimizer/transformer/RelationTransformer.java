@@ -684,6 +684,26 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .setSelectedTabletIds(node.getTabletIds())
                         .build();
             } else {
+<<<<<<< HEAD
+=======
+                OlapTable scanTable = (OlapTable) node.getTable();
+                OlapTable unscopedTable = scanTable;
+                if (node.getBookmarkId().isPresent()) {
+                    scanTable = BookmarkScopedTableResolver.resolveById(
+                            scanTable, node.getBookmarkId().getAsLong());
+                } else if (session.getMvPinnedBookmarkIds() != null) {
+                    // Pinned MV refresh: read the base table AS-OF the frozen snapshot the refresh
+                    // planner staged on the context (no [_BOOKMARK_] hint on the relation).
+                    Long pinned = session.getMvPinnedBookmarkIds().get(scanTable.getUUID());
+                    if (pinned != null) {
+                        scanTable = BookmarkScopedTableResolver.resolveById(scanTable, pinned);
+                    }
+                }
+                // Checked against the table the scan reads, which a bookmark scopes to the table as it was then: a
+                // partition added since then is not one the scan reads.
+                List<Long> tabletIds = new ArrayList<>(
+                        TabletClause.resolve(scanTable, node.getPartitionNames(), node.getTabletIds()).keySet());
+>>>>>>> 05eeef58a95... [BugFix][RB-1242] Read nothing from a named tablet whose partition is pruned instead of failing (#68650)
                 scanOperator = LogicalOlapScanOperator.builder()
                         .setParallelRangeScan(parallelRangeScan)
                         .setTable(node.getTable())
@@ -696,7 +716,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                                 : new PartitionNames(node.getPartitionNames().isTemp(),
                                 node.getPartitionNames().getPartitionNames(), node.getPartitionNames().getPos()))
                         .setSelectedTabletId(Lists.newArrayList())
-                        .setHintsTabletIds(node.getTabletIds())
+                        .setHintsTabletIds(tabletIds)
                         .setHintsReplicaIds(node.getReplicaIds())
                         .setHasTableHints(node.hasTableHints())
                         .setUsePkIndex(node.isUsePkIndex())

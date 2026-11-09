@@ -1833,8 +1833,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             }
         }
         for (Long tabletId : scanTabletIds) {
-            // for query: select count(1) from t tablet(tablet_id0, tablet_id1,...), the user-provided tablet_id
-            // maybe invalid.
+            // The tablets of a scan are chosen from its selected partitions, those a TABLET clause names included, so
+            // one that is not there means the table's tablets changed after they were chosen, as a split changes them.
             if (!tabletToPartitionMap.containsKey(tabletId)) {
                 throw new RuntimeException(String.format("Invalid tablet id: '%d'. The tablet may have been dropped. " +
                                 "Selected partitions: %s, Table: %s, IndexMetaId: %d. ",
