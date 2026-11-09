@@ -94,6 +94,12 @@ inline constexpr int kBenchChunkSize = 4096;
 inline constexpr int64_t kTimedRowsPerCombo = 10'000'000;
 inline constexpr int64_t kUniformTimedRows = 64 * kBenchChunkSize;
 
+// Scale the timed probe stream with target_size so large tables (1M/4M groups)
+// probe across the full table rather than repeating a 262K-key L3-resident subset.
+inline constexpr int64_t uniform_timed_rows(int64_t target_size) {
+    return std::max<int64_t>(kUniformTimedRows, target_size);
+}
+
 template <PhmapSeed seed>
 using PhmapInt64 = phmap::flat_hash_map<int64_t, AggDataPtr, StdHashWithSeed<int64_t, seed>>;
 
@@ -350,12 +356,9 @@ public:
         static std::once_flag cpu_once;
         std::call_once(cpu_once, [] {
             CpuInfo::init();
-            config::agg_hash_map_prefetch_dist = 16;
+            config::agg_hash_map_prefetch_dist = static_cast<int32_t>(kArchDefaultAggPrefetchDist);
             config::agg_prefetch_l2_ratio = 1.0;
         });
-        // Ensure arch default prefetch distance is initialized before saving saved_dist
-        // so explicit distance overrides [0, 4, 8, 12, 16, 24, 32] are never overwritten on first call.
-        (void)agg_hash_map_default_prefetch_dist();
         saved_dist = config::agg_hash_map_prefetch_dist;
         saved_ratio = config::agg_prefetch_l2_ratio;
         // Disable the resident<L2 prefetch gate so the bench drives the prefetch
@@ -580,7 +583,8 @@ static void BM_Int32Map_Uniform(benchmark::State& state) {
     }
     const size_t prefilled = wrapper->hash_map.size();
 
-    Int32KeyStream timed_stream(kUniformTimedRows, target_size, Pattern::Random, 0xBEEFCAFE);
+    const int64_t timed_rows = uniform_timed_rows(target_size);
+    Int32KeyStream timed_stream(timed_rows, target_size, Pattern::Random, 0xBEEFCAFE);
     for (const auto& key_columns : timed_stream.chunks()) {
         const auto* col = down_cast<const Int32Column*>(key_columns[0].get());
         benchmark::DoNotOptimize(col->immutable_data().data());
@@ -604,7 +608,7 @@ static void BM_Int32Map_Uniform(benchmark::State& state) {
     state.counters["hash_table_bytes"] = hash_table_bytes(wrapper.get());
     state.counters["resident_bytes"] = resident_bucket_bytes(wrapper->hash_map);
     state.counters["bucket_count"] = wrapper->hash_map.capacity();
-    state.counters["rows_per_iter"] = kUniformTimedRows;
+    state.counters["rows_per_iter"] = timed_rows;
     attach_cpu_cache_counters(state);
     state.SetItemsProcessed(total_rows);
 
@@ -628,7 +632,8 @@ static void BM_Int32Set_Uniform(benchmark::State& state) {
     }
     const size_t prefilled = wrapper->hash_set.size();
 
-    Int32KeyStream timed_stream(kUniformTimedRows, target_size, Pattern::Random, 0xBEEFCAFE);
+    const int64_t timed_rows = uniform_timed_rows(target_size);
+    Int32KeyStream timed_stream(timed_rows, target_size, Pattern::Random, 0xBEEFCAFE);
     for (const auto& key_columns : timed_stream.chunks()) {
         const auto* col = down_cast<const Int32Column*>(key_columns[0].get());
         benchmark::DoNotOptimize(col->immutable_data().data());
@@ -650,7 +655,7 @@ static void BM_Int32Set_Uniform(benchmark::State& state) {
     state.counters["post_size"] = post_size;
     state.counters["resident_bytes"] = resident_bucket_bytes(wrapper->hash_set);
     state.counters["bucket_count"] = wrapper->hash_set.capacity();
-    state.counters["rows_per_iter"] = kUniformTimedRows;
+    state.counters["rows_per_iter"] = timed_rows;
     attach_cpu_cache_counters(state);
     state.SetItemsProcessed(total_rows);
 
@@ -682,7 +687,8 @@ static void BM_FixedSize4Map_Uniform(benchmark::State& state) {
     }
     const size_t prefilled = wrapper->hash_map.size();
 
-    FixedSizeKeyStream<4> timed_stream(kUniformTimedRows, target_size, Pattern::Random, 0xBEEFCAFE);
+    const int64_t timed_rows = uniform_timed_rows(target_size);
+    FixedSizeKeyStream<4> timed_stream(timed_rows, target_size, Pattern::Random, 0xBEEFCAFE);
     for (const auto& key_columns : timed_stream.chunks()) {
         const auto* col0 = down_cast<const Int16Column*>(key_columns[0].get());
         const auto* col1 = down_cast<const Int16Column*>(key_columns[1].get());
@@ -708,7 +714,7 @@ static void BM_FixedSize4Map_Uniform(benchmark::State& state) {
     state.counters["hash_table_bytes"] = hash_table_bytes(wrapper.get());
     state.counters["resident_bytes"] = resident_bucket_bytes(wrapper->hash_map);
     state.counters["bucket_count"] = wrapper->hash_map.capacity();
-    state.counters["rows_per_iter"] = kUniformTimedRows;
+    state.counters["rows_per_iter"] = timed_rows;
     attach_cpu_cache_counters(state);
     state.SetItemsProcessed(total_rows);
 
@@ -740,7 +746,8 @@ static void BM_FixedSize8Map_Uniform(benchmark::State& state) {
     }
     const size_t prefilled = wrapper->hash_map.size();
 
-    FixedSizeKeyStream<8> timed_stream(kUniformTimedRows, target_size, Pattern::Random, 0xBEEFCAFE);
+    const int64_t timed_rows = uniform_timed_rows(target_size);
+    FixedSizeKeyStream<8> timed_stream(timed_rows, target_size, Pattern::Random, 0xBEEFCAFE);
     for (const auto& key_columns : timed_stream.chunks()) {
         const auto* col0 = down_cast<const Int32Column*>(key_columns[0].get());
         const auto* col1 = down_cast<const Int32Column*>(key_columns[1].get());
@@ -766,7 +773,7 @@ static void BM_FixedSize8Map_Uniform(benchmark::State& state) {
     state.counters["hash_table_bytes"] = hash_table_bytes(wrapper.get());
     state.counters["resident_bytes"] = resident_bucket_bytes(wrapper->hash_map);
     state.counters["bucket_count"] = wrapper->hash_map.capacity();
-    state.counters["rows_per_iter"] = kUniformTimedRows;
+    state.counters["rows_per_iter"] = timed_rows;
     attach_cpu_cache_counters(state);
     state.SetItemsProcessed(total_rows);
 
@@ -795,7 +802,8 @@ static void BM_Int32Map_DefaultGate(benchmark::State& state) {
     }
     const size_t prefilled = wrapper->hash_map.size();
 
-    Int32KeyStream timed_stream(kUniformTimedRows, target_size, Pattern::Random, 0xBEEFCAFE);
+    const int64_t timed_rows = uniform_timed_rows(target_size);
+    Int32KeyStream timed_stream(timed_rows, target_size, Pattern::Random, 0xBEEFCAFE);
     for (const auto& key_columns : timed_stream.chunks()) {
         const auto* col = down_cast<const Int32Column*>(key_columns[0].get());
         benchmark::DoNotOptimize(col->immutable_data().data());
@@ -821,7 +829,7 @@ static void BM_Int32Map_DefaultGate(benchmark::State& state) {
     state.counters["bucket_count"] = wrapper->hash_map.capacity();
     state.counters["prefetch_min_bytes"] = agg_prefetch_min_bytes();
     state.counters["prefetch_active"] = agg_should_prefetch_table(wrapper->hash_map);
-    state.counters["rows_per_iter"] = kUniformTimedRows;
+    state.counters["rows_per_iter"] = timed_rows;
     attach_cpu_cache_counters(state);
     state.SetItemsProcessed(total_rows);
 
@@ -853,7 +861,8 @@ static void BM_FixedSize8Map_DefaultGate(benchmark::State& state) {
     }
     const size_t prefilled = wrapper->hash_map.size();
 
-    FixedSizeKeyStream<8> timed_stream(kUniformTimedRows, target_size, Pattern::Random, 0xBEEFCAFE);
+    const int64_t timed_rows = uniform_timed_rows(target_size);
+    FixedSizeKeyStream<8> timed_stream(timed_rows, target_size, Pattern::Random, 0xBEEFCAFE);
     for (const auto& key_columns : timed_stream.chunks()) {
         const auto* col0 = down_cast<const Int32Column*>(key_columns[0].get());
         const auto* col1 = down_cast<const Int32Column*>(key_columns[1].get());
@@ -881,7 +890,7 @@ static void BM_FixedSize8Map_DefaultGate(benchmark::State& state) {
     state.counters["bucket_count"] = wrapper->hash_map.capacity();
     state.counters["prefetch_min_bytes"] = agg_prefetch_min_bytes();
     state.counters["prefetch_active"] = agg_should_prefetch_table(wrapper->hash_map);
-    state.counters["rows_per_iter"] = kUniformTimedRows;
+    state.counters["rows_per_iter"] = timed_rows;
     attach_cpu_cache_counters(state);
     state.SetItemsProcessed(total_rows);
 
