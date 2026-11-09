@@ -1343,6 +1343,13 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
             if (desc->is_stream_build_filter() && (!desc->is_topn_filter() || !_enable_topn_filter_pushdown)) {
                 continue;
             }
+            // If the runtime filter's partition-by-exprs's size is greater than 1, skip to push it down to storage engine.
+            if (desc->num_partition_by_exprs() > 1) {
+                continue;
+            }
+            if (!parser->can_pushdown(slot_desc)) {
+                continue;
+            }
 
             // When a pushed-down runtime filter is applied, VARCHAR columns use local dict IDs instead of global dict IDs.
             // Therefore, global low-cardinality dict columns cannot be pushed down.
