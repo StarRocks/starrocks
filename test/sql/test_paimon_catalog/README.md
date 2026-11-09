@@ -36,6 +36,7 @@ The reader-boundary cases additionally use these fixed tables:
 | `reader_aggregate_product_v1` | Unsupported native `product` aggregation uses JNI |
 | `reader_timestamp9_v1`, `reader_orc_legacy_v1` | Nanosecond timestamps and legacy ORC timestamp encoding |
 | `reader_struct_parent_null_v1` | 8,192 rows with NULL ancestor ROWs, SQL NULL and VARIANT null; two overlapping primary-key files require SDK reads |
+| `reader_int96_signed_nanos_v1` | TIMESTAMP(6) columns backed by legacy Parquet INT96 with signed negative nanoseconds, positive timestamps and NULLs |
 | `reader_pk_nullable_map_orc_v1`, `reader_nullable_map_avro_v1` | Nullable MAP keys on SDK reads; the ORC table retains unmerged primary-key files |
 | `reader_schema_cast_v1` | INT-to-STRING evolution outside native compatibility rules |
 | `reader_bitmap64_dv_v1` | Real bitmap64 DV files plus INT-to-STRING evolution, preventing raw-file bypass of the SDK check |
@@ -80,6 +81,39 @@ separate `tmp/<case-name>/<UUID>/` prefix, not this persistent warehouse.
 See [T/test_paimon_reader_modes](T/test_paimon_reader_modes) for an example.
 
 ## Reader assertions
+
+### Signed INT96 fixture
+
+`test_paimon_int96_signed_nanoseconds` reads a complete, static Paimon table.
+It checks pre-epoch microseconds, a negative fractional second, a positive timestamp
+and NULLs through the StarRocks raw-file reader in UTC and Asia/Shanghai, then
+compares the JNI result. The TIMESTAMP(6) values have no time zone and must remain
+identical in both sessions. The routing assertion is essential: a JNI-only read
+would not exercise the Parquet converter being tested.
+
+To reproduce the fixture offline, from the repository root:
+
+```bash
+# Requires PyArrow 25.0.1; regenerates the checked-in BE test file.
+python3 be/test/formats/parquet/test_data/gen_int96_signed_nanoseconds.py
+# Requires a built FE distribution with Paimon 2.0.0 and a compatible JDK.
+javac -cp 'fe/fe-server/target/lib/*' -d "$FIXTURE_CLASSES" \
+  test/sql/test_paimon_catalog/datagen/GenerateInt96Fixture.java
+java -cp "$FIXTURE_CLASSES:fe/fe-server/target/lib/*" GenerateInt96Fixture \
+  "$NEW_FIXTURE_WAREHOUSE" \
+  be/test/formats/parquet/test_data/column_converter/int96_signed_nanoseconds.parquet
+```
+
+Set `FIXTURE_CLASSES` to a scratch class directory and `NEW_FIXTURE_WAREHOUSE` to
+a new local directory. The Python generator changes the equivalent INT96 encoding
+to signed nanoseconds and checks the decoded values. The Java generator commits
+that file through the Paimon API, creating schema, manifests and a snapshot, and
+independently verifies all five rows using the Java reader. Fixture publication
+copies the entire `paimon_test.db/reader_int96_signed_nanos_v1/` directory into the
+shared warehouse, preserving its layout. Do not upload only the Parquet file or
+overwrite the existing shared fixture during test execution.
+
+### Routing helpers
 
 After creating the catalog as in that example, add
 these statements to a T file:
