@@ -3192,6 +3192,218 @@ TEST_F(MetaFileTest, test_no_orphan_delvec_after_write_then_compaction) {
             EXPECT_TRUE(referenced) << "version_to_file entry for version " << vtf_entry.first
                                     << " is not referenced by any delvec";
         }
+<<<<<<< HEAD
+=======
+        // The merged segment's delvec file (version 13) is kept precisely because
+        // compaction_input_delvecs references it; a naive prune over live delvecs only would have
+        // dropped it.
+        EXPECT_TRUE(metadata->delvec_meta().version_to_file().find(13) !=
+                    metadata->delvec_meta().version_to_file().end());
+    }
+}
+
+// Builds tablet |tablet_id| up to version 11, which adds segment 100 and, when |rows| is not empty, records
+// |rows| as its delete vector.
+static std::shared_ptr<TabletMetadata> sstable_delvec_page_base(TabletManager* tablet_manager, int64_t tablet_id,
+                                                                const std::vector<uint32_t>& rows) {
+    auto tablet = std::make_shared<Tablet>(tablet_manager, tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+    {
+        MetaFileBuilder builder(*tablet, metadata);
+        CHECK_OK(builder.finalize(next_id()));
+    }
+    metadata->set_version(11);
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpWrite op_write;
+    op_write.mutable_rowset()->add_segment_metas()->set_filename("a.dat");
+    builder.apply_opwrite(op_write, {}, {});
+    if (!rows.empty()) {
+        auto delvec = std::make_shared<DelVector>();
+        delvec->init(11, rows.data(), rows.size());
+        builder.append_delvec(delvec, 100);
+    }
+    CHECK_OK(builder.finalize(next_id()));
+    CHECK_EQ(100, metadata->rowsets(0).id());
+    return metadata;
+}
+
+// An sstable in |builder|'s sstable meta that refers to |page|, as a position-delete sstable does.
+static void refer_to_page(MetaFileBuilder* builder, const DelvecPagePB& page) {
+    PersistentIndexSstableMetaPB sstable_meta;
+    auto* sstable = sstable_meta.add_sstables();
+    sstable->set_filename("refers_to_page.sst");
+    sstable->set_filesize(1);
+    sstable->set_max_rss_rowid((uint64_t{101} << 32) | std::numeric_limits<uint32_t>::max());
+    sstable->mutable_delvec()->CopyFrom(page);
+    builder->finalize_sstable_meta(sstable_meta);
+}
+
+// A mask page goes into the publish's own file under the publish's version, where no segment records it. Until the
+// file is written the builder reads it from its buffer, and for that page only; the builder of a later publish reads it
+// from the file. A newer delete vector of the segment and a later compaction in the same publish that removes the
+// segment leave no segment delete vector in the builder; the page still reaches the file, under a checksum that is
+// verified when read.
+TEST_F(MetaFileTest, test_position_delete_mask_page) {
+    const int64_t tablet_id = 40004;
+    auto metadata = sstable_delvec_page_base(_tablet_manager.get(), tablet_id, {});
+
+    metadata->set_version(12);
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    MetaFileBuilder builder(*tablet, metadata);
+    auto segment_rows = std::make_shared<DelVector>();
+    const std::vector<uint32_t> deleted_rows = {1};
+    segment_rows->init(12, deleted_rows.data(), deleted_rows.size());
+    builder.append_delvec(segment_rows, 100);
+    auto mask_delvec = std::make_shared<DelVector>();
+    const std::vector<uint32_t> mask_ids = {2, 4};
+    mask_delvec->init(12, mask_ids.data(), mask_ids.size());
+    const DelvecPagePB page = builder.append_position_delete_mask_page(mask_delvec);
+    EXPECT_EQ(12, page.version());
+    EXPECT_EQ(12, page.crc32c_gen_version());
+    EXPECT_GT(page.offset(), 0);
+    ASSIGN_OR_ABORT(auto in_buffer, builder.read_position_delete_mask_page(page));
+    EXPECT_EQ(mask_delvec, in_buffer);
+    // Version 11 wrote no delete vector file, and offset 0 holds the delete vector of segment 100, no mask page.
+    DelvecPagePB other_version = page;
+    other_version.set_version(11);
+    EXPECT_TRUE(builder.read_position_delete_mask_page(other_version).status().is_corruption());
+    DelvecPagePB other_offset = page;
+    other_offset.set_offset(0);
+    EXPECT_TRUE(builder.read_position_delete_mask_page(other_offset).status().is_corruption());
+
+    auto newer = std::make_shared<DelVector>();
+    const std::vector<uint32_t> newer_rows = {1, 2};
+    newer->init(12, newer_rows.data(), newer_rows.size());
+    builder.append_delvec(newer, 100);
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(100);
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("compacted.dat");
+    ASSERT_OK(builder.apply_opcompaction(op_compaction, 100, 0));
+    refer_to_page(&builder, page);
+    ASSERT_OK(builder.finalize(next_id()));
+
+    EXPECT_TRUE(metadata->delvec_meta().delvecs().empty());
+    ASSERT_EQ(1, metadata->delvec_meta().version_to_file().count(12));
+    metadata->set_version(13);
+    MetaFileBuilder later(*tablet, metadata);
+    ASSIGN_OR_ABORT(auto from_file, later.read_position_delete_mask_page(page));
+    EXPECT_EQ(2, from_file->cardinality());
+    EXPECT_TRUE(from_file->roaring()->contains(2));
+    EXPECT_TRUE(from_file->roaring()->contains(4));
+
+    // The same page with a wrong checksum is rejected.
+    DelvecPagePB wrong_checksum = page;
+    wrong_checksum.set_crc32c(page.crc32c() + 1);
+    EXPECT_TRUE(later.read_position_delete_mask_page(wrong_checksum).status().is_corruption());
+}
+
+// The reset for primary key recovery drops the mask pages the publish appended along with the buffer that holds them.
+// A page read at its old place is refused, as that place now holds a segment's delete vector, while the page appended
+// anew reads back from its new place, from the buffer and from the file the publish writes.
+TEST_F(MetaFileTest, test_position_delete_mask_page_reset_for_recover) {
+    const int64_t tablet_id = 40005;
+    auto metadata = sstable_delvec_page_base(_tablet_manager.get(), tablet_id, {});
+
+    metadata->set_version(12);
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    MetaFileBuilder builder(*tablet, metadata);
+    auto mask_delvec = std::make_shared<DelVector>();
+    const std::vector<uint32_t> mask_ids = {2, 4};
+    mask_delvec->init(12, mask_ids.data(), mask_ids.size());
+    const DelvecPagePB old_page = builder.append_position_delete_mask_page(mask_delvec);
+    ASSERT_EQ(0, old_page.offset());
+
+    builder.reset_delvecs_for_recover();
+    auto segment_rows = std::make_shared<DelVector>();
+    const std::vector<uint32_t> deleted_rows = {1};
+    segment_rows->init(12, deleted_rows.data(), deleted_rows.size());
+    builder.append_delvec(segment_rows, 100);
+    EXPECT_TRUE(builder.read_position_delete_mask_page(old_page).status().is_corruption());
+
+    const DelvecPagePB new_page = builder.append_position_delete_mask_page(mask_delvec);
+    EXPECT_GT(new_page.offset(), 0);
+    ASSIGN_OR_ABORT(auto in_buffer, builder.read_position_delete_mask_page(new_page));
+    EXPECT_EQ(mask_delvec, in_buffer);
+    refer_to_page(&builder, new_page);
+    ASSERT_OK(builder.finalize(next_id()));
+
+    metadata->set_version(13);
+    MetaFileBuilder later(*tablet, metadata);
+    ASSIGN_OR_ABORT(auto from_file, later.read_position_delete_mask_page(new_page));
+    EXPECT_EQ(2, from_file->cardinality());
+    EXPECT_TRUE(from_file->roaring()->contains(2));
+    EXPECT_TRUE(from_file->roaring()->contains(4));
+}
+
+// PK CDC (Gap 2 A, cross-publish): when a segment's delete bits were written in an EARLIER publish
+// and the segment is merged away by a LATER compaction publish, compaction_input_delvecs copies the
+// segment's existing page (which references the earlier publish's delvec file). The vacuum prune in
+// _finalize_delvec must keep that older version_to_file entry alive even though no live delvec
+// references it anymore. This exercises Hook B's "older page" branch + the vacuum union.
+TEST_F(MetaFileTest, test_cdc_compaction_input_delvec_keeps_older_publish_file) {
+    const int64_t tablet_id = 40050;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+    // compaction_input_delvecs is only captured when CDC is enabled on the tablet.
+    metadata->mutable_cdc_metadata()->set_enable_cdc(true);
+
+    { // v10: baseline
+        MetaFileBuilder builder(*tablet, metadata);
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+    { // v11: write rowset 100 (segment "a.dat")
+        metadata->set_version(11);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->add_segment_metas()->set_filename("a.dat");
+        builder.apply_opwrite(op_write, {}, {});
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+    int64_t delete_version = 12;
+    { // v12: delete bits on segment 100 -> live delvec + version_to_file[12]
+        metadata->set_version(delete_version);
+        MetaFileBuilder builder(*tablet, metadata);
+        DelVector dv;
+        dv.set_empty();
+        std::shared_ptr<DelVector> ndv;
+        std::vector<uint32_t> dels = {1, 3, 5};
+        dv.add_dels_as_new_version(dels, delete_version, &ndv);
+        builder.append_delvec(ndv, 100);
+        ASSERT_OK(builder.finalize(next_id()));
+    }
+    ASSERT_TRUE(metadata->delvec_meta().version_to_file().find(delete_version) !=
+                metadata->delvec_meta().version_to_file().end());
+
+    { // v13: compaction merges rowset 100 away in a SEPARATE publish (no new delvec on 100 this batch)
+        metadata->set_version(13);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpCompaction op_compaction;
+        op_compaction.add_input_rowsets(100);
+        op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("compacted.dat");
+        ASSERT_OK(builder.apply_opcompaction(op_compaction, 100, 0));
+        ASSERT_OK(builder.finalize(next_id()));
+
+        // segment 100's live delvec is gone, but compaction_input_delvecs captured its older page
+        // (version 12).
+        const auto& dm = metadata->delvec_meta();
+        const auto& cdc = metadata->cdc_metadata().pk_change_locator();
+        EXPECT_TRUE(dm.delvecs().find(100) == dm.delvecs().end());
+        auto cit = cdc.compaction_input_delvecs().find(100);
+        ASSERT_TRUE(cit != cdc.compaction_input_delvecs().end());
+        EXPECT_EQ(delete_version, cit->second.version());
+        // The older delvec file (version 12) must survive: it is now referenced only by
+        // compaction_input_delvecs.
+        EXPECT_TRUE(dm.version_to_file().find(delete_version) != dm.version_to_file().end())
+                << "older delvec file (version " << delete_version << ") must be kept for compaction_input_delvecs";
+>>>>>>> 5a04e593607... [Feature][RB-588] Optimistic DELETE: replay position deletes in primary key recovery (#66246)
     }
 }
 

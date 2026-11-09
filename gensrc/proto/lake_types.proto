@@ -306,6 +306,13 @@ message RowsetMetadataPB {
     // from the same logical rowset compare equal. MERGE dedups rowsets by uid equality.
     // Optional => backward compatible; legacy rowsets are backfilled at split time.
     optional PUniqueId uid = 19;
+<<<<<<< HEAD
+=======
+    // Set on the rowset a position delete's publish appends. The rowset has no segments. It holds the del files of
+    // the delete's candidate sets, and their deletes are already in the delete vectors. How a del file is read
+    // follows from its own fields; primary key recovery only checks this mark against them.
+    optional bool position_delete = 50;
+>>>>>>> 5a04e593607... [Feature][RB-588] Optimistic DELETE: replay position deletes in primary key recovery (#66246)
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,
@@ -420,6 +427,168 @@ message BundleTabletMetadataPB {
     map<int64, uint32> tablet_meta_page_checksum = 4;
 }
 
+<<<<<<< HEAD
+=======
+// Rows of a primary key tablet to delete by position: the writer names each row by its key and its position, and the
+// publish deletes the rows whose position still holds the row the writer read.
+//
+// Why by position: a delete by key deletes whatever row its key has at the publish, a row upserted after the writer
+// read the tablet too, while a delete by position spares it. Writers that pick rows by reading the tablet use it, such
+// as a DELETE that reads the rows it deletes, or a job that removes expired rows.
+//
+// How it works, on an example: a writer deletes seven rows it read at version R, and a load upserts two of
+// their keys before the publish, at version V. Keys sort k1 < k2 < ... < k7.
+//
+//   (1) SCAN at R: the writer picks the rows to delete, each a key at a position (rssid, rowid).
+//
+//           segment 12          segment 15                          segment 18
+//           +------+------+     +------+------+------+------+       +------+
+//  rowid    |  3   |  8   |     |  0   |  4   |  6   |  9   |       |  2   |
+//  key      |  k3  |  k1  |     |  k2  |  k5  |  k6  |  k4  |       |  k7  |
+//           +------+------+     +------+------+------+------+       +------+
+//
+//   (2) WRITE: each spill merge of the writer makes a candidate set. It numbers the set's rows in position
+//       order, their mask ids, sorts them by key into delete entries (key -> mask id), and writes the set's
+//       files, each kind cut into as many files as it fills. Set 0 has the candidate rowid file R0, with
+//       the pages R0.p1 and R0.p2, one per candidate segment, the tombstone sstables S0a and S0b, and the del
+//       files D0a and D0b; the txn log names them all.
+//
+//                            +------------------------------------------------------+
+//                            | txn log: OpWrite.position_delete, read_version R     |
+//                            +-------+-----------------------------------------+----+
+//                                    |                                         +--------------+
+//                                    v                                                        v
+//  +--------------------------------------------------------------------+  +---------------------------------------+
+//  | candidate set 0, from spill merge 1                                |  | candidate set 1, from spill merge 2   |
+//  | mask ids: (12,3) 0  (12,8) 1  (15,0) 2  (15,4) 3  (15,6) 4         |  | mask ids: (15,9) 0  (18,2) 1          |
+//  |                                                                    |  |                                       |
+//  |  candidate rowid file   tombstone sstables   del files             |  |  candidate rowid file    del file     |
+//  |  +- R0 --------------+  +- S0a -+ +- S0b -+  +- D0a --+ +- D0b --+ |  |  +- R1 --------------+   +- D1a --+   |
+//  |  | +- R0.p1 -------+ |  | k1->1 | | k3->0 |  | (k1,1) | | (k5,3) | |  |  | +- R1.p1 -------+ |   | (k4,0) |   |
+//  |  | | 12: {3, 8}    | |  | k2->2 | | k5->3 |  | (k2,2) | | (k6,4) | |  |  | | 15: {9}       | |   | (k7,1) |   |
+//  |  | +- R0.p2 -------+ |  +-------+ | k6->4 |  | (k3,0) | +--------+ |  |  | +- R1.p2 -------+ |   +--------+   |
+//  |  | | 15: {0, 4, 6} | |            +-------+  +--------+            |  |  | | 18: {2}       | |                |
+//  |  | +---------------+ |                                             |  |  | +---------------+ |  no tombstone  |
+//  |  +-------------------+                                             |  |  +-------------------+  sstables:     |
+//  |                                                                    |  |                         too small     |
+//  +--------------------------------------------------------------------+  +---------------------------------------+
+//
+//   (3) A LOAD after R upserts k1 and k7: their new rows are (20,0) and (20,1), and the delete vectors of
+//       segments 12 and 18 get rowids 8 and 2.
+//
+//   (4) PUBLISH at V: (12,8) and (18,2) are stale, as their rows are gone; the other five are live. All the
+//       del files and tombstone sstables of a set refer to its own mask page, a page of DV, the delete
+//       vector file of V: those of set 0 to M0, the del file of set 1 to M1.
+//
+//  +------------------------------------------------------------------------------------------------------------------+
+//  | tablet metadata, version V      orphan files: R0 and R1, left to vacuum                                          |
+//  +--------+------------------------------------------------+-------------------------------------+------------------+
+//           | rowsets: rowset 21, appended,                  | delvec meta: DV, the delete         | sstable meta: the
+//           | marked position_delete, no segments            | vector file of version V            | primary key index
+//           v                                                v                                     v
+//  +- rowset 21: del files -----------+      +- DV ----------------------------+     +- primary key index ----------+
+//  | D0a, of set 0                    |      | DV.p1 segment 12 + {3}          |     | S0a, of set 0                |
+//  |   (k1,1) (k2,2) (k3,0)           |      | DV.p2 segment 15 + {0, 4, 6, 9} |     |   k1->1 k2->2                |
+//  |   row mask: 5 rows, 1 masked, M0 |--+   +---------------------------------+  +--|   mounted with M0            |
+//  | D0b, of set 0                    |  +-->| M0    mask page of set 0: {1}   |<-+  | S0b, of set 0                |
+//  |   (k5,3) (k6,4)                  |  |   +---------------------------------+  |  |   k3->0 k5->3 k6->4          |
+//  |   row mask: 5 rows, 1 masked, M0 |--+   | M1    mask page of set 1: {1}   |  +--|   mounted with M0            |
+//  | D1a, of set 1                    |      +---------------------------------+     | set 1: tombstone of k4       |
+//  |   (k4,0) (k7,1)                  |                      ^                       +------------------------------+
+//  |   row mask: 2 rows, 1 masked, M1 |----------------------+
+//  +----------------------------------+
+//
+//   (5) AFTER: readers skip the masked delete entries, those whose mask id the mask page of their set holds.
+//
+//         lookup of k1           k1->1 in S0a is masked by M0: skipped, so the lookup finds (20,0)
+//         lookup of k7           set 1 put no tombstone for its stale row of k7, so the lookup finds (20,1)
+//         lookup of k3, k4       k3->0 in S0b is not masked, and k4 has a tombstone: both are deleted
+//         index rebuild          replays D0a, D0b and D1a without (k1,1) and (k7,1)
+//         primary key recovery   replays D0a, D0b and D1a without (k1,1) and (k7,1) too
+//         index compaction       drops k1->1 of S0a, and writes the other tombstones without mask ids
+//
+// Terms:
+//   position              where a row is: (rssid, rowid)
+//   candidate row         a row the writer picked to delete: its key and its position at read_version
+//   live, stale           a candidate row whose position still holds the row the writer read is live, else stale; the
+//                         publish deletes the live ones only
+//   stale segment         a segment that a data compaction has replaced, or a delta column group file changed in place,
+//                         since read_version; every candidate row in it is stale
+//   candidate set         candidate rows that the writer numbers, sorts and writes on their own
+//   candidate segment     a segment that a candidate set has candidate rows in
+//   candidate rowid page  a bitmap of the rowids of a set's candidate rows in one candidate segment
+//   mask id               the number of a candidate row within its candidate set
+//   delete entry          a candidate row as del files and tombstone sstables hold it: key -> mask id
+//   mask page             a bitmap of the mask ids of a set's stale candidate rows
+//   masked                said of a delete entry whose mask id its set's mask page holds: it deletes nothing
+//   row mask              what a del file carries of its set: how many candidate rows, how many masked, the mask page
+//   appended rowset       the rowset without segments that the publish appends to hold the del files
+//
+// Mask ids: a set numbers the candidate rows of its candidate segments in the order it lists the segments, each
+// segment's by ascending rowid, so
+//
+//     mask id = (num_candidate_rows summed over the candidate segments listed before the row's)
+//               + (rank of the row's rowid in its candidate rowid page: how many of the page's rowids are smaller)
+//
+// For (15,4) in set 0: R0.p1, the page of segment 12, comes first with 2 rowids, and 4 has one smaller rowid in
+// R0.p2, so 2 + 1 = 3.
+//
+// The writer:
+//   - A key and a candidate segment at most once in a set: a key may be in several sets, so that a set is cut without
+//     looking at the others, since only its candidate row at the position holding its row can be live.
+//   - Each key paired with its position: the publish reads no key to check, and a wrong pair deletes one row and
+//     another key in the index.
+//   - Mask ids from 0 in each set: a set's files can be written as soon as it is sorted. The order of its candidate
+//     segments only sets the mask ids.
+//   - Tombstone sstables with each key once, in ascending bytewise order of the index encoding: every kind of file is
+//     cut where it fills up, so a set's files of one kind do not overlap in key range.
+//   - Del files for every set, with tombstone sstables or without, as for an ordinary delete with a pre-built
+//     tombstone sstable: index compaction consumes the sstables, while primary key recovery, which drops every index
+//     sstable and delete vector, replays the del files.
+//   - position_delete alone in its OpWrite.
+// The publish, at version V:
+//   - Live or stale by position, without reading a key: mask ids follow positions. A stale segment makes all its
+//     candidate rows stale, as data compaction moves rows and a delta column group file does not record the rows it
+//     changed; any other candidate row is stale if its segment's delete vector holds its rowid.
+//   - The live candidate rows deleted, the stale ones not: a writer that needs them gone picks them again.
+//   - A mask page for each set with stale candidate rows: the set's mask ids are one range, so the one page that an
+//     index sstable carries covers all the set's files.
+//   - The delete entries into the index: a set's tombstone sstables mounted with its mask page, or the keys of its live
+//     candidate rows put in as tombstones. The sets go in in any order, all tombstones being of version V.
+//   - One appended rowset, marked position_delete, for the del files, each with its set's row mask: a set without live
+//     candidate rows is left out, its files left to vacuum as every candidate rowid file is, and if no set is left, no
+//     rowset is appended.
+//   - V shared with the transactions published together: each sees the delete vectors the earlier ones wrote.
+message PositionDeletePB {
+    // The version the writer read the candidate rows at.
+    optional int64 read_version = 1;
+    repeated CandidateSetPB candidate_sets = 2;
+
+    // A segment that a candidate set has candidate rows in, and which rows: those at the rowids that
+    // candidate_rowid_page holds.
+    message CandidateSegmentPB {
+        optional uint32 rssid = 1;
+        // How many candidate rows these are.
+        optional uint32 num_candidate_rows = 2;
+        // The bitmap of their rowids, a page in the candidate set's candidate rowid file.
+        optional DelvecPagePB candidate_rowid_page = 3;
+    }
+
+    // A set of candidate rows that the writer sorts and writes on its own; its mask ids count from 0.
+    message CandidateSetPB {
+        // The set's candidate segments, each segment at most once. Their order sets the mask ids.
+        repeated CandidateSegmentPB candidate_segments = 1;
+        // The set's own file of candidate rowid pages.
+        optional FileMetaPB candidate_rowid_file = 2;
+        // The set's delete entries, in del files of DEL_FILE_SEGMENT. The writer sets name, encryption_meta,
+        // num_rows and format. The publish sets origin_rowset_id, op_offset, version, shared and row_mask.
+        repeated DelfileWithRowsetId del_files = 3;
+        // The set's delete entries as tombstones of the primary key index. None for a small set.
+        repeated SstableWithRangePB tombstone_sstables = 4;
+    }
+}
+
+>>>>>>> 5a04e593607... [Feature][RB-588] Optimistic DELETE: replay position deletes in primary key recovery (#66246)
 message TxnLogPB {
 
     message OpWrite {

@@ -15,7 +15,6 @@
 #include "storage/primary_key_recover.h"
 
 #include "column/chunk_factory.h"
-#include "column/serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage_primitive/primary_key_encoder.h"
 
@@ -46,29 +45,23 @@ Status PrimaryKeyRecover::recover() {
     // 3. scan all rowsets and segments to build primary index
     RETURN_IF_ERROR(rowset_iterator(
             pkey_schema, stats,
-            [&](const std::vector<ChunkIteratorPtr>& itrs,
-                const std::vector<std::unique_ptr<RandomAccessFile>>& del_rfs, const std::vector<uint32_t>& delidxs,
-                uint32_t rowset_id) {
+            [&](const std::vector<ChunkIteratorPtr>& itrs, const std::vector<DelKeysReader>& del_keys_readers,
+                const std::vector<uint32_t>& delidxs, uint32_t rowset_id) {
                 // handle upsert
-                if (del_rfs.size() != delidxs.size()) {
+                if (del_keys_readers.size() != delidxs.size()) {
                     return Status::InternalError(
                             fmt::format("invalid delete files when recover, del files {} vs del idxs {}",
-                                        del_rfs.size(), delidxs.size()));
+                                        del_keys_readers.size(), delidxs.size()));
                 }
-                const size_t total_size = itrs.size() + del_rfs.size();
+                const size_t total_size = itrs.size() + del_keys_readers.size();
                 size_t itr_index = 0;
                 size_t del_index = 0;
                 for (size_t i = 0; i < total_size; i++) {
                     if (del_index < delidxs.size() && i == delidxs[del_index]) {
                         // this one is delete op
                         pk_column->reset_column();
-                        const auto& read_file = del_rfs[del_index];
-                        ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
-                        std::vector<uint8_t> read_buffer(file_size);
-                        RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
                         auto col = pk_column->clone();
-                        const auto* end = read_buffer.data() + read_buffer.size();
-                        RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(read_buffer.data(), end, col.get()));
+                        RETURN_IF_ERROR(del_keys_readers[del_index](col.get()));
                         RETURN_IF_ERROR(index.erase(*col, &new_deletes));
                         del_index++;
                     } else {

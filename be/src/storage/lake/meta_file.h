@@ -91,10 +91,31 @@ public:
     explicit MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
     // append delvec to builder's buffer
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
+<<<<<<< HEAD
     // append delta column group to builder
     void append_dcg(uint32_t rssid, const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
                     const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
                     const std::vector<int64_t>& file_sizes);
+=======
+    // Appends |delvec| to this publish's delete vector file as the mask page of a candidate set of a position delete,
+    // for the set's tombstone sstables and the row masks of its del files to refer to, and returns where it is. No
+    // segment's entry in delvec_meta records the page. It gets this publish's version as both version and
+    // crc32c_gen_version, so its checksum is verified when read, and the buffer keeps it however the segments' delete
+    // vectors change. The builder keeps |delvec| too, for an index rebuild or a recovery within this publish, before
+    // the file is written, to read the page back: see read_position_delete_mask_page().
+    DelvecPagePB append_position_delete_mask_page(const DelVectorPtr& delvec);
+    // The delete vector of |page|, a mask page of a position delete, as this publish sees it: one in the delete vector
+    // file that the metadata records for the page's version, or else one this publish appended with
+    // append_position_delete_mask_page(), which is in no delete vector file yet. Corruption if it is in neither.
+    StatusOr<DelVectorPtr> read_position_delete_mask_page(const DelvecPagePB& page) const;
+    // append delta column group to builder. |updated_rowids| holds the rows this column-mode partial
+    // update overlaid on |rssid|, recorded so change data capture can reconstruct this publish's
+    // before/after images. Every dcg write must record the rows it changed.
+    Status append_dcg(uint32_t rssid,
+                      const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
+                      const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
+                      const std::vector<int64_t>& file_sizes, const Roaring& updated_rowids);
+>>>>>>> 5a04e593607... [Feature][RB-588] Optimistic DELETE: replay position deletes in primary key recovery (#66246)
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, SegmentFileInfo>& replace_segments,
                        const std::vector<FileMetaPB>& orphan_files);
@@ -148,7 +169,9 @@ public:
 
     // Primary key recover rebuilds every delvec from the segments and appends them here. Drop the
     // delvecs still pending in the builder (e.g. appended by a failed publish attempt) and make the
-    // builder the only source of delvecs for the rest of this publish.
+    // builder the only source of delvecs for the rest of this publish. The mask pages appended with
+    // append_position_delete_mask_page() go too, with the buffer that holds them: recovery reads the ones it keeps
+    // before the reset, and appends them anew.
     void reset_delvecs_for_recover();
 
     // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
@@ -225,6 +248,13 @@ private:
     std::unordered_map<uint32_t, DelvecPagePB> _delvecs;
     // from segment id to delvec, used for fill cache in finalize stage.
     std::unordered_map<uint32_t, DelVectorPtr> _segmentid_to_delvec;
+<<<<<<< HEAD
+=======
+    // The mask pages append_position_delete_mask_page() put in _buf, by offset. No segment records them, so an empty
+    // _delvecs does not mean that nothing in _buf is referenced. reset_delvecs_for_recover() clears it along with _buf,
+    // or its offsets would name whatever goes into _buf next.
+    std::unordered_map<uint64_t, DelVectorPtr> _position_delete_mask_pages;
+>>>>>>> 5a04e593607... [Feature][RB-588] Optimistic DELETE: replay position deletes in primary key recovery (#66246)
     // from cache key to segment id
     std::unordered_map<MetacacheKey, uint32_t, MetacacheKey::Hash> _cache_key_to_segment_id;
     // When recover flag isn't ok, need recover later

@@ -1363,6 +1363,20 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
             refered_versions.insert(sst.delvec().version());
         }
     }
+<<<<<<< HEAD
+=======
+    // The row masks of del files refer to pages that no slot records, which an index rebuild reads for as long as the
+    // rowset holds the del files, also after an index compaction merged away the sstables bound to the same pages, and
+    // which primary key recovery reads for the del files a rowset wrote itself.
+    for (const auto& rowset : _tablet_meta->rowsets()) {
+        for (const auto& del : rowset.del_files()) {
+            if (del.row_mask().has_mask_page() && del.row_mask().mask_page().size() > 0) {
+                refered_versions.insert(del.row_mask().mask_page().version());
+            }
+        }
+    }
+    _collect_cdc_referenced_delvec_file_versions(refered_versions);
+>>>>>>> 5a04e593607... [Feature][RB-588] Optimistic DELETE: replay position deletes in primary key recovery (#66246)
 
     auto itr = _tablet_meta->mutable_delvec_meta()->mutable_version_to_file()->begin();
     for (; itr != _tablet_meta->mutable_delvec_meta()->mutable_version_to_file()->end();) {
@@ -1429,6 +1443,7 @@ void MetaFileBuilder::reset_delvecs_for_recover() {
     _buf.clear();
     _delvecs.clear();
     _segmentid_to_delvec.clear();
+    _position_delete_mask_pages.clear();
     _cache_key_to_segment_id.clear();
     _delvecs_reset_by_recover = true;
 }

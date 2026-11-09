@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,7 @@
 
 namespace starrocks {
 
+class Column;
 class OlapReaderStatistics;
 
 /**
@@ -39,6 +41,11 @@ class OlapReaderStatistics;
 */
 class PrimaryKeyRecover {
 public:
+    // Appends the keys a del file deletes to |keys|, an empty column of the tablet's encoded primary key type. The
+    // handler of rowset_iterator() calls each one as recovery reaches its del file, so that the keys of one del file
+    // at a time are in memory.
+    using DelKeysReader = std::function<Status(Column* keys)>;
+
     virtual ~PrimaryKeyRecover() = default;
 
     // Follow the steps below:
@@ -52,10 +59,10 @@ public:
     virtual starrocks::Schema generate_pkey_schema() = 0;
 
     // iterator all rowset and get their iterator and basic stat
-    virtual Status rowset_iterator(const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
-                                   const std::function<Status(const std::vector<ChunkIteratorPtr>&,
-                                                              const std::vector<std::unique_ptr<RandomAccessFile>>&,
-                                                              const std::vector<uint32_t>&, uint32_t)>& handler) = 0;
+    virtual Status rowset_iterator(
+            const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
+            const std::function<Status(const std::vector<ChunkIteratorPtr>&, const std::vector<DelKeysReader>&,
+                                       const std::vector<uint32_t>&, uint32_t)>& handler) = 0;
 
     // generate delvec and save
     virtual Status finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) = 0;

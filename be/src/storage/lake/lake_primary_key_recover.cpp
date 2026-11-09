@@ -14,11 +14,19 @@
 
 #include "storage/lake/lake_primary_key_recover.h"
 
+#include <map>
+#include <memory>
+#include <string>
+#include <string_view>
+
 #include "column/column.h"
+#include "column/fixed_length_column.h"
+#include "column/serde/column_array_serde.h"
 #include "common/constexpr.h"
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/del_file_with_mask_ids.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet.h"
@@ -28,7 +36,91 @@
 
 namespace starrocks::lake {
 
+namespace {
+
+// Corruption of del file |del| of rowset |rowset_id| in tablet |tablet_id|: |what| says what is wrong with it.
+Status corrupt_del_file(int64_t tablet_id, uint32_t rowset_id, const DelfileWithRowsetId& del, std::string_view what) {
+    return Status::Corruption(
+            fmt::format("del file {} of rowset {} in tablet {} {}", del.name(), rowset_id, tablet_id, what));
+}
+
+// Checks del file |del|, which |rowset| wrote itself. A rowset marked position_delete holds only del files with mask
+// ids. A del file with mask ids has a row mask, and one of keys alone has none. A row mask masks no more rows than its
+// set has, and refers to a mask page exactly when it masks rows.
+Status check_del_file(int64_t tablet_id, const RowsetMetadataPB& rowset, const DelfileWithRowsetId& del) {
+    auto corrupt = [&](std::string_view what) { return corrupt_del_file(tablet_id, rowset.id(), del, what); };
+    const bool has_mask_ids = del.format() == DelfileFormatPB::DEL_FILE_SEGMENT;
+    if (rowset.position_delete() && !has_mask_ids) {
+        return corrupt("holds keys alone, though its rowset is a position delete's");
+    }
+    if (del.has_row_mask() != has_mask_ids) {
+        return corrupt(has_mask_ids ? "holds mask ids but has no row mask" : "has a row mask but holds keys alone");
+    }
+    const auto& row_mask = del.row_mask();
+    if (row_mask.num_masked_rows() < 0 || row_mask.num_masked_rows() > row_mask.total_rows()) {
+        return corrupt(fmt::format("masks {} of {} rows", row_mask.num_masked_rows(), row_mask.total_rows()));
+    }
+    if (row_mask.num_masked_rows() == 0 && row_mask.has_mask_page()) {
+        return corrupt("masks no row but refers to a page");
+    }
+    if (row_mask.num_masked_rows() > 0 && row_mask.mask_page().size() == 0) {
+        return corrupt(fmt::format("masks {} rows but refers to no page", row_mask.num_masked_rows()));
+    }
+    return Status::OK();
+}
+
+} // namespace
+
+Status LakePrimaryKeyRecover::read_position_delete_mask_pages() {
+    _position_delete_mask_pages.clear();
+    for (const auto& rowset : _metadata->rowsets()) {
+        for (const auto& del : rowset.del_files()) {
+            // A del file that a compaction output carried over from one of its inputs is not replayed: pre_cleanup()
+            // drops it, row mask and all.
+            if (del.origin_rowset_id() != rowset.id()) {
+                continue;
+            }
+            RETURN_IF_ERROR(check_del_file(_tablet->id(), rowset, del));
+            const auto& row_mask = del.row_mask();
+            if (row_mask.num_masked_rows() == 0) {
+                continue;
+            }
+            auto corrupt = [&](std::string_view what) {
+                return corrupt_del_file(_tablet->id(), rowset.id(), del, what);
+            };
+            const auto& page = row_mask.mask_page();
+            const PositionDeleteMaskPageId id = position_delete_mask_page_id(page);
+            DelVectorPtr delvec;
+            if (auto read = _position_delete_mask_pages.find(id); read != _position_delete_mask_pages.end()) {
+                // Row masks that refer to one page name it alike. One that names a page's place with another size or
+                // checksum refers to something that is not there.
+                const auto& known = read->second.page;
+                if (page.size() != known.size() || page.crc32c() != known.crc32c()) {
+                    return corrupt(fmt::format(
+                            "refers to the page at version {} offset {} with size {} and checksum {}, which another "
+                            "row mask names with size {} and checksum {}",
+                            page.version(), page.offset(), page.size(), page.crc32c(), known.size(), known.crc32c()));
+                }
+                delvec = read->second.delvec;
+            } else {
+                // Called before pre_cleanup() clears the delete vector metadata and resets the builder, so the builder
+                // still finds the files, and the pages this publish appended.
+                ASSIGN_OR_RETURN(delvec, _builder->read_position_delete_mask_page(page));
+            }
+            if (static_cast<int64_t>(delvec->cardinality()) != row_mask.num_masked_rows()) {
+                return corrupt(fmt::format("masks {} rows but its page holds {}", row_mask.num_masked_rows(),
+                                           delvec->cardinality()));
+            }
+            _position_delete_mask_pages.emplace(id, PositionDeleteMaskPage{page, std::move(delvec)});
+        }
+    }
+    return Status::OK();
+}
+
 Status LakePrimaryKeyRecover::pre_cleanup() {
+    // 0. read the mask pages of position deletes, while the metadata still says which file holds each version, and the
+    // builder still holds the pages this publish appended
+    RETURN_IF_ERROR(read_position_delete_mask_pages());
     // 1. reset delvec & sst in metadata and clean delvec in builder.
     // Nothing refers to the dropped delvec files and sstables any more, hand them to vacuum.
     for (auto& [version, file] : *_metadata->mutable_delvec_meta()->mutable_version_to_file()) {
@@ -73,7 +165,8 @@ Status LakePrimaryKeyRecover::pre_cleanup() {
     }
     rowsets->erase(emptied, rowsets->end());
     // The builder may still hold delvecs appended before recover, and must not let a segment that the
-    // rebuild finds no deletes for fall back to the base version's delvec.
+    // rebuild finds no deletes for fall back to the base version's delvec. The mask pages it holds go too: step 0 read
+    // those that row masks refer to.
     _builder->reset_delvecs_for_recover();
     // 2. reset primary index
     RETURN_ERROR_IF_FALSE(_tablet->primary_key_mgr()->try_remove_primary_index_cache(_tablet->id()));
@@ -99,26 +192,20 @@ starrocks::Schema LakePrimaryKeyRecover::generate_pkey_schema() {
 }
 
 Status LakePrimaryKeyRecover::sort_rowsets(std::vector<RowsetPtr>* rowsets) {
-    std::sort(rowsets->begin(), rowsets->end(), [](const RowsetPtr& a, const RowsetPtr& b) {
-        const RowsetMetadataPB& rowset_meta_a = a->metadata();
-        const RowsetMetadataPB& rowset_meta_b = b->metadata();
-        // if rowset was generated by compaction, use max compact input rowset id as its compare id
-        uint32_t rowset_a_comp_id = rowset_meta_a.has_max_compact_input_rowset_id()
-                                            ? rowset_meta_a.max_compact_input_rowset_id()
-                                            : rowset_meta_a.id();
-        uint32_t rowset_b_comp_id = rowset_meta_b.has_max_compact_input_rowset_id()
-                                            ? rowset_meta_b.max_compact_input_rowset_id()
-                                            : rowset_meta_b.id();
-        return rowset_a_comp_id < rowset_b_comp_id;
-    });
+    auto replay_key = [](const RowsetPtr& rowset) {
+        const RowsetMetadataPB& meta = rowset->metadata();
+        const uint32_t place = meta.has_max_compact_input_rowset_id() ? meta.max_compact_input_rowset_id() : meta.id();
+        return std::make_pair(place, meta.id());
+    };
+    std::sort(rowsets->begin(), rowsets->end(),
+              [&](const RowsetPtr& a, const RowsetPtr& b) { return replay_key(a) < replay_key(b); });
     return Status::OK();
 }
 
 Status LakePrimaryKeyRecover::rowset_iterator(
         const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
-        const std::function<Status(const std::vector<ChunkIteratorPtr>&,
-                                   const std::vector<std::unique_ptr<RandomAccessFile>>&, const std::vector<uint32_t>&,
-                                   uint32_t)>& handler) {
+        const std::function<Status(const std::vector<ChunkIteratorPtr>&, const std::vector<DelKeysReader>&,
+                                   const std::vector<uint32_t>&, uint32_t)>& handler) {
     auto rowsets = _tablet->get_rowsets(_metadata);
     // Sort the rowsets in order of primary key occurrence,
     // so we can generate correct delvecs
@@ -130,8 +217,8 @@ Status LakePrimaryKeyRecover::rowset_iterator(
         }
         // iterator for each segment
         auto& itrs = res.value();
-        // iterator for each del files
-        std::vector<std::unique_ptr<RandomAccessFile>> del_rfs;
+        // reader for each del file
+        std::vector<DelKeysReader> del_keys_readers;
         for (int del_idx = 0; del_idx < rowset->metadata().del_files_size(); ++del_idx) {
             const auto& del = rowset->metadata().del_files(del_idx);
             if (del.origin_rowset_id() != rowset->id()) {
@@ -139,36 +226,19 @@ Status LakePrimaryKeyRecover::rowset_iterator(
                 // because that means this rowset is generated by compaction
                 break;
             }
-            RandomAccessFileOptions ropts;
-            if (!del.encryption_meta().empty()) {
-                ASSIGN_OR_RETURN(ropts.encryption_info,
-                                 KeyCache::instance().unwrap_encryption_meta(del.encryption_meta()));
-            }
-            ASSIGN_OR_RETURN(auto read_file, fs::new_random_access_file(ropts, _tablet->tablet_mgr()->del_location(
-                                                                                       _metadata->id(), del.name())));
-            // Recovery rebuilds every delvec from these deletes, so a corrupt del file that still
-            // deserializes would bake the wrong rows into the recovered delvecs -- permanently, since
-            // recovery treats the result as the new source of truth. The shared PrimaryKeyRecover
-            // consumes plain file handles (it also serves shared-nothing, which has no del checksum),
-            // so verify here before handing the handle over; it re-reads positionally from offset 0.
-            // Only pays the extra read when a checksum was actually recorded.
-            if (del.has_crc32c()) {
-                auto verified = read_and_verify_del_file(read_file.get(), del, _metadata->id());
-                RETURN_IF_ERROR(verified.status());
-            }
-            del_rfs.push_back(std::move(read_file));
+            del_keys_readers.emplace_back([this, del](Column* keys) { return read_keys_to_delete(del, keys); });
         }
         // Position of each del file in the merged (segments + dels) replay sequence consumed by the
         // handler. A del file logically follows segment index op_offset, so the segments preceding it
         // are this rowset's iterators with segment index <= op_offset (segs_before, counted below) and
         // the del files preceding it are the j already collected; hence its merged position is
         // segs_before + j. This interleaves deletes at the same point the apply path does, so recover
-        // reproduces the same delvec. del_rfs only holds origin del files (the loop above breaks on
+        // reproduces the same delvec. del_keys_readers only reads origin del files (the loop above breaks on
         // non-origin), so op_offset is in this rowset's segment-index space. Reduces to the legacy
         // "after all segments" when op_offset is the max segment index.
         std::vector<uint32_t> delidxs;
-        delidxs.reserve(del_rfs.size());
-        for (uint32_t j = 0; j < del_rfs.size(); ++j) {
+        delidxs.reserve(del_keys_readers.size());
+        for (uint32_t j = 0; j < del_keys_readers.size(); ++j) {
             const auto& del = rowset->metadata().del_files(j);
             // Fall back to the max segment id when op_offset was not recorded (older metadata): the
             // delete then sorts after all segments (num_segments + j), i.e. the legacy recover
@@ -190,9 +260,36 @@ Status LakePrimaryKeyRecover::rowset_iterator(
             }
             delidxs.push_back(segs_before + j);
         }
-        RETURN_IF_ERROR(handler(itrs, del_rfs, delidxs, rowset->id()));
+        RETURN_IF_ERROR(handler(itrs, del_keys_readers, delidxs, rowset->id()));
     }
     return Status::OK();
+}
+
+Status LakePrimaryKeyRecover::read_keys_to_delete(const DelfileWithRowsetId& del, Column* keys) {
+    if (del.format() == DelfileFormatPB::DEL_FILE_SEGMENT) {
+        // A position delete's del file deletes the keys of its live candidate rows: the entries its mask page does not
+        // mask.
+        const auto& row_mask = del.row_mask();
+        const roaring::Roaring* stale_mask_ids = nullptr;
+        if (row_mask.num_masked_rows() > 0) {
+            const auto id = position_delete_mask_page_id(row_mask.mask_page());
+            stale_mask_ids = _position_delete_mask_pages.at(id).delvec->roaring();
+        }
+        return read_live_row_keys(_tablet->tablet_mgr(), _tablet->id(), del, row_mask.total_rows(), stale_mask_ids,
+                                  keys);
+    }
+    RandomAccessFileOptions ropts;
+    if (!del.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(ropts.encryption_info, KeyCache::instance().unwrap_encryption_meta(del.encryption_meta()));
+    }
+    ASSIGN_OR_RETURN(auto read_file, fs::new_random_access_file(
+                                             ropts, _tablet->tablet_mgr()->del_location(_metadata->id(), del.name())));
+    // Recovery rebuilds every delvec from these deletes, so a corrupt del file that still deserializes would bake the
+    // wrong rows into the recovered delvecs -- permanently, since recovery treats the result as the new source of
+    // truth. So the checksum is verified whenever one was recorded.
+    ASSIGN_OR_RETURN(auto content, read_and_verify_del_file(read_file.get(), del, _metadata->id()));
+    const auto* begin = reinterpret_cast<const uint8_t*>(content.data());
+    return serde::ColumnArraySerde::deserialize(begin, begin + content.size(), keys).status();
 }
 
 // generate delvec and save
@@ -214,6 +311,27 @@ Status LakePrimaryKeyRecover::finalize_delvec(const PrimaryIndex::DeletesMap& ne
         auto it = rssid_to_rowset.find(new_delete.first);
         if (it != rssid_to_rowset.end()) {
             it->second->set_num_dels(it->second->num_dels() + delvec_ptr->cardinality());
+        }
+    }
+    // pre_cleanup() dropped the record of which file holds each version, and the pages this publish appended, so the
+    // pages row masks refer to go into this publish's delete vector file anew, and the row masks are pointed at them
+    // there.
+    std::map<PositionDeleteMaskPageId, DelvecPagePB> rewritten;
+    for (const auto& [id, read] : _position_delete_mask_pages) {
+        rewritten.emplace(id, _builder->append_position_delete_mask_page(read.delvec));
+    }
+    for (auto& rowset : *_metadata->mutable_rowsets()) {
+        for (auto& del : *rowset.mutable_del_files()) {
+            if (!del.row_mask().has_mask_page()) {
+                continue;
+            }
+            const auto& page = del.row_mask().mask_page();
+            auto iter = rewritten.find(position_delete_mask_page_id(page));
+            if (iter == rewritten.end()) {
+                return Status::InternalError(fmt::format(
+                        "page of the row mask of del file {} in tablet {} was not read", del.name(), _tablet->id()));
+            }
+            *del.mutable_row_mask()->mutable_mask_page() = iter->second;
         }
     }
     return Status::OK();

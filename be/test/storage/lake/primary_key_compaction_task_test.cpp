@@ -15,18 +15,23 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <map>
 #include <memory>
+#include <numeric>
+#include <optional>
 #include <random>
 #include <set>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_ingest_fwd.h"
@@ -36,16 +41,20 @@
 #include "common/logging.h"
 #include "exec/exec_env.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/Types_types.h"
+#include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_test_utils.h"
 #include "storage/lake/delta_writer.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_primary_key_recover.h"
+#include "storage/lake/position_delete_test_util.h"
 #include "storage/lake/primary_key_compaction_policy.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
@@ -56,6 +65,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/variant_tuple.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
@@ -229,6 +239,173 @@ protected:
             ASSERT_EQ(GetParam().algorithm, VERTICAL_COMPACTION);
             ASSERT_TRUE(dynamic_cast<VerticalCompactionTask*>(task.get()) != nullptr);
         }
+    }
+
+    Chunk single_row(int key, int value) {
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append(key);
+        c1->append(value);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
+    }
+
+    // Writes |chunk| as one load into the fixture's tablet and returns the txn id, unpublished.
+    int64_t write_txn(const Chunk& chunk) {
+        std::vector<uint32_t> indexes(chunk.num_rows());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        const int64_t txn_id = next_id();
+        auto delta_writer = DeltaWriterBuilder()
+                                    .set_tablet_manager(_tablet_mgr.get())
+                                    .set_tablet_id(_tablet_metadata->id())
+                                    .set_txn_id(txn_id)
+                                    .set_partition_id(_partition_id)
+                                    .set_mem_tracker(_mem_tracker.get())
+                                    .set_schema_id(_tablet_schema->id())
+                                    .set_profile(&_dummy_runtime_profile)
+                                    .build();
+        CHECK_OK(delta_writer.status());
+        CHECK_OK((*delta_writer)->open());
+        CHECK_OK((*delta_writer)->write(chunk, indexes.data(), indexes.size()));
+        CHECK_OK((*delta_writer)->finish_with_txnlog());
+        (*delta_writer)->close();
+        return txn_id;
+    }
+
+    // Writes |chunk| as one load and publishes it as |version| while forcing a primary key recovery: the
+    // index load reports a duplicate key once, so the publish recovers the tablet and then publishes again.
+    Status publish_forcing_recovery(const Chunk& chunk, int64_t version) {
+        ConfigResetGuard<bool> recover_guard(&config::enable_primary_key_recover, true);
+        bool report_duplicate = true;
+        SyncPoint::GetInstance()->SetCallBack("lake_index_load.1", [&](void* arg) {
+            if (report_duplicate) {
+                *static_cast<Status*>(arg) = Status::AlreadyExist("forced primary key recovery");
+                report_duplicate = false;
+            }
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp clear_sync_point([] {
+            SyncPoint::GetInstance()->ClearCallBack("lake_index_load.1");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        // Only an index that is not cached gets loaded, and the load is where the duplicate is reported.
+        _primary_key_mgr->try_remove_primary_index_cache(_tablet_metadata->id());
+        const int64_t txn_id = write_txn(chunk);
+        auto st = publish_single_version(_tablet_metadata->id(), version, txn_id).status();
+        CHECK(!report_duplicate) << "the publish did not load the index";
+        return st;
+    }
+
+    std::map<int, int> read_key_values(int64_t version) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        std::map<int, int> rows;
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                rows[chunk->columns()[0]->get(i).get_int32()] = chunk->columns()[1]->get(i).get_int32();
+            }
+            chunk->reset();
+        }
+        return rows;
+    }
+
+    // Writes a load that deletes |keys| from the fixture's tablet and returns the txn id, unpublished.
+    int64_t write_delete_txn(const std::vector<int>& keys) {
+        std::vector<SlotDescriptor> slots;
+        slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        std::vector<SlotDescriptor*> slot_pointers{&slots[0], &slots[1], &slots[2]};
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto ops = Int8Column::create();
+        for (int key : keys) {
+            c0->append(key);
+            c1->append(0);
+            ops->append(TOpType::DELETE);
+        }
+        Chunk chunk(Columns{std::move(c0), std::move(c1), std::move(ops)}, Chunk::SlotHashMap{{0, 0}, {1, 1}, {2, 2}});
+        std::vector<uint32_t> indexes(keys.size());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        const int64_t txn_id = next_id();
+        auto delta_writer = DeltaWriterBuilder()
+                                    .set_tablet_manager(_tablet_mgr.get())
+                                    .set_tablet_id(_tablet_metadata->id())
+                                    .set_txn_id(txn_id)
+                                    .set_partition_id(_partition_id)
+                                    .set_mem_tracker(_mem_tracker.get())
+                                    .set_schema_id(_tablet_schema->id())
+                                    .set_slot_descriptors(&slot_pointers)
+                                    .set_profile(&_dummy_runtime_profile)
+                                    .build();
+        CHECK_OK(delta_writer.status());
+        CHECK_OK((*delta_writer)->open());
+        CHECK_OK((*delta_writer)->write(chunk, indexes.data(), indexes.size()));
+        CHECK_OK((*delta_writer)->finish_with_txnlog());
+        (*delta_writer)->close();
+        return txn_id;
+    }
+
+    // Keys 0..11 and 12..23 are written as versions 2 and 3, one rowset each, key k at rowid k % 12; version
+    // 3 is the snapshot a delete of keys 2, 3 and 12 is decided on. A compaction reads both rowsets right then
+    // and commits only after the delete. Key 3 is upserted as version 4, after the snapshot, and
+    // |publish_delete|, given the snapshot, publishes the delete as version 5. The compaction commits as
+    // version 6: its output carries copies of the old rows of keys 2, 3 and 12 under an rssid newer than the
+    // delete's rowset, but replays in place of its newest input, before it. Version 7 is published while a
+    // primary key recovery is forced, so it holds what recovery derives from all of the above.
+    void recover_after_concurrent_compaction(const std::function<void(const TabletMetadataPtr&)>& publish_delete) {
+        const int64_t tablet_id = _tablet_metadata->id();
+        ASSERT_OK(publish_single_version(tablet_id, 2, write_txn(generate_data(kChunkSize, 0))).status());
+        ASSERT_OK(publish_single_version(tablet_id, 3, write_txn(generate_data(kChunkSize, 1))).status());
+        ASSIGN_OR_ABORT(auto snapshot, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+
+        const int64_t compaction_txn_id = next_id();
+        auto task_context =
+                std::make_unique<CompactionTaskContext>(compaction_txn_id, tablet_id, 3, false, false, nullptr);
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+        check_task(task);
+        ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+        ASSIGN_OR_ABORT(auto compaction_log, _tablet_mgr->get_txn_log(tablet_id, compaction_txn_id));
+        ASSERT_EQ(2, compaction_log->op_compaction().input_rowsets_size());
+
+        ASSERT_OK(publish_single_version(tablet_id, 4, write_txn(single_row(3, 333))).status());
+        publish_delete(snapshot);
+        ASSIGN_OR_ABORT(auto deleted, _tablet_mgr->get_tablet_metadata(tablet_id, 5));
+        const uint32_t delete_rowset_id = deleted->rowsets(deleted->rowsets_size() - 1).id();
+        ASSERT_OK(publish_single_version(tablet_id, 6, compaction_txn_id).status());
+        ASSIGN_OR_ABORT(auto compacted, _tablet_mgr->get_tablet_metadata(tablet_id, 6));
+        const auto& output = compacted->rowsets(compacted->rowsets_size() - 1);
+        ASSERT_TRUE(output.has_max_compact_input_rowset_id());
+        ASSERT_GT(output.id(), delete_rowset_id);
+        ASSERT_LT(output.max_compact_input_rowset_id(), delete_rowset_id);
+
+        ASSERT_OK(publish_forcing_recovery(single_row(100, 300), 7));
+    }
+
+    // The rows version 7 of that case holds: keys 0..23 at their loaded values, less keys 2 and 12, which the
+    // delete removes, with key 3 at the value it was upserted with, or removed too when |key3_deleted|, and
+    // key 100 from version 7 itself.
+    std::map<int, int> rows_after_recovery(bool key3_deleted) {
+        std::map<int, int> rows;
+        for (int key = 0; key < 2 * kChunkSize; key++) {
+            rows[key] = key * 3;
+        }
+        rows.erase(2);
+        rows.erase(12);
+        if (key3_deleted) {
+            rows.erase(3);
+        } else {
+            rows[3] = 333;
+        }
+        rows[100] = 300;
+        return rows;
     }
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
@@ -2566,6 +2743,532 @@ TEST_P(LakePrimaryKeyCompactionTest, test_replace_batch_rows_correctness) {
     }
 }
 
+<<<<<<< HEAD
+=======
+// A compaction merges an input segment, while a concurrent upsert published earlier in the same
+// batch has already re-written (superseded) one of that segment's keys. When the compaction
+// publishes, the primary index maps the superseded key to the upsert's rowset, whose id is greater
+// than the largest input rowset id, so the compaction stamps a delete bit on its own output segment.
+// That delete bit is the conflict subset, and it must be captured into
+// cdc_metadata().pk_change_locator().compaction_output_delvecs() keyed by the output segment's rssid.
+TEST_P(LakePrimaryKeyCompactionTest, test_cdc_compaction_output_delvecs_captured) {
+    // Compaction only records capture metadata when change data capture is enabled on the tablet
+    // (SetUp seeded the tablet with the flag off).
+    _tablet_metadata->mutable_cdc_metadata()->set_enable_cdc(true);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    // try_replace(... max_src_rssid ...) only runs on the non-light publish path; the light path
+    // resolves conflicts from the input segments' base-version delvec and would not exercise the
+    // in-batch superseded-key case. Force the non-light path for the duration of this test.
+    ConfigResetGuard<bool> light_publish_guard(&config::enable_light_pk_compaction_publish, false);
+
+    // The three input rowsets carry the same key set so the compaction has overlapping keys to
+    // merge into a single output segment.
+    auto chunk0 = generate_data(kChunkSize, 0);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, read(version));
+    auto base_version = version;
+
+    // Create the compaction against base_version so its input rowsets are the three already-published
+    // ones. Its largest input rowset id becomes max_src_rssid at publish time.
+    auto compaction_txn_id = next_id();
+    auto task_context =
+            std::make_unique<CompactionTaskContext>(compaction_txn_id, tablet_id, base_version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
+
+    // Concurrent upsert that re-writes the same key set into a new rowset. Its rowset id is larger
+    // than any compaction input rowset id, so the index entries it produces look superseded to the
+    // compaction's try_replace. Leave it unpublished; the batch below publishes it before the
+    // compaction.
+    auto write_txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(write_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // Batch publish with the upsert ordered before the compaction. The upsert applies first and
+    // remaps every key to its new rowset; the compaction then resolves the conflict by deleting
+    // those rows from its output segment.
+    std::vector<int64_t> txn_ids{write_txn_id, compaction_txn_id};
+    auto new_version = base_version + txn_ids.size();
+    ASSIGN_OR_ABORT(auto metadata, batch_publish(tablet_id, base_version, new_version, txn_ids));
+
+    const auto& output_delvecs = metadata->cdc_metadata().pk_change_locator().compaction_output_delvecs();
+    ASSERT_FALSE(output_delvecs.empty());
+    // The only conflict entry belongs to the compaction output segment; all kChunkSize keys were
+    // superseded, so the captured subset is non-empty and stamped at the compaction publish version.
+    bool found_output_segment_entry = false;
+    for (const auto& [output_rssid, page] : output_delvecs) {
+        EXPECT_GT(page.size(), 0);
+        EXPECT_EQ(page.version(), new_version);
+        found_output_segment_entry = true;
+    }
+    EXPECT_TRUE(found_output_segment_entry);
+
+    // Sanity check that the upsert really superseded the merged keys: the surviving rows live in the
+    // upsert's rowset, the compaction output segment is fully deleted.
+    EXPECT_EQ(kChunkSize, read(new_version));
+}
+
+// The mirror of test_cdc_compaction_output_delvecs_captured. There a concurrent upsert published
+// BEFORE the compaction superseded the merged keys, so the compaction stamped conflict-resolution
+// delete bits on its own output and recorded them in compaction_output_delvecs. Here the batch
+// orders the compaction FIRST, so it merges a clean output -- no key is superseded while it publishes,
+// and compaction_output_delvecs stays empty. A load ordered AFTER it then updates the first half of
+// the merged keys: the index already maps those keys to the output, so the upsert stamps an ordinary
+// op_write delete vector on the output segment (not a conflict capture) and writes the new values into
+// its own rowset. This is the clean-output delete path the changes connector reads with an empty
+// conflict baseline (changes_connector_test.cpp test_primary_keys_before_values_compaction_output
+// sub-case G), the branch its conflict-bearing sub-cases never reach. Runs on the default light
+// compaction publish path: op_write delete-vector stamping is independent of that config, and a
+// compaction with no concurrent supersede produces no conflict capture on either path.
+TEST_P(LakePrimaryKeyCompactionTest, test_cdc_compaction_then_load_records_no_output_delvecs) {
+    // Compaction only records capture metadata when change data capture is enabled on the tablet.
+    _tablet_metadata->mutable_cdc_metadata()->set_enable_cdc(true);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    // Three input rowsets carrying the same key set [0, kChunkSize) so the compaction has overlapping
+    // keys to merge into a single output segment.
+    auto chunk0 = generate_data(kChunkSize, 0);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, read(version));
+    auto base_version = version;
+
+    // Compaction created against base_version; its inputs are the three published rowsets. Executed
+    // now, published below ordered before the load.
+    auto compaction_txn_id = next_id();
+    auto task_context =
+            std::make_unique<CompactionTaskContext>(compaction_txn_id, tablet_id, base_version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
+
+    // A load that upserts the first half of the key set ([0, kUpdated) is a subset of the merged
+    // [0, kChunkSize)). Ordered AFTER the compaction in the batch below, it updates keys the compaction
+    // has already merged into its output. Leave it unpublished.
+    const int kUpdated = kChunkSize / 2;
+    auto update_chunk = generate_data(kUpdated, 0);
+    auto update_indexes = std::vector<uint32_t>(kUpdated);
+    for (int i = 0; i < kUpdated; i++) {
+        update_indexes[i] = i;
+    }
+    auto write_txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(write_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(update_chunk, update_indexes.data(), update_indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // Batch publish with the compaction ordered before the load. The compaction merges cleanly, then
+    // the load supersedes the first half of the keys.
+    std::vector<int64_t> txn_ids{compaction_txn_id, write_txn_id};
+    auto new_version = base_version + txn_ids.size();
+    ASSIGN_OR_ABORT(auto metadata, batch_publish(tablet_id, base_version, new_version, txn_ids));
+
+    // The compaction was clean: nothing recorded in the conflict capture.
+    EXPECT_TRUE(metadata->cdc_metadata().pk_change_locator().compaction_output_delvecs().empty());
+
+    // The load's deletes landed on the compaction output as an ordinary op_write delete vector: the
+    // single output rowset (the one carrying max_compact_input_rowset_id) is half deleted; its merged-
+    // but-untouched half plus the load's own kUpdated new rows leave kChunkSize live rows.
+    int output_rowsets = 0;
+    for (int i = 0; i < metadata->rowsets_size(); i++) {
+        if (metadata->rowsets(i).has_max_compact_input_rowset_id()) {
+            output_rowsets++;
+            EXPECT_EQ(kUpdated, metadata->rowsets(i).num_dels());
+        }
+    }
+    EXPECT_EQ(1, output_rowsets);
+    EXPECT_EQ(kChunkSize, read(new_version));
+}
+
+// Write the same key set three times (so the first two rowsets carry full delete vectors), then
+// compact them into one rowset at version V. The compaction captures those input segments' delvecs
+// into compaction_input_delvecs, each page stamped at version V. A following normal publish at V+1 has
+// ori_base_version == V, so every captured page (version V <= V) is pruned at publish start and the
+// three CDC maps come up empty on the V+1 metadata.
+TEST_P(LakePrimaryKeyCompactionTest, test_cdc_maps_reset_on_next_normal_publish) {
+    // Compaction only records capture metadata when change data capture is enabled on the tablet.
+    _tablet_metadata->mutable_cdc_metadata()->set_enable_cdc(true);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    auto chunk0 = generate_data(kChunkSize, 0);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Compact at the current version; the merged input segments' delvecs land in compaction_input_delvecs.
+    auto compaction_txn_id = next_id();
+    auto task_context =
+            std::make_unique<CompactionTaskContext>(compaction_txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, compaction_txn_id).status());
+    version++;
+    auto compaction_version = version;
+
+    ASSIGN_OR_ABORT(auto metadata_after_compaction, _tablet_mgr->get_tablet_metadata(tablet_id, compaction_version));
+    ASSERT_FALSE(metadata_after_compaction->cdc_metadata().pk_change_locator().compaction_input_delvecs().empty());
+    // Each captured page keeps the version at which its delete bits were written (the overwrite
+    // publishes before this compaction), so every page.version() <= base of the compaction publish,
+    // hence < compaction_version. That is exactly why the next publish (whose ori_base ==
+    // compaction_version) prunes them all.
+    for (const auto& [rssid, page] :
+         metadata_after_compaction->cdc_metadata().pk_change_locator().compaction_input_delvecs()) {
+        EXPECT_LT(page.version(), compaction_version);
+    }
+
+    // A second normal publish (overwriting the same keys again) at compaction_version + 1.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    ASSIGN_OR_ABORT(auto metadata_next, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_TRUE(metadata_next->cdc_metadata().pk_change_locator().compaction_input_delvecs().empty());
+    EXPECT_TRUE(metadata_next->cdc_metadata().pk_change_locator().compaction_output_delvecs().empty());
+    EXPECT_TRUE(metadata_next->cdc_metadata().pk_change_locator().column_overlay_vecs().empty());
+}
+
+// After a compaction leaves a compaction_input_delvecs entry at version V, an empty publish (a single
+// txn whose txn_id is EMPTY_TXNLOG_TXNID, taking publish_version's fast path) advances to V+1. The fast
+// path leaves the CDC capture cleared, so the V+1 metadata's maps are empty and it carries no
+// capture status.
+TEST_P(LakePrimaryKeyCompactionTest, test_cdc_maps_reset_on_empty_publish) {
+    // Compaction only records capture metadata when change data capture is enabled on the tablet.
+    _tablet_metadata->mutable_cdc_metadata()->set_enable_cdc(true);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    auto chunk0 = generate_data(kChunkSize, 0);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    auto compaction_txn_id = next_id();
+    auto task_context =
+            std::make_unique<CompactionTaskContext>(compaction_txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, compaction_txn_id).status());
+    version++;
+
+    ASSIGN_OR_ABORT(auto metadata_after_compaction, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_FALSE(metadata_after_compaction->cdc_metadata().pk_change_locator().compaction_input_delvecs().empty());
+
+    // Empty publish (no txnlog) -> publish_version's reshard/empty fast path.
+    {
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(-1 /* EMPTY_TXNLOG_TXNID */);
+        txn_info.set_txn_type(TXN_NORMAL);
+        txn_info.set_combined_txn_log(false);
+        txn_info.set_commit_time(time(nullptr));
+        txn_info.set_force_publish(false);
+        std::vector<TxnInfoPB> txns{txn_info};
+        ASSIGN_OR_ABORT(auto empty_meta, publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), version,
+                                                         version + 1, txns, false, std::nullopt));
+        version++;
+        EXPECT_TRUE(empty_meta->cdc_metadata().pk_change_locator().compaction_input_delvecs().empty());
+        EXPECT_TRUE(empty_meta->cdc_metadata().pk_change_locator().compaction_output_delvecs().empty());
+        EXPECT_TRUE(empty_meta->cdc_metadata().pk_change_locator().column_overlay_vecs().empty());
+        EXPECT_TRUE(!empty_meta->has_cdc_metadata() || !empty_meta->cdc_metadata().has_capture_status() ||
+                    empty_meta->cdc_metadata().capture_status().status_code() == 0);
+    }
+}
+
+// lake::PrimaryKeyCompactionState::_load_segments() used to create every segment's encoded primary keys as a
+// LargeBinaryColumn. Load a three-segment rowset of a VARCHAR primary key tablet the way the non-light
+// publish_primary_compaction does, and check each segment is a BinaryColumn holding the segment's keys.
+class LakeCompactionStateTest : public TestBase {
+public:
+    LakeCompactionStateTest() : TestBase(kTestDirectory), _partition_id(next_id()) {
+        _tablet_metadata = generate_simple_tablet_metadata_v2(PRIMARY_KEYS);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_lake_compaction_state";
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override { remove_test_dir_or_die(); }
+
+    // Keys are zero-padded so that their lexicographic order matches their numeric order.
+    static std::string make_key(int k) {
+        std::string digits = std::to_string(k);
+        return "key_" + std::string(digits.size() < 6 ? 6 - digits.size() : 0, '0') + digits;
+    }
+
+    Chunk generate_chunk(int begin, int rows) {
+        auto c0 = BinaryColumn::create();
+        auto c1 = Int32Column::create();
+        for (int k = begin; k < begin + rows; k++) {
+            c0->append(make_key(k));
+            c1->append(k);
+        }
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
+    }
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+    int64_t _partition_id;
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
+};
+
+TEST_F(LakeCompactionStateTest, load_segments_uses_binary_column) {
+    const int kSegments = 3;
+    const int kRowsPerSegment = 100;
+    const auto tablet_id = _tablet_metadata->id();
+    auto indexes = std::vector<uint32_t>(kRowsPerSegment);
+    for (int i = 0; i < kRowsPerSegment; i++) {
+        indexes[i] = i;
+    }
+
+    // One load with three flushes, so the rowset has three segments. Load spill would instead spill each flush into a
+    // block and merge all blocks into one segment at finish, so turn it off for this load.
+    auto load_spill_backup = config::enable_load_spill;
+    config::enable_load_spill = false;
+    DeferOp restore_load_spill([&]() { config::enable_load_spill = load_spill_backup; });
+    auto txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    for (int s = 0; s < kSegments; s++) {
+        auto chunk = generate_chunk(s * kRowsPerSegment, kRowsPerSegment);
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->flush());
+    }
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+    ASSIGN_OR_ABORT(auto metadata, publish_single_version(tablet_id, 2, txn_id));
+    ASSERT_EQ(1, metadata->rowsets_size());
+
+    Rowset rowset(_tablet_mgr.get(), tablet_id, &metadata->rowsets(0), -1, _tablet_schema);
+    ASSERT_EQ(kSegments, rowset.num_segments());
+
+    auto* tracker = _primary_key_mgr->compaction_state_mem_tracker();
+    const auto base_consumption = tracker->consumption();
+    {
+        PrimaryKeyCompactionState state;
+        for (int i = 0; i < kSegments; i++) {
+            ASSERT_OK(state.load_segments(&rowset, _primary_key_mgr.get(), _tablet_schema, i));
+            const auto& pks = state.pk_cols[i];
+            ASSERT_NE(nullptr, pks) << "segment " << i;
+            EXPECT_TRUE(pks->is_binary()) << "segment " << i << " is " << pks->get_name();
+            ASSERT_EQ(static_cast<size_t>(kRowsPerSegment), pks->size()) << "segment " << i;
+            for (int j = 0; j < kRowsPerSegment; j++) {
+                ASSERT_EQ(make_key(i * kRowsPerSegment + j), pks->get(j).get_slice().to_string())
+                        << "segment " << i << " row " << j;
+            }
+            EXPECT_EQ(base_consumption + static_cast<int64_t>(pks->memory_usage()), tracker->consumption());
+            state.release_segments(i);
+            EXPECT_EQ(nullptr, state.pk_cols[i]) << "segment " << i;
+            EXPECT_EQ(base_consumption, tracker->consumption());
+        }
+    }
+    EXPECT_EQ(base_consumption, tracker->consumption());
+}
+
+// Recovery replays the rowset a position delete appended at its own id, as any rowset but a compaction output, which
+// replays in place of its newest input.
+TEST_P(LakePrimaryKeyCompactionTest, test_pk_recover_rowset_order_with_position_deletes) {
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    metadata->clear_rowsets();
+    auto add_rowset = [&](uint32_t id, int segments) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(id);
+        for (int i = 0; i < segments; ++i) {
+            rowset->add_segment_metas()->set_segment_idx(i);
+        }
+        return rowset;
+    };
+    auto add_position_delete = [](RowsetMetadataPB* rowset) {
+        rowset->set_position_delete(true);
+        auto* del = rowset->add_del_files();
+        del->set_name(fmt::format("{}.del", rowset->id()));
+        del->set_origin_rowset_id(rowset->id());
+        del->set_op_offset(0);
+        del->set_format(DelfileFormatPB::DEL_FILE_SEGMENT);
+        del->mutable_row_mask()->set_total_rows(1);
+    };
+    add_rowset(10, 2);
+    add_rowset(13, 1);
+    add_rowset(20, 1)->set_max_compact_input_rowset_id(12);
+    add_position_delete(add_rowset(16, 0));
+    add_position_delete(add_rowset(15, 0));
+    add_rowset(30, 1)->set_max_compact_input_rowset_id(14);
+
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), metadata);
+    ASSERT_OK(LakePrimaryKeyRecover::sort_rowsets(&rowsets));
+    std::vector<uint32_t> ids;
+    for (const auto& rowset : rowsets) {
+        ids.push_back(rowset->id());
+    }
+    EXPECT_EQ((std::vector<uint32_t>{10, 20, 13, 30, 15, 16}), ids);
+}
+
+// The same scenario with the delete published as a position delete: its publish already finds key 3's row
+// deleted by the upsert and leaves it, and recovery keeps what the publish did.
+TEST_P(LakePrimaryKeyCompactionTest, test_recover_position_delete_after_concurrent_compaction) {
+    recover_after_concurrent_compaction([&](const TabletMetadataPtr& snapshot) {
+        const int64_t txn_id = next_id();
+        ASSERT_OK(write_position_delete(_tablet_mgr.get(), txn_id, snapshot, {{1, {{2, 2}, {3, 3}}}, {2, {{12, 0}}}})
+                          .status());
+        ASSERT_OK(publish_single_version(_tablet_metadata->id(), 5, txn_id).status());
+    });
+    EXPECT_EQ(rows_after_recovery(/*key3_deleted=*/false), read_key_values(7));
+}
+
+// The same scenario with an ordinary DELETE load, which recovery keeps as it is: key 3 is deleted along with
+// the others, its upsert having come before the delete.
+TEST_P(LakePrimaryKeyCompactionTest, test_recover_delete_after_concurrent_compaction) {
+    recover_after_concurrent_compaction([&](const TabletMetadataPtr&) {
+        ASSERT_OK(publish_single_version(_tablet_metadata->id(), 5, write_delete_txn({2, 3, 12})).status());
+    });
+    EXPECT_EQ(rows_after_recovery(/*key3_deleted=*/true), read_key_values(7));
+}
+
+>>>>>>> 5a04e593607... [Feature][RB-588] Optimistic DELETE: replay position deletes in primary key recovery (#66246)
 INSTANTIATE_TEST_SUITE_P(
         LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, true, PersistentIndexTypePB::CLOUD_NATIVE},

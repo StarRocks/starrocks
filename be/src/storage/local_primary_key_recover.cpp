@@ -14,6 +14,7 @@
 
 #include "storage/local_primary_key_recover.h"
 
+#include "column/serde/column_array_serde.h"
 #include "fs/fs_factory.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
@@ -64,9 +65,8 @@ Status LocalPrimaryKeyRecover::sort_rowsets(std::vector<RowsetSharedPtr>* rowset
 
 Status LocalPrimaryKeyRecover::rowset_iterator(
         const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
-        const std::function<Status(const std::vector<ChunkIteratorPtr>&,
-                                   const std::vector<std::unique_ptr<RandomAccessFile>>&, const std::vector<uint32_t>&,
-                                   uint32_t)>& handler) {
+        const std::function<Status(const std::vector<ChunkIteratorPtr>&, const std::vector<DelKeysReader>&,
+                                   const std::vector<uint32_t>&, uint32_t)>& handler) {
     std::vector<RowsetSharedPtr> rowsets;
     std::vector<uint32_t> rowset_ids;
     int64_t latest_applied_major_version;
@@ -88,9 +88,9 @@ Status LocalPrimaryKeyRecover::rowset_iterator(
             return res.status();
         }
         auto& itrs = res.value();
-        // 2. get delete read files
+        // 2. get the readers of the delete files, which read each file when recovery reaches it
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
-        std::vector<std::unique_ptr<RandomAccessFile>> del_rfs;
+        std::vector<DelKeysReader> del_keys_readers;
         ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(rowset->rowset_path()));
         std::vector<uint32_t> delidxs;
         for (int idx = 0; idx < rowset->num_delete_files(); idx++) {
@@ -100,11 +100,15 @@ Status LocalPrimaryKeyRecover::rowset_iterator(
             if (!encryption_meta.empty()) {
                 ASSIGN_OR_RETURN(opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(encryption_meta));
             }
-            ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, path));
-            del_rfs.push_back(std::move(read_file));
+            del_keys_readers.emplace_back([fs, opts, path](Column* keys) -> Status {
+                ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, path));
+                ASSIGN_OR_RETURN(auto content, read_file->read_all());
+                const auto* begin = reinterpret_cast<const uint8_t*>(content.data());
+                return serde::ColumnArraySerde::deserialize(begin, begin + content.size(), keys).status();
+            });
             delidxs.push_back(rowset->rowset_meta()->get_meta_pb_without_schema().delfile_idxes(idx));
         }
-        RETURN_IF_ERROR(handler(itrs, del_rfs, delidxs, rowset->rowset_meta()->get_rowset_seg_id()));
+        RETURN_IF_ERROR(handler(itrs, del_keys_readers, delidxs, rowset->rowset_meta()->get_rowset_seg_id()));
     }
     return Status::OK();
 }

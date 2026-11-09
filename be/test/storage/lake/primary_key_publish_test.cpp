@@ -478,6 +478,227 @@ public:
         return oracle;
     }
 
+<<<<<<< HEAD
+=======
+    static std::vector<int32_t> key_range(int32_t first, int32_t count) {
+        std::vector<int32_t> keys(count);
+        std::iota(keys.begin(), keys.end(), first);
+        return keys;
+    }
+
+    // A load of |keys| in this order, each upserted with value key * 3, or deleted when |upsert| is false.
+    ChunkPtr keys_chunk(const std::vector<int32_t>& keys, bool upsert = true) {
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto ops = Int8Column::create();
+        for (int32_t key : keys) {
+            c0->append(key);
+            c1->append(key * 3);
+            ops->append(upsert ? TOpType::UPSERT : TOpType::DELETE);
+        }
+        return std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1), std::move(ops)}, _slot_cid_map);
+    }
+
+    // Writes |chunk|, of columns c0, c1 and __op, as a load and returns its txn id.
+    int64_t write_load(int64_t tablet_id, const ChunkPtr& chunk) {
+        std::vector<uint32_t> indexes(chunk->num_rows());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        const int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                             .set_tablet_manager(_tablet_mgr.get())
+                                             .set_tablet_id(tablet_id)
+                                             .set_txn_id(txn_id)
+                                             .set_partition_id(_partition_id)
+                                             .set_mem_tracker(_mem_tracker.get())
+                                             .set_schema_id(_tablet_schema->id())
+                                             .set_slot_descriptors(&_slot_pointers)
+                                             .set_profile(&_dummy_runtime_profile)
+                                             .build());
+        CHECK_OK(writer->open());
+        CHECK_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(writer->finish_with_txnlog());
+        writer->close();
+        return txn_id;
+    }
+
+    // Starts a compaction of the tablet at |version|: it reads its inputs now, and the txn returned commits it.
+    int64_t start_compaction(int64_t tablet_id, int64_t version) {
+        ConfigResetGuard<int64_t> min_input_guard(&config::lake_pk_compaction_min_input_segments, 1);
+        const int64_t txn_id = next_id();
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+        CHECK_OK(task->execute(CompactionTask::kNoCancelFn));
+        return txn_id;
+    }
+
+    // Merges every sstable of the primary key index at |version| and publishes the result as the next version.
+    void compact_primary_index(int64_t tablet_id, int64_t version) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto log = std::make_shared<TxnLogPB>();
+        log->set_tablet_id(tablet_id);
+        log->set_txn_id(next_id());
+        ASSERT_OK(LakePersistentIndex::parallel_major_compact(StorageEnv::GetInstance()->parallel_compact_mgr(),
+                                                              _tablet_mgr.get(), metadata, log.get()));
+        ASSERT_GT(log->op_compaction().input_sstables_size(), 0);
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, log->txn_id()).status());
+    }
+
+    // The rows of |version| that no delete vector holds, as key -> value.
+    std::map<int32_t, int32_t> key_values(int64_t tablet_id, int64_t version) {
+        ASSIGN_OR_ABORT(auto chunk, read(tablet_id, version));
+        std::map<int32_t, int32_t> rows;
+        for (size_t row = 0; row < chunk->num_rows(); ++row) {
+            rows[chunk->get(row)[0].get_int32()] = chunk->get(row)[1].get_int32();
+        }
+        return rows;
+    }
+
+    // The rows the delete vector of segment |rssid| holds at |version|.
+    std::vector<uint32_t> deleted_rowids(int64_t tablet_id, int64_t version, uint32_t rssid) {
+        DelVector delvec;
+        CHECK_OK(_primary_key_mgr->get_del_vec_in_meta(TabletSegmentId(tablet_id, rssid), version, false, &delvec));
+        std::vector<uint32_t> rowids;
+        if (!delvec.empty()) {
+            rowids.resize(delvec.cardinality());
+            delvec.roaring()->toUint32Array(rowids.data());
+        }
+        return rowids;
+    }
+
+    // The mask ids that |page|, the mask page of a position delete's candidate set in |metadata|, holds.
+    std::vector<uint32_t> mask_ids_in_page(const TabletMetadata& metadata, const DelvecPagePB& page) {
+        DelVector delvec;
+        CHECK_OK(get_del_vec(_tablet_mgr.get(), metadata, page, false /* fill cache */, LakeIOOptions{}, &delvec));
+        std::vector<uint32_t> mask_ids(delvec.cardinality());
+        if (!mask_ids.empty()) {
+            delvec.roaring()->toUint32Array(mask_ids.data());
+        }
+        return mask_ids;
+    }
+
+    static const PersistentIndexSstablePB* find_sstable(const TabletMetadataPB& metadata, const std::string& filename) {
+        for (const auto& sstable : metadata.sstable_meta().sstables()) {
+            if (sstable.filename() == filename) {
+                return &sstable;
+            }
+        }
+        return nullptr;
+    }
+
+    static const FileMetaPB* find_orphan(const TabletMetadataPB& metadata, const std::string& name) {
+        for (const auto& file : metadata.orphan_files()) {
+            if (file.name() == name) {
+                return &file;
+            }
+        }
+        return nullptr;
+    }
+
+    static bool has_orphan(const TabletMetadataPB& metadata, const std::string& name) {
+        return find_orphan(metadata, name) != nullptr;
+    }
+
+    // A trace counter, matched by name: counters are keyed by the address of their name, and another translation
+    // unit has its own copy of the literal.
+    static int64_t trace_counter(Trace* trace, std::string_view name) {
+        for (const auto& [key, value] : trace->metrics()->Get()) {
+            if (key != nullptr && name == key) {
+                return value;
+            }
+        }
+        return 0;
+    }
+
+    // Publishes |txn_id| as |version| of |tablet_id| under a trace of its own, which |*trace| gets.
+    TabletMetadataPtr publish_traced(int64_t tablet_id, int64_t version, int64_t txn_id, scoped_refptr<Trace>* trace) {
+        *trace = new Trace;
+        ADOPT_TRACE(trace->get());
+        ASSIGN_OR_ABORT(auto published, publish_single_version(tablet_id, version, txn_id));
+        return published;
+    }
+
+    // Checks what the publish of a position delete counted in |trace|.
+    static void expect_counts(Trace* trace, int64_t candidate_rows, int64_t live_rows, int64_t stale_rows,
+                              int64_t stale_segments) {
+        EXPECT_EQ(candidate_rows, trace_counter(trace, "position_delete_candidate_rows"));
+        EXPECT_EQ(live_rows, trace_counter(trace, "position_delete_live_rows"));
+        EXPECT_EQ(stale_rows, trace_counter(trace, "position_delete_stale_rows"));
+        EXPECT_EQ(stale_segments, trace_counter(trace, "position_delete_stale_segments"));
+    }
+
+    // Checks the index loaded cold from |metadata|: the keys of |deleted| read as deleted, and each key of |located|
+    // at the index value it maps to.
+    void expect_cold_index(const TabletMetadataPtr& metadata, const std::vector<int32_t>& deleted,
+                           const std::map<int32_t, uint64_t>& located = {}) {
+        ASSERT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(metadata->id()));
+        for (int32_t key : deleted) {
+            EXPECT_EQ(NullIndexValue, prepare_and_point_get(metadata, metadata->version(), key).get_value()) << key;
+        }
+        for (const auto& [key, value] : located) {
+            EXPECT_EQ(value, prepare_and_point_get(metadata, metadata->version(), key).get_value()) << key;
+        }
+    }
+
+    // Runs |publish| while |sync_point| reports |injected| at its |nth| call, counting from 1, which the publish
+    // answers with a primary key recovery when that is on.
+    StatusOr<TabletMetadataPtr> publish_with_injected(const std::string& sync_point, const Status& injected, int nth,
+                                                      const std::function<StatusOr<TabletMetadataPtr>()>& publish) {
+        int calls = 0;
+        SyncPoint::GetInstance()->SetCallBack(sync_point, [&](void* arg) {
+            if (++calls == nth) {
+                *static_cast<Status*>(arg) = injected;
+            }
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp clear_sync_point([&] {
+            SyncPoint::GetInstance()->ClearCallBack(sync_point);
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        auto published = publish();
+        EXPECT_GE(calls, nth) << sync_point;
+        return published;
+    }
+
+    // Builds, on |tablet_id| from its empty version 1, the case most position delete tests start from. Version 2
+    // loads keys 0..11 into segment 1, key k at rowid k with value k * 3, and the rows of keys 1, 3, 5 and 7 are read
+    // at version 2. Returns the position delete of those candidate rows, stored as the txn log of |txn_id| and not
+    // yet published.
+    TxnLogPtr pick(int64_t tablet_id, int64_t txn_id, const PositionDeleteWriteOptions& options = {}) {
+        CHECK_OK(publish_single_version(tablet_id, 2, write_load(tablet_id, keys_chunk(key_range(0, 12)))).status());
+        ASSIGN_OR_ABORT(auto snapshot, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
+        ASSIGN_OR_ABORT(auto log,
+                        write_position_delete_sets(_tablet_mgr.get(), txn_id, snapshot,
+                                                   {CandidateSet{{1, {{1, 1}, {3, 3}, {5, 5}, {7, 7}}}}}, options));
+        return log;
+    }
+
+    // That case, with version 3 then upserting key 5 with value 500 into segment 2.
+    TxnLogPtr pick_then_upsert(int64_t tablet_id, int64_t txn_id, const PositionDeleteWriteOptions& options = {}) {
+        auto log = pick(tablet_id, txn_id, options);
+        CHECK_OK(publish_single_version(tablet_id, 3, write_single_upsert_txn(tablet_id, 5, 500)).status());
+        return log;
+    }
+
+    // What that position delete leaves of the rows: keys 1, 3 and 7 are gone, and key 5 keeps its new value.
+    static std::map<int32_t, int32_t> rows_left_by_position_delete() {
+        return {{0, 0}, {2, 6}, {4, 12}, {5, 500}, {6, 18}, {8, 24}, {9, 27}, {10, 30}, {11, 33}};
+    }
+
+    // Checks the index of that case at |metadata|, loaded cold from it: keys 1, 3 and 7 read as deleted, and key 5
+    // at rowid 0 of segment 2 while that segment is there.
+    void expect_index_after_position_delete(const TabletMetadataPtr& metadata) {
+        expect_cold_index(metadata, {1, 3, 7});
+        const uint64_t key5 = prepare_and_point_get(metadata, metadata->version(), 5).get_value();
+        EXPECT_NE(NullIndexValue, key5);
+        const bool has_segment_2 = std::any_of(metadata->rowsets().begin(), metadata->rowsets().end(),
+                                               [](const RowsetMetadataPB& rowset) { return rowset.id() == 2; });
+        if (has_segment_2) {
+            EXPECT_EQ(uint64_t{2} << 32, key5);
+        }
+    }
+
+>>>>>>> 5a04e593607... [Feature][RB-588] Optimistic DELETE: replay position deletes in primary key recovery (#66246)
 protected:
     // Suffix with PID so concurrent processes (e.g. gtest-parallel) never share this dir.
     inline static const std::string kTestGroupPath = "test_lake_primary_key_" + std::to_string(getpid());
@@ -4618,6 +4839,678 @@ TEST_P(LakePrimaryKeyPublishTest, test_same_cache_second_upsert_preserves_old_ro
     EXPECT_EQ(expected_new_value, cached_point_get(tablet_id, kLowKey));
 }
 
+<<<<<<< HEAD
+=======
+// A position delete deletes its live candidate rows, and a key upserted after the read version keeps its new value. Its
+// candidate set gives the candidate rows 1, 3, 5 and 7 of segment 1 the mask ids 0 to 3; key 5 was upserted after the
+// read version, so its candidate row is stale, and the mask page of the set holds its mask id 2. The sstable is mounted
+// with that page, the appended rowset is marked as a position delete's and holds the del file whose row mask points at
+// it, and an index loaded cold from the published metadata answers the same. Publishing the same log on the same base
+// again gives the same tablet.
+TEST_P(LakePrimaryKeyPublishTest, test_position_delete) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const int64_t txn_id = next_id();
+    auto log = pick_then_upsert(tablet_id, txn_id);
+    const auto& candidate_set = log->op_write().position_delete().candidate_sets(0);
+    scoped_refptr<Trace> trace;
+    auto published = publish_traced(tablet_id, 4, txn_id, &trace);
+
+    EXPECT_EQ(rows_left_by_position_delete(), key_values(tablet_id, 4));
+    const auto deleted_in_1 = deleted_rowids(tablet_id, 4, 1);
+    const auto deleted_in_2 = deleted_rowids(tablet_id, 4, 2);
+    EXPECT_EQ((std::vector<uint32_t>{1, 3, 5, 7}), deleted_in_1);
+    expect_counts(trace.get(), 4, 3, 1, 0);
+    // The appended rowset takes the next id and holds nothing but the del file, at the rowset's own position.
+    ASSERT_EQ(3, published->rowsets_size());
+    const auto& appended = published->rowsets(2);
+    EXPECT_EQ(3, appended.id());
+    EXPECT_EQ(4, appended.version());
+    EXPECT_EQ(0, appended.segment_metas_size());
+    EXPECT_EQ(0, appended.num_rows());
+    // num_dels counts deleted rows of a rowset's own segments: the appended rowset has none, and the three rows this
+    // delete removed count on rowset 1, next to the row of key 5 that the upsert replaced.
+    EXPECT_FALSE(appended.has_num_dels());
+    EXPECT_EQ(4, published->rowsets(0).num_dels());
+    EXPECT_TRUE(tablet_reshard_helper::has_valid_uid(appended));
+    EXPECT_TRUE(appended.position_delete());
+    ASSERT_EQ(1, appended.del_files_size());
+    const auto& del = appended.del_files(0);
+    EXPECT_EQ(candidate_set.del_files(0).name(), del.name());
+    EXPECT_EQ(3, del.origin_rowset_id());
+    EXPECT_EQ(0, del.op_offset());
+    EXPECT_EQ(4, del.version());
+    ASSERT_TRUE(del.has_row_mask());
+    EXPECT_EQ(4, del.row_mask().total_rows());
+    EXPECT_EQ(1, del.row_mask().num_masked_rows());
+    EXPECT_EQ(4, del.num_rows());
+    EXPECT_FALSE(del.shared());
+    EXPECT_EQ(4, published->next_rowset_id());
+    // The page is in this publish's own delete vector file, where no segment's slot records it.
+    const auto& page = del.row_mask().mask_page();
+    EXPECT_EQ(4, page.version());
+    EXPECT_EQ(4, page.crc32c_gen_version());
+    EXPECT_EQ((std::vector<uint32_t>{2}), mask_ids_in_page(*published, page));
+    for (const auto& [rssid, slot] : published->delvec_meta().delvecs()) {
+        EXPECT_FALSE(slot.version() == page.version() && slot.offset() == page.offset()) << rssid;
+    }
+    const auto* mounted = find_sstable(*published, candidate_set.tombstone_sstables(0).file().name());
+    ASSERT_NE(nullptr, mounted);
+    EXPECT_EQ(3, mounted->shared_rssid());
+    EXPECT_EQ(4, mounted->shared_version());
+    EXPECT_EQ(page.ShortDebugString(), mounted->delvec().ShortDebugString());
+    // Version 3's file held nothing but segment 1's delete vector of version 3, which this publish replaced.
+    ASSIGN_OR_ABORT(auto base, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    const std::string file_of_3 = base->delvec_meta().version_to_file().at(3).name();
+    EXPECT_EQ(0, published->delvec_meta().version_to_file().count(3));
+    EXPECT_TRUE(has_orphan(*published, file_of_3));
+    EXPECT_TRUE(has_orphan(*published, candidate_set.candidate_rowid_file().name()));
+    expect_index_after_position_delete(published);
+
+    // The same log once more on the same base, its del file now carrying a row mask of the writer's, which the
+    // publish overwrites. Only what the publish names or numbers afresh differs: the delete vector file,
+    // the sstables flushed from memory and the rowset uid. The first publish deletes the txn log in the background,
+    // so that has to finish before the log is put back.
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    ASSERT_OK(_tablet_mgr->delete_tablet_metadata(tablet_id, 4));
+    ASSERT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
+    auto rewritten_log = std::make_shared<TxnLogPB>(*log);
+    auto* rewritten_set = rewritten_log->mutable_op_write()->mutable_position_delete()->mutable_candidate_sets(0);
+    auto* writer_del = rewritten_set->mutable_del_files(0);
+    writer_del->mutable_row_mask()->set_total_rows(77);
+    writer_del->mutable_row_mask()->set_num_masked_rows(77);
+    writer_del->mutable_row_mask()->mutable_mask_page()->set_offset(77);
+    ASSERT_OK(_tablet_mgr->put_txn_log(rewritten_log));
+    ASSIGN_OR_ABORT(auto republished, publish_single_version(tablet_id, 4, txn_id));
+    ASSERT_EQ(published->rowsets_size(), republished->rowsets_size());
+    for (int i = 0; i < published->rowsets_size(); ++i) {
+        RowsetMetadataPB first = published->rowsets(i);
+        RowsetMetadataPB second = republished->rowsets(i);
+        first.clear_uid();
+        second.clear_uid();
+        EXPECT_EQ(first.ShortDebugString(), second.ShortDebugString());
+    }
+    EXPECT_EQ(published->next_rowset_id(), republished->next_rowset_id());
+    EXPECT_EQ(deleted_in_1, deleted_rowids(tablet_id, 4, 1));
+    EXPECT_EQ(deleted_in_2, deleted_rowids(tablet_id, 4, 2));
+    EXPECT_EQ(published->sstable_meta().sstables_size(), republished->sstable_meta().sstables_size());
+    const auto* remounted = find_sstable(*republished, candidate_set.tombstone_sstables(0).file().name());
+    ASSERT_NE(nullptr, remounted);
+    EXPECT_EQ(mounted->shared_rssid(), remounted->shared_rssid());
+    EXPECT_EQ(mounted->shared_version(), remounted->shared_version());
+    EXPECT_EQ(mounted->max_rss_rowid(), remounted->max_rss_rowid());
+    EXPECT_EQ(mounted->delvec().ShortDebugString(), remounted->delvec().ShortDebugString());
+    EXPECT_EQ(rows_left_by_position_delete(), key_values(tablet_id, 4));
+    expect_index_after_position_delete(republished);
+
+    // A load upserting key 2 replaces segment 1's delete vector again, which leaves the page the only thing of
+    // version 4's file in use. Once an index compaction merges the sstable away, the del file's row mask still refers
+    // to the page, and the file stays. The compaction leaves the last fileset alone, so the load, within the
+    // sstable's key range, is flushed at once into a fileset after the sstable's.
+    {
+        ConfigResetGuard<int64_t> flush_guard(&config::l0_max_mem_usage, 1);
+        ConfigResetGuard<int32_t> sync_flush_guard(&config::pk_index_memtable_max_count, 1);
+        ASSERT_OK(publish_single_version(tablet_id, 5, write_single_upsert_txn(tablet_id, 2, 200)).status());
+    }
+    ASSERT_NO_FATAL_FAILURE(compact_primary_index(tablet_id, 5));
+    ASSIGN_OR_ABORT(auto compacted, _tablet_mgr->get_tablet_metadata(tablet_id, 6));
+    EXPECT_EQ(nullptr, find_sstable(*compacted, candidate_set.tombstone_sstables(0).file().name()));
+    EXPECT_EQ(5, compacted->delvec_meta().delvecs().at(1).version());
+    EXPECT_EQ(1, compacted->delvec_meta().version_to_file().count(4));
+    EXPECT_EQ((std::vector<uint32_t>{2}),
+              mask_ids_in_page(*compacted, compacted->rowsets(2).del_files(0).row_mask().mask_page()));
+    auto expected = rows_left_by_position_delete();
+    expected[2] = 200;
+    EXPECT_EQ(expected, key_values(tablet_id, 6));
+    expect_index_after_position_delete(compacted);
+}
+
+// A segment compacted away since the read version is a stale segment: its candidate rows are stale, while the live
+// candidate rows of the other segments are still deleted. A candidate row deleted since the read version is stale too,
+// though its segment is no stale segment. A candidate set without live candidate rows leaves its files to vacuum, each
+// with its size.
+TEST_P(LakePrimaryKeyPublishTest, test_position_delete_stale_segments) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    // Segments 1 and 2, read by a compaction that commits only after the candidate rows are read.
+    ASSERT_OK(publish_single_version(tablet_id, 2, write_load(tablet_id, keys_chunk(key_range(0, 12)))).status());
+    ASSERT_OK(publish_single_version(tablet_id, 3, write_load(tablet_id, keys_chunk(key_range(100, 12)))).status());
+    const int64_t compaction_txn_id = start_compaction(tablet_id, 3);
+    ASSIGN_OR_ABORT(auto compaction_log, _tablet_mgr->get_txn_log(tablet_id, compaction_txn_id));
+    ASSERT_EQ(2, compaction_log->op_compaction().input_rowsets_size());
+    // Segments 3 and 4.
+    ASSERT_OK(publish_single_version(tablet_id, 4, write_load(tablet_id, keys_chunk(key_range(12, 12)))).status());
+    ASSERT_OK(publish_single_version(tablet_id, 5, write_load(tablet_id, keys_chunk(key_range(24, 12)))).status());
+    ASSIGN_OR_ABORT(auto snapshot, _tablet_mgr->get_tablet_metadata(tablet_id, 5));
+    int64_t txn_id = next_id();
+    // Set 0 has candidate rows in segments 1, 3 and 4, set 1 only one in segment 1.
+    ASSIGN_OR_ABORT(auto log,
+                    write_position_delete_sets(
+                            _tablet_mgr.get(), txn_id, snapshot,
+                            {{{1, {{0, 0}, {1, 1}}}, {3, {{12, 0}, {13, 1}}}, {4, {{24, 0}}}}, {{1, {{2, 2}}}}}));
+    ASSERT_OK(publish_single_version(tablet_id, 6, compaction_txn_id).status());
+
+    scoped_refptr<Trace> trace;
+    auto published = publish_traced(tablet_id, 7, txn_id, &trace);
+    const auto& sets = log->op_write().position_delete().candidate_sets();
+    const auto rows = key_values(tablet_id, 7);
+    EXPECT_EQ(45, rows.size());
+    for (int32_t key : {0, 1, 2}) {
+        EXPECT_TRUE(rows.contains(key)) << key;
+    }
+    for (int32_t key : {12, 13, 24}) {
+        EXPECT_FALSE(rows.contains(key)) << key;
+    }
+    EXPECT_EQ((std::vector<uint32_t>{0, 1}), deleted_rowids(tablet_id, 7, 3));
+    EXPECT_EQ((std::vector<uint32_t>{0}), deleted_rowids(tablet_id, 7, 4));
+    expect_counts(trace.get(), 6, 3, 3, 1);
+    // The mask page of set 0 holds the mask ids of its stale candidate rows, those in segment 1. Set 1 has no live
+    // candidate row, so its files go to vacuum.
+    const auto& appended = published->rowsets(published->rowsets_size() - 1);
+    ASSERT_EQ(1, appended.del_files_size());
+    EXPECT_EQ(sets.Get(0).del_files(0).name(), appended.del_files(0).name());
+    EXPECT_EQ((std::vector<uint32_t>{0, 1}),
+              mask_ids_in_page(*published, appended.del_files(0).row_mask().mask_page()));
+    EXPECT_NE(nullptr, find_sstable(*published, sets.Get(0).tombstone_sstables(0).file().name()));
+    EXPECT_EQ(nullptr, find_sstable(*published, sets.Get(1).tombstone_sstables(0).file().name()));
+    EXPECT_TRUE(has_orphan(*published, sets.Get(1).tombstone_sstables(0).file().name()));
+    // Vacuum adds the size of each entry to the bytes it frees.
+    const auto* orphan_del_file = find_orphan(*published, sets.Get(1).del_files(0).name());
+    ASSERT_NE(nullptr, orphan_del_file);
+    EXPECT_GT(orphan_del_file->size(), 0);
+    EXPECT_EQ(sets.Get(1).del_files(0).size(), orphan_del_file->size());
+
+    // Read at the same version again, the candidate row of segment 4 is deleted by now, and so stale, though segment 4
+    // is no stale segment. With no live candidate row, no rowset is appended, but the version advances.
+    txn_id = next_id();
+    ASSIGN_OR_ABORT(auto again, write_position_delete(_tablet_mgr.get(), txn_id, snapshot, {{4, {{24, 0}}}}));
+    scoped_refptr<Trace> again_trace;
+    auto unchanged = publish_traced(tablet_id, 8, txn_id, &again_trace);
+    EXPECT_EQ(published->rowsets_size(), unchanged->rowsets_size());
+    EXPECT_EQ(published->next_rowset_id(), unchanged->next_rowset_id());
+    const auto& again_set = again->op_write().position_delete().candidate_sets(0);
+    EXPECT_EQ(nullptr, find_sstable(*unchanged, again_set.tombstone_sstables(0).file().name()));
+    EXPECT_TRUE(has_orphan(*unchanged, again_set.tombstone_sstables(0).file().name()));
+    EXPECT_TRUE(has_orphan(*unchanged, again_set.del_files(0).name()));
+    EXPECT_TRUE(has_orphan(*unchanged, again_set.candidate_rowid_file().name()));
+    expect_counts(again_trace.get(), 1, 0, 1, 0);
+    EXPECT_EQ(rows, key_values(tablet_id, 8));
+
+    // Recovery keeps what the publishes did. In particular it does not delete keys 0 and 1, whose candidate rows'
+    // segment was compacted away: their rows are in the compaction output now, which recovery replays before the
+    // rowset of the position delete.
+    ConfigResetGuard<bool> recover_guard(&config::enable_primary_key_recover, true);
+    const int64_t upsert_txn_id = write_single_upsert_txn(tablet_id, 1000, 3000);
+    ASSERT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
+    ASSERT_OK(publish_with_injected("lake_index_load.1", Status::AlreadyExist("forced primary key recovery"), 1, [&] {
+                  return publish_single_version(tablet_id, 9, upsert_txn_id);
+              }).status());
+    auto after = rows;
+    after[1000] = 3000;
+    EXPECT_EQ(after, key_values(tablet_id, 9));
+}
+
+// A candidate rowid page that cannot be read back fails the publish, which goes through once the page reads back: a
+// page whose checksum does not match, and one that holds other than num_candidate_rows rowids, which the mask ids of
+// the set's candidate rows rest on. A checksum mismatch that a corrupted block in the local data cache causes goes
+// away: the read drops that cache and reads the page once more, from the remote object.
+TEST_P(LakePrimaryKeyPublishTest, test_position_delete_unreadable_candidate_rowid_page) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    // Segment 1 holds keys 0..11 at rowids 0..11.
+    ASSERT_OK(publish_single_version(tablet_id, 2, write_load(tablet_id, keys_chunk(key_range(0, 12)))).status());
+    ASSIGN_OR_ABORT(auto snapshot, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
+    const int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto log, write_position_delete(_tablet_mgr.get(), txn_id, snapshot, {{1, {{1, 1}, {3, 3}}}}));
+    auto expect_refused = [&](const std::function<void(PositionDeletePB::CandidateSegmentPB*)>& tamper,
+                              const std::string& reason) {
+        auto tampered = std::make_shared<TxnLogPB>(*log);
+        tamper(tampered->mutable_op_write()
+                       ->mutable_position_delete()
+                       ->mutable_candidate_sets(0)
+                       ->mutable_candidate_segments(0));
+        ASSERT_OK(_tablet_mgr->put_txn_log(tampered));
+        auto st = publish_single_version(tablet_id, 3, txn_id).status();
+        EXPECT_NE(std::string::npos, st.message().find("Corruption")) << reason << ": " << st;
+        EXPECT_NE(std::string::npos, st.message().find(reason)) << reason << ": " << st;
+        EXPECT_TRUE(_tablet_mgr->get_tablet_metadata(tablet_id, 3).status().is_not_found()) << reason;
+    };
+    expect_refused(
+            [](auto* segment) {
+                auto* page = segment->mutable_candidate_rowid_page();
+                page->set_crc32c(page->crc32c() + 1);
+            },
+            "candidate rowid page checksum mismatch");
+    expect_refused([](auto* segment) { segment->set_num_candidate_rows(3); },
+                   "holds 2 rowids, but num_candidate_rows is 3");
+
+    // The candidate rowid file is corrupted in place, and the cache drop puts the good bytes back, which is what
+    // dropping a corrupted cached block achieves in production. The page reads back after the drop.
+    ASSERT_OK(_tablet_mgr->put_txn_log(log));
+    const auto& set = log->op_write().position_delete().candidate_sets(0);
+    const std::string path = _tablet_mgr->delvec_location(tablet_id, set.candidate_rowid_file().name());
+    std::string good_bytes;
+    {
+        ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(path));
+        ASSIGN_OR_ABORT(good_bytes, rf->read_all());
+        auto corrupted = good_bytes;
+        const auto& page = set.candidate_segments(0).candidate_rowid_page();
+        const size_t last = page.offset() + page.size() - 1;
+        corrupted[last] = static_cast<char>(corrupted[last] ^ 0xff);
+        WritableFileOptions wopts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(wopts, path));
+        ASSERT_OK(wf->append(Slice(corrupted)));
+        ASSERT_OK(wf->close());
+    }
+    int drop_calls = 0;
+    const std::string sync_point = "lake::drop_corrupted_delvec_file_cache";
+    SyncPoint::GetInstance()->SetCallBack(sync_point, [&](void* arg) {
+        ++drop_calls;
+        WritableFileOptions wopts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(wopts, path));
+        CHECK_OK(wf->append(Slice(good_bytes)));
+        CHECK_OK(wf->close());
+        *static_cast<Status*>(arg) = Status::OK();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([&] {
+        SyncPoint::GetInstance()->ClearCallBack(sync_point);
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    ASSERT_OK(publish_single_version(tablet_id, 3, txn_id).status());
+    EXPECT_EQ(1, drop_calls);
+    auto expected = key_values(tablet_id, 2);
+    expected.erase(1);
+    expected.erase(3);
+    EXPECT_EQ(expected, key_values(tablet_id, 3));
+}
+
+// A candidate set without tombstone sstables goes into the index through its memtable. An index rebuild that starts
+// before it replays its del file without the entry of the stale candidate row, also after a compaction carried the del
+// file to its output, until primary key recovery drops the carried del file, as it drops every del file a compaction
+// carried. Such a set also goes in next to a set with tombstone sstables, before or after it in the position delete.
+TEST_P(LakePrimaryKeyPublishTest, test_position_delete_without_tombstone_sstables) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const int64_t txn_id = next_id();
+    // Version 2 flushes the index into an sstable, so that a rebuild that starts after it has to replay the position
+    // delete's del file to erase the keys the position delete reads.
+    {
+        ConfigResetGuard<int64_t> flush_guard(&config::l0_max_mem_usage, 1);
+        ConfigResetGuard<int32_t> sync_flush_guard(&config::pk_index_memtable_max_count, 1);
+        pick(tablet_id, txn_id, PositionDeleteWriteOptions{.sets_without_tombstone_sstables = {0}});
+    }
+    ASSIGN_OR_ABORT(auto version2, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
+    ASSERT_GT(version2->sstable_meta().sstables_size(), 0);
+    ASSERT_OK(publish_single_version(tablet_id, 3, write_single_upsert_txn(tablet_id, 5, 500)).status());
+    scoped_refptr<Trace> trace;
+    auto published = publish_traced(tablet_id, 4, txn_id, &trace);
+    EXPECT_EQ(rows_left_by_position_delete(), key_values(tablet_id, 4));
+    EXPECT_EQ(3, trace_counter(trace.get(), "position_delete_memtable_keys"));
+    ASSERT_EQ(3, published->rowsets_size());
+    const auto& appended = published->rowsets(2);
+    ASSERT_TRUE(appended.position_delete());
+    ASSERT_EQ(1, appended.del_files_size());
+    const auto del = appended.del_files(0);
+    EXPECT_EQ((std::vector<uint32_t>{2}), mask_ids_in_page(*published, del.row_mask().mask_page()));
+    // No sstable holds the tombstones: an index rebuild starts before the position delete.
+    EXPECT_LT(published->sstable_meta().sstables().rbegin()->max_rss_rowid() >> 32, appended.id());
+    // The tombstones are in the memtable of the index in the cache, and an index loaded cold replays the del file.
+    for (int32_t key : {1, 3, 7}) {
+        EXPECT_EQ(NullIndexValue, prepare_and_point_get(published, 4, key).get_value()) << key;
+    }
+    EXPECT_NE(NullIndexValue, prepare_and_point_get(published, 4, 5).get_value());
+    expect_index_after_position_delete(published);
+
+    // Above the rebuild point, a compaction carries the del file to its output, row mask and all.
+    ASSIGN_OR_ABORT(auto compacted, publish_single_version(tablet_id, 5, start_compaction(tablet_id, 4)));
+    ASSERT_EQ(1, compacted->rowsets_size());
+    const auto& output = compacted->rowsets(0);
+    ASSERT_EQ(1, output.del_files_size());
+    EXPECT_EQ(del.name(), output.del_files(0).name());
+    EXPECT_EQ(appended.id(), output.del_files(0).origin_rowset_id());
+    EXPECT_EQ((std::vector<uint32_t>{2}), mask_ids_in_page(*compacted, output.del_files(0).row_mask().mask_page()));
+    EXPECT_EQ(rows_left_by_position_delete(), key_values(tablet_id, 5));
+    expect_index_after_position_delete(compacted);
+
+    // Recovery drops the carried del file, row mask and all, and leaves it to vacuum. The compaction read the segments
+    // after the position delete, so its output holds none of the rows the position delete deleted.
+    ConfigResetGuard<bool> recover_guard(&config::enable_primary_key_recover, true);
+    const int64_t upsert_txn_id = write_single_upsert_txn(tablet_id, 100, 300);
+    ASSERT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
+    ASSIGN_OR_ABORT(auto recovered,
+                    publish_with_injected("lake_index_load.1", Status::AlreadyExist("forced primary key recovery"), 1,
+                                          [&] { return publish_single_version(tablet_id, 6, upsert_txn_id); }));
+    auto expected = rows_left_by_position_delete();
+    expected[100] = 300;
+    EXPECT_EQ(expected, key_values(tablet_id, 6));
+    EXPECT_EQ(0, recovered->rowsets(0).del_files_size());
+    EXPECT_TRUE(has_orphan(*recovered, del.name()));
+    expect_index_after_position_delete(recovered);
+
+    // Keys 1 and 3 in a candidate set without tombstone sstables, keys 5 and 7 in a set with them, in either order.
+    // Mounting the sstables flushes the memtable that holds the tombstones of the other set.
+    for (const size_t memtable_set : {size_t{0}, size_t{1}}) {
+        const int64_t mixed_tablet_id = new_cloud_native_pk_tablet()->id();
+        const int64_t mixed_txn_id = next_id();
+        ASSERT_OK(publish_single_version(mixed_tablet_id, 2, write_load(mixed_tablet_id, keys_chunk(key_range(0, 12))))
+                          .status());
+        ASSIGN_OR_ABORT(auto snapshot, _tablet_mgr->get_tablet_metadata(mixed_tablet_id, 2));
+        std::vector<CandidateSet> sets{CandidateSet{{1, {{5, 5}, {7, 7}}}}};
+        sets.insert(sets.begin() + memtable_set, CandidateSet{{1, {{1, 1}, {3, 3}}}});
+        ASSERT_OK(write_position_delete_sets(
+                          _tablet_mgr.get(), mixed_txn_id, snapshot, sets,
+                          PositionDeleteWriteOptions{.sets_without_tombstone_sstables = {memtable_set}})
+                          .status());
+        ASSERT_OK(
+                publish_single_version(mixed_tablet_id, 3, write_single_upsert_txn(mixed_tablet_id, 5, 500)).status());
+        scoped_refptr<Trace> mixed_trace;
+        auto mixed = publish_traced(mixed_tablet_id, 4, mixed_txn_id, &mixed_trace);
+        EXPECT_EQ(rows_left_by_position_delete(), key_values(mixed_tablet_id, 4)) << memtable_set;
+        EXPECT_EQ(2, trace_counter(mixed_trace.get(), "position_delete_memtable_keys")) << memtable_set;
+        const auto& mixed_appended = mixed->rowsets(mixed->rowsets_size() - 1);
+        ASSERT_TRUE(mixed_appended.position_delete()) << memtable_set;
+        ASSERT_EQ(2, mixed_appended.del_files_size()) << memtable_set;
+        for (int32_t key : {1, 3, 7}) {
+            EXPECT_EQ(NullIndexValue, prepare_and_point_get(mixed, 4, key).get_value()) << memtable_set << " " << key;
+        }
+        EXPECT_NE(NullIndexValue, prepare_and_point_get(mixed, 4, 5).get_value()) << memtable_set;
+        expect_index_after_position_delete(mixed);
+    }
+}
+
+// Primary key recovery keeps what a position delete did: when a later publish asks for it, again and again; and when
+// the position delete's own publish does -- before writing anything, which publishes it again, or after appending its
+// rowset, which does not and finds the page only in the builder; and when a later transaction of the same batch does.
+// The rows come out right each time, the rowset is appended once, and the row mask of its del file points at the page
+// as recovery wrote it anew into the delete vector file of the recovering publish.
+TEST_P(LakePrimaryKeyPublishTest, test_position_delete_recover) {
+    ConfigResetGuard<bool> recover_guard(&config::enable_primary_key_recover, true);
+    const Status duplicate_key = Status::AlreadyExist("forced primary key recovery");
+    const Status num_del_failed = Status::InternalError("forced primary key recovery");
+    // The appended rowset of |metadata|, at |position|, still holds the del file of |log|, whose row mask refers to a
+    // page in the delete vector file of |metadata|'s version that holds the mask id of key 5's stale candidate row.
+    auto expect_appended = [&](const TabletMetadataPtr& metadata, int position, const TxnLogPtr& log) {
+        ASSERT_LT(position, metadata->rowsets_size());
+        EXPECT_TRUE(metadata->rowsets(position).position_delete());
+        ASSERT_EQ(1, metadata->rowsets(position).del_files_size());
+        const auto& del = metadata->rowsets(position).del_files(0);
+        EXPECT_EQ(log->op_write().position_delete().candidate_sets(0).del_files(0).name(), del.name());
+        EXPECT_EQ(metadata->version(), del.row_mask().mask_page().version());
+        EXPECT_EQ((std::vector<uint32_t>{2}), mask_ids_in_page(*metadata, del.row_mask().mask_page()));
+    };
+
+    // A later publish recovers, reading the page from version 4's file, and the next one again, from the file of the
+    // version the first recovery wrote.
+    {
+        const int64_t tablet_id = _tablet_metadata->id();
+        const int64_t txn_id = next_id();
+        auto log = pick_then_upsert(tablet_id, txn_id);
+        ASSERT_OK(publish_single_version(tablet_id, 4, txn_id).status());
+        auto expected = rows_left_by_position_delete();
+        for (int64_t version : {5, 6}) {
+            const auto key = static_cast<int32_t>(100 + version);
+            const int64_t upsert_txn_id = write_single_upsert_txn(tablet_id, key, 300);
+            ASSERT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
+            ASSIGN_OR_ABORT(auto recovered, publish_with_injected("lake_index_load.1", duplicate_key, 1, [&] {
+                                return publish_single_version(tablet_id, version, upsert_txn_id);
+                            }));
+            expected[key] = 300;
+            EXPECT_EQ(expected, key_values(tablet_id, version)) << version;
+            expect_appended(recovered, 2, log);
+            expect_index_after_position_delete(recovered);
+        }
+    }
+    // The position delete's own publish recovers while preparing the index, then publishes again; and after it
+    // appended its rowset, while counting the deleted rows, and is not published again.
+    for (const auto& [sync_point, injected] : std::vector<std::pair<std::string, Status>>{
+                 {"lake_index_load.1", duplicate_key}, {"update_num_del_stat", num_del_failed}}) {
+        const int64_t tablet_id = new_cloud_native_pk_tablet()->id();
+        const int64_t txn_id = next_id();
+        auto log = pick_then_upsert(tablet_id, txn_id);
+        ASSERT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
+        ASSIGN_OR_ABORT(auto recovered, publish_with_injected(sync_point, injected, 1, [&] {
+                            return publish_single_version(tablet_id, 4, txn_id);
+                        }));
+        EXPECT_EQ(rows_left_by_position_delete(), key_values(tablet_id, 4)) << sync_point;
+        EXPECT_EQ((std::vector<uint32_t>{1, 3, 5, 7}), deleted_rowids(tablet_id, 4, 1)) << sync_point;
+        ASSERT_EQ(3, recovered->rowsets_size()) << sync_point;
+        expect_appended(recovered, 2, log);
+        EXPECT_EQ(4, recovered->next_rowset_id()) << sync_point;
+        expect_index_after_position_delete(recovered);
+    }
+    // In a batch, the load after the position delete fails counting its deleted rows: recovery runs after the
+    // position delete appended its rowset, with the page only in the builder.
+    {
+        const int64_t tablet_id = new_cloud_native_pk_tablet()->id();
+        const int64_t txn_id = next_id();
+        auto log = pick_then_upsert(tablet_id, txn_id);
+        std::vector<int64_t> txn_ids{txn_id, write_single_upsert_txn(tablet_id, 100, 300)};
+        ASSIGN_OR_ABORT(auto recovered, publish_with_injected("update_num_del_stat", num_del_failed, 2, [&] {
+                            return TEST_batch_publish(_tablet_mgr.get(), tablet_id, 3, 5, txn_ids);
+                        }));
+        auto expected = rows_left_by_position_delete();
+        expected[100] = 300;
+        EXPECT_EQ(expected, key_values(tablet_id, 5));
+        expect_appended(recovered, 2, log);
+        expect_index_after_position_delete(recovered);
+    }
+    // A recovery that cannot read a page fails, and the publish that asked for it is retried. That publish upserted
+    // key 5 into the index in the cache before the delete vector it worked out asked for recovery, and unloads the
+    // index before it recovers: a retry that took the index as loaded would find key 5 at the row of the retry's own
+    // first attempt, delete that row, and leave the old one.
+    {
+        const int64_t tablet_id = new_cloud_native_pk_tablet()->id();
+        const int64_t txn_id = next_id();
+        pick_then_upsert(tablet_id, txn_id);
+        ASSIGN_OR_ABORT(auto published, publish_single_version(tablet_id, 4, txn_id));
+        // The position delete's page is in the delete vector file of version 4, out of reach for the first attempt.
+        // Key 5's row is in segment 2, which has no delete vector, so the publish itself reads nothing from that file.
+        const std::string path =
+                _tablet_mgr->delvec_location(tablet_id, published->delvec_meta().version_to_file().at(4).name());
+        ASSERT_OK(FileSystem::Default()->rename_file(path, path + ".away"));
+        const int64_t upsert_txn_id = write_single_upsert_txn(tablet_id, 5, 5000);
+        auto failed = publish_with_injected("delvec_inconsistent", Status::InternalError("forced primary key recovery"),
+                                            1, [&] { return publish_single_version(tablet_id, 5, upsert_txn_id); });
+        ASSERT_FALSE(failed.ok());
+        ASSERT_OK(FileSystem::Default()->rename_file(path + ".away", path));
+        ASSIGN_OR_ABORT(auto retried, publish_single_version(tablet_id, 5, upsert_txn_id));
+        auto expected = rows_left_by_position_delete();
+        expected[5] = 5000;
+        EXPECT_EQ(expected, key_values(tablet_id, 5));
+        const uint32_t upsert_rowset_id = retried->rowsets(retried->rowsets_size() - 1).id();
+        expect_cold_index(retried, {1, 3, 7}, {{5, uint64_t{upsert_rowset_id} << 32}});
+    }
+}
+
+// Primary key recovery refuses a position delete's del file whose row mask does not check out, a del file whose format
+// and row mask disagree, or a rowset marked position_delete that holds a del file of keys alone, rather than delete by
+// keys whose rows the publish never deleted, or bring back rows it did delete.
+TEST_P(LakePrimaryKeyPublishTest, test_position_delete_recover_corruption) {
+    ConfigResetGuard<bool> recover_guard(&config::enable_primary_key_recover, true);
+    const int64_t tablet_id = _tablet_metadata->id();
+    const int64_t txn_id = next_id();
+    pick_then_upsert(tablet_id, txn_id);
+    ASSIGN_OR_ABORT(auto published, publish_single_version(tablet_id, 4, txn_id));
+    auto expect_refused = [&](const std::function<void(RowsetMetadataPB*)>& corrupt, const std::string& reason) {
+        auto tampered = std::make_shared<TabletMetadataPB>(*published);
+        corrupt(tampered->mutable_rowsets(2));
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(tampered));
+        const int64_t upsert_txn_id = write_single_upsert_txn(tablet_id, 100, 300);
+        ASSERT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
+        auto st =
+                publish_with_injected("lake_index_load.1", Status::AlreadyExist("forced primary key recovery"), 1, [&] {
+                    return publish_single_version(tablet_id, 5, upsert_txn_id);
+                }).status();
+        EXPECT_NE(std::string::npos, st.message().find("Corruption")) << reason << ": " << st;
+        EXPECT_NE(std::string::npos, st.message().find(reason)) << reason << ": " << st;
+        EXPECT_TRUE(_tablet_mgr->get_tablet_metadata(tablet_id, 5).status().is_not_found()) << reason;
+    };
+    auto row_mask = [](RowsetMetadataPB* rowset) { return rowset->mutable_del_files(0)->mutable_row_mask(); };
+    expect_refused([&](auto* rowset) { row_mask(rowset)->set_num_masked_rows(2); },
+                   "masks 2 rows but its page holds 1");
+    expect_refused([&](auto* rowset) { row_mask(rowset)->clear_mask_page(); }, "masks 1 rows but refers to no page");
+    expect_refused([&](auto* rowset) { row_mask(rowset)->set_num_masked_rows(0); },
+                   "masks no row but refers to a page");
+    expect_refused([&](auto* rowset) { row_mask(rowset)->set_num_masked_rows(5); }, "masks 5 of 4 rows");
+    expect_refused([&](auto* rowset) { row_mask(rowset)->mutable_mask_page()->set_version(3); },
+                   "mask page of version 3 at offset");
+    expect_refused(
+            [&](auto* rowset) {
+                auto* page = row_mask(rowset)->mutable_mask_page();
+                page->set_crc32c(page->crc32c() + 1);
+            },
+            "crc32c mismatch");
+    // Key 7's row has mask id 3, past a row mask over 3 rows.
+    expect_refused([&](auto* rowset) { row_mask(rowset)->set_total_rows(3); },
+                   "has a row with mask id 3, but its row mask covers 3 rows");
+    // A rowset marked position_delete holds del files with mask ids, and a del file's format and row mask have to agree.
+    expect_refused([](auto* rowset) { rowset->mutable_del_files(0)->clear_format(); },
+                   "holds keys alone, though its rowset is a position delete's");
+    expect_refused([](auto* rowset) { rowset->mutable_del_files(0)->clear_row_mask(); },
+                   "holds mask ids but has no row mask");
+    expect_refused(
+            [](auto* rowset) {
+                rowset->clear_position_delete();
+                rowset->mutable_del_files(0)->clear_format();
+            },
+            "has a row mask but holds keys alone");
+
+    // Two candidate sets whose mask pages mask one row each. A row mask that names the place of the other set's page,
+    // with the size and checksum of its own, is refused: recovery does not take the page it read at that place for it.
+    const int64_t two_sets_tablet_id = new_cloud_native_pk_tablet()->id();
+    ASSERT_OK(
+            publish_single_version(two_sets_tablet_id, 2, write_load(two_sets_tablet_id, keys_chunk(key_range(0, 12))))
+                    .status());
+    ASSIGN_OR_ABORT(auto snapshot, _tablet_mgr->get_tablet_metadata(two_sets_tablet_id, 2));
+    const int64_t two_sets_txn_id = next_id();
+    ASSERT_OK(write_position_delete_sets(_tablet_mgr.get(), two_sets_txn_id, snapshot,
+                                         {CandidateSet{{1, {{1, 1}, {3, 3}}}}, CandidateSet{{1, {{5, 5}, {7, 7}}}}})
+                      .status());
+    // Keys 3 and 5 are upserted after the read: mask id 1 of the first set and mask id 0 of the second are stale.
+    ASSERT_OK(publish_single_version(two_sets_tablet_id, 3, write_single_upsert_txn(two_sets_tablet_id, 3, 300))
+                      .status());
+    ASSERT_OK(publish_single_version(two_sets_tablet_id, 4, write_single_upsert_txn(two_sets_tablet_id, 5, 500))
+                      .status());
+    ASSIGN_OR_ABORT(auto two_sets, publish_single_version(two_sets_tablet_id, 5, two_sets_txn_id));
+    auto tampered = std::make_shared<TabletMetadataPB>(*two_sets);
+    auto* appended = tampered->mutable_rowsets(tampered->rowsets_size() - 1);
+    ASSERT_EQ(2, appended->del_files_size());
+    const uint64_t first_offset = appended->del_files(0).row_mask().mask_page().offset();
+    auto* second_page = appended->mutable_del_files(1)->mutable_row_mask()->mutable_mask_page();
+    ASSERT_NE(first_offset, second_page->offset());
+    second_page->set_offset(first_offset);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(tampered));
+    const int64_t two_sets_upsert_txn_id = write_single_upsert_txn(two_sets_tablet_id, 100, 300);
+    ASSERT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(two_sets_tablet_id));
+    auto st = publish_with_injected("lake_index_load.1", Status::AlreadyExist("forced primary key recovery"), 1, [&] {
+                  return publish_single_version(two_sets_tablet_id, 6, two_sets_upsert_txn_id);
+              }).status();
+    EXPECT_NE(std::string::npos, st.message().find("Corruption")) << st;
+    EXPECT_NE(std::string::npos, st.message().find("which another row mask names with size")) << st;
+    EXPECT_TRUE(_tablet_mgr->get_tablet_metadata(two_sets_tablet_id, 6).status().is_not_found());
+}
+
+// A position delete whose candidate sets mount enough filesets starts an early compaction of them, as a load does, when
+// no set has a mask page. When one has, it starts none: the compaction would read the page back from the delete vector
+// file of this publish, which is written only when the publish finishes.
+TEST_P(LakePrimaryKeyPublishTest, test_position_delete_early_sst_compaction) {
+    ConfigResetGuard<int32_t> threshold_guard(&config::pk_index_early_sst_compaction_threshold, 2);
+    const int64_t tablet_id = _tablet_metadata->id();
+    // Segment s + 1 holds keys s, s + 4, s + 8, ..., key s + 4j at rowid j, so the sstables of candidate sets of
+    // different segments overlap and each makes a fileset of its own.
+    for (int32_t s = 0; s < 4; ++s) {
+        std::vector<int32_t> keys;
+        for (int32_t j = 0; j < 12; ++j) {
+            keys.push_back(s + 4 * j);
+        }
+        ASSERT_OK(publish_single_version(tablet_id, s + 2, write_load(tablet_id, keys_chunk(keys))).status());
+    }
+    // Picks rows |first| and |first| + 1 of every segment on the tablet at |version|, a candidate set per segment, as
+    // txn |txn_id|.
+    auto pick_two_rows_per_segment = [&](int64_t version, int32_t first, int64_t txn_id) {
+        ASSIGN_OR_ABORT(auto snapshot, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        std::vector<CandidateSet> sets;
+        for (int32_t s = 0; s < 4; ++s) {
+            CandidateRows rows{{s + 4 * first, first}, {s + 4 * (first + 1), first + 1}};
+            sets.push_back({{s + 1, std::move(rows)}});
+        }
+        ASSIGN_OR_ABORT(auto log, write_position_delete_sets(_tablet_mgr.get(), txn_id, snapshot, sets));
+        return log;
+    };
+    // How many of the sstables of |log| are still in the tablet at |version|; the others went into a compaction.
+    auto mounted_count = [&](const TxnLogPtr& log, int64_t version) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        int count = 0;
+        for (const auto& set : log->op_write().position_delete().candidate_sets()) {
+            for (const auto& sstable : set.tombstone_sstables()) {
+                count += find_sstable(*metadata, sstable.file().name()) != nullptr;
+            }
+        }
+        return count;
+    };
+
+    // Keys 0..7, all of them deleted by this publish.
+    int64_t txn_id = next_id();
+    auto first_log = pick_two_rows_per_segment(5, 0, txn_id);
+    scoped_refptr<Trace> trace;
+    publish_traced(tablet_id, 6, txn_id, &trace);
+    EXPECT_GT(trace_counter(trace.get(), "early_sst_compact_times"), 0);
+    EXPECT_LT(mounted_count(first_log, 6), 4);
+    auto rows = key_values(tablet_id, 6);
+    EXPECT_EQ(40, rows.size());
+    ASSIGN_OR_ABORT(auto published, _tablet_mgr->get_tablet_metadata(tablet_id, 6));
+    const auto& appended = published->rowsets(published->rowsets_size() - 1);
+    ASSERT_EQ(4, appended.del_files_size());
+    for (const auto& del : appended.del_files()) {
+        EXPECT_EQ(0, del.row_mask().num_masked_rows()) << del.name();
+        EXPECT_FALSE(del.row_mask().has_mask_page()) << del.name();
+    }
+    ASSERT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
+    for (int32_t key = 0; key < 8; ++key) {
+        EXPECT_FALSE(rows.contains(key)) << key;
+        EXPECT_EQ(NullIndexValue, prepare_and_point_get(published, 6, key).get_value()) << key;
+    }
+
+    // Keys 8..15, key 8 upserted by version 7 after the read version: its candidate row is stale, and the mask page of
+    // the candidate set of segment 1 holds its mask id.
+    txn_id = next_id();
+    auto second_log = pick_two_rows_per_segment(6, 2, txn_id);
+    ASSERT_OK(publish_single_version(tablet_id, 7, write_single_upsert_txn(tablet_id, 8, 800)).status());
+    scoped_refptr<Trace> second_trace;
+    publish_traced(tablet_id, 8, txn_id, &second_trace);
+    EXPECT_EQ(0, trace_counter(second_trace.get(), "early_sst_compact_times"));
+    EXPECT_EQ(4, mounted_count(second_log, 8));
+    rows = key_values(tablet_id, 8);
+    EXPECT_EQ(33, rows.size());
+    EXPECT_EQ(800, rows[8]);
+    published = _tablet_mgr->get_tablet_metadata(tablet_id, 8).value();
+    ASSERT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
+    EXPECT_NE(NullIndexValue, prepare_and_point_get(published, 8, 8).get_value());
+    for (int32_t key = 9; key < 16; ++key) {
+        EXPECT_FALSE(rows.contains(key)) << key;
+        EXPECT_EQ(NullIndexValue, prepare_and_point_get(published, 8, key).get_value()) << key;
+    }
+}
+
+// Aborting the txn of a position delete deletes its log and every file it brought.
+TEST_P(LakePrimaryKeyPublishTest, test_position_delete_abort) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const int64_t txn_id = next_id();
+    auto log = pick_then_upsert(tablet_id, txn_id);
+    const auto paths =
+            collect_files_in_position_delete(_tablet_mgr.get(), tablet_id, log->op_write().position_delete());
+    // The candidate rowid file, the sstable and the del file of its one candidate set.
+    ASSERT_EQ(3, paths.size());
+    for (const auto& path : paths) {
+        ASSERT_TRUE(fs::path_exist(path)) << path;
+    }
+    const auto txn_info = TEST_txn_info(txn_id, time(nullptr));
+    abort_txn(_tablet_mgr.get(), tablet_id, std::span<const TxnInfoPB>(&txn_info, 1));
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    for (const auto& path : paths) {
+        EXPECT_FALSE(fs::path_exist(path)) << path;
+    }
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(tablet_id, txn_id)));
+}
+
+>>>>>>> 5a04e593607... [Feature][RB-588] Optimistic DELETE: replay position deletes in primary key recovery (#66246)
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
                          ::testing::Values(PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
                                            PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE,
