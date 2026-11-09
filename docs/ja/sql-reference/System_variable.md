@@ -608,6 +608,12 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: true
 * **導入バージョン**: v3.5.1
 
+### enable_delta_lake_function_predicate_pruning
+
+* **説明**: Delta Lake テーブルの列に関数を適用した述語を、データファイルのスキップに使用するかどうか。StarRocks はこのような述語を列自体の条件に変換します。たとえば `year(dt) = 2024` は `dt >= '2024-01-01' AND dt < '2025-01-01'` に変換され、パーティション値とファイルの列統計情報によってファイルを、Parquet の row group の列統計情報によって row group をスキップできます。対象の関数は `enable_iceberg_function_predicate_pruning` と同じです。元の述語は引き続き各行に対して評価されます。`false` に設定すると、このようなクエリを従来どおりにプランします。たとえば結果を比較する場合に使用します。
+* **デフォルト**: true
+* **導入バージョン**: v26.3
+
 ### enable_distinct_agg_over_window
 
 * **説明**: WINDOW句上の DISTINCT 集約呼び出しを等価な join ベースのプランに変換するオプティマイザのリライトを制御します。有効（`true`、デフォルト）の場合、QueryOptimizer.invoke convertDistinctAggOverWindowToNullSafeEqualJoin は以下を行います:
@@ -678,6 +684,12 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **説明**: リソースグループレベルの[クエリキュー](../administration/management/resource_management/query_queues.md)を有効にするかどうか。
 * **デフォルト**: false、つまりこの機能は無効です。
 * **導入バージョン**: v3.1.4
+
+### enable_hive_function_predicate_pruning
+
+* **説明**: Hive テーブルの日付または日時の列に関数を適用した述語を、パーティションのプルーニングに使用するかどうか。StarRocks はこのような述語を列自体の条件に変換します。たとえば `year(dt) = 2024` は `dt >= '2024-01-01' AND dt < '2025-01-01'` に変換され、パーティション列ではパーティションをプルーニングし、row group の列統計情報によって row group をスキップできます。対象は `enable_iceberg_function_predicate_pruning` に記載された日付と時刻の関数です。元の述語は引き続き各行に対して評価されます。`false` に設定すると、このようなクエリを従来どおりにプランします。たとえば結果を比較する場合に使用します。
+* **デフォルト**: true
+* **導入バージョン**: v26.3
 
 ### enable_iceberg_eq_delete_runtime_filter_pruning
 

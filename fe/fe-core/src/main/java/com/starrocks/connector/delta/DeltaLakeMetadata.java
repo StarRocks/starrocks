@@ -60,6 +60,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -206,6 +207,17 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         }
     }
 
+    // Column predicates implied by function predicates (year(c) = 2024 -> c >= ... and c < ...), so the kernel skips
+    // files on them; pruning only, so a failure never fails the query.
+    private static List<ScalarOperator> derivePreimages(List<ScalarOperator> conjuncts, StructType schema) {
+        try {
+            return DeltaLakePreimagePredicates.forFileSkipping(conjuncts, schema);
+        } catch (RuntimeException e) {
+            LOG.debug("failed to derive delta lake preimage predicates", e);
+            return List.of();
+        }
+    }
+
     private CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> buildFileScanTaskIterator(
             Table table, ScalarOperator operator, boolean enableCollectColumnStats) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
@@ -225,7 +237,13 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 scalarOperators, identityStringPartitionColumns(deltaLakeTable, partitionColumns));
         ScalarOperationToDeltaLakeExpr.DeltaLakeContext deltaLakeContext =
                 new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, partitionColumns);
-        Predicate deltaLakePredicate = new ScalarOperationToDeltaLakeExpr().convert(residual.pushable, deltaLakeContext);
+        List<ScalarOperator> pushable = residual.pushable;
+        List<ScalarOperator> preimages = derivePreimages(pushable, schema);
+        if (!preimages.isEmpty()) {
+            pushable = new ArrayList<>(pushable);
+            pushable.addAll(preimages);
+        }
+        Predicate deltaLakePredicate = new ScalarOperationToDeltaLakeExpr().convert(pushable, deltaLakeContext);
 
         ScanBuilderImpl scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder();
         ScanImpl scan = (ScanImpl) scanBuilder.withFilter(deltaLakePredicate).build();

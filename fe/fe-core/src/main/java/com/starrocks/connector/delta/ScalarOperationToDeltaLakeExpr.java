@@ -15,11 +15,13 @@
 package com.starrocks.connector.delta;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.LocalTimeBounds;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -46,7 +48,6 @@ import io.delta.kernel.types.StructField;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.time.zone.ZoneOffsetTransition;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -178,10 +179,8 @@ public class ScalarOperationToDeltaLakeExpr {
             for (ScalarOperator child : operator.getListChildren()) {
                 if (dstAware) {
                     LocalDateTime local = toLocalDateTime(child);
-                    ZoneOffsetTransition transition = local == null ? null :
-                            TimeUtils.getTimeZone().toZoneId().getRules().getTransition(local);
-                    if (transition != null) {
-                        Predicate range = convertAcrossTransition(column, BinaryType.EQ, local, transition);
+                    if (local != null && LocalTimeBounds.isAmbiguous(local)) {
+                        Predicate range = convertAmbiguous(column, BinaryType.EQ, local);
                         if (range == null) {
                             return null;
                         }
@@ -217,16 +216,6 @@ public class ScalarOperationToDeltaLakeExpr {
             if (operator.getLikeType() != LikePredicateOperator.LikeType.LIKE) {
                 return null;
             }
-            String columnName = getColumnName(operator.getChild(0));
-            if (columnName == null) {
-                return null;
-            }
-            Column column = context.getColumn(columnName);
-            // Only the kernel's partition pruning evaluates STARTS_WITH; its data skipping ignores it.
-            if (column == null || !context.isPartitionColumn(columnName) ||
-                    getResultType(columnName, context) != DeltaDataType.STRING) {
-                return null;
-            }
             if (!(operator.getChild(1) instanceof ConstantOperator)) {
                 return null;
             }
@@ -234,8 +223,32 @@ public class ScalarOperationToDeltaLakeExpr {
             if (pattern.isNull() || !pattern.getType().isStringType()) {
                 return null;
             }
-            String prefix = getLikePrefix(pattern.getVarchar());
+            return startsWith(operator.getChild(0), getLikePrefix(pattern.getVarchar()), context);
+        }
+
+        // starts_with(s, 'abc'), which the function preimage derives from left(s, 3) = 'abc' and substr(s, 1, 3)
+        @Override
+        public Predicate visitCall(CallOperator call, DeltaLakeContext context) {
+            if (!FunctionSet.STARTS_WITH.equalsIgnoreCase(call.getFnName()) || call.getChildren().size() != 2
+                    || !(call.getChild(1) instanceof ConstantOperator prefix)
+                    || prefix.isNull() || !prefix.getType().isStringType()) {
+                return null;
+            }
+            return startsWith(call.getChild(0), prefix.getVarchar(), context);
+        }
+
+        private Predicate startsWith(ScalarOperator operand, String prefix, DeltaLakeContext context) {
             if (prefix == null) {
+                return null;
+            }
+            String columnName = getColumnName(operand);
+            if (columnName == null) {
+                return null;
+            }
+            Column column = context.getColumn(columnName);
+            // Only the kernel's partition pruning evaluates STARTS_WITH; its data skipping ignores it.
+            if (column == null || !context.isPartitionColumn(columnName) ||
+                    getResultType(columnName, context) != DeltaDataType.STRING) {
                 return null;
             }
             return new Predicate("STARTS_WITH", column, Literal.ofString(prefix));
@@ -290,10 +303,8 @@ public class ScalarOperationToDeltaLakeExpr {
             DeltaDataType resultType = getResultType(columnName, context);
             if (resultType == DeltaDataType.TIMESTAMP && !context.isPartitionColumn(columnName)) {
                 LocalDateTime local = toLocalDateTime(operator.getChild(1));
-                ZoneOffsetTransition transition = local == null ? null :
-                        TimeUtils.getTimeZone().toZoneId().getRules().getTransition(local);
-                if (transition != null) {
-                    return convertAcrossTransition(column, operator.getBinaryType(), local, transition);
+                if (local != null && LocalTimeBounds.isAmbiguous(local)) {
+                    return convertAmbiguous(column, operator.getBinaryType(), local);
                 }
             }
             Literal literal = getLiteral(operator.getChild(1), resultType, context.isPartitionColumn(columnName));
@@ -322,37 +333,37 @@ public class ScalarOperationToDeltaLakeExpr {
 
         /**
          * A TIMESTAMP constant is a local time in the session time zone. In a DST overlap it names two instants and in
-         * a gap none, so a single instant is neither a superset nor a subset of the original predicate: compare lower
-         * bounds with the earlier candidate instant and upper bounds with the later one, which keeps a superset.
-         * There is no subset to give under a NOT or for NE.
+         * a gap none, so a single instant is neither a superset nor a subset of the original predicate; see
+         * {@link LocalTimeBounds}. There is no subset to give under a NOT or for NE.
          */
-        private Predicate convertAcrossTransition(Column column, BinaryType op, LocalDateTime local,
-                                                  ZoneOffsetTransition transition) {
-            if (insideNot) {
+        private Predicate convertAmbiguous(Column column, BinaryType op, LocalDateTime local) {
+            List<LocalTimeBounds.Bound> bounds = insideNot ? null : LocalTimeBounds.superset(op, local);
+            if (bounds == null) {
                 return null;
             }
-            long before = toMicros(local, transition.getOffsetBefore());
-            long after = toMicros(local, transition.getOffsetAfter());
-            Literal earlier = Literal.ofTimestamp(Math.min(before, after));
-            Literal later = Literal.ofTimestamp(Math.max(before, after));
-            switch (op) {
-                case LT:
-                    return new Predicate("<", column, later);
-                case LE:
-                    return new Predicate("<=", column, later);
-                case GT:
-                    return new Predicate(">", column, earlier);
-                case GE:
-                    return new Predicate(">=", column, earlier);
-                case EQ:
-                    return new And(new Predicate(">=", column, earlier), new Predicate("<=", column, later));
-                default:
-                    return null;
+            Predicate result = null;
+            for (LocalTimeBounds.Bound bound : bounds) {
+                Predicate predicate = new Predicate(sqlOp(bound.op()), column, Literal.ofTimestamp(bound.micros()));
+                result = result == null ? predicate : new And(result, predicate);
             }
+            return result;
         }
 
-        private static long toMicros(LocalDateTime local, ZoneOffset offset) {
-            return local.toEpochSecond(offset) * 1000 * 1000 + local.getNano() / 1000;
+        private static String sqlOp(BinaryType op) {
+            switch (op) {
+                case EQ:
+                    return "=";
+                case LT:
+                    return "<";
+                case LE:
+                    return "<=";
+                case GT:
+                    return ">";
+                case GE:
+                    return ">=";
+                default:
+                    throw new IllegalArgumentException(op.toString());
+            }
         }
 
         private static LocalDateTime toLocalDateTime(ScalarOperator operator) {
@@ -574,15 +585,9 @@ public class ScalarOperationToDeltaLakeExpr {
 
         @Override
         public String visitSubfield(SubfieldOperator operator, Void context) {
-            ScalarOperator child = operator.getChild(0);
-            if (!(child instanceof ColumnRefOperator)) {
-                return null;
-            }
-            ColumnRefOperator childColumnRefOperator = ((ColumnRefOperator) child);
-            List<String> paths = new ImmutableList.Builder<String>()
-                    .add(childColumnRefOperator.getName()).addAll(operator.getFieldNames())
-                    .build();
-            return String.join(".", paths);
+            // The converter only binds top-level columns, so a joined path such as "s.a" would bind to a top-level
+            // column literally named "s.a" instead of the field a of struct s. Keep subfield predicates residual.
+            return null;
         }
     }
 

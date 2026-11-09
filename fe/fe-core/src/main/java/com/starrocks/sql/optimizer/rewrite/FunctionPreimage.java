@@ -12,38 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.connector.iceberg;
+package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
+import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
-import org.apache.iceberg.expressions.Expression;
-import org.apache.iceberg.expressions.Expressions;
-import org.apache.iceberg.types.Type;
-import org.apache.iceberg.types.Types;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.ResolverStyle;
 import java.time.temporal.ChronoField;
 import java.time.temporal.ChronoUnit;
-import java.time.zone.ZoneOffsetTransition;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -51,63 +48,56 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Preimages of function predicates: maps a predicate on a function of a column to an Iceberg expression on the column
- * itself, so Iceberg prunes files through every partition transform of the column and through file column metrics.
+ * Preimages of function predicates: maps a predicate on a function of a column to plain {@code column op constant}
+ * predicates on the column itself. Connectors map the result onto their own expressions (e.g. Iceberg prunes files
+ * through every partition transform of the column and through file column metrics), and the BE prunes row groups and
+ * segments with it, since it only uses predicates on a bare column.
  * <pre>
  *   year(c) = 2024                         -> c >= 2024-01-01 and c < 2025-01-01
  *   date_trunc('month', c) <= D            -> c < date_trunc('month', D) + 1 month
  *   date_format(c, '%Y-%m') = '2024-03'    -> c >= 2024-03-01 and c < 2024-04-01
  *   datediff(now(), c) <= 30               -> c >= to_date(now()) - 30 days
  *   hours_add(c, 2) < T                    -> c < T - 2 hours
- *   left(s, 3) = 'abc', starts_with(s, 'abc') -> s starts with 'abc'
+ *   left(s, 3) = 'abc'                     -> starts_with(s, 'abc')
  *   year(c) = 2024 and month(c) = 3        -> c >= 2024-03-01 and c < 2024-04-01
  * </pre>
- * Every handler maps to a superset of the matching values (all but the timestamptz DST overlap case are exact). The
- * result is only used for pruning: the original predicate is still evaluated on the rows. Callers must not use it
- * under NOT or for strict (exact) conversion.
+ * Bounds are local times: a connector whose column holds instants (e.g. an Iceberg timestamptz) maps them in the
+ * session time zone, see {@code com.starrocks.connector.LocalTimeBounds}. Every handler maps to a superset of the
+ * matching values. The result is only used for pruning: the original predicate is still evaluated on the rows. Callers
+ * must not use it under NOT or for strict (exact) conversion.
  */
-final class IcebergFunctionPreimage {
-    private IcebergFunctionPreimage() {
+public final class FunctionPreimage {
+    private FunctionPreimage() {
     }
 
     /**
-     * An operand resolved to an Iceberg column.
+     * What a preimage puts on the column.
      */
-    static final class Column {
-        final String name;
-        final Type type;
-
-        Column(String name, Type type) {
-            this.name = name;
-            this.type = type;
-        }
-
-        boolean isTemporal() {
-            return type.typeId() == Type.TypeID.DATE || type.typeId() == Type.TypeID.TIMESTAMP;
-        }
-
-        boolean isString() {
-            return type.typeId() == Type.TypeID.STRING;
-        }
+    public enum Kind {
+        // a DATE or DATETIME range
+        TEMPORAL,
+        // a string prefix or equality
+        STRING
     }
 
     /**
-     * Resolves an operand to an Iceberg column of the table, or null.
+     * Whether a preimage of {@code kind} may be put on {@code operand}: it names a column the caller can prune on, and
+     * the column's type orders like the operand's type. The operand's own type picks DATE or DATETIME bounds.
      */
-    interface ColumnResolver {
-        Column resolve(ScalarOperator operand);
+    public interface ColumnResolver {
+        boolean accepts(ScalarOperator operand, Kind kind);
     }
 
     /**
      * The preimage of {@code f(column, constants...) op value} for one function family.
      */
     private interface ComparisonPreimage {
-        Expression derive(CallOperator call, BinaryType op, ConstantOperator value, ColumnResolver resolver);
+        ScalarOperator derive(CallOperator call, BinaryType op, ConstantOperator value, ColumnResolver resolver);
     }
 
     private static final Map<String, ComparisonPreimage> COMPARISON_PREIMAGES = buildComparisonPreimages();
 
-    // the OR of a long IN list is a deep expression tree that Iceberg binds recursively; leave such lists unpruned
+    // the OR of a long IN list is a deep expression tree that connectors bind recursively; leave such lists unpruned
     private static final int MAX_IN_VALUES = 128;
 
     private static Map<String, ComparisonPreimage> buildComparisonPreimages() {
@@ -127,12 +117,71 @@ final class IcebergFunctionPreimage {
     }
 
     /**
+     * {@link #derive} split into conjuncts, without those already among {@code conjuncts}: the column predicates a
+     * scan can add next to its own (for its file, partition and row group pruning) without changing its result.
+     */
+    public static List<ScalarOperator> deriveColumnPredicates(List<ScalarOperator> conjuncts,
+                                                              ColumnResolver resolver) {
+        Set<ScalarOperator> existing = new HashSet<>(conjuncts);
+        List<ScalarOperator> result = new ArrayList<>();
+        for (ScalarOperator preimage : derive(conjuncts, resolver)) {
+            for (ScalarOperator conjunct : Utils.extractConjuncts(preimage)) {
+                if (existing.add(conjunct)) {
+                    result.add(conjunct);
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * {@link #deriveColumnPredicates} without disjunctions, for a scan to add to the predicates it evaluates on every
+     * row. A disjunction (the ranges of an IN list) prunes row groups only when its ranges miss them, yet costs an
+     * evaluation of every range on every row that is read, next to the original predicate that is still evaluated.
+     */
+    public static List<ScalarOperator> deriveRangePredicates(List<ScalarOperator> conjuncts, ColumnResolver resolver) {
+        List<ScalarOperator> result = new ArrayList<>();
+        for (ScalarOperator predicate : deriveColumnPredicates(conjuncts, resolver)) {
+            if (!isDisjunction(predicate)) {
+                result.add(predicate);
+            }
+        }
+        return result;
+    }
+
+    public static boolean isDisjunction(ScalarOperator predicate) {
+        return predicate instanceof CompoundPredicateOperator compound && compound.isOr();
+    }
+
+    /**
+     * The preimages of the function predicates among {@code conjuncts}, each a superset of the conjunct(s) it came
+     * from: comparisons and IN lists on a function of a column, then {@link #deriveConjuncts}.
+     */
+    public static List<ScalarOperator> derive(List<ScalarOperator> conjuncts, ColumnResolver resolver) {
+        List<ScalarOperator> derived = new ArrayList<>();
+        for (ScalarOperator conjunct : conjuncts) {
+            ScalarOperator result = null;
+            if (conjunct instanceof BinaryPredicateOperator binary) {
+                result = deriveComparison(binary.getChild(0), binary.getBinaryType(), List.of(binary.getChild(1)),
+                        resolver);
+            } else if (conjunct instanceof InPredicateOperator in && !in.isNotIn()) {
+                result = deriveComparison(in.getChild(0), BinaryType.EQ, in.getListChildren(), resolver);
+            }
+            if (result != null) {
+                derived.add(result);
+            }
+        }
+        derived.addAll(deriveConjuncts(conjuncts, resolver));
+        return derived;
+    }
+
+    /**
      * {@code call op value}; an IN list passes EQ and all its values.
      *
      * @return null when nothing safe can be derived.
      */
-    static Expression deriveComparison(ScalarOperator operand, BinaryType op, List<ScalarOperator> values,
-                                       ColumnResolver resolver) {
+    public static ScalarOperator deriveComparison(ScalarOperator operand, BinaryType op, List<ScalarOperator> values,
+                                                  ColumnResolver resolver) {
         if (values.isEmpty() || values.size() > MAX_IN_VALUES) {
             return null;
         }
@@ -143,47 +192,42 @@ final class IcebergFunctionPreimage {
         if (preimage == null) {
             return null;
         }
-        Expression result = null;
+        ScalarOperator result = null;
         for (ScalarOperator value : values) {
             if (!(value instanceof ConstantOperator) || ((ConstantOperator) value).isNull()) {
                 return null;
             }
-            Expression expr;
+            ScalarOperator derived;
             try {
-                expr = preimage.derive(call, op, (ConstantOperator) value, resolver);
+                derived = preimage.derive(call, op, (ConstantOperator) value, resolver);
             } catch (RuntimeException e) {
                 // an out-of-range boundary or an unparsable constant: leave the predicate unpruned
                 return null;
             }
-            if (expr == null) {
+            if (derived == null) {
                 // every value of an IN list must be covered, or the OR would prune matching files
                 return null;
             }
-            result = result == null ? expr : Expressions.or(result, expr);
+            result = result == null ? derived
+                    : new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, result, derived);
         }
         return result;
     }
 
     /**
-     * A boolean function used as a predicate: {@code starts_with(s, 'abc')}.
+     * Preimages that need several conjuncts together: {@code year(c) = Y and month(c) = M} (or {@code quarter(c)}).
      */
-    static Expression derivePredicateCall(CallOperator call, ColumnResolver resolver) {
-        if (!FunctionSet.STARTS_WITH.equalsIgnoreCase(call.getFnName()) || call.getChildren().size() != 2) {
-            return null;
-        }
-        Column column = resolver.resolve(call.getChild(0));
-        String prefix = stringConstant(call.getChild(1));
-        if (column == null || !column.isString() || prefix == null) {
-            return null;
-        }
-        return Expressions.startsWith(column.name, prefix);
+    public static List<ScalarOperator> deriveConjuncts(List<ScalarOperator> conjuncts, ColumnResolver resolver) {
+        return YearMonthPreimage.derive(conjuncts, resolver);
     }
 
     /**
-     * Preimages that need several conjuncts together: {@code year(c) = Y and month(c) = M} (or {@code quarter(c)}).
+     * The temporal operand of a function, cast(date as datetime) unwrapped, if a range may be put on it.
      */
-    static List<Expression> deriveConjuncts(List<ScalarOperator> conjuncts, ColumnResolver resolver) {
-        return YearMonthPreimage.derive(conjuncts, resolver);
+    private static ScalarOperator temporalColumn(ScalarOperator operand, ColumnResolver resolver) {
+        ScalarOperator column = unwrapDateCast(operand);
+        boolean temporal = column.getType().isDate() || column.getType().isDatetime();
+        return temporal && resolver.accepts(column, Kind.TEMPORAL) ? column : null;
     }
 
     // ------------------------------------------------------------------------------------------------------------
@@ -194,7 +238,7 @@ final class IcebergFunctionPreimage {
         private static final Set<String> UNITS =
                 Set.of("year", "quarter", "month", "week", "day", "hour", "minute", "second");
 
-        static Expression derive(CallOperator call, BinaryType op, ConstantOperator value, ColumnResolver resolver) {
+        static ScalarOperator derive(CallOperator call, BinaryType op, ConstantOperator value, ColumnResolver resolver) {
             String fn = call.getFnName().toLowerCase(Locale.ROOT);
             String unit;
             ScalarOperator operand;
@@ -211,8 +255,8 @@ final class IcebergFunctionPreimage {
             } else {
                 return null;
             }
-            Column column = resolver.resolve(unwrapDateCast(operand));
-            if (column == null || !column.isTemporal()) {
+            ScalarOperator column = temporalColumn(operand, resolver);
+            if (column == null) {
                 return null;
             }
             LocalDateTime floor;
@@ -253,15 +297,15 @@ final class IcebergFunctionPreimage {
                 .put("%Y-%m-%d %H:%i:%s", new String[] {"second", "uuuu-MM-dd HH:mm:ss"})
                 .build();
 
-        static Expression derive(CallOperator call, BinaryType op, ConstantOperator value, ColumnResolver resolver) {
+        static ScalarOperator derive(CallOperator call, BinaryType op, ConstantOperator value, ColumnResolver resolver) {
             if (call.getChildren().size() != 2) {
                 return null;
             }
             String format = stringConstant(call.getChild(1));
             String[] spec = format == null ? null : FORMATS.get(format);
             String text = stringConstant(value);
-            Column column = resolver.resolve(unwrapDateCast(call.getChild(0)));
-            if (spec == null || text == null || column == null || !column.isTemporal()) {
+            ScalarOperator column = temporalColumn(call.getChild(0), resolver);
+            if (spec == null || text == null || column == null) {
                 return null;
             }
             DateTimeFormatter formatter = new DateTimeFormatterBuilder().appendPattern(spec[1])
@@ -286,7 +330,7 @@ final class IcebergFunctionPreimage {
     // ------------------------------------------------------------------------------------------------------------
 
     private static final class DateDiffPreimage {
-        static Expression derive(CallOperator call, BinaryType op, ConstantOperator value, ColumnResolver resolver) {
+        static ScalarOperator derive(CallOperator call, BinaryType op, ConstantOperator value, ColumnResolver resolver) {
             Integer days = intConstant(value);
             if (call.getChildren().size() != 2 || days == null) {
                 return null;
@@ -294,8 +338,8 @@ final class IcebergFunctionPreimage {
             boolean columnFirst = !call.getChild(0).isConstantRef();
             ScalarOperator operand = call.getChild(columnFirst ? 0 : 1);
             ScalarOperator other = call.getChild(columnFirst ? 1 : 0);
-            Column column = resolver.resolve(unwrapDateCast(operand));
-            if (column == null || !column.isTemporal() || !(other instanceof ConstantOperator)
+            ScalarOperator column = temporalColumn(operand, resolver);
+            if (column == null || !(other instanceof ConstantOperator)
                     || ((ConstantOperator) other).isNull()
                     || !(other.getType().isDate() || other.getType().isDatetime())) {
                 return null;
@@ -351,11 +395,11 @@ final class IcebergFunctionPreimage {
                 .put(FunctionSet.SECONDS_SUB, ChronoUnit.SECONDS)
                 .build();
 
-        static Expression derive(CallOperator call, BinaryType op, ConstantOperator value, ColumnResolver resolver) {
+        static ScalarOperator derive(CallOperator call, BinaryType op, ConstantOperator value, ColumnResolver resolver) {
             String fn = call.getFnName().toLowerCase(Locale.ROOT);
             Integer amount = call.getChildren().size() == 2 ? intConstant(call.getChild(1)) : null;
-            Column column = resolver.resolve(unwrapDateCast(call.getChild(0)));
-            if (amount == null || column == null || !column.isTemporal()
+            ScalarOperator column = temporalColumn(call.getChild(0), resolver);
+            if (amount == null || column == null
                     || !(value.getType().isDate() || value.getType().isDatetime())) {
                 return null;
             }
@@ -375,7 +419,7 @@ final class IcebergFunctionPreimage {
     // ------------------------------------------------------------------------------------------------------------
 
     private static final class PrefixPreimage {
-        static Expression derive(CallOperator call, BinaryType op, ConstantOperator value, ColumnResolver resolver) {
+        static ScalarOperator derive(CallOperator call, BinaryType op, ConstantOperator value, ColumnResolver resolver) {
             if (op != BinaryType.EQ) {
                 return null;
             }
@@ -386,17 +430,22 @@ final class IcebergFunctionPreimage {
                 Integer pos = call.getChildren().size() == 3 ? intConstant(call.getChild(1)) : null;
                 length = pos != null && pos == 1 ? intConstant(call.getChild(2)) : null;
             }
-            Column column = resolver.resolve(call.getChild(0));
+            ScalarOperator column = call.getChild(0);
             String text = stringConstant(value);
-            if (length == null || length <= 0 || column == null || !column.isString() || text == null) {
+            if (length == null || length <= 0 || !column.getType().isStringType()
+                    || !resolver.accepts(column, Kind.STRING) || text == null) {
                 return null;
             }
             int chars = text.codePointCount(0, text.length());
             if (chars == length) {
-                return Expressions.startsWith(column.name, text);
+                Function fn = ExprUtils.getBuiltinFunction(FunctionSet.STARTS_WITH,
+                        new Type[] {VarcharType.VARCHAR, VarcharType.VARCHAR},
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                return fn == null ? null : new CallOperator(FunctionSet.STARTS_WITH, BooleanType.BOOLEAN,
+                        List.of(column, ConstantOperator.createVarchar(text)), fn);
             } else if (chars < length) {
                 // a shorter result means the whole string is shorter than n
-                return Expressions.equal(column.name, text);
+                return new BinaryPredicateOperator(BinaryType.EQ, column, ConstantOperator.createVarchar(text));
             }
             return null;
         }
@@ -407,10 +456,10 @@ final class IcebergFunctionPreimage {
     // ------------------------------------------------------------------------------------------------------------
 
     private static final class YearMonthPreimage {
-        static List<Expression> derive(List<ScalarOperator> conjuncts, ColumnResolver resolver) {
-            Map<String, Integer> years = new HashMap<>();
-            Map<String, Column> columns = new HashMap<>();
-            Map<String, List<int[]>> parts = new HashMap<>();
+        static List<ScalarOperator> derive(List<ScalarOperator> conjuncts, ColumnResolver resolver) {
+            // keyed by the column operand, in conjunct order
+            Map<ScalarOperator, Integer> years = new LinkedHashMap<>();
+            Map<ScalarOperator, List<int[]>> parts = new LinkedHashMap<>();
             for (ScalarOperator conjunct : conjuncts) {
                 CallOperator call;
                 List<ScalarOperator> values;
@@ -431,8 +480,8 @@ final class IcebergFunctionPreimage {
                 if ((months == 0 && !fn.equals(FunctionSet.YEAR)) || call.getChildren().size() != 1) {
                     continue;
                 }
-                Column column = resolver.resolve(unwrapDateCast(call.getChild(0)));
-                if (column == null || !column.isTemporal()) {
+                ScalarOperator column = temporalColumn(call.getChild(0), resolver);
+                if (column == null) {
                     continue;
                 }
                 if (values.size() > MAX_IN_VALUES) {
@@ -450,10 +499,9 @@ final class IcebergFunctionPreimage {
                 if (ints == null) {
                     continue;
                 }
-                columns.put(column.name, column);
                 if (months == 0) {
                     if (ints.size() == 1) {
-                        years.put(column.name, ints.get(0));
+                        years.put(column, ints.get(0));
                     }
                 } else {
                     // [first month, months spanned] per value; an out-of-range value matches nothing, so skip it
@@ -463,25 +511,32 @@ final class IcebergFunctionPreimage {
                             ranges.add(new int[] {(i - 1) * months + 1, months});
                         }
                     }
-                    if (ranges.size() == ints.size() && !parts.containsKey(column.name)) {
-                        parts.put(column.name, ranges);
+                    if (ranges.size() == ints.size() && !parts.containsKey(column)) {
+                        parts.put(column, ranges);
                     }
                 }
             }
-            List<Expression> result = new ArrayList<>();
-            for (Map.Entry<String, List<int[]>> entry : parts.entrySet()) {
+            List<ScalarOperator> result = new ArrayList<>();
+            for (Map.Entry<ScalarOperator, List<int[]>> entry : parts.entrySet()) {
                 Integer year = years.get(entry.getKey());
                 if (year == null || year < 1 || year > 9998) {
                     continue;
                 }
-                Column column = columns.get(entry.getKey());
-                Expression expr = null;
+                ScalarOperator expr = null;
                 for (int[] range : entry.getValue()) {
                     LocalDateTime floor = LocalDateTime.of(year, range[0], 1, 0, 0);
-                    Expression one = truncRange(column, BinaryType.EQ, floor, true, floor.plusMonths(range[1]));
-                    expr = expr == null ? one : Expressions.or(expr, one);
+                    ScalarOperator one = truncRange(entry.getKey(), BinaryType.EQ, floor, true,
+                            floor.plusMonths(range[1]));
+                    if (one == null) {
+                        expr = null;
+                        break;
+                    }
+                    expr = expr == null ? one
+                            : new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, expr, one);
                 }
-                result.add(expr);
+                if (expr != null) {
+                    result.add(expr);
+                }
             }
             return result;
         }
@@ -551,16 +606,22 @@ final class IcebergFunctionPreimage {
     /**
      * {@code f(c) op K} for a non-decreasing step function f whose step containing K is [floor, next).
      */
-    private static Expression truncRange(Column column, BinaryType op, LocalDateTime floor, boolean aligned,
-                                         LocalDateTime next) {
+    private static ScalarOperator truncRange(ScalarOperator column, BinaryType op, LocalDateTime floor,
+                                             boolean aligned, LocalDateTime next) {
         if (next.getYear() > 9999) {
             return null;
         }
         switch (op) {
-            case EQ:
+            case EQ: {
                 // a non-aligned constant never equals f(c); leave it unpruned rather than proving it empty
-                return aligned ? Expressions.and(compare(column, BinaryType.GE, floor),
-                        compare(column, BinaryType.LT, next)) : null;
+                if (!aligned) {
+                    return null;
+                }
+                ScalarOperator lower = compare(column, BinaryType.GE, floor);
+                ScalarOperator upper = compare(column, BinaryType.LT, next);
+                return lower == null || upper == null ? null
+                        : new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, lower, upper);
+            }
             case GE:
                 return compare(column, BinaryType.GE, aligned ? floor : next);
             case GT:
@@ -575,101 +636,45 @@ final class IcebergFunctionPreimage {
     }
 
     /**
-     * {@code c op bound} on a DATE or TIMESTAMP column; a superset when the column cannot hold {@code bound} exactly.
+     * {@code c op bound} on a DATE or DATETIME column; a superset when the column cannot hold {@code bound} exactly.
      */
-    static Expression compare(Column column, BinaryType op, LocalDateTime bound) {
+    private static ScalarOperator compare(ScalarOperator column, BinaryType op, LocalDateTime bound) {
         if (bound.getYear() < 1 || bound.getYear() > 9999) {
             return null;
         }
-        String name = column.name;
-        if (column.type.typeId() == Type.TypeID.DATE) {
-            LocalDateTime day = bound.truncatedTo(ChronoUnit.DAYS);
-            boolean midnight = day.equals(bound);
-            long floorDay = day.toLocalDate().toEpochDay();
-            long ceilDay = midnight ? floorDay : floorDay + 1;
+        if (!column.getType().isDate()) {
             switch (op) {
                 case EQ:
-                    return midnight ? Expressions.equal(name, floorDay) : null;
                 case GE:
-                    return Expressions.greaterThanOrEqual(name, ceilDay);
                 case GT:
-                    return Expressions.greaterThanOrEqual(name, floorDay + 1);
                 case LT:
-                    return Expressions.lessThan(name, ceilDay);
                 case LE:
-                    return Expressions.lessThan(name, floorDay + 1);
+                    return new BinaryPredicateOperator(op, column, ConstantOperator.createDatetime(bound));
                 default:
                     return null;
             }
         }
-        // A timestamptz is compared as a local time in the session time zone. At a DST overlap a local time names two
-        // instants: lower bounds take the earlier one and upper bounds the later one, covering both occurrences.
-        // A local time in a DST gap names no instant: every local time after it starts at the transition instant.
-        boolean inGap = isInGap(column.type, bound);
-        long earlier = toMicros(column.type, bound, true);
-        long later = toMicros(column.type, bound, false);
+        LocalDateTime floorDay = bound.truncatedTo(ChronoUnit.DAYS);
+        boolean midnight = floorDay.equals(bound);
+        LocalDateTime nextDay = floorDay.plusDays(1);
+        LocalDateTime ceilDay = midnight ? floorDay : nextDay;
         switch (op) {
             case EQ:
-                return earlier == later ? Expressions.equal(name, earlier)
-                        : Expressions.and(Expressions.greaterThanOrEqual(name, earlier),
-                        Expressions.lessThanOrEqual(name, later));
+                return midnight ? dateComparison(column, BinaryType.EQ, floorDay) : null;
             case GE:
-                return Expressions.greaterThanOrEqual(name, earlier);
+                return dateComparison(column, BinaryType.GE, ceilDay);
             case GT:
-                // c > a gap time holds from the transition instant itself
-                return inGap ? Expressions.greaterThanOrEqual(name, earlier) : Expressions.greaterThan(name, earlier);
+                return dateComparison(column, BinaryType.GE, nextDay);
             case LT:
-                return Expressions.lessThan(name, later);
+                return dateComparison(column, BinaryType.LT, ceilDay);
             case LE:
-                return Expressions.lessThanOrEqual(name, later);
+                return dateComparison(column, BinaryType.LT, nextDay);
             default:
                 return null;
         }
     }
 
-    /**
-     * Whether a timestamptz constant, a local time in the session time zone, names other than exactly one instant:
-     * two at a DST overlap, none in a gap. A single instant is then neither a superset nor a subset of the matches.
-     */
-    static boolean isDstAmbiguous(Type icebergType, LocalDateTime bound) {
-        return Types.TimestampType.withZone().equals(icebergType)
-                && TimeUtils.getTimeZone().toZoneId().getRules().getValidOffsets(bound).size() != 1;
-    }
-
-    /**
-     * The instants a timestamptz column may hold where it equals {@code bound}: both at a DST overlap, and the gap's
-     * transition instant for a time in a gap (which no value equals, so any instant is a superset).
-     */
-    static List<Long> equalInstants(Type icebergType, LocalDateTime bound) {
-        long earlier = toMicros(icebergType, bound, true);
-        long later = toMicros(icebergType, bound, false);
-        return earlier == later ? List.of(earlier) : List.of(earlier, later);
-    }
-
-    private static boolean isInGap(Type icebergType, LocalDateTime bound) {
-        return Types.TimestampType.withZone().equals(icebergType)
-                && TimeUtils.getTimeZone().toZoneId().getRules().getValidOffsets(bound).isEmpty();
-    }
-
-    private static long toMicros(Type icebergType, LocalDateTime bound, boolean earlier) {
-        ZonedDateTime zoned;
-        if (Types.TimestampType.withZone().equals(icebergType)) {
-            ZoneId zone = TimeUtils.getTimeZone().toZoneId();
-            ZoneOffsetTransition gap = zone.getRules().getTransition(bound);
-            if (gap != null && gap.isGap()) {
-                // atZone() would move the time forward by the gap length, past local times that follow the gap
-                return toMicros(gap.getInstant());
-            }
-            zoned = bound.atZone(zone);
-            zoned = earlier ? zoned.withEarlierOffsetAtOverlap() : zoned.withLaterOffsetAtOverlap();
-        } else {
-            zoned = bound.atZone(ZoneOffset.UTC);
-        }
-        return toMicros(zoned.toInstant());
-    }
-
-    // ChronoUnit.MICROS.between counts in nanoseconds and overflows before 1677 and after 2262
-    private static long toMicros(Instant instant) {
-        return Math.addExact(Math.multiplyExact(instant.getEpochSecond(), 1_000_000L), instant.getNano() / 1000);
+    private static ScalarOperator dateComparison(ScalarOperator column, BinaryType op, LocalDateTime day) {
+        return new BinaryPredicateOperator(op, column, ConstantOperator.createDate(day));
     }
 }
