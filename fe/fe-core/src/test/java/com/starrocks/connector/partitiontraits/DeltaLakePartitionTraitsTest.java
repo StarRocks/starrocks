@@ -124,6 +124,10 @@ public class DeltaLakePartitionTraitsTest {
         DeltaLakeTable table = partitionedTable(7);
         assertTrue(DeltaLakePartitionTraits.isTableVersionTracked(table));
         assertEquals(List.of(TBL), DeltaLakePartitionTraits.versionTrackingPartitionNames(table));
+        // without listing the partitions, which would need the log
+        Map<String, PartitionInfo> infos = ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo();
+        assertEquals(Set.of(TBL), infos.keySet());
+        assertEquals(7, infos.get(TBL).getVersion());
         assertEquals(Set.of(), updatedPartitionNames(table, baseTableInfo(table), refreshedFrom(table, TBL)));
 
         DeltaLakeTable current = partitionedTable(8);
