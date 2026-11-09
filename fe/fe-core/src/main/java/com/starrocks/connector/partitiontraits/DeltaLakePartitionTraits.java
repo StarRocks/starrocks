@@ -15,6 +15,7 @@
 package com.starrocks.connector.partitiontraits;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.DeltaLakePartitionKey;
@@ -80,6 +81,18 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
     protected Object partitionInfoSnapshot() {
         // the partition infos carry the table version, which DeltaLakeTable#equals ignores
         return pinnedVersionRange != null ? pinnedVersionRange : versionOf(table);
+    }
+
+    @Override
+    Map<String, PartitionInfo> fetchPartitionNameWithPartitionInfo() {
+        if (pinnedVersionRange != null || !isTableVersionTracked(table)) {
+            return super.fetchPartitionNameWithPartitionInfo();
+        }
+        // keep to the names the version is recorded under: listing the partitions of a partitioned table scans all
+        // its data files, and their names would read as the recorded table name being dropped
+        Map<String, PartitionInfo> tableVersion = Maps.newHashMap();
+        tableVersion.put(table.getName(), new DeltaLakeTableVersion((DeltaLakeTable) table));
+        return tableVersion;
     }
 
     @Override

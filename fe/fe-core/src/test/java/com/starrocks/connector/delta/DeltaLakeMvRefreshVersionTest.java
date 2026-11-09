@@ -33,7 +33,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 /**
@@ -43,24 +45,22 @@ import java.util.stream.Stream;
 public class DeltaLakeMvRefreshVersionTest extends MVTestBase {
     private static final String CATALOG = "delta_version_catalog";
     private static final String DB = "delta_db";
-    private static final String TBL = CATALOG + "." + DB + ".tbl";
-    private static final String QUERY = "SELECT col1, col2 FROM " + TBL + " WHERE col1 > 10";
+    private static final String UNPARTITIONED = "tbl";
+    private static final String PARTITIONED = "ptbl";
 
-    private static Path tablePath;
-    private static long lastVersion;
-    private static volatile Table currentTable;
+    private static final Map<String, Path> TABLE_PATHS = new HashMap<>();
+    private static final Map<String, Long> LAST_VERSIONS = new HashMap<>();
+    private static final Map<String, Table> CURRENT_TABLES = new HashMap<>();
 
     @BeforeAll
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
-        tablePath = Files.createTempDirectory("delta_mv_version");
-        writeCommit(0, "{\"protocol\":{\"minReaderVersion\":1,\"minWriterVersion\":2}}\n" +
-                "{\"metaData\":{\"id\":\"8c3a9b4e-1f2d-4c5b-9e7a-0d1c2b3a4f5e\",\"format\":{\"provider\":\"parquet\"," +
-                "\"options\":{}},\"schemaString\":\"{\\\"type\\\":\\\"struct\\\",\\\"fields\\\":[" +
-                "{\\\"name\\\":\\\"col1\\\",\\\"type\\\":\\\"integer\\\",\\\"nullable\\\":true,\\\"metadata\\\":{}}," +
-                "{\\\"name\\\":\\\"col2\\\",\\\"type\\\":\\\"string\\\",\\\"nullable\\\":true,\\\"metadata\\\":{}}]}\"," +
-                "\"partitionColumns\":[],\"configuration\":{},\"createdTime\":1700000000000}}\n");
+        createTable(UNPARTITIONED, "col2", "", "");
+        // the data file isn't read: listing the partitions only reads the log
+        createTable(PARTITIONED, "p", "\"p\"",
+                "{\"add\":{\"path\":\"p=x/f.parquet\",\"partitionValues\":{\"p\":\"x\"},\"size\":1," +
+                        "\"modificationTime\":1700000000000,\"dataChange\":true}}\n");
 
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
         if (!catalogMgr.catalogExists(CATALOG)) {
@@ -75,24 +75,46 @@ public class DeltaLakeMvRefreshVersionTest extends MVTestBase {
     public static void afterClass() throws Exception {
         ConnectorPlanTestBase.dropCatalog(CATALOG);
         ((MockedMetadataMgr) GlobalStateMgr.getCurrentState().getMetadataMgr()).unregisterMockedMetadata(CATALOG);
-        try (Stream<Path> paths = Files.walk(tablePath)) {
-            paths.sorted(Comparator.reverseOrder()).forEach(path -> path.toFile().delete());
+        for (Path tablePath : TABLE_PATHS.values()) {
+            try (Stream<Path> paths = Files.walk(tablePath)) {
+                paths.sorted(Comparator.reverseOrder()).forEach(path -> path.toFile().delete());
+            }
         }
     }
 
     private static final class LocalDeltaLakeMetadata extends ConnectorPlanTestBase.MockedDeltaLakeMetadata {
         @Override
         public Table getTable(ConnectContext context, String dbName, String tblName) {
-            return DB.equalsIgnoreCase(dbName) && "tbl".equalsIgnoreCase(tblName) ? currentTable : null;
+            return DB.equalsIgnoreCase(dbName) ? CURRENT_TABLES.get(tblName.toLowerCase()) : null;
         }
     }
 
-    private static void writeCommit(long version, String actions) throws Exception {
+    /**
+     * A table of an int column col1 and a string column named secondColumn, which is partitioned by it if
+     * partitionColumns is non-empty.
+     */
+    private static void createTable(String name, String secondColumn, String partitionColumns, String addActions)
+            throws Exception {
+        TABLE_PATHS.put(name, Files.createTempDirectory("delta_mv_version_" + name));
+        writeCommit(name, 0, "{\"protocol\":{\"minReaderVersion\":1,\"minWriterVersion\":2}}\n" +
+                "{\"metaData\":{\"id\":\"" + UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8)) +
+                "\",\"format\":{\"provider\":\"parquet\",\"options\":{}},\"schemaString\":\"{\\\"type\\\":" +
+                "\\\"struct\\\",\\\"fields\\\":[" +
+                "{\\\"name\\\":\\\"col1\\\",\\\"type\\\":\\\"integer\\\",\\\"nullable\\\":true," +
+                "\\\"metadata\\\":{}}," +
+                "{\\\"name\\\":\\\"" + secondColumn + "\\\",\\\"type\\\":\\\"string\\\"," +
+                "\\\"nullable\\\":true,\\\"metadata\\\":{}}]}\"," +
+                "\"partitionColumns\":[" + partitionColumns +
+                "],\"configuration\":{},\"createdTime\":1700000000000}}\n" + addActions);
+    }
+
+    private static void writeCommit(String name, long version, String actions) throws Exception {
+        Path tablePath = TABLE_PATHS.get(name);
         Path log = Files.createDirectories(tablePath.resolve("_delta_log"));
         Files.writeString(log.resolve(String.format("%020d.json", version)), actions +
                 "{\"commitInfo\":{\"timestamp\":" + (1700000000000L + version) + ",\"operation\":\"WRITE\"}}\n",
                 StandardCharsets.UTF_8);
-        lastVersion = version;
+        LAST_VERSIONS.put(name, version);
 
         DeltaLakeEngine engine = DeltaLakeEngine.create(new Configuration(false), new DeltaLakeCatalogProperties(Map.of(
                 DeltaLakeCatalogProperties.ENABLE_DELTA_LAKE_JSON_META_CACHE, "false",
@@ -100,36 +122,49 @@ public class DeltaLakeMvRefreshVersionTest extends MVTestBase {
         String path = tablePath.toUri().toString();
         SnapshotImpl snapshot = (SnapshotImpl) io.delta.kernel.Table.forPath(engine, path).getLatestSnapshot(engine);
         Table table = DeltaUtils.convertDeltaSnapshotToSRTable(CATALOG,
-                new DeltaLakeSnapshot(DB, "tbl", engine, snapshot, new MetastoreTable(DB, "tbl", path, 1700000000L)));
+                new DeltaLakeSnapshot(DB, name, engine, snapshot, new MetastoreTable(DB, name, path, 1700000000L)));
         // a connector re-attaches the table's MVs to each loaded table object, the mocked catalog doesn't
-        if (currentTable != null) {
-            currentTable.getRelatedMaterializedViews().forEach(table::addRelatedMaterializedView);
+        Table previous = CURRENT_TABLES.put(name, table);
+        if (previous != null) {
+            previous.getRelatedMaterializedViews().forEach(table::addRelatedMaterializedView);
         }
-        currentTable = table;
     }
 
     @Test
     public void testMvIsUsedOnlyWhileTheTableIsAtTheRefreshedVersion() throws Exception {
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW delta_version_mv\n" +
+        assertMvIsUsedOnlyWhileTheTableIsAtTheRefreshedVersion(UNPARTITIONED, "col2");
+    }
+
+    @Test
+    public void testMvOverPartitionedTableIsUsedOnlyWhileTheTableIsAtTheRefreshedVersion() throws Exception {
+        assertMvIsUsedOnlyWhileTheTableIsAtTheRefreshedVersion(PARTITIONED, "p");
+    }
+
+    private void assertMvIsUsedOnlyWhileTheTableIsAtTheRefreshedVersion(String table, String secondColumn)
+            throws Exception {
+        String mvName = "delta_version_mv_" + table;
+        String tableName = CATALOG + "." + DB + "." + table;
+        String query = "SELECT col1, " + secondColumn + " FROM " + tableName + " WHERE col1 > 10";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" +
                 "DISTRIBUTED BY HASH(col1)\n" +
                 "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\"replication_num\" = \"1\")\n" +
-                "AS SELECT col1, col2 FROM " + TBL);
+                "AS SELECT col1, " + secondColumn + " FROM " + tableName);
         try {
-            PlanTestBase.assertNotContains(getFragmentPlan(QUERY), "delta_version_mv");
+            PlanTestBase.assertNotContains(getFragmentPlan(query), mvName);
 
-            refreshMaterializedView("test", "delta_version_mv");
-            PlanTestBase.assertContains(getFragmentPlan(QUERY), "delta_version_mv");
+            refreshMaterializedView("test", mvName);
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
 
-            writeCommit(lastVersion + 1, "");
-            String plan = getFragmentPlan(QUERY);
-            PlanTestBase.assertNotContains(plan, "delta_version_mv");
+            writeCommit(table, LAST_VERSIONS.get(table) + 1, "");
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, mvName);
             PlanTestBase.assertContains(plan, "DeltaLakeScanNode");
 
-            refreshMaterializedView("test", "delta_version_mv");
-            PlanTestBase.assertContains(getFragmentPlan(QUERY), "delta_version_mv");
+            refreshMaterializedView("test", mvName);
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
         } finally {
-            dropMv("test", "delta_version_mv");
+            dropMv("test", mvName);
         }
     }
 }
