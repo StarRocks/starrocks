@@ -509,6 +509,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：启用后，Compaction 将对由部分列更新产生的 Delta 列采用“懒惰”策略：StarRocks 会避免将 Delta-column 文件立即合并回其主段文件以节省 Compaction 的 I/O。实际上，Compaction 选择代码会检查是否存在部分列更新的 Rowset 和多个候选项；如果发现以上情况且此配置项为 `true`，引擎要么停止向 Compaction 添加更多输入，要么仅合并空的 Rowset（level -1），将 Delta 列保持分离。这会减少 Compaction 期间的即时 I/O 和 CPU 开销，但以延迟合并为代价（可能产生更多段和临时存储开销）。正确性和查询语义不受影响。
 - 引入版本：v3.2.3
 
+### enable_light_pk_compaction_publish
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为存算一体集群中的主键表启用轻量 Compaction 发布。此配置项仅控制存算一体表。存算分离主键表始终使用轻量 Compaction 发布，因此将此配置项设为 `false` 不会关闭存算分离表的轻量发布路径。
+- 引入版本：-
+
 ### enable_new_load_on_memory_limit_exceeded
 
 - 默认值：false
