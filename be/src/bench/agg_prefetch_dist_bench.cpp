@@ -81,6 +81,7 @@
 #include "common/system/cpu_info.h"
 #include "exec/aggregate/agg_hash_map.h"
 #include "exec/aggregate/agg_hash_set.h"
+#include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
 #include "exec/aggregator.h"
 #include "runtime/mem_pool.h"
@@ -91,6 +92,7 @@ namespace starrocks {
 
 inline constexpr int kBenchChunkSize = 4096;
 inline constexpr int64_t kTimedRowsPerCombo = 10'000'000;
+inline constexpr int64_t kUniformTimedRows = 64 * kBenchChunkSize;
 
 template <PhmapSeed seed>
 using PhmapInt64 = phmap::flat_hash_map<int64_t, AggDataPtr, StdHashWithSeed<int64_t, seed>>;
@@ -102,6 +104,11 @@ using PhmapInt64Set = phmap::flat_hash_set<int64_t, StdHashWithSeed<int64_t, see
 
 using PhmapInt64SetWrapper = AggHashSetOfOneNumberKey<TYPE_BIGINT, PhmapInt64Set<PhmapSeed1>>;
 
+using PhmapInt32Wrapper = AggHashMapWithOneNumberKey<TYPE_INT, Int32AggHashMap<PhmapSeed1>>;
+using PhmapInt32SetWrapper = AggHashSetOfOneNumberKey<TYPE_INT, Int32AggHashSet<PhmapSeed1>>;
+using FixedSize4MapWrapper = SerializedKeyFixedSize4AggHashMap<PhmapSeed1>;
+using FixedSize8MapWrapper = SerializedKeyFixedSize8AggHashMap<PhmapSeed1>;
+
 enum class Pattern : int {
     Random = 0,     // uniform random over [0, target_size)
     Clustered64 = 1 // run-length 64 over the same range (consecutive-keys shape)
@@ -110,7 +117,10 @@ enum class Pattern : int {
 struct BenchAllocateState {
     HashTableKeyAllocator* allocator;
     AggDataPtr operator()(std::nullptr_t) { return allocator->allocate_null_key_data(); }
+    AggDataPtr operator()(int32_t /*key*/) { return allocator->allocate(); }
     AggDataPtr operator()(int64_t /*key*/) { return allocator->allocate(); }
+    AggDataPtr operator()(const SliceKey4& /*key*/) { return allocator->allocate(); }
+    AggDataPtr operator()(const SliceKey8& /*key*/) { return allocator->allocate(); }
 };
 
 class Int64ChunkStream {
@@ -174,13 +184,180 @@ private:
     std::vector<ColumnPtr> _chunks;
 };
 
-class BenchSuite {
+class Int32KeyStream {
+public:
+    Int32KeyStream(int64_t num_rows, int64_t key_universe_size, Pattern p, uint64_t seed)
+            : _num_rows(num_rows), _universe(key_universe_size) {
+        std::mt19937_64 rng(seed);
+        std::uniform_int_distribution<int32_t> uni(0, _universe > 0 ? static_cast<int32_t>(_universe - 1) : 0);
+        const int64_t num_chunks = (num_rows + kBenchChunkSize - 1) / kBenchChunkSize;
+        _chunks.reserve(num_chunks);
+        for (int64_t c = 0; c < num_chunks; ++c) {
+            auto col = Int32Column::create();
+            auto& data = col->get_data();
+            data.resize(kBenchChunkSize);
+            switch (p) {
+            case Pattern::Random:
+                for (int i = 0; i < kBenchChunkSize; ++i) data[i] = uni(rng);
+                break;
+            case Pattern::Clustered64: {
+                int32_t current = uni(rng);
+                for (int i = 0; i < kBenchChunkSize; ++i) {
+                    if (i > 0 && i % 64 == 0) current = uni(rng);
+                    data[i] = current;
+                }
+                break;
+            }
+            }
+            _chunks.emplace_back(Columns{std::move(col)});
+        }
+    }
+
+    static const std::vector<Columns>& build_distinct_keys(int64_t universe_size) {
+        static int64_t cached_universe = -1;
+        static std::vector<Columns> cached_chunks;
+        if (cached_universe == universe_size) {
+            return cached_chunks;
+        }
+        std::vector<int32_t> all(universe_size);
+        for (int64_t i = 0; i < universe_size; ++i) all[i] = static_cast<int32_t>(i);
+        std::mt19937_64 rng(0xC0FFEEC0FFEEC0FFULL);
+        std::shuffle(all.begin(), all.end(), rng);
+        std::vector<Columns> chunks;
+        const int64_t num_chunks = (universe_size + kBenchChunkSize - 1) / kBenchChunkSize;
+        chunks.reserve(num_chunks);
+        for (int64_t c = 0; c < num_chunks; ++c) {
+            auto col = Int32Column::create();
+            auto& data = col->get_data();
+            data.resize(kBenchChunkSize);
+            for (int i = 0; i < kBenchChunkSize; ++i) {
+                const int64_t idx = c * kBenchChunkSize + i;
+                data[i] = idx < universe_size ? all[idx] : all[idx % universe_size];
+            }
+            chunks.emplace_back(Columns{std::move(col)});
+        }
+        cached_universe = universe_size;
+        cached_chunks = std::move(chunks);
+        return cached_chunks;
+    }
+
+    const std::vector<Columns>& chunks() const { return _chunks; }
+
+private:
+    int64_t _num_rows;
+    int64_t _universe;
+    std::vector<Columns> _chunks;
+};
+
+// FixedSizeKeyStream:
+//   FixedBytes == 4 -> 2 x Int16Column (4-byte fixed keys)
+//   FixedBytes == 8 -> 2 x Int32Column (8-byte fixed keys)
+template <size_t FixedBytes>
+class FixedSizeKeyStream {
+public:
+    static_assert(FixedBytes == 4 || FixedBytes == 8, "FixedSizeKeyStream supports 4-byte or 8-byte keys");
+    using ElemColumn = std::conditional_t<FixedBytes == 4, Int16Column, Int32Column>;
+    using ElemType = std::conditional_t<FixedBytes == 4, int16_t, int32_t>;
+
+    FixedSizeKeyStream(int64_t num_rows, int64_t key_universe_size, Pattern p, uint64_t seed)
+            : _num_rows(num_rows), _universe(key_universe_size) {
+        std::mt19937_64 rng(seed);
+        std::uniform_int_distribution<uint32_t> uni(0, _universe > 0 ? static_cast<uint32_t>(_universe - 1) : 0);
+        const int64_t num_chunks = (num_rows + kBenchChunkSize - 1) / kBenchChunkSize;
+        _chunks.reserve(num_chunks);
+        for (int64_t c = 0; c < num_chunks; ++c) {
+            auto col0 = ElemColumn::create();
+            auto col1 = ElemColumn::create();
+            auto& data0 = col0->get_data();
+            auto& data1 = col1->get_data();
+            data0.resize(kBenchChunkSize);
+            data1.resize(kBenchChunkSize);
+            switch (p) {
+            case Pattern::Random:
+                for (int i = 0; i < kBenchChunkSize; ++i) {
+                    encode_key(uni(rng), &data0[i], &data1[i]);
+                }
+                break;
+            case Pattern::Clustered64: {
+                uint32_t current = uni(rng);
+                for (int i = 0; i < kBenchChunkSize; ++i) {
+                    if (i > 0 && i % 64 == 0) current = uni(rng);
+                    encode_key(current, &data0[i], &data1[i]);
+                }
+                break;
+            }
+            }
+            _chunks.emplace_back(Columns{std::move(col0), std::move(col1)});
+        }
+    }
+
+    static const std::vector<Columns>& build_distinct_keys(int64_t universe_size) {
+        static int64_t cached_universe = -1;
+        static std::vector<Columns> cached_chunks;
+        if (cached_universe == universe_size) {
+            return cached_chunks;
+        }
+        std::vector<uint32_t> all(universe_size);
+        for (int64_t i = 0; i < universe_size; ++i) all[i] = static_cast<uint32_t>(i);
+        std::mt19937_64 rng(0xC0FFEEC0FFEEC0FFULL);
+        std::shuffle(all.begin(), all.end(), rng);
+        std::vector<Columns> chunks;
+        const int64_t num_chunks = (universe_size + kBenchChunkSize - 1) / kBenchChunkSize;
+        chunks.reserve(num_chunks);
+        for (int64_t c = 0; c < num_chunks; ++c) {
+            auto col0 = ElemColumn::create();
+            auto col1 = ElemColumn::create();
+            auto& data0 = col0->get_data();
+            auto& data1 = col1->get_data();
+            data0.resize(kBenchChunkSize);
+            data1.resize(kBenchChunkSize);
+            for (int i = 0; i < kBenchChunkSize; ++i) {
+                const int64_t idx = c * kBenchChunkSize + i;
+                const uint32_t k = idx < universe_size ? all[idx] : all[idx % universe_size];
+                encode_key(k, &data0[i], &data1[i]);
+            }
+            chunks.emplace_back(Columns{std::move(col0), std::move(col1)});
+        }
+        cached_universe = universe_size;
+        cached_chunks = std::move(chunks);
+        return cached_chunks;
+    }
+
+    const std::vector<Columns>& chunks() const { return _chunks; }
+
+private:
+    static void encode_key(uint32_t k, ElemType* c0, ElemType* c1) {
+        if constexpr (FixedBytes == 4) {
+            *c0 = static_cast<int16_t>(k & 0xFFFFu);
+            *c1 = static_cast<int16_t>((k >> 16) & 0xFFFFu);
+        } else {
+            *c0 = static_cast<int32_t>(k);
+            *c1 = static_cast<int32_t>(k ^ 0x9E3779B9u);
+        }
+    }
+
+    int64_t _num_rows;
+    int64_t _universe;
+    std::vector<Columns> _chunks;
+};
+
+class BenchFixture {
 public:
     void SetUp() {
         config::vector_chunk_size = kBenchChunkSize;
-        // CpuInfo must be initialized before the agg prefetch gate reads L2 size.
+        // CpuInfo and config defaults must be initialized before the agg prefetch gate reads L2 size
+        // (BENCHMARK_MAIN does not invoke config::init).
         static std::once_flag cpu_once;
-        std::call_once(cpu_once, [] { CpuInfo::init(); });
+        std::call_once(cpu_once, [] {
+            CpuInfo::init();
+            config::agg_hash_map_prefetch_dist = 16;
+            config::agg_prefetch_l2_ratio = 1.0;
+        });
+        // Ensure arch default prefetch distance is initialized before saving saved_dist
+        // so explicit distance overrides [0, 4, 8, 12, 16, 24, 32] are never overwritten on first call.
+        (void)agg_hash_map_default_prefetch_dist();
+        saved_dist = config::agg_hash_map_prefetch_dist;
+        saved_ratio = config::agg_prefetch_l2_ratio;
         // Disable the resident<L2 prefetch gate so the bench drives the prefetch
         // distance directly (the gate would otherwise force noprefetch below L2).
         // ratio=0 -> threshold 0 -> prefetch path always taken; distance still
@@ -202,13 +379,19 @@ public:
         _runtime_profile.reset();
         _mem_pool.reset();
         _runtime_state.reset();
+        config::agg_hash_map_prefetch_dist = saved_dist;
+        config::agg_prefetch_l2_ratio = saved_ratio;
     }
 
+    int32_t saved_dist = 0;
+    double saved_ratio = 1.0;
     std::shared_ptr<RuntimeState> _runtime_state;
     std::unique_ptr<MemPool> _mem_pool;
     std::unique_ptr<RuntimeProfile> _runtime_profile;
     std::unique_ptr<AggStatistics> _agg_stat;
 };
+
+using BenchSuite = BenchFixture;
 
 template <typename Wrapper>
 inline size_t hash_table_bytes(Wrapper* w) {
@@ -246,12 +429,12 @@ static void BM_PrefetchProbe(benchmark::State& state) {
     const int64_t target_size = state.range(1);
     const Pattern pattern = static_cast<Pattern>(state.range(2));
 
+    BenchFixture suite;
+    suite.SetUp();
+
     // Knob under test: the function in agg_hash_set.h reads this at chunk
     // start, captures into __prefetch_dist for the loop body.
     config::agg_hash_map_prefetch_dist = distance;
-
-    BenchSuite suite;
-    suite.SetUp();
 
     auto wrapper = std::make_unique<PhmapInt64Wrapper>(kBenchChunkSize, suite._agg_stat.get());
     HashTableKeyAllocator allocator;
@@ -323,10 +506,10 @@ static void BM_PrefetchProbeSet(benchmark::State& state) {
     const int64_t target_size = state.range(1);
     const Pattern pattern = static_cast<Pattern>(state.range(2));
 
-    config::agg_hash_map_prefetch_dist = distance;
-
-    BenchSuite suite;
+    BenchFixture suite;
     suite.SetUp();
+
+    config::agg_hash_map_prefetch_dist = distance;
 
     auto wrapper = std::make_unique<PhmapInt64SetWrapper>(kBenchChunkSize, suite._agg_stat.get());
 
@@ -374,6 +557,339 @@ static void BM_PrefetchProbeSet(benchmark::State& state) {
 }
 
 // ============================================================================
+// Int32 and FixedSize4/FixedSize8 Uniform and DefaultGate benchmarks
+// ============================================================================
+static void BM_Int32Map_Uniform(benchmark::State& state) {
+    const int64_t target_size = state.range(0);
+    const int32_t distance = static_cast<int32_t>(state.range(1));
+
+    BenchFixture suite;
+    suite.SetUp();
+    config::agg_hash_map_prefetch_dist = distance;
+
+    auto wrapper = std::make_unique<PhmapInt32Wrapper>(kBenchChunkSize, suite._agg_stat.get());
+    HashTableKeyAllocator allocator;
+    allocator.aggregate_key_size = sizeof(int32_t);
+    allocator.pool = suite._mem_pool.get();
+    BenchAllocateState alloc{&allocator};
+    Buffer<AggDataPtr> agg_states(kBenchChunkSize);
+
+    const auto& prefill_chunks = Int32KeyStream::build_distinct_keys(target_size);
+    for (const auto& key_columns : prefill_chunks) {
+        wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
+    }
+    const size_t prefilled = wrapper->hash_map.size();
+
+    Int32KeyStream timed_stream(kUniformTimedRows, target_size, Pattern::Random, 0xBEEFCAFE);
+    for (const auto& key_columns : timed_stream.chunks()) {
+        const auto* col = down_cast<const Int32Column*>(key_columns[0].get());
+        benchmark::DoNotOptimize(col->immutable_data().data());
+    }
+
+    int64_t total_rows = 0;
+    for (auto _ : state) {
+        for (const auto& key_columns : timed_stream.chunks()) {
+            wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
+            total_rows += kBenchChunkSize;
+        }
+        benchmark::DoNotOptimize(agg_states.data());
+        benchmark::ClobberMemory();
+    }
+
+    const size_t post_size = wrapper->hash_map.size();
+    state.counters["distance"] = distance;
+    state.counters["target_size"] = target_size;
+    state.counters["prefilled"] = prefilled;
+    state.counters["post_size"] = post_size;
+    state.counters["hash_table_bytes"] = hash_table_bytes(wrapper.get());
+    state.counters["resident_bytes"] = resident_bucket_bytes(wrapper->hash_map);
+    state.counters["bucket_count"] = wrapper->hash_map.capacity();
+    state.counters["rows_per_iter"] = kUniformTimedRows;
+    attach_cpu_cache_counters(state);
+    state.SetItemsProcessed(total_rows);
+
+    wrapper.reset();
+    suite.TearDown();
+}
+
+static void BM_Int32Set_Uniform(benchmark::State& state) {
+    const int64_t target_size = state.range(0);
+    const int32_t distance = static_cast<int32_t>(state.range(1));
+
+    BenchFixture suite;
+    suite.SetUp();
+    config::agg_hash_map_prefetch_dist = distance;
+
+    auto wrapper = std::make_unique<PhmapInt32SetWrapper>(kBenchChunkSize, suite._agg_stat.get());
+
+    const auto& prefill_chunks = Int32KeyStream::build_distinct_keys(target_size);
+    for (const auto& key_columns : prefill_chunks) {
+        wrapper->build_hash_set(kBenchChunkSize, key_columns, suite._mem_pool.get());
+    }
+    const size_t prefilled = wrapper->hash_set.size();
+
+    Int32KeyStream timed_stream(kUniformTimedRows, target_size, Pattern::Random, 0xBEEFCAFE);
+    for (const auto& key_columns : timed_stream.chunks()) {
+        const auto* col = down_cast<const Int32Column*>(key_columns[0].get());
+        benchmark::DoNotOptimize(col->immutable_data().data());
+    }
+
+    int64_t total_rows = 0;
+    for (auto _ : state) {
+        for (const auto& key_columns : timed_stream.chunks()) {
+            wrapper->build_hash_set(kBenchChunkSize, key_columns, suite._mem_pool.get());
+            total_rows += kBenchChunkSize;
+        }
+        benchmark::ClobberMemory();
+    }
+
+    const size_t post_size = wrapper->hash_set.size();
+    state.counters["distance"] = distance;
+    state.counters["target_size"] = target_size;
+    state.counters["prefilled"] = prefilled;
+    state.counters["post_size"] = post_size;
+    state.counters["resident_bytes"] = resident_bucket_bytes(wrapper->hash_set);
+    state.counters["bucket_count"] = wrapper->hash_set.capacity();
+    state.counters["rows_per_iter"] = kUniformTimedRows;
+    attach_cpu_cache_counters(state);
+    state.SetItemsProcessed(total_rows);
+
+    wrapper.reset();
+    suite.TearDown();
+}
+
+static void BM_FixedSize4Map_Uniform(benchmark::State& state) {
+    const int64_t target_size = state.range(0);
+    const int32_t distance = static_cast<int32_t>(state.range(1));
+
+    BenchFixture suite;
+    suite.SetUp();
+    config::agg_hash_map_prefetch_dist = distance;
+
+    auto wrapper = std::make_unique<FixedSize4MapWrapper>(kBenchChunkSize, suite._agg_stat.get());
+    wrapper->has_null_column = false;
+    wrapper->fixed_byte_size = 4;
+
+    HashTableKeyAllocator allocator;
+    allocator.aggregate_key_size = sizeof(SliceKey4);
+    allocator.pool = suite._mem_pool.get();
+    BenchAllocateState alloc{&allocator};
+    Buffer<AggDataPtr> agg_states(kBenchChunkSize);
+
+    const auto& prefill_chunks = FixedSizeKeyStream<4>::build_distinct_keys(target_size);
+    for (const auto& key_columns : prefill_chunks) {
+        wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
+    }
+    const size_t prefilled = wrapper->hash_map.size();
+
+    FixedSizeKeyStream<4> timed_stream(kUniformTimedRows, target_size, Pattern::Random, 0xBEEFCAFE);
+    for (const auto& key_columns : timed_stream.chunks()) {
+        const auto* col0 = down_cast<const Int16Column*>(key_columns[0].get());
+        const auto* col1 = down_cast<const Int16Column*>(key_columns[1].get());
+        benchmark::DoNotOptimize(col0->immutable_data().data());
+        benchmark::DoNotOptimize(col1->immutable_data().data());
+    }
+
+    int64_t total_rows = 0;
+    for (auto _ : state) {
+        for (const auto& key_columns : timed_stream.chunks()) {
+            wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
+            total_rows += kBenchChunkSize;
+        }
+        benchmark::DoNotOptimize(agg_states.data());
+        benchmark::ClobberMemory();
+    }
+
+    const size_t post_size = wrapper->hash_map.size();
+    state.counters["distance"] = distance;
+    state.counters["target_size"] = target_size;
+    state.counters["prefilled"] = prefilled;
+    state.counters["post_size"] = post_size;
+    state.counters["hash_table_bytes"] = hash_table_bytes(wrapper.get());
+    state.counters["resident_bytes"] = resident_bucket_bytes(wrapper->hash_map);
+    state.counters["bucket_count"] = wrapper->hash_map.capacity();
+    state.counters["rows_per_iter"] = kUniformTimedRows;
+    attach_cpu_cache_counters(state);
+    state.SetItemsProcessed(total_rows);
+
+    wrapper.reset();
+    suite.TearDown();
+}
+
+static void BM_FixedSize8Map_Uniform(benchmark::State& state) {
+    const int64_t target_size = state.range(0);
+    const int32_t distance = static_cast<int32_t>(state.range(1));
+
+    BenchFixture suite;
+    suite.SetUp();
+    config::agg_hash_map_prefetch_dist = distance;
+
+    auto wrapper = std::make_unique<FixedSize8MapWrapper>(kBenchChunkSize, suite._agg_stat.get());
+    wrapper->has_null_column = false;
+    wrapper->fixed_byte_size = 8;
+
+    HashTableKeyAllocator allocator;
+    allocator.aggregate_key_size = sizeof(SliceKey8);
+    allocator.pool = suite._mem_pool.get();
+    BenchAllocateState alloc{&allocator};
+    Buffer<AggDataPtr> agg_states(kBenchChunkSize);
+
+    const auto& prefill_chunks = FixedSizeKeyStream<8>::build_distinct_keys(target_size);
+    for (const auto& key_columns : prefill_chunks) {
+        wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
+    }
+    const size_t prefilled = wrapper->hash_map.size();
+
+    FixedSizeKeyStream<8> timed_stream(kUniformTimedRows, target_size, Pattern::Random, 0xBEEFCAFE);
+    for (const auto& key_columns : timed_stream.chunks()) {
+        const auto* col0 = down_cast<const Int32Column*>(key_columns[0].get());
+        const auto* col1 = down_cast<const Int32Column*>(key_columns[1].get());
+        benchmark::DoNotOptimize(col0->immutable_data().data());
+        benchmark::DoNotOptimize(col1->immutable_data().data());
+    }
+
+    int64_t total_rows = 0;
+    for (auto _ : state) {
+        for (const auto& key_columns : timed_stream.chunks()) {
+            wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
+            total_rows += kBenchChunkSize;
+        }
+        benchmark::DoNotOptimize(agg_states.data());
+        benchmark::ClobberMemory();
+    }
+
+    const size_t post_size = wrapper->hash_map.size();
+    state.counters["distance"] = distance;
+    state.counters["target_size"] = target_size;
+    state.counters["prefilled"] = prefilled;
+    state.counters["post_size"] = post_size;
+    state.counters["hash_table_bytes"] = hash_table_bytes(wrapper.get());
+    state.counters["resident_bytes"] = resident_bucket_bytes(wrapper->hash_map);
+    state.counters["bucket_count"] = wrapper->hash_map.capacity();
+    state.counters["rows_per_iter"] = kUniformTimedRows;
+    attach_cpu_cache_counters(state);
+    state.SetItemsProcessed(total_rows);
+
+    wrapper.reset();
+    suite.TearDown();
+}
+
+static void BM_Int32Map_DefaultGate(benchmark::State& state) {
+    const int64_t target_size = state.range(0);
+
+    BenchFixture suite;
+    suite.SetUp();
+    config::agg_prefetch_l2_ratio = 1.0;
+    config::agg_hash_map_prefetch_dist = suite.saved_dist;
+
+    auto wrapper = std::make_unique<PhmapInt32Wrapper>(kBenchChunkSize, suite._agg_stat.get());
+    HashTableKeyAllocator allocator;
+    allocator.aggregate_key_size = sizeof(int32_t);
+    allocator.pool = suite._mem_pool.get();
+    BenchAllocateState alloc{&allocator};
+    Buffer<AggDataPtr> agg_states(kBenchChunkSize);
+
+    const auto& prefill_chunks = Int32KeyStream::build_distinct_keys(target_size);
+    for (const auto& key_columns : prefill_chunks) {
+        wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
+    }
+    const size_t prefilled = wrapper->hash_map.size();
+
+    Int32KeyStream timed_stream(kUniformTimedRows, target_size, Pattern::Random, 0xBEEFCAFE);
+    for (const auto& key_columns : timed_stream.chunks()) {
+        const auto* col = down_cast<const Int32Column*>(key_columns[0].get());
+        benchmark::DoNotOptimize(col->immutable_data().data());
+    }
+
+    int64_t total_rows = 0;
+    for (auto _ : state) {
+        for (const auto& key_columns : timed_stream.chunks()) {
+            wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
+            total_rows += kBenchChunkSize;
+        }
+        benchmark::DoNotOptimize(agg_states.data());
+        benchmark::ClobberMemory();
+    }
+
+    const size_t post_size = wrapper->hash_map.size();
+    state.counters["distance"] = agg_hash_map_default_prefetch_dist();
+    state.counters["target_size"] = target_size;
+    state.counters["prefilled"] = prefilled;
+    state.counters["post_size"] = post_size;
+    state.counters["hash_table_bytes"] = hash_table_bytes(wrapper.get());
+    state.counters["resident_bytes"] = resident_bucket_bytes(wrapper->hash_map);
+    state.counters["bucket_count"] = wrapper->hash_map.capacity();
+    state.counters["prefetch_min_bytes"] = agg_prefetch_min_bytes();
+    state.counters["prefetch_active"] = agg_should_prefetch_table(wrapper->hash_map);
+    state.counters["rows_per_iter"] = kUniformTimedRows;
+    attach_cpu_cache_counters(state);
+    state.SetItemsProcessed(total_rows);
+
+    wrapper.reset();
+    suite.TearDown();
+}
+
+static void BM_FixedSize8Map_DefaultGate(benchmark::State& state) {
+    const int64_t target_size = state.range(0);
+
+    BenchFixture suite;
+    suite.SetUp();
+    config::agg_prefetch_l2_ratio = 1.0;
+    config::agg_hash_map_prefetch_dist = suite.saved_dist;
+
+    auto wrapper = std::make_unique<FixedSize8MapWrapper>(kBenchChunkSize, suite._agg_stat.get());
+    wrapper->has_null_column = false;
+    wrapper->fixed_byte_size = 8;
+
+    HashTableKeyAllocator allocator;
+    allocator.aggregate_key_size = sizeof(SliceKey8);
+    allocator.pool = suite._mem_pool.get();
+    BenchAllocateState alloc{&allocator};
+    Buffer<AggDataPtr> agg_states(kBenchChunkSize);
+
+    const auto& prefill_chunks = FixedSizeKeyStream<8>::build_distinct_keys(target_size);
+    for (const auto& key_columns : prefill_chunks) {
+        wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
+    }
+    const size_t prefilled = wrapper->hash_map.size();
+
+    FixedSizeKeyStream<8> timed_stream(kUniformTimedRows, target_size, Pattern::Random, 0xBEEFCAFE);
+    for (const auto& key_columns : timed_stream.chunks()) {
+        const auto* col0 = down_cast<const Int32Column*>(key_columns[0].get());
+        const auto* col1 = down_cast<const Int32Column*>(key_columns[1].get());
+        benchmark::DoNotOptimize(col0->immutable_data().data());
+        benchmark::DoNotOptimize(col1->immutable_data().data());
+    }
+
+    int64_t total_rows = 0;
+    for (auto _ : state) {
+        for (const auto& key_columns : timed_stream.chunks()) {
+            wrapper->build_hash_map(kBenchChunkSize, key_columns, suite._mem_pool.get(), alloc, &agg_states);
+            total_rows += kBenchChunkSize;
+        }
+        benchmark::DoNotOptimize(agg_states.data());
+        benchmark::ClobberMemory();
+    }
+
+    const size_t post_size = wrapper->hash_map.size();
+    state.counters["distance"] = agg_hash_map_default_prefetch_dist();
+    state.counters["target_size"] = target_size;
+    state.counters["prefilled"] = prefilled;
+    state.counters["post_size"] = post_size;
+    state.counters["hash_table_bytes"] = hash_table_bytes(wrapper.get());
+    state.counters["resident_bytes"] = resident_bucket_bytes(wrapper->hash_map);
+    state.counters["bucket_count"] = wrapper->hash_map.capacity();
+    state.counters["prefetch_min_bytes"] = agg_prefetch_min_bytes();
+    state.counters["prefetch_active"] = agg_should_prefetch_table(wrapper->hash_map);
+    state.counters["rows_per_iter"] = kUniformTimedRows;
+    attach_cpu_cache_counters(state);
+    state.SetItemsProcessed(total_rows);
+
+    wrapper.reset();
+    suite.TearDown();
+}
+
+// ============================================================================
 // Argument matrix
 // ============================================================================
 // Distances: 0 (no SW prefetch via guard) + 4 / 8 / 16 / 24 / 32 sweep.
@@ -401,8 +917,31 @@ static void RegisterArgs(benchmark::Benchmark* b) {
     }
 }
 
+static void RegisterUniformArgs(benchmark::Benchmark* b) {
+    constexpr int64_t cardinalities[] = {1024, 16384, 65536, 262144, 1048576, 4194304};
+    constexpr int distances[] = {0, 4, 8, 12, 16};
+    for (auto c : cardinalities) {
+        for (auto d : distances) {
+            b->Args({c, d});
+        }
+    }
+}
+
+static void RegisterDefaultGateArgs(benchmark::Benchmark* b) {
+    constexpr int64_t cardinalities[] = {1024, 16384, 65536, 262144, 1048576, 4194304};
+    for (auto c : cardinalities) {
+        b->Arg(c);
+    }
+}
+
 BENCHMARK(BM_PrefetchProbe)->Apply(RegisterArgs)->Unit(benchmark::kMillisecond);
 BENCHMARK(BM_PrefetchProbeSet)->Apply(RegisterArgs)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_Int32Map_Uniform)->Apply(RegisterUniformArgs)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_Int32Set_Uniform)->Apply(RegisterUniformArgs)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_FixedSize4Map_Uniform)->Apply(RegisterUniformArgs)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_FixedSize8Map_Uniform)->Apply(RegisterUniformArgs)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_Int32Map_DefaultGate)->Apply(RegisterDefaultGateArgs)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_FixedSize8Map_DefaultGate)->Apply(RegisterDefaultGateArgs)->Unit(benchmark::kMillisecond);
 
 } // namespace starrocks
 
