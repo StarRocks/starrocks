@@ -58,9 +58,7 @@ jobs:
           # the marker list.)
           # Accept the old `cd-contributed` or the new `PAI-contributed` (rename transition).
           echo "${labels}" | grep -qxE 'cd-contributed|PAI-contributed' && skip_cd=true
-          if echo "${labels}" | grep -qx 'MS-contributed' || echo "${labels}" | grep -qx 'ms-contributed'; then
-            skip_ms=true
-          fi
+          echo "${labels}" | grep -qxE 'MS-contributed|ms-contributed' && skip_ms=true
 
           if [[ "$skip_cd" != "true" || "$skip_ms" != "true" ]]; then
             src=""
@@ -72,9 +70,7 @@ jobs:
             if [[ -n "$src" ]]; then
               src_labels=$(gh pr view "$src" -R ${{ github.repository }} --json labels -q '.labels[].name' || true)
               echo "${src_labels}" | grep -qxE 'cd-contributed|PAI-contributed' && skip_cd=true
-              if echo "${src_labels}" | grep -qx 'MS-contributed' || echo "${src_labels}" | grep -qx 'ms-contributed'; then
-                skip_ms=true
-              fi
+              echo "${src_labels}" | grep -qxE 'MS-contributed|ms-contributed' && skip_ms=true
             fi
           fi
 
