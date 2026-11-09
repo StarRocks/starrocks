@@ -36,6 +36,7 @@
 
 #include <gtest/gtest.h>
 
+#include <fstream>
 #include <memory>
 
 #include "base/logging.h"
@@ -1514,6 +1515,28 @@ TEST_F(BitShufflePageTest, rowid_preceding_page_ordinal_returns_corruption) {
     Status st = page.decoder->read_by_rowids(50, rowids, &count, column.get());
     EXPECT_TRUE(st.is_corruption());
     EXPECT_EQ(orig_size, column->size());
+}
+
+TEST_F(BitShufflePageTest, ReadByRowidsNoRttiGuard) {
+    std::string test_file = __FILE__;
+    auto pos = test_file.rfind("be/test/storage/rowset/bitshuffle_page_test.cpp");
+    ASSERT_NE(std::string::npos, pos) << "Unexpected __FILE__ path: " << test_file;
+    std::string header_path = test_file.substr(0, pos) + "be/src/storage/rowset/bitshuffle_page.h";
+
+    std::ifstream in(header_path);
+    ASSERT_TRUE(in.is_open()) << "Unable to open " << header_path;
+    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+
+    auto fn_pos = content.find("BitShufflePageDecoder<Type>::read_by_rowids(");
+    ASSERT_NE(std::string::npos, fn_pos) << "Could not find BitShufflePageDecoder<Type>::read_by_rowids in header";
+    std::string fn_body = content.substr(fn_pos);
+
+    EXPECT_EQ(std::string::npos, fn_body.find("dynamic_cast"))
+            << "BitShufflePageDecoder::read_by_rowids must not use dynamic_cast (RTTI overhead in point-lookup hot "
+               "path)";
+    EXPECT_EQ(std::string::npos, fn_body.find("typeid")) << "BitShufflePageDecoder::read_by_rowids must not use typeid";
+    EXPECT_NE(std::string::npos, fn_body.find("down_cast<BaseCol*>(target_col)"))
+            << "BitShufflePageDecoder::read_by_rowids must use down_cast<BaseCol*>(target_col)";
 }
 
 } // namespace starrocks
