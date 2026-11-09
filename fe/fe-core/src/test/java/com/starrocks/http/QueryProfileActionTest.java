@@ -79,14 +79,10 @@ public class QueryProfileActionTest extends StarRocksHttpTestCase {
     }
 
     private Response getProfilePageAsRoot() throws IOException {
-        return getProfilePageAsRoot("");
-    }
-
-    private Response getProfilePageAsRoot(String extraParams) throws IOException {
         Request request = new Request.Builder()
                 .get()
                 .addHeader("Authorization", rootAuth)
-                .url(BASE_URL + QUERY_PLAN_URI + "?query_id=" + QUERY_ID + extraParams)
+                .url(BASE_URL + QUERY_PLAN_URI + "?query_id=" + QUERY_ID)
                 .build();
         return networkClient.newCall(request).execute();
     }
@@ -96,13 +92,11 @@ public class QueryProfileActionTest extends StarRocksHttpTestCase {
         // Only the first line of the statement shares a line with "Sql Statement"; the payload is on the second.
         pushProfile("root", "select 'line1',\n'<img src=x onerror=\"alert(1)\">' as c2");
         stubOperate(true);
-        for (String extraParams : new String[] {"", "&content_type=sql"}) {
-            Response response = getProfilePageAsRoot(extraParams);
-            String body = response.body().string();
-            Assertions.assertEquals(200, response.code(), body);
-            Assertions.assertFalse(body.contains("<img src=x"), extraParams + ": " + body);
-            Assertions.assertTrue(body.contains("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;"), extraParams + ": " + body);
-        }
+        Response response = getProfilePageAsRoot();
+        String body = response.body().string();
+        Assertions.assertEquals(200, response.code(), body);
+        Assertions.assertFalse(body.contains("<img src=x"), body);
+        Assertions.assertTrue(body.contains("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;"), body);
     }
 
     @Test

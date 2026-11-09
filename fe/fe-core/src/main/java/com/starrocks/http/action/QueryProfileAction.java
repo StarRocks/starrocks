@@ -47,6 +47,7 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.owasp.encoder.Encode;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -85,15 +86,9 @@ public class QueryProfileAction extends WebBaseAction {
             try {
                 Authorizer.checkQueryProfileAccess(ConnectContext.get(), queryProfile);
             } catch (AccessDeniedException e) {
-<<<<<<< HEAD
                 response.appendContent("<p class=\"text-error\"> Access denied: the profile of query "
                         + encodedQueryId + " belongs to another user and reading it requires the OPERATE "
                         + "privilege.</p>");
-=======
-                // appendContent encodes every line, so pass the raw query id.
-                appendContent(response.getContent(), "Access denied: the profile of query " + queryId
-                        + " belongs to another user and reading it requires the OPERATE privilege.");
->>>>>>> 08240c5 ([BugFix] HTML-encode every line on the FE web console /query_profile page (#82641))
                 getPageFooter(response.getContent());
                 writeResponse(request, response, HttpResponseStatus.FORBIDDEN);
                 return;
@@ -106,12 +101,8 @@ public class QueryProfileAction extends WebBaseAction {
             getPageFooter(response.getContent());
             writeResponse(request, response);
         } else {
-<<<<<<< HEAD
-            appendQueryProfile(response.getContent(), "query id " + encodedQueryId + " not found.");
-=======
-            // appendContent encodes every line, so pass the raw query id.
-            appendContent(response.getContent(), "query id " + queryId + " not found.");
->>>>>>> 08240c5 ([BugFix] HTML-encode every line on the FE web console /query_profile page (#82641))
+            // appendQueryProfile encodes every line, so pass the raw query id.
+            appendQueryProfile(response.getContent(), "query id " + queryId + " not found.");
             getPageFooter(response.getContent());
             writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
         }
