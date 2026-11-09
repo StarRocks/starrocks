@@ -164,6 +164,15 @@ WHERE <condition>
   - `IS NULL` and `IS NOT NULL`
   - Sub-queries with `IN` or `EXISTS`
 
+<<<<<<< HEAD
+=======
+### Usage notes
+
+- On Iceberg V2 tables, DELETE writes position delete files. From v26.2 onwards, DELETE on Iceberg tables of format version 3 or later writes deletion vectors in Puffin files instead, one deletion vector per data file.
+- If a data file that DELETE touches already has deletes, such as an earlier deletion vector or position delete files, they are merged into its new deletion vector. The delete files scoped to that data file are then removed from the table, while position delete files that also apply to other data files are kept.
+- The `iceberg_delete_*` metrics report DELETE on tables of format version 3 or later with `delete_type` set to `deletion_vector`. See [Metrics](../../../administration/management/monitoring/metric_details/i-p.md).
+
+>>>>>>> 681f4cdd658... [Doc] Document Iceberg format version 4 support (#68999)
 ### Examples
 
 #### Basic DELETE operations
@@ -264,7 +273,7 @@ WHERE <condition>
 
 ### Usage notes
 
-- Only Iceberg tables with **format version 2** are supported. UPDATE on V1 and V3 tables is rejected the query analysis phase.
+- Only Iceberg tables with **format version 2** are supported. UPDATE on V1, V3, and V4 tables is rejected the query analysis phase.
 - A `WHERE` clause is **required** to prevent accidental full-table updates.
 - Partition columns cannot be updated. Use `INSERT OVERWRITE` if you need to rewrite partition columns.
 - The hidden metadata columns `_file` and `_pos` cannot be assigned in `SET`.
@@ -380,7 +389,7 @@ ON <merge_condition>
 
 ### Usage notes
 
-- Only Iceberg tables with **format version 2** are supported. MERGE INTO on V1 and V3 tables, or on non-Iceberg tables (for example, native OLAP tables), is rejected during query analysis.
+- Only Iceberg tables with **format version 2** are supported. MERGE INTO on V1, V3, and V4 tables, or on non-Iceberg tables (for example, native OLAP tables), is rejected during query analysis.
 - At least one `WHEN` clause is required.
 - Each target row must be matched by **at most one** source row. If a target row matches more than one source row, the statement fails at runtime rather than applying an ambiguous change. Deduplicate or aggregate the source in advance when necessary.
 - Partition columns cannot be updated in a `WHEN MATCHED ... THEN UPDATE` clause.

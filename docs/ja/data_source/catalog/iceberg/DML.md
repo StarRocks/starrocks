@@ -153,6 +153,15 @@ WHERE <condition>
   - `IS NULL` および `IS NOT NULL`
   - `IN` または `EXISTS` を含むサブクエリ
 
+<<<<<<< HEAD
+=======
+### 使用上の注意
+
+- Iceberg V2 テーブルに対する DELETE は位置削除ファイルを書き込みます。v26.2 以降、フォーマットバージョン 3 以降の Iceberg テーブルに対する DELETE は、代わりに Puffin ファイルに削除ベクトルを書き込みます。削除ベクトルはデータファイルごとに 1 つです。
+- DELETE の対象となるデータファイルに既存の削除（以前の削除ベクトルや位置削除ファイルなど）がある場合、それらはそのデータファイルの新しい削除ベクトルにマージされます。その後、そのデータファイルのみに適用される削除ファイルはテーブルから削除され、他のデータファイルにも適用される位置削除ファイルは保持されます。
+- `iceberg_delete_*` 指標は、フォーマットバージョン 3 以降のテーブルに対する DELETE を `delete_type` が `deletion_vector` として報告します。[モニタリング指標](../../../administration/management/monitoring/metric_details/i-p.md) を参照してください。
+
+>>>>>>> 681f4cdd658... [Doc] Document Iceberg format version 4 support (#68999)
 ### 例
 
 #### 基本的な DELETE 操作
@@ -253,7 +262,7 @@ WHERE <condition>
 
 ### 使用上の注意
 
-- **format-version 2** の Iceberg テーブルのみサポートされます。V1 と V3 テーブルへの UPDATE は解析時に拒否されます。
+- **format-version 2** の Iceberg テーブルのみサポートされます。V1、V3、V4 テーブルへの UPDATE は解析時に拒否されます。
 - フルテーブル更新を防ぐため、`WHERE` 句は **必須** です。
 - パーティション列は更新できません。 パーティション割り当てを変更する必要がある場合は、`INSERT OVERWRITE` を使用してください。
 - 隠しメタデータ列 `_file` および `_pos` は `SET` で代入できません。
@@ -369,7 +378,7 @@ ON <merge_condition>
 
 ### 使用上の注意
 
-- **format-version 2** の Iceberg テーブルのみサポートされます。V1、V3 テーブル、または非 Iceberg テーブル（ネイティブ OLAP テーブルなど）への MERGE INTO は解析時に拒否されます。
+- **format-version 2** の Iceberg テーブルのみサポートされます。V1、V3、V4 テーブル、または非 Iceberg テーブル（ネイティブ OLAP テーブルなど）への MERGE INTO は解析時に拒否されます。
 - 少なくとも 1 つの `WHEN` 句が必要です。
 - 各ターゲット行は **最大 1 つ** のソース行にのみ一致できます。あるターゲット行が複数のソース行に一致した場合、あいまいな変更を適用する代わりに、ステートメントは実行時に失敗します。必要に応じて、事前にソースを重複排除または集約してください。
 - `WHEN MATCHED ... THEN UPDATE` 句ではパーティション列を更新できません。

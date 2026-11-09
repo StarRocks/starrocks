@@ -153,6 +153,15 @@ WHERE <condition>
   - `IS NULL` 和 `IS NOT NULL`
   - 带 `IN` 或 `EXISTS` 的子查询
 
+<<<<<<< HEAD
+=======
+### 使用说明
+
+- 对 Iceberg V2 表执行 DELETE 会写入 Position Delete 文件。自 v26.2 起，对格式版本 3 及以上的 Iceberg 表执行 DELETE 会改为在 Puffin 文件中写入 Deletion Vector，每个数据文件对应一个 Deletion Vector。
+- 如果 DELETE 涉及的数据文件已有删除记录（例如之前的 Deletion Vector 或 Position Delete 文件），这些删除记录会合并到该数据文件新的 Deletion Vector 中。随后，仅作用于该数据文件的删除文件会从表中移除，同时作用于其他数据文件的 Position Delete 文件则会保留。
+- `iceberg_delete_*` 指标在统计格式版本 3 及以上的表上的 DELETE 时，`delete_type` 为 `deletion_vector`。参见 [监控指标](../../../administration/management/monitoring/metric_details/i-p.md)。
+
+>>>>>>> 681f4cdd658... [Doc] Document Iceberg format version 4 support (#68999)
 ### 示例
 
 #### Basic DELETE 操作
@@ -253,7 +262,7 @@ WHERE <condition>
 
 ### 使用说明
 
-- 仅支持 **format-version 2** 的 Iceberg 表。对 V1 和 V3 表执行 UPDATE 会在分析阶段被拒绝。
+- 仅支持 **format-version 2** 的 Iceberg 表。对 V1、V3 和 V4 表执行 UPDATE 会在分析阶段被拒绝。
 - 必须指定 `WHERE` 子句，以防误更新全表。
 - 不支持更新分区列。 如需修改分区归属，请使用 `INSERT OVERWRITE`。
 - 不允许在 `SET` 中赋值给隐藏的元数据列 `_file` 和 `_pos`。
@@ -367,7 +376,7 @@ ON <merge_condition>
 
 ### 使用说明
 
-- 仅支持 **format-version 2** 的 Iceberg 表。对 V1、V3 表或非 Iceberg 表（例如原生 OLAP 表）执行 MERGE INTO 会在分析阶段被拒绝。
+- 仅支持 **format-version 2** 的 Iceberg 表。对 V1、V3、V4 表或非 Iceberg 表（例如原生 OLAP 表）执行 MERGE INTO 会在分析阶段被拒绝。
 - 至少需要一个 `WHEN` 子句。
 - 每个目标行**最多只能被一个源行匹配**。若某个目标行匹配了多个源行，语句会在运行时失败，而不是执行有歧义的变更。必要时请提前对源进行去重或聚合。
 - 在 `WHEN MATCHED ... THEN UPDATE` 子句中不能更新分区列。
