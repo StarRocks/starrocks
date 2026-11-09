@@ -20,11 +20,11 @@
 #include <string>
 
 #include "base/utility/dynamic_util.h"
+#include "connector/hive/paimon/paimon_chunk_sink.h"
 #include "connector/hive/paimon/paimon_cpp_shim_api.h"
 #include "fmt/format.h"
 
 namespace starrocks {
-
 namespace {
 
 constexpr const char* kShimLibraryName = "libstarrocks_paimon.so";
@@ -32,60 +32,101 @@ constexpr const char* kShimLibraryName = "libstarrocks_paimon.so";
 std::string shim_library_path() {
     const char* home = std::getenv("STARROCKS_HOME");
     if (home == nullptr) {
-        // UT / source-tree runs: let the dynamic loader search LD_LIBRARY_PATH.
         return kShimLibraryName;
     }
-    // Absolute path on purpose: start_backend.sh puts $STARROCKS_HOME/lib on
-    // LD_LIBRARY_PATH only when JAVA_HOME is unset, so the search path cannot
-    // be relied on in production. The shim's own paimon dependencies resolve
-    // next to it through its $ORIGIN rpath.
     return std::string(home) + "/lib/paimon-cpp-lib/" + kShimLibraryName;
 }
 
-// Set once under _load_mutex, then read lock-free. A successfully loaded shim
-// is never dlclose()d: BE code holds vtables and code pointers into it for the
-// process lifetime.
-std::atomic<StarRocksPaimonCreateScannerFn> _create_scanner_fn{nullptr};
-std::mutex _load_mutex;
+// Never dlclose a usable shim: BE objects keep its vtables for their entire lifetime.
+std::mutex load_mutex;
+void* shim_handle = nullptr; // Protected by load_mutex.
+std::atomic<StarRocksPaimonCreateScannerFn> create_scanner_fn{nullptr};
+std::atomic<StarRocksPaimonCreateSinkFn> create_sink_fn{nullptr};
+std::atomic<StarRocksPaimonBucketIdsFn> bucket_ids_fn{nullptr};
 
-Status load_shim_locked() {
-    const std::string path = shim_library_path();
-
-    void* handle = nullptr;
-    if (const Status st = dynamic_open(path.c_str(), &handle); !st.ok()) {
-        return Status::InternalError(fmt::format(
-                "Paimon native reader is unavailable: {}. Either this BE was packaged without paimon-cpp or the "
-                "paimon libraries were removed from be/lib/paimon-cpp-lib. Set session variable "
-                "paimon_reader_mode=JNI to use the JNI reader instead.",
-                st.message()));
+template <typename Fn>
+StatusOr<Fn> load_capability(std::atomic<Fn>& cached, const char* symbol, bool reader) {
+    auto fn = cached.load(std::memory_order_acquire);
+    if (fn != nullptr) return fn;
+    std::lock_guard<std::mutex> guard(load_mutex);
+    fn = cached.load(std::memory_order_acquire);
+    if (fn != nullptr) return fn;
+    if (shim_handle == nullptr) {
+        const auto path = shim_library_path();
+        if (Status st = dynamic_open(path.c_str(), &shim_handle); !st.ok()) {
+            shim_handle = nullptr;
+            return Status::InternalError(fmt::format(
+                    "Paimon native {} is unavailable: {}. Install the matching BE's paimon-cpp-lib package.{}",
+                    reader ? "reader" : "writer", st.message(),
+                    reader ? " Set paimon_reader_mode=JNI to use the JNI reader instead." : ""));
+        }
     }
-
-    void* create_sym = nullptr;
-    if (Status st = dynamic_lookup(handle, STARROCKS_PAIMON_CREATE_SCANNER_SYMBOL, &create_sym); !st.ok()) {
-        // Drop the handle again so a retry after the operator fixes be/lib does
-        // not pile up dlopen references on an unusable library.
-        dynamic_close(handle);
-        return st;
+    void* address = nullptr;
+    if (Status st = dynamic_lookup(shim_handle, symbol, &address); !st.ok()) {
+        // Do not tear down the independently available scanner when an older shim lacks writes.
+        return Status::NotSupported(fmt::format(
+                "Paimon shim lacks {} capability ({}). Install the matching BE's paimon-cpp-lib package: {}",
+                reader ? "reader" : "native writer v1", symbol, st.message()));
     }
-    _create_scanner_fn.store(reinterpret_cast<StarRocksPaimonCreateScannerFn>(create_sym), std::memory_order_release);
-    return Status::OK();
+    fn = reinterpret_cast<Fn>(address);
+    cached.store(fn, std::memory_order_release);
+    return fn;
 }
+
+class DeferredPaimonSink final : public connector::ConnectorSink {
+public:
+    DeferredPaimonSink(std::shared_ptr<connector::PaimonChunkSinkContext> context, int32_t driver_id)
+            : _context(std::move(context)), _driver_id(driver_id) {}
+
+    Status init(formats::AsyncFlushStreamPoller* poller, RuntimeProfile* profile,
+                connector::SinkMemoryManager* memory) override {
+        auto result = load_capability(create_sink_fn, STARROCKS_PAIMON_CREATE_SINK_SYMBOL, false);
+        if (!result.ok()) return _status = result.status();
+        _delegate.reset(result.value()(_context, _driver_id));
+        if (_delegate == nullptr) return _status = Status::InternalError("Paimon shim returned a null writer");
+        return _status = _delegate->init(poller, profile, memory);
+    }
+    Status add(const ChunkPtr& chunk) override { return _delegate ? _delegate->add(chunk) : uninitialized_status(); }
+    Status finish() override { return _delegate ? _delegate->finish() : uninitialized_status(); }
+    void rollback() override {
+        if (_delegate) _delegate->rollback();
+    }
+    bool is_finished() override { return _delegate ? _delegate->is_finished() : true; }
+    Status status() override { return _delegate ? _delegate->status() : uninitialized_status(); }
+    connector::SinkOperatorMemoryManager* op_mem_mgr() const override {
+        return _delegate ? _delegate->op_mem_mgr() : nullptr;
+    }
+
+private:
+    Status uninitialized_status() const {
+        return _status.ok() ? Status::InternalError("Paimon sink is not initialized") : _status;
+    }
+    std::shared_ptr<connector::PaimonChunkSinkContext> _context;
+    int32_t _driver_id;
+    std::unique_ptr<connector::ConnectorSink> _delegate;
+    Status _status;
+};
 
 } // namespace
 
 StatusOr<HdfsScanner*> create_paimon_cpp_scanner() {
-    auto fn = _create_scanner_fn.load(std::memory_order_acquire);
-    if (fn == nullptr) {
-        std::lock_guard<std::mutex> guard(_load_mutex);
-        fn = _create_scanner_fn.load(std::memory_order_acquire);
-        if (fn == nullptr) {
-            // Failures are not cached: an operator can drop the libraries into
-            // be/lib and retry without restarting the BE.
-            RETURN_IF_ERROR(load_shim_locked());
-            fn = _create_scanner_fn.load(std::memory_order_acquire);
-        }
-    }
+    ASSIGN_OR_RETURN(auto fn, load_capability(create_scanner_fn, STARROCKS_PAIMON_CREATE_SCANNER_SYMBOL, true));
     return fn();
+}
+
+std::unique_ptr<connector::ConnectorSink> create_paimon_cpp_chunk_sink(
+        std::shared_ptr<connector::PaimonChunkSinkContext> context, int32_t driver_id) {
+    return std::make_unique<DeferredPaimonSink>(std::move(context), driver_id);
+}
+
+StatusOr<std::vector<int32_t>> calculate_paimon_cpp_bucket_ids(const TPaimonTableSink& sink, const ChunkPtr& chunk,
+                                                               const std::vector<ExprContext*>& output_exprs) {
+    ASSIGN_OR_RETURN(auto fn, load_capability(bucket_ids_fn, STARROCKS_PAIMON_BUCKET_IDS_SYMBOL, false));
+    return fn(sink, chunk, output_exprs);
+}
+
+StatusOr<std::unique_ptr<connector::ConnectorSink>> connector::PaimonChunkSinkProvider::create_sink(int32_t driver_id) {
+    return create_paimon_cpp_chunk_sink(_context, driver_id);
 }
 
 } // namespace starrocks

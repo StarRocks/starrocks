@@ -802,7 +802,7 @@ class StarrocksSQLApiLib(object):
             if not all(getattr(self, key, "") for key in ("oss_bucket", "oss_ak", "oss_sk", "oss_endpoint")):
                 raise SkipTest("Paimon DDL requires OSS settings or paimon_ddl_local_warehouse_root")
             warehouse_root = getattr(self, "paimon_ddl_warehouse_root", "") or (
-                "oss://%s/tmp/paimon_catalog_ddl" % self.oss_bucket)
+                "s3://%s/tmp/paimon_catalog_ddl" % self.oss_bucket)
             properties.update({
                 "paimon.catalog.warehouse": "%s/%s" % (warehouse_root.rstrip("/"), warehouse_id),
                 "aws.s3.access_key": self.oss_ak,

@@ -140,6 +140,14 @@ target_link_libraries(ai_project_operator_test PRIVATE StarRocksPCH)
 set_target_properties(ai_project_operator_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 target_link_libraries(ai_project_operator_test PRIVATE ${TEST_LINK_LIBS} gtest_main)
 
+add_executable(paimon_bucket_operator_test
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    pipeline/paimon_bucket_operator_test.cpp
+)
+target_link_libraries(paimon_bucket_operator_test PRIVATE StarRocksPCH ${TEST_LINK_LIBS} gtest_main)
+set_target_properties(paimon_bucket_operator_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+
 set(AI_PROJECT_PIPELINE_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     ${BE_TEST_JNI_ENV_STUB}

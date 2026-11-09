@@ -312,3 +312,17 @@ The legacy ORC timestamp case checks fractional microseconds and NULLs rather th
 complete timestamp strings: legacy decoding depends on the reader JVM default time
 zone, which is not fixed by the SQL session time zone. Routing assertions still
 require `ORC_LEGACY_TIMESTAMP` and explicit NATIVE rejection.
+
+## Native INSERT tests
+
+`test_paimon_insert_into` creates a temporary filesystem catalog using the same
+isolated warehouse helper as the DDL tests. It writes only beneath the per-case
+UUID directory in `oss_bucket` (or the explicitly configured local warehouse).
+It never writes to the shared `ci_catalog_test_data/paimon/paimon_test.db` fixtures.
+Use an S3-compatible `s3://` warehouse and a same-region internal OSS endpoint
+when running against OSS.
+
+The cases cover append writes, column mapping, static partitions, empty input,
+fixed buckets, primary-key full-row upserts, and nested/VARIANT values. Independent
+catalogs and the JNI reader verify visibility of the committed append and
+primary-key data. Every case has a `CLEANUP` block for the objects it creates.
