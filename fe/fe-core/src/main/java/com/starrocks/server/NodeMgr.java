@@ -832,7 +832,7 @@ public class NodeMgr {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            Frontend frontend = getFeByHost(srcHost);
+            Frontend frontend = getFeByExactOrResolvedHost(srcHost);
             if (frontend == null) {
                 throw new DdlException(String.format("frontend [%s] not found", srcHost));
             }
@@ -857,6 +857,17 @@ public class NodeMgr {
         } finally {
             unlock();
         }
+    }
+
+    // The exact match comes first so that a frontend can still be renamed after its old host stops resolving.
+    private Frontend getFeByExactOrResolvedHost(String host) {
+        for (Frontend fe : frontends.values()) {
+            if (fe.getHost().equals(host)) {
+                return fe;
+            }
+        }
+
+        return getFeByHost(host);
     }
 
     public void dropFrontend(FrontendNodeType role, String host, int port) throws DdlException {

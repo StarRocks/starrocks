@@ -160,10 +160,8 @@ public class AlterSystemStmtAnalyzer implements AstVisitorExtendInterface<Void, 
             if (srcHostIsIP && destHostIsIP) {
                 throw new SemanticException("Can't change ip to ip");
             }
-            // Can't get an ip through the srcHost/destHost, will throw UnknownHostException
-            if (!srcHostIsIP) {
-                InetAddress.getByName(srcHost);
-            }
+            // srcHost is not resolved: it only has to match a registered host, and a host is often renamed
+            // because its old name no longer resolves.
             if (!destHostIsIP) {
                 InetAddress.getByName(destHost);
             }
