@@ -381,10 +381,10 @@ StatusOr<Conversion> make_conversion(const TypeDescriptor& source, const std::sh
                         precision > 9) {
                         return Status::InvalidArgument("Invalid native Paimon timestamp precision");
                     }
-                    const auto unit = precision == 0   ? arrow::TimeUnit::SECOND
-                                      : precision <= 3 ? arrow::TimeUnit::MILLI
-                                      : precision <= 6 ? arrow::TimeUnit::MICRO
-                                                       : arrow::TimeUnit::NANO;
+                    const auto unit = precision == 0 ? arrow::TimeUnit::SECOND
+                                                     : precision <= 3 ? arrow::TimeUnit::MILLI
+                                                                      : precision <= 6 ? arrow::TimeUnit::MICRO
+                                                                                       : arrow::TimeUnit::NANO;
                     if (timestamp.unit() != unit) {
                         return Status::InvalidArgument("Native Paimon timestamp precision and Arrow unit disagree");
                     }
