@@ -1,0 +1,82 @@
+-- name: test_paimon_insert_into_append
+function: create_paimon_ddl_catalog("paimon_write_${uuid0}", "${uuid0}")
+set time_zone = 'UTC';
+set paimon_reader_mode = 'native';
+set pipeline_dop = 4;
+create database paimon_write_${uuid0}.writer_db;
+-- The partition column deliberately precedes a data column.
+create table paimon_write_${uuid0}.writer_db.append_rows (id int not null, p varchar(32), value varchar(64)) partition by (p) properties ('bucket'='-1', 'file.format'='parquet');
+insert into paimon_write_${uuid0}.writer_db.append_rows values (1, 'a/b', 'one'), (2, NULL, NULL);
+insert into paimon_write_${uuid0}.writer_db.append_rows (value, id, p) select 'three', 3, 'a/b';
+insert into paimon_write_${uuid0}.writer_db.append_rows partition(p='static') values (4, 'four');
+insert into paimon_write_${uuid0}.writer_db.append_rows by name select 'five' as value, 'static' as p, 5 as id;
+insert into paimon_write_${uuid0}.writer_db.append_rows (id, p) values (6, 'omitted');
+insert into paimon_write_${uuid0}.writer_db.append_rows partition(p=NULL) values (7, 'null partition');
+insert into paimon_write_${uuid0}.writer_db.append_rows select 0, 'empty', 'unused' where false;
+function: assert_query_error_contains("insert into paimon_write_${uuid0}.writer_db.append_rows values (8, '', 'rejected')", "cannot preserve empty/whitespace-only string partitions")
+[ORDER]select id, p, value from paimon_write_${uuid0}.writer_db.append_rows order by id;
+-- A second catalog and the Java reader must observe the same committed snapshot.
+function: create_paimon_ddl_catalog("paimon_write_reader_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'jni';
+[ORDER]select id, p, value from paimon_write_reader_${uuid0}.writer_db.append_rows order by id;
+function: assert_query_error_contains("insert overwrite paimon_write_${uuid0}.writer_db.append_rows values (7, 'a', 'seven')", "Only support insert overwrite")
+function: assert_query_error_contains("create table paimon_write_${uuid0}.writer_db.deferred_ctas as select 1 as id", "Paimon CREATE TABLE AS SELECT is not supported")
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.deferred_ctas;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.append_rows;
+  drop database if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_write_reader_${paimon_ddl_warehouse_id};
+  drop catalog if exists paimon_write_${paimon_ddl_warehouse_id};
+} END CLEANUP
+
+-- name: test_paimon_insert_into_fixed_buckets
+function: create_paimon_ddl_catalog("paimon_write_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+set pipeline_dop = 4;
+create database paimon_write_${uuid0}.writer_db;
+create table paimon_write_${uuid0}.writer_db.pk_rows (id bigint not null, p varchar(32) not null, value varchar(64)) primary key(id, p) partition by(p) properties ('bucket'='4', 'file.format'='parquet');
+insert into paimon_write_${uuid0}.writer_db.pk_rows values (1, 'a', 'old'), (2, 'b', 'two');
+insert into paimon_write_${uuid0}.writer_db.pk_rows select 1, 'a', 'new';
+insert into paimon_write_${uuid0}.writer_db.pk_rows partition(p='b') values (3, 'three');
+[ORDER]select id, p, value from paimon_write_${uuid0}.writer_db.pk_rows order by id;
+function: assert_paimon_readers("select id, p, value from paimon_write_${uuid0}.writer_db.pk_rows", "pk_rows", "native,starrocks")
+-- Cross chunk boundaries and exercise multiple partition/bucket owners before a second upsert.
+create table paimon_write_${uuid0}.writer_db.pk_bulk (id bigint not null, p int not null, value bigint) primary key(id, p) partition by(p) properties ('bucket'='4', 'file.format'='parquet');
+insert into paimon_write_${uuid0}.writer_db.pk_bulk select generate_series, generate_series % 3, generate_series + 100000 from table(generate_series(1, 8192));
+insert into paimon_write_${uuid0}.writer_db.pk_bulk select id, p, value + 1 from paimon_write_${uuid0}.writer_db.pk_bulk where id % 2 = 0;
+select count(*), count(distinct id), sum(value - id) from paimon_write_${uuid0}.writer_db.pk_bulk;
+create table paimon_write_${uuid0}.writer_db.fixed_append (id bigint, p varchar(32), value varchar(64)) partition by(p) properties ('bucket'='4', 'bucket-key'='id', 'file.format'='parquet');
+insert into paimon_write_${uuid0}.writer_db.fixed_append select id, p, value from paimon_write_${uuid0}.writer_db.pk_rows;
+insert into paimon_write_${uuid0}.writer_db.fixed_append values (1, 'a', 'duplicate');
+[ORDER]select id, p, value from paimon_write_${uuid0}.writer_db.fixed_append order by id, value;
+function: create_paimon_ddl_catalog("paimon_write_reader_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'jni';
+[ORDER]select id, p, value from paimon_write_reader_${uuid0}.writer_db.pk_rows order by id;
+[ORDER]select id, p, value from paimon_write_reader_${uuid0}.writer_db.fixed_append order by id, value;
+select count(*), count(distinct id), sum(value - id) from paimon_write_reader_${uuid0}.writer_db.pk_bulk;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.pk_bulk;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.fixed_append;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.pk_rows;
+  drop database if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_write_reader_${paimon_ddl_warehouse_id};
+  drop catalog if exists paimon_write_${paimon_ddl_warehouse_id};
+} END CLEANUP
+
+-- name: test_paimon_insert_into_nested_types
+function: create_paimon_ddl_catalog("paimon_write_${uuid0}", "${uuid0}")
+set time_zone = 'UTC';
+set paimon_reader_mode = 'native';
+create database paimon_write_${uuid0}.writer_db;
+create table paimon_write_${uuid0}.writer_db.nested_rows (id int, a array<int>, m map<varchar(16), int>, r struct<field_value int>, v variant, t datetime) properties ('bucket'='-1', 'file.format'='parquet');
+insert into paimon_write_${uuid0}.writer_db.nested_rows select 1, [1, NULL, 3], map{'x': 7}, named_struct('field_value', 9), cast(parse_json('{"a":42,"b":false}') as variant), cast('1969-12-31 23:59:59.999999' as datetime);
+insert into paimon_write_${uuid0}.writer_db.nested_rows values (2, NULL, NULL, NULL, NULL, NULL);
+[ORDER]select id, a[1], a[2], a[3], m['x'], r.field_value, cast(variant_query(v, '$.a') as int), cast(variant_query(v, '$.b') as boolean), cast(t as varchar) from paimon_write_${uuid0}.writer_db.nested_rows order by id;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.nested_rows;
+  drop database if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_write_${paimon_ddl_warehouse_id};
+} END CLEANUP

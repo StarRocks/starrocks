@@ -24,7 +24,7 @@ To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluste
 
 ## Usage notes
 
-You can use Paimon catalogs to query data and create or drop Paimon databases and tables. Writing data with INSERT, UPDATE, or DELETE, and creating tables with CREATE TABLE LIKE or CREATE TABLE AS SELECT are not supported.
+You can use Paimon catalogs to query data, create or drop Paimon databases and tables, and write data with INSERT INTO. INSERT OVERWRITE, UPDATE, DELETE, CREATE TABLE LIKE, and CREATE TABLE AS SELECT are not supported.
 
 ## Paimon to StarRocks data types
 
@@ -791,7 +791,7 @@ Alternatively, omit the `PRIMARY KEY (id, dt)` clause and add `"primary-key" = "
 
 - `DISTRIBUTED BY`, `ORDER BY`, `ROLLUP`, generated columns, aggregate columns, and `AUTO_INCREMENT` are not supported.
 - Non-NULL column defaults are not supported.
-- `CREATE TABLE LIKE`, `CREATE TABLE AS SELECT`, and writing data with `INSERT`, `UPDATE`, or `DELETE` are not supported.
+- `CREATE TABLE LIKE`, `CREATE TABLE AS SELECT`, and writing data with `INSERT OVERWRITE`, `UPDATE`, or `DELETE` are not supported.
 
 ### DROP TABLE
 
@@ -827,6 +827,33 @@ After dropping the tables in the database, drop the database:
 ```SQL
 DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
 ```
+
+## Write data to Paimon
+
+Use `INSERT INTO ... VALUES` or `INSERT INTO ... SELECT` to write to a native file-store table in a Paimon catalog. Append-only tables support `bucket = -1` or a positive fixed bucket count. Primary-key tables require a positive fixed bucket count and the `deduplicate` merge engine. Inserting an existing primary key performs a full-row upsert; it is not a partial update.
+
+```sql
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+CREATE TABLE paimon_catalog_fs.ddl_demo.write_demo (
+    id INT NOT NULL,
+    p VARCHAR(32),
+    value VARCHAR(64)
+)
+PARTITION BY (p)
+PROPERTIES ('bucket' = '-1', 'file.format' = 'parquet');
+
+INSERT INTO paimon_catalog_fs.ddl_demo.write_demo VALUES (1, 'a', 'one');
+INSERT INTO paimon_catalog_fs.ddl_demo.write_demo PARTITION (p = 'b')
+SELECT 2, 'two';
+```
+
+An explicit column list and `BY NAME` are supported. For a static partition, omit the partition columns from the input; their position in the native schema does not matter. Omitted nullable columns receive NULL. Required columns must be supplied. If a column has a native Paimon default value, provide its value explicitly: omitting it or using `DEFAULT` is not supported.
+
+Writes require the pipeline engine, Parquet data files, and matching FE/BE versions with the native Paimon writer installed. The writer uses the catalog storage credentials. `paimon_reader_mode` selects a reader and does not change the write implementation. Explicit transactions, partial updates, dynamic primary-key buckets, cross-partition primary-key updates, data evolution, row tracking, global indexes, and external data paths are not supported.
+
+Partition columns support boolean, integer, string, and date types. Empty or whitespace-only string partition values and the reserved default partition name are rejected because the native SDK cannot preserve them distinctly from NULL. Each sink driver defaults to at most 64 active partition/bucket writers and a 256 MiB native/Arrow allocation budget; exceeding a bound fails the statement before publication. The table options `starrocks.paimon.max-active-writers` (1–4096) and `starrocks.paimon.max-writer-memory-bytes` (2 MiB–4 GiB, in bytes) control these bounds. The query memory limit also applies.
+
+Data becomes visible after the FE publishes the native Paimon snapshot. An empty INSERT INTO is a no-op. If the client receives a Paimon commit-outcome-unknown error, reconcile the operation before retrying: the snapshot may already have been published, and retrying an append can duplicate rows. The query profile exposes `PaimonOperationId` and `PaimonPublicationState` for this purpose.
 
 ## View the schema of a Paimon table
 

@@ -145,6 +145,8 @@ public class StatementPlanner {
             SPMPlanner spmPlanner = new SPMPlanner(session);
             stmt = spmPlanner.plan(stmt);
 
+            // Paimon uuid resolution may read storage; freeze it before any FE metadata lock, independent of preparse flags.
+            new QueryAnalyzer(session).resolvePaimonWriteTargetIdentity(stmt);
             plannerMetaLocker = new PlannerMetaLocker(session, stmt);
             // Analyze
             analyzeStatement(stmt, session, plannerMetaLocker);

@@ -97,6 +97,8 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.connector.paimon.PaimonCommitUnknownException;
+import com.starrocks.connector.paimon.PaimonSinkExtra;
 import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpResultSender;
@@ -130,6 +132,7 @@ import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PaimonTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
@@ -391,6 +394,7 @@ public class StmtExecutor {
 
     // Catalog types involved in this query (e.g., "default", "hive", "iceberg")
     private Set<String> catalogTypesInvolved = Collections.emptySet();
+    private PaimonSinkExtra paimonOperation;
 
     private final CompletableFuture<ArrowFlightSqlResultDescriptor> deploymentFinished;
 
@@ -452,6 +456,10 @@ public class StmtExecutor {
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Query");
         summaryProfile.addInfoString(ProfileManager.QUERY_STATE, context.getState().toProfileString());
+        if (paimonOperation != null) {
+            summaryProfile.addInfoString("PaimonOperationId", paimonOperation.getOperationId());
+            summaryProfile.addInfoString("PaimonPublicationState", paimonOperation.getPublicationState().name());
+        }
         summaryProfile.addInfoString(ProfileKeyDictionary.STARROCKS_VERSION,
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
@@ -1388,7 +1396,8 @@ public class StmtExecutor {
         } catch (Throwable e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             LOG.warn("execute Exception, sql: {}", SqlCredentialRedactor.redact(sql), e);
-            context.getState().setError(LogUtil.getUnwoundExceptionMessage(e));
+            context.getState().setError(e instanceof PaimonCommitUnknownException
+                    ? e.getMessage() : LogUtil.getUnwoundExceptionMessage(e));
             context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
@@ -3655,6 +3664,16 @@ public class StmtExecutor {
             Preconditions.checkState(targetTable instanceof OlapTable,
                     "explain analyze only supports insert into olap native table");
         }
+        if (targetTable.isPaimonTable()) {
+            if (!(stmt instanceof InsertStmt) || context.getTxnId() != 0) {
+                throw new SemanticException("Paimon writes require an autocommit INSERT statement");
+            }
+            if (execPlan.getFragments().isEmpty()
+                    || !(execPlan.getFragments().get(0).getSink() instanceof PaimonTableSink sink)) {
+                throw new StarRocksConnectorException("Paimon write is missing its native sink context");
+            }
+            paimonOperation = sink.getPaimonSinkExtra();
+        }
 
         if (dmlType == DmlType.INSERT_OVERWRITE && !((InsertStmt) parsedStmt).hasOverwriteJob() &&
                 !(targetTable.isIcebergTable() || targetTable.isHiveTable())) {
@@ -3741,8 +3760,8 @@ public class StmtExecutor {
 
             context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
             InsertLoadJob loadJob = null;
-            if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
-                    targetTable.isBlackHoleTable())) {
+            if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isPaimonTable() ||
+                    targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable())) {
                 InsertLoadTxnCallback insertLoadTxnCallback =
                         InsertLoadTxnCallbackFactory.of(context, database.getId(), targetTable);
                 // insert, update and delete job
@@ -3856,6 +3875,13 @@ public class StmtExecutor {
                             TransactionCommitFailedException.FILTER_DATA_ERR + ", tracking sql = " + trackingSql,
                             coord == null ? Collections.emptyList() : coord.getCommitInfos(),
                             coord == null ? Collections.emptyList() : coord.getFailInfos());
+                } else if (targetTable.isPaimonTable()) {
+                    try {
+                        abortPaimonSink(catalogName, dbName, tableName);
+                    } catch (Exception abortException) {
+                        // Retain the quality failure as the user-visible error if cleanup cannot be proven safe.
+                        LOG.warn("Cannot abort filtered Paimon operation", abortException);
+                    }
                 } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() ||
                         targetTable.isIcebergTable() ||
                         targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
@@ -3869,11 +3895,13 @@ public class StmtExecutor {
                         TransactionCommitFailedException.FILTER_DATA_ERR + ", txn_id = " + transactionId +
                                 ", tracking sql = " + trackingSql);
                 insertError = true;
+
                 return;
             }
             // An Iceberg rewrite writes no row when every row of its files is deleted; it still has to commit
             // to drop those files.
-            if (loadedRows == 0 && filteredRows == 0 && !(stmt instanceof IcebergRewriteStmt)
+            if (loadedRows == 0 && filteredRows == 0 && !targetTable.isPaimonTable()
+                    && !(stmt instanceof IcebergRewriteStmt)
                     && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
                     || stmt instanceof UpdateStmt || stmt instanceof MergeIntoStmt)) {
                 // when the target table is not ExternalOlapTable or OlapTable
@@ -3950,6 +3978,23 @@ public class StmtExecutor {
                 }
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_ICEBERG_SINK_LABEL";
+            } else if (targetTable.isPaimonTable()) {
+                if (isCancelled() || context.isStatementCancelled()) {
+                    throw new StarRocksConnectorException("Paimon operation was cancelled before publication");
+                }
+                if (!(coord instanceof DefaultCoordinator coordinator)) {
+                    throw new StarRocksConnectorException("Paimon producer completeness cannot be verified");
+                }
+                coordinator.getQueryRuntimeProfile().validatePaimonSinkCommitInfos(loadedRows);
+                // Validate even empty writes; the connector confirms an empty append as a no-op.
+                context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName,
+                        coord.getSinkCommitInfos(), null, paimonOperation, context);
+                if (paimonOperation.getPublicationState() != PaimonSinkExtra.PublicationState.COMMITTED) {
+                    throw new StarRocksConnectorException("Paimon publication was not confirmed");
+                }
+                txnStatus = TransactionStatus.VISIBLE;
+                label = paimonOperation.getOperationId();
+                MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
             } else if (targetTable.isHiveTable()) {
                 List<TSinkCommitInfo> commitInfos = coord.getSinkCommitInfos();
                 HiveTableSink hiveTableSink = (HiveTableSink) execPlan.getFragments().get(0).getSink();
@@ -4074,9 +4119,12 @@ public class StmtExecutor {
                             errMsg,
                             coord == null ? Collections.emptyList() : coord.getCommitInfos(),
                             coord == null ? Collections.emptyList() : coord.getFailInfos());
+                } else if (targetTable.isPaimonTable()) {
+                    abortPaimonSink(catalogName, dbName, tableName);
                 } else if (targetTable.isExternalTableWithFileSystem()) {
                     GlobalStateMgr.getCurrentState().getMetadataMgr().abortSink(
-                            catalogName, dbName, tableName, coord.getSinkCommitInfos());
+                            catalogName, dbName, tableName,
+                            coord == null ? Collections.emptyList() : coord.getSinkCommitInfos());
                     recordExternalSinkFailure(targetTable, dmlType, t);
                 } else if (targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
                     // INSERT INTO FILES(...) (table function) and black hole tables begin no FE txn
@@ -4092,6 +4140,7 @@ public class StmtExecutor {
                 // user only concern abort how txn failed.
                 LOG.warn("errors when abort txn", abortTxnException);
             }
+
 
             // if not using old load usage pattern, error will be returned directly to user
             StringBuilder sb = new StringBuilder(errMsg);
@@ -4111,6 +4160,9 @@ public class StmtExecutor {
                 }
             } catch (Exception abortTxnException) {
                 LOG.warn("errors when cancel insert load job {}", jobId);
+            }
+            if (targetTable.isPaimonTable() && t instanceof StarRocksConnectorException connectorException) {
+                throw connectorException;
             }
             throw new StarRocksException(t.getMessage(), t);
         } finally {
@@ -4182,6 +4234,15 @@ public class StmtExecutor {
         }
         // filterRows may be overflow when to convert it into int, use `saturatedCast` to avoid overflow
         context.getState().setOk(loadedRows, Ints.saturatedCast(filteredRows), sb.toString());
+    }
+
+    private void abortPaimonSink(String catalogName, String dbName, String tableName) {
+        // Publication may already be durable. Never abort files on an unknown outcome, even when the
+        // client saw cancellation/failure. The contextual connector repeats this guard under its lock.
+        if (paimonOperation != null && paimonOperation.canAbort()) {
+            context.getGlobalStateMgr().getMetadataMgr().abortSink(catalogName, dbName, tableName,
+                    coord == null ? Collections.emptyList() : coord.getSinkCommitInfos(), paimonOperation, context);
+        }
     }
 
     private boolean shouldStopPublishWaitAfterCommit() {

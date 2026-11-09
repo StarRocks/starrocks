@@ -372,6 +372,11 @@ public interface ConnectorMetadata {
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
+    default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos,
+                           Object extra, ConnectContext context) {
+        abortSink(dbName, table, commitInfos);
+    }
+
     default ShowResultSet alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         throw new StarRocksConnectorException("This connector doesn't support alter table");
     }
