@@ -211,7 +211,8 @@ Status validate_contract(const TPaimonTableSink& sink) {
         sink.commit_user.empty() || !sink.__isset.overwrite_mode) {
         return Status::InvalidArgument("Paimon sink is missing its operation/commit identity");
     }
-    if (sink.overwrite_mode != "APPEND") {
+    if (sink.overwrite_mode != "APPEND" && sink.overwrite_mode != "FULL" && sink.overwrite_mode != "STATIC" &&
+        sink.overwrite_mode != "DYNAMIC") {
         return Status::InvalidArgument("Unknown Paimon overwrite mode");
     }
     if (sink.bucket_count == 0 || sink.bucket_count < -1 ||
@@ -884,7 +885,8 @@ public:
         builder.WithMemoryPool(native_pool)
                 .WithFileSystem(native_fs)
                 .WithExecutor(native_executor)
-                .WithIgnorePreviousFiles(context->sink.primary_key_columns.empty())
+                .WithIgnorePreviousFiles(context->sink.overwrite_mode != "APPEND" ||
+                                         context->sink.primary_key_columns.empty())
                 .WithStreamingMode(false)
                 .SetWriteBufferSpillThreadNumber(0)
                 .SetOptions(options);

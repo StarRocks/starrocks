@@ -25,7 +25,7 @@ To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluste
 
 ## Usage notes
 
-You can use Paimon catalogs to query data, create or drop Paimon databases and tables, and write data with INSERT INTO. INSERT OVERWRITE, UPDATE, DELETE, CREATE TABLE LIKE, and CREATE TABLE AS SELECT are not supported.
+You can use Paimon catalogs to query data, create or drop Paimon databases and tables, and write data with INSERT INTO or INSERT OVERWRITE. UPDATE, DELETE, CREATE TABLE LIKE, and CREATE TABLE AS SELECT are not supported.
 
 ## Paimon to StarRocks data types
 
@@ -792,7 +792,7 @@ Alternatively, omit the `PRIMARY KEY (id, dt)` clause and add `"primary-key" = "
 
 - `DISTRIBUTED BY`, `ORDER BY`, `ROLLUP`, generated columns, aggregate columns, and `AUTO_INCREMENT` are not supported.
 - Non-NULL column defaults are not supported.
-- `CREATE TABLE LIKE`, `CREATE TABLE AS SELECT`, and writing data with `INSERT OVERWRITE`, `UPDATE`, or `DELETE` are not supported.
+- `CREATE TABLE LIKE`, `CREATE TABLE AS SELECT`, and writing data with `UPDATE` or `DELETE` are not supported.
 
 ### DROP TABLE
 
@@ -849,6 +849,8 @@ SELECT 2, 'two';
 ```
 
 An explicit column list and `BY NAME` are supported. For a static partition, omit the partition columns from the input; their position in the native schema does not matter. Omitted nullable columns receive NULL. Required columns must be supplied. If a column has a native Paimon default value, provide its value explicitly: omitting it or using `DEFAULT` is not supported.
+
+`INSERT OVERWRITE` replaces the entire table by default. An explicit `PARTITION` replaces only that partition. With `dynamic_overwrite = true`, an overwrite without an explicit partition replaces only partitions present in the input. An empty full or static overwrite clears its target; an empty dynamic overwrite is a no-op.
 
 Writes require Parquet data files, and matching FE/BE versions with the native Paimon writer installed. The writer uses the catalog storage credentials. `paimon_reader_mode` selects a reader and does not change the write implementation. Explicit transactions, partial updates, dynamic primary-key buckets, cross-partition primary-key updates, data evolution, row tracking, global indexes, and external data paths are not supported.
 

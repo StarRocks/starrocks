@@ -25,7 +25,7 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 
 ## 使用注意事项
 
-Paimon catalog 支持查询数据、创建和删除 Paimon 数据库与表，以及通过 INSERT INTO 写入数据。不支持 INSERT OVERWRITE、UPDATE、DELETE、CREATE TABLE LIKE 和 CREATE TABLE AS SELECT。
+Paimon catalog 支持查询数据、创建和删除 Paimon 数据库与表，以及通过 INSERT INTO 和 INSERT OVERWRITE 写入数据。不支持 UPDATE、DELETE、CREATE TABLE LIKE 和 CREATE TABLE AS SELECT。
 
 ## Paimon to StarRocks data types
 
@@ -792,7 +792,7 @@ PROPERTIES (
 
 - 不支持 `DISTRIBUTED BY`、`ORDER BY`、`ROLLUP`、生成列、聚合列和 `AUTO_INCREMENT`。
 - 不支持非 NULL 的列默认值。
-- 不支持 `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`，也不支持通过 `INSERT OVERWRITE`、`UPDATE`、`DELETE` 写入数据。
+- 不支持 `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`，也不支持通过 `UPDATE`、`DELETE` 写入数据。
 
 ### DROP TABLE
 
@@ -849,6 +849,8 @@ SELECT 2, 'two';
 ```
 
 支持显式列列表和 `BY NAME`。指定静态分区时，输入中不包含分区列，分区列在原生 schema 中的位置不受限制。省略的可空列填充 NULL，必填列必须提供值。对于配置了 Paimon 原生默认值的列，需要显式提供值，暂不支持省略该列或使用 `DEFAULT`。
+
+`INSERT OVERWRITE` 默认覆盖整张表。指定 `PARTITION` 时仅覆盖该分区。设置 `dynamic_overwrite = true` 且未指定分区时，仅覆盖输入数据涉及的分区。输入为空时，全表或静态分区覆盖会清空目标；动态分区覆盖不会修改数据。
 
 写入要求使用 Parquet 数据文件，并且 FE/BE 版本一致、BE 安装原生 Paimon writer。写入使用 catalog 的存储凭据。`paimon_reader_mode` 只选择读取方式，不改变写入实现。暂不支持显式事务、部分列更新、主键表动态分桶、跨分区主键更新、data evolution、row tracking、全局索引和外部数据路径。
 

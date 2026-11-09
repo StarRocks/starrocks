@@ -66,9 +66,11 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import static com.starrocks.connector.paimon.PaimonSinkExtra.PublicationState.ABORTED;
@@ -302,7 +304,7 @@ public class PaimonWriteMetadataTest {
         seed(row(1, "one", 10), row(2, "two", 20));
         long before = latestSnapshot().id();
         PaimonTable cached = table();
-        for (String mode : List.of("APPEND")) {
+        for (String mode : List.of("APPEND", "DYNAMIC")) {
             PaimonSinkExtra operation = operation(mode, Map.of(), "empty_" + mode);
             List<TSinkCommitInfo> reports = List.of(report(operation, PRODUCER, List.of()));
             completeProducerReports(operation, reports);
@@ -319,8 +321,65 @@ public class PaimonWriteMetadataTest {
         }
     }
 
+    @Test
+    public void testEmptyFullOverwritePublishesFreshSnapshotAndClearsAllPartitions() throws Exception {
+        createTarget();
+        seed(row(1, "one", 10), row(2, "two", 20));
+        long before = latestSnapshot().id();
+        PaimonTable cached = table();
+        assertEquals(Set.of("p=one", "p=two"), new HashSet<>(metadata.listPartitionNames(DB, TABLE, null)));
+        PaimonSinkExtra operation = operation("FULL", Map.of(), "empty_full");
+        List<TSinkCommitInfo> reports = List.of(report(operation, PRODUCER, List.of()));
+        completeProducerReports(operation, reports);
+        metadata.finishSink(DB, TABLE, reports, null, operation, null);
+        assertPublishedAfter(operation, before);
+        assertTrue(freshRows().isEmpty());
+        assertNotSame(cached, table());
+        assertTrue(metadata.listPartitionNames(DB, TABLE, null).isEmpty());
+        long committed = latestSnapshot().id();
+        metadata.finishSink(DB, TABLE, List.of(), null, operation, null);
+        metadata.abortSink(DB, TABLE, null, operation, null);
+        assertEquals(committed, latestSnapshot().id());
+        assertEquals(COMMITTED, operation.getPublicationState());
+    }
 
+    @Test
+    public void testEmptyStaticOverwriteRemovesOnlyItsExplicitPartition() throws Exception {
+        createTarget();
+        seed(row(1, "one", 10), row(2, "two", 20), row(3, "one", 30));
+        long before = latestSnapshot().id();
+        assertEquals(2, metadata.listPartitionNames(DB, TABLE, null).size());
+        PaimonSinkExtra operation = operation("STATIC", Map.of("p", "one"), "empty_static");
+        List<TSinkCommitInfo> reports = List.of(report(operation, PRODUCER, List.of()));
+        completeProducerReports(operation, reports);
+        metadata.finishSink(DB, TABLE, reports, null, operation, null);
+        assertPublishedAfter(operation, before);
+        assertEquals(List.of("2|two|20"), freshRows());
+        assertEquals(List.of("p=two"), metadata.listPartitionNames(DB, TABLE, null));
+    }
 
+    @Test
+    public void testDynamicOverwriteConsumesNativeProtocolReportsFromJavaDataFixturesExactlyOnce() throws Exception {
+        createTarget();
+        seed(row(1, "one", 10), row(2, "two", 20), row(3, "one", 30));
+        long before = latestSnapshot().id();
+        PaimonTable cached = table();
+        PaimonSinkExtra operation = operation("DYNAMIC", Map.of(), "dynamic_fixture");
+        List<CommitMessage> prepared = prepare(row(4, "one", 40), row(5, "one", 50));
+        TSinkCommitInfo producer = report(operation, PRODUCER, prepared);
+        assertEquals(12, producer.getPaimon_commit_info().getSerializer_version());
+        assertEquals(prepared.size(), ByteBuffer.wrap(producer.getPaimon_commit_info().getCommit_messages()).getInt());
+        assertEquals(prepared.size(), PaimonCommitCodec.collect(List.of(producer, producer.deepCopy()), operation)
+                .validateOwnership(nativeTable()).size());
+        completeProducerReports(operation, List.of(producer));
+        metadata.finishSink(DB, TABLE, List.of(producer, producer.deepCopy()), null, operation, null);
+        assertPublishedAfter(operation, before);
+        assertEquals(List.of("2|two|20", "4|one|40", "5|one|50"), freshRows());
+        assertNotSame(cached, table());
+        long committed = latestSnapshot().id();
+        metadata.finishSink(DB, TABLE, List.of(producer), null, operation, null);
+        assertEquals(committed, latestSnapshot().id());
+    }
 
     @Test
     public void testAbortKnownUnpublishedFilesPreservesPreviouslyCommittedData() throws Exception {

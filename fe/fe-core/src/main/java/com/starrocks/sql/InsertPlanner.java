@@ -709,7 +709,7 @@ public class InsertPlanner {
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
             } else if (targetTable instanceof PaimonTable paimonTable) {
                 try {
-                    PaimonSinkExtra extra = PaimonSinkExtra.from(paimonTable, "APPEND",
+                    PaimonSinkExtra extra = PaimonSinkExtra.from(paimonTable, paimonOverwriteMode(insertStmt),
                             PaimonUtils.getStaticPartitionValues(insertStmt, paimonTable),
                             PaimonUtils.getWriteOperationId(session), session.getSessionVariable().getTimeZone());
                     dataSink = new PaimonTableSink(paimonTable, tupleDesc, extra);
@@ -1387,6 +1387,16 @@ public class InsertPlanner {
         }
         Preconditions.checkState(dataColumnIndex == dataColumns.size(), "Paimon static partition output mismatch");
         return root.withNewRoot(new LogicalProjectOperator(projection));
+    }
+
+    private static String paimonOverwriteMode(InsertStmt insertStmt) {
+        if (!insertStmt.isOverwrite()) {
+            return "APPEND";
+        }
+        if (insertStmt.isStaticKeyPartitionInsert()) {
+            return "STATIC";
+        }
+        return insertStmt.isDynamicOverwrite() ? "DYNAMIC" : "FULL";
     }
 
     private OptExprBuilder fillKeyPartitionsColumn(ColumnRefFactory columnRefFactory,

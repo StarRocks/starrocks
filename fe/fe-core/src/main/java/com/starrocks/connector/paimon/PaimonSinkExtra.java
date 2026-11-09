@@ -92,12 +92,15 @@ public final class PaimonSinkExtra {
         if (operationId == null || !operationId.matches("[A-Za-z0-9_-]{1,128}")) {
             throw new StarRocksConnectorException("Invalid Paimon write operation identity");
         }
-        if (!"APPEND".equals(mode)) {
+        if (!List.of("APPEND", "FULL", "STATIC", "DYNAMIC").contains(mode)) {
             throw new StarRocksConnectorException("Unsupported Paimon overwrite mode");
         }
         Map<String, String> partition = staticPartition == null ? Map.of() : staticPartition;
         if (!nativeTable.partitionKeys().containsAll(partition.keySet())) {
             throw new StarRocksConnectorException("Paimon static partition contains an unknown column");
+        }
+        if (mode.equals("STATIC") && partition.isEmpty()) {
+            throw new StarRocksConnectorException("Paimon static overwrite requires a partition target");
         }
         return new PaimonSinkExtra(nativeTable, table.getNativeWriteIdentity(), mode, partition, operationId, timeZone);
     }

@@ -209,6 +209,20 @@ public class PaimonInsertPlanTest extends PlanTestBase {
 
 
     @Test
+    public void testOverwriteModesAndEmptyStaticInput() throws Exception {
+        Assertions.assertEquals("FULL", plan("insert overwrite " + target("unpartitioned")
+                + " select 1, 'a' where false").sink().getPaimonSinkExtra().getOverwriteMode());
+        Assertions.assertEquals("STATIC", plan("insert overwrite " + target("target")
+                + " partition(p='2026-10-29') select 1, 'a' where false")
+                .sink().getPaimonSinkExtra().getOverwriteMode());
+        connectContext.getSessionVariable().setDynamicOverwrite(true);
+        Assertions.assertEquals("DYNAMIC", plan("insert overwrite " + target("target")
+                + " select cast('2026-10-29' as date), 1, 'a'").sink().getPaimonSinkExtra().getOverwriteMode());
+        Assertions.assertEquals("FULL", plan("insert overwrite " + target("unpartitioned")
+                + " values(1, 'a')").sink().getPaimonSinkExtra().getOverwriteMode());
+    }
+
+    @Test
     public void testFixedBucketsKeepParallelNativeOwnerRouting() throws Exception {
         Planned fixed = plan("insert into " + target("fixed")
                 + " select cast('2026-10-29' as date), v1, cast(v2 as varchar) from t0 limit 5");
@@ -260,8 +274,6 @@ public class PaimonInsertPlanTest extends PlanTestBase {
 
     @Test
     public void testCapabilitiesAndSchemaFailuresAreSemanticErrors() {
-        Assertions.assertThrows(com.starrocks.sql.common.UnsupportedException.class,
-                () -> plan("insert overwrite " + target("unpartitioned") + " values (1, 'a')"));
         assertAnalysisError("insert into " + target("bad_format") + " values (1)", "Parquet");
         assertAnalysisError("insert into " + target("target") + " (value) values ('a')", "Paimon column 'id'");
         assertAnalysisError("insert into " + target("target") + " partition(unknown='x') values (1, 'a')",

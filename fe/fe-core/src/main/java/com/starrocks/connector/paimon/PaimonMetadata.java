@@ -286,7 +286,8 @@ public class PaimonMetadata implements ConnectorMetadata {
             Identifier identifier = new Identifier(dbName, tableName);
             FileStoreTable table = loadWriteTarget(identifier, operation);
             List<CommitMessage> messages = collected.validateOwnership(table);
-            if (messages.isEmpty() && operation.getOverwriteMode().equals("APPEND")) {
+            if (messages.isEmpty() && (operation.getOverwriteMode().equals("APPEND")
+                    || operation.getOverwriteMode().equals("DYNAMIC"))) {
                 operation.transition(PaimonSinkExtra.PublicationState.WRITING,
                         PaimonSinkExtra.PublicationState.PREPARED);
                 operation.transition(PaimonSinkExtra.PublicationState.PREPARED,
@@ -295,9 +296,15 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
             operation.transition(PaimonSinkExtra.PublicationState.WRITING,
                     PaimonSinkExtra.PublicationState.PREPARED);
-            try (InnerTableCommit commit = table.newCommit(operation.getCommitUser());
+            // Paimon's default dynamic-partition-overwrite ignores an explicit static
+            // target and treats empty input as a no-op. The selected SR mode supplies
+            // the exact predicate itself, including an empty FULL/STATIC overwrite.
+            FileStoreTable commitTable = operation.isOverwrite()
+                    ? table.copy(Map.of(CoreOptions.DYNAMIC_PARTITION_OVERWRITE.key(), "false")) : table;
+            try (InnerTableCommit commit = commitTable.newCommit(operation.getCommitUser());
                     Timer ignored = Tracers.watchScope(EXTERNAL, "PaimonSinkCommit")) {
                 // Configure completely before publication. A failure in this phase remains abortable.
+                configureOverwrite(commit, operation, messages);
                 commit.ignoreEmptyCommit(false);
                 if (context != null && context.isStatementCancelled()) {
                     throw new StarRocksConnectorException("Paimon operation was cancelled before publication");
@@ -361,6 +368,26 @@ public class PaimonMetadata implements ConnectorMetadata {
             return fileStoreTable;
         } catch (Catalog.TableNotExistException e) {
             throw new StarRocksConnectorException("Paimon write target no longer exists", e);
+        }
+    }
+
+    private static void configureOverwrite(InnerTableCommit commit, PaimonSinkExtra operation,
+                                           List<CommitMessage> messages) {
+        switch (operation.getOverwriteMode()) {
+            case "APPEND":
+                return;
+            case "FULL":
+                commit.withOverwrite(Collections.emptyMap());
+                return;
+            case "STATIC":
+                commit.withOverwrite(operation.getStaticPartition());
+                return;
+            case "DYNAMIC":
+                commit.withOverwriteStaticPartitions(messages.stream().map(CommitMessage::partition)
+                        .distinct().collect(Collectors.toList()));
+                return;
+            default:
+                throw new StarRocksConnectorException("Unsupported Paimon overwrite operation");
         }
     }
 

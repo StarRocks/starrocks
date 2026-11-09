@@ -170,6 +170,23 @@ TEST_F(PaimonChunkSinkTest, EmptyDriverReportsVersionedTerminalProducerAndNoSnap
     EXPECT_EQ(1, state.sink_commit_infos().size());
 }
 
+TEST_F(PaimonChunkSinkTest, OverwriteModesPrepareNativeFiles) {
+    for (const auto* mode : {"FULL", "STATIC", "DYNAMIC"}) {
+        auto ctx = context(false, true);
+        ctx->sink.__set_overwrite_mode(mode);
+        connector::PaimonChunkSink sink(ctx, 0);
+        ASSERT_OK(sink.init(nullptr, &profile, &manager));
+        auto rows = chunk({1});
+        auto partition = BinaryColumn::create();
+        partition->append(Slice("p"));
+        rows->append_column(std::move(partition), 1);
+        ASSERT_OK(sink.add(rows));
+        ASSERT_OK(sink.finish());
+        ASSERT_TRUE(await(sink));
+        ASSERT_OK(sink.status());
+    }
+}
+
 TEST_F(PaimonChunkSinkTest, FullRowsGroupedByActualPartitionAndPreparedFilesSurviveLateCancellation) {
     auto ctx = context(false, true);
     connector::PaimonChunkSink sink(ctx, 0);
