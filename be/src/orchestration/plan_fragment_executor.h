@@ -59,6 +59,7 @@ class QueryStatistics;
 class RuntimeProfile;
 class RuntimeState;
 class StreamLoadContext;
+class MessageBodySink;
 class TExecPlanFragmentParams;
 class TPlanFragment;
 class TPlanFragmentExecParams;
@@ -222,6 +223,9 @@ private:
 
     std::vector<StreamLoadContext*> _stream_load_contexts;
     bool _channel_stream_load = false;
+
+    // Populated in prepare; immutable afterwards so cancel and close can both notify readers.
+    std::vector<std::shared_ptr<MessageBodySink>> _stream_load_sinks;
 
     ObjectPool* obj_pool();
 
