@@ -58,7 +58,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
-import com.starrocks.sql.optimizer.transformer.TabletClause;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
@@ -66,7 +65,6 @@ import com.starrocks.type.IntegerType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -304,45 +302,6 @@ public class DeletePlanner {
     }
 
     /**
-<<<<<<< HEAD
-=======
-     * The partitions the sink of a DELETE on {@code table} writes to: those of the tablets the DELETE names, or else
-     * the partitions it names, or else all of them. A DELETE that names tablets or partitions reads its keys from them
-     * only, and the sink sends each key back to the partition it was read from, because the partition columns of a
-     * primary key table are key columns. The sink describes the tablets of every partition it is given, so each
-     * partition is given once.
-     */
-    private static List<Long> sinkPartitionIds(DeleteStmt deleteStatement, OlapTable table) {
-        List<Long> partitionIds = Lists.newArrayList();
-        if (!deleteStatement.getTabletIds().isEmpty()) {
-            Collection<Partition> tabletPartitions = TabletClause.resolve(table, deleteStatement.getPartitionNames(),
-                    deleteStatement.getTabletIds()).values();
-            for (Partition partition : tabletPartitions) {
-                if (!partitionIds.contains(partition.getId())) {
-                    partitionIds.add(partition.getId());
-                }
-            }
-            return partitionIds;
-        }
-        if (deleteStatement.getPartitionNames() == null) {
-            return table.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
-        }
-        for (String name : deleteStatement.getPartitionNamesList()) {
-            Partition partition = table.getPartition(name);
-            if (partition == null) {
-                // Analysis found it, but planning runs off a copy of the table, which may be taken after the
-                // partition is dropped.
-                throw new SemanticException("Unknown partition '%s' in table '%s'", name, table.getName());
-            }
-            if (!partitionIds.contains(partition.getId())) {
-                partitionIds.add(partition.getId());
-            }
-        }
-        return partitionIds;
-    }
-
-    /**
->>>>>>> 05eeef58a95... [BugFix][RB-1242] Read nothing from a named tablet whose partition is pruned instead of failing (#68650)
      * Sets up Iceberg delete sink for delete operations
      */
     private void setupIcebergDeleteSink(ExecPlan execPlan, List<String> colNames,

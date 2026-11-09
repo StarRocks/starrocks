@@ -179,7 +179,6 @@ public class DeleteAnalyzer {
                 + "(Disable this notice with FE config enable_non_primary_key_delete_warning=false.)";
     }
 
-<<<<<<< HEAD
     private static void analyzeNonPrimaryKey(DeleteStmt deleteStatement) {
         PartitionRef partitionNames = deleteStatement.getPartitionNames();
         if (partitionNames != null) {
@@ -194,32 +193,6 @@ public class DeleteAnalyzer {
             if (names.stream().anyMatch(entity -> Strings.isNullOrEmpty(entity))) {
                 throw new SemanticException("there are empty partition name", partitionNames.getPos());
             }
-=======
-    // A DELETE on an OLAP table, with a primary key or not, deletes only from the partitions its PARTITION clause names.
-    // It takes them by name: not temporary partitions, and not partitions given by the values of their columns, which
-    // parse into no names at all.
-    private static void analyzePartitionNames(PartitionRef partitionNames) {
-        if (partitionNames == null) {
-            return;
-        }
-        if (partitionNames.isTemp()) {
-            throw new SemanticException("Do not support deleting temp partitions", partitionNames.getPos());
-        }
-        List<String> names = partitionNames.getPartitionNames();
-        if (names.isEmpty()) {
-            throw new SemanticException("No partition specifed in partition lists", partitionNames.getPos());
-        }
-        if (names.stream().anyMatch(Strings::isNullOrEmpty)) {
-            throw new SemanticException("there are empty partition name", partitionNames.getPos());
-        }
-    }
-
-    private static void analyzeNonPrimaryKey(DeleteStmt deleteStatement) {
-        analyzePartitionNames(deleteStatement.getPartitionNames());
-
-        if (!deleteStatement.getTabletIds().isEmpty()) {
-            throw new SemanticException(TABLET_CLAUSE_NOT_SUPPORTED);
->>>>>>> 05eeef58a95... [BugFix][RB-1242] Read nothing from a named tablet whose partition is pruned instead of failing (#68650)
         }
 
         if (deleteStatement.getUsingRelations() != null) {
@@ -352,15 +325,10 @@ public class DeleteAnalyzer {
         if (deleteStatement.getWherePredicate() == null) {
             throw new SemanticException("Delete must specify where clause to prevent full table delete");
         }
-<<<<<<< HEAD
         if (deleteStatement.getPartitionNames() != null) {
             throw new SemanticException("Delete for primary key table do not support specifying partitions",
                     deleteStatement.getPartitionNames().getPos());
         }
-=======
-        PartitionRef partitionNames = deleteStatement.getPartitionNames();
-        analyzePartitionNames(partitionNames);
->>>>>>> 05eeef58a95... [BugFix][RB-1242] Read nothing from a named tablet whose partition is pruned instead of failing (#68650)
 
         SelectList selectList = new SelectList();
         for (Column col : table.getBaseSchema()) {
@@ -378,15 +346,7 @@ public class DeleteAnalyzer {
             throw new SemanticException("analyze delete failed", e);
         }
 
-<<<<<<< HEAD
         Relation relation = new TableRelation(tableName);
-=======
-        // The keys to delete are read from the named partitions and tablets only. PARTITION and TABLET limit just
-        // this table: USING and subqueries read the tables they name, this one included, in full unless they name
-        // partitions or tablets themselves.
-        Relation relation = new TableRelation(tableName, partitionNames, deleteStatement.getTabletIds(),
-                Lists.newArrayList(), tableName.getPos());
->>>>>>> 05eeef58a95... [BugFix][RB-1242] Read nothing from a named tablet whose partition is pruned instead of failing (#68650)
         if (deleteStatement.getUsingRelations() != null) {
             for (Relation r : deleteStatement.getUsingRelations()) {
                 relation = new JoinRelation(null, relation, r, null, false);

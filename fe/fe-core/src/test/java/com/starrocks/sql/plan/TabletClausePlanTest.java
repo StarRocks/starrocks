@@ -24,7 +24,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.planner.OlapScanNode;
-import com.starrocks.planner.OlapTableSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -51,7 +50,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The TABLET clause of a table reference on an OLAP table, which SELECT and DELETE share. Each tablet the clause names
+ * The TABLET clause of a table reference on an OLAP table. Each tablet the clause names
  * must be a tablet of the partitions the reference reads, or the statement fails. A named tablet whose partition
  * pruning removes, because the WHERE clause rules the partition out or because the partition holds no data, is not
  * read and raises no error. The cases run in a shared-nothing cluster here, and in a shared-data one in a subclass.
@@ -74,9 +73,8 @@ public class TabletClausePlanTest {
 
     protected static ConnectContext connectContext;
     protected static StarRocksAssert starRocksAssert;
-    // The duplicate key tables a SELECT reads and the primary key tables a DELETE deletes from, partitioned as above.
+    // The duplicate key tables a SELECT reads, partitioned as above.
     protected static final List<String> SELECT_TABLES = new ArrayList<>();
-    protected static final List<String> DELETE_TABLES = new ArrayList<>();
     private static boolean savedRunningUnitTest;
 
     @BeforeAll
@@ -97,7 +95,6 @@ public class TabletClausePlanTest {
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB).useDatabase(DB);
         SELECT_TABLES.clear();
-        DELETE_TABLES.clear();
     }
 
     protected static void createTables() throws Exception {
@@ -128,7 +125,6 @@ public class TabletClausePlanTest {
             markLoaded(table(name).getPartition("p2"));
         }
         SELECT_TABLES.add(duplicateKeyTable);
-        DELETE_TABLES.add(primaryKeyTable);
     }
 
     protected static void useProductionPruning() {
@@ -157,40 +153,20 @@ public class TabletClausePlanTest {
             cases.add(reads(select + " TABLET (" + p3 + ")", t, List.of()));
             cases.add(reads(select + " TABLET (" + p3 + ") WHERE dt >= '2025-03-01'", t, List.of()));
         }
-        for (String t : DELETE_TABLES) {
-            long p1 = tabletOf(t, "p1");
-            long p2 = tabletOf(t, "p2");
-            long p3 = tabletOf(t, "p3");
-            String delete = "DELETE FROM " + t;
-            cases.add(deletes(delete + " TABLET (" + p1 + ") WHERE v > 0", t, List.of(p1), List.of("p1")));
-            cases.add(deletes(delete + " TABLET (" + p2 + ") WHERE dt < '2025-02-01'", t, List.of(), List.of("p2")));
-            cases.add(deletes(delete + " TABLET (" + p1 + ", " + p2 + ") WHERE dt = '2025-02-15'", t, List.of(p2),
-                    List.of("p1", "p2")));
-            cases.add(deletes(delete + " PARTITION (p2) TABLET (" + p2 + ") WHERE dt < '2025-02-01'", t, List.of(),
-                    List.of("p2")));
-            cases.add(deletes(delete + " TABLET (" + p1 + ") WHERE dt = '2025-03-15'", t, List.of(), List.of("p1")));
-            cases.add(deletes(delete + " TABLET (" + p3 + ") WHERE v > 0", t, List.of(), List.of("p3")));
-            cases.add(deletes(delete + " TABLET (" + p3 + ") WHERE dt >= '2025-03-01'", t, List.of(), List.of("p3")));
-        }
         // The only partition of a table that is not partitioned holds no data.
         long unloaded = tabletOf("t_unloaded_pk", "t_unloaded_pk");
         cases.add(reads("SELECT k FROM t_unloaded_pk TABLET (" + unloaded + ")", "t_unloaded_pk", List.of()));
-        cases.add(deletes("DELETE FROM t_unloaded_pk TABLET (" + unloaded + ") WHERE v > 0", "t_unloaded_pk",
-                List.of(), List.of("t_unloaded_pk")));
         assertAll(cases);
     }
 
     // A table reference reads the partitions PARTITION or TEMPORARY PARTITION names, or else the partitions of the
-    // table, and each named tablet must be a tablet of them. Any other fails SELECT and DELETE alike, whatever the WHERE
-    // clause, so that a tablet that is gone, such as one a split replaced, is never mistaken for one that holds nothing.
+    // table, and each named tablet must be a tablet of them. Any other fails, whatever the WHERE clause, so that a
+    // tablet that is gone, such as one a split replaced, is never mistaken for one that holds nothing.
     @Test
     public void testTabletsMustBelongToTheReadPartitions() {
         List<Executable> cases = new ArrayList<>();
         for (String t : SELECT_TABLES) {
             addReadPartitionCases(cases, "SELECT k FROM " + t, t);
-        }
-        for (String t : DELETE_TABLES) {
-            addReadPartitionCases(cases, "DELETE FROM " + t, t);
         }
         long p1 = tabletOf("t_dup", "p1");
         long temporary = table("t_dup").getPartition("tp1", true).getDefaultPhysicalPartition()
@@ -240,11 +216,6 @@ public class TabletClausePlanTest {
             long p1 = tabletOf(t, "p1");
             cases.add(reads("SELECT k FROM " + t + " TABLETS (" + p1 + ", " + p1 + ")", t, List.of(p1)));
         }
-        for (String t : DELETE_TABLES) {
-            long p1 = tabletOf(t, "p1");
-            cases.add(deletes("DELETE FROM " + t + " TABLETS (" + p1 + ", " + p1 + ") WHERE v > 0", t, List.of(p1),
-                    List.of("p1")));
-        }
         assertAll(cases);
     }
 
@@ -280,14 +251,6 @@ public class TabletClausePlanTest {
         return () -> assertEquals(tablets, scannedTablets(plan(sql), tableName), sql);
     }
 
-    protected static Executable deletes(String sql, String tableName, List<Long> tablets, List<String> sinkPartitions) {
-        return () -> {
-            ExecPlan plan = plan(sql);
-            assertEquals(tablets, scannedTablets(plan, tableName), sql);
-            assertEquals(sinkPartitions, sinkPartitionNames(plan), sql);
-        };
-    }
-
     protected static Executable fails(String sql, String message) {
         return () -> {
             Exception e = assertThrows(Exception.class, () -> plan(sql), sql);
@@ -313,15 +276,6 @@ public class TabletClausePlanTest {
         return plan.getScanNodes().stream()
                 .filter(scan -> scan instanceof OlapScanNode && scan.getTableName().equals(tableName))
                 .flatMap(scan -> ((OlapScanNode) scan).getScanTabletIds().stream())
-                .collect(Collectors.toList());
-    }
-
-    private static List<String> sinkPartitionNames(ExecPlan plan) {
-        OlapTableSink sink = (OlapTableSink) plan.getFragments().get(0).getSink();
-        OlapTable table = (OlapTable) sink.getDstTable();
-        return sink.getPartitionIds().stream()
-                .map(id -> table.getPartition(id).getName())
-                .sorted()
                 .collect(Collectors.toList());
     }
 
