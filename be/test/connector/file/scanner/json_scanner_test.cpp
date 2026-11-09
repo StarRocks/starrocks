@@ -2232,6 +2232,37 @@ private:
     bool _old_dynamic_batch_size = true;
 };
 
+TEST_F(JsonScannerTruncatedDocTest, cancelled_pipe_does_not_report_bad_row) {
+    for (bool read_first_buffer : {false, true}) {
+        TBrokerRangeDesc range;
+        range.__set_file_type(TFileType::FILE_STREAM);
+        range.__set_format_type(TFileFormatType::FORMAT_JSON);
+        auto scanner = create_json_scanner({TypeDescriptor(TYPE_INT)}, {range}, {"k"});
+        ASSERT_OK(scanner->open());
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_state->instance_mem_tracker());
+        auto pipe = std::make_shared<StreamLoadPipe>();
+        auto file =
+                std::make_shared<SequentialFile>(std::make_shared<StreamLoadPipeInputStream>(pipe), "stream-load-pipe");
+        JsonReader reader(_state.get(), _counter, scanner.get(), file, true, scanner->_src_slot_descriptors,
+                          scanner->_json_types, range);
+        ChunkPtr chunk;
+        ASSERT_OK(scanner->_create_src_chunk(&chunk));
+        if (read_first_buffer) {
+            ASSERT_OK(append_json_buffer(pipe.get(), R"({"k":1})", nullptr));
+            ASSERT_OK(reader.open());
+            ASSERT_OK(reader.read_chunk(chunk.get(), 1));
+            ASSERT_EQ(1, chunk->num_rows());
+        }
+
+        const auto error = Status::Cancelled("Fragment cancelled");
+        pipe->cancel(error);
+        auto status = read_first_buffer ? reader.read_chunk(chunk.get(), 1) : reader.open();
+        EXPECT_EQ(error.to_string(), status.to_string());
+        EXPECT_EQ(0, _counter->num_rows_filtered);
+        EXPECT_EQ("", error_log());
+    }
+}
+
 // Routine load: the only message of the batch is a truncated document.
 TEST_F(JsonScannerTruncatedDocTest, kafka_message_with_only_truncated_document) {
     StreamMessageMeta meta(ByteBufferMetaType::KAFKA);
