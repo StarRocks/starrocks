@@ -163,9 +163,379 @@ public class MergePartitionJobTest extends DDLTestBase {
         });
         Assertions.assertTrue(ex.getMessage().contains("rewrite failed"));
 
+<<<<<<< HEAD
         Mockito.verify(table).dropTempPartition(tempPartitionName, true);
         Assertions.assertEquals(Constants.TaskRunState.FAILED, task.getOptimizeTaskState());
         Assertions.assertTrue(nameMapping.isEmpty());
+=======
+        job.runRunningJob();
+        Assertions.assertEquals(JobState.RUNNING, job.getJobState());
+        assertNotMergedYet(table);
+
+        finishTransactions(List.of(januaryTxnId));
+        job.runRunningJob();
+        Assertions.assertEquals(JobState.FINISHED, job.getJobState(), job.errMsg);
+        assertMerged(table);
+    }
+
+    /**
+     * A load into several source partitions of one merge group blocks that group once. The job error lists each
+     * blocking transaction once, so that a duplicate neither crowds another blocker out of the reported sample nor
+     * inflates the total.
+     */
+    @Test
+    public void testLoadIntoSeveralSourcePartitionsOfAGroupIsReportedOnce() throws Exception {
+        OlapTable table = createDailyPartitionedTable("t_merge_blocker_reported_once");
+        MergePartitionJob job = submitMerge(table);
+        runToRunning(job);
+
+        // one load into two of the daily partitions that merge into the same monthly one
+        long txnId = 4242L;
+        Map<Long, List<Long>> conflictingTxnIds = Maps.newHashMap();
+        table.getPartitions().stream().limit(2)
+                .forEach(partition -> conflictingTxnIds.put(partition.getId(), List.of(txnId)));
+        Mockito.doReturn(conflictingTxnIds).when(job).getConflictingTxnIds(Mockito.any());
+        for (OptimizeTask task : job.getOptimizeTasks()) {
+            task.setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
+        }
+        job.run();
+
+        Assertions.assertEquals(JobState.CANCELLED, job.getJobState());
+        Assertions.assertTrue(job.errMsg.contains("has ingestion during merge partitions (txn: " + txnId + ")"),
+                job.errMsg);
+    }
+
+    // ---- merging a table some of whose partitions are merged already ------------------------------
+
+    /**
+     * A merge leaves the partition expression of the table alone, so loads keep creating hourly partitions after a
+     * merge into days, and merging into days again without a range takes the day partition of the first merge as a
+     * source partition too. That partition already is the day partition the merge would build from it, so the merge
+     * leaves it alone and merges only the new hourly partitions.
+     */
+    @Test
+    public void testMergeAgainLeavesMergedPartitionAlone() throws Exception {
+        OlapTable table = createHourlyPartitionedTable("t_merge_again");
+        addHourlyPartitions(table, "2020-01-01 00:00:00", "2020-01-01 01:00:00", "2020-01-01 02:00:00");
+        mergeToFinished(table, "date_trunc('day', k)");
+        Partition mergedDay = table.getPartition("p20200101");
+        Assertions.assertNotNull(mergedDay, partitionNames(table).toString());
+
+        addHourlyPartitions(table, "2020-01-03 02:00:00", "2020-01-03 03:00:00");
+        MergePartitionJob job = submitMerge(table, "date_trunc('day', k)");
+        runToRunning(job);
+        Assertions.assertEquals(List.of("p20200103"), tempPartitionNames(table));
+        runToFinished(job);
+
+        Assertions.assertEquals(Set.of("p20200101", "p20200103"), partitionNames(table));
+        Assertions.assertSame(mergedDay, table.getPartition("p20200101"));
+        Assertions.assertTrue(table.getTempPartitions().isEmpty());
+    }
+
+    /**
+     * Merging a table whose partitions are all merged into the target granularity already has nothing to merge, so the
+     * merge finishes without touching them.
+     */
+    @Test
+    public void testMergeOfMergedPartitionsChangesNothing() throws Exception {
+        OlapTable table = createHourlyPartitionedTable("t_merge_merged");
+        addHourlyPartitions(table, "2020-01-01 00:00:00", "2020-01-01 01:00:00");
+        mergeToFinished(table, "date_trunc('day', k)");
+        Partition mergedDay = table.getPartition("p20200101");
+        Assertions.assertNotNull(mergedDay, partitionNames(table).toString());
+
+        MergePartitionJob job = submitMerge(table, "date_trunc('day', k)");
+        runToRunning(job);
+        Assertions.assertTrue(table.getTempPartitions().isEmpty());
+        Assertions.assertTrue(job.getOptimizeTasks().isEmpty());
+        runToFinished(job);
+
+        Assertions.assertEquals(Set.of("p20200101"), partitionNames(table));
+        Assertions.assertSame(mergedDay, table.getPartition("p20200101"));
+        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+    }
+
+    /**
+     * A partition coarser than the target granularity, such as the month partition of an earlier merge into months,
+     * has nothing to merge into a day either. The merge leaves it alone rather than rewriting it into its first day.
+     */
+    @Test
+    public void testMergeLeavesCoarserPartitionAlone() throws Exception {
+        OlapTable table = createHourlyPartitionedTable("t_merge_coarser");
+        addHourlyPartitions(table, "2020-01-01 00:00:00", "2020-01-02 05:00:00");
+        mergeToFinished(table, "date_trunc('month', k)");
+        Partition mergedMonth = table.getPartition("p202001");
+        Assertions.assertNotNull(mergedMonth, partitionNames(table).toString());
+
+        addHourlyPartitions(table, "2020-02-03 02:00:00", "2020-02-03 03:00:00");
+        MergePartitionJob job = submitMerge(table, "date_trunc('day', k)");
+        runToRunning(job);
+        Assertions.assertEquals(List.of("p20200203"), tempPartitionNames(table));
+        runToFinished(job);
+
+        Assertions.assertEquals(Set.of("p202001", "p20200203"), partitionNames(table));
+        Assertions.assertSame(mergedMonth, table.getPartition("p202001"));
+    }
+
+    /**
+     * A merged partition takes the name of its range. When a partition the merge does not leave alone already has that
+     * name, the job is cancelled with an error that names the conflict, instead of reporting that the merged partition
+     * does not exist. DDL keeps every partition of an automatic partitioned table under the name of its range, so the
+     * test renames an hourly partition to the name of its day in the catalog.
+     */
+    @Test
+    public void testMergeIntoTakenPartitionNameReportsConflict() throws Exception {
+        OlapTable table = createHourlyPartitionedTable("t_merge_name_taken");
+        addHourlyPartitions(table, "2020-01-03 02:00:00", "2020-01-03 03:00:00");
+        table.renamePartition("p2020010302", "p20200103");
+        Assertions.assertEquals(Set.of("p20200103", "p2020010303"), partitionNames(table));
+
+        MergePartitionJob job = submitMerge(table, "date_trunc('day', k)");
+        job.run();
+
+        Assertions.assertEquals(JobState.CANCELLED, job.getJobState());
+        Assertions.assertTrue(job.errMsg.contains("already has a partition named p20200103"), job.errMsg);
+        Assertions.assertEquals(Set.of("p20200103", "p2020010303"), partitionNames(table));
+        Assertions.assertTrue(table.getTempPartitions().isEmpty());
+        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+    }
+
+    /**
+     * An attempt that loses leadership in PENDING leaves its temp partitions in the catalog, and the job runs from
+     * PENDING again. The second attempt leaves the merged partition alone again, takes the temp partition of the first
+     * attempt back instead of reporting a name conflict, and finishes the merge.
+     */
+    @Test
+    public void testRerunOfPendingMergeTakesItsTempPartitionBack() throws Exception {
+        OlapTable table = createHourlyPartitionedTable("t_merge_rerun");
+        addHourlyPartitions(table, "2020-01-01 00:00:00", "2020-01-01 01:00:00");
+        mergeToFinished(table, "date_trunc('day', k)");
+        Partition mergedDay = table.getPartition("p20200101");
+        Assertions.assertNotNull(mergedDay, partitionNames(table).toString());
+        addHourlyPartitions(table, "2020-01-03 02:00:00", "2020-01-03 03:00:00");
+
+        MergePartitionJob job = submitMerge(table, "date_trunc('day', k)");
+        job.runPendingJob();
+        Partition tempPartition = table.getPartition("p20200103", true);
+        Assertions.assertNotNull(tempPartition);
+        // The first attempt did not get to journal WAITING_TXN.
+        job.setJobState(JobState.PENDING);
+        job.resetToLastDurableState();
+        Assertions.assertTrue(job.getTmpPartitionIds().isEmpty());
+
+        runToRunning(job);
+        Assertions.assertEquals(List.of(tempPartition.getId()), job.getTmpPartitionIds());
+        runToFinished(job);
+
+        Assertions.assertEquals(Set.of("p20200101", "p20200103"), partitionNames(table));
+        Assertions.assertSame(mergedDay, table.getPartition("p20200101"));
+        Assertions.assertEquals(tempPartition.getId(), table.getPartition("p20200103").getId());
+        Assertions.assertTrue(table.getTempPartitions().isEmpty());
+    }
+
+    /**
+     * Loads may write into a partition the merge leaves alone while the job runs. That does not concern the merge,
+     * which still swaps its own partition in and keeps the new data of the other one.
+     */
+    @Test
+    public void testLoadIntoPartitionLeftAloneDuringMerge() throws Exception {
+        OlapTable table = createHourlyPartitionedTable("t_merge_load_left_alone");
+        addHourlyPartitions(table, "2020-01-01 00:00:00", "2020-01-01 01:00:00");
+        mergeToFinished(table, "date_trunc('day', k)");
+        addHourlyPartitions(table, "2020-01-03 02:00:00", "2020-01-03 03:00:00");
+
+        MergePartitionJob job = submitMerge(table, "date_trunc('day', k)");
+        runToRunning(job);
+        // A load publishes a new version of the day partition of the first merge.
+        PhysicalPartition mergedDay = table.getPartition("p20200101").getDefaultPhysicalPartition();
+        long loadedVersion = mergedDay.getVisibleVersion() + 1;
+        mergedDay.setVisibleVersion(loadedVersion, System.currentTimeMillis());
+        runToFinished(job);
+
+        Assertions.assertEquals(Set.of("p20200101", "p20200103"), partitionNames(table));
+        Assertions.assertEquals(loadedVersion,
+                table.getPartition("p20200101").getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertTrue(table.getTempPartitions().isEmpty());
+    }
+
+    /**
+     * A table partitioned on a DATE column builds its partition keys from DATE values: merging its days into months again
+     * leaves the month partition of the first merge alone as well.
+     */
+    @Test
+    public void testMergeAgainOnDateColumnLeavesMergedPartitionAlone() throws Exception {
+        OlapTable table = createDailyPartitionedTable("t_merge_again_date");
+        mergeToFinished(table, "date_trunc('month', k)");
+        Partition mergedMonth = table.getPartition("p202002");
+        Assertions.assertNotNull(mergedMonth, partitionNames(table).toString());
+
+        MergePartitionJob job = submitMerge(table, "date_trunc('month', k)");
+        runToRunning(job);
+        Assertions.assertTrue(table.getTempPartitions().isEmpty());
+        Assertions.assertTrue(job.getOptimizeTasks().isEmpty());
+        runToFinished(job);
+
+        Assertions.assertEquals(Set.of("p202002"), partitionNames(table));
+        Assertions.assertSame(mergedMonth, table.getPartition("p202002"));
+    }
+
+    // ---- pruning the per-partition data of a done job -------------------------------------------
+
+    @Test
+    public void testLeaderPrunesFinishedJob() throws Exception {
+        OlapTable table = createDailyPartitionedTable("t_merge_prune_finished");
+        MergePartitionJob job = submitMerge(table);
+        runToRunning(job);
+        Assertions.assertEquals(List.of(1, 3, 3), partitionMapSizes(job));
+
+        runToFinished(job);
+
+        assertPruned(job);
+        List<MergePartitionJob> entries = readJournaledEntries(job.getJobId());
+        MergePartitionJob finishedEntry = entries.get(entries.size() - 1);
+        Assertions.assertEquals(JobState.FINISHED, finishedEntry.getJobState());
+        Assertions.assertEquals(List.of(1, 3, 3), partitionMapSizes(finishedEntry));
+        // The merged temp partition replaced the daily ones before the prune.
+        assertMergedPartitionReplacedDailyOnes(table, finishedEntry);
+        assertShowAlterUnchangedByPrune(finishedEntry);
+    }
+
+    @Test
+    public void testLeaderPrunesCancelledJob() throws Exception {
+        OlapTable table = createDailyPartitionedTable("t_merge_prune_cancelled");
+        MergePartitionJob job = submitMerge(table);
+        runToRunning(job);
+        List<Long> tempTabletIds = tabletIds(table.getTempPartitions());
+        assertInInvertedIndex(tempTabletIds);
+
+        Assertions.assertTrue(job.cancel("cancel"));
+
+        Assertions.assertEquals(JobState.CANCELLED, job.getJobState());
+        assertPruned(job);
+        assertTempPartitionsDropped(table, tempTabletIds);
+        List<MergePartitionJob> entries = readJournaledEntries(job.getJobId());
+        MergePartitionJob cancelledEntry = entries.get(entries.size() - 1);
+        Assertions.assertEquals(JobState.CANCELLED, cancelledEntry.getJobState());
+        Assertions.assertEquals(List.of(1, 3, 3), partitionMapSizes(cancelledEntry));
+        assertShowAlterUnchangedByPrune(cancelledEntry);
+    }
+
+    @Test
+    public void testFollowerReplayPrunesFinishedJob() throws Exception {
+        OlapTable table = createDailyPartitionedTable("t_merge_follower_finished");
+        // The follower starts from the catalog as it was before the merge.
+        UtFrameUtils.PseudoImage initialImage = saveMetastore();
+        MergePartitionJob job = submitMerge(table);
+        runToRunning(job);
+        runToFinished(job);
+
+        LocalMetastore followerMetastore = loadMetastore(initialImage);
+        OlapTable followerTable = tableIn(followerMetastore, table);
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        MergePartitionJob finishedEntry =
+                (MergePartitionJob) replayUpToFinalEntry(followerMetastore, followerHandler, job.getJobId(), 1);
+        // The handler keeps the first replayed entry and applies the later ones to it.
+        MergePartitionJob retained = (MergePartitionJob) followerHandler.getAlterJobsV2().get(job.getJobId());
+        Assertions.assertEquals(JobState.WAITING_TXN, retained.getJobState());
+        Assertions.assertEquals(List.of(0, 3, 0), partitionMapSizes(retained));
+        assertMergedPartitionReplacedDailyOnes(followerTable, finishedEntry);
+        Assertions.assertEquals(OlapTableState.OPTIMIZE, followerTable.getState());
+
+        replayOn(followerMetastore, followerHandler, finishedEntry);
+
+        Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(job.getJobId()));
+        Assertions.assertEquals(JobState.FINISHED, retained.getJobState());
+        assertPruned(retained);
+        // The retained job took over the partition name map of the entry; pruning it left the entry intact.
+        Assertions.assertEquals(List.of(1, 3, 3), partitionMapSizes(finishedEntry));
+        Assertions.assertEquals(catalogSnapshot(table), catalogSnapshot(followerTable));
+    }
+
+    @Test
+    public void testFollowerReplayOfFinishedJobKeepsLiveTabletsUnmarked() throws Exception {
+        OlapTable table = createDailyPartitionedTable("t_merge_follower_force_delete");
+        // The follower starts from the catalog as it was before the merge.
+        UtFrameUtils.PseudoImage initialImage = saveMetastore();
+        MergePartitionJob job = submitMerge(table);
+        runToRunning(job);
+        runToFinished(job);
+
+        LocalMetastore followerMetastore = loadMetastore(initialImage);
+        OlapTable followerTable = tableIn(followerMetastore, table);
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        MergePartitionJob finishedEntry =
+                (MergePartitionJob) replayUpToFinalEntry(followerMetastore, followerHandler, job.getJobId(), 1);
+        // The swap already made the merged temp partition of the entry a live partition of the table.
+        assertMergedPartitionReplacedDailyOnes(followerTable, finishedEntry);
+        List<Long> liveTabletIds = tabletIds(followerTable.getPartitions());
+        assertInInvertedIndex(liveTabletIds);
+        assertNotMarkedForceDelete(liveTabletIds);
+
+        replayOn(followerMetastore, followerHandler, finishedEntry);
+
+        assertNotMarkedForceDelete(liveTabletIds);
+        Assertions.assertEquals(catalogSnapshot(table), catalogSnapshot(followerTable));
+    }
+
+    @Test
+    public void testFollowerReplayDropsTempPartitionsOfCancelledJob() throws Exception {
+        OlapTable table = createDailyPartitionedTable("t_merge_follower_cancelled");
+        // The follower starts from the catalog as it was before the merge.
+        UtFrameUtils.PseudoImage initialImage = saveMetastore();
+        MergePartitionJob job = submitMerge(table);
+        runToRunning(job);
+        Assertions.assertTrue(job.cancel("cancel"));
+
+        LocalMetastore followerMetastore = loadMetastore(initialImage);
+        OlapTable followerTable = tableIn(followerMetastore, table);
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        MergePartitionJob cancelledEntry =
+                (MergePartitionJob) replayUpToFinalEntry(followerMetastore, followerHandler, job.getJobId(), 0);
+        MergePartitionJob retained = (MergePartitionJob) followerHandler.getAlterJobsV2().get(job.getJobId());
+        Assertions.assertEquals(List.of(0, 3, 0), partitionMapSizes(retained));
+        Assertions.assertEquals(new HashSet<>(retained.getTmpPartitionIds()),
+                partitionIds(followerTable.getTempPartitions()));
+        List<Long> tempTabletIds = tabletIds(followerTable.getTempPartitions());
+        assertInInvertedIndex(tempTabletIds);
+
+        replayOn(followerMetastore, followerHandler, cancelledEntry);
+
+        // The CANCELLED replay drops the temp partitions the retained job maps; the prune comes after it.
+        Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(job.getJobId()));
+        Assertions.assertEquals(JobState.CANCELLED, retained.getJobState());
+        assertPruned(retained);
+        assertTempPartitionsDropped(followerTable, tempTabletIds);
+        Assertions.assertEquals(catalogSnapshot(table), catalogSnapshot(followerTable));
+    }
+
+    @Test
+    public void testLoadPrunesDoneJobFromImage() throws Exception {
+        OlapTable table = createDailyPartitionedTable("t_merge_prune_image");
+        MergePartitionJob job = submitMerge(table);
+        runToRunning(job);
+        runToFinished(job);
+        // Images written by older versions hold the done job with its partition maps, as the journal entry does.
+        List<MergePartitionJob> entries = readJournaledEntries(job.getJobId());
+        MergePartitionJob doneJob = entries.get(entries.size() - 1);
+        Assertions.assertEquals(List.of(1, 3, 3), partitionMapSizes(doneJob));
+        AlterJobMgr alterJobMgr = newAlterJobMgr();
+        alterJobMgr.getSchemaChangeHandler().addAlterJobV2(doneJob);
+        // SHOW ALTER of the loaded job must match that of a job that went through the same serialization.
+        List<List<Comparable>> expectedRows = new ArrayList<>();
+        gsonCopy(doneJob).getInfo(expectedRows);
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        alterJobMgr.save(image.getImageWriter());
+        AlterJobMgr restoredMgr = loadAlterJobMgr(image);
+
+        MergePartitionJob restored =
+                (MergePartitionJob) restoredMgr.getSchemaChangeHandler().getAlterJobsV2().get(job.getJobId());
+        assertPruned(restored);
+        List<List<Comparable>> restoredRows = new ArrayList<>();
+        restored.getInfo(restoredRows);
+        Assertions.assertFalse(expectedRows.isEmpty());
+        Assertions.assertEquals(expectedRows, restoredRows);
+>>>>>>> 732b120 ([BugFix][RB-919] Leave merged partitions alone when merging partitions again (#82408))
     }
 
     // ---- expiry of the rewrite tasks registered in TaskManager ------------------------------------
@@ -269,12 +639,55 @@ public class MergePartitionJobTest extends DDLTestBase {
     }
 
     /**
+     * Creates a table partitioned by hour that has no partition yet; addHourlyPartitions adds them.
+     */
+    private static OlapTable createHourlyPartitionedTable(String tableName) throws Exception {
+        starRocksAssert.withTable("CREATE TABLE " + tableName + " (k DATETIME NOT NULL, v INT) DUPLICATE KEY(k) " +
+                "PARTITION BY date_trunc('hour', k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+        return (OlapTable) starRocksAssert.getTable(GlobalStateMgrTestUtil.testDb1, tableName);
+    }
+
+    /**
+     * Creates the partitions of the given times the way a load creates the partitions of the rows it writes.
+     */
+    private static void addHourlyPartitions(OlapTable table, String... times) throws Exception {
+        List<List<String>> partitionValues = Arrays.stream(times).map(List::of).collect(Collectors.toList());
+        AddPartitionClause clause =
+                AnalyzerUtils.getAddPartitionClauseFromPartitionValues(table, partitionValues, false, null);
+        new AlterTableClauseAnalyzer(table).analyze(starRocksAssert.getCtx(), clause);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .addPartitions(starRocksAssert.getCtx(), db, table.getName(), clause);
+    }
+
+    private static void mergeToFinished(OlapTable table, String partitionBy) throws Exception {
+        MergePartitionJob job = submitMerge(table, partitionBy);
+        runToRunning(job);
+        runToFinished(job);
+    }
+
+    /**
+     * The names of the partitions of the table, without the shadow partition of an automatic partitioned table.
+     */
+    private static Set<String> partitionNames(OlapTable table) {
+        return table.getVisiblePartitions().stream().map(Partition::getName).collect(Collectors.toSet());
+    }
+
+    private static List<String> tempPartitionNames(OlapTable table) {
+        return table.getTempPartitions().stream().map(Partition::getName).sorted().collect(Collectors.toList());
+    }
+
+    private static MergePartitionJob submitMerge(OlapTable table) throws Exception {
+        return submitMerge(table, "date_trunc('month', k)");
+    }
+
+    /**
      * Submits the merge through a handler whose daemon is never started, so only the test runs the job. The returned
      * job sees every earlier load as finished and every load into its temp partition as visible.
      */
-    private static MergePartitionJob submitMerge(OlapTable table) throws Exception {
+    private static MergePartitionJob submitMerge(OlapTable table, String partitionBy) throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
-                "ALTER TABLE " + table.getName() + " PARTITION BY date_trunc('month', k)", starRocksAssert.getCtx());
+                "ALTER TABLE " + table.getName() + " PARTITION BY " + partitionBy, starRocksAssert.getCtx());
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         SchemaChangeHandler handler = new SchemaChangeHandler();
         handler.process(stmt.getAlterClauseList(), db, table);
