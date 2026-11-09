@@ -15,6 +15,7 @@
 #pragma once
 
 #include <any>
+#include <bit>
 #include <limits>
 
 #include "base/container/fixed_hash_map.h"
@@ -229,6 +230,7 @@ struct AggHashSet {
     using HHashSetType = HashSet;
     HashSet hash_set;
     AggStatistics* agg_stat;
+    raw::RawVector<size_t> _prefetch_hash_ring;
 
     ////// Common Methods ////////
     void build_hash_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
@@ -270,23 +272,30 @@ struct AggHashSet {
     ALWAYS_INLINE void probe_slice_cache_prefetch(size_t chunk_size,
                                                   const typename HashSet::key_type* __restrict cache_ptr, MemPool* pool,
                                                   Filter* not_founds) {
-        constexpr size_t kRingCap = 64;
-        constexpr size_t kRingMask = kRingCap - 1;
-        const size_t dist = std::min<size_t>(agg_hash_map_default_prefetch_dist(), kRingCap - 1);
-        size_t hash_ring[kRingCap];
+        constexpr size_t kStackRingCap = 64;
+        size_t stack_ring[kStackRingCap];
+        const size_t dist = agg_hash_map_default_prefetch_dist();
         const size_t preload = std::min(dist, chunk_size);
+        size_t ring_cap = kStackRingCap;
+        size_t* __restrict hash_ring = stack_ring;
+        if (UNLIKELY(preload >= kStackRingCap)) {
+            ring_cap = std::bit_ceil(preload + 1);
+            _prefetch_hash_ring.resize(ring_cap);
+            hash_ring = _prefetch_hash_ring.data();
+        }
+        const size_t ring_mask = ring_cap - 1;
         for (size_t j = 0; j < preload; ++j) {
             hash_ring[j] = this->hash_set.hash_function()(cache_ptr[j]);
         }
         for (size_t i = 0; i < chunk_size; ++i) {
             if (i + dist < chunk_size) {
                 const size_t next_hash = this->hash_set.hash_function()(cache_ptr[i + dist]);
-                hash_ring[(i + dist) & kRingMask] = next_hash;
+                hash_ring[(i + dist) & ring_mask] = next_hash;
                 if (LIKELY(dist != 0)) {
                     this->hash_set.prefetch_hash(next_hash);
                 }
             }
-            const size_t hashval = hash_ring[i & kRingMask];
+            const size_t hashval = hash_ring[i & ring_mask];
             this->template probe_or_insert_slice_key_with_hash<compute_and_allocate>(cache_ptr[i], hashval, pool,
                                                                                      not_founds, i);
         }

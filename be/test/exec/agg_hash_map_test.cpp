@@ -1880,6 +1880,11 @@ TEST(SliceWithHash32Test, NullableAndNonNullableSelectionAndLimitPaths) {
             for (int i = 0; i < kRows; ++i) {
                 EXPECT_EQ(0, agg->_streaming_selection[i]);
             }
+            const int32_t prev_dist = config::agg_hash_map_prefetch_dist;
+            config::agg_hash_map_prefetch_dist = 64;
+            agg->build_hash_set(kRows);
+            agg->build_hash_set_with_selection(kRows);
+            config::agg_hash_map_prefetch_dist = prev_dist;
         }
 
         for (auto null_str_type :
@@ -1991,6 +1996,20 @@ struct CountingSliceWithHash32Hash {
         return SliceWithHash32Hash<PhmapSeed1>()(s);
     }
 };
+
+struct RecordingSliceHashSet : public phmap::flat_hash_set<SliceWithHash32<PhmapSeed1>, CountingSliceWithHash32Hash,
+                                                           SliceWithHash32Equal<PhmapSeed1>> {
+    using Base = phmap::flat_hash_set<SliceWithHash32<PhmapSeed1>, CountingSliceWithHash32Hash,
+                                      SliceWithHash32Equal<PhmapSeed1>>;
+    using Base::Base;
+
+    std::vector<size_t> prefetched_hashes;
+
+    void prefetch_hash(size_t hashval) const {
+        const_cast<RecordingSliceHashSet*>(this)->prefetched_hashes.push_back(hashval);
+        Base::prefetch_hash(hashval);
+    }
+};
 } // namespace
 
 TEST(SliceWithHash32Test, EqualShortCircuitsOnSizeMismatchBeforeReadingData) {
@@ -2012,8 +2031,7 @@ TEST(SliceWithHash32Test, EqualShortCircuitsOnSizeMismatchBeforeReadingData) {
 
 TEST(SliceWithHash32Test, PrefetchRingHandlesBoundaryDistancesAndChunkSizes) {
     using Key = SliceWithHash32<PhmapSeed1>;
-    using CountingSet = phmap::flat_hash_set<Key, CountingSliceWithHash32Hash, SliceWithHash32Equal<PhmapSeed1>>;
-    using SetWrapper = AggHashSetOfOneStringKey<CountingSet>;
+    using SetWrapper = AggHashSetOfOneStringKey<RecordingSliceHashSet>;
 
     const int32_t saved_dist = config::agg_hash_map_prefetch_dist;
     DeferOp restore([&]() { config::agg_hash_map_prefetch_dist = saved_dist; });
@@ -2024,7 +2042,8 @@ TEST(SliceWithHash32Test, PrefetchRingHandlesBoundaryDistancesAndChunkSizes) {
 
     for (int32_t dist : {0, 1, 16, 32, 63, 64, 128}) {
         config::agg_hash_map_prefetch_dist = dist;
-        for (size_t chunk_size : {size_t(0), size_t(1), size_t(7), size_t(16), size_t(64), size_t(100)}) {
+        const size_t udist = static_cast<size_t>(dist);
+        for (size_t chunk_size : {size_t(0), size_t(1), size_t(7), size_t(16), size_t(64), size_t(100), size_t(200)}) {
             SetWrapper wrapper(chunk_size, &statistics);
             wrapper.hash_set.reserve(chunk_size * 2);
             std::vector<std::string> raw_keys(chunk_size);
@@ -2034,16 +2053,35 @@ TEST(SliceWithHash32Test, PrefetchRingHandlesBoundaryDistancesAndChunkSizes) {
                 cache[i] = Key(Slice(raw_keys[i]));
             }
 
+            const size_t expected_prefetches = (udist > 0 && chunk_size > udist) ? (chunk_size - udist) : 0;
+
             CountingSliceWithHash32Hash::call_count = 0;
+            wrapper.hash_set.prefetched_hashes.clear();
             wrapper.probe_slice_cache_prefetch<true>(chunk_size, cache.data(), &pool, nullptr);
             EXPECT_EQ(chunk_size, CountingSliceWithHash32Hash::call_count)
                     << "dist=" << dist << " chunk_size=" << chunk_size;
             EXPECT_EQ(chunk_size, wrapper.hash_set.size());
+            ASSERT_EQ(expected_prefetches, wrapper.hash_set.prefetched_hashes.size())
+                    << "dist=" << dist << " chunk_size=" << chunk_size;
+            for (size_t k = 0; k < expected_prefetches; ++k) {
+                EXPECT_EQ(SliceWithHash32Hash<PhmapSeed1>()(cache[udist + k]), wrapper.hash_set.prefetched_hashes[k])
+                        << "dist=" << dist << " chunk_size=" << chunk_size << " k=" << k;
+            }
+            const size_t preload = std::min(udist, chunk_size);
+            if (preload < 64) {
+                EXPECT_TRUE(wrapper._prefetch_hash_ring.empty()) << "dist=" << dist << " chunk_size=" << chunk_size;
+            } else {
+                EXPECT_EQ(std::bit_ceil(preload + 1), wrapper._prefetch_hash_ring.size())
+                        << "dist=" << dist << " chunk_size=" << chunk_size;
+            }
 
             Filter not_founds(chunk_size, 1);
             CountingSliceWithHash32Hash::call_count = 0;
+            wrapper.hash_set.prefetched_hashes.clear();
             wrapper.probe_slice_cache_prefetch<false>(chunk_size, cache.data(), &pool, &not_founds);
             EXPECT_EQ(chunk_size, CountingSliceWithHash32Hash::call_count)
+                    << "dist=" << dist << " chunk_size=" << chunk_size;
+            ASSERT_EQ(expected_prefetches, wrapper.hash_set.prefetched_hashes.size())
                     << "dist=" << dist << " chunk_size=" << chunk_size;
             for (size_t i = 0; i < chunk_size; ++i) {
                 EXPECT_EQ(0, not_founds[i]);
