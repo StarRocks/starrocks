@@ -900,18 +900,24 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
         for (size_t i = 0; i < conv_func->field_names.size(); i++) {
             const auto& child_name = conv_func->field_names[i];
             ASSIGN_OR_RETURN(auto* child_col, struct_col->field_column_raw_ptr(child_name));
-            auto child_array = struct_array->GetFieldByName(child_name);
+            const auto child_index = struct_array->struct_type()->GetFieldIndex(child_name);
 
-            if (child_array == nullptr) {
+            if (child_index < 0) {
                 // default null
                 DCHECK(child_col->is_nullable());
                 child_col->append_nulls(num_elements);
                 continue;
             }
 
+            // Combine the parent validity bitmap with the child's before conversion.
+            auto child_array = struct_array->GetFlattenedField(child_index);
+            if (!child_array.ok()) {
+                return Status::InternalError(child_array.status().ToString());
+            }
+
 #ifndef __APPLE__
             RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(conv_func->children[i].get(), num_elements,
-                                                                    child_array.get(), child_col, array_start_idx,
+                                                                    child_array->get(), child_col, array_start_idx,
                                                                     chunk_start_idx, chunk_filter, ctx));
 #else
             return Status::NotSupported("Parquet nested type conversion is not supported on this build");
