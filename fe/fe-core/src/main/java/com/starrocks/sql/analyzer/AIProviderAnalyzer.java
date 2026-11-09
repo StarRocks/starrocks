@@ -34,7 +34,7 @@ import java.util.TreeSet;
 
 /**
  * Semantic validation for the unified {@code AI PROVIDER} DDL. Validation is keyed off the declared
- * {@code TYPE} (embedding / rerank / chat): the common params (endpoint / model / api_key /
+ * {@code TYPE} (embedding / rerank / chat / decision): the common params (endpoint / model / api_key /
  * timeout_ms / protocol) apply to every type, and each type adds its own allowed keys. ALTER resolves
  * the stored provider by name to validate properties against its type. DROP/SET DEFAULT only need a name check.
  */
@@ -62,6 +62,7 @@ public class AIProviderAnalyzer {
                 keys.add(AIProvider.PROPERTY_DEADLINE_MS);
                 break;
             case CHAT:
+            case DECISION:
             default:
                 break;
         }

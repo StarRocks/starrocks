@@ -20,6 +20,8 @@ An AI Provider is a centrally managed model service configuration in the cluster
 - `ai_complete` and the other text helper functions use a `chat` Provider.
 - These AI functions currently require the Provider to use the `openai` protocol. The endpoint and model must also support the corresponding chat or embedding capability.
 
+- [ai_decide](ai_decide.md) evaluates structured questions using a `decision` Provider with the `bailian_decision` protocol.
+
 When calling a function, you can specify a Provider with `provider` or use the cluster default Provider of the corresponding type. Defaults are maintained independently for each type. If you omit `model`, the selected Provider's default model is used. You can also explicitly specify another model supported by the service.
 
 For Provider creation, configuration properties, and management syntax, see [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md). For default settings, see [SET DEFAULT AI PROVIDER](../../sql-statements/cluster-management/ai_provider/SET_DEFAULT_AI_PROVIDER.md).

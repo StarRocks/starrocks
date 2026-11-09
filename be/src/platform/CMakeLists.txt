@@ -42,6 +42,8 @@ set(PLATFORM_FILES
   llm/ai_admission_controller.cpp
   llm/ai_http_client.cpp
   llm/ai_metrics.cpp
+  llm/ai_decision_input.cpp
+  llm/bailian_decision_provider.cpp
   llm/ai_media_input.cpp
   llm/ai_provider.cpp
   llm/ai_provider_options.cpp

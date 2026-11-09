@@ -23,8 +23,8 @@ public:
     explicit OpenAICompatibleProvider(bool supports_video = false) : _supports_video(supports_video) {}
 
     StatusOr<AIProviderHttpRequest> build_request(const AIChatRequest& request) const override;
-    AIProviderParseResult parse_response(std::string_view body,
-                                         AICapability capability = AICapability::CHAT) const override;
+    AIProviderParseResult parse_response(std::string_view body, AICapability capability = AICapability::CHAT,
+                                         const AIProviderResponseContext& context = {}) const override;
 
 private:
     bool _supports_video;

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "Register an external AI service of type chat, embedding, or rerank as an AI Provider in the cluster."
+description: "Register an external AI service of type chat, embedding, rerank, or decision as an AI Provider in the cluster."
 ---
 
 # CREATE AI PROVIDER
@@ -13,6 +13,7 @@ holds providers of different **types** and keeps one default **per type**:
 - `rerank` — Cohere-compatible `/rerank` endpoint (Cohere / Jina / Voyage / OpenRouter / local TEI),
   used by the optional cross-encoder second phase of `/api/context/search`.
 - `chat` — chat / completion endpoint (OpenAI Chat Completions or Anthropic Messages).
+- `decision` — structured decision endpoint for [ai_decide](../../../sql-functions/ai-functions/ai_decide.md), using the `bailian_decision` protocol.
 
 Each provider also declares the wire **protocol** its endpoint speaks via the `protocol` property.
 When omitted it defaults to the protocol the type implies: `openai` for `embedding` and `chat`,
@@ -33,6 +34,8 @@ Create a Provider with `protocol = "openai"`. Both HTTP and HTTPS endpoints are 
 
 Set a default with `SET <provider_name> AS DEFAULT AI PROVIDER`. If the corresponding default is absent, FE rejects implicit Provider calls, including `EXPLAIN`. Each execution plan captures its selected Provider configuration. ALTER and default changes affect newly planned queries; each prepared `EXECUTE` replans against current metadata.
 
+The default protocol for `decision` is `bailian_decision`. [ai_decide](../../../sql-functions/ai-functions/ai_decide.md) requires this type/protocol pair.
+
 ## Privileges
 
 Creating or managing providers requires SYSTEM `OPERATE`. Calling a provider through an AI function requires both the [AI function privilege](../../../sql-functions/ai-functions/ai_functions.mdx#ai-function-privileges) and `USAGE` on that AI PROVIDER. Creating a provider does not automatically grant usage to ordinary users.
@@ -41,12 +44,12 @@ Creating or managing providers requires SYSTEM `OPERATE`. Calling a provider thr
 
 ```SQL
 CREATE AI PROVIDER [IF NOT EXISTS] <provider_name>
-TYPE { embedding | rerank | chat }
+TYPE { embedding | rerank | chat | decision }
 [ COMMENT '<comment>' ]
 PROPERTIES (
     "endpoint"   = "<url>",
     "model"      = "<model_name>"
-    [, "protocol" = "{ openai | anthropic | cohere }" ]
+    [, "protocol" = "{ openai | anthropic | cohere | bailian_decision }" ]
     [, "dimensions" = "<int>" ]      -- embedding only
     [, "max_documents" = "<int>" ]   -- rerank only (optional)
     [, "deadline_ms" = "<int>" ]     -- rerank only (optional)
@@ -60,7 +63,7 @@ PROPERTIES (
 | Parameter       | Description                                                                                          |
 | --------------- | ---------------------------------------------------------------------------------------------------- |
 | `provider_name` | Name of the provider. Used by `SET ... AS DEFAULT AI PROVIDER` and shown in `SHOW AI PROVIDERS`.     |
-| `TYPE`          | `embedding`, `rerank`, or `chat`. Determines which properties are allowed and which per-type default this provider can become. |
+| `TYPE`          | `embedding`, `rerank`, `chat`, or `decision`. Determines which properties are allowed and which per-type default this provider can become. |
 | `COMMENT`       | Optional comment string.                                                                             |
 | `PROPERTIES`    | `"key" = "value"` configuration. Allowed keys depend on `TYPE` (see below). Any other key is rejected. |
 
@@ -70,7 +73,7 @@ PROPERTIES (
 | --------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `endpoint`      | all            | Yes      | HTTP(S) endpoint URL. Must start with `http://` or `https://`.                                       |
 | `model`         | all            | Yes      | Model name passed in the request `model` field (e.g. `text-embedding-3-small`, `cohere/rerank-4-fast`). |
-| `protocol`      | all            | No       | Wire protocol of the endpoint: `openai`, `anthropic`, or `cohere`. Default: `openai` for `embedding` and `chat`, `cohere` for `rerank`. |
+| `protocol`      | all            | No       | Wire protocol of the endpoint: `openai`, `anthropic`, `cohere`, or `bailian_decision`. Default: `openai` for `embedding` and `chat`, `cohere` for `rerank`, and `bailian_decision` for `decision`. |
 | `dimensions`    | embedding      | No       | Embedding vector dimension (positive int). Must match the provider output and the vector index dim. |
 | `max_documents` | rerank         | No       | Max documents sent per rerank request (positive int; default 1000).                                  |
 | `deadline_ms`   | rerank         | No       | Overall wall-clock budget in ms for the whole rerank call across all retry attempts (positive int; default 10000). Bounds how long a slow/unreachable reranker can stall a search before it degrades to fusion order. A timeout is never retried; only a connection failure or HTTP 5xx is. |

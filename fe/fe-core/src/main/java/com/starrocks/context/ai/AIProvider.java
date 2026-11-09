@@ -27,7 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Persisted metadata for one external AI service provider (embedding / rerank / chat). The
+ * Persisted metadata for one external AI service provider (embedding / rerank / chat / decision). The
  * full property bag — including the API key — lives on the FE meta journal and image, so cluster
  * upgrades that wipe the installation directory do not lose the credential.
  *
@@ -95,11 +95,13 @@ public class AIProvider implements Writable {
             case EMBEDDING -> TAIProviderType.EMBEDDING;
             case CHAT -> TAIProviderType.CHAT;
             case RERANK -> TAIProviderType.RERANK;
+            case DECISION -> TAIProviderType.DECISION;
         });
         result.setProtocol(switch (getProtocol()) {
             case OPENAI -> TAIProviderProtocol.OPENAI;
             case ANTHROPIC -> TAIProviderProtocol.ANTHROPIC;
             case COHERE -> TAIProviderProtocol.COHERE;
+            case BAILIAN_DECISION -> TAIProviderProtocol.BAILIAN_DECISION;
         });
         result.setParams(getParams());
         return result;
