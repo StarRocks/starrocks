@@ -3,7 +3,7 @@ create external catalog paimon_boundaries_${uuid0}
 properties (
 "type" = "paimon",
 "paimon.catalog.type" = "filesystem",
-"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"paimon.catalog.warehouse" = "oss://${shared_oss_bucket}/ci_catalog_test_data/paimon/",
 "aws.s3.access_key" = "${oss_ak}",
 "aws.s3.secret_key" = "${oss_sk}",
 "aws.s3.endpoint" = "${oss_endpoint}"
@@ -101,7 +101,7 @@ create external catalog paimon_boundaries_${uuid0}
 properties (
 "type" = "paimon",
 "paimon.catalog.type" = "filesystem",
-"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"paimon.catalog.warehouse" = "oss://${shared_oss_bucket}/ci_catalog_test_data/paimon/",
 "aws.s3.access_key" = "${oss_ak}",
 "aws.s3.secret_key" = "${oss_sk}",
 "aws.s3.endpoint" = "${oss_endpoint}"
@@ -199,7 +199,7 @@ create external catalog paimon_boundaries_${uuid0}
 properties (
 "type" = "paimon",
 "paimon.catalog.type" = "filesystem",
-"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"paimon.catalog.warehouse" = "oss://${shared_oss_bucket}/ci_catalog_test_data/paimon/",
 "aws.s3.access_key" = "${oss_ak}",
 "aws.s3.secret_key" = "${oss_sk}",
 "aws.s3.endpoint" = "${oss_endpoint}"
@@ -297,7 +297,7 @@ create external catalog paimon_boundaries_${uuid0}
 properties (
 "type" = "paimon",
 "paimon.catalog.type" = "filesystem",
-"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"paimon.catalog.warehouse" = "oss://${shared_oss_bucket}/ci_catalog_test_data/paimon/",
 "aws.s3.access_key" = "${oss_ak}",
 "aws.s3.secret_key" = "${oss_sk}",
 "aws.s3.endpoint" = "${oss_endpoint}"

@@ -7,7 +7,7 @@ paimon-cpp.
 ## Test data
 
 These cases read fixed tables from
-`oss://${oss_bucket}/ci_catalog_test_data/paimon/paimon_test.db/`:
+`oss://${shared_oss_bucket}/ci_catalog_test_data/paimon/paimon_test.db/`:
 `scalar_types`, `variant_basic`, `image_blob`, `image_blob_desc`,
 `image_blob_view`, and `pk_merge_v1`, plus:
 
@@ -45,7 +45,7 @@ The reader-boundary cases additionally use these fixed tables:
 | `reader_partial_groups_v1`, `reader_partial_retract_v1` | Independent sequence groups, composite ordering, late older updates, and field-level retraction |
 | `reader_partial_delete_v1`, `reader_partial_ignore_delete_v1` | Partial-update whole-row removal and ignored deletes; NULL updates preserve prior fields |
 
-The persistent warehouse is `oss://${oss_bucket}/ci_catalog_test_data/paimon/`. Upload the
+The persistent warehouse is `oss://${shared_oss_bucket}/ci_catalog_test_data/paimon/`. Upload the
 complete `paimon_test.db` directory before running these cases, preserving all
 schema, snapshot, manifest and data files:
 
@@ -63,15 +63,20 @@ In the existing `[.oss]` subsection under `[env]` in `conf/sr.conf`, configure:
 ```ini
 [env]
   [.oss]
-    oss_bucket = starrocks-ci-test
-    oss_endpoint = oss-ap-southeast-1.aliyuncs.com
+    oss_bucket = <writable-test-bucket>
+    shared_oss_bucket = starrocks-ci-test
+    oss_endpoint = https://oss-ap-southeast-1-internal.aliyuncs.com
     oss_region = ap-southeast-1
     oss_ak = <access-key-id>
     oss_sk = <access-key-secret>
 ```
 
-Use an endpoint reachable from both FE and BE. CI supplies its own OSS settings;
-keep credentials out of committed files. The original six fixtures originate from
+Use `shared_oss_bucket` for shared static fixtures and `oss_bucket` for temporary
+data that tests create or delete. The two buckets can differ between environments;
+do not derive the shared fixture location from the writable bucket.
+
+Use a same-region internal endpoint reachable from both FE and BE. CI supplies its
+own OSS settings; keep credentials out of committed files. The original six fixtures originate from
 [starrocks-testing-data](https://github.com/StarRocks/starrocks-testing-data/tree/4bce0eac1a87b23982561b7c53636d125e13abf2/catalog/paimon).
 
 Fixture-based cases create unique Catalog names and drop only those Catalogs when finished.
@@ -274,7 +279,7 @@ Set `FIXTURE_CLASSES` to a scratch class directory and `NEW_FIXTURE_WAREHOUSE` t
 a new local directory. Publish the complete generated
 `paimon_test.db/reader_struct_parent_null_v1/` directory, including schema,
 snapshots, manifests and data, under
-`oss://${oss_bucket}/ci_catalog_test_data/paimon/paimon_test.db/`.
+`oss://${shared_oss_bucket}/ci_catalog_test_data/paimon/paimon_test.db/`.
 Do not overwrite the existing shared fixture during test execution. The SQL case
 only creates and cleans up its own Catalog; it does not modify the static table.
 
