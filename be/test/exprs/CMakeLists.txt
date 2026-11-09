@@ -30,6 +30,7 @@ set(EXPR_TEST_FILES
     array_expr_test.cpp
     case_expr_test.cpp
     cast_expr_core_test.cpp
+    cast_geo_null_test.cpp
     cast_expr_test.cpp
     function_context_core_test.cpp
     expr_test.cpp
