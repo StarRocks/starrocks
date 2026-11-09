@@ -24,7 +24,9 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -52,6 +54,9 @@ import java.util.Set;
 import static io.delta.kernel.expressions.AlwaysTrue.ALWAYS_TRUE;
 
 public class ScalarOperationToDeltaLakeExpr {
+    // An IN list longer than this is not pushed down, to keep the kernel expression small.
+    static final int MAX_IN_LIST_SIZE = 1000;
+
     public Predicate convert(List<ScalarOperator> operators, DeltaLakeContext context) {
         DeltaLakeExprVisitor visitor = new DeltaLakeExprVisitor();
         List<Predicate> predicates = Lists.newArrayList();
@@ -123,10 +128,14 @@ public class ScalarOperationToDeltaLakeExpr {
                 if (operator.getChild(0) instanceof LikePredicateOperator) {
                     return null;
                 }
-                boolean outerInsideNot = insideNot;
+                boolean savedInsideNot = insideNot;
                 insideNot = true;
-                Predicate predicate = operator.getChild(0).accept(this, context);
-                insideNot = outerInsideNot;
+                Predicate predicate;
+                try {
+                    predicate = operator.getChild(0).accept(this, context);
+                } finally {
+                    insideNot = savedInsideNot;
+                }
 
                 if (predicate != null) {
                     return new Predicate("NOT", predicate);
@@ -138,8 +147,113 @@ public class ScalarOperationToDeltaLakeExpr {
                     return (op == CompoundPredicateOperator.CompoundType.OR) ?
                             new Or(left, right) : new And(left, right);
                 }
+                // AND(a, b) implies a, so pushing down only the side that converts still prunes correctly.
+                // Not under NOT: NOT(AND(a, b)) = OR(NOT(a), NOT(b)), so NOT(a) alone would over-prune.
+                if (op == CompoundPredicateOperator.CompoundType.AND && !insideNot) {
+                    return left != null ? left : right;
+                }
             }
             return null;
+        }
+
+        @Override
+        public Predicate visitInPredicate(InPredicateOperator operator, DeltaLakeContext context) {
+            // NOT IN is not pushed down.
+            if (operator.isNotIn() || operator.getListChildren().size() > MAX_IN_LIST_SIZE) {
+                return null;
+            }
+            String columnName = getColumnName(operator.getChild(0));
+            if (columnName == null) {
+                return null;
+            }
+            Column column = context.getColumn(columnName);
+            if (column == null) {
+                return null;
+            }
+            DeltaDataType resultType = getResultType(columnName, context);
+            boolean isPartitionColumn = context.isPartitionColumn(columnName);
+            // The kernel's data skipping does not understand IN, so expand it to an OR of equalities.
+            boolean dstAware = resultType == DeltaDataType.TIMESTAMP && !isPartitionColumn;
+            List<Predicate> equalities = Lists.newArrayList();
+            for (ScalarOperator child : operator.getListChildren()) {
+                if (dstAware) {
+                    LocalDateTime local = toLocalDateTime(child);
+                    ZoneOffsetTransition transition = local == null ? null :
+                            TimeUtils.getTimeZone().toZoneId().getRules().getTransition(local);
+                    if (transition != null) {
+                        Predicate range = convertAcrossTransition(column, BinaryType.EQ, local, transition);
+                        if (range == null) {
+                            return null;
+                        }
+                        equalities.add(range);
+                        continue;
+                    }
+                }
+                Literal literal = getLiteral(child, resultType, isPartitionColumn);
+                if (literal == null) {
+                    return null;
+                }
+                equalities.add(new Predicate("=", column, literal));
+            }
+            return equalities.isEmpty() ? null : balancedOr(equalities, 0, equalities.size());
+        }
+
+        @Override
+        public Predicate visitLargeInPredicate(LargeInPredicateOperator operator, DeltaLakeContext context) {
+            return null;
+        }
+
+        // A balanced tree keeps the kernel's recursive evaluation shallow for long IN lists.
+        private static Predicate balancedOr(List<Predicate> predicates, int from, int to) {
+            if (to - from == 1) {
+                return predicates.get(from);
+            }
+            int mid = (from + to) >>> 1;
+            return new Or(balancedOr(predicates, from, mid), balancedOr(predicates, mid, to));
+        }
+
+        @Override
+        public Predicate visitLikePredicateOperator(LikePredicateOperator operator, DeltaLakeContext context) {
+            if (operator.getLikeType() != LikePredicateOperator.LikeType.LIKE) {
+                return null;
+            }
+            String columnName = getColumnName(operator.getChild(0));
+            if (columnName == null) {
+                return null;
+            }
+            Column column = context.getColumn(columnName);
+            // Only the kernel's partition pruning evaluates STARTS_WITH; its data skipping ignores it.
+            if (column == null || !context.isPartitionColumn(columnName) ||
+                    getResultType(columnName, context) != DeltaDataType.STRING) {
+                return null;
+            }
+            if (!(operator.getChild(1) instanceof ConstantOperator)) {
+                return null;
+            }
+            ConstantOperator pattern = (ConstantOperator) operator.getChild(1);
+            if (pattern.isNull() || !pattern.getType().isStringType()) {
+                return null;
+            }
+            String prefix = getLikePrefix(pattern.getVarchar());
+            if (prefix == null) {
+                return null;
+            }
+            return new Predicate("STARTS_WITH", column, Literal.ofString(prefix));
+        }
+
+        /**
+         * Returns the prefix of a pattern of the form 'prefix%', where the prefix is non-empty and has no
+         * wildcard or escape character, or null for any other pattern.
+         */
+        static String getLikePrefix(String pattern) {
+            if (pattern == null || pattern.length() < 2 || pattern.charAt(pattern.length() - 1) != '%') {
+                return null;
+            }
+            String prefix = pattern.substring(0, pattern.length() - 1);
+            if (prefix.indexOf('%') >= 0 || prefix.indexOf('_') >= 0 || prefix.indexOf('\\') >= 0) {
+                return null;
+            }
+            return prefix;
         }
 
         @Override
