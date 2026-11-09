@@ -17,13 +17,15 @@
 #include <algorithm>
 
 #include "column/array_column.h"
+#include "column/chunk.h"
 #include "column/const_column.h"
 #include "column/geo_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "exprs/cast_expr.h"
-#include "exprs/mock_vectorized_expr.h"
+#include "exprs/column_ref.h"
 #include "testutil/column_test_helper.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks {
 namespace {
@@ -74,11 +76,20 @@ protected:
         ObjectPool pool;
         ASSIGN_OR_RETURN(auto* expr, VectorizedCastExprFactory::create_cast_expr(&pool, from, to, false));
         pool.add(expr);
-        expr->add_child(pool.add(new MockExpr(from, std::move(input))));
-        return (clone ? Expr::copy(&pool, expr) : expr)->evaluate_checked(nullptr, nullptr);
+        expr->add_child(pool.add(new ColumnRef(from, 0)));
+        Chunk chunk;
+        chunk.append_column(std::move(input), 0);
+        return (clone ? Expr::copy(&pool, expr) : expr)->evaluate_checked(nullptr, &chunk);
+    }
+
+    static auto struct_with_hidden_boolean() {
+        MutableColumns fields;
+        fields.emplace_back(nullable(BooleanColumn::create(3, 0), {1, 0, 1}));
+        return nullable(StructColumn::create(std::move(fields), std::vector<std::string>{"g"}), {0, 1, 0});
     }
 
     void check_geo(const ColumnPtr& column) const {
+        ASSERT_TRUE(column->is_nullable());
         auto* data = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(column.get()));
         ASSERT_NE(nullptr, data);
         EXPECT_EQ(*geo_type().geo_type, data->descriptor().type);
@@ -105,14 +116,15 @@ TEST_P(GeoNullCastTest, ScalarNull) {
 TEST_P(GeoNullCastTest, ArrayNulls) {
     auto from = array_type(TYPE_BOOLEAN);
     auto to = array_type(geo_type());
-    auto input = nullable(ArrayColumn::create(nulls(3), offsets({0, 0, 1, 3, 3})), {0, 0, 0, 1});
+    auto input = nullable(ArrayColumn::create(nulls(3), offsets({0, 2, 2, 2, 3})), {0, 0, 1, 0});
     auto result = cast(input, from, to, true);
     ASSERT_TRUE(result.ok()) << result.status();
     EXPECT_EQ(4, result.value()->size());
     EXPECT_EQ(1, ColumnHelper::count_nulls(result.value()));
-    EXPECT_TRUE(result.value()->is_null(3));
+    EXPECT_TRUE(result.value()->is_null(2));
     auto* data = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(result.value().get()));
-    check_offsets(data->offsets(), {0, 0, 1, 3, 3});
+    check_offsets(data->offsets(), {0, 2, 2, 2, 3});
+    EXPECT_EQ(3, data->elements_column()->size());
     check_geo(data->elements_column());
 
     result = cast(ArrayColumn::create(nulls(0), offsets({0, 0})), from, to);
@@ -148,13 +160,15 @@ TEST_P(GeoNullCastTest, MapValue) {
         to.children = {TYPE_INT_DESC, geo_type()};
         auto keys = key == TYPE_INT ? ColumnTestHelper::build_nullable_column<int32_t>({1, 2, 3})
                                     : ColumnTestHelper::build_nullable_column<int8_t>({1, 2, 3});
-        auto input = nullable(MapColumn::create(std::move(keys), nulls(3), offsets({0, 1, 1, 3})), {0, 1, 0});
+        auto input = nullable(MapColumn::create(std::move(keys), nulls(3), offsets({0, 2, 2, 2, 3})), {0, 0, 1, 0});
         auto result = cast(input, from, to);
         ASSERT_TRUE(result.ok()) << result.status();
-        EXPECT_EQ(3, result.value()->size());
-        EXPECT_TRUE(result.value()->is_null(1));
+        EXPECT_EQ(4, result.value()->size());
+        EXPECT_EQ(1, ColumnHelper::count_nulls(result.value()));
+        EXPECT_TRUE(result.value()->is_null(2));
         auto* data = down_cast<const MapColumn*>(ColumnHelper::get_data_column(result.value().get()));
-        check_offsets(data->offsets(), {0, 1, 1, 3});
+        check_offsets(data->offsets(), {0, 2, 2, 2, 3});
+        EXPECT_EQ(3, data->values_column()->size());
         check_geo(data->values_column());
     }
 }
@@ -191,19 +205,27 @@ TEST_P(GeoNullCastTest, NestedArrayStructArray) {
     check_geo(inner->elements_column());
 }
 
-TEST_P(GeoNullCastTest, RejectNonNullBoolean) {
-    for (auto values : {std::vector<uint8_t>{0, 1}, std::vector<uint8_t>{1, 0}}) {
-        auto input = ColumnTestHelper::build_nullable_column<uint8_t>(values, {0, 0});
-        auto result = cast(ArrayColumn::create(std::move(input), offsets({0, 2})), array_type(TYPE_BOOLEAN),
-                           array_type(geo_type()));
-        ASSERT_FALSE(result.ok());
-        EXPECT_TRUE(result.status().is_not_supported());
-        EXPECT_EQ("Cannot cast non-NULL values to " + geo_type().debug_string(), result.status().message());
-    }
-    auto mixed = ColumnTestHelper::build_nullable_column<uint8_t>({0, 1}, {1, 0});
-    EXPECT_FALSE(cast(mixed, TYPE_BOOLEAN_DESC, geo_type()).ok());
-    auto constant = ConstColumn::create(BooleanColumn::create(1, 0), 4);
-    EXPECT_FALSE(cast(constant, TYPE_BOOLEAN_DESC, geo_type()).ok());
+TEST_P(GeoNullCastTest, NullStructWithHiddenBoolean) {
+    auto result = cast(struct_with_hidden_boolean(), struct_type(TYPE_BOOLEAN_DESC), struct_type(geo_type()));
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_EQ(3, result.value()->size());
+    EXPECT_EQ(1, ColumnHelper::count_nulls(result.value()));
+    EXPECT_TRUE(result.value()->is_null(1));
+    auto* data = down_cast<const StructColumn*>(ColumnHelper::get_data_column(result.value().get()));
+    check_geo(data->fields()[0]);
+}
+
+TEST_P(GeoNullCastTest, ArrayWithNullStructElement) {
+    auto input = ArrayColumn::create(struct_with_hidden_boolean(), offsets({0, 2, 3}));
+    auto result = cast(input, array_type(struct_type(TYPE_BOOLEAN_DESC)), array_type(struct_type(geo_type())));
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_EQ(2, result.value()->size());
+    auto* array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(result.value().get()));
+    check_offsets(array->offsets(), {0, 2, 3});
+    EXPECT_EQ(1, ColumnHelper::count_nulls(array->elements_column()));
+    EXPECT_TRUE(array->elements_column()->is_null(1));
+    auto* data = down_cast<const StructColumn*>(ColumnHelper::get_data_column(array->elements_column().get()));
+    check_geo(data->fields()[0]);
 }
 
 INSTANTIATE_TEST_SUITE_P(NativeGeo, GeoNullCastTest, ::testing::Values(TYPE_GEOGRAPHY, TYPE_GEOMETRY));

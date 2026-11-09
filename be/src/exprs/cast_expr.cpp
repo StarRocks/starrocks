@@ -45,25 +45,6 @@ static std::unique_ptr<Expr> create_slot_ref(const TypeDescriptor& type) {
     return std::make_unique<ColumnRef>(ref_node);
 }
 
-namespace {
-class CastNullToGeoExpr final : public Expr {
-public:
-    explicit CastNullToGeoExpr(const TExprNode& node) : Expr(node) {}
-
-    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {
-        ASSIGN_OR_RETURN(auto input, _children[0]->evaluate_checked(context, chunk));
-        if (ColumnHelper::count_nulls(input) != input->size()) {
-            return Status::NotSupported("Cannot cast non-NULL values to " + _type.debug_string());
-        }
-        auto column = ColumnHelper::create_column(_type, true);
-        column->append_nulls(1);
-        return ConstColumn::create(std::move(column), input->size());
-    }
-
-    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastNullToGeoExpr(*this)); }
-};
-} // namespace
-
 StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     // only null
     auto column = ColumnHelper::create_column(_type, true);
@@ -629,10 +610,8 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
             return new CastStructExpr(node, std::move(field_casts), std::move(source_field_indices));
         }
     }
-    if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) && to_type.is_geo_type()) {
-        return new CastNullToGeoExpr(node);
-    }
-    if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) && to_type.is_complex_type()) {
+    if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) &&
+        (to_type.is_complex_type() || to_type.is_geo_type())) {
         return new MustNullExpr(node);
     }
 
