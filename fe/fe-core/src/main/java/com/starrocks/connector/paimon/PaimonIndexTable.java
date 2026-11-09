@@ -55,7 +55,7 @@ public final class PaimonIndexTable extends Table {
                 ? tableName.substring(0, tableName.length() - INDEX_TABLE_SUFFIX.length()) : tableName;
     }
 
-    public static Table metadataTable(Table table) {
+    public static Table unwrap(Table table) {
         return table instanceof PaimonIndexTable ? ((PaimonIndexTable) table).getInnerTable() : table;
     }
 

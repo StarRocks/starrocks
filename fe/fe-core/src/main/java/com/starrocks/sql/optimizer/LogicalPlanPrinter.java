@@ -234,15 +234,18 @@ public class LogicalPlanPrinter {
 
         @Override
         public OperatorStr visitLogicalTableScan(OptExpression optExpression, Integer step) {
-            LogicalScanOperator scanOperator = optExpression.getOp().cast();
-            String suffix = "";
-            if (scanOperator instanceof LogicalPaimonScanOperator) {
-                LogicalPaimonScanOperator paimonScan = (LogicalPaimonScanOperator) scanOperator;
-                if (paimonScan.getIndexCondition() != null) {
-                    suffix = " recognized index[predicate="
-                            + scalarOperatorStringFunction.apply(paimonScan.getIndexCondition().getPredicate()) + "]";
-                }
-            }
+            return printLogicalScan(optExpression.getOp().cast(), step, "");
+        }
+
+        @Override
+        public OperatorStr visitLogicalPaimonScan(OptExpression optExpression, Integer step) {
+            LogicalPaimonScanOperator scan = optExpression.getOp().cast();
+            String suffix = scan.getIndexCondition() == null ? "" : " recognized index[predicate="
+                    + scalarOperatorStringFunction.apply(scan.getIndexCondition().getPredicate()) + "]";
+            return printLogicalScan(scan, step, suffix);
+        }
+
+        private OperatorStr printLogicalScan(LogicalScanOperator scanOperator, Integer step, String suffix) {
             if (!isPrintColumnRef) {
                 return new OperatorStr("logical scan" + suffix, step, Collections.emptyList());
             }

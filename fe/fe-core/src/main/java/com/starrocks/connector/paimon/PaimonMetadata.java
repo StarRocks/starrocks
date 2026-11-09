@@ -514,7 +514,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     public TvrVersionRange getTableVersionRange(String dbName, Table table,
                                                 Optional<ConnectorTableVersion> startVersion,
                                                 Optional<ConnectorTableVersion> endVersion) {
-        PaimonTable paimonTable = (PaimonTable) PaimonIndexTable.metadataTable(table);
+        PaimonTable paimonTable = (PaimonTable) PaimonIndexTable.unwrap(table);
         String branch = endVersion.map(PaimonMetadata::requestedBranch).orElse(DEFAULT_MAIN_BRANCH);
         String startBranch = startVersion.map(PaimonMetadata::requestedBranch).orElse(branch);
         if (!branch.equals(startBranch)) {

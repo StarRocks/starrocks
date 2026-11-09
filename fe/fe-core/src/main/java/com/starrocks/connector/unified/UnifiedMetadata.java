@@ -159,7 +159,7 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     }
 
     private ConnectorMetadata metadataOfTable(Table table) {
-        table = PaimonIndexTable.metadataTable(table);
+        table = PaimonIndexTable.unwrap(table);
         Table.TableType type = getTableType(table);
         if (table.isHiveView()) {
             type = HIVE;

@@ -26,6 +26,7 @@ import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
@@ -107,6 +108,28 @@ public class ApplyConnectorIndexRuleTest {
             Assertions.assertFalse(rule.check(input, null));
             Assertions.assertTrue(rule.transform(input, null).isEmpty());
         }
+    }
+
+    @Test
+    public void testLogicalPaimonScanVisitorDispatch() {
+        OptExpression input = OptExpression.create(createScan(ConstantOperator.createBoolean(true)));
+        OptExpressionVisitor<String, Void> genericVisitor = new OptExpressionVisitor<>() {
+            @Override
+            public String visitLogicalTableScan(OptExpression expression, Void context) {
+                Assertions.assertSame(input, expression);
+                return "generic";
+            }
+        };
+        OptExpressionVisitor<String, Void> paimonVisitor = new OptExpressionVisitor<>() {
+            @Override
+            public String visitLogicalPaimonScan(OptExpression expression, Void context) {
+                Assertions.assertSame(input, expression);
+                return "paimon";
+            }
+        };
+
+        Assertions.assertEquals("generic", genericVisitor.visit(input, null));
+        Assertions.assertEquals("paimon", paimonVisitor.visit(input, null));
     }
 
     @Test

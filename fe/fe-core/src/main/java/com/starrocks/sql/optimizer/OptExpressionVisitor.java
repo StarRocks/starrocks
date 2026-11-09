@@ -35,6 +35,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitLogicalPaimonScan(OptExpression optExpression, C context) {
+        return visitLogicalTableScan(optExpression, context);
+    }
+
     public R visitLogicalProject(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }

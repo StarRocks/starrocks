@@ -21,6 +21,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.index.IndexCondition;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -58,6 +60,11 @@ public class LogicalPaimonScanOperator extends LogicalScanOperator {
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalPaimonScan(this, context);
+    }
+
+    @Override
+    public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
+        return visitor.visitLogicalPaimonScan(optExpression, context);
     }
 
     @Override
