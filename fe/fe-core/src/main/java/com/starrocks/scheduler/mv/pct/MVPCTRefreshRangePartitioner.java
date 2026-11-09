@@ -27,6 +27,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
@@ -34,6 +35,7 @@ import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshParams;
 import com.starrocks.scheduler.mv.MVTraceUtils;
+import com.starrocks.scheduler.mv.MVVersionManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -117,7 +119,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     }
 
     @Override
-    public boolean syncAddOrDropPartitions() throws AnalysisException {
+    public boolean syncAddOrDropPartitions() throws AnalysisException, LockTimeoutException {
         String start = context == null ? null : context.getProperties().get(TaskRun.PARTITION_START);
         String end = context == null ? null : context.getProperties().get(TaskRun.PARTITION_END);
         Optional<Column> partitionColumnOpt = mv.getRangePartitionFirstColumn();
@@ -143,6 +145,14 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         // intersects a component this diff kept untouched, the request cannot be satisfied: remember the
         // conflict so the refresh reports it instead of claiming the range is already up to date.
         recordDeferredShapeChangeRanges(rangeToInclude, result.diff.getDeferredReplacementRanges());
+
+        // This sync is about to drop populated partitions for their replacements, which only hold rows once the
+        // insert of this run commits (it may also never commit). Invalidate the persisted freshness first, before
+        // the first drop: a failure between the drop and the additions/insert (allocation failure, DDL error,
+        // crash) must not leave the mv claiming to be fresh over the empty replacements.
+        if (!mvContext.isExplain() && !result.diff.getReplacementAdds().isEmpty()) {
+            new MVVersionManager(mv, mvContext).invalidateFreshnessForPendingReplacement();
+        }
 
         // Delete old partitions and then add new partitions because the old and new partitions may overlap
         PCellSortedSet deletes = result.diff.getDeletes();

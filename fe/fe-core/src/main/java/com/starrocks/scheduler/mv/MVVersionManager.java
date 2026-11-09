@@ -25,6 +25,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionUtil;
@@ -150,37 +151,47 @@ public class MVVersionManager {
     }
 
     /**
-     * Drop the IVM base-table checkpoint after a partition shape change replaced populated partitions.
-     * IVM only applies base-table deltas, so it cannot rebuild a replacement partition: if this run's insert
-     * never commits, the replacement stays empty and IVM would later report the mv up to date because the base
-     * tables have not changed. Invalidating the checkpoint forces the next refresh onto the PCT path, which
-     * re-materializes the replacement partitions from the base tables. The journaled scheme keeps this across a
-     * leader failover; the next successful refresh writes the new checkpoint.
+     * Persist that the mv's freshness state no longer describes its data, because this refresh is about to drop
+     * populated partitions for replacements whose rows only exist once its insert commits.
+     *
+     * <p>Both pieces of persisted state that would otherwise claim the mv is fresh are cleared:
+     * <ul>
+     *   <li>the IVM base-table checkpoint, because IVM only applies base-table deltas and would report the
+     *       replacements up to date while the base tables have not changed;</li>
+     *   <li>{@code lastFreshnessConfirmedAt}, because {@code MaterializedView#isStalenessSatisfied()} would
+     *       otherwise skip per-partition change detection inside {@code mv_rewrite_staleness_second} and let
+     *       queries rewrite to the empty replacements.</li>
+     * </ul>
+     *
+     * <p>The journaled write is a prerequisite for the replacement: a failure between the drop and the insert
+     * must be visible to the next refresh (and to a follower after failover), so it is done under the mv write
+     * lock rather than degraded to an in-memory clear.
      */
-    public void invalidateIvmCheckpointForPendingReplacement() {
-        MaterializedView.AsyncRefreshContext refreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
-        if (refreshContext.getBaseTableInfoTvrVersionRangeMap().isEmpty()) {
-            // Nothing to invalidate: no IVM checkpoint exists (e.g. the first refresh of the mv).
+    public void invalidateFreshnessForPendingReplacement() throws LockTimeoutException {
+        MaterializedView.MvRefreshScheme scheme = mv.getRefreshScheme();
+        boolean hasIvmCheckpoint = !scheme.getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap().isEmpty();
+        boolean hasConfirmedFreshness = scheme.getLastFreshnessConfirmedAt() > 0;
+        if (!hasIvmCheckpoint && !hasConfirmedFreshness) {
+            // Nothing claims the mv is fresh: nothing to invalidate.
             return;
         }
         Locker locker = new Locker();
         if (!locker.tryLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE,
                 Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
-            // Still drop the checkpoint in memory: the retries in this process must not skip the rebuild. A
-            // failover still reads the old checkpoint from the journal, which is the pre-existing window.
-            logger.warn("failed to lock mv {} to invalidate the IVM checkpoint, only clearing it in memory",
-                    mv.getName());
-            refreshContext.getBaseTableInfoTvrVersionRangeMap().clear();
-            return;
+            // Proceeding would either drop partitions with a marker that a concurrent publisher can overwrite,
+            // or leave no journaled recovery state at all. Fail the refresh before it reshapes anything.
+            throw new LockTimeoutException(String.format("Failed to acquire the write lock of materialized view "
+                    + "%s to invalidate its freshness before reshaping partitions, retry the refresh", mv.getName()));
         }
         try {
             if (!mv.isInCatalog()) {
                 return;
             }
-            logger.info("invalidate the IVM checkpoint of materialized view {} because a pending partition "
-                    + "shape replacement is not materialized yet", mv.getName());
+            logger.info("invalidate the freshness of materialized view {} because a partition shape replacement "
+                    + "is not materialized yet", mv.getName());
             MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy();
             copiedScheme.getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap().clear();
+            copiedScheme.setLastFreshnessConfirmedAt(0);
             persistRefreshScheme(copiedScheme);
         } finally {
             locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE);

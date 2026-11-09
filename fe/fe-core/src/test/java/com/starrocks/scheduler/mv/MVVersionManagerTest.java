@@ -25,6 +25,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersion;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionUtil;
@@ -443,38 +444,54 @@ public class MVVersionManagerTest {
     }
 
     // A shape change drops populated partitions and creates their empty replacements before the insert that
-    // fills them commits. IVM would otherwise skip the rebuild (base tables did not change), leaving the
-    // replacements empty forever, so the IVM checkpoint is dropped and journaled.
+    // fills them commits. IVM would otherwise skip the rebuild (base tables did not change), and the rewrite
+    // staleness window would skip per-partition checks, so both pieces of freshness state are dropped and
+    // journaled before the replacement starts.
     @Test
-    public void invalidateIvmCheckpointClearsBaselineAndLogsOnce() {
+    public void invalidateFreshnessClearsCheckpointAndConfirmedFreshness() {
         MaterializedView mv = buildMv(1000L);
         BaseTableInfo baseTableInfo = mock(BaseTableInfo.class);
         mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap()
                 .put(baseTableInfo, TvrTableSnapshot.of(TvrVersion.of(1L)));
         MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
 
-        manager.invalidateIvmCheckpointForPendingReplacement();
+        Assertions.assertDoesNotThrow(manager::invalidateFreshnessForPendingReplacement);
 
         Assertions.assertTrue(mv.getRefreshScheme().getAsyncRefreshContext()
                         .getBaseTableInfoTvrVersionRangeMap().isEmpty(),
                 "the IVM checkpoint must be dropped so the next run rebuilds the replacement partitions");
-        Assertions.assertEquals(1, editLogCount.get(), "the dropped checkpoint must be journaled");
+        Assertions.assertEquals(0L, mv.getRefreshScheme().getLastFreshnessConfirmedAt(),
+                "a confirmed freshness would let query rewrite skip the empty replacements");
+        Assertions.assertEquals(1, editLogCount.get(), "the invalidated state must be journaled");
     }
 
+    // MVs without an IVM checkpoint (native base tables) still need the rewrite freshness baseline dropped.
     @Test
-    public void invalidateIvmCheckpointIsNoopWithoutBaseline() {
+    public void invalidateFreshnessClearsConfirmedFreshnessWithoutCheckpoint() {
         MaterializedView mv = buildMv(1000L);
         MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
 
-        manager.invalidateIvmCheckpointForPendingReplacement();
+        Assertions.assertDoesNotThrow(manager::invalidateFreshnessForPendingReplacement);
 
-        Assertions.assertEquals(0, editLogCount.get(), "no checkpoint means nothing to invalidate");
+        Assertions.assertEquals(0L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertEquals(1, editLogCount.get());
     }
 
-    // The lock-timeout fallback still drops the checkpoint in memory, so the retries in this process cannot skip
-    // the rebuild; only the journaled scheme keeps the old checkpoint (a failover window).
     @Test
-    public void invalidateIvmCheckpointClearsMemoryWhenLockTimedOut() {
+    public void invalidateFreshnessIsNoopWithoutFreshnessEvidence() {
+        MaterializedView mv = buildMv(0L);
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+
+        Assertions.assertDoesNotThrow(manager::invalidateFreshnessForPendingReplacement);
+
+        Assertions.assertEquals(0, editLogCount.get(), "nothing claims the mv is fresh, nothing to invalidate");
+    }
+
+    // The invalidation is a prerequisite for the destructive replacement: without the mv write lock there is no
+    // journaled recovery state, so the refresh must not proceed (a lock-less in-memory clear could be overwritten
+    // by a concurrent publisher and is not visible after failover).
+    @Test
+    public void invalidateFreshnessFailsWithoutTheMvWriteLock() {
         MaterializedView mv = buildMv(1000L);
         BaseTableInfo baseTableInfo = mock(BaseTableInfo.class);
         mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap()
@@ -488,11 +505,13 @@ public class MVVersionManagerTest {
         };
         MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
 
-        manager.invalidateIvmCheckpointForPendingReplacement();
+        Assertions.assertThrows(LockTimeoutException.class,
+                manager::invalidateFreshnessForPendingReplacement);
 
-        Assertions.assertTrue(mv.getRefreshScheme().getAsyncRefreshContext()
+        Assertions.assertFalse(mv.getRefreshScheme().getAsyncRefreshContext()
                         .getBaseTableInfoTvrVersionRangeMap().isEmpty(),
-                "the in-process checkpoint must still be dropped");
+                "the state must not be mutated without the lock");
+        Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
         Assertions.assertEquals(0, editLogCount.get(), "no journal write without the mv lock");
     }
 
