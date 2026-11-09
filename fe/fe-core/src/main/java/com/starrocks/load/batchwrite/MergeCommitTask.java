@@ -47,6 +47,8 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.LoadConstants;
+import com.starrocks.load.LoadErrorCode;
+import com.starrocks.load.LoadErrorCodeMapper;
 import com.starrocks.load.loadv2.LoadErrorUtils;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.streamload.AbstractStreamLoadTask;
@@ -233,6 +235,9 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
     // The message describing the current state. For CANCELLED/ABORTED, it's the reason.
     // For FINISHED, describe whether publish success before load timeouts
     private volatile String taskStateMessage = null;
+    // Classification of taskStateMessage once the task ends in CANCELLED or ABORTED, derived
+    // lazily on first read and kept together with the message it belongs to.
+    private volatile LoadErrorCodeMapper.CachedCode cachedErrorCode = null;
     // Cancel handler for the current non-final state; invoked when the task is cancelled in that state.
     // It may be null depending on the current state (e.g. states without meaningful cancel action).
     private volatile TaskStateCancelHandler taskStateCancelHandler = null;
@@ -867,6 +872,24 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
         return txnId;
     }
 
+    /**
+     * Returns the failure reason once the task is cancelled or aborted, or null while it is running
+     * or has succeeded.
+     */
+    public LoadErrorCode getErrorCode() {
+        TaskState state = taskState;
+        if (state != TaskState.CANCELLED && state != TaskState.ABORTED) {
+            return null;
+        }
+        String message = taskStateMessage;
+        LoadErrorCodeMapper.CachedCode cached = cachedErrorCode;
+        if (cached == null || cached.source() != message) {
+            cached = new LoadErrorCodeMapper.CachedCode(message, LoadErrorCodeMapper.fromMessage(message));
+            cachedErrorCode = cached;
+        }
+        return cached.code();
+    }
+
     @Override
     public String getStateName() {
         return convertTaskStateToLoadState();
@@ -935,6 +958,11 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             info.setPriority(LoadPriority.NORMAL);
             info.setState(convertTaskStateToLoadState());
             info.setError_msg(taskStateMessage);
+            // read under the same lock as the state and the message, so the three always agree
+            LoadErrorCode errorCode = getErrorCode();
+            if (errorCode != null) {
+                info.setError_code(errorCode.name());
+            }
 
             LoadStats stats = this.loadStats;
             if (stats != null) {

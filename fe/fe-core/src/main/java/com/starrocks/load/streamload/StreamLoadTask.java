@@ -44,6 +44,8 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.LoadConstants;
+import com.starrocks.load.LoadErrorCode;
+import com.starrocks.load.LoadErrorCodeMapper;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -142,6 +144,9 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     private String clientIp = "";
     @SerializedName(value = "errorMsg")
     private String errorMsg;
+    // Classification of errorMsg once the task is CANCELLED, derived lazily on first read and
+    // kept together with the message it belongs to.
+    private transient volatile LoadErrorCodeMapper.CachedCode cachedErrorCode;
     @SerializedName(value = "trackingUrl")
     private String trackingUrl;
     @SerializedName(value = "timeoutMs")
@@ -1087,6 +1092,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     this.channels.set(i, State.CANCELLED);
                 }
                 this.state = State.CANCELLED;
+                this.errorMsg = reason;
                 writeUnlock();
             }
         } catch (Exception e) {
@@ -1631,6 +1637,22 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         return id;
     }
 
+    /**
+     * Returns the failure reason once the task is cancelled, or null while it is running or has succeeded.
+     */
+    public LoadErrorCode getErrorCode() {
+        if (state != State.CANCELLED) {
+            return null;
+        }
+        String message = errorMsg;
+        LoadErrorCodeMapper.CachedCode cached = cachedErrorCode;
+        if (cached == null || cached.source() != message) {
+            cached = new LoadErrorCodeMapper.CachedCode(message, LoadErrorCodeMapper.fromMessage(message));
+            cachedErrorCode = cached;
+        }
+        return cached.code();
+    }
+
     public String getStateName() {
         return state.name();
     }
@@ -1844,6 +1866,10 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             info.setUser(user);
             info.setState(state.name());
             info.setError_msg(errorMsg);
+            LoadErrorCode errorCode = getErrorCode();
+            if (errorCode != null) {
+                info.setError_code(errorCode.name());
+            }
             info.setRuntime_details(toRuntimeDetails());
             info.setProperties(toProperties());
             if (state == State.FINISHED) {

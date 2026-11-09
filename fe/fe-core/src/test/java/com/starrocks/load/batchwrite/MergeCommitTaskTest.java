@@ -20,6 +20,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.load.LoadErrorCode;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.streamload.StreamLoadHttpHeader;
 import com.starrocks.load.streamload.StreamLoadInfo;
@@ -355,6 +356,8 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         assertEquals(label, loadExecuteCallback.getFinishedLoads().get(0));
         assertEquals(TransactionStatus.ABORTED, getTxnStatus(label));
         assertTrue(task.getTxnId() > 0);
+        assertEquals(LoadErrorCode.FILTER_RATIO_EXCEEDED, task.getErrorCode());
+        assertEquals(LoadErrorCode.FILTER_RATIO_EXCEEDED.name(), task.toThrift().get(0).getError_code());
     }
 
     @Test
@@ -1307,5 +1310,30 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         public void finish(MergeCommitTask mergeCommitTask) {
             finishedLoads.add(mergeCommitTask.getLabel());
         }
+    }
+
+    @Test
+    public void testErrorCodeAfterCancel() {
+        Coordinator.Factory factory = Mockito.mock(Coordinator.Factory.class);
+        MergeCommitTask task = new MergeCommitTask(
+                GlobalStateMgr.getCurrentState().getNextId(),
+                DATABASE_1.getId(),
+                new TableId(DB_NAME_1, TABLE_NAME_1_1),
+                label,
+                loadId,
+                streamLoadInfo,
+                1000,
+                kvParams,
+                "root",
+                warehouseName,
+                new HashSet<>(Arrays.asList(10002L, 10003L)),
+                factory,
+                loadExecuteCallback);
+
+        assertNull(task.getErrorCode());
+        task.cancel("manual abort");
+        assertEquals(LoadErrorCode.USER_CANCELLED, task.getErrorCode());
+        task.run();
+        assertEquals(LoadErrorCode.USER_CANCELLED, task.getErrorCode());
     }
 }

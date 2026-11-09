@@ -64,6 +64,8 @@ import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
 import com.starrocks.load.LoadConstants;
+import com.starrocks.load.LoadErrorCode;
+import com.starrocks.load.LoadErrorCodeMapper;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -171,6 +173,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
     protected long transactionId;
     @SerializedName("fm")
     protected FailMsg failMsg;
+    // Classification of failMsg for a cancelled job, derived lazily on first read and kept
+    // together with the FailMsg instance it belongs to, so it is computed once per message
+    // and never inside the cancel path or the transaction abort callback.
+    private transient volatile LoadErrorCodeMapper.CachedCode cachedErrorCode;
     protected Map<Long, LoadTask> idToTasks = Maps.newConcurrentMap();
     // Persisted so that LOAD_ID survives a restart; cleared when the job is retried.
     @SerializedName("lids")
@@ -307,6 +313,25 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
 
     public JobState getState() {
         return state;
+    }
+
+    /**
+     * Returns the failure reason of a cancelled job, or null when the job has not failed.
+     */
+    public LoadErrorCode getErrorCode() {
+        if (state != JobState.CANCELLED) {
+            return null;
+        }
+        FailMsg msg = failMsg;
+        if (msg == null) {
+            return LoadErrorCode.UNKNOWN;
+        }
+        LoadErrorCodeMapper.CachedCode cached = cachedErrorCode;
+        if (cached == null || cached.source() != msg) {
+            cached = new LoadErrorCodeMapper.CachedCode(msg, LoadErrorCodeMapper.fromFailMsg(msg));
+            cachedErrorCode = cached;
+        }
+        return cached.code();
     }
 
     protected void setState(JobState state) {
@@ -1169,6 +1194,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
             // error msg
             if (failMsg != null) {
                 info.setError_msg("type:" + failMsg.getCancelType() + "; msg:" + failMsg.getMsg());
+            }
+            LoadErrorCode errorCode = getErrorCode();
+            if (errorCode != null) {
+                info.setError_code(errorCode.name());
             }
 
             // create time. Set both the legacy wall-clock string and the new

@@ -43,7 +43,7 @@ description: "loads 提供导入作业的结果信息。"
 | TABLE_ID             | 目标表的 ID。当 Broker Load 作业导入多张表时返回 `NULL`。    |
 | PARENT_ID            | 对于 Routine Load 任务，为其所属 Routine Load 作业的 ID；对于 Merge Commit 任务，为其所属 Merge Commit 作业的 ID。其他情况返回 `NULL`。 |
 | STATEMENT            | 对于 INSERT 作业，为创建该作业的语句类型：`INSERT_SELECT`、`INSERT_VALUES`、`INSERT_FILES`、`UPDATE`、`DELETE` 或 `MERGE`。其他情况返回 `NULL`。 |
-| ERROR_CODE           | 预留字段。当前始终为 `NULL`。                                 |
+| ERROR_CODE           | 导入被取消的原因，取值为以下固定编码之一：`FILTER_RATIO_EXCEEDED`、`MEM_LIMIT_EXCEEDED`、`COMPACTION_SCORE_EXCEEDED`、`TOO_MANY_RUNNING_TXNS`、`LABEL_ALREADY_EXISTS`、`TIMEOUT`、`USER_CANCELLED`、`SOURCE_READ_FAILED`、`SCHEMA_MISMATCH`、`BE_UNAVAILABLE`、`TXN_CONFLICT`、`INTERNAL_ERROR` 或 `UNKNOWN`。未被取消的导入作业返回 `NULL`。 |
 | VISIBLE_TIME         | 导入事务变为可见的时间。未完成或已取消的导入作业返回 `NULL`。 |
 | SINK_BYTES           | 写入目标表的字节数。对应导入类型未统计时返回 `NULL`。          |
 | CLIENT_IP            | 提交导入作业的客户端 IP 地址。INSERT 和 Stream Load 作业可用；其他导入类型以及在 FE 上开启事务的 Stream Load 返回 `NULL`。 |

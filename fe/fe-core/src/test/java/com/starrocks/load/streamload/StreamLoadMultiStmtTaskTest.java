@@ -22,6 +22,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.load.LoadErrorCode;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -509,6 +510,26 @@ public class StreamLoadMultiStmtTaskTest {
         boolean result = multiTask.checkNeedRemove(System.currentTimeMillis(), false);
         Assertions.assertFalse(result);
         Assertions.assertEquals("CANCELLED", multiTask.getStateName());
+    }
+
+    // The rows of a multi-statement load are its sub-tasks, so a timeout of the parent must
+    // reach them as a reason that says what timed out.
+    @Test
+    public void testCancelOnTimeoutGivesSubTasksTimeoutErrorCode() {
+        new MockUp<TransactionStmtExecutor>() {
+            @Mock
+            public void rollbackStmt(com.starrocks.qe.ConnectContext ctx,
+                                     com.starrocks.sql.ast.txn.RollbackStmt stmt) {
+            }
+        };
+        Deencapsulation.setField(multiTask, "txnId", 500L);
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.LOADING);
+
+        multiTask.cancelOnTimeout();
+
+        Assertions.assertEquals("CANCELLED", multiTask.getStateName());
+        Assertions.assertEquals(StreamLoadTask.State.CANCELLED, Deencapsulation.getField(sub, "state"));
+        Assertions.assertEquals(LoadErrorCode.TIMEOUT, sub.getErrorCode());
     }
 
     @Test

@@ -42,6 +42,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
@@ -55,6 +56,7 @@ import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.FailMsg;
+import com.starrocks.load.LoadErrorCode;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.NextIdLog;
@@ -1332,5 +1334,46 @@ public class BrokerLoadJobTest {
             }
         }
         Assertions.fail("expected MetaNotFoundException in the cause chain, got: " + thrown);
+    }
+
+    @Test
+    public void testErrorCodeAfterCancel(@Injectable long taskId) {
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation, WALApplier walApplier) {
+                walApplier.apply(loadJobFinalOperation);
+            }
+        };
+
+        // A running job has no error code.
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        Assertions.assertNull(brokerLoadJob.getErrorCode());
+
+        // Task failure with an unstructured cancel type: the message decides.
+        brokerLoadJob.retryTime = 0;
+        brokerLoadJob.onTaskFailed(taskId, new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL,
+                "Memory of process exceed limit. Used: 100, Limit: 99. Mem usage has exceed the limit of BE"), null);
+        Assertions.assertEquals(JobState.CANCELLED, brokerLoadJob.getState());
+        Assertions.assertEquals(LoadErrorCode.MEM_LIMIT_EXCEEDED, brokerLoadJob.getErrorCode());
+
+        // CANCEL LOAD: the structured cancel type decides.
+        BrokerLoadJob userCancelled = new BrokerLoadJob();
+        userCancelled.cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.USER_CANCEL, "user cancel"), false);
+        Assertions.assertEquals(JobState.CANCELLED, userCancelled.getState());
+        Assertions.assertEquals(LoadErrorCode.USER_CANCELLED, userCancelled.getErrorCode());
+    }
+
+    @Test
+    public void testErrorCodeAfterReplayOnAborted() {
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        brokerLoadJob.retryTime = 0;
+        TransactionState txnState = new TransactionState();
+        // the reason BrokerLoadJob aborts the transaction with when the quality check fails
+        txnState.setReason(DataQualityException.QUALITY_FAIL_MSG + ". tracking sql: select tracking_log from "
+                + "information_schema.load_tracking_logs where job_id=1");
+        brokerLoadJob.replayOnAborted(txnState);
+        Assertions.assertEquals(JobState.CANCELLED, brokerLoadJob.getState());
+        Assertions.assertEquals(LoadErrorCode.FILTER_RATIO_EXCEEDED, brokerLoadJob.getErrorCode());
     }
 }

@@ -763,7 +763,9 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
             LOG.info("Cancel multi-statement stream load task due to timeout, label: {}, txnId: {}, " +
                     "createTimeMs: {}, timeoutMs: {}", label, txnId, createTimeMs, timeoutMs);
             this.errorMsg = "transaction timeout after " + timeoutMs + "ms";
-            transitionToAborting("timeout");
+            // The abort reason becomes the error message of every sub-task, which is what the
+            // rows of this load show, so it has to say what timed out.
+            transitionToAborting(this.errorMsg);
         } finally {
             writeUnlock();
         }

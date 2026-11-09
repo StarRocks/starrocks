@@ -43,7 +43,7 @@ The following fields are provided in `loads`:
 | TABLE_ID             | The ID of the target table. `NULL` when a Broker Load job targets more than one table. |
 | PARENT_ID            | For a Routine Load task, the ID of its Routine Load job. For a Merge Commit task, the ID of its merge commit job. `NULL` otherwise. |
 | STATEMENT            | For INSERT jobs, the statement that created the job: `INSERT_SELECT`, `INSERT_VALUES`, `INSERT_FILES`, `UPDATE`, `DELETE`, or `MERGE`. `NULL` otherwise. |
-| ERROR_CODE           | Reserved. Currently always `NULL`.                            |
+| ERROR_CODE           | The reason a load was cancelled, as one of a fixed set of codes: `FILTER_RATIO_EXCEEDED`, `MEM_LIMIT_EXCEEDED`, `COMPACTION_SCORE_EXCEEDED`, `TOO_MANY_RUNNING_TXNS`, `LABEL_ALREADY_EXISTS`, `TIMEOUT`, `USER_CANCELLED`, `SOURCE_READ_FAILED`, `SCHEMA_MISMATCH`, `BE_UNAVAILABLE`, `TXN_CONFLICT`, `INTERNAL_ERROR`, or `UNKNOWN`. `NULL` for load jobs that have not been cancelled. |
 | VISIBLE_TIME         | The time at which the load transaction became visible. `NULL` for load jobs that have not finished or were cancelled. |
 | SINK_BYTES           | The number of bytes written to the target table. `NULL` when not tracked for the load type. |
 | CLIENT_IP            | The IP address of the client that submitted the load job. Available for INSERT and for Stream Load; `NULL` for other load types and for Stream Load transactions that are begun on the FE. |

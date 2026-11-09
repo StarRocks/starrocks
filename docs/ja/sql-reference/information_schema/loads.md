@@ -43,7 +43,7 @@ description: "loadsはロードジョブの結果を提供します。"
 | TABLE_ID             | 対象テーブルの ID。Broker Load ジョブが複数のテーブルを対象とする場合は `NULL`。 |
 | PARENT_ID            | Routine Load タスクの場合は所属する Routine Load ジョブの ID。Merge Commit タスクの場合は所属する Merge Commit ジョブの ID。それ以外は `NULL`。 |
 | STATEMENT            | INSERT ジョブの場合、ジョブを作成したステートメントの種類: `INSERT_SELECT`、`INSERT_VALUES`、`INSERT_FILES`、`UPDATE`、`DELETE`、`MERGE`。それ以外は `NULL`。 |
-| ERROR_CODE           | 予約済み。現在は常に `NULL`。                                 |
+| ERROR_CODE           | ロードがキャンセルされた理由を表す固定コード: `FILTER_RATIO_EXCEEDED`、`MEM_LIMIT_EXCEEDED`、`COMPACTION_SCORE_EXCEEDED`、`TOO_MANY_RUNNING_TXNS`、`LABEL_ALREADY_EXISTS`、`TIMEOUT`、`USER_CANCELLED`、`SOURCE_READ_FAILED`、`SCHEMA_MISMATCH`、`BE_UNAVAILABLE`、`TXN_CONFLICT`、`INTERNAL_ERROR`、または `UNKNOWN`。キャンセルされていないロードジョブでは `NULL`。 |
 | VISIBLE_TIME         | ロードトランザクションが可視になった時刻。未完了またはキャンセルされたロードジョブでは `NULL`。 |
 | SINK_BYTES           | 対象テーブルに書き込まれたバイト数。ロードタイプで追跡されない場合は `NULL`。 |
 | CLIENT_IP            | ロードジョブを送信したクライアントの IP アドレス。INSERT と Stream Load で利用可能。その他のロードタイプ、および FE でトランザクションを開始する Stream Load では `NULL`。 |

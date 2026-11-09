@@ -25,6 +25,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.load.LoadErrorCode;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -900,5 +901,31 @@ public class StreamLoadTaskTest {
         // State should remain FINISHED since it's an unreversible state
         Assertions.assertEquals(StreamLoadTask.State.FINISHED,
                 Deencapsulation.getField(task, "state"));
+    }
+
+    @Test
+    public void testErrorCodeAfterAborted() throws StarRocksException {
+        Assertions.assertNull(streamLoadTask.getErrorCode());
+
+        TransactionState txnState = new TransactionState();
+        txnState.setReason("too many filtered rows");
+        streamLoadTask.afterAborted(txnState, "too many filtered rows");
+        Assertions.assertEquals(StreamLoadTask.State.CANCELLED,
+                Deencapsulation.getField(streamLoadTask, "state"));
+        Assertions.assertEquals(LoadErrorCode.FILTER_RATIO_EXCEEDED, streamLoadTask.getErrorCode());
+    }
+
+    @Test
+    public void testErrorCodeAfterRestartCancel() {
+        streamLoadTask.cancelAfterRestart();
+        Assertions.assertEquals(LoadErrorCode.INTERNAL_ERROR, streamLoadTask.getErrorCode());
+    }
+
+    @Test
+    public void testErrorCodeFromRestoredErrorMsg() {
+        // A task restored from the journal only carries its state and error message.
+        Deencapsulation.invoke(streamLoadTask, "setState", StreamLoadTask.State.CANCELLED);
+        Deencapsulation.setField(streamLoadTask, "errorMsg", "manual abort");
+        Assertions.assertEquals(LoadErrorCode.USER_CANCELLED, streamLoadTask.getErrorCode());
     }
 }
