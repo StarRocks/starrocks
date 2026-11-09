@@ -233,7 +233,6 @@ p20200101	3
 p202002	4
 -- !result
 
-<<<<<<< HEAD
 -- name: test_merge_partitions_specify_distributition_fail
 create table t(k date, v int) partition by date_trunc('day', k) distributed by hash(k) buckets 3;
 -- result:
@@ -245,7 +244,8 @@ E: (5064, 'Getting analyzing error. Detail message: Unsupported change distribut
 alter table t partition by date_trunc('month',k) distributed by random between '2020-02-01' and '2020-02-28';
 -- result:
 E: (5064, 'Getting analyzing error. Detail message: Unsupported change distribution type when merge partitions.')
-=======
+-- !result
+
 -- name: test_merge_partitions_again
 create table t(k datetime, v int) partition by date_trunc('hour', k) distributed by hash(k) buckets 3;
 -- result:
@@ -304,5 +304,4 @@ select * from t order by k;
 2020-01-01 02:00:00	3
 2020-01-03 02:00:00	4
 2020-01-03 03:00:00	5
->>>>>>> 732b120 ([BugFix][RB-919] Leave merged partitions alone when merging partitions again (#82408))
 -- !result

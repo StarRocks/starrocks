@@ -298,15 +298,11 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             List<String> partitionNames;
             Range<PartitionKey> targetRange;
             if (partitionDesc instanceof RangePartitionDesc) {
-<<<<<<< HEAD
-                partitionNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
-=======
                 RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
-                partitionNames = rangePartitionDesc.getPartitionNames();
+                partitionNames = rangePartitionDesc.getPartitionColNames();
                 Preconditions.checkState(rangePartitionDesc.getSingleRangePartitionDescs().size() == 1);
                 targetRange = getRange(rangePartitionDesc.getSingleRangePartitionDescs().get(0).getPartitionKeyDesc(),
                         partitionColumns);
->>>>>>> 732b120 ([BugFix][RB-919] Leave merged partitions alone when merging partitions again (#82408))
             } else {
                 throw new DdlException("Unsupported partitionDesc");
             }
