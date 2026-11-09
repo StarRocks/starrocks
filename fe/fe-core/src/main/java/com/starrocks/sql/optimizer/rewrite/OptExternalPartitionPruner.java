@@ -432,65 +432,6 @@ public class OptExternalPartitionPruner {
                 columnToPartitionValuesMap, columnToNullPartitions);
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * StarRocks external table: rebuild partition metadata from the statistics
-     * snapshot pinned on the table object (no remote call here — the snapshot
-     * was resolved through the connector's cache). LIST partitioning fills the
-     * value maps consumed by ListPartitionPruner; RANGE partitioning only
-     * registers the partition column refs (so classifyConjuncts can split the
-     * conjuncts) and prunes against rebuilt ranges in computePartitionInfo.
-     * Local pruning is estimation-only: the remote re-plans the pushed-down
-     * predicate SQL and prunes against its own live metadata for execution.
-     */
-    private static void initStarRocksPartitionInfo(
-            LogicalScanOperator operator, StarRocksExternalTable table,
-            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
-        StarRocksRemoteTableStats.Snapshot snapshot = table.getStatsSnapshot();
-        if (!StarRocksStatsUtils.isPruneSupported(snapshot) || table.isUnPartitioned()) {
-            return;
-        }
-        List<Column> partitionColumns = table.getPartitionColumns();
-        if (partitionColumns.isEmpty() || snapshot.partitionColumns == null
-                || partitionColumns.size() != snapshot.partitionColumns.size()) {
-            return;
-        }
-        List<ColumnRefOperator> partitionColumnRefOperators = new ArrayList<>();
-        for (Column column : partitionColumns) {
-            ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
-            columnToPartitionValuesMap.put(partitionColumnRefOperator, new ConcurrentSkipListMap<>());
-            columnToNullPartitions.put(partitionColumnRefOperator, Sets.newConcurrentHashSet());
-            partitionColumnRefOperators.add(partitionColumnRefOperator);
-        }
-
-        Map<Long, PartitionKey> canonicalKeys = StarRocksStatsUtils.buildCanonicalKeys(snapshot, partitionColumns);
-        Map<Long, PartitionKey> idToPartitionKey = operator.getScanOperatorPredicates().getIdToPartitionKey();
-        idToPartitionKey.putAll(canonicalKeys);
-
-        if (StarRocksRemoteTableStats.PARTITION_TYPE_LIST.equals(snapshot.partitionType)) {
-            Map<Long, List<List<LiteralExpr>>> tuples =
-                    StarRocksStatsUtils.parseListTuples(snapshot, partitionColumns);
-            for (Map.Entry<Long, List<List<LiteralExpr>>> entry : tuples.entrySet()) {
-                long partitionId = entry.getKey();
-                for (List<LiteralExpr> tuple : entry.getValue()) {
-                    for (int i = 0; i < tuple.size() && i < partitionColumnRefOperators.size(); i++) {
-                        ColumnRefOperator columnRefOperator = partitionColumnRefOperators.get(i);
-                        LiteralExpr literal = tuple.get(i);
-                        if (literal == null) {
-                            columnToNullPartitions.get(columnRefOperator).add(partitionId);
-                        } else {
-                            columnToPartitionValuesMap.get(columnRefOperator)
-                                    .computeIfAbsent(literal, k -> Sets.newConcurrentHashSet())
-                                    .add(partitionId);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     /**
      * The scan's conjuncts, and for a Hive scan the column predicates implied by its function predicates, so
      * {@code year(dt) = 2024} prunes partitions and row groups on {@code dt}; pruning only, never failing the query.
@@ -516,7 +457,6 @@ public class OptExternalPartitionPruner {
         }
     }
 
->>>>>>> 9a38b60d52d... [Enhancement][RB-225] Unify function predicate pruning for Iceberg, Delta Lake and Hive (#68959)
     private static void classifyConjuncts(LogicalScanOperator operator,
                                           Map<ColumnRefOperator,
                                                   ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap)
