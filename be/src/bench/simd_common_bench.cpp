@@ -364,8 +364,8 @@ static void BM_CountZero_32Bit_SIMD(benchmark::State& state) {
     state.SetBytesProcessed(state.iterations() * bytes);
 }
 
-BENCHMARK(BM_CountZero_8Bit_Scalar)->Apply(GenerateCountZeroArgs);
-BENCHMARK(BM_CountZero_8Bit_SIMD)->Apply(GenerateCountZeroArgs);
+BENCHMARK(BM_CountZero_8Bit_Scalar)->Apply(GenerateCountZeroArgs)->Arg(31)->Arg(63)->Arg(255)->Arg(4095);
+BENCHMARK(BM_CountZero_8Bit_SIMD)->Apply(GenerateCountZeroArgs)->Arg(31)->Arg(63)->Arg(255)->Arg(4095);
 BENCHMARK(BM_CountZero_32Bit_Scalar)->Apply(GenerateCountZeroArgs);
 BENCHMARK(BM_CountZero_32Bit_SIMD)->Apply(GenerateCountZeroArgs);
 

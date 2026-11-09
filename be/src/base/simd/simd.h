@@ -42,12 +42,40 @@ concept Integer32BitType = std::is_same_v<T, int32_t> || std::is_same_v<T, uint3
 // Count the number of zeros of 8-bit integers.
 template <Integer8BitType T>
 inline size_t count_zero(const T* data, size_t size) {
+    if (size == 0) {
+        return 0;
+    }
     size_t count = 0;
     const T* end = data + size;
 
 #if defined(__AVX2__)
     const __m256i zero256 = _mm256_setzero_si256();
-    const T* end64 = data + (size / 64 * 64);
+    const T* end256 = data + (size / 256 * 256);
+    for (; data < end256; data += 256) {
+        __m256i acc0 = _mm256_setzero_si256();
+        __m256i acc1 = _mm256_setzero_si256();
+        acc0 = _mm256_sub_epi8(acc0,
+                               _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data)), zero256));
+        acc1 = _mm256_sub_epi8(
+                acc1, _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 32)), zero256));
+        acc0 = _mm256_sub_epi8(
+                acc0, _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 64)), zero256));
+        acc1 = _mm256_sub_epi8(
+                acc1, _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 96)), zero256));
+        acc0 = _mm256_sub_epi8(
+                acc0, _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 128)), zero256));
+        acc1 = _mm256_sub_epi8(
+                acc1, _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 160)), zero256));
+        acc0 = _mm256_sub_epi8(
+                acc0, _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 192)), zero256));
+        acc1 = _mm256_sub_epi8(
+                acc1, _mm256_cmpeq_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + 224)), zero256));
+        const __m256i sad = _mm256_add_epi64(_mm256_sad_epu8(acc0, zero256), _mm256_sad_epu8(acc1, zero256));
+        const __m128i sad128 = _mm_add_epi64(_mm256_castsi256_si128(sad), _mm256_extracti128_si256(sad, 1));
+        count += static_cast<size_t>(_mm_cvtsi128_si64(sad128) + _mm_extract_epi64(sad128, 1));
+    }
+
+    const T* end64 = data + ((end - data) / 64 * 64);
 
     for (; data < end64; data += 64) {
         const __m256i v0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data));
@@ -69,6 +97,14 @@ inline size_t count_zero(const T* data, size_t size) {
         const uint32_t m = static_cast<uint32_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(v, _mm_setzero_si128())));
         count += __builtin_popcount(m);
         data += 16;
+    }
+
+    const size_t rem = static_cast<size_t>(end - data);
+    if (rem > 0 && size >= 16) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(end - 16));
+        const uint32_t m = static_cast<uint32_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(v, _mm_setzero_si128())));
+        count += __builtin_popcount(m >> (16 - rem));
+        return count;
     }
 #elif defined(__SSE2__) && defined(__POPCNT__)
     const __m128i zero16 = _mm_setzero_si128();
@@ -92,6 +128,14 @@ inline size_t count_zero(const T* data, size_t size) {
     for (; data < end16; data += 16) {
         count += __builtin_popcount(static_cast<uint32_t>(
                 _mm_movemask_epi8(_mm_cmpeq_epi8(_mm_loadu_si128(reinterpret_cast<const __m128i*>(data)), zero16))));
+    }
+
+    const size_t rem = static_cast<size_t>(end - data);
+    if (rem > 0 && size >= 16) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(end - 16));
+        const uint32_t m = static_cast<uint32_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(v, _mm_setzero_si128())));
+        count += __builtin_popcount(m >> (16 - rem));
+        return count;
     }
 #elif defined(__ARM_NEON) && defined(__aarch64__)
     const uint8x16_t zero_vec = vdupq_n_u8(0);
@@ -143,6 +187,9 @@ inline size_t count_zero(const T* data, size_t size) {
 // Count the number of zeros of 32-bit integers.
 template <Integer32BitType T>
 inline size_t count_zero(const T* data, size_t size) {
+    if (size == 0) {
+        return 0;
+    }
     size_t count = 0;
     const T* end = data + size;
 
@@ -176,6 +223,15 @@ inline size_t count_zero(const T* data, size_t size) {
         count += __builtin_popcount(m);
         data += 4;
     }
+
+    const size_t rem = static_cast<size_t>(end - data);
+    if (rem > 0 && size >= 4) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(end - 4));
+        const uint32_t m =
+                static_cast<uint32_t>(_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(v, _mm_setzero_si128()))));
+        count += __builtin_popcount(m >> (4 - rem));
+        return count;
+    }
 #elif defined(__SSE2__) && defined(__POPCNT__)
     // Count per 16 ints
     const __m128i zero16 = _mm_setzero_si128();
@@ -199,6 +255,15 @@ inline size_t count_zero(const T* data, size_t size) {
     for (; data < end4; data += 4) {
         count += __builtin_popcount(static_cast<uint32_t>(_mm_movemask_ps(
                 _mm_castsi128_ps(_mm_cmpeq_epi32(_mm_loadu_si128(reinterpret_cast<const __m128i*>(data)), zero16)))));
+    }
+
+    const size_t rem = static_cast<size_t>(end - data);
+    if (rem > 0 && size >= 4) {
+        const __m128i v = _mm_loadu_si128(reinterpret_cast<const __m128i*>(end - 4));
+        const uint32_t m =
+                static_cast<uint32_t>(_mm_movemask_ps(_mm_castsi128_ps(_mm_cmpeq_epi32(v, _mm_setzero_si128()))));
+        count += __builtin_popcount(m >> (4 - rem));
+        return count;
     }
 #elif defined(__ARM_NEON) && defined(__aarch64__)
     const uint32x4_t zero32 = vdupq_n_u32(0);
@@ -391,6 +456,13 @@ inline bool contains_nonzero_bit(const T* data, size_t size) {
     }
 
     return false;
+}
+
+template <typename Container, typename T = typename Container::value_type>
+inline bool contains_nonzero_bit(const Container& data) {
+    static_assert(std::is_integral<T>::value && sizeof(T) == sizeof(uint8_t),
+                  "only 8-bit integral types are supported");
+    return contains_nonzero_bit(data.data(), data.size());
 }
 
 /// Check if all bytes are zero (early exit on first non-zero).

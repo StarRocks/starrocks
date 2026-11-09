@@ -743,4 +743,105 @@ TEST_F(SIMDTest, streaming_agg_three_way_dispatch_equivalence) {
     }
 }
 
+TEST_F(SIMDTest, count_zero_unaligned_tails_256b_blocks_and_contains_nonzero_bit_container) {
+    // 1. Test SIMD::contains_nonzero_bit(const Container&) on std::vector<uint8_t> and std::vector<int8_t>
+    {
+        std::vector<uint8_t> empty_u8;
+        std::vector<int8_t> empty_i8;
+        EXPECT_FALSE(SIMD::contains_nonzero_bit(empty_u8));
+        EXPECT_FALSE(SIMD::contains_nonzero_bit(empty_i8));
+
+        const std::vector<size_t> unaligned_sizes = {1, 15, 16, 17, 31, 32, 33, 63, 64, 65, 255, 256, 257};
+        for (size_t sz : unaligned_sizes) {
+            std::vector<uint8_t> u8_vec(sz, 0);
+            std::vector<int8_t> i8_vec(sz, 0);
+            EXPECT_FALSE(SIMD::contains_nonzero_bit(u8_vec)) << "sz=" << sz;
+            EXPECT_FALSE(SIMD::contains_nonzero_bit(i8_vec)) << "sz=" << sz;
+
+            const std::vector<size_t> positions = {0, sz / 2, sz - 1};
+            for (size_t pos : positions) {
+                u8_vec[pos] = 1;
+                i8_vec[pos] = -1;
+                EXPECT_TRUE(SIMD::contains_nonzero_bit(u8_vec)) << "sz=" << sz << " pos=" << pos;
+                EXPECT_TRUE(SIMD::contains_nonzero_bit(i8_vec)) << "sz=" << sz << " pos=" << pos;
+                u8_vec[pos] = 0;
+                i8_vec[pos] = 0;
+            }
+        }
+    }
+
+    // 2. Test exact-sized buffers (for ASAN boundary checking) across 1..300 and {4095, 4096, 4097, 4111}
+    std::vector<size_t> test_sizes;
+    for (size_t n = 1; n <= 300; ++n) {
+        test_sizes.push_back(n);
+    }
+    for (size_t n : {size_t(4095), size_t(4096), size_t(4097), size_t(4111)}) {
+        test_sizes.push_back(n);
+    }
+
+    auto verify_u8 = [](const std::vector<uint8_t>& vec) {
+        size_t expected_zeros = 0;
+        for (uint8_t v : vec) {
+            expected_zeros += (v == 0);
+        }
+        EXPECT_EQ(expected_zeros, SIMD::count_zero(vec.data(), vec.size()));
+        EXPECT_EQ(expected_zeros, SIMD::count_zero(vec));
+        EXPECT_EQ(vec.size() - expected_zeros, SIMD::count_nonzero(vec.data(), vec.size()));
+        EXPECT_EQ(vec.size() - expected_zeros, SIMD::count_nonzero(vec));
+    };
+
+    auto verify_i32 = [](const std::vector<int32_t>& vec) {
+        size_t expected_zeros = 0;
+        for (int32_t v : vec) {
+            expected_zeros += (v == 0);
+        }
+        EXPECT_EQ(expected_zeros, SIMD::count_zero(vec.data(), vec.size()));
+        EXPECT_EQ(expected_zeros, SIMD::count_zero(vec));
+        EXPECT_EQ(vec.size() - expected_zeros, SIMD::count_nonzero(vec.data(), vec.size()));
+        EXPECT_EQ(vec.size() - expected_zeros, SIMD::count_nonzero(vec));
+    };
+
+    for (size_t n : test_sizes) {
+        // All-zeros
+        {
+            std::vector<uint8_t> u8_zeros(n, 0);
+            std::vector<int32_t> i32_zeros(n, 0);
+            verify_u8(u8_zeros);
+            verify_i32(i32_zeros);
+        }
+        // All-ones
+        {
+            std::vector<uint8_t> u8_ones(n, 1);
+            std::vector<int32_t> i32_ones(n, 1);
+            verify_u8(u8_ones);
+            verify_i32(i32_ones);
+        }
+        // Alternating
+        {
+            std::vector<uint8_t> u8_alt(n);
+            std::vector<int32_t> i32_alt(n);
+            for (size_t i = 0; i < n; ++i) {
+                u8_alt[i] = (i % 2 == 0) ? 0 : static_cast<uint8_t>((i % 251) + 1);
+                i32_alt[i] = (i % 2 == 0) ? 0 : static_cast<int32_t>(i + 1);
+            }
+            verify_u8(u8_alt);
+            verify_i32(i32_alt);
+        }
+        // Single-zero-at-each-tail-position (last up to 16 elements)
+        {
+            std::vector<uint8_t> u8_tail(n, 1);
+            std::vector<int32_t> i32_tail(n, 1);
+            const size_t tail_start = (n > 16) ? (n - 16) : 0;
+            for (size_t pos = tail_start; pos < n; ++pos) {
+                u8_tail[pos] = 0;
+                i32_tail[pos] = 0;
+                verify_u8(u8_tail);
+                verify_i32(i32_tail);
+                u8_tail[pos] = 1;
+                i32_tail[pos] = 1;
+            }
+        }
+    }
+}
+
 } // namespace starrocks
