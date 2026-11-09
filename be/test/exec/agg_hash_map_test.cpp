@@ -651,10 +651,14 @@ TEST(HashMapTest, ArchAwarePrefetchGateAndDistance) {
     EXPECT_EQ(16u, kArchDefaultAggPrefetchDist);
 #endif
 
-    // Default initialization sets arch-tuned distance, while explicit overrides (including 16 and 0) are respected.
-    EXPECT_EQ(kArchDefaultAggPrefetchDist, agg_hash_map_default_prefetch_dist());
+    // Config initialization sets arch-tuned distance before first prefetch call, and an explicit 16 on the
+    // very first call to agg_hash_map_default_prefetch_dist() is preserved without being overwritten.
+    EXPECT_EQ(static_cast<int32_t>(kArchDefaultAggPrefetchDist), saved_dist);
     config::agg_hash_map_prefetch_dist = 16;
     EXPECT_EQ(16u, agg_hash_map_default_prefetch_dist());
+    EXPECT_EQ(16, config::agg_hash_map_prefetch_dist);
+    config::agg_hash_map_prefetch_dist = static_cast<int32_t>(kArchDefaultAggPrefetchDist);
+    EXPECT_EQ(kArchDefaultAggPrefetchDist, agg_hash_map_default_prefetch_dist());
     config::agg_hash_map_prefetch_dist = 12;
     EXPECT_EQ(12u, agg_hash_map_default_prefetch_dist());
     config::agg_hash_map_prefetch_dist = 0;

@@ -69,12 +69,6 @@ inline bool agg_should_prefetch_table(const Table& table) {
 // Read once per chunk from config::agg_hash_map_prefetch_dist (arch default: 8 on x86_64, 16 on aarch64).
 // Clamp negative to 0 (disabled).
 inline size_t agg_hash_map_default_prefetch_dist() {
-    [[maybe_unused]] static const bool init_arch_default = []() {
-        if (config::agg_hash_map_prefetch_dist == 16) {
-            config::agg_hash_map_prefetch_dist = static_cast<int32_t>(kArchDefaultAggPrefetchDist);
-        }
-        return true;
-    }();
     const int32_t v = config::agg_hash_map_prefetch_dist;
     return v > 0 ? static_cast<size_t>(v) : 0;
 }
