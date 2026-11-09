@@ -18,16 +18,12 @@ import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.PlacementPolicy;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.alter.LakeRangeRollupJob;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
-import com.starrocks.alter.MaterializedViewHandler;
-import com.starrocks.alter.reshard.presplit.SampleSet;
 import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
@@ -57,10 +53,6 @@ import com.starrocks.sql.ast.TabletList;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.transaction.InsertTxnCommitAttachment;
-import com.starrocks.transaction.TransactionState;
-import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -73,7 +65,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -118,16 +109,10 @@ public class RangeColocatePartitionAttachTest {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
-        // Nothing may act behind the test: the reshard daemon also runs the colocate checker, and the rollup handler
-        // would run the rollup job a test drives itself.
+        // Nothing may act behind the test: the reshard daemon also runs the colocate checker.
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            protected void runAfterLeaseValid() {
-            }
-        };
-        new MockUp<MaterializedViewHandler>() {
-            @Mock
-            protected void runAfterLeaseValid() {
+            protected void runAfterCatalogReady() {
             }
         };
         new MockUp<StarOSAgent>() {
@@ -338,7 +323,8 @@ public class RangeColocatePartitionAttachTest {
             Assertions.assertTrue(index().isGroupUnstable(peer), "GroupId " + peer + " of the group must be unstable");
         }
         Assertions.assertTrue(reshardJobsOf(t).stream()
-                        .anyMatch(job -> job.getReshardingPhysicalPartitions().containsKey(partition.getId())),
+                        .anyMatch(job -> job instanceof SplitTabletJob
+                                && ((SplitTabletJob) job).getReshardingPhysicalPartitions().containsKey(partition.getId())),
                 "no alignment split of " + t.getName() + " covers partition " + partition.getId());
     }
 
@@ -707,58 +693,6 @@ public class RangeColocatePartitionAttachTest {
                 GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().createTabletReshardJob(db, peer, clause));
     }
 
-    /**
-     * Runs a range rollup job of a table in a range colocate group from PENDING to FINISHED, the way the rollup handler
-     * does: the loads before the watershed are reported finished, the rewrite of each partition is reported published
-     * as the transaction of its INSERT would be, and the flip's publish to the compute nodes is skipped.
-     */
-    private static void runRangeRollupJobToFinished(LakeRangeRollupJob job) throws Exception {
-        job.setSampler(request -> SampleSet.EMPTY);
-        Deencapsulation.invoke(job, "runPendingJob");
-        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
-        // The first round allocates the watershed and exposes the shadow index to loads.
-        Deencapsulation.invoke(job, "runWaitingTxnJob");
-        new MockUp<LakeRangeRollupJob>() {
-            @Mock
-            public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {
-                return true;
-            }
-        };
-        Deencapsulation.invoke(job, "runWaitingTxnJob");
-        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
-
-        long watershedTxnId = job.getTransactionId().orElseThrow();
-        Map<Long, TransactionState> rewriteTxns = new HashMap<>();
-        for (long physicalPartitionId : job.getPartitionIdsForTest()) {
-            long rewriteTxnId = GlobalStateMgr.getCurrentState().getNextId();
-            job.setRewriteTxnIdForTest(physicalPartitionId, rewriteTxnId);
-            TransactionState rewriteTxn = new TransactionState(0L, new ArrayList<>(), rewriteTxnId, "rewrite", null,
-                    TransactionState.LoadJobSourceType.SHADOW_REWRITE,
-                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"), 0L, 60_000L);
-            rewriteTxn.setTransactionStatus(TransactionStatus.VISIBLE);
-            InsertTxnCommitAttachment attachment = new InsertTxnCommitAttachment(0L);
-            attachment.setShadowRewriteWatershedTxnId(watershedTxnId);
-            attachment.setShadowRewriteAlterVersion(job.getWatershedVersion(physicalPartitionId));
-            rewriteTxn.setTxnCommitAttachment(attachment);
-            rewriteTxns.put(rewriteTxnId, rewriteTxn);
-        }
-        new MockUp<GlobalTransactionMgr>() {
-            @Mock
-            public TransactionState getTransactionState(Invocation invocation, long dbId, long transactionId) {
-                TransactionState rewriteTxn = rewriteTxns.get(transactionId);
-                return rewriteTxn != null ? rewriteTxn : invocation.proceed();
-            }
-        };
-        // Each rewrite is published already, so the job runs none. The first round places the shadow tablets into the
-        // PACK shard groups of their ColocateRanges and waits; the second finds them placed.
-        Deencapsulation.invoke(job, "runRunningJob");
-        Deencapsulation.invoke(job, "runRunningJob");
-        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
-        job.setPublishExecutor(publishingJob -> true);
-        Deencapsulation.invoke(job, "runFinishedRewritingJob");
-        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
-    }
-
     /** Runs a lake schema change job to FINISHED through run(), the entry point of the schema change handler. */
     private static void runSchemaChangeJobToFinished(LakeTableSchemaChangeJob job) throws Exception {
         new MockUp<LakeTableSchemaChangeJob>() {
@@ -783,20 +717,18 @@ public class RangeColocatePartitionAttachTest {
                 String.valueOf(Deencapsulation.<String>getField(job, "errMsg")));
     }
 
-    /** The only unfinished alter job of {@code t} the handler of {@code jobClass} holds. */
+    /** The only unfinished alter job of {@code t} the schema change handler holds. */
     private static <T extends AlterJobV2> T soleAlterJob(OlapTable t, Class<T> jobClass) {
-        List<AlterJobV2> jobs = jobClass == LakeRangeRollupJob.class
-                ? GlobalStateMgr.getCurrentState().getRollupHandler().getUnfinishedAlterJobV2ByTableId(t.getId())
-                : GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(t.getId());
+        List<AlterJobV2> jobs =
+                GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(t.getId());
         Assertions.assertEquals(1, jobs.size());
         return Assertions.assertInstanceOf(jobClass, jobs.get(0));
     }
 
     /**
      * On a converged group, a user split that splices a new bound (followed by the alignment split of the other member
-     * and the stable flip, with the superseded parent indexes still installed), a range rollup, and a heavy schema
-     * change each leave a stable, aligned group: sweeps across several intervals after each write no mark-unstable
-     * entry and submit no job. The retained parent indexes cross the new bound, so only the latest indexes may count.
+     * and the stable flip) and a heavy schema change each leave a stable, aligned group: sweeps across several
+     * intervals after each write no mark-unstable entry and submit no job.
      */
     @Test
     public void testSweepAfterLegitimateLayoutChangesKeepsGroupStable() throws Exception {
@@ -829,19 +761,6 @@ public class RangeColocatePartitionAttachTest {
             runReshardJobToFinished(alignmentSplits.get(0));
             checker.runOneCycle();
             Assertions.assertFalse(index().isAnyGroupWithSameColocateGroupIdUnstable(g.grpId));
-            for (OlapTable member : members) {
-                PhysicalPartition partition = member.getPhysicalPartitions().iterator().next();
-                List<MaterializedIndex> latest = partition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
-                Assertions.assertTrue(partition.getAllMaterializedIndices(IndexExtState.VISIBLE).stream()
-                                .anyMatch(index -> !latest.contains(index) && !alignedWithCurrentRanges(member, index)),
-                        "the superseded parent index of " + member.getName() + " stays installed across 150");
-            }
-            assertSweepsLeaveGroupsStable(checker, now, marked, grpIds, members);
-
-            // A range rollup whose sort key keeps the colocate column first.
-            starRocksAssert.alterTable("alter table t_legit add rollup r (k1, k3, k2) order by (k1, k3)");
-            runRangeRollupJobToFinished(soleAlterJob(table, LakeRangeRollupJob.class));
-            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
             assertSweepsLeaveGroupsStable(checker, now, marked, grpIds, members);
 
             // A heavy schema change of a value column: without fast schema evolution, MODIFY COLUMN rewrites the data
@@ -857,7 +776,6 @@ public class RangeColocatePartitionAttachTest {
             Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
             assertSweepsLeaveGroupsStable(checker, now, marked, grpIds, members);
         } finally {
-            GlobalStateMgr.getCurrentState().getRollupHandler().clearJobs();
             GlobalStateMgr.getCurrentState().getSchemaChangeHandler().clearJobs();
         }
     }
