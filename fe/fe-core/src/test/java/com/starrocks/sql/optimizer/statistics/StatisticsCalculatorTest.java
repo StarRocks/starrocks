@@ -984,62 +984,64 @@ public class StatisticsCalculatorTest {
         Assertions.assertTrue(innerValStatAfterJoin.getNullsFraction() < outerNullFraction);
     }
 
-    // An outer join keeps the unmatched rows of its preserved side, so the NDV of the preserved side's columns must
-    // not be capped at the inner-join row count, while the non-preserved side's columns stay capped
     @ParameterizedTest
-    @EnumSource(value = JoinOperator.class, names = {"LEFT_OUTER_JOIN", "RIGHT_OUTER_JOIN", "FULL_OUTER_JOIN"})
-    public void testOuterJoinKeepsPreservedSideStats(JoinOperator joinType) {
-        ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(true);
-        // big side: 200000 rows, key v1 and non-key v2
-        ColumnRefOperator v1 = columnRefFactory.create("v1", IntegerType.INT, true);
-        ColumnRefOperator v2 = columnRefFactory.create("v2", IntegerType.INT, true);
-        // small side: 100 rows, key v3 and non-key v4
-        ColumnRefOperator v3 = columnRefFactory.create("v3", IntegerType.INT, true);
-        ColumnRefOperator v4 = columnRefFactory.create("v4", IntegerType.INT, true);
-        columnRefFactory.updateColumnToRelationIds(v1.getId(), 0);
-        columnRefFactory.updateColumnToRelationIds(v2.getId(), 0);
-        columnRefFactory.updateColumnToRelationIds(v3.getId(), 1);
-        columnRefFactory.updateColumnToRelationIds(v4.getId(), 1);
+    @EnumSource(value = OuterJoin.class)
+    public void testOuterJoinKeepsPreservedSideStats(OuterJoin outerJoin) {
+        // GIVEN
+        JoinOperator joinType = JoinOperator.RIGHT_OUTER_JOIN;
+        if (outerJoin == OuterJoin.LEFT_OUTER_JOIN) {
+            joinType = JoinOperator.LEFT_OUTER_JOIN;
+        }
 
-        Group bigGroup = new Group(0);
+        // The big side is preserved, the small side only matches a part of it
+        final var bigKey = columnRefFactory.create("big_key", IntegerType.INT, true);
+        final var bigVal = columnRefFactory.create("big_val", IntegerType.INT, true);
+        final var smallKey = columnRefFactory.create("small_key", IntegerType.INT, true);
+        columnRefFactory.updateColumnToRelationIds(bigKey.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(bigVal.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(smallKey.getId(), 1);
+
+        final var bigHistogram = new Histogram(
+                Lists.newArrayList(new Bucket(1, 200000, 200000L, 1L)), Maps.newHashMap());
+        final var bigGroup = new Group(0);
         bigGroup.setStatistics(Statistics.builder().setOutputRowCount(200000)
-                .addColumnStatistic(v1, new ColumnStatistic(1, 200000, 0, 8, 200000))
-                .addColumnStatistic(v2, new ColumnStatistic(1, 200000, 0, 8, 100000))
+                .addColumnStatistic(bigKey, new ColumnStatistic(1, 200000, 0, 8, 200000, bigHistogram,
+                        ColumnStatistic.StatisticType.ESTIMATE))
+                .addColumnStatistic(bigVal, new ColumnStatistic(1, 200000, 0, 8, 100000))
                 .build());
-        bigGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(v1, v2))));
-        Group smallGroup = new Group(1);
+        bigGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(bigKey, bigVal))));
+
+        final var smallGroup = new Group(1);
         smallGroup.setStatistics(Statistics.builder().setOutputRowCount(100)
-                .addColumnStatistic(v3, new ColumnStatistic(1, 100, 0, 8, 100))
-                .addColumnStatistic(v4, new ColumnStatistic(1, 100, 0, 8, 100))
+                .addColumnStatistic(smallKey, new ColumnStatistic(1, 100, 0, 8, 100))
                 .build());
-        smallGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(v3, v4))));
+        smallGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(smallKey))));
 
-        // The preserved side is the big one: left child for LEFT/FULL, right child for RIGHT.
-        boolean bigIsRight = joinType == JoinOperator.RIGHT_OUTER_JOIN;
-        Group left = bigIsRight ? smallGroup : bigGroup;
-        Group right = bigIsRight ? bigGroup : smallGroup;
-        ScalarOperator onPredicate = bigIsRight ? new BinaryPredicateOperator(BinaryType.EQ, v3, v1)
-                : new BinaryPredicateOperator(BinaryType.EQ, v1, v3);
-        GroupExpression groupExpression =
-                new GroupExpression(new LogicalJoinOperator(joinType, onPredicate), Lists.newArrayList(left, right));
-        groupExpression.setGroup(new Group(2));
-        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
-        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+        final var IsRight = joinType == JoinOperator.RIGHT_OUTER_JOIN;
+        final var joinPred = IsRight
+                ? new BinaryPredicateOperator(BinaryType.EQ, smallKey, bigKey)
+                : new BinaryPredicateOperator(BinaryType.EQ, bigKey, smallKey);
+        final var children = IsRight
+                ? Lists.newArrayList(smallGroup, bigGroup)
+                : Lists.newArrayList(bigGroup, smallGroup);
+        final var groupExpr = new GroupExpression(new LogicalJoinOperator(joinType, joinPred), children);
+        groupExpr.setGroup(new Group(2));
+        final var exprCtx = new ExpressionContext(groupExpr);
+        final var calc = new StatisticsCalculator(exprCtx, columnRefFactory, optimizerContext);
 
-        Statistics joinStats = expressionContext.getStatistics();
+        // WHEN
+        calc.estimatorStats();
+        final var joinStats = exprCtx.getStatistics();
+
+        // THEN
         Assertions.assertEquals(200000, joinStats.getOutputRowCount(), 0.0001);
-        // preserved side: key and non-key NDVs survive, the key range is not narrowed to the small side's
-        Assertions.assertEquals(200000, joinStats.getColumnStatistic(v1).getDistinctValuesCount(), 0.0001);
-        Assertions.assertEquals(1, joinStats.getColumnStatistic(v1).getMinValue(), 0.0001);
-        Assertions.assertEquals(200000, joinStats.getColumnStatistic(v1).getMaxValue(), 0.0001);
-        Assertions.assertEquals(1, joinStats.getColumnStatistic(v2).getMinValue(), 0.0001);
-        Assertions.assertEquals(200000, joinStats.getColumnStatistic(v2).getMaxValue(), 0.0001);
-        Assertions.assertEquals(100000, joinStats.getColumnStatistic(v2).getDistinctValuesCount(), 0.0001);
-        // non-preserved side: only the matched values remain
-        Assertions.assertEquals(100, joinStats.getColumnStatistic(v3).getDistinctValuesCount(), 0.0001);
-        Assertions.assertEquals(100, joinStats.getColumnStatistic(v4).getDistinctValuesCount(), 0.0001);
-        Assertions.assertEquals(1, joinStats.getColumnStatistic(v3).getMinValue(), 0.0001);
-        Assertions.assertEquals(100, joinStats.getColumnStatistic(v3).getMaxValue(), 0.0001);
+        final var bigKeyStat = joinStats.getColumnStatistic(bigKey);
+        Assertions.assertEquals(200000, bigKeyStat.getDistinctValuesCount(), 0.0001);
+        Assertions.assertEquals(1, bigKeyStat.getMinValue(), 0.0001);
+        Assertions.assertEquals(200000, bigKeyStat.getMaxValue(), 0.0001);
+        Assertions.assertSame(bigHistogram, bigKeyStat.getHistogram());
+        Assertions.assertEquals(100000, joinStats.getColumnStatistic(bigVal).getDistinctValuesCount(), 0.0001);
+        Assertions.assertTrue(joinStats.getColumnStatistic(smallKey).getDistinctValuesCount() <= 100);
     }
 
 

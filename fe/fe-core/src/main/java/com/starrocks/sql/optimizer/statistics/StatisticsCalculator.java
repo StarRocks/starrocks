@@ -2015,7 +2015,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     // The inner-join estimate caps every column's NDV at the inner-join row count and narrows the join keys' range
     // to the matched values. An outer join also keeps the unmatched rows of its preserved side, so every distinct
     // value and the range of a preserve side columns survive.
-    // Restore the original NDV (capped by the output row count) and range of the preserved columns.
+    // Restore the original NDV (capped by the output row count), range and histogram of the preserved columns.
     private static Statistics restorePreservedColumnsStats(Statistics joinStats, Statistics rawCrossJoinStats,
                                                            ColumnRefSet preservedColumns) {
         double outputRowCount = Math.max(1, joinStats.getOutputRowCount());
@@ -2033,7 +2033,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     .setMinValue(raw.getMinValue())
                     .setMaxValue(raw.getMaxValue())
                     .setDistinctValuesCount(ndv)
-                    .setHistogram(null)
+                    .setHistogram(raw.getHistogram())
                     .build());
         });
         if (restored.isEmpty()) {
