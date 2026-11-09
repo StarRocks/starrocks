@@ -9,6 +9,7 @@ description: "Quick start guide for streaming data from Kafka into StarRocks usi
 
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 
 ## About Routine Load
 
@@ -51,6 +52,10 @@ You can use the SQL client provided in the Docker environment, or use one on you
 
 `curl` is used to download the Compose file and the script to generate the data. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/).
 
+### MinIO AIStor license
+
+This guide uses MinIO AIStor for object storage, which requires a license. A free tier license is sufficient. The instructions for acquiring a license are provided later in this guide.
+
 ### Python
 
 Python 3 and the Python client for Apache Kafka, `kafka-python`, are required.
@@ -88,7 +93,7 @@ To run StarRocks with shared-data using Object Storage you need:
 - A compute node (CN)
 - Object Storage
 
-This guide uses MinIO, which is S3 compatible Object Storage provider. MinIO is provided under the GNU Affero General Public License.
+This guide uses MinIO AIStor, which is S3 compatible Object Storage. MinIO AIStor requires a license.
 
 ### Download the lab files
 
@@ -107,6 +112,10 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/routine-load-shared-data/gen.py
 ```
+
+### Acquire a MinIO AIStor license
+
+<AIStorLicense />
 
 ## Start StarRocks, MinIO, and Redpanda
 
