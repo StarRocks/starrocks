@@ -888,6 +888,26 @@ struct TReportExecStatusParams {
   28: optional RuntimeProfile.TRuntimeProfileTree load_channel_profile;
 
   29: optional DataCache.TLoadDataCacheMetrics load_datacache_metrics
+
+  // Peak memory of the load channels (memtables and tablet writers) on the backends
+  // this fragment's sink wrote to, taken as the max over those backends. Only set in
+  // the final report of a load fragment.
+  30: optional i64 load_channel_peak_mem_bytes
+
+  // CPU time this backend has spent on the load so far, over all its fragment
+  // instances. Only set in the final report of a load fragment.
+  31: optional i64 load_cpu_ns
+
+  // Peak of this backend's query memory tracker for the load. The memory of the load
+  // channel the backend hosts is not part of it, see load_channel_peak_mem_bytes_by_backend.
+  // Only set in the final report of a load fragment.
+  32: optional i64 load_peak_mem_bytes
+
+  // Peak memory of each load channel this fragment's sink wrote to, keyed by the id of
+  // the backend that hosts the channel. A backend can host a load channel without
+  // running any fragment of the load, so the FE adds the two per backend. Only set in
+  // the final report of a load fragment.
+  33: optional map<i64, i64> load_channel_peak_mem_bytes_by_backend
 }
 
 struct TBatchReportExecStatusParams {
@@ -1212,6 +1232,9 @@ struct TRLTaskTxnCommitAttachment {
     12: optional TPulsarRLTaskProgress pulsarRLTaskProgress
     // If true, the error is non-retryable and routine load job should be paused
     13: optional bool nonRetryable
+    // CPU time and peak memory the load consumed on the backends
+    14: optional i64 cpuNs
+    15: optional i64 peakMemBytes
 }
 
 struct TMiniLoadTxnCommitAttachment {
@@ -1230,6 +1253,9 @@ struct TManualLoadTxnCommitAttachment {
     7: optional i64 planTime
     8: optional i64 receiveDataTime
     9: optional i64 beginTxnTime
+    // CPU time and peak memory the load consumed on the backends
+    10: optional i64 cpuNs
+    11: optional i64 peakMemBytes
 }
 
 struct TTxnCommitAttachment {

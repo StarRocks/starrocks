@@ -234,6 +234,11 @@ void LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request, PTablet
     } else {
         _add_chunk(nullptr, nullptr, request, response);
     }
+    // On eos, and on a failure: a load that is killed by a memory limit never sends an eos,
+    // and it is the one whose peak matters.
+    if (request.eos() || response->status().status_code() != TStatusCode::OK) {
+        report_peak_mem_usage(response);
+    }
     report_profile(response, config::pipeline_print_profile);
 }
 
@@ -285,6 +290,9 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     RuntimeMetrics::instance()->load_channel_add_chunks_eos_total.increment(eos_count);
     RuntimeMetrics::instance()->load_channel_add_chunks_duration_us.increment(total_time_us);
 
+    if (eos_count > 0 || response->status().status_code() != TStatusCode::OK) {
+        report_peak_mem_usage(response);
+    }
     report_profile(response, config::pipeline_print_profile);
     _check_and_log_timeout_rpc("tablet writer add chunk", total_time_us / 1000, timeout_ms);
 }
@@ -493,6 +501,10 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
     if (!status.ok()) {
         result->clear_load_channel_profile();
     }
+}
+
+void LoadChannel::report_peak_mem_usage(PTabletWriterAddBatchResult* result) {
+    result->set_load_channel_peak_mem_bytes(_mem_tracker->peak_consumption());
 }
 
 void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequest* request,

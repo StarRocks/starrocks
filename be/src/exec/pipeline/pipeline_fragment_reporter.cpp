@@ -24,6 +24,7 @@
 #include "common/util/thrift_client_cache.h"
 #include "common/util/thrift_key_redaction.h"
 #include "common/util/thrift_util.h"
+#include "exec/pipeline/exec_state_reporter.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/query_context.h"
@@ -79,6 +80,8 @@ void report_fragments_with_same_host(
                 if (runtime_state->query_options().query_type == TQueryType::LOAD) {
                     RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                     params.__set_load_type(runtime_state->query_options().load_job_type);
+                    pipeline::ExecStateReporter::set_load_resource_usage(runtime_state->query_ctx(), runtime_state,
+                                                                         &params);
                 }
 
                 auto backend_id = get_backend_id();
@@ -158,6 +161,8 @@ std::vector<PipeLineReportTaskKey> report_pipeline_fragments(
             if (runtime_state->query_options().query_type == TQueryType::LOAD) {
                 RuntimeStateHelper::update_report_load_status(runtime_state, &params);
                 params.__set_load_type(runtime_state->query_options().load_job_type);
+                pipeline::ExecStateReporter::set_load_resource_usage(runtime_state->query_ctx(), runtime_state,
+                                                                     &params);
             }
 
             auto backend_id = get_backend_id();

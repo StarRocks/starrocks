@@ -35,6 +35,11 @@ public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
     private long beginTxnTime;
     private long planTime;
     private long receiveDataTime;
+    // resources the load consumed on the backends; 0 when the backend did not report them
+    @SerializedName("cpuNs")
+    private long cpuNs;
+    @SerializedName("peakMemBytes")
+    private long peakMemBytes;
 
     public ManualLoadTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.BACKEND_STREAMING);
@@ -53,6 +58,12 @@ public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
         this.beginTxnTime = tManualLoadTxnCommitAttachment.getBeginTxnTime();
         this.planTime = tManualLoadTxnCommitAttachment.getPlanTime();
         this.receiveDataTime = tManualLoadTxnCommitAttachment.getReceiveDataTime();
+        if (tManualLoadTxnCommitAttachment.isSetCpuNs()) {
+            this.cpuNs = tManualLoadTxnCommitAttachment.getCpuNs();
+        }
+        if (tManualLoadTxnCommitAttachment.isSetPeakMemBytes()) {
+            this.peakMemBytes = tManualLoadTxnCommitAttachment.getPeakMemBytes();
+        }
     }
 
     public long getLoadedRows() {
@@ -89,6 +100,14 @@ public class ManualLoadTxnCommitAttachment extends TxnCommitAttachment {
 
     public long getReceiveDataTime() {
         return receiveDataTime;
+    }
+
+    public long getCpuNs() {
+        return cpuNs;
+    }
+
+    public long getPeakMemBytes() {
+        return peakMemBytes;
     }
 
 

@@ -168,12 +168,20 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
                 loadExecuteCallback);
 
         stubCoordinatorSuccess();
+        when(coordinator.getLoadCpuNs()).thenReturn(1234L);
+        when(coordinator.getLoadPeakMemBytes()).thenReturn(5678L);
+        assertEquals(0L, task.getCpuNs());
+        assertEquals(0L, task.getPeakMemBytes());
 
         task.run();
         assertEquals(1, loadExecuteCallback.getFinishedLoads().size());
         assertEquals(label, loadExecuteCallback.getFinishedLoads().get(0));
         assertEquals(TransactionStatus.VISIBLE, getTxnStatus(label));
         assertTrue(task.getTxnId() > 0);
+        assertEquals(1234L, task.getCpuNs());
+        assertEquals(5678L, task.getPeakMemBytes());
+        assertEquals(1234L, task.toThrift().get(0).getCpu_ns());
+        assertEquals(5678L, task.toThrift().get(0).getPeak_mem_bytes());
         assertNull(ProfileManager.getInstance().getProfile(DebugUtil.printId(loadId)));
         // The task must always remove its txn callback after completion to avoid leaking callbacks.
         TxnStateCallbackFactory callbackFactory =
@@ -238,12 +246,19 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
 
         stubCoordinatorSuccess();
         when(coordinator.getExecStatus()).thenReturn(new Status(TStatusCode.INTERNAL_ERROR, "artificial failure"));
+        when(coordinator.getLoadCpuNs()).thenReturn(321L);
+        when(coordinator.getLoadPeakMemBytes()).thenReturn(654L);
 
         task.run();
         assertEquals(1, loadExecuteCallback.getFinishedLoads().size());
         assertEquals(label, loadExecuteCallback.getFinishedLoads().get(0));
         assertEquals(TransactionStatus.ABORTED, getTxnStatus(label));
         assertTrue(task.getTxnId() > 0);
+        // a failed execution still records what the load consumed
+        assertEquals(321L, task.getCpuNs());
+        assertEquals(654L, task.getPeakMemBytes());
+        assertEquals(321L, task.toThrift().get(0).getCpu_ns());
+        assertEquals(654L, task.toThrift().get(0).getPeak_mem_bytes());
     }
 
     @Test

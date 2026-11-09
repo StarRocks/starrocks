@@ -176,6 +176,10 @@ public class InsertLoadJob extends LoadJob {
                 this.progress = 0;
             }
             this.loadingStatus.setTrackingUrl(trackingUrl);
+            if (this.coordinator != null) {
+                this.loadingStatus.accumulateResourceUsage(this.coordinator.getLoadCpuNs(),
+                        this.coordinator.getLoadPeakMemBytes());
+            }
             this.coordinator = null;
             // persistent
             GlobalStateMgr.getCurrentState().getEditLog().logEndLoadJob(

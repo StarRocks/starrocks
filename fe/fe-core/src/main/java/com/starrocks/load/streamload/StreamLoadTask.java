@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -201,6 +202,12 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     // may be purged before the task is. -1 when ingestion slowdown never evaluated the commit.
     @SerializedName(value = "commitThrottleMs")
     private long commitThrottleMs = -1;
+    // Only ever raised, through raiseResourceUsage(): several callbacks of the transaction and
+    // of the coordinator can be the last one to see the numbers, on different threads.
+    @SerializedName(value = "cpuNs")
+    private volatile long cpuNs;
+    @SerializedName(value = "peakMemBytes")
+    private volatile long peakMemBytes;
 
     // used for sync stream load and routine load
     private boolean isSyncStreamLoad = false;
@@ -1003,6 +1010,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 throw new LoadException("Load timeout. Increase the timeout and retry");
             }
             if (coord.join(waitSecond)) {
+                recordResourceUsage();
                 Status status = coord.getExecStatus();
                 // Record where the rejected rows are logged before any check below fails the load, also when
                 // every row was rejected: information_schema.load_tracking_logs reads them through this URL.
@@ -1123,6 +1131,10 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 beforeLoadTimeMs, startLoadingTimeMs, startPreparingTimeMs, finishPreparingTimeMs,
                 endTimeMs, numRowsNormal, numRowsAbnormal, numRowsUnselected, numLoadBytesTotal,
                 trackingUrl);
+        // The task itself is only logged when it is created, so the attachment is what carries
+        // the resource usage to the followers and across a restart.
+        recordResourceUsage();
+        txnCommitAttachment.setResourceUsage(cpuNs, peakMemBytes);
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(
                 dbId, txnId, preparedTimeoutMs, commitInfos, failInfos, txnCommitAttachment, timeoutMs);
     }
@@ -1214,6 +1226,8 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
 
     @Override
     public void afterCommitted(TransactionState txnState) throws StarRocksException {
+        recordResourceUsage();
+        recordResourceUsage(txnState.getTxnCommitAttachment());
         // sync stream load collect profile, here we collect profile only when be has reported
         if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
             collectProfile(false);
@@ -1290,6 +1304,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
 
     public void setLoadState(TxnCommitAttachment attachment, String errorMsg) {
         this.errorMsg = errorMsg;
+        recordResourceUsage(attachment);
         if (attachment != null) {
             if (attachment instanceof ManualLoadTxnCommitAttachment) {
                 ManualLoadTxnCommitAttachment manualLoadTxnCommitAttachment = (ManualLoadTxnCommitAttachment) attachment;
@@ -1330,8 +1345,53 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     @Override
+    public void beforeAborted(TransactionState txnState) throws TransactionException {
+        try {
+            attachResourceUsageBeforeAbort(txnState);
+        } catch (Throwable t) {
+            // never let the bookkeeping stand in the way of the abort
+            LOG.warn("stream load {} failed to attach its resource usage to the aborted txn {}", label, txnId, t);
+        }
+    }
+
+    /**
+     * Put what a load driven by the FE consumed into the transaction that is about to be aborted.
+     * The task itself is only logged when it is created, and the abort is logged before
+     * {@link #afterAborted} runs, so the transaction's attachment is the only way the numbers
+     * reach the followers and survive a restart. A load driven by a backend needs nothing here:
+     * the backend sends its own attachment with the rollback.
+     */
+    @VisibleForTesting
+    void attachResourceUsageBeforeAbort(TransactionState txnState) {
+        if (isSyncStreamLoad) {
+            return;
+        }
+        recordResourceUsage();
+        if (cpuNs <= 0 && peakMemBytes <= 0) {
+            return;
+        }
+        TxnCommitAttachment existing = txnState.getTxnCommitAttachment();
+        if (existing instanceof StreamLoadTxnCommitAttachment) {
+            // aborted after it was prepared: the prepare wrote the attachment, keep it current
+            StreamLoadTxnCommitAttachment attachment = (StreamLoadTxnCommitAttachment) existing;
+            attachment.setResourceUsage(Math.max(attachment.getCpuNs(), cpuNs),
+                    Math.max(attachment.getPeakMemBytes(), peakMemBytes));
+        } else if (existing == null) {
+            StreamLoadTxnCommitAttachment attachment = new StreamLoadTxnCommitAttachment(
+                    beforeLoadTimeMs, startLoadingTimeMs, startPreparingTimeMs, finishPreparingTimeMs,
+                    endTimeMs, numRowsNormal, numRowsAbnormal, numRowsUnselected, numLoadBytesTotal,
+                    trackingUrl);
+            attachment.setResourceUsage(cpuNs, peakMemBytes);
+            txnState.setTxnCommitAttachment(attachment);
+        }
+    }
+
+    @Override
     public void afterAborted(TransactionState txnState, String txnStatusChangeReason)
             throws StarRocksException {
+        recordResourceUsage();
+        // a backend sends what the failed load consumed with the rollback
+        recordResourceUsage(txnState.getTxnCommitAttachment());
         if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
             collectProfile(true);
         }
@@ -1381,6 +1441,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
 
     @Override
     public void afterVisible(TransactionState txnState) {
+        recordResourceUsage(txnState.getTxnCommitAttachment());
         writeLock();
         try {
             for (int i = 0; i < channelNum; i++) {
@@ -1532,6 +1593,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             this.numRowsAbnormal = attachment.getNumRowsAbnormal();
             this.numRowsUnselected = attachment.getNumRowsUnselected();
             this.numLoadBytesTotal = attachment.getNumLoadBytesTotal();
+            recordResourceUsage(attachment);
             return;
         }
         if (txnCommitAttachment instanceof ManualLoadTxnCommitAttachment
@@ -1671,6 +1733,48 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
 
     public void setRoutineLoadJobId(long routineLoadJobId) {
         this.routineLoadJobId = routineLoadJobId;
+    }
+
+    @Override
+    public long getCpuNs() {
+        return cpuNs;
+    }
+
+    @Override
+    public long getPeakMemBytes() {
+        return peakMemBytes;
+    }
+
+    // Take the CPU time and peak memory the backends reported to the coordinator. The coordinator
+    // is dropped once the task is final, so this runs on every path that can be the last one to
+    // see it; a later call only ever raises the values.
+    private void recordResourceUsage() {
+        Coordinator currentCoord = coord;
+        if (currentCoord == null) {
+            return;
+        }
+        raiseResourceUsage(currentCoord.getLoadCpuNs(), currentCoord.getLoadPeakMemBytes());
+    }
+
+    private synchronized void raiseResourceUsage(long newCpuNs, long newPeakMemBytes) {
+        cpuNs = Math.max(cpuNs, newCpuNs);
+        peakMemBytes = Math.max(peakMemBytes, newPeakMemBytes);
+    }
+
+    // Loads driven by a backend (plain stream load, routine load task) have no coordinator on
+    // the FE; the backend puts the numbers into the commit attachment instead. A load driven by
+    // the FE writes its own attachment, which is how a follower learns the numbers on replay.
+    private void recordResourceUsage(TxnCommitAttachment attachment) {
+        if (attachment instanceof StreamLoadTxnCommitAttachment) {
+            StreamLoadTxnCommitAttachment streamLoad = (StreamLoadTxnCommitAttachment) attachment;
+            raiseResourceUsage(streamLoad.getCpuNs(), streamLoad.getPeakMemBytes());
+        } else if (attachment instanceof ManualLoadTxnCommitAttachment) {
+            ManualLoadTxnCommitAttachment manual = (ManualLoadTxnCommitAttachment) attachment;
+            raiseResourceUsage(manual.getCpuNs(), manual.getPeakMemBytes());
+        } else if (attachment instanceof RLTaskTxnCommitAttachment) {
+            RLTaskTxnCommitAttachment rlTask = (RLTaskTxnCommitAttachment) attachment;
+            raiseResourceUsage(rlTask.getCpuNs(), rlTask.getPeakMemBytes());
+        }
     }
 
     public void setType(Type type) {
@@ -1838,6 +1942,12 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             info.setLoad_id(DebugUtil.printId(loadId));
             if (txnId > 0) {
                 info.setTxn_id(txnId);
+            }
+            if (cpuNs > 0) {
+                info.setCpu_ns(cpuNs);
+            }
+            if (peakMemBytes > 0) {
+                info.setPeak_mem_bytes(peakMemBytes);
             }
             info.setDb(dbName);
             info.setTable(tableName);

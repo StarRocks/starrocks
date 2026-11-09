@@ -15,6 +15,8 @@
 package com.starrocks.load.streamload;
 
 import com.google.common.collect.Maps;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
@@ -28,6 +30,7 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -35,13 +38,18 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.LoadEtlTask;
+import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadInfo;
+import com.starrocks.thrift.TLoadSourceType;
+import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -102,6 +110,259 @@ public class StreamLoadTaskTest {
         TransactionState txnState = new TransactionState();
         streamLoadTask.afterCommitted(txnState);
         Assertions.assertEquals(0, QeProcessorImpl.INSTANCE.getCoordinatorCount());
+    }
+
+    @Test
+    public void testAfterCommittedRecordsResourceUsage() throws StarRocksException {
+        streamLoadTask.setCoordinator(coord);
+        new Expectations() {
+            {
+                coord.isProfileAlreadyReported();
+                result = false;
+                coord.getLoadCpuNs();
+                result = 123L;
+                coord.getLoadPeakMemBytes();
+                result = 456L;
+            }
+        };
+        streamLoadTask.setTUniqueId(new TUniqueId(2, 3));
+        Assertions.assertEquals(0L, streamLoadTask.getCpuNs());
+        Assertions.assertEquals(0L, streamLoadTask.getPeakMemBytes());
+
+        streamLoadTask.afterCommitted(new TransactionState());
+        Assertions.assertEquals(123L, streamLoadTask.getCpuNs());
+        Assertions.assertEquals(456L, streamLoadTask.getPeakMemBytes());
+
+        // the coordinator is gone once the load is visible, the recorded values stay
+        streamLoadTask.afterVisible(new TransactionState());
+        Assertions.assertEquals(123L, streamLoadTask.getCpuNs());
+        Assertions.assertEquals(456L, streamLoadTask.getPeakMemBytes());
+    }
+
+    @Test
+    public void testAfterAbortedRecordsResourceUsage() throws StarRocksException {
+        streamLoadTask.setCoordinator(coord);
+        new Expectations() {
+            {
+                coord.isProfileAlreadyReported();
+                result = false;
+                coord.getLoadCpuNs();
+                result = 11L;
+                coord.getLoadPeakMemBytes();
+                result = 22L;
+            }
+        };
+        streamLoadTask.setTUniqueId(new TUniqueId(2, 3));
+
+        streamLoadTask.afterAborted(new TransactionState(), "");
+        Assertions.assertEquals(11L, streamLoadTask.getCpuNs());
+        Assertions.assertEquals(22L, streamLoadTask.getPeakMemBytes());
+    }
+
+    @Test
+    public void testAfterCommittedWithoutCoordinatorKeepsZero() throws StarRocksException {
+        streamLoadTask.setTUniqueId(new TUniqueId(2, 3));
+        streamLoadTask.afterCommitted(new TransactionState());
+        Assertions.assertEquals(0L, streamLoadTask.getCpuNs());
+        Assertions.assertEquals(0L, streamLoadTask.getPeakMemBytes());
+        // nothing reported, the columns stay unset
+        TLoadInfo info = streamLoadTask.toThrift().get(0);
+        Assertions.assertFalse(info.isSetCpu_ns());
+        Assertions.assertFalse(info.isSetPeak_mem_bytes());
+    }
+
+    @Test
+    public void testResourceUsageFromManualLoadCommitAttachment() throws StarRocksException {
+        // a backend-driven stream load has no coordinator on the FE; the numbers come with the commit
+        TManualLoadTxnCommitAttachment tAttachment = new TManualLoadTxnCommitAttachment();
+        tAttachment.setLoadedRows(10L);
+        tAttachment.setCpuNs(4321L);
+        tAttachment.setPeakMemBytes(8765L);
+        ManualLoadTxnCommitAttachment attachment = new ManualLoadTxnCommitAttachment(tAttachment);
+        Assertions.assertEquals(4321L, attachment.getCpuNs());
+        Assertions.assertEquals(8765L, attachment.getPeakMemBytes());
+
+        TransactionState txnState = new TransactionState();
+        txnState.setTxnCommitAttachment(attachment);
+        streamLoadTask.setTUniqueId(new TUniqueId(2, 3));
+        streamLoadTask.afterCommitted(txnState);
+        Assertions.assertEquals(4321L, streamLoadTask.getCpuNs());
+        Assertions.assertEquals(8765L, streamLoadTask.getPeakMemBytes());
+
+        streamLoadTask.afterVisible(txnState);
+        Assertions.assertEquals(4321L, streamLoadTask.getCpuNs());
+        Assertions.assertEquals(8765L, streamLoadTask.getPeakMemBytes());
+
+        TLoadInfo info = streamLoadTask.toThrift().get(0);
+        Assertions.assertEquals(4321L, info.getCpu_ns());
+        Assertions.assertEquals(8765L, info.getPeak_mem_bytes());
+    }
+
+    @Test
+    public void testResourceUsageFromRoutineLoadCommitAttachment() {
+        TRLTaskTxnCommitAttachment tAttachment = new TRLTaskTxnCommitAttachment();
+        tAttachment.setLoadSourceType(TLoadSourceType.KAFKA);
+        tAttachment.setId(new TUniqueId(1, 2));
+        tAttachment.setJobId(7L);
+        TKafkaRLTaskProgress progress = new TKafkaRLTaskProgress();
+        progress.setPartitionCmtOffset(Maps.newHashMap());
+        progress.setPartitionCmtOffsetTimestamp(Maps.newHashMap());
+        tAttachment.setKafkaRLTaskProgress(progress);
+        tAttachment.setLoadedRows(10L);
+        tAttachment.setCpuNs(111L);
+        tAttachment.setPeakMemBytes(222L);
+        RLTaskTxnCommitAttachment attachment = new RLTaskTxnCommitAttachment(tAttachment);
+        Assertions.assertEquals(111L, attachment.getCpuNs());
+        Assertions.assertEquals(222L, attachment.getPeakMemBytes());
+
+        streamLoadTask.setLoadState(attachment, "");
+        Assertions.assertEquals(111L, streamLoadTask.getCpuNs());
+        Assertions.assertEquals(222L, streamLoadTask.getPeakMemBytes());
+    }
+
+    @Test
+    public void testAfterAbortedRecordsResourceUsageFromRollbackAttachment() throws StarRocksException {
+        // a backend-driven load that failed sends what it consumed with the rollback
+        TManualLoadTxnCommitAttachment tAttachment = new TManualLoadTxnCommitAttachment();
+        tAttachment.setCpuNs(55L);
+        tAttachment.setPeakMemBytes(66L);
+        TransactionState txnState = new TransactionState();
+        txnState.setTxnCommitAttachment(new ManualLoadTxnCommitAttachment(tAttachment));
+        streamLoadTask.setTUniqueId(new TUniqueId(2, 3));
+
+        streamLoadTask.afterAborted(txnState, "Memory of query exceed limit");
+        Assertions.assertEquals(55L, streamLoadTask.getCpuNs());
+        Assertions.assertEquals(66L, streamLoadTask.getPeakMemBytes());
+    }
+
+    @Test
+    public void testReplayRestoresResourceUsageFromStreamLoadAttachment() {
+        // A load driven by the FE is logged only when it is created; the attachment of the
+        // prepared transaction is what brings the resource usage to a follower.
+        StreamLoadTxnCommitAttachment attachment = new StreamLoadTxnCommitAttachment(
+                1L, 2L, 3L, 4L, 5L, 100L, 0L, 0L, 1000L, "");
+        attachment.setResourceUsage(777L, 8888L);
+        String json = GsonUtils.GSON.toJson(attachment, TxnCommitAttachment.class);
+        TxnCommitAttachment replayed = GsonUtils.GSON.fromJson(json, TxnCommitAttachment.class);
+        Assertions.assertTrue(replayed instanceof StreamLoadTxnCommitAttachment);
+        Assertions.assertEquals(777L, ((StreamLoadTxnCommitAttachment) replayed).getCpuNs());
+        Assertions.assertEquals(8888L, ((StreamLoadTxnCommitAttachment) replayed).getPeakMemBytes());
+
+        TransactionState txnState = new TransactionState();
+        txnState.setTxnCommitAttachment(replayed);
+        txnState.setFinishTime(System.currentTimeMillis());
+        streamLoadTask.replayOnVisible(txnState);
+        Assertions.assertEquals(777L, streamLoadTask.getCpuNs());
+        Assertions.assertEquals(8888L, streamLoadTask.getPeakMemBytes());
+        TLoadInfo info = streamLoadTask.toThrift().get(0);
+        Assertions.assertEquals(777L, info.getCpu_ns());
+        Assertions.assertEquals(8888L, info.getPeak_mem_bytes());
+    }
+
+    private StreamLoadTask newFeDrivenTask(long id, String label) {
+        return new StreamLoadTask(id, new Database(), new OlapTable(), label, "u", "127.0.0.1",
+                10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+    }
+
+    @Test
+    public void testAbortBeforePreparedCarriesResourceUsageToFollowers() throws Exception {
+        // A load driven by the FE that fails before it is prepared, for example on the data
+        // quality check, is aborted without an attachment. The abort is logged before
+        // afterAborted runs, so the usage must be in the transaction by then.
+        StreamLoadTask leader = newFeDrivenTask(2001, "abort_usage_label");
+        Deencapsulation.setField(leader, "coord", coord);
+        new Expectations() {
+            {
+                coord.getLoadCpuNs();
+                result = 31L;
+                coord.getLoadPeakMemBytes();
+                result = 41L;
+            }
+        };
+        TransactionState txnState = new TransactionState();
+        Assertions.assertNull(txnState.getTxnCommitAttachment());
+
+        leader.beforeAborted(txnState);
+
+        TxnCommitAttachment attached = txnState.getTxnCommitAttachment();
+        Assertions.assertTrue(attached instanceof StreamLoadTxnCommitAttachment);
+        Assertions.assertEquals(31L, ((StreamLoadTxnCommitAttachment) attached).getCpuNs());
+        Assertions.assertEquals(41L, ((StreamLoadTxnCommitAttachment) attached).getPeakMemBytes());
+
+        // what a follower, or the leader after a restart, reads back from the edit log
+        String json = GsonUtils.GSON.toJson(attached, TxnCommitAttachment.class);
+        TransactionState replayedTxn = new TransactionState();
+        replayedTxn.setTxnCommitAttachment(GsonUtils.GSON.fromJson(json, TxnCommitAttachment.class));
+        replayedTxn.setFinishTime(System.currentTimeMillis());
+        StreamLoadTask follower = newFeDrivenTask(2001, "abort_usage_label");
+        follower.replayOnAborted(replayedTxn);
+        Assertions.assertEquals(31L, follower.getCpuNs());
+        Assertions.assertEquals(41L, follower.getPeakMemBytes());
+    }
+
+    @Test
+    public void testAbortAfterPreparedRaisesTheUsageOfThePreparedAttachment() throws Exception {
+        StreamLoadTask task = newFeDrivenTask(2002, "abort_prepared_label");
+        Deencapsulation.setField(task, "coord", coord);
+        new Expectations() {
+            {
+                coord.getLoadCpuNs();
+                result = 500L;
+                coord.getLoadPeakMemBytes();
+                result = 60L;
+            }
+        };
+        StreamLoadTxnCommitAttachment prepared = new StreamLoadTxnCommitAttachment(
+                1L, 2L, 3L, 4L, 5L, 100L, 0L, 0L, 1000L, "");
+        prepared.setResourceUsage(300L, 90L);
+        TransactionState txnState = new TransactionState();
+        txnState.setTxnCommitAttachment(prepared);
+
+        task.beforeAborted(txnState);
+
+        Assertions.assertSame(prepared, txnState.getTxnCommitAttachment());
+        Assertions.assertEquals(500L, prepared.getCpuNs());
+        Assertions.assertEquals(90L, prepared.getPeakMemBytes());
+        // the rest of what the prepare logged is untouched
+        Assertions.assertEquals(100L, prepared.getNumRowsNormal());
+    }
+
+    @Test
+    public void testBeforeAbortedAttachesNothingWithoutUsageOrForBackendDrivenLoads() throws Exception {
+        // no coordinator yet: nothing was consumed, nothing to log
+        StreamLoadTask notStarted = newFeDrivenTask(2003, "abort_not_started_label");
+        TransactionState txnState = new TransactionState();
+        notStarted.beforeAborted(txnState);
+        Assertions.assertNull(txnState.getTxnCommitAttachment());
+
+        // a load driven by a backend gets its usage from the attachment of the rollback
+        streamLoadTask.setCoordinator(coord);
+        TransactionState syncTxnState = new TransactionState();
+        streamLoadTask.beforeAborted(syncTxnState);
+        Assertions.assertNull(syncTxnState.getTxnCommitAttachment());
+    }
+
+    @Test
+    public void testReplayStreamLoadAttachmentWrittenWithoutResourceUsage() {
+        // an attachment logged before the fields existed still loads and leaves the columns unset
+        StreamLoadTxnCommitAttachment attachment = new StreamLoadTxnCommitAttachment(
+                1L, 2L, 3L, 4L, 5L, 100L, 0L, 0L, 1000L, "");
+        JsonObject json = JsonParser.parseString(GsonUtils.GSON.toJson(attachment, TxnCommitAttachment.class))
+                .getAsJsonObject();
+        json.remove("cpuNs");
+        json.remove("peakMemBytes");
+        TxnCommitAttachment replayed = GsonUtils.GSON.fromJson(json.toString(), TxnCommitAttachment.class);
+        Assertions.assertEquals(0L, ((StreamLoadTxnCommitAttachment) replayed).getCpuNs());
+        Assertions.assertEquals(0L, ((StreamLoadTxnCommitAttachment) replayed).getPeakMemBytes());
+
+        TransactionState txnState = new TransactionState();
+        txnState.setTxnCommitAttachment(replayed);
+        txnState.setFinishTime(System.currentTimeMillis());
+        streamLoadTask.replayOnVisible(txnState);
+        TLoadInfo info = streamLoadTask.toThrift().get(0);
+        Assertions.assertEquals(100L, info.getNum_sink_rows());
+        Assertions.assertFalse(info.isSetCpu_ns());
+        Assertions.assertFalse(info.isSetPeak_mem_bytes());
     }
 
     @Test
@@ -589,11 +850,17 @@ public class StreamLoadTaskTest {
                 result = false;
                 c.getTrackingUrl();
                 result = "url";
+                c.getLoadCpuNs();
+                result = 321L;
+                c.getLoadPeakMemBytes();
+                result = 654L;
             }
         };
         TransactionResult resp = new TransactionResult();
         task.waitCoordFinish(resp);
         Assertions.assertTrue(resp.stateOK());
+        Assertions.assertEquals(321L, task.getCpuNs());
+        Assertions.assertEquals(654L, task.getPeakMemBytes());
     }
 
     @Test

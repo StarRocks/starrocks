@@ -419,6 +419,16 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
+    protected long getReportedLoadCpuNs() {
+        return queryProfile.getLoadCpuNs();
+    }
+
+    @Override
+    protected long getReportedLoadPeakMemBytes() {
+        return queryProfile.getLoadPeakMemBytes();
+    }
+
+    @Override
     public long getStartTimeMs() {
         return jobSpec.getStartTimeMs();
     }
@@ -1460,6 +1470,18 @@ public class DefaultCoordinator extends Coordinator {
             updateJobProgress(params);
         } catch (Throwable e) {
             LOG.warn("update job progress failed {}", instanceId, e);
+        }
+
+        // A failed status below cancels the query, which can release join() before this report
+        // reaches updateFinishInstance. Record the resource usage it carries first, so that a
+        // failed load still shows what it consumed.
+        try {
+            lock();
+            queryProfile.updateLoadResourceUsage(execState, params);
+        } catch (Throwable e) {
+            LOG.warn("update load resource usage failed {}", instanceId, e);
+        } finally {
+            unlock();
         }
 
         // update status

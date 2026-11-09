@@ -224,10 +224,58 @@ public abstract class Coordinator {
 
     public abstract DataCacheSelectMetrics getDataCacheSelectMetrics();
 
+    /**
+     * CPU time of the load summed over the backends whose final exec status reports carry it;
+     * zero when no report carried it.
+     */
+    protected long getReportedLoadCpuNs() {
+        return 0;
+    }
+
+    /**
+     * Peak memory of the load taken from the backends' final exec status reports, the largest
+     * per-backend total; zero when none carried it.
+     */
+    protected long getReportedLoadPeakMemBytes() {
+        return 0;
+    }
+
     // ------------------------------------------------------------------------------------
     // Methods for audit.
     // ------------------------------------------------------------------------------------
     public abstract PQueryStatistics getAuditStatistics();
+
+    /**
+     * CPU time of a load in nanoseconds, summed over all backends. There are two measurements of
+     * it and the larger one is taken. The final exec status reports carry each backend's own CPU
+     * time and are complete once join() returns, but a backend of an older version sends none.
+     * The audit statistics arrive on their own schedule, and what a backend sends is already
+     * merged over the backends upstream of it, so their total covers every backend of any version
+     * but cannot be split per backend. Each is at most the real total, so the larger is the better
+     * estimate and never counts a backend twice; adding the two up would.
+     *
+     * <p>A failed or cancelled load is read as soon as the failure releases join(), before the
+     * final reports of the instances it cancels arrive. What it shows is what the backends had
+     * reported by then: the running reports of Broker Load and INSERT carry the usage every
+     * report interval, the other load types only report it when an instance ends.
+     */
+    public long getLoadCpuNs() {
+        PQueryStatistics statistics = getAuditStatistics();
+        long audit = (statistics == null || statistics.cpuCostNs == null) ? 0 : statistics.cpuCostNs;
+        return Math.max(getReportedLoadCpuNs(), audit);
+    }
+
+    /**
+     * Peak memory of a load in bytes: the largest per-backend total, where each backend adds up
+     * the peak of its query memory tracker and the peak of the load channel it hosts for the load.
+     * The audit statistics' execution peak is a lower bound of the same quantity and only serves
+     * as a fallback.
+     */
+    public long getLoadPeakMemBytes() {
+        PQueryStatistics statistics = getAuditStatistics();
+        long execPeak = (statistics == null || statistics.memCostBytes == null) ? 0 : statistics.memCostBytes;
+        return Math.max(getReportedLoadPeakMemBytes(), execPeak);
+    }
 
     // ------------------------------------------------------------------------------------
     // Common methods.

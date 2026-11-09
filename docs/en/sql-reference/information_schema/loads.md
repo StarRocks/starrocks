@@ -49,8 +49,8 @@ The following fields are provided in `loads`:
 | CLIENT_IP            | The IP address of the client that submitted the load job. Available for INSERT and for Stream Load; `NULL` for other load types and for Stream Load transactions that are begun on the FE. |
 | BE_IDS               | The IDs of the BEs that executed the load, separated by commas. `NULL` when not tracked for the load type. |
 | COMMIT_THROTTLE_MS   | The time (in milliseconds) that ingestion slowdown required the commit to wait after the write finished, in shared-data clusters. A load that committed later than that for another reason, such as a two-phase commit, waited less. `0` when no wait was required, `NULL` when ingestion slowdown was not evaluated for the transaction. Recorded on the Leader FE only. |
-| CPU_NS               | Reserved. Currently always `NULL`.                            |
-| PEAK_MEM_BYTES       | Reserved. Currently always `NULL`.                            |
+| CPU_NS               | The CPU time (in nanoseconds) that the load consumed on the BEs or CNs to read, compute, and send the data, summed over all nodes. The CPU time that the receiving nodes spend writing the data (sorting and flushing memtables, writing segment files) is not included. For a load that failed or was cancelled, the value covers what the nodes had reported by then and can be lower than the actual usage. `NULL` when it is unknown, for example, when the load did not start to execute. |
+| PEAK_MEM_BYTES       | The peak memory usage (in bytes) of the load on a single BE or CN: for each node, the peak of the memory used to execute the load plus the peak of the load channel that the node hosts for the load; the largest value among all nodes is returned. `NULL` when it is unknown. |
 
 :::note
 

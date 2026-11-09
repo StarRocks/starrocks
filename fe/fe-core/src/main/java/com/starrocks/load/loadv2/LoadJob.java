@@ -375,6 +375,14 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
         return loadStartTimestamp;
     }
 
+    public long getCpuNs() {
+        return loadingStatus.getCpuNs();
+    }
+
+    public long getPeakMemBytes() {
+        return loadingStatus.getPeakMemBytes();
+    }
+
     @Override
     public String getUser() {
         return user;
@@ -813,6 +821,17 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
                 loadIds.add(((LoadLoadingTask) loadTask).getLoadId());
             }
         }
+        // A task that is still running has not handed in what it consumed, and what it reports
+        // once it is cancelled is ignored because the job is done by then. Take what its
+        // backends have reported so far (running reports carry it), before the final operation
+        // is logged. A task that already finished or failed is no longer registered here and
+        // handed its usage in with its attachment, so nothing is counted twice.
+        for (TUniqueId loadId : loadIds) {
+            Coordinator coordinator = QeProcessorImpl.INSTANCE.getCoordinator(loadId);
+            if (coordinator != null) {
+                loadingStatus.accumulateResourceUsage(coordinator.getLoadCpuNs(), coordinator.getLoadPeakMemBytes());
+            }
+        }
         idToTasks.clear();
 
         // set failMsg and state
@@ -1107,6 +1126,12 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
             }
             if (transactionId > 0) {
                 info.setTxn_id(transactionId);
+            }
+            if (loadingStatus.getCpuNs() > 0) {
+                info.setCpu_ns(loadingStatus.getCpuNs());
+            }
+            if (loadingStatus.getPeakMemBytes() > 0) {
+                info.setPeak_mem_bytes(loadingStatus.getPeakMemBytes());
             }
             if (!loadIds.isEmpty()) {
                 info.setLoad_id(joinForLoadsColumn(", ", loadIds));

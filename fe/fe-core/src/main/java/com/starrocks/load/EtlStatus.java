@@ -84,6 +84,12 @@ public class EtlStatus implements Writable {
 
     @SerializedName("c")
     private Map<String, String> counters;
+    // resources consumed on the backends: CPU time summed over all loading tasks,
+    // peak memory as the largest peak seen by any of them
+    @SerializedName("cpuNs")
+    private long cpuNs;
+    @SerializedName("peakMemBytes")
+    private long peakMemBytes;
     private Map<Long, Map<String, Long>> tableCounters;
     // not persist
     private Map<String, Long> fileMap;
@@ -150,6 +156,19 @@ public class EtlStatus implements Writable {
         this.counters = counters;
     }
 
+    public long getCpuNs() {
+        return cpuNs;
+    }
+
+    public long getPeakMemBytes() {
+        return peakMemBytes;
+    }
+
+    public void accumulateResourceUsage(long cpuNs, long peakMemBytes) {
+        this.cpuNs += cpuNs;
+        this.peakMemBytes = Math.max(this.peakMemBytes, peakMemBytes);
+    }
+
     public Long getLoadedRows(long tableId) {
         Map<String, Long> counters = tableCounters.get(tableId);
         if (counters == null) {
@@ -214,6 +233,8 @@ public class EtlStatus implements Writable {
         this.progress = 0;
         this.failMsg = "";
         this.dppResult = null;
+        this.cpuNs = 0;
+        this.peakMemBytes = 0;
         loadStatistic.reset();
     }
 
@@ -224,6 +245,8 @@ public class EtlStatus implements Writable {
                 ", trackingUrl='" + trackingUrl + '\'' +
                 ", stats=" + stats +
                 ", counters=" + counters +
+                ", cpuNs=" + cpuNs +
+                ", peakMemBytes=" + peakMemBytes +
                 ", tableCounters=" + tableCounters +
                 ", fileMap=" + fileMap +
                 ", progress=" + progress +

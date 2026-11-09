@@ -310,6 +310,12 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
 
 void FileScanNode::_scanner_worker(int start_idx, int length) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state()->instance_mem_tracker());
+    // Reading and parsing happen on this thread, not on the fragment thread, so its CPU is
+    // added to the fragment here. close() joins this thread before the fragment is done.
+    int64_t cpu_start_ns = RuntimeState::thread_cpu_time_ns();
+    DeferOp add_cpu([this, cpu_start_ns] {
+        runtime_state()->add_non_pipeline_cpu_ns(RuntimeState::thread_cpu_time_ns() - cpu_start_ns);
+    });
 
     // Clone expr context
     std::vector<ExprContext*> scanner_expr_ctxs;
