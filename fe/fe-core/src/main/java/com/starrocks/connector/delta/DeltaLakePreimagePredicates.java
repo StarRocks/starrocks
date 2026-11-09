@@ -15,9 +15,9 @@
 package com.starrocks.connector.delta;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ExternalScanPredicates;
 import com.starrocks.sql.optimizer.rewrite.FunctionPreimage;
 import io.delta.kernel.types.DataType;
 import io.delta.kernel.types.DateType;
@@ -32,7 +32,9 @@ import java.util.Map;
 
 /**
  * Plain {@code column op constant} predicates implied by the function predicates of a Delta Lake scan
- * ({@code year(c) = 2024} implies {@code c >= 2024-01-01 and c < 2025-01-01}), see {@link FunctionPreimage}.
+ * ({@code year(c) = 2024} implies {@code c >= 2024-01-01 and c < 2025-01-01}), see {@link FunctionPreimage}. The
+ * switch, the disjunction policy and error handling are in {@link ExternalScanPredicates}; this class only maps
+ * the columns of the kernel schema.
  * <p>
  * Each derived predicate is a superset of the conjunct it came from. They are used in two places, never in the
  * optimizer's predicate, so the selectivity of a conjunct is not counted twice:
@@ -48,23 +50,16 @@ public final class DeltaLakePreimagePredicates {
     private DeltaLakePreimagePredicates() {
     }
 
-    public static boolean isEnabled() {
-        // Without a session (e.g. a metadata-prefetch thread) neither the switch nor the time zone is known.
-        ConnectContext connectContext = ConnectContext.get();
-        return connectContext != null
-                && connectContext.getSessionVariable().isEnableDeltaLakeFunctionPredicatePruning();
-    }
-
     /**
      * Predicates to push to the Delta kernel next to {@code conjuncts}, on top-level DATE, TIMESTAMP, TIMESTAMP_NTZ
      * and STRING columns of {@code schema}.
      */
     public static List<ScalarOperator> forFileSkipping(List<ScalarOperator> conjuncts, StructType schema) {
-        if (conjuncts.isEmpty() || schema == null || !isEnabled()) {
+        if (schema == null) {
             return List.of();
         }
-        return FunctionPreimage.deriveColumnPredicates(conjuncts, (operand, kind) -> operand instanceof ColumnRefOperator ref
-                && accepts(schema, ref.getName(), kind));
+        return ExternalScanPredicates.forFileSkipping(ExternalScanPredicates.Connector.DELTA_LAKE, conjuncts,
+                (operand, kind) -> operand instanceof ColumnRefOperator ref && accepts(schema, ref.getName(), kind));
     }
 
     /**
@@ -72,11 +67,8 @@ public final class DeltaLakePreimagePredicates {
      */
     public static List<ScalarOperator> forScan(List<ScalarOperator> conjuncts,
                                                Map<ColumnRefOperator, Column> colRefToColumn) {
-        if (conjuncts.isEmpty() || !isEnabled()) {
-            return List.of();
-        }
-        return FunctionPreimage.deriveRangePredicates(conjuncts, (operand, kind) -> kind == FunctionPreimage.Kind.TEMPORAL
-                && operand instanceof ColumnRefOperator ref && colRefToColumn.containsKey(ref));
+        return ExternalScanPredicates.forBeConjuncts(ExternalScanPredicates.Connector.DELTA_LAKE, conjuncts,
+                ExternalScanPredicates.scanTemporalColumns(colRefToColumn));
     }
 
     private static boolean accepts(StructType schema, String name, FunctionPreimage.Kind kind) {
