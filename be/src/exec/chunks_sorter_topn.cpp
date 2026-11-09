@@ -468,54 +468,57 @@ Status ChunksSorterTopn::_build_filter_from_high_low_comparison(const DataSegmen
     get_compare_results_colwise(max_rid, run->orderby, compare_results_array, data_segments, sort_descs);
 
     include_num = 0;
+    smaller_num = 0;
+    static_assert(DataSegment::LARGER_THAN_MAX_OF_SEGMENT == 0);
+    static_assert(DataSegment::INCLUDE_IN_SEGMENT == 1);
     for (size_t i = 0; i < data_segment_size; ++i) {
-        const auto& cmp_vec = compare_results_array[i];
+        auto& cmp_vec = compare_results_array[i];
         const size_t rows = cmp_vec.size();
         uint32_t seg_include = 0;
         for (size_t j = 0; j < rows; ++j) {
             seg_include += (cmp_vec[j] <= 0);
         }
-        include_num += seg_include;
+        if (seg_include > 0) {
+            if (filter_array.empty()) {
+                filter_array.resize(data_segment_size);
+            }
+            filter_array[i].resize(rows);
+            uint8_t* __restrict dst = filter_array[i].data();
+            int8_t* __restrict src = cmp_vec.data();
+            for (size_t j = 0; j < rows; ++j) {
+                uint8_t le = static_cast<uint8_t>(src[j] <= 0);
+                dst[j] = le;
+                src[j] = static_cast<int8_t>(1 - le);
+            }
+            include_num += seg_include;
+        }
     }
 
     if (include_num == 0) {
-        smaller_num = 0;
         return Status::OK();
     }
 
-    filter_array.resize(data_segment_size);
-    for (size_t i = 0; i < data_segment_size; ++i) {
-        const DataSegment& segment = data_segments[i];
-        size_t rows = segment.chunk->num_rows();
-        filter_array[i].assign(rows, static_cast<uint8_t>(DataSegment::LARGER_THAN_MAX_OF_SEGMENT));
-
-        for (size_t j = 0; j < rows; ++j) {
-            if (compare_results_array[i][j] <= 0) {
-                filter_array[i][j] = DataSegment::INCLUDE_IN_SEGMENT;
-            }
-        }
+    // Second compare with first row of this chunk, only on segments that have qualifying rows.
+    const Columns& low_order_by = _lowest_merged_run().orderby;
+    const size_t order_by_column_size = low_order_by.size();
+    Buffer<Datum> low_rhs_values;
+    low_rhs_values.reserve(order_by_column_size);
+    for (size_t col_idx = 0; col_idx < order_by_column_size; ++col_idx) {
+        low_rhs_values.push_back(low_order_by[col_idx]->get(0));
     }
 
-    // Second compare with first row of this chunk, use rows from first compare.
-    {
-        for (size_t i = 0; i < data_segment_size; i++) {
-            for (auto& cmp : compare_results_array[i]) {
-                if (cmp < 0) {
-                    cmp = 0;
-                }
-            }
-        }
-        get_compare_results_colwise(0, _lowest_merged_run().orderby, compare_results_array, data_segments, sort_descs);
-    }
-
-    smaller_num = 0;
     for (size_t i = 0; i < data_segment_size; ++i) {
-        const DataSegment& segment = data_segments[i];
-        size_t rows = segment.chunk->num_rows();
+        if (filter_array[i].empty()) {
+            continue;
+        }
+        compare_columns(data_segments[i].order_by_columns, compare_results_array[i], low_rhs_values, sort_descs);
 
+        const size_t rows = compare_results_array[i].size();
+        const int8_t* __restrict src = compare_results_array[i].data();
+        uint8_t* __restrict dst = filter_array[i].data();
         for (size_t j = 0; j < rows; ++j) {
-            if (compare_results_array[i][j] < 0) {
-                filter_array[i][j] = DataSegment::SMALLER_THAN_MIN_OF_SEGMENT;
+            if (src[j] < 0) {
+                dst[j] = DataSegment::SMALLER_THAN_MIN_OF_SEGMENT;
                 ++smaller_num;
             }
         }

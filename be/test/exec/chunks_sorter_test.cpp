@@ -1811,4 +1811,171 @@ TEST_F(ChunksSorterTest, test_topn_randomized_differential) {
     }
 }
 
+template <typename T>
+static void verify_integral_column_compare_type() {
+    const std::vector<T> boundary_vals = {
+            std::numeric_limits<T>::min(),
+            static_cast<T>(std::numeric_limits<T>::min() + 1),
+            static_cast<T>(0),
+            static_cast<T>(1),
+            static_cast<T>(std::numeric_limits<T>::max() - 1),
+            std::numeric_limits<T>::max(),
+    };
+    const std::vector<size_t> lengths = {0, 1, 3, 4, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65};
+    const std::vector<int> zero_pcts = {0, 5, 12, 25, 50, 90, 100};
+
+    std::mt19937_64 rng(0x9E3779B97F4A7C15ULL ^ sizeof(T));
+    for (size_t len : lengths) {
+        std::vector<T> data(len);
+        for (size_t i = 0; i < len; ++i) {
+            data[i] = boundary_vals[(i + (rng() % boundary_vals.size())) % boundary_vals.size()];
+        }
+        auto col = FixedLengthColumn<T>::create();
+        col->get_data().assign(data.begin(), data.end());
+
+        for (int zero_pct : zero_pcts) {
+            CompareVector init_cmp(len);
+            for (size_t i = 0; i < len; ++i) {
+                int r = static_cast<int>((i * 37 + zero_pct) % 100);
+                init_cmp[i] = (r < zero_pct) ? int8_t{0} : ((i & 1) ? int8_t{-1} : int8_t{1});
+            }
+
+            for (T rhs : boundary_vals) {
+                for (int sort_order : {1, -1}) {
+                    CompareVector expected = init_cmp;
+                    int expected_zeros = 0;
+                    for (size_t i = 0; i < len; ++i) {
+                        if (expected[i] == 0) {
+                            int c = (data[i] < rhs) ? -1 : (data[i] > rhs ? 1 : 0);
+                            expected[i] = static_cast<int8_t>(sort_order >= 0 ? c : -c);
+                        }
+                        if (expected[i] == 0) {
+                            ++expected_zeros;
+                        }
+                    }
+
+                    CompareVector actual = init_cmp;
+                    int actual_zeros = compare_column(col, actual, Datum(rhs), SortDesc(sort_order, 1));
+                    ASSERT_EQ(expected_zeros, actual_zeros);
+                    ASSERT_EQ(expected, actual);
+
+                    CompareVector actual_multi = init_cmp;
+                    Buffer<Datum> rhs_buf{Datum(rhs)};
+                    SortDescs descs;
+                    descs.descs.emplace_back(sort_order == 1, true);
+                    compare_columns(Columns{col}, actual_multi, rhs_buf, descs);
+                    ASSERT_EQ(expected, actual_multi);
+                }
+            }
+        }
+    }
+}
+
+TEST_F(ChunksSorterTest, test_compare_integral_column_simd_boundaries_and_tails) {
+    verify_integral_column_compare_type<int8_t>();
+    verify_integral_column_compare_type<uint8_t>();
+    verify_integral_column_compare_type<int16_t>();
+    verify_integral_column_compare_type<uint16_t>();
+    verify_integral_column_compare_type<int32_t>();
+    verify_integral_column_compare_type<uint32_t>();
+    verify_integral_column_compare_type<int64_t>();
+    verify_integral_column_compare_type<uint64_t>();
+
+    // Multi-column compare_columns with NullableColumn followed by Int64Column
+    auto col0 = ColumnTestHelper::build_nullable_column<int32_t>({10, 10, 10, 20, 0, 0, 10, 10, 10, 30},
+                                                                 {0, 0, 0, 0, 1, 1, 0, 0, 0, 0});
+    auto col1 = ColumnTestHelper::build_column<int64_t>({1, 2, 3, 99, 5, 2, 2, 1, 2, 0});
+    CompareVector cmp(10, 0);
+    Buffer<Datum> rhs_values{Datum(int32_t(10)), Datum(int64_t(2))};
+    SortDescs descs(std::vector<bool>{true, true}, std::vector<bool>{true, true});
+    compare_columns(Columns{col0, col1}, cmp, rhs_values, descs);
+    // Rows 0,1,2,6,7,8 have col0 == 10 (tie on col0), refined by col1 vs 2:
+    // row 0: 1 < 2 -> -1
+    // row 1: 2 == 2 -> 0
+    // row 2: 3 > 2 -> 1
+    // row 3: col0=20 > 10 -> 1
+    // row 4,5: col0=NULL < 10 (null_first=true, asc=true) -> -1
+    // row 6: 2 == 2 -> 0
+    // row 7: 1 < 2 -> -1
+    // row 8: 2 == 2 -> 0
+    // row 9: col0=30 > 10 -> 1
+    CompareVector expected_cmp = {-1, 0, 1, 1, -1, -1, 0, -1, 0, 1};
+    EXPECT_EQ(expected_cmp, cmp);
+}
+
+TEST_F(ChunksSorterTest, test_topn_multi_segment_mixed_selectivity) {
+    auto expr_int = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_BIGINT), 0);
+    std::vector<bool> is_asc{true};
+    std::vector<bool> is_null_first{true};
+    std::vector<ExprContext*> sort_exprs{new ExprContext(expr_int.get())};
+    DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
+
+    RuntimeProfile profile("test_topn_multi_segment_mixed_selectivity");
+    MemTracker mem_tracker(1L << 62, "test_topn_multi_segment_mixed_selectivity", nullptr);
+
+    // Use max_buffered_chunks = 4 and chunk_size = 64 so each update of a 64-row chunk stays a separate raw chunk
+    const int old_chunk_size = _runtime_state->chunk_size();
+    _runtime_state->set_chunk_size(64);
+    DeferOp restore_chunk_size([&]() { _runtime_state->set_chunk_size(old_chunk_size); });
+
+    ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "",
+                            /*offset=*/0, /*limit=*/16, TTopNType::ROW_NUMBER, ChunksSorterTopn::kDefaultMaxBufferRows,
+                            ChunksSorterTopn::kDefaultMaxBufferBytes,
+                            /*max_buffered_chunks=*/4);
+    sorter.setup_runtime(_runtime_state.get(), &profile, &mem_tracker);
+
+    Chunk::SlotHashMap slot_map{{0, 0}};
+    std::vector<int64_t> all_expected;
+
+    auto make_chunk = [&](const std::vector<int64_t>& vals) {
+        all_expected.insert(all_expected.end(), vals.begin(), vals.end());
+        return std::make_shared<Chunk>(Columns{ColumnTestHelper::build_column<int64_t>(vals)}, slot_map);
+    };
+
+    // First batch of 4 chunks (initializes _merged_runs with top 16 = [100..115])
+    for (int c = 0; c < 4; ++c) {
+        std::vector<int64_t> vals(64);
+        std::iota(vals.begin(), vals.end(), 100 + c * 100);
+        ASSERT_OK(sorter.update(_runtime_state.get(), make_chunk(vals)));
+    }
+
+    // Second batch of 4 chunks with mixed per-segment selectivity against [100..115]:
+    // Segment 0: 0% qualifying ([5000..5063])
+    // Segment 1: partial qualifying (8 rows < 100, 8 rows in [100..115], 48 rows > 115)
+    // Segment 2: 0% qualifying ([6000..6063])
+    // Segment 3: 100% qualifying ([0..63])
+    {
+        std::vector<int64_t> seg0(64), seg1(64), seg2(64), seg3(64);
+        std::iota(seg0.begin(), seg0.end(), 5000);
+        for (int i = 0; i < 64; ++i) {
+            if (i < 8) {
+                seg1[i] = 50 + i; // smaller than min (100)
+            } else if (i < 16) {
+                seg1[i] = 105 + (i - 8); // between min (100) and max (115)
+            } else {
+                seg1[i] = 2000 + i; // larger than max (115)
+            }
+        }
+        std::iota(seg2.begin(), seg2.end(), 6000);
+        std::iota(seg3.begin(), seg3.end(), 0);
+
+        ASSERT_OK(sorter.update(_runtime_state.get(), make_chunk(seg0)));
+        ASSERT_OK(sorter.update(_runtime_state.get(), make_chunk(seg1)));
+        ASSERT_OK(sorter.update(_runtime_state.get(), make_chunk(seg2)));
+        ASSERT_OK(sorter.update(_runtime_state.get(), make_chunk(seg3)));
+    }
+
+    ASSERT_OK(sorter.done(_runtime_state.get()));
+    std::stable_sort(all_expected.begin(), all_expected.end());
+
+    ChunkPtr result = consume_page_from_sorter(sorter);
+    ASSERT_NE(nullptr, result);
+    ASSERT_EQ(16, result->num_rows());
+    for (int i = 0; i < 16; ++i) {
+        EXPECT_EQ(all_expected[i], result->get(i).get(0).get_int64()) << " at index " << i;
+    }
+}
+
 } // namespace starrocks
