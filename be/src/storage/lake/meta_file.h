@@ -22,6 +22,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "fs/fs.h"
+#include "storage/lake/metacache_key.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
@@ -163,6 +164,14 @@ public:
     // Number of rssid slots already assigned (accumulated) in current pending batch rowset build.
     uint32_t assigned_segment_idx() const { return _pending_rowset_data.assigned_segment_idx; }
 
+    // The rowset batch_apply_opwrite() has merged so far, and the partial-update rewrites to apply to
+    // it, keyed by segment position in that rowset. set_final_rowset() materializes the two as one
+    // rowset whose id is the tablet's next_rowset_id().
+    const RowsetMetadataPB& pending_rowset() const { return _pending_rowset_data.rowset_pb; }
+    const std::map<int, SegmentFileInfo>& pending_replace_segments() const {
+        return _pending_rowset_data.replace_segments;
+    }
+
     void finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta);
 
     void remove_compacted_sst(const TxnLogPB_OpCompaction& op_compaction);
@@ -217,7 +226,7 @@ private:
     // from segment id to delvec, used for fill cache in finalize stage.
     std::unordered_map<uint32_t, DelVectorPtr> _segmentid_to_delvec;
     // from cache key to segment id
-    std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
+    std::unordered_map<MetacacheKey, uint32_t, MetacacheKey::Hash> _cache_key_to_segment_id;
     // When recover flag isn't ok, need recover later
     RecoverFlag _recover_flag = RecoverFlag::OK;
     // Set by reset_delvecs_for_recover(): delvecs of the base version are discarded, see find_delvec().

@@ -59,6 +59,7 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/scoped_local_disk_cache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
@@ -2997,7 +2998,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_retry_publish_reads_written_new_version) 
                                      /*skip_write_tablet_metadata=*/false, kBuiltVersion,
                                      InitialMetadataOrder::kPerTabletFirst, /*is_retry_publish=*/true));
     }
-    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path));
+    EXPECT_EQ(nullptr,
+              _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(new_metadata_path)));
     evict_caches();
     ASSIGN_OR_ABORT(auto republished,
                     publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), base_version, new_version, txns,
@@ -3007,6 +3009,79 @@ TEST_P(LakePrimaryKeyPublishTest, test_retry_publish_reads_written_new_version) 
 
     EXPECT_EQ(2 * kChunkSize, read_rows(tablet_id, new_version));
 }
+
+#ifdef WITH_STARCACHE
+// Under file bundling a version's metadata is written only inside its bundle, so a tablet that finished in an
+// earlier attempt keeps its result in a partial_meta in the local disk cache. A retry reads it back instead of
+// applying again; with lake_enable_publish_partial_meta off it applies.
+TEST_P(LakePrimaryKeyPublishTest, test_retry_publish_reads_partial_meta) {
+    ScopedLocalDiskCache local_disk_cache(lake::join_path(kTestGroupPath, "partial_meta_cache"));
+    auto [chunk0, indexes0] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto [chunk1, indexes1] = gen_data_and_index(kChunkSize, 1, true, true);
+    auto base_version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<int64_t> txn_ids;
+    auto write_txn = [&](const Chunk& chunk, const std::vector<uint32_t>& indexes) {
+        auto txn_id = next_id();
+        txn_ids.emplace_back(txn_id);
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    };
+    write_txn(*chunk0, indexes0);
+    write_txn(*chunk1, indexes1);
+    auto txns = std::vector<TxnInfoPB>();
+    auto commit_time = time(nullptr);
+    for (auto id : txn_ids) {
+        txns.emplace_back(TEST_txn_info(id, commit_time));
+    }
+    auto new_version = base_version + 2;
+    auto publish = [&](bool is_retry_publish) {
+        return publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), base_version, new_version, txns,
+                               /*skip_write_tablet_metadata=*/true, /*fe_built_version=*/0,
+                               InitialMetadataOrder::kPerTabletFirst, is_retry_publish);
+    };
+    auto evict_caches = [&]() {
+        _tablet_mgr->prune_metacache();
+        _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
+        ASSERT_EQ(0, _primary_key_mgr->get_primary_index_data_version(tablet_id));
+    };
+
+    ASSIGN_OR_ABORT(auto metadata, publish(/*is_retry_publish=*/false));
+    ASSERT_OK(_tablet_mgr->put_partial_tablet_metadata(metadata));
+
+    auto old_enable = config::lake_enable_publish_partial_meta;
+    DeferOp restore([&]() { config::lake_enable_publish_partial_meta = old_enable; });
+    config::lake_enable_publish_partial_meta = true;
+    evict_caches();
+    // Answered from the partial_meta: the index stays unloaded.
+    ASSIGN_OR_ABORT(auto from_partial, publish(/*is_retry_publish=*/true));
+    EXPECT_EQ(new_version, from_partial->version());
+    EXPECT_EQ(metadata->rowsets_size(), from_partial->rowsets_size());
+    EXPECT_EQ(0, _primary_key_mgr->get_primary_index_data_version(tablet_id));
+
+    // A first attempt never reads it: it applies again and loads the index on the way.
+    evict_caches();
+    ASSERT_OK(publish(/*is_retry_publish=*/false).status());
+    EXPECT_GT(_primary_key_mgr->get_primary_index_data_version(tablet_id), 0);
+
+    config::lake_enable_publish_partial_meta = false;
+    evict_caches();
+    ASSERT_OK(publish(/*is_retry_publish=*/true).status());
+    EXPECT_GT(_primary_key_mgr->get_primary_index_data_version(tablet_id), 0);
+}
+#endif
 
 TEST_P(LakePrimaryKeyPublishTest, test_batch_publish_1) {
     auto [chunk0, indexes0] = gen_data_and_index(kChunkSize, 0, false, true);
@@ -3151,8 +3226,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_transform_batch_to_single) {
 
 TEST_P(LakePrimaryKeyPublishTest, test_mem_tracker) {
     EXPECT_EQ(10 * 1024 * 1024, _mem_tracker->limit());
-    EXPECT_EQ(10 * 1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
-              _primary_key_mgr->compaction_state_mem_tracker()->limit());
     EXPECT_EQ(10 * 1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
               _primary_key_mgr->update_state_mem_tracker()->limit());
 }
@@ -4143,11 +4216,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_multi_chunk_upsert) {
 }
 
 // experimental_lake_ignore_lost_segment: a PK compaction whose output segment file is lost before the
-// compaction txn is published must not crash and must not fail the publish. This covers all three
+// compaction txn is published must not crash and must not fail the publish. This covers both
 // publish shapes with an error-injected (physically deleted) lost output segment:
-//   1. light publish, NO loss    -> normal SST ingest + conflict resolver
-//   2. light publish, lost seg   -> conflict-resolver lost branch + SST-ingest skip
-//   3. non-light publish, lost   -> PrimaryKeyCompactionState empty PK column
+//   1. NO loss    -> normal SST ingest + conflict resolver
+//   2. lost seg   -> conflict-resolver lost branch + SST-ingest skip
 // and runs under both LOCAL (resolver execute()) and CLOUD_NATIVE (resolver execute_without_update_index
 // + SST ingest) persistent index via the param list.
 TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_segment) {
@@ -4201,19 +4273,13 @@ TEST_P(LakePrimaryKeyPublishTest, test_compaction_publish_tolerates_lost_output_
         return st;
     };
 
-    // 1. Light publish (default enable_light_pk_compaction_publish=true), no loss: normal ingest path.
+    // 1. No loss: normal ingest path.
     write_rowsets(3);
     ASSERT_OK(compact_and_publish(/*lose_output_segment=*/false));
 
-    // 2. Light publish, lost output segment: resolver lost branch + SST-ingest skip.
+    // 2. Lost output segment: resolver lost branch + SST-ingest skip.
     config::experimental_lake_ignore_lost_segment = true;
     DeferOp reset_flag([] { config::experimental_lake_ignore_lost_segment = false; });
-    write_rowsets(3);
-    ASSERT_OK(compact_and_publish(/*lose_output_segment=*/true));
-
-    // 3. Non-light publish, lost output segment: PrimaryKeyCompactionState empty PK column path.
-    config::enable_light_pk_compaction_publish = false;
-    DeferOp reset_light([] { config::enable_light_pk_compaction_publish = true; });
     write_rowsets(3);
     ASSERT_OK(compact_and_publish(/*lose_output_segment=*/true));
 
@@ -4288,7 +4354,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_light_compaction_publish_row_count_from_m
 
     // Build index SSTs during load (write_buffer_size forces multi-segment rowsets; the 1-byte eager
     // threshold builds an index SST for each) so the compaction carries op_compaction.ssts and
-    // light_publish_primary_compaction dispatches to execute_without_update_index (the path under test)
+    // publish_primary_compaction dispatches to execute_without_update_index (the path under test)
     // rather than resolver->execute(). This is the recipe proven deterministic by pk_tablet_sst_writer_test.
     ConfigResetGuard<int64_t> g_write_buffer(&config::write_buffer_size, 512);
     ConfigResetGuard<int64_t> g_eager_threshold(&config::pk_index_eager_build_threshold_bytes, 1);
@@ -4340,7 +4406,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_light_compaction_publish_row_count_from_m
     EXPECT_EQ(240, read_rows(tablet_id, version));
 
     // Compact the rowsets into one; the eager-built index ssts drive
-    // light_publish_primary_compaction -> execute_without_update_index.
+    // publish_primary_compaction -> execute_without_update_index.
     int64_t txn_id = next_id();
     auto ctx = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(ctx.get()));
@@ -4355,7 +4421,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_light_compaction_publish_row_count_from_m
     version++;
 
     // The compaction preserves every live row. The publish goes through
-    // light_publish_primary_compaction -> execute_without_update_index (the path under test), where a
+    // publish_primary_compaction -> execute_without_update_index (the path under test), where a
     // wrong per-segment row count (from output_segment_num_rows()) would mis-advance the rows-mapper and
     // drop or duplicate rows.
     EXPECT_EQ(240, read_rows(tablet_id, version));

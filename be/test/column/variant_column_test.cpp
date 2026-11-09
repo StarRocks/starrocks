@@ -1144,6 +1144,29 @@ PARALLEL_TEST(VariantColumnTest, test_base_shredded_materialization_typed_overri
     ASSERT_EQ(R"({"a":99,"b":2})", json.value());
 }
 
+PARALLEL_TEST(VariantColumnTest, test_base_shredded_materialization_nonmonotonic_object_offsets) {
+    auto col = VariantColumn::create();
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    // Residual fields are indexed as [a, b], with b stored before a in the payload.
+    const char metadata_bytes[] = {0x11, 2, 0, 1, 2, 'a', 'b'};
+    const char value_bytes[] = {2, 2, 0, 1, 1, 0, 5, 0, 13, 'x', 'y', 'z'};
+    metadata->append(Slice(metadata_bytes, sizeof(metadata_bytes)));
+    remain->append(Slice(value_bytes, sizeof(value_bytes)));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({99}, {0}));
+    col->set_shredded_columns({"c"}, {TYPE_BIGINT_DESC}, std::move(typed), std::move(metadata), std::move(remain));
+
+    VariantRowValue row;
+    const auto* value = col->get_row_value(0, &row);
+    ASSERT_NE(nullptr, value);
+    auto json = value->to_json();
+    ASSERT_TRUE(json.ok()) << json.status();
+    // Falling back to the residual payload would silently lose c.
+    ASSERT_EQ(R"({"a":"xyz","b":null,"c":99})", json.value());
+}
+
 // Verifies typed NULL acts as tombstone and removes same-path key from materialized object.
 PARALLEL_TEST(VariantColumnTest, test_base_shredded_materialization_typed_null_tombstone) {
     auto col = VariantColumn::create();

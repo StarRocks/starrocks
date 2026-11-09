@@ -11,6 +11,10 @@ description: "查看数据库中指定导入作业的相关信息，包括 Broke
 
 除了以上三种导入方式， StarRocks 还支持 Stream Load 和 Routine Load，其中 Stream Load 是同步操作，会直接返回结果，不会通过 SHOW LOAD 展示。Routine Load 可通过 [SHOW ROUTINE LOAD](routine_load/SHOW_ROUTINE_LOAD.md) 查看导入作业的相关信息。
 
+对导入作业的每一张目标表都拥有至少一项权限，或者拥有 OPERATE 权限时，SHOW LOAD 会显示该作业。如果没有每一张目标表的 SELECT 权限，`TaskInfo` 和 `TrackingSQL` 为 NULL，`ErrorMsg` 只保留失败类型，`JobDetails` 不含 BE 节点。`root` 用户可以看到所有导入作业的完整信息。目标表已被删除的导入作业，只有 `root` 用户能看到完整信息，拥有 OPERATE 权限的用户看到的是隐藏上述字段后的信息。
+
+对 Stream Load 作业的每一张目标表都拥有至少一项权限，或者拥有 OPERATE 权限时，SHOW STREAM LOAD 会显示该作业。如果没有每一张目标表的 SELECT 权限，`ErrorMsg`、`TrackingURL` 和 `TrackingSQL` 为 NULL。`root` 用户可以看到所有 Stream Load 作业的完整信息。目标表已被删除的 Stream Load 作业，只有 `root` 用户能看到完整信息，拥有 OPERATE 权限的用户看到的是隐藏上述字段后的信息。
+
 ## 语法
 
 ```SQL

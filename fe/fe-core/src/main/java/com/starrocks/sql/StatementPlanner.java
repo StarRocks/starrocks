@@ -1031,8 +1031,8 @@ public class StatementPlanner {
                     tbl.getSourceTablePort(),
                     authenticateParams);
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
-                || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
-            // schema table and iceberg and hive table does not need txn
+                || targetTable.isPaimonTable() || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
+            // These targets do not use StarRocks local transactions; their analyzers validate write support.
         } else {
             long dbId = db.getId();
             txnId = transactionMgr.beginTransaction(

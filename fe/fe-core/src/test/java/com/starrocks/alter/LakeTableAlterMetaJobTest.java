@@ -137,6 +137,89 @@ public class LakeTableAlterMetaJobTest {
     }
 
     @Test
+    public void testPublishRetrySetsIsRetryPublish() throws Exception {
+        job.runPendingJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        // The first attempt fails; the second one is a retry. Both publish paths are intercepted, whichever the
+        // table's file_bundling selects.
+        List<Boolean> flags = new ArrayList<>();
+        java.util.concurrent.atomic.AtomicBoolean fail = new java.util.concurrent.atomic.AtomicBoolean(true);
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish, boolean isRetryPublish) {
+                flags.add(isRetryPublish);
+                if (fail.getAndSet(false)) {
+                    throw new RuntimeException("injected publish failure");
+                }
+            }
+
+            @Mock
+            public void aggregatePublishVersion(List<Tablet> tablets, List<TxnInfoPB> txnInfos, long baseVersion,
+                                                long newVersion, Map<Long, Double> compactionScores,
+                                                Map<Long, com.starrocks.catalog.TabletRange> tabletRanges,
+                                                Map<com.starrocks.system.ComputeNode, List<Long>> nodeToTablets,
+                                                com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                                Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                                                List<com.starrocks.proto.VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                                boolean preferSharedInitialMetadata, boolean isRetryPublish) {
+                publishVersion(tablets, txnInfos.get(0), baseVersion, newVersion, computeResource, true,
+                        isRetryPublish);
+            }
+        };
+        Assertions.assertFalse(job.lakePublishVersion());
+        Assertions.assertTrue(job.lakePublishVersion());
+        Assertions.assertEquals(List.of(false, true), flags);
+    }
+
+    @Test
+    public void testPublishAfterPartialForceNoOpPublishIsNotRetry() throws Exception {
+        job.runPendingJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        // A normal publish is sent and fails, then a FORCE cancel's no-op publish fails too, leaving the job in
+        // FINISHED_REWRITING. The no-op publish may have written the commit version with the job's gtid, so the
+        // normal publish that resumes must not be a retry: it would take that version for the alter's own.
+        List<Boolean> normalFlags = new ArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish, boolean isRetryPublish) {
+                if (Boolean.TRUE.equals(txnInfo.noOpPublish)) {
+                    throw new RuntimeException("injected no-op publish failure");
+                }
+                normalFlags.add(isRetryPublish);
+                if (normalFlags.size() == 1) {
+                    throw new RuntimeException("injected publish failure");
+                }
+            }
+
+            @Mock
+            public void aggregatePublishVersion(List<Tablet> tablets, List<TxnInfoPB> txnInfos, long baseVersion,
+                                                long newVersion, Map<Long, Double> compactionScores,
+                                                Map<Long, com.starrocks.catalog.TabletRange> tabletRanges,
+                                                Map<com.starrocks.system.ComputeNode, List<Long>> nodeToTablets,
+                                                com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                                Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                                                List<com.starrocks.proto.VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                                boolean preferSharedInitialMetadata, boolean isRetryPublish) {
+                publishVersion(tablets, txnInfos.get(0), baseVersion, newVersion, computeResource, true,
+                        isRetryPublish);
+            }
+        };
+        Assertions.assertFalse(job.lakePublishVersion());
+        Assertions.assertFalse(job.cancel("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertTrue(job.lakePublishVersion());
+        Assertions.assertEquals(List.of(false, false), normalFlags);
+    }
+
+    @Test
     public void testJobState() throws Exception {
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         job.runPendingJob();
@@ -310,7 +393,7 @@ public class LakeTableAlterMetaJobTest {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                        long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
-                                       boolean useAggregatePublish) {
+                                       boolean useAggregatePublish, boolean isRetryPublish) {
             }
         };
         job.runPendingJob();
@@ -339,7 +422,7 @@ public class LakeTableAlterMetaJobTest {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                        long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
-                                       boolean useAggregatePublish) {
+                                       boolean useAggregatePublish, boolean isRetryPublish) {
                 publishCalls.incrementAndGet();
                 lastNoOp.set(txnInfo.noOpPublish);
                 lastAggregate.set(useAggregatePublish);
@@ -606,7 +689,7 @@ public class LakeTableAlterMetaJobTest {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
                                        com.starrocks.warehouse.cngroup.ComputeResource computeResource,
-                                       boolean useAggregatePublish) {
+                                       boolean useAggregatePublish, boolean isRetryPublish) {
                 publishedTxns.add(txnInfo);
                 publishedVersions.add(newVersion);
             }

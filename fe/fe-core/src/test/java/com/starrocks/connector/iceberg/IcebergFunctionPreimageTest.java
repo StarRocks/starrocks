@@ -147,6 +147,8 @@ public class IcebergFunctionPreimageTest {
                 return cmp < 0;
             case LE:
                 return cmp <= 0;
+            case NE:
+                return cmp != 0;
             default:
                 throw new IllegalArgumentException(op.toString());
         }
@@ -370,6 +372,144 @@ public class IcebergFunctionPreimageTest {
                 }
             }
         }
+    }
+
+    /**
+     * A bare timestamptz column compared with a local time: at a DST overlap the constant names two instants, in a gap
+     * none. The scan conversion must cover every matching instant, also under NOT; a strict one must not over-match.
+     */
+    @Test
+    public void testBareTimestampTzAcrossDst() {
+        ConnectContext ctx = new ConnectContext();
+        ctx.getSessionVariable().setTimeZone("America/New_York");
+        ctx.setThreadLocalInfo();
+        ZoneId zone = ZoneId.of("America/New_York");
+        List<Instant> instants = new ArrayList<>();
+        for (List<String> range : List.of(List.of("2024-11-03T03:00:00Z", "2024-11-03T09:00:00Z"),
+                List.of("2024-03-10T04:00:00Z", "2024-03-10T10:00:00Z"))) {
+            for (Instant t = Instant.parse(range.get(0)); t.isBefore(Instant.parse(range.get(1))); t = t.plusSeconds(300)) {
+                instants.add(t);
+            }
+        }
+        List<LocalDateTime> constants = new ArrayList<>();
+        for (LocalDateTime k = LocalDateTime.of(2024, 11, 3, 0, 30); k.isBefore(LocalDateTime.of(2024, 11, 3, 2, 31));
+                k = k.plusMinutes(15)) {
+            constants.add(k);
+        }
+        for (LocalDateTime k = LocalDateTime.of(2024, 3, 10, 1, 30); k.isBefore(LocalDateTime.of(2024, 3, 10, 3, 31));
+                k = k.plusMinutes(15)) {
+            constants.add(k);
+        }
+        Types.StructType tzType = Types.StructType.of(SCHEMA.findField("tz"));
+        List<BinaryType> ops = new ArrayList<>(List.of(OPS));
+        ops.add(BinaryType.NE);
+        for (LocalDateTime k : constants) {
+            for (BinaryType op : ops) {
+                ScalarOperator predicate = new BinaryPredicateOperator(op, TZ, ConstantOperator.createDatetime(k));
+                for (boolean negated : List.of(false, true)) {
+                    ScalarOperator p = negated ? CompoundPredicateOperator.not(predicate) : predicate;
+                    Evaluator evaluator = new Evaluator(tzType, convert(p));
+                    for (Instant instant : instants) {
+                        boolean matches = compare(op, LocalDateTime.ofInstant(instant, zone).compareTo(k)) != negated;
+                        if (matches) {
+                            Assertions.assertTrue(
+                                    evaluator.eval(row(ChronoUnit.MICROS.between(Instant.EPOCH, instant))),
+                                    p + " pruned " + instant);
+                        }
+                    }
+                }
+                // a strict conversion selects only matching rows
+                Expression strict = converter.convertStrict(List.of(predicate), context);
+                if (strict != null) {
+                    Evaluator evaluator = new Evaluator(tzType, strict);
+                    for (Instant instant : instants) {
+                        if (evaluator.eval(row(ChronoUnit.MICROS.between(Instant.EPOCH, instant)))) {
+                            Assertions.assertTrue(compare(op, LocalDateTime.ofInstant(instant, zone).compareTo(k)),
+                                    "strict " + predicate + " selects " + instant);
+                        }
+                    }
+                }
+            }
+            for (boolean notIn : List.of(false, true)) {
+                ScalarOperator in = new InPredicateOperator(notIn, TZ, ConstantOperator.createDatetime(k),
+                        ConstantOperator.createDatetime(LocalDateTime.of(2000, 1, 1, 0, 0)));
+                Evaluator evaluator = new Evaluator(tzType, convert(in));
+                for (Instant instant : instants) {
+                    if ((LocalDateTime.ofInstant(instant, zone).equals(k)) != notIn) {
+                        Assertions.assertTrue(
+                                evaluator.eval(row(ChronoUnit.MICROS.between(Instant.EPOCH, instant))),
+                                in + " pruned " + instant);
+                    }
+                }
+            }
+        }
+        // 01:30 happens twice: both instants are kept
+        Assertions.assertEquals(Expressions.and(Expressions.greaterThanOrEqual("tz", micros(
+                        LocalDateTime.of(2024, 11, 3, 5, 30), ZoneOffset.UTC)),
+                        Expressions.lessThanOrEqual("tz", micros(LocalDateTime.of(2024, 11, 3, 6, 30), ZoneOffset.UTC)))
+                        .toString(),
+                convert(new BinaryPredicateOperator(BinaryType.EQ, TZ,
+                        ConstantOperator.createDatetime(LocalDateTime.of(2024, 11, 3, 1, 30)))).toString());
+    }
+
+    @Test
+    public void testPlainTimestampTzConstantAcrossDst() {
+        ConnectContext ctx = new ConnectContext();
+        ctx.getSessionVariable().setTimeZone("America/New_York");
+        ctx.setThreadLocalInfo();
+        ZoneId zone = ZoneId.of("America/New_York");
+        List<Instant> instants = new ArrayList<>();
+        for (Instant t = Instant.parse("2024-11-02T22:00:00Z"); t.isBefore(Instant.parse("2024-11-03T12:00:00Z"));
+                t = t.plusSeconds(300)) {
+            instants.add(t);
+        }
+        for (Instant t = Instant.parse("2024-03-10T03:00:00Z"); t.isBefore(Instant.parse("2024-03-10T12:00:00Z"));
+                t = t.plusSeconds(300)) {
+            instants.add(t);
+        }
+        List<LocalDateTime> constants = List.of(LocalDateTime.of(2024, 11, 3, 1, 30), LocalDateTime.of(2024, 11, 3, 1, 0),
+                LocalDateTime.of(2024, 11, 3, 2, 0), LocalDateTime.of(2024, 3, 10, 2, 30),
+                LocalDateTime.of(2024, 3, 10, 2, 0), LocalDateTime.of(2024, 3, 10, 3, 0));
+        for (LocalDateTime k : constants) {
+            for (BinaryType op : OPS) {
+                for (ConstantOperator constant : List.of(ConstantOperator.createDatetime(k),
+                        ConstantOperator.createVarchar(k.toString().replace('T', ' ') + ":00"))) {
+                    Expression derived = convert(new BinaryPredicateOperator(op, TZ, constant));
+                    Evaluator evaluator = new Evaluator(Types.StructType.of(SCHEMA.findField("tz")), derived);
+                    for (Instant instant : instants) {
+                        if (compare(op, LocalDateTime.ofInstant(instant, zone).compareTo(k))) {
+                            Assertions.assertTrue(
+                                    evaluator.eval(row(ChronoUnit.MICROS.between(Instant.EPOCH, instant))),
+                                    "tz " + op + " " + constant + " pruned " + instant);
+                        }
+                    }
+                }
+            }
+        }
+
+        // a constant in an overlap or gap has no exact form: not under NOT, for NE, for IN or for strict conversion
+        for (LocalDateTime k : List.of(LocalDateTime.of(2024, 11, 3, 1, 30), LocalDateTime.of(2024, 3, 10, 2, 30))) {
+            BinaryPredicateOperator eq = new BinaryPredicateOperator(BinaryType.EQ, TZ, ConstantOperator.createDatetime(k));
+            Assertions.assertEquals(Expressions.alwaysTrue(),
+                    convert(new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, eq)));
+            Assertions.assertEquals(Expressions.alwaysTrue(), convert(
+                    new BinaryPredicateOperator(BinaryType.NE, TZ, ConstantOperator.createDatetime(k))));
+            // IN keeps every candidate instant of the constant
+            Evaluator inEvaluator = new Evaluator(Types.StructType.of(SCHEMA.findField("tz")), convert(
+                    new InPredicateOperator(false, TZ, ConstantOperator.createDatetime(k),
+                            ConstantOperator.createDatetime(k.plusDays(1)))));
+            for (Instant instant : instants) {
+                LocalDateTime local = LocalDateTime.ofInstant(instant, zone);
+                if (local.equals(k) || local.equals(k.plusDays(1))) {
+                    Assertions.assertTrue(inEvaluator.eval(row(ChronoUnit.MICROS.between(Instant.EPOCH, instant))),
+                            "tz in " + k + " pruned " + instant);
+                }
+            }
+            Assertions.assertNull(converter.convertStrict(List.of(eq), context));
+        }
+        // an unambiguous constant converts exactly as before
+        Assertions.assertNotNull(converter.convertStrict(List.of(new BinaryPredicateOperator(BinaryType.EQ, TZ,
+                ConstantOperator.createDatetime(LocalDateTime.of(2024, 11, 3, 2, 0)))), context));
     }
 
     @Test

@@ -29,6 +29,7 @@ import copy
 import datetime
 import json
 import logging
+import socket
 import sys
 import threading
 import traceback
@@ -786,6 +787,32 @@ class StarrocksSQLApiLib(object):
         ) % (catalog_name, warehouse)
         res = self.execute_sql(sql)
         tools.assert_true(res["status"], "create hadoop iceberg catalog failed: %s" % res.get("msg"))
+
+    def create_paimon_ddl_catalog(self, catalog_name, warehouse_id):
+        """Create an isolated filesystem catalog; catalogs in one case share the warehouse."""
+        # CLEANUP runs outside the normal statement UUID substitution.
+        self.paimon_ddl_warehouse_id = warehouse_id
+        properties = {"type": "paimon", "paimon.catalog.type": "filesystem"}
+        local_root = getattr(self, "paimon_ddl_local_warehouse_root", "")
+        if local_root:
+            warehouse = os.path.join(local_root, warehouse_id)
+            os.makedirs(warehouse, exist_ok=True)
+            properties["paimon.catalog.warehouse"] = "file://" + warehouse
+        else:
+            if not all(getattr(self, key, "") for key in ("oss_bucket", "oss_ak", "oss_sk", "oss_endpoint")):
+                raise SkipTest("Paimon DDL requires OSS settings or paimon_ddl_local_warehouse_root")
+            warehouse_root = getattr(self, "paimon_ddl_warehouse_root", "") or (
+                "oss://%s/tmp/paimon_catalog_ddl" % self.oss_bucket)
+            properties.update({
+                "paimon.catalog.warehouse": "%s/%s" % (warehouse_root.rstrip("/"), warehouse_id),
+                "aws.s3.access_key": self.oss_ak,
+                "aws.s3.secret_key": self.oss_sk,
+                "aws.s3.endpoint": self.oss_endpoint,
+            })
+        sql = "create external catalog `%s` properties (%s)" % (
+            catalog_name, ", ".join('"%s" = "%s"' % (key, value) for key, value in properties.items()))
+        result = self.execute_sql(sql)
+        tools.assert_true(result["status"], "create Paimon DDL catalog failed: %s" % result.get("msg"))
 
     def assert_paimon_reader(self, query, table, expected):
         """Assert one reader and reject empty scans or mixed routes."""
@@ -4497,6 +4524,49 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         query_id = result["result"][0][0]
         # print(f"Last query id: {query_id}")
         return query_id
+
+    def assert_pipelined_request_waits_for_stream(self, query):
+        """
+        Sends `query` to the HTTP SQL API and, while its response is still being streamed, pipelines GET /api/health
+        on the same connection: the SQL response has to end with its last chunk before the health response starts.
+        """
+        auth = base64.b64encode(f"{self.mysql_user}:{self.mysql_password}".encode()).decode()
+        body = json.dumps({"query": query}).encode()
+        sql = (f"POST /api/v1/catalogs/default_catalog/sql HTTP/1.1\r\nHost: {self.mysql_host}\r\n"
+               f"Authorization: Basic {auth}\r\nContent-Type: application/json\r\n"
+               f"Content-Length: {len(body)}\r\n\r\n").encode() + body
+        health = f"GET /api/health HTTP/1.1\r\nHost: {self.mysql_host}\r\n\r\n".encode()
+        last_chunk = b"\r\n0\r\n\r\n"
+
+        def health_after(data, start):
+            # The start of a whole response with a Content-Length at or after `start`, or -1.
+            at = data.find(b"HTTP/1.1", start)
+            head_end = data.find(b"\r\n\r\n", at) if at >= 0 else -1
+            if head_end < 0:
+                return -1
+            length = re.search(rb"(?i)content-length:\s*(\d+)", data[at:head_end])
+            return at if length and len(data) >= head_end + 4 + int(length.group(1)) else -1
+
+        received = bytearray()
+        with socket.create_connection((self.mysql_host, int(self.http_port)), timeout=60) as conn:
+            conn.sendall(sql)
+            # Well into the stream before the next request goes out.
+            while len(received) < 1024 * 1024:
+                data = conn.recv(65536)
+                tools.assert_true(data, f"the SQL response ended early: {bytes(received[:300])!r}")
+                received += data
+            conn.sendall(health)
+            while True:
+                end = received.find(last_chunk)
+                if end >= 0 and health_after(received, end + len(last_chunk)) >= 0:
+                    break
+                data = conn.recv(1 << 20)
+                tools.assert_true(data, "the connection closed before both responses were whole")
+                received += data
+        tools.assert_true(received.startswith(b"HTTP/1.1 200"), bytes(received[:300]))
+        tools.assert_equal(-1, received.find(b"HTTP/1.1", 1, end), "a response started inside the SQL response")
+        health_at = health_after(received, end + len(last_chunk))
+        tools.assert_true(received.startswith(b"HTTP/1.1 200", health_at), bytes(received[health_at:health_at + 300]))
 
     def get_query_details(self):
         url = f"http://{self.mysql_host}:{self.http_port}/api/query_detail?event_time=0"

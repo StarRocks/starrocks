@@ -149,6 +149,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Set it to `false` only while the cluster may still be downgraded to a version that predates the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
 - Introduced in: v4.2
 
+### lake_enable_publish_partial_meta
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a publish of a shared-data table with file bundling keeps the result of each tablet that the aggregator may not have received. A tablet whose publish finishes more than the publish RPC timeout plus 3 seconds after the request arrived, or whose publish is a retry, keeps its result in the local Data Cache of the node, never in object storage. A later retry on that node reads it back instead of applying the transactions again, so tablets that already finished are not redone on every retry of a slow partition. The entries are evicted like any other Data Cache entry. Takes effect only when Data Cache is enabled. Set the same value on all BE and CN nodes.
+- Introduced in: v4.2
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
@@ -157,6 +166,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
+
+### lake_pk_compaction_max_rowsets_per_level
+
+- Default: 20
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of rowsets that still need compaction at which a size level of a Primary Key table in a shared-data cluster is merged even if it does not have the highest score. The Size-tiered Compaction policy merges only the level with the highest score in each round. While loads keep arriving, the level of the newest and smallest rowsets has the highest score in every round, so a level of larger rowsets (outputs of earlier compactions and medium-sized loads) keeps growing. This increases the number of segments that queries read, and shows up as a spike in the compaction score right after a compaction finishes. When a level that is not picked holds this many rowsets that still need compaction, and these rowsets fit in the same compaction task as the picked ones, the level is merged in that compaction task. Set it to `0` to disable this behavior.
+- Introduced in: -
 
 ### lake_pk_compaction_base_enable_delete_trigger
 
@@ -675,7 +693,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: No
-- Description: The length of time after which an idle connection in the JDBC connection pool expires. If the connection idle time in the JDBC connection pool exceeds this value, the connection pool closes idle connections beyond the number specified in the configuration item `jdbc_minimum_idle_connections`.
+- Description: The length of time after which an idle connection in the JDBC connection pool expires. If the connection idle time in the JDBC connection pool exceeds this value, the connection pool closes idle connections beyond the number specified in the configuration item `jdbc_minimum_idle_connections`. If no query uses a connection pool for this length of time, the BE closes the whole connection pool, including the connections kept by `jdbc_minimum_idle_connections`, and creates a new one on the next query. This releases the connection pools of dropped or altered JDBC catalogs and resources.
 - Introduced in: -
 
 ### jdbc_connection_pool_size

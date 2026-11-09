@@ -22,6 +22,7 @@ Map the FE surface for SQL parsing, optimization, metadata, coordination, and sh
 - AST nodes stay immutable after parsing.
 - Connectors and plugins should depend on FE SPI boundaries, not FE internals.
 - Shared test utilities belong in `fe/fe-testing/` instead of ad hoc local fixtures.
+- An HTTP action has queued every write of its response by the time `handleRequest` returns: `HttpServerHandler` handles the requests of one connection one at a time, and starts the next pipelined one only then. A response written later, from another thread, would be cut into by the next response.
 
 ## Observability Touchpoints
 

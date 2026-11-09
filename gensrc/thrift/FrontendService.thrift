@@ -50,6 +50,7 @@ include "AgentService.thrift"
 include "ResourceUsage.thrift"
 include "MVMaintenance.thrift"
 include "DataCache.thrift"
+include "CloudConfiguration.thrift"
 
 // These are supporting structs for JniFrontend.java, which serves as the glue
 // between our C++ execution environment and the Java frontend.
@@ -640,6 +641,8 @@ struct TGetLoadsParams {
     // declares it understands TGetLoadsResult.next_job_id_offset; FE returns the whole
     // result set unpaged when it is absent, so an old BE keeps its previous behavior.
     21: optional i64 start_job_id_offset
+    // The querying user. FE returns only the load jobs this user may see, and none when it is unset.
+    22: optional Types.TUserIdentity current_user_ident
 }
 
 struct TTrackingLoadInfo {
@@ -2543,6 +2546,20 @@ struct TFeMetricsResult {
     2: optional string json_metrics
 }
 
+// Asked by a backend whose scan node carries a TCloudConfiguration with refresh_after_ms set, once that time
+// has passed. refresh_token is the one that configuration carried; the coordinator answers with the scan node's
+// current configuration, renewing it first if it is due.
+struct TRefreshScanCredentialsRequest {
+    1: optional Types.TUniqueId query_id;
+    2: optional i32 plan_node_id;
+    3: optional string refresh_token;
+}
+
+struct TRefreshScanCredentialsResponse {
+    1: optional Status.TStatus status;
+    2: optional CloudConfiguration.TCloudConfiguration cloud_configuration;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2707,4 +2724,6 @@ service FrontendService {
     // when `enable_http_auth` is on. Returns OK status when the user/password pair is
     // valid for the given host, or an error status otherwise.
     TFeResult checkAuth(1: optional TAuthenticateParams request)
+
+    TRefreshScanCredentialsResponse refreshScanCredentials(1: optional TRefreshScanCredentialsRequest request)
 }

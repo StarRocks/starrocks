@@ -604,7 +604,6 @@ Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& t
 Status RowsetColumnUpdateState::_update_primary_index(const TabletSchemaCSPtr& tablet_schema, Tablet* tablet,
                                                       const EditVersion& edit_version, uint32_t rowset_id,
                                                       std::map<int, ChunkUniquePtr>& segid_to_chunk,
-                                                      int64_t insert_row_cnt, PersistentIndexMetaPB& index_meta,
                                                       vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
                                                       PrimaryIndex& index) {
     // 1. build pk column
@@ -617,7 +616,6 @@ Status RowsetColumnUpdateState::_update_primary_index(const TabletSchemaCSPtr& t
 
     // 2. update pk index
     PrimaryIndex::DeletesMap new_deletes;
-    RETURN_IF_ERROR(index.prepare(edit_version, insert_row_cnt));
     for (const auto& each_chunk : segid_to_chunk) {
         new_deletes[rowset_id + each_chunk.first] = {};
         MutableColumnPtr pk_column;
@@ -627,7 +625,6 @@ Status RowsetColumnUpdateState::_update_primary_index(const TabletSchemaCSPtr& t
                                   PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
         RETURN_IF_ERROR(index.upsert(rowset_id + each_chunk.first, 0, *pk_column, &new_deletes));
     }
-    RETURN_IF_ERROR(index.commit(&index_meta));
     for (auto& new_delete : new_deletes) {
         // record delvec
         auto delvec = std::make_shared<DelVector>();
@@ -662,7 +659,6 @@ static void padding_char_columns(const Schema& schema, const TabletSchemaCSPtr& 
 // handle new rows, generate segment files and update primary index
 Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet_schema, Tablet* tablet,
                                                  const EditVersion& edit_version, Rowset* rowset, uint32_t rowset_id,
-                                                 PersistentIndexMetaPB& index_meta,
                                                  vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
                                                  PrimaryIndex& index) {
     int segid = 0;
@@ -715,8 +711,8 @@ Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet
     }
     if (stat.num_segment > 0) {
         // 2. update pk index
-        RETURN_IF_ERROR(_update_primary_index(tablet_schema, tablet, edit_version, rowset_id, segid_to_chunk,
-                                              stat.num_rows_written, index_meta, delvecs, index));
+        RETURN_IF_ERROR(
+                _update_primary_index(tablet_schema, tablet, edit_version, rowset_id, segid_to_chunk, delvecs, index));
         // 3. update meta, add segment to rowset
         RETURN_IF_ERROR(_update_rowset_meta(stat, rowset));
     }
@@ -900,14 +896,19 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     }
     cost_str << " [generate delta column group] " << watch.elapsed_time();
     watch.reset();
-    // 5. generate segment file for insert data
+    // 5. generate segment file for insert data, then commit the primary index at the new version.
+    // Commit even when no row is inserted (COLUMN_UPDATE_MODE, or every key already exists): otherwise the
+    // persistent index meta stays at the previous version, and the next load from disk sees a version behind
+    // the applied version and rebuilds the whole index.
+    const EditVersion new_version(latest_applied_version.major_number() + 1, 0);
+    RETURN_IF_ERROR(index.prepare(new_version, insert_rows));
     if (txn_meta.partial_update_mode() == PartialUpdateMode::COLUMN_UPSERT_MODE) {
         // ignore insert missing rows if partial_update_mode == COLUMN_UPDATE_MODE
-        RETURN_IF_ERROR(_insert_new_rows(tschema, tablet, EditVersion(latest_applied_version.major_number() + 1, 0),
-                                         rowset, rowset_id, index_meta, delvecs, index));
+        RETURN_IF_ERROR(_insert_new_rows(tschema, tablet, new_version, rowset, rowset_id, delvecs, index));
         cost_str << " [insert missing rows] " << watch.elapsed_time();
         watch.reset();
     }
+    RETURN_IF_ERROR(index.commit(&index_meta));
     cost_str << strings::Substitute(" total_do_update_time(ms):$0 total_finalize_dcg_time(ms):$1 ",
                                     total_do_update_time, total_finalize_dcg_time);
     cost_str << strings::Substitute(

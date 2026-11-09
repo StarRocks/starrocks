@@ -19,10 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.alter.reshard.TabletReshardUtils;
-import com.starrocks.alter.reshard.presplit.BoundaryPlanner;
-import com.starrocks.alter.reshard.presplit.BoundaryPlannerResult;
-import com.starrocks.alter.reshard.presplit.DefaultPreSplitPipeline;
 import com.starrocks.alter.reshard.presplit.InternalPartitionScanContext;
 import com.starrocks.alter.reshard.presplit.ReservoirSampler;
 import com.starrocks.alter.reshard.presplit.SampleRequest;
@@ -38,12 +34,10 @@ import com.starrocks.catalog.SyncMaterializedViewDefinition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -331,67 +325,13 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase implements Gson
         return false;
     }
 
-    /**
-     * Plan one partition's K-tablet shadow layout for the rollup index, lock-free: use the shared
-     * tablet-count policy, which preserves the latest base-index {@code K} when the target is zero and
-     * otherwise derives {@code K} adaptively from base data size and active compute-node count. When
-     * {@code K > 1}, sample by the rollup sort key and plan the boundaries; {@code K == 1} skips sampling.
-     * Build the shadow {@link MaterializedIndex} via the StarOS createShards RPC.
-     * NO db lock is held here.
-     */
-    @Override
-    protected void planPartitionShadow(PendingPartitionPlan plan, OlapTable table, String dbName)
-            throws AlterCancelException {
-        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
-        int requestedTabletCount = selectRequestedTabletCount(plan, activeComputeNodeCount);
-        List<Tuple> boundaries = requestedTabletCount == 1
-                ? List.of()
-                : planBoundaries(dbName, plan.tableName, plan.partitionName,
-                        plan.physicalPartitionId, plan.partitionDataSize, requestedTabletCount);
-        // K may collapse to 1 (sampling failure / no-distinction): a single full-range tablet.
-        int shadowTabletCount = boundaries.size() + 1;
-        List<TabletRange> ranges = buildTabletRanges(boundaries);
-        MaterializedIndex shadowIndex;
-        try {
-            shadowIndex = LakeTableAlterJobV2Builder.buildRangeShadowIndex(
-                    dbId, table, plan.physicalPartition, shadowIndexMetaId, shadowTabletCount, ranges,
-                    plan.shardGroupId, computeResource);
-        } catch (DdlException e) {
-            throw new AlterCancelException("failed to build rollup shadow index for partition "
-                    + plan.physicalPartitionId + ": " + e.getMessage());
-        }
-        plan.boundaries = boundaries;
-        plan.shadowTabletCount = shadowTabletCount;
-        plan.shadowIndex = shadowIndex;
-    }
-
-    /**
-     * Sample the partition by the rollup sort key and plan {@code K-1} boundaries. A sampling failure
-     * or a no-distinction sample (empty sample / all-equal keys → planner NO_SPLIT) degrades to an
-     * empty boundary list = a single full-range tablet (K=1 fallback). All inputs are captured
-     * snapshots so this runs lock-free (the sampler itself re-acquires a read lock for its SQL round-trip).
-     */
-    private List<Tuple> planBoundaries(String dbName, String tableName, String partitionName,
-                                       long physicalPartitionId, long partitionDataSize,
-                                       int requestedTabletCount) {
-        try {
-            SampleSet sampleSet = sampleByRollupSortKey(dbName, tableName, partitionName, partitionDataSize);
-            if (sampleSet.isEmpty()) {
-                return List.of();
-            }
-            BoundaryPlannerResult planResult =
-                    BoundaryPlanner.planRowQuantileBoundaries(sampleSet, requestedTabletCount, rollupSortKeyColumns);
-            if (planResult.isNoSplit()) {
-                return List.of();
-            }
-            return planResult.getBoundaries();
-        } catch (StarRocksException | RuntimeException e) {
-            // Sampling / planning failure must not fail the alter: fall back to a single full-range
-            // shadow tablet (the rewrite still re-sorts by the rollup key; it just isn't split).
-            LOG.warn("range-rollup job {}: sampling/planning failed for partition {}, "
-                    + "falling back to a single full-range shadow tablet", jobId, physicalPartitionId, e);
-            return List.of();
-        }
+    // Entry point of the sampling tests: plans the boundaries of one partition without a table.
+    @VisibleForTesting
+    List<Tuple> planBoundaries(String dbName, String tableName, String partitionName, long physicalPartitionId,
+                               long partitionDataSize, int requestedTabletCount) {
+        PendingPartitionPlan plan = new PendingPartitionPlan(physicalPartitionId, null, 0L, partitionName,
+                partitionDataSize, tableName, null);
+        return planBoundaries(null, dbName, plan, requestedTabletCount);
     }
 
     private SampleSet sampleByRollupSortKey(String dbName, String tableName, String partitionName,
@@ -413,21 +353,6 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase implements Gson
         SampleRequest request = new SampleRequest(
                 scanContext, rollupSortKeyColumns, Config.tablet_pre_split_sample_byte_limit, jobId);
         return getSampler().sample(request);
-    }
-
-    /**
-     * Tile {@code (-inf, +inf)} with one {@link TabletRange} per tablet given the {@code K-1}
-     * sorted boundaries: {@code (-inf, c1), [c1, c2), ..., [c_{K-1}, +inf)}. An empty boundary list
-     * yields a single full-range tablet (K=1 case).
-     */
-    @VisibleForTesting
-    static List<TabletRange> buildTabletRanges(List<Tuple> boundaries) {
-        if (boundaries.isEmpty()) {
-            List<TabletRange> singleRange = new ArrayList<>(1);
-            singleRange.add(new TabletRange(Range.all()));
-            return singleRange;
-        }
-        return DefaultPreSplitPipeline.buildTabletRanges(boundaries);
     }
 
     @Override
@@ -458,6 +383,37 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase implements Gson
     @Override
     protected String shadowKindLabel() {
         return "rollup";
+    }
+
+    @Override
+    protected String rangeJobLogPrefix() {
+        return "range-rollup job";
+    }
+
+    @Override
+    protected String shadowIndexNoun() {
+        return "rollup shadow index";
+    }
+
+    @Override
+    protected List<Column> getShadowRangeColumns() {
+        return rollupSortKeyColumns;
+    }
+
+    @Override
+    protected SampleSet sampleShadowSortKey(OlapTable table, String dbName, PendingPartitionPlan plan)
+            throws StarRocksException {
+        return sampleByRollupSortKey(dbName, plan.tableName, plan.partitionName, plan.partitionDataSize);
+    }
+
+    @Override
+    protected void checkShadowColocatePrefix(OlapTable table) throws AlterCancelException {
+        try {
+            MaterializedViewHandler.checkRangeColocateRollupPrefix(table, shadowIndexName, isSyncMaterializedView(),
+                    SchemaChangeHandler.newRangeRoutingColumns(rollupSchema, rollupKeysType, rollupSortKeyIdxes));
+        } catch (DdlException e) {
+            throw new AlterCancelException(e.getMessage());
+        }
     }
 
     /**

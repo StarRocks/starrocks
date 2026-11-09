@@ -56,6 +56,7 @@ set(STORAGE_FILES
     query/olap_dynamic_morsel_queue.cpp
     query/olap_fixed_morsel_queue.cpp
     query/olap_morsel_queue.cpp
+    query/range_group_task.cpp
     query/split_morsel_queue.cpp
     query/split_scan_morsel.cpp
     protobuf_file.cpp
@@ -265,7 +266,6 @@ set(STORAGE_FILES
     binlog_builder.cpp
     binlog_manager.cpp
     binlog_reader.cpp
-    lake/primary_key_compaction_state.cpp
     lake/txn_log_applier.cpp
     persistent_index_compaction_manager.cpp
     persistent_index_load_executor.cpp

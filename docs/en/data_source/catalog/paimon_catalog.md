@@ -24,7 +24,7 @@ To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluste
 
 ## Usage notes
 
-You can only use Paimon catalogs to query data. You cannot use Paimon catalogs to drop, delete, or insert data into your Paimon cluster.
+You can use Paimon catalogs to query data and create or drop Paimon databases and tables. Writing data with INSERT, UPDATE, or DELETE, and creating tables with CREATE TABLE LIKE or CREATE TABLE AS SELECT are not supported.
 
 ## Paimon to StarRocks data types
 
@@ -698,6 +698,134 @@ The following example drops a Paimon catalog named `paimon_catalog_fs`:
 
 ```SQL
 DROP Catalog paimon_catalog_fs;
+```
+
+## Create and drop Paimon databases and tables
+
+These operations create or drop native Paimon objects. The examples use an existing `paimon_catalog_fs` catalog with its warehouse and storage credentials configured.
+
+### CREATE DATABASE
+
+#### Syntax
+
+```SQL
+CREATE DATABASE [IF NOT EXISTS] <catalog_name>.<database_name>;
+```
+
+#### Parameters
+
+- `catalog_name`: The name of an existing Paimon catalog.
+- `database_name`: The name of the database to create.
+- `IF NOT EXISTS`: Suppresses the error if the database already exists.
+
+Database `PROPERTIES` are not supported. The database uses the catalog's storage configuration.
+
+#### Example
+
+```SQL
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+```
+
+### CREATE TABLE
+
+#### Syntax
+
+```SQL
+CREATE TABLE [IF NOT EXISTS] <catalog_name>.<database_name>.<table_name> (
+    <column_name> <column_type> [NULL | NOT NULL] [DEFAULT NULL] [COMMENT '<column_comment>']
+    [, ...]
+)
+[ENGINE = paimon]
+[PRIMARY KEY (<column_name> [, ...])]
+[COMMENT '<table_comment>']
+[PARTITION BY (<column_name> [, ...])]
+[PROPERTIES ("<key>" = "<value>" [, ...])];
+```
+
+#### Parameters
+
+- **Table name and engine**: Specify the database and new table name in an existing Paimon catalog. You can omit `ENGINE = paimon` when the target is a Paimon catalog. `IF NOT EXISTS` suppresses the duplicate-table error, but the table definition and properties are still validated.
+- **Column definitions**: Supported types are BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, FLOAT, DOUBLE, DATE, DATETIME, CHAR, VARCHAR, VARBINARY, DECIMAL with precision up to 38, ARRAY, MAP, STRUCT, and VARIANT. DATETIME maps to Paimon TIMESTAMP(6). The existing read restrictions for VARIANT still apply. Only `DEFAULT NULL` is supported, and primary key columns cannot have defaults. Use `COMMENT` for column and table comments.
+- **Primary keys**: Define keys with `PRIMARY KEY (column, ...)` or the `primary-key` table property. Key columns need not be the first columns. If nullability is unspecified, they become non-nullable in the Paimon schema; explicitly declaring them as `NULL` is not allowed. If both key forms are specified, the resolved column names and their order must match.
+- **Partitions**: Use `PARTITION BY (column, ...)` for ordinary partition columns. Partition expressions and explicit partition definitions are not supported.
+- **Table properties**: Specify Paimon table options, such as `bucket` and `file.format`, in `PROPERTIES`. The table uses the catalog's warehouse and storage credentials. Properties that override the catalog, storage location, credentials, or schema are rejected. Unknown options are rejected. Some invalid write configurations may only be detected when writing data. Dynamic column options such as `fields.<column>.aggregate-function` are not currently supported.
+
+#### Examples
+
+Create an empty partitioned append-only table:
+
+```SQL
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.append_demo (
+    id BIGINT NOT NULL,
+    payload VARCHAR(100) COMMENT 'Payload',
+    dt DATE
+)
+ENGINE = paimon
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "-1",
+    "file.format" = "parquet"
+);
+```
+
+Create a partitioned primary-key table:
+
+```SQL
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.pk_demo (
+    payload VARCHAR(100),
+    id BIGINT,
+    dt DATE
+)
+PRIMARY KEY (id, dt)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "2",
+    "bucket-key" = "id",
+    "file.format" = "parquet"
+);
+```
+
+Alternatively, omit the `PRIMARY KEY (id, dt)` clause and add `"primary-key" = "id,dt"` to `PROPERTIES`.
+
+#### Limitations
+
+- `DISTRIBUTED BY`, `ORDER BY`, `ROLLUP`, generated columns, aggregate columns, and `AUTO_INCREMENT` are not supported.
+- Non-NULL column defaults are not supported.
+- `CREATE TABLE LIKE`, `CREATE TABLE AS SELECT`, and writing data with `INSERT`, `UPDATE`, or `DELETE` are not supported.
+
+### DROP TABLE
+
+#### Syntax
+
+```SQL
+DROP TABLE [IF EXISTS] <catalog_name>.<database_name>.<table_name>;
+```
+
+`IF EXISTS` suppresses the error if the table does not exist. This operation drops the native Paimon table, rather than only removing its reference in StarRocks.
+
+#### Example
+
+```SQL
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.append_demo;
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.pk_demo;
+```
+
+### DROP DATABASE
+
+#### Syntax
+
+```SQL
+DROP DATABASE [IF EXISTS] <catalog_name>.<database_name> [FORCE];
+```
+
+`IF EXISTS` suppresses the error if the database does not exist. A database must be empty before it can be dropped; `FORCE` does not enable cascading deletion.
+
+#### Example
+
+After dropping the tables in the database, drop the database:
+
+```SQL
+DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
 ```
 
 ## View the schema of a Paimon table

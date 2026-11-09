@@ -260,6 +260,14 @@ AsyncCompactCB::AsyncCompactCB(std::unique_ptr<ThreadPoolToken> token,
     _create_us = butil::gettimeofday_us();
 }
 
+AsyncCompactCB::~AsyncCompactCB() {
+    // The tasks submitted through the token report into this object (trace(), create_us(), update_status(),
+    // add_result()). Destroying the token cancels the queued tasks and waits for the running ones, so it must run
+    // before the members those tasks touch are destroyed; as the first declared member, the token would otherwise be
+    // destroyed last.
+    _thread_pool_token.reset();
+}
+
 Trace* AsyncCompactCB::trace() {
     return _trace_guard.get();
 }

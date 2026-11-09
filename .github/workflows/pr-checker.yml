@@ -139,8 +139,24 @@ jobs:
           echo "::error::Branch PR does not contain the backport option!"
           exit 1
 
+  # The backport versions come from the branch map (ci-tool conf/sync_branch_map.json:
+  # `versions --repo sr`, the StarRocks branches paired with CelerData), so a
+  # new or retired release branch needs no workflow edit. The static list is the fallback when
+  # the map cannot be read.
+  backport-versions:
+    runs-on: [ self-hosted, quick ]
+    outputs:
+      versions: ${{ steps.map.outputs.versions || '["4.2", "4.1", "4.0"]' }}
+    steps:
+      - name: read the backport versions
+        id: map
+        continue-on-error: true
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull -q || true)
+          echo "versions=$(python3 lib/sync_branch_map.py versions --repo sr)" >> "$GITHUB_OUTPUT"
+
   backport-check-subtask:
-    needs: title-check
+    needs: [ title-check, backport-versions ]
     runs-on: ubuntu-latest
     if: >
       (
@@ -152,7 +168,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["4.2", "4.1", "4.0", "3.5"]
+        version: ${{ fromJSON(needs.backport-versions.outputs.versions) }}
     steps:
       - name: add ${{ matrix.version }} label
         if: contains(toJson(github.event.pull_request.body), format('[x] {0}', matrix.version))

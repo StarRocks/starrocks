@@ -146,6 +146,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否在写入存算分离集群的 Tablet 元数据和事务日志文件时附加 Adler-32 校验和，以便在读取时检测这些文件是否损坏。无论该配置项如何设置，读取端在文件包含校验和时都会自动识别并校验；该配置项仅控制写入格式。仅当集群仍可能降级到不支持该校验和格式的版本时，才将该配置项设置为 `false`。在滚动升级或降级期间，旧版本的 BE 或 CN 使用旧的读取逻辑，无法解析新格式写入的文件。
 - 引入版本：v4.2
 
+### lake_enable_publish_partial_meta
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中开启 File Bundling 的表在导入发布（Publish）时，是否保留聚合节点可能未收到的 Tablet 发布结果。某个 Tablet 的 Publish 在请求到达后超过 Publish RPC 超时时间加 3 秒才完成，或者本次 Publish 是重试，就会把结果保存在本节点的 Data Cache 中，不写入对象存储。之后该节点上的重试会直接读取这份结果，不再重新执行事务，因此慢分区每次重试时，已完成的 Tablet 不会被重做。这些缓存条目和其他 Data Cache 数据一样按需淘汰。仅在开启 Data Cache 时生效。所有 BE 和 CN 节点应设置相同的值。
+- 引入版本：v4.2
+
 ### lake_pk_compaction_max_input_rowsets
 
 - 默认值：500
@@ -154,6 +163,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。该参数默认值自 v3.2.4 和 v3.1.10 版本开始从 `5` 变更为 `1000`，并自 v3.3.1 和 v3.2.9 版本开始变更为 `500`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
 - 引入版本：v3.1.8, v3.2.3
+
+### lake_pk_compaction_max_rowsets_per_level
+
+- 默认值：20
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，主键表的某个大小层中待合并的 Rowset 达到该数量时，即使该层得分不是最高，也会被合并。Size-tiered Compaction 策略每轮只合并得分最高的一层。持续导入时，最新写入的小 Rowset 所在层每轮得分都最高，由较大 Rowset（之前 Compaction 的产物和中等批次的导入）组成的层会一直增长，导致查询需要读取的 Segment 增多，并在 Compaction 刚完成时表现为 Compaction Score 的尖峰。当某个未被选中的层中待合并的 Rowset 达到该数量，且这些 Rowset 能与已选中的 Rowset 在同一次 Compaction 任务中合并时，该层会并入该次 Compaction 任务。设置为 `0` 表示关闭该行为。
+- 引入版本：-
 
 ### lake_pk_compaction_base_enable_delete_trigger
 
@@ -672,7 +690,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：毫秒
 - 是否动态：否
-- 描述：JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。
+- 描述：JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。如果某个连接池在此时间内没有被任何查询使用，BE 会关闭整个连接池（包括 `jdbc_minimum_idle_connections` 保留的连接），并在下一次查询时重新创建。这样可以释放已删除或已修改的 JDBC Catalog 和资源所对应的连接池。
 - 引入版本：-
 
 ### jdbc_connection_pool_size

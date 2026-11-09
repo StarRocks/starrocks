@@ -594,6 +594,16 @@ public class Config extends ConfigBase {
     public static int label_keep_max_second = 3 * 24 * 3600; // 3 days
 
     /**
+     * Whether the load job views (information_schema loads, load_tracking_logs, routine_load_jobs, stream_loads,
+     * SHOW LOAD / STREAM LOAD / ROUTINE LOAD, their SHOW PROC nodes and /api/{db}/_load_info) show a job only to
+     * callers with a privilege on its target tables or OPERATE, and its rejected rows and the fields leading to them
+     * only to callers with SELECT on them. Setting it to false returns every view to its earlier checks, and exposes
+     * the rejected rows and error-log URLs to the users those checks let through.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_new_load_job_privilege_check = true;
+
+    /**
      * for load job managed by LoadManager, such as Insert, Broker load and Spark load.
      */
     @ConfField(mutable = true)
@@ -3319,6 +3329,24 @@ public class Config extends ConfigBase {
             "column is left to the connector's own table metadata. <= 0 records whatever was collected.")
     public static double connector_table_analyze_min_column_coverage_ratio = 0.5;
 
+    // An external-table analyze deletes the statistics of partitions that are no longer in the table's partition
+    // list, since the read path aggregates every partition's rows and a dropped partition's would otherwise keep
+    // skewing NDV, row count and min/max. A partition's rows are deleted only once none of them has been written
+    // for this long: the partition list a job holds can lag the table, and a concurrent job that saw a newer
+    // snapshot may just have collected a partition this job does not know about yet.
+    @ConfField(mutable = true, comment = "External-table analyze deletes the column statistics of partitions " +
+            "that no longer exist once none of their rows has been written for this many seconds; " +
+            "<= 0 disables the cleanup.")
+    public static long connector_table_analyze_dropped_partition_stats_grace_second = 86400; // default 1 day
+
+    // The cleanup above only runs at the end of a collection, so a partition dropped after the table's last
+    // collection (or still inside the grace at it) keeps its statistics until the next one. The leader also runs
+    // the same cleanup periodically, at most once per this interval, over a bounded number of tables per round.
+    @ConfField(mutable = true, comment = "Interval at which the leader FE periodically deletes the column " +
+            "statistics of dropped partitions of external tables, independent of collections; <= 0 disables " +
+            "the periodic cleanup.")
+    public static long connector_table_analyze_dropped_partition_stats_cleanup_interval_second = 3600;
+
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
      * This may reduce network transmission in following case:
@@ -3571,31 +3599,31 @@ public class Config extends ConfigBase {
     /**
      * iceberg metadata cache dir
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static String iceberg_metadata_cache_disk_path = Config.STARROCKS_HOME_DIR + "/caches/iceberg";
 
     /**
      * iceberg metadata memory cache total size, default 0MB (turn off)
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_memory_cache_capacity = 0L;
 
     /**
      * iceberg metadata memory cache expiration time, default 86500s
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_memory_cache_expiration_seconds = 86500;
 
     /**
      * enable iceberg metadata disk cache, default false
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static boolean enable_iceberg_metadata_disk_cache = false;
 
     /**
      * iceberg metadata disk cache total size, default 2GB
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_disk_cache_capacity = 2147483648L;
 
     /**
@@ -3607,7 +3635,7 @@ public class Config extends ConfigBase {
     /**
      * iceberg metadata cache max entry size, default 0L (turn off)
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_cache_max_entry_size = 0L;
 
     /**
@@ -4172,6 +4200,14 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "disable table or partition compaction, format:'id1;id2'",
             aliases = {"lake_compaction_disable_tables"})
     public static String lake_compaction_disable_ids = "";
+
+    @ConfField(mutable = true, acceptEmpty = true, comment = "Compaction admission mode: NORMAL ignores the allowlist; " +
+            "ALLOWLIST only allows tables in lake_compaction_allow_table_ids.")
+    public static String lake_compaction_admission_mode = "NORMAL";
+
+    @ConfField(mutable = true, comment = "Table IDs allowed to compact in ALLOWLIST mode, format:'id1;id2'. " +
+            "An empty string allows no tables. lake_compaction_disable_ids takes precedence.")
+    public static String lake_compaction_allow_table_ids = "";
 
     @ConfField(mutable = true, comment = "partitions which can be vacuumed immediately, test only, format:'id1;id2'")
     public static String lake_vacuum_immediately_partition_ids = "";

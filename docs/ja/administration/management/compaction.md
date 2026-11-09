@@ -297,6 +297,15 @@ WHERE name = "compact_threads";
 >
 > 本番環境では、`max_cumulative_compaction_num_singleton_deltas` を `100` に設定して、Compaction タスクを加速し、そのリソース消費を減らすことを推奨します。
 
+##### lake_pk_compaction_max_rowsets_per_level
+
+- デフォルト: 20
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタ内の Primary Key テーブルで、あるサイズレベルの compaction 待ちの rowset がこの数に達すると、そのレベルのスコアが最高でなくてもマージされます。Size-tiered Compaction ポリシーは各ラウンドでスコアが最も高いレベルのみをマージします。ロードが継続している間は、最新の小さな rowset のレベルが毎回最高スコアとなるため、より大きな rowset（以前の compaction の出力や中規模のロード）からなるレベルは増え続けます。その結果、クエリが読み取る segment 数が増え、compaction の完了直後に compaction スコアのスパイクとして現れます。選択されていないレベルの compaction 待ちの rowset がこの数に達し、かつそれらが選択済みの rowset と同じ compaction タスクに収まる場合、そのレベルはその compaction タスクでマージされます。`0` に設定するとこの動作は無効になります。
+- 導入バージョン: -
+
 ### Compaction タスクの手動トリガー
 
 ```SQL
