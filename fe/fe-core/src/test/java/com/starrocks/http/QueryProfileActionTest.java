@@ -13,9 +13,12 @@
 // limitations under the License.
 package com.starrocks.http;
 
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.http.action.QueryProfileAction;
 import okhttp3.Request;
 import okhttp3.Response;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -25,6 +28,43 @@ import java.lang.reflect.Method;
 public class QueryProfileActionTest extends StarRocksHttpTestCase {
 
     private static final String QUERY_PLAN_URI = "/query_profile";
+    private static final String QUERY_ID = "eaff21d2-3734-11ee-909f-8e20563011de";
+
+    @AfterEach
+    public void restoreDefaults() {
+        ProfileManager.getInstance().clearProfiles();
+    }
+
+    private static void pushProfile(String user, String sql) {
+        RuntimeProfile profile = new RuntimeProfile("Query");
+        RuntimeProfile summary = new RuntimeProfile("Summary");
+        summary.addInfoString(ProfileManager.QUERY_ID, QUERY_ID);
+        summary.addInfoString(ProfileManager.QUERY_TYPE, "Query");
+        summary.addInfoString(ProfileManager.USER, user);
+        summary.addInfoString(ProfileManager.SQL_STATEMENT, sql);
+        profile.addChild(summary);
+        ProfileManager.getInstance().pushProfile(null, profile);
+    }
+
+    private Response getProfilePageAsRoot() throws IOException {
+        Request request = new Request.Builder()
+                .get()
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + QUERY_PLAN_URI + "?query_id=" + QUERY_ID)
+                .build();
+        return networkClient.newCall(request).execute();
+    }
+
+    @Test
+    public void testMultiLineSqlIsHtmlEncoded() throws IOException {
+        // Only the first line of the statement shares a line with "Sql Statement"; the payload is on the second.
+        pushProfile("root", "select 'line1',\n'<img src=x onerror=\"alert(1)\">' as c2");
+        Response response = getProfilePageAsRoot();
+        String body = response.body().string();
+        Assertions.assertEquals(200, response.code(), body);
+        Assertions.assertFalse(body.contains("<img src=x"), body);
+        Assertions.assertTrue(body.contains("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;"), body);
+    }
 
     private void sendHttp() throws IOException {
         Request request = new Request.Builder()
@@ -83,7 +123,7 @@ public class QueryProfileActionTest extends StarRocksHttpTestCase {
                 "     - Query State: Finished\n" +
                 "     - StarRocks Version: bugfix2-0da335ff34\n" +
                 "     - User: root\n" +
-                "     - Test: a<b<c\n" +
+                "     - Test: a&lt;b&lt;c\n" +
                 "     - Default Db: ssb\n" +
                 "     - Sql Statement: select count(s_suppkey), count(s_name), count(s_address), count(s_city), " +
                 "count(s_nation), count(s_region), count(s_phone), count(lo_revenue), count(lo_shipmode), " +
