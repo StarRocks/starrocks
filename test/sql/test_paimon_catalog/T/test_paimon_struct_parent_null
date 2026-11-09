@@ -1,0 +1,35 @@
+-- name: test_paimon_struct_parent_null
+[UC]paimon_struct_null_catalog=select 'paimon_struct_null_${uuid0}';
+create external catalog paimon_struct_null_${uuid0} properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}",
+"aws.s3.region" = "${oss_region}",
+"aws.s3.enable_ssl" = "true"
+);
+set new_planner_optimize_timeout = 30000;
+set paimon_reader_mode = 'native';
+set enable_prune_complex_types = true;
+set chunk_size = 2;
+-- Full structs and pruned subfields must agree on ancestor NULLs.
+[ORDER]select id, detail from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1 where id < 8 order by id;
+[ORDER]select id, detail is null, detail.nested is null, detail.payload is null, variant_typeof(detail.payload), cast(detail.payload as varchar), variant_typeof(detail.nested.payload), cast(detail.nested.payload as varchar) from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1 where id < 8 order by id;
+set chunk_size = 1024;
+-- Eight patterns repeated 1,024 times span multiple StarRocks chunks from the SDK batch.
+[ORDER]select id % 8, count(*), sum(detail is null), sum(detail.nested is null), sum(detail.payload is null), sum(detail.nested.payload is null) from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1 group by id % 8 order by 1;
+[ORDER]select id, cast(detail.payload as varchar), cast(detail.nested.payload as varchar) from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1 where id between 2046 and 2051 order by id;
+[ORDER]select id from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1 where id < 8 and (detail is null or detail.nested is null) order by id;
+function: assert_paimon_reader("select id, detail from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1", "reader_struct_parent_null_v1", "native")
+function: assert_paimon_native_profile("select id, detail from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1")
+set enable_prune_complex_types = false;
+[ORDER]select cast(detail.nested.payload as varchar), id, cast(detail.payload as varchar) from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1 where id < 8 order by id;
+set enable_prune_complex_types = true;
+set paimon_reader_mode = 'auto';
+[ORDER]select id, detail is null, detail.nested is null, detail.payload is null, variant_typeof(detail.payload), cast(detail.payload as varchar), variant_typeof(detail.nested.payload), cast(detail.nested.payload as varchar) from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1 where id < 8 order by id;
+function: assert_paimon_reader("select id, detail from paimon_struct_null_${uuid0}.paimon_test.reader_struct_parent_null_v1", "reader_struct_parent_null_v1", "native")
+CLEANUP {
+  drop catalog if exists ${paimon_struct_null_catalog};
+} END CLEANUP
