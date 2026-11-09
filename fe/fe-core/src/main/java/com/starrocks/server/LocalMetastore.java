@@ -4638,6 +4638,31 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    private void alterTabletReshardTargetSize(OlapTable table, Map<String, String> properties,
+                                              Map<String, String> propertiesToPersist,
+                                              List<Runnable> appliers) throws DdlException {
+        if (!table.isRangeDistribution()) {
+            throw new DdlException(PropertyAnalyzer.TABLET_RESHARD_TARGET_SIZE_RANGE_ONLY_MSG);
+        }
+        long size;
+        try {
+            size = PropertyAnalyzer.analyzeTableTabletReshardTargetSize(
+                    properties.remove(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE), true);
+        } catch (SemanticException e) {
+            throw new DdlException(e.getMessage(), e);
+        }
+        // Store and journal the parsed value, as CREATE TABLE does, so "+1073741824" reads back as "1073741824";
+        // "" (a clear) stays "".
+        String value = size == 0L ? "" : String.valueOf(size);
+        propertiesToPersist.put(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, value);
+        // The same steps replay takes, so an empty value removes the property here as it does on a follower.
+        appliers.add(() -> {
+            TableProperty tableProperty = table.getTableProperty();
+            tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, value);
+            tableProperty.buildTabletReshardTargetSize();
+        });
+    }
+
     private void alterDataCacheEnable(Database db, OlapTable table,
                                       Map<String, String> properties,
                                       List<Runnable> appliers) throws DdlException {
@@ -4739,6 +4764,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
             alterTableQueryTimeout(table, properties, appliers);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE)) {
+            alterTabletReshardTargetSize(table, properties, propertiesToPersist, appliers);
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
             alterDataCacheEnable(db, table, properties, appliers);

@@ -814,6 +814,46 @@ The range-based distribution semantic is different from the default semantic in 
 - This semantic is supported from v4.1 onwards. In shared-data mode it is enabled by default, controlled by the FE configuration `enable_range_distribution`.
 - To disable it and fall back to the previous default distribution, set the FE configuration `enable_range_distribution` to `false`. It has no effect in shared-nothing mode.
 
+#### Target tablet size
+
+Automatic tablet split and merge keep the tablets of a range-distributed table around a target size. By default, every table uses the FE configuration `tablet_reshard_target_size` (Default: 10 GB). To give a table its own target size, set the table property `tablet_reshard_target_size` (Unit: bytes) to a positive integer when you create the table, or change it with `ALTER TABLE ... SET`. The table property has the same name as the FE configuration and is supported only on range-distributed tables. On any other table, the statement fails with `tablet_reshard_target_size is only supported for range-distributed tables`.
+
+```SQL
+CREATE TABLE orders (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int,
+    amount decimal(18, 2)
+)
+DUPLICATE KEY (tenant_id, created_time, id)
+PROPERTIES ("tablet_reshard_target_size" = "1073741824");
+
+-- Change the target size of the table to 4 GB.
+ALTER TABLE orders SET ("tablet_reshard_target_size" = "4294967296");
+
+-- Remove the property. The table follows the FE configuration tablet_reshard_target_size again.
+ALTER TABLE orders SET ("tablet_reshard_target_size" = "");
+```
+
+A table with the property uses the property value in place of the FE configuration:
+
+- Automatic split splits a tablet once it reaches 1.5 times the property value (rounded up), into tablets of about the property value.
+- Automatic merge, when enabled by the FE configuration `tablet_reshard_enable_tablet_merge`, is triggered when two adjacent tablets together are smaller than 80% of the property value (rounded up), and the total size of each group of merged tablets does not exceed the property value.
+- `ALTER TABLE ... SPLIT TABLET` and `ALTER TABLE ... MERGE TABLET` use the property value as the target size unless `tablet_reshard_target_size` is specified in the `PROPERTIES` of the statement.
+- Tablet pre-split during data loading, online sort key changes such as `ALTER TABLE ... ORDER BY`, and rollups of the table size their new tablets against the property value.
+
+For details, see [ALTER TABLE - Modify the tablet size](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#modify-the-tablet-size).
+
+The table property has no default value. A table without it follows the FE configuration `tablet_reshard_target_size`, including any later change to that configuration. `0`, negative values, and non-numeric values are rejected.
+
+If the FE configuration `tablet_reshard_target_size` is set to `0`, automatic split and merge are disabled for all tables, including tables with the table property. The table property takes effect again after the configuration is set back to a positive value.
+
+:::note
+
+`SHOW CREATE TABLE` returns the `tablet_reshard_target_size` property of a table that has it. Where range distribution is not the default, that is, when the FE configuration `enable_range_distribution` is `false` or in shared-nothing mode, the returned statement would create a hash-bucketed or randomly bucketed table, so it fails because the property is supported only on range-distributed tables. A version that does not support the property rejects it as an unknown property. Remove the property before you run the statement in these environments.
+
+:::
+
 #### Examples
 
 ##### Create new tables with Range-based Distribution semantic
@@ -896,7 +936,7 @@ PROPERTIES(
 
 For detailed instructions on splitting and merging tablets, see [ALTER TABLE - Modify the tablet size](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#modify-the-tablet-size).
 
-- Split all tablets that meet the conditions in the table to a target size of 10 GB (Default).
+- Split all tablets that meet the conditions in the table to the table's target size (10 GB by default).
 
 ```SQL
 ALTER TABLE table1 SPLIT TABLETS;
@@ -985,6 +1025,7 @@ Buckets reflect how data files are actually organized in StarRocks.
       user_name VARCHAR(32) DEFAULT '')
   DUPLICATE KEY (event_day,site_id,pv)
   PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY RANDOM
   -- The number of buckets in a partition is automatically determined by StarRocks and the number dynamically increases on demand because the size of a bucket is set to 1 GB.
   PROPERTIES("bucket_size"="1073741824")
   ;
@@ -997,6 +1038,7 @@ Buckets reflect how data files are actually organized in StarRocks.
       user_name VARCHAR(32) DEFAULT '')
   DUPLICATE KEY (event_day,site_id,pv)
   PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY RANDOM
   -- The number of buckets in the table partition is automatically determined by StarRocks, and the number is fixed and does not dynamically increases on demand because the size of a bucket is not set.
   ;
   ```

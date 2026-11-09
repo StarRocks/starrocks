@@ -99,6 +99,8 @@ public class TabletStatMgrTest {
     private static final String SCAN_DB_NAME = "tablet_stat_scan_test";
 
     private Database registeredDb;
+    // tablet_reshard_target_size property the scan fixture's range table carries; 0 leaves it unset.
+    private long scanTableTargetSize;
 
     @BeforeEach
     public void before() {
@@ -694,6 +696,9 @@ public class TabletStatMgrTest {
         LakeTable table = createLakeTableForTest();
         // Reshard, and with it the early-split signal, only looks at range-distribution tables.
         table.setDefaultDistributionInfo(new RangeDistributionInfo());
+        if (scanTableTargetSize > 0) {
+            table.setTabletReshardTargetSize(scanTableTargetSize);
+        }
 
         MaterializedIndex index =
                 table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex();
@@ -823,6 +828,38 @@ public class TabletStatMgrTest {
         // it. This is the one live-warehouse tablet count where the ceiling and the merge floor differ,
         // so it is what keeps the ceiling from being replaced by the floor already in scope.
         assertEquals(0L, runScan(true, 1, 8L << 30));
+    }
+
+    /**
+     * Runs one scan over a single 3 GiB tablet on 4 nodes (bound 4) with the cluster target pinned at
+     * 10 GiB and tablet_reshard_min_split_size at 2 GiB. Against the cluster target the adaptive target
+     * is floored at 2 GiB, and 3 GiB is not worth two of those; a 1 GiB table target lowers the target
+     * to 1 GiB, and the same tablet splits.
+     */
+    private long runScanAgainstPinnedTargets() {
+        long savedTargetSize = Config.tablet_reshard_target_size;
+        long savedMinSplitSize = Config.tablet_reshard_min_split_size;
+        Config.tablet_reshard_target_size = 10L << 30;
+        Config.tablet_reshard_min_split_size = 2L << 30;
+        try {
+            return runScan(true, 4, 3L << 30);
+        } finally {
+            Config.tablet_reshard_target_size = savedTargetSize;
+            Config.tablet_reshard_min_split_size = savedMinSplitSize;
+        }
+    }
+
+    @Test
+    public void theClusterTargetEmitsNoEarlySignalForTheTargetSizeFixture() {
+        assertEquals(0L, runScanAgainstPinnedTargets(),
+                "without a table target the adaptive target follows the configuration");
+    }
+
+    @Test
+    public void theAdaptiveTargetFollowsTheTableTargetSize() {
+        scanTableTargetSize = 1L << 30;
+        assertEquals(3L << 30, runScanAgainstPinnedTargets(),
+                "a range table's own target must be the steady target the adaptive target narrows");
     }
 
     @Test

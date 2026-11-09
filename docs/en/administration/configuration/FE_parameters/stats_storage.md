@@ -652,7 +652,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes
-- Description: The target size of tablets after a SPLIT or MERGE operation. `0` disables automatic size-based tablet splitting and merging. When a shared-data online range rewrite runs with this value set to `0`, it uses each latest base index's current tablet count as the requested count and recomputes boundaries in the new sort-key space instead of reusing the old boundaries. The actual count can be smaller if sampling cannot produce enough distinct boundaries.
+- Description: The target size of tablets after a SPLIT or MERGE operation. While this value is positive, a range-distributed table with the table property `tablet_reshard_target_size` uses that property in its place for automatic splitting and merging, for SPLIT and MERGE statements that do not specify a target size, for tablet pre-split, and for online range rewrites and rollups. `0` disables automatic size-based tablet splitting and merging for all tables, including tables with the table property. When a shared-data online range rewrite runs with this value set to `0`, it uses each latest base index's current tablet count as the requested count and recomputes boundaries in the new sort-key space instead of reusing the old boundaries. The actual count can be smaller if sampling cannot produce enough distinct boundaries.
 - Introduced in: v4.1.0
 
 ### `tablet_reshard_max_split_count`
@@ -697,7 +697,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Bytes
 - Is mutable: Yes
-- Description: The minimum size of a tablet produced by tablet pre-split. It bounds compute-node alignment during pre-split so that a small load on a large cluster is not split into many tiny tablets. It is also the smallest target size automatic splitting will aim at: while a materialized index holds fewer tablets than its warehouse has compute nodes (capped by `tablet_reshard_max_split_count`), splitting aims at the size that would give it one tablet per such slot, floored at this value, so a tablet splits once it is worth at least two of that target. Raising this value therefore also delays that splitting, and setting it at or above `tablet_reshard_target_size` turns it off, leaving only the size-based rule. Should be no larger than `tablet_reshard_target_size`.
+- Description: The minimum size of a tablet produced by tablet pre-split. It bounds compute-node alignment during pre-split so that a small load on a large cluster is not split into many tiny tablets. It is also the smallest target size automatic splitting will aim at: while a materialized index holds fewer tablets than its warehouse has compute nodes (capped by `tablet_reshard_max_split_count`), splitting aims at the size that would give it one tablet per such slot, no larger than the table's target size (its table property `tablet_reshard_target_size` if it has one, otherwise the FE configuration `tablet_reshard_target_size`) and floored at this value, so a tablet splits once it is worth at least two of that target. Raising this value therefore also delays that splitting, and setting it at or above a table's target size turns it off for that table, leaving only the size-based rule. Should be no larger than `tablet_reshard_target_size`.
 - Introduced in: v4.1.0
 
 ### `tablet_reshard_history_job_max_keep_ms`
@@ -856,7 +856,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Bytes
 - Is mutable: Yes
-- Description: Target tablet size that Sample-Based Tablet Pre-Split sizes a load's split count against. `0` (the default) inherits `tablet_reshard_target_size`. Lower it to give a load more write parallelism without shrinking every tablet in the cluster: the background tablet split/merge daemon keeps measuring against `tablet_reshard_target_size`, so it merges the finer tablets back together after the load finishes. This matters most for a load that writes brand-new range-distributed partitions (for example the replacement partitions of an `INSERT OVERWRITE`), which start from a single catch-all tablet and would otherwise be written by a single backend.
+- Description: Target tablet size that Sample-Based Tablet Pre-Split sizes a load's split count against. `0` (the default) inherits `tablet_reshard_target_size`. A range-distributed table with the table property `tablet_reshard_target_size` is pre-split against that property instead while the FE configuration `tablet_reshard_target_size` is positive, so the order is: the table property, then this value if it is greater than `0`, then the FE configuration `tablet_reshard_target_size`. Lower it to give a load more write parallelism without shrinking every tablet in the cluster: the background tablet split/merge daemon keeps measuring against `tablet_reshard_target_size`, so it merges the finer tablets back together after the load finishes. This matters most for a load that writes brand-new range-distributed partitions (for example the replacement partitions of an `INSERT OVERWRITE`), which start from a single catch-all tablet and would otherwise be written by a single backend.
 
 #### Rolling back Sample-Based Tablet Pre-Split
 
