@@ -130,7 +130,8 @@ StatusOr<int64_t> PaimonWriteFileTracker::owned_file_bytes() const {
     for (const auto& [path, state] : _files) {
         if (!state.owned) continue;
         if (state.open || !state.closed_ok || state.bytes > std::numeric_limits<int64_t>::max() - total) {
-            return Status::InvalidArgument("Paimon owned files must be closed successfully and fit in the byte counter");
+            return Status::InvalidArgument(
+                    "Paimon owned files must be closed successfully and fit in the byte counter");
         }
         total += state.bytes;
     }
