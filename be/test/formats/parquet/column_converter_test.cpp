@@ -803,7 +803,7 @@ TEST_F(ColumnConverterTest, Int96SignedNanosecondsRoundTrip) {
         SCOPED_TRACE(fmt::format("zone={}", zone));
         TypeDescriptor type(TYPE_DATETIME);
         std::unique_ptr<ColumnConverter> converter;
-        ASSERT_OK(ColumnConverterFactory::create_converter(field, type, zone, &converter));
+        ASSERT_TRUE(ColumnConverterFactory::create_converter(field, type, zone, &converter).ok());
         ASSERT_TRUE(converter->need_convert);
         auto src = converter->create_src_column();
         auto* src_nullable = down_cast<NullableColumn*>(src.get());
@@ -815,7 +815,7 @@ TEST_F(ColumnConverterTest, Int96SignedNanosecondsRoundTrip) {
         ASSERT_TRUE(src_nullable->append_nulls(1));
         src_data->get_data().back() = {std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint32_t>::max()};
         auto dst = ColumnHelper::create_column(type, true);
-        ASSERT_OK(converter->convert(src.get(), dst.get()));
+        ASSERT_TRUE(converter->convert(src.get(), dst.get()).ok());
         ASSERT_EQ(cases.size() + 1, dst->size());
         ASSERT_TRUE(dst->has_null());
         ASSERT_TRUE(dst->is_null(cases.size()));
@@ -833,7 +833,7 @@ TEST_F(ColumnConverterTest, Int96SignedNanosecondsRoundTrip) {
         down_cast<FixedLengthColumn<int96_t>*>(all_null_nullable->data_column_raw_ptr())->get_data()[0] = {
                 std::numeric_limits<uint64_t>::max(), std::numeric_limits<uint32_t>::max()};
         auto null_dst = ColumnHelper::create_column(type, true);
-        ASSERT_OK(converter->convert(all_null.get(), null_dst.get()));
+        ASSERT_TRUE(converter->convert(all_null.get(), null_dst.get()).ok());
         ASSERT_EQ(1, null_dst->size());
         ASSERT_TRUE(null_dst->has_null());
         ASSERT_TRUE(null_dst->is_null(0));
