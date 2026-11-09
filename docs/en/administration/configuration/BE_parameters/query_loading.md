@@ -162,11 +162,11 @@ This topic introduces the following types of BE configurations:
 
 ### agg_hash_map_prefetch_dist
 
-- Default: 16
+- Default: 8 (x86_64) / 16 (ARM64)
 - Type: Int
 - Unit: Rows
 - Is mutable: Yes
-- Description: Software prefetch distance (in rows) for the aggregation hash-map / hash-set probe loop. While building the aggregation hash table, the loop prefetches the bucket for the row this many positions ahead of the one it is currently processing, hiding memory latency on large tables. Setting it to `0` disables software prefetch. The value is read once per chunk, so changes take effect on the next chunk. The default 16 is empirical for L3-resident tables; raise it for DRAM-resident workloads and lower it for cache-resident ones. Prefetch is additionally gated by `agg_prefetch_l2_ratio`: regardless of this distance, no prefetch is issued while the hash table still fits in L2.
+- Description: Software prefetch distance (in rows) for the aggregation hash-map / hash-set probe loop. While building the aggregation hash table, the loop prefetches the bucket for the row this many positions ahead of the one it is currently processing, hiding memory latency on large tables. Setting it to `0` disables software prefetch. The value is read once per chunk, so changes take effect on the next chunk. The default is `8` on x86_64 (to avoid L2 MSHR contention with aggressive hardware stream prefetchers) and `16` on ARM64; raise it for DRAM-resident workloads and lower it for cache-resident ones. Prefetch is additionally gated by `agg_prefetch_l2_ratio`: regardless of this distance, no prefetch is issued while the hash table still fits within the L2 prefetch threshold.
 - Introduced in: -
 
 ### agg_prefetch_l2_ratio
@@ -175,7 +175,7 @@ This topic introduces the following types of BE configurations:
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: Gates aggregation hash-table software prefetch on L2 residency. Prefetch is enabled only once the bucket array spills L2, that is, when `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio`, where the L2 size is detected at runtime (falling back to 1 MiB if detection fails). Below this point the table is L2-resident and prefetching is a net loss. Lower the ratio on contended deployments that run many drivers per core, where the effective per-table share of L2 is smaller than the nominal per-core size; raising it above 1.0 delays prefetch until the table is well past L2. See also `agg_hash_map_prefetch_dist`.
+- Description: Gates aggregation hash-table software prefetch on L2 residency. Prefetch is enabled only once the bucket and control arrays spill past the L2 gate, that is, when `bucket_count * (slot_bytes + 1) >= L2_size * arch_scale * agg_prefetch_l2_ratio`, where `arch_scale` is `2.0` on x86_64 and `1.0` on ARM64, and `L2_size` is detected at runtime (falling back to 2 MiB on x86_64 and 1 MiB on ARM64 if detection fails). Below this point the table is L2-resident (or covered by the hardware L2 prefetcher on x86_64) and software prefetching is a net loss. Lower the ratio on contended deployments that run many drivers per core, where the effective per-table share of L2 is smaller than the nominal per-core size; raising it above 1.0 delays prefetch until the table is well past L2. See also `agg_hash_map_prefetch_dist`.
 - Introduced in: -
 
 ### arrow_io_thread_pool_size
