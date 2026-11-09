@@ -443,6 +443,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     return false;
                 }
                 long commitVersion = e.getValue();
+                // A retry lets the tablets an earlier attempt already published answer from storage.
+                boolean isRetryPublish = getAndMarkLakePublishSent(e.getKey());
                 // Task dispatch and publish both iterate every latest visible
                 // logical index, so base + rollup + sync-MV tablets advance
                 // together without republishing retained physical generations.
@@ -457,12 +459,12 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                         tablets.addAll(idx.getTablets());
                     } else {
                         Utils.publishVersion(idx.getTablets(), txnInfo, commitVersion - 1,
-                                commitVersion, computeResource, false);
+                                commitVersion, computeResource, false, isRetryPublish);
                     }
                 }
                 if (useAggregatePublish) {
                     Utils.publishVersion(tablets, txnInfo, commitVersion - 1,
-                            commitVersion, computeResource, true);
+                            commitVersion, computeResource, true, isRetryPublish);
                 }
             }
             return true;
@@ -513,6 +515,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         boolean advanceVersionForForce =
                 force && jobState == JobState.FINISHED_REWRITING && tableStillExists && hasReservedVersion;
         if (advanceVersionForForce) {
+            markLakeNoOpPublishSent();
             if (!lakePublishVersionWithSkip(errMsg)) {
                 // The no-op publish RPC failed; leave the job in
                 // FINISHED_REWRITING so the operator can retry
