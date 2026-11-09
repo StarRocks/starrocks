@@ -32,3 +32,11 @@ ADD_BE_BENCH(${SRC_DIR}/bench/filter_data_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/cow_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/table_metrics_mgr_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/cast_overflow_check_bench)
+<<<<<<< HEAD
+=======
+ADD_BE_BENCH(${SRC_DIR}/bench/agg_simd_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/flat_json_vertical_compaction_mem_bench)
+# Measure task memory with the same malloc hooks as starrocks_be.
+target_sources(flat_json_vertical_compaction_mem_bench PRIVATE ${SRC_DIR}/service/mem_hook.cpp)
+ADD_BE_BENCH(${SRC_DIR}/bench/tdigest_bench)
+>>>>>>> d153176 ([Enhancement] Avoid frequent reallocation in `tdigest` and rebuilding of cumulative weights when unnecessary (#81957))
