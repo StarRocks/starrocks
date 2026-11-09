@@ -17,6 +17,8 @@
 #include <arrow/api.h>
 #include <gtest/gtest.h>
 
+#include <cmath>
+
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "column/fixed_length_column.h"
@@ -262,6 +264,146 @@ TEST_F(LanceConnectorTest, ConvertsFixedSizeVectorAndNull) {
     EXPECT_FLOAT_EQ(1.5f, result[0].get_float());
     EXPECT_FLOAT_EQ(2.5f, result[1].get_float());
     EXPECT_TRUE(chunk->get_column_by_index(0)->is_null(1));
+}
+
+TEST_F(LanceConnectorTest, DecodesHalfFloatBitsIncludingNestedSlices) {
+    arrow::HalfFloatBuilder builder;
+    // Include a discarded prefix, normal values, subnormal, signed zero, infinity and NaN.
+    ASSERT_TRUE(builder.AppendValues({0x4000, 0x3c00, 0xc000, 0x0001, 0x8000, 0x7c00, 0x7e00}).ok());
+    ASSERT_TRUE(builder.AppendNull().ok());
+    std::shared_ptr<arrow::Array> halves;
+    ASSERT_TRUE(builder.Finish(&halves).ok());
+    for (auto target : {TYPE_FLOAT, TYPE_DOUBLE}) {
+        for (int shape = 0; shape < 3; ++shape) {
+            TypeDescriptor type(target);
+            auto array = halves;
+            if (shape != 0) {
+                TypeDescriptor list(TYPE_ARRAY);
+                list.children = {type};
+                type = list;
+                array = arrow::FixedSizeListArray::FromArrays(array, 1).ValueOrDie();
+            }
+            if (shape == 2) {
+                TypeDescriptor structure(TYPE_STRUCT);
+                structure.field_names = {"embedding"};
+                structure.children = {type};
+                type = structure;
+                array = arrow::StructArray::Make({array}, std::vector<std::string>{"embedding"}).ValueOrDie();
+            }
+            const auto* tuple = tuple_for_type(type);
+            ASSERT_NE(nullptr, tuple);
+            auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("id", array->type())}), 8, {array});
+            ChunkPtr chunk;
+            ASSERT_OK(LanceNativeReader::convert_batch(_state.get(), tuple, batch->Slice(1, 7), &chunk));
+            ASSERT_EQ(7, chunk->num_rows());
+            for (size_t i = 0; i < 7; ++i) {
+                auto value = chunk->get_column_by_index(0)->get(i);
+                if (shape == 2) value = value.get_struct()[0];
+                if (shape != 0) value = value.get_array()[0];
+                if (i == 6) {
+                    EXPECT_TRUE(value.is_null());
+                    continue;
+                }
+                const double number = target == TYPE_FLOAT ? value.get_float() : value.get_double();
+                if (i == 0) {
+                    EXPECT_EQ(1.0, number);
+                }
+                if (i == 1) {
+                    EXPECT_EQ(-2.0, number);
+                }
+                if (i == 2) {
+                    EXPECT_EQ(std::ldexp(1.0, -24), number);
+                }
+                if (i == 3) {
+                    EXPECT_TRUE(number == 0 && std::signbit(number));
+                }
+                if (i == 4) {
+                    EXPECT_EQ(std::numeric_limits<double>::infinity(), number);
+                }
+                if (i == 5) {
+                    EXPECT_TRUE(std::isnan(number));
+                }
+            }
+        }
+    }
+}
+
+TEST_F(LanceConnectorTest, RejectsIncompatibleFallbackCastIncludingNestedColumns) {
+    arrow::StringBuilder builder;
+    ASSERT_TRUE(builder.AppendValues({"not-an-integer", "42"}).ok());
+    std::shared_ptr<arrow::Array> strings;
+    ASSERT_TRUE(builder.Finish(&strings).ok());
+    for (int shape = 0; shape < 3; ++shape) {
+        TypeDescriptor type(TYPE_INT);
+        auto array = strings;
+        if (shape != 0) {
+            TypeDescriptor list(TYPE_ARRAY);
+            list.children = {type};
+            type = list;
+            array = arrow::FixedSizeListArray::FromArrays(array, 1).ValueOrDie();
+        }
+        if (shape == 2) {
+            TypeDescriptor structure(TYPE_STRUCT);
+            structure.field_names = {"value"};
+            structure.children = {type};
+            type = structure;
+            array = arrow::StructArray::Make({array}, std::vector<std::string>{"value"}).ValueOrDie();
+        }
+        const auto* tuple = tuple_for_type(type);
+        ASSERT_NE(nullptr, tuple);
+        auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("id", array->type())}), 2, {array});
+        ChunkPtr chunk;
+        EXPECT_TRUE(LanceNativeReader::convert_batch(_state.get(), tuple, batch, &chunk).is_data_quality_error());
+        EXPECT_EQ(nullptr, chunk);
+    }
+}
+
+TEST_F(LanceConnectorTest, RejectsNestedDecimalNarrowingAndScaleChanges) {
+    auto source_type = arrow::decimal128(20, 0);
+    arrow::Decimal128Builder values(source_type);
+    ASSERT_TRUE(values.Append(arrow::Decimal128("10000000000000000000")).ok());
+    std::shared_ptr<arrow::Array> decimals;
+    ASSERT_TRUE(values.Finish(&decimals).ok());
+    for (const auto& target : {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 0),
+                               TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 19, 0),
+                               TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 20, 1),
+                               TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 20, 0)}) {
+        for (int shape = 0; shape < 3; ++shape) {
+            TypeDescriptor type(TYPE_ARRAY);
+            type.children = {target};
+            auto offsets = std::make_shared<arrow::Int32Builder>();
+            ASSERT_TRUE(offsets->AppendValues({0, 1}).ok());
+            auto array = arrow::ListArray::FromArrays(*offsets->Finish().ValueOrDie(), *decimals).ValueOrDie();
+            std::shared_ptr<arrow::Array> source = array;
+            if (shape == 1) {
+                TypeDescriptor structure(TYPE_STRUCT);
+                structure.field_names = {"amounts"};
+                structure.children = {type};
+                type = structure;
+                source = arrow::StructArray::Make({source}, std::vector<std::string>{"amounts"}).ValueOrDie();
+            } else if (shape == 2) {
+                TypeDescriptor list(TYPE_ARRAY);
+                list.children = {type};
+                type = list;
+                source = arrow::FixedSizeListArray::FromArrays(source, 1).ValueOrDie();
+            }
+            const auto* tuple = tuple_for_type(type);
+            ASSERT_NE(nullptr, tuple);
+            auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("id", source->type())}), 1, {source});
+            ChunkPtr chunk;
+            auto status = LanceNativeReader::convert_batch(_state.get(), tuple, batch, &chunk);
+            if (target.precision == 20 && target.scale == 0) {
+                ASSERT_OK(status);
+                auto value = chunk->get_column_by_index(0)->get(0);
+                if (shape == 1) value = value.get_struct()[0];
+                if (shape == 2) value = value.get_array()[0];
+                EXPECT_EQ(static_cast<int128_t>(1000000000000000000LL) * 10, value.get_array()[0].get_int128());
+            } else {
+                EXPECT_TRUE(status.is_data_quality_error()) << status;
+                EXPECT_EQ(nullptr, chunk);
+            }
+        }
+    }
 }
 
 TEST_F(LanceConnectorTest, PreservesUnsignedIntegerRange) {
