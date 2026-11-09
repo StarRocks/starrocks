@@ -434,7 +434,7 @@ static void SimdFilterKernelArgs(benchmark::Benchmark* b) {
     // and 32-row batch boundaries (avoiding cluster = 32 aligned to from = 0, where every 32-row batch is
     // trivially all-zero or all-one).
     for (int cluster : {0, 7, 13, 16}) {
-        for (int sel : {10, 20, 30, 40, 50, 60, 70, 80, 90}) {
+        for (int sel : {0, 1, 5, 10, 20, 25, 30, 40, 50, 60, 70, 75, 80, 90, 99, 100}) {
             b->Args({sel, cluster});
         }
     }
