@@ -205,7 +205,8 @@ OLAP_SCAN Operator 负责从 StarRocks 内表中读取数据。
 | DataSourceType | 数据源类型，可以是 HiveDataSource、ESDataSource 等。 |
 | Table | 表名。 |
 | TabletCount | tablet 的数量。 |
-| MorselsCount | morsels 的数量。 |
+| MorselsCount | morsels 的数量；对于 lake 分组扫描，包含根裁剪任务和生成的 I/O 子任务。 |
+| RangeClipTasks | 成功打开的 lake 分组根范围裁剪任务数，显示在 `DataSource` 下。每个通过校验的根任务只计数一次，包括未返回数据行或仅发布物理行号子任务的根任务；子任务、读取 Segment 和重新打开 Reader 不会增加该计数。 |
 | Predicates | 谓词表达式。 |
 | PredicatesPartition | 应用于分区的谓词表达式。 |
 | SharedScan | 是否启用了 `enable_shared_scan` 会话变量。 |

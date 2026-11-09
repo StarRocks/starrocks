@@ -33,9 +33,11 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/merge_iterator.h"
 #include "storage/predicate_parser.h"
+#include "storage/query/range_group_task.h"
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
+#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
@@ -130,6 +132,13 @@ Status TabletReader::prepare() {
 }
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
+    if (read_params.grouped_range_task != nullptr) {
+        if ((_need_split && (!_could_split_physically || read_params.rowid_range_option != nullptr)) ||
+            read_params.short_key_ranges_option != nullptr) {
+            return Status::NotSupported("grouped range task does not support logical split readers");
+        }
+        RETURN_IF_ERROR(validate_range_group_schema(*read_params.grouped_range_task, *_tablet_schema));
+    }
     if (read_params.reader_type != ReaderType::READER_QUERY && read_params.reader_type != ReaderType::READER_CHECKSUM &&
         read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type) &&
         read_params.reader_type != ReaderType::READER_BYPASS_QUERY) {
@@ -172,6 +181,47 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             return init_collector(read_params);
         }
 
+        RowidRangeOptionPtr grouped_candidates;
+        const std::atomic<bool>* is_cancelled =
+                read_params.runtime_state != nullptr ? &read_params.runtime_state->cancelled_ref() : nullptr;
+        auto check_grouped_cancelled = [&]() -> Status {
+            if (read_params.grouped_range_task != nullptr && is_cancelled != nullptr &&
+                is_cancelled->load(std::memory_order_acquire)) {
+                return Status::Cancelled(
+                        fmt::format("cancelled grouped range preparation, tablet:{}", _tablet_metadata->id()));
+            }
+            return Status::OK();
+        };
+        if (read_params.grouped_range_task != nullptr) {
+            // Resolve exact candidates in each actual segment's ID space. The short-key index
+            // can omit a varying group suffix, so block-aligned candidates alone are insufficient.
+            grouped_candidates = std::make_shared<RowidRangeOption>();
+            for (const auto& rowset : _rowsets) {
+                RETURN_IF_ERROR(check_grouped_cancelled());
+                RETURN_IF_ERROR(validate_range_group_schema(*read_params.grouped_range_task, *rowset->tablet_schema()));
+                ASSIGN_OR_RETURN(auto segments,
+                                 rowset->get_segments_checked(read_params.lake_io_opts, &_stats, is_cancelled));
+                for (const auto& segment : segments) {
+                    if (segment == nullptr) continue;
+                    RETURN_IF_ERROR(
+                            validate_range_group_schema(*read_params.grouped_range_task, segment->tablet_schema()));
+                    RETURN_IF_ERROR(check_grouped_cancelled());
+                    SparseRange<> candidates;
+                    if (segment->num_rows() != 0) {
+                        ASSIGN_OR_RETURN(auto seek, decode_range_group_seek(*read_params.grouped_range_task,
+                                                                            segment->tablet_schema_share_ptr()));
+                        ASSIGN_OR_RETURN(auto rowids, segment_seek_range_to_rowid_range(
+                                                              segment, seek, read_params.lake_io_opts, &_stats,
+                                                              read_params.use_page_cache, is_cancelled));
+                        RETURN_IF_ERROR(check_grouped_cancelled());
+                        if (rowids.has_value()) candidates.add(*rowids);
+                    }
+                    grouped_candidates->add(rowset.get(), segment.get(),
+                                            std::make_shared<SparseRange<>>(std::move(candidates)), true);
+                }
+            }
+        }
+
         pipeline::Morsels morsels;
         morsels.emplace_back(
                 std::make_unique<pipeline::ScanMorsel>(read_params.plan_node_id, *(read_params.scan_range)));
@@ -179,8 +229,10 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         std::shared_ptr<pipeline::SplitMorselQueue> split_morsel_queue = nullptr;
 
         if (_could_split_physically) {
-            split_morsel_queue = std::make_shared<pipeline::PhysicalSplitMorselQueue>(
+            auto physical_queue = std::make_shared<pipeline::PhysicalSplitMorselQueue>(
                     std::move(morsels), read_params.scan_dop, read_params.splitted_scan_rows);
+            physical_queue->set_candidate_rowid_ranges(std::move(grouped_candidates));
+            split_morsel_queue = std::move(physical_queue);
         } else {
             // logical
             split_morsel_queue = std::make_shared<pipeline::LogicalSplitMorselQueue>(
@@ -194,11 +246,18 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
                                            read_params.end_key);
         split_morsel_queue->set_tablet_schema(_tablet_schema);
 
+        bool split_plan_finished = false;
+        DeferOp discard_unpublished_grouped_splits([&] {
+            if (read_params.grouped_range_task != nullptr && !split_plan_finished) _split_tasks.clear();
+        });
         while (true) {
             // Every split can load a rowset's segments (PhysicalSplitMorselQueue::_init_segment).
             RETURN_IF_ERROR(check_cancelled(read_params, _tablet_metadata->id()));
             auto split_status_or = split_morsel_queue->try_get();
             if (UNLIKELY(!split_status_or.ok())) {
+                if (read_params.grouped_range_task != nullptr) {
+                    return split_status_or.status();
+                }
                 LOG(WARNING) << "failed to get split morsel: " << split_status_or.status()
                              << ", query_id: " << print_id(read_params.runtime_state->query_id())
                              << ", tablet_id: " << tablet_shared_ptr->tablet_id();
@@ -221,10 +280,12 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
                 }
                 ctx->split_morsel_queue = split_morsel_queue;
                 _split_tasks.emplace_back(std::move(ctx));
+                TEST_SYNC_POINT_CALLBACK("TabletReader::open::split_task_added", &_split_tasks);
             } else {
                 break;
             }
         }
+        split_plan_finished = true;
 
     } else {
         return init_collector(read_params);
@@ -364,6 +425,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(init_delete_predicates(params, &_delete_predicates));
     RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
+    rs_opts.grouped_range_task = params.grouped_range_task;
     rs_opts.pred_tree = params.pred_tree;
     rs_opts.runtime_filter_preds = params.runtime_filter_preds;
     PredicateTree pred_tree_for_zone_map;

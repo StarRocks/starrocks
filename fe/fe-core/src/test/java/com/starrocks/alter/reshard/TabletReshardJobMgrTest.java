@@ -66,7 +66,7 @@ public class TabletReshardJobMgrTest {
 
     public static class TestNormalTabletReshardJob extends TabletReshardJob {
 
-        private long tableId = 0;
+        private long tableId = reshardTable.getId();
 
         public TestNormalTabletReshardJob(long jobId, TabletReshardJob.JobType jobType) {
             super(jobId, jobType);
@@ -84,6 +84,21 @@ public class TabletReshardJobMgrTest {
         @Override
         public long getTableId() {
             return tableId;
+        }
+
+        @Override
+        public long getDbId() {
+            return reshardDb.getId();
+        }
+
+        @Override
+        public Map<Long, ReshardingPhysicalPartition> getReshardingPhysicalPartitions() {
+            return Map.of();
+        }
+
+        @Override
+        protected void initLocked(OlapTable table) throws StarRocksException {
+            reserveTableForReshard(getDbId(), table, getReshardingPhysicalPartitions());
         }
 
         @Override
@@ -216,6 +231,12 @@ public class TabletReshardJobMgrTest {
 
     @BeforeEach
     public void clearSharedMgr() {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public long getEpoch() {
+                return 7L;
+            }
+        };
         // Tests that use the singleton TabletReshardJobMgr share its state. Clear it before each
         // test so a job created in one test does not block table-reservation checks in the next.
         GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().tabletReshardJobs.clear();
@@ -271,7 +292,7 @@ public class TabletReshardJobMgrTest {
 
     @Test
     public void testTabletReshardJobMgr() throws Exception {
-        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        TabletReshardJobMgr jobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
 
         TestNormalTabletReshardJob normalJob = new TestNormalTabletReshardJob(1, null);
         jobMgr.addTabletReshardJob(normalJob);
@@ -307,12 +328,12 @@ public class TabletReshardJobMgrTest {
 
     @Test
     public void testAddJobRejectedWhenInitFails() {
-        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        TabletReshardJobMgr jobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
 
         // A job whose init() (admission-time table reservation) fails must not be queued.
         TabletReshardJob job = new TestNormalTabletReshardJob(1, null) {
             @Override
-            public void init() throws StarRocksException {
+            protected void initLocked(OlapTable table) throws StarRocksException {
                 throw new StarRocksException("table not reservable");
             }
         };
@@ -324,7 +345,7 @@ public class TabletReshardJobMgrTest {
 
     @Test
     public void testGetTabletReshardJobsInfo() throws Exception {
-        TabletReshardJobMgr jobMgr = new TabletReshardJobMgr();
+        TabletReshardJobMgr jobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
 
         TestNormalTabletReshardJob job1 = new TestNormalTabletReshardJob(1, null);
         TestNormalTabletReshardJob job2 = new TestNormalTabletReshardJob(2, null);
@@ -448,6 +469,7 @@ public class TabletReshardJobMgrTest {
         job.setTableId(100L);
         job.jobState = TabletReshardJob.JobState.FINISHED;
         job.finishedTimeMs = 1000L; // deep in the past -> isExpired() is true
+        job.initializeAfterRecovery();
         jobMgr.tabletReshardJobs.put(job.getJobId(), job);
         Assertions.assertTrue(job.isExpired());
 

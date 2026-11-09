@@ -96,6 +96,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -1306,6 +1307,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_LAKE_TABLET_INTERNAL_PARALLEL)
     private boolean enableLakeTabletInternalParallel = true;
+
+    @VariableMgr.VarAttr(name = "range_scan_execution_mode", flag = VariableMgr.SESSION_ONLY)
+    private String rangeScanExecutionMode = "colocate";
 
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
     // The optional values are "auto" and "force_split".
@@ -4586,6 +4590,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setLogRejectedRecordNum(long logRejectedRecordNum) {
         this.logRejectedRecordNum = logRejectedRecordNum;
+    }
+
+    public String getRangeScanExecutionMode() {
+        return rangeScanExecutionMode;
+    }
+
+    public void setRangeScanExecutionMode(String mode) {
+        if (!"colocate".equalsIgnoreCase(mode) && !"parallel".equalsIgnoreCase(mode)
+                && !"grouped".equalsIgnoreCase(mode)) {
+            throw new IllegalArgumentException("Legal values of range_scan_execution_mode are colocate|parallel|grouped");
+        }
+        rangeScanExecutionMode = mode.toLowerCase(Locale.ROOT);
+    }
+
+    public boolean isGroupedRangeScan() {
+        return "grouped".equals(rangeScanExecutionMode);
+    }
+
+    public boolean isRangeScanExecutionOverride() {
+        return isParallelRangeScan() || isGroupedRangeScan();
+    }
+
+    public boolean isParallelRangeScan() {
+        return "parallel".equals(rangeScanExecutionMode);
     }
 
     public boolean isEnablePipelineEngine() {

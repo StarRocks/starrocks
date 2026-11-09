@@ -291,9 +291,9 @@ public class PreSplitFlowTest {
     }
 
     @Test
-    public void dynamicOverwriteRevokesCleanupExclusionAfterAwait() {
-        // The await is fail-safe, so it can return with the job still pre-CLEANING while the
-        // overwrite transaction is about to start writing. The exclusion must not survive it.
+    public void dynamicOverwriteWaitUsesOriginalAdmissionJob() {
+        // A new leader may already exist by wait start; the dynamic route must carry the
+        // submitted job's original admission token into the separate layout-ready wait.
         Database database = mock(Database.class);
         when(database.getId()).thenReturn(7L);
         OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
@@ -318,9 +318,8 @@ public class PreSplitFlowTest {
             PreSplitFlow.runDynamicOverwriteFlow(database, table, prepared, LoadKind.INSERT_FROM_TABLE,
                     () -> false, mock(ConnectContext.class), 42L);
 
-            coordinator.verify(() -> TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
+            coordinator.verify(() -> TabletPreSplitCoordinator.awaitCombinedJobLayoutReadyAllowingFallback(
                     any(), eq(table), eq(combinedJob), any()), times(1));
-            Mockito.verify(combinedJob, times(1)).clearCleanupExcludedTransactionIds();
         }
     }
 

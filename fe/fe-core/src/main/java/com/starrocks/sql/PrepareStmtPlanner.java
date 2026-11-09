@@ -44,7 +44,8 @@ public class PrepareStmtPlanner {
 
     public static ExecPlan plan(ExecuteStmt executeStmt, StatementBase stmt, ConnectContext session) {
         try {
-            if (!(stmt instanceof QueryStatement)) {
+            // Explicit range execution overrides rerun eligibility checks before any cached plan reuse.
+            if (session.getSessionVariable().isRangeScanExecutionOverride() || !(stmt instanceof QueryStatement)) {
                 return StatementPlanner.plan(stmt, session);
             }
             QueryStatement queryStmt = (QueryStatement) stmt;

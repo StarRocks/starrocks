@@ -32,6 +32,7 @@ import com.starrocks.planner.SetOperationNode;
 import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.FragmentScanRangeAssignment;
+import com.starrocks.qe.QueryGroupAssignment;
 import com.starrocks.qe.scheduler.ExplainBuilder;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.THdfsScanRange;
@@ -73,6 +74,7 @@ public class ExecutionFragment {
 
     private final FragmentScanRangeAssignment scanRangeAssignment;
     private ColocatedBackendSelector.Assignment colocatedAssignment = null;
+    private QueryGroupAssignment queryGroupAssignment;
 
     public static class BucketSeqAssignment {
         public List<Integer> bucketSeqToInstance;
@@ -165,6 +167,15 @@ public class ExecutionFragment {
 
     public FragmentScanRangeAssignment getScanRangeAssignment() {
         return scanRangeAssignment;
+    }
+
+    public QueryGroupAssignment getQueryGroupAssignment() {
+        return queryGroupAssignment;
+    }
+
+    public void setQueryGroupAssignment(QueryGroupAssignment assignment) {
+        Preconditions.checkState(queryGroupAssignment == null, "Grouped assignment is one-shot");
+        queryGroupAssignment = Preconditions.checkNotNull(assignment);
     }
 
     public ColocatedBackendSelector.Assignment getColocatedAssignment() {

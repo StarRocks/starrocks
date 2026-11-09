@@ -104,7 +104,7 @@ public:
     ~Segment();
 
     Status open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                const LakeIOOptions& lake_io_opts);
+                const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats = nullptr);
 
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
@@ -202,7 +202,7 @@ public:
 
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
-    Status load_index(const LakeIOOptions& lake_io_opts = {});
+    Status load_index(const LakeIOOptions& lake_io_opts = {}, OlapReaderStatistics* stats = nullptr);
     bool has_loaded_index() const;
 
     Status new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator** iter, const SegmentReadOptions& opts,
@@ -277,7 +277,7 @@ private:
         TabletSchemaCSPtr _schema;
     };
 
-    Status _load_index(const LakeIOOptions& lake_io_opts);
+    Status _load_index(const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats);
 
     void _reset();
 
@@ -295,7 +295,7 @@ private:
 
     // open segment file and read the minimum amount of necessary information (footer)
     Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                 const LakeIOOptions& lake_io_opts);
+                 const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats);
     Status _create_column_readers(SegmentFooterPB* footer);
 
     Status _check_column_unique_id_uniqueness(SegmentFooterPB* footer,

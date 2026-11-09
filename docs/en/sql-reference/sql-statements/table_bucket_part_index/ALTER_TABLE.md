@@ -488,6 +488,12 @@ Parameter:
     - The total size of two adjacent tablets is **smaller** than `tablet_reshard_target_size`.
     - The number of tablets that are running tablet SPLIT or MERGE is less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).
 
+For range-distributed tables in shared-data clusters, split and merge jobs on the same table can run concurrently when their target physical partitions do not overlap. Jobs that touch the same physical partition conflict, even if they target different materialized indexes. This also applies to pre-split jobs triggered by concurrent loads into different partitions.
+
+A physical partition becomes available for another split or merge when its job finishes or aborts. The table remains in `TABLET_RESHARD` state while any split or merge job is active, so schema changes and other incompatible ALTER operations remain blocked. The table returns to `NORMAL` after all active split and merge jobs finish or abort.
+
+All participating FEs must support this concurrency policy. Before rolling back to an older FE version, wait for all split and merge jobs to finish or abort.
+
 For detailed examples, see [Split or merge tablets](#split-or-merge-tablets).
 
 ### Modify columns (add/delete columns, change column order, modify column comment)
