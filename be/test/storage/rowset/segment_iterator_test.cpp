@@ -3614,4 +3614,152 @@ TEST_F(SegmentIteratorTest, RuntimeFilterPredicatesFastPathTest) {
     EXPECT_TRUE(dict_rewritten_preds.has_dict_filters());
 }
 
+TEST_F(SegmentIteratorTest, SegmentIteratorDictFilterFastPathDeduplicationTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+
+    class CountingDictRuntimeFilterPredicate final : public DictColumnRuntimeFilterPredicate {
+    public:
+        CountingDictRuntimeFilterPredicate(ColumnId cid, const ColumnPtr& dict_words, const RuntimeFilter* rf,
+                                           bool is_nullable, size_t* refresh_count)
+                : DictColumnRuntimeFilterPredicate(cid, dict_words, rf, is_nullable), _refresh_count(refresh_count) {}
+
+        Status refresh_if_updated(int32_t driver_sequence = -1) override {
+            if (_refresh_count != nullptr) {
+                ++(*_refresh_count);
+            }
+            return DictColumnRuntimeFilterPredicate::refresh_if_updated(driver_sequence);
+        }
+
+    private:
+        size_t* _refresh_count = nullptr;
+    };
+
+    std::string file_name = kSegmentDir + "/seg_iter_dict_rf_fast_path_dedup";
+    DeferOp defer([&] { (void)_fs->delete_file(file_name); });
+
+    TabletSchemaBuilder schema_builder;
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(32)
+                                                          .create(2, /*nullable=*/false, TYPE_INT)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, 100);
+    for (int i = 0; i < 100; ++i) {
+        write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(
+                Datum(Slice(i % 2 == 0 ? "a_word" : "z_word")));
+        write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i % 2)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, 100);
+
+    auto dict_words = BinaryColumn::create();
+    dict_words->append(Slice("a_word"));
+    dict_words->append(Slice("z_word"));
+
+    auto* str_rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("z_word"), true, false);
+
+    // 1. When enable_join_runtime_filter_pushdown == false, refresh_if_updated() must be called 0 times.
+    {
+        size_t refresh_count = 0;
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 100;
+        seg_opts.enable_join_runtime_filter_pushdown = false;
+        seg_opts.runtime_filter_preds.add_predicate(
+                pool.add(new CountingDictRuntimeFilterPredicate(1, dict_words, str_rf, false, &refresh_count)));
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+        ASSERT_OK(iter->get_next(read_chunk.get()));
+        EXPECT_EQ(read_chunk->num_rows(), 100);
+        EXPECT_EQ(refresh_count, 0u);
+        iter->close();
+    }
+
+    // 2. When enable_join_runtime_filter_pushdown == true, reading a single 100-row chunk must not execute
+    // redundant back-to-back _prune_by_dict_runtime_filter_bounds() calls at chunk_start == 0.
+    {
+        size_t refresh_count = 0;
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = 100;
+        seg_opts.enable_join_runtime_filter_pushdown = true;
+        seg_opts.enable_predicate_col_late_materialize = false;
+
+        auto* ne_empty = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, ""));
+        auto* placeholder_c1 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_INT), 1));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{ne_empty});
+        pred_root.add_child(PredicateColumnNode{placeholder_c1});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+        seg_opts.runtime_filter_preds.add_predicate(
+                pool.add(new CountingDictRuntimeFilterPredicate(1, dict_words, str_rf, false, &refresh_count)));
+
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+        ASSERT_OK(iter->get_next(read_chunk.get()));
+        EXPECT_EQ(read_chunk->num_rows(), 100);
+        EXPECT_GT(refresh_count, 0u);
+        EXPECT_LE(refresh_count, 4u);
+        iter->close();
+    }
+
+    // 3. Reusable segment iterator: transitioning from a scan with a dictionary RF to a scan without RFs
+    // resets _has_dict_runtime_filters and returns all 100 rows.
+    {
+        ChunkIteratorPtr reusable_slot;
+        auto* prune_all_rf =
+                MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("0_none"), true, false);
+        RuntimeFilterProbeDescriptor prune_all_desc;
+        prune_all_desc.set_runtime_filter(prune_all_rf);
+        auto* placeholder_c0 = pool.add(new_column_placeholder_predicate(get_type_info(TYPE_VARCHAR), 0));
+
+        OlapReaderStatistics stats1;
+        SegmentReadOptions opts1;
+        opts1.fs = _fs;
+        opts1.stats = &stats1;
+        opts1.tablet_schema = tablet_schema;
+        opts1.chunk_size = 100;
+        opts1.enable_join_runtime_filter_pushdown = true;
+        PredicateAndNode pred_root1;
+        pred_root1.add_child(PredicateColumnNode{placeholder_c0});
+        opts1.pred_tree = PredicateTree::create(std::move(pred_root1));
+        opts1.runtime_filter_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&prune_all_desc, 0)));
+
+        ASSIGN_OR_ABORT(auto iter1,
+                        new_reusable_segment_iterator(segment, full_schema, full_schema, opts1, &reusable_slot));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, 100);
+        Status st1 = iter1->get_next(read_chunk.get());
+        EXPECT_TRUE(st1.is_end_of_file()) << st1;
+        EXPECT_EQ(stats1.runtime_stats_filtered, 100);
+        iter1->close();
+
+        // Reuse the same slot with no runtime filters.
+        OlapReaderStatistics stats2;
+        SegmentReadOptions opts2;
+        opts2.fs = _fs;
+        opts2.stats = &stats2;
+        opts2.tablet_schema = tablet_schema;
+        opts2.chunk_size = 100;
+        opts2.enable_join_runtime_filter_pushdown = true;
+        PredicateAndNode pred_root2;
+        pred_root2.add_child(PredicateColumnNode{placeholder_c0});
+        opts2.pred_tree = PredicateTree::create(std::move(pred_root2));
+
+        ASSIGN_OR_ABORT(auto iter2,
+                        new_reusable_segment_iterator(segment, full_schema, full_schema, opts2, &reusable_slot));
+        read_chunk->reset();
+        ASSERT_OK(iter2->get_next(read_chunk.get()));
+        EXPECT_EQ(read_chunk->num_rows(), 100);
+        iter2->close();
+        reusable_slot->close();
+    }
+}
+
 } // namespace starrocks
