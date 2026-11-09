@@ -2191,7 +2191,8 @@ ALWAYS_INLINE bool SegmentIterator::_prune_by_dict_runtime_filter_bounds() {
     if (LIKELY(!_has_dict_runtime_filters)) {
         return false;
     }
-    Status st = _runtime_filter_preds.refresh_dict_filters();
+    int64_t* rf_eval_timer_ns = _opts.stats != nullptr ? &_opts.stats->rf_cond_evaluate_ns : nullptr;
+    Status st = _runtime_filter_preds.refresh_dict_filters(rf_eval_timer_ns);
     if (!st.ok()) {
         return false;
     }
@@ -4398,10 +4399,11 @@ Status SegmentIterator::_rewrite_predicates() {
 }
 
 Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
-    SCOPED_RAW_TIMER(&_opts.stats->decode_dict_ns);
     if (UNLIKELY(_has_dict_runtime_filters)) {
-        RETURN_IF_ERROR(_runtime_filter_preds.refresh_dict_filters());
+        int64_t* rf_eval_timer_ns = _opts.stats != nullptr ? &_opts.stats->rf_cond_evaluate_ns : nullptr;
+        RETURN_IF_ERROR(_runtime_filter_preds.refresh_dict_filters(rf_eval_timer_ns));
     }
+    SCOPED_RAW_TIMER(&_opts.stats->decode_dict_ns);
     DCHECK_NE(ctx->_read_chunk, ctx->_dict_chunk);
     if (ctx->_read_chunk->num_rows() == 0) {
         ctx->_dict_chunk->set_num_rows(0);

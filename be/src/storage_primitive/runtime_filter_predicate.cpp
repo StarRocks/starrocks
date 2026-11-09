@@ -18,6 +18,7 @@
 
 #include "base/simd/simd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/runtime_profile.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/mem_tracker.h"
 
@@ -209,7 +210,7 @@ void DictColumnRuntimeFilterPredicate::set_static_dict_mask(const Filter& mask, 
     _initialized = false;
 }
 
-Status DictColumnRuntimeFilterPredicate::refresh_if_updated(int32_t driver_sequence) {
+Status DictColumnRuntimeFilterPredicate::refresh_if_updated(int32_t driver_sequence, int64_t* rf_eval_timer_ns) {
     if (_rf == nullptr && _rf_desc != nullptr) {
         RuntimeFilterPredicate::init(driver_sequence);
     }
@@ -217,6 +218,10 @@ Status DictColumnRuntimeFilterPredicate::refresh_if_updated(int32_t driver_seque
         return Status::OK();
     }
     if (!_initialized || _rf->rf_version() != _rf_version || _rf->has_null() != _rf_has_null) {
+        if (rf_eval_timer_ns != nullptr) {
+            SCOPED_RAW_TIMER(rf_eval_timer_ns);
+            return _recompute_selection();
+        }
         return _recompute_selection();
     }
     return Status::OK();
@@ -391,13 +396,13 @@ bool RuntimeFilterPredicates::any_filter_ready() const {
     return false;
 }
 
-Status RuntimeFilterPredicates::refresh_dict_filters() {
+Status RuntimeFilterPredicates::refresh_dict_filters(int64_t* rf_eval_timer_ns) {
     if (LIKELY(!_has_dict_filters)) {
         return Status::OK();
     }
     for (auto* pred : _rf_predicates) {
         if (pred->is_dict_filter()) {
-            RETURN_IF_ERROR(pred->refresh_if_updated(_driver_sequence));
+            RETURN_IF_ERROR(pred->refresh_if_updated(_driver_sequence, rf_eval_timer_ns));
         }
     }
     return Status::OK();

@@ -50,7 +50,9 @@ public:
     bool is_dict_filter() const { return _is_dict_filter; }
     bool init(int32_t driver_sequence);
     virtual Status init() { return Status::OK(); }
-    virtual Status refresh_if_updated(int32_t driver_sequence = -1) { return Status::OK(); }
+    virtual Status refresh_if_updated(int32_t driver_sequence = -1, int64_t* rf_eval_timer_ns = nullptr) {
+        return Status::OK();
+    }
     virtual void set_static_dict_mask(const Filter& mask, bool is_nullable) {}
     virtual bool is_always_false() const { return false; }
 
@@ -98,7 +100,7 @@ public:
     Status evaluate(Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) override;
     StatusOr<uint16_t> evaluate(Chunk* chunk, uint16_t* sel, uint16_t sel_size, uint16_t* dst_sel) override;
     Status evaluate(Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
-    Status refresh_if_updated(int32_t driver_sequence = -1) override;
+    Status refresh_if_updated(int32_t driver_sequence = -1, int64_t* rf_eval_timer_ns = nullptr) override;
     void set_static_dict_mask(const Filter& mask, bool is_nullable) override;
     bool is_always_false() const override { return _is_always_false; }
 
@@ -165,7 +167,7 @@ public:
     // Note this is deliberately not cached: filters keep arriving during a scan.
     bool any_filter_ready() const;
 
-    Status refresh_dict_filters();
+    Status refresh_dict_filters(int64_t* rf_eval_timer_ns = nullptr);
     bool has_always_false_dict_filter() const;
     void set_static_dict_mask(ColumnId column_id, const Filter& mask, bool is_nullable);
 
