@@ -21,6 +21,7 @@ import com.starrocks.alter.LakeOnlineRewriteJobBase.PendingPartitionPlan;
 import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.alter.reshard.presplit.SampleRequest;
 import com.starrocks.alter.reshard.presplit.SampleSet;
+import com.starrocks.alter.reshard.presplit.TabletPreSplitCoordinator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -214,7 +215,8 @@ public class LakeTableSchemaChangeJobRangeRollupTest {
 
         new MockUp<LakeOnlineRewriteJobBase>() {
             @Mock
-            protected int selectRequestedTabletCount(PendingPartitionPlan plan, int activeComputeNodeCount) {
+            protected int selectRequestedTabletCount(PendingPartitionPlan plan, int activeComputeNodeCount,
+                                                     long targetSize) {
                 return K;
             }
         };
@@ -1090,6 +1092,52 @@ public class LakeTableSchemaChangeJobRangeRollupTest {
         starRocksAssert.alterTable("alter table t_g_accept modify column v1 bigint");
         for (AlterJobV2 job : unfinishedJobs(t)) {
             job.cancel("test");
+        }
+    }
+
+    // ------------------------------------------------------------------ tablet count
+
+    /** The rollup's shadow tablets are sized against the base table's tablet_reshard_target_size when it is set. */
+    @Test
+    public void testPlanPartitionShadowSizesAgainstTableTargetSize() throws Exception {
+        long oneGiB = 1L << 30;
+        starRocksAssert.withTable(rangeTableSql("t_target_size", ", 'tablet_reshard_target_size' = '" + oneGiB + "'"));
+        starRocksAssert.alterTable(
+                "alter table t_target_size add rollup r_ts(k2, k1, v1) duplicate key(k2) order by (k2, k1)");
+        MaterializedViewHandler handler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        List<AlterJobV2> jobs = new ArrayList<>(handler.getAlterJobsV2().values());
+        handler.clearJobs();
+        assertEquals(1, jobs.size());
+        LakeRangeRollupJob job = assertInstanceOf(LakeRangeRollupJob.class, jobs.get(0));
+
+        List<Long> receivedTargets = new ArrayList<>();
+        new MockUp<TabletPreSplitCoordinator>() {
+            @Mock
+            public int selectTabletCount(Estimates estimates, int activeComputeNodeCount, long targetSize) {
+                receivedTargets.add(targetSize);
+                return 1;
+            }
+        };
+        OlapTable t = table("t_target_size");
+        PhysicalPartition pp = partition(t);
+        MaterializedIndex baseIndex = pp.getLatestIndex(t.getBaseIndexMetaId());
+        String partitionName = t.getPartition(pp.getParentId()).getName();
+        long oldTargetSize = Config.tablet_reshard_target_size;
+        try {
+            Config.tablet_reshard_target_size = 10 * oneGiB;
+            job.planPartitionShadow(new PendingPartitionPlan(pp.getId(), baseIndex, baseIndex.getShardGroupId(),
+                    partitionName, 10 * oneGiB, t.getName(), pp), t, DB);
+            assertEquals(List.of(oneGiB), receivedTargets);
+
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB), t,
+                    new HashMap<>(Map.of("tablet_reshard_target_size", "")));
+            receivedTargets.clear();
+            job.planPartitionShadow(new PendingPartitionPlan(pp.getId(), baseIndex, baseIndex.getShardGroupId(),
+                    partitionName, 10 * oneGiB, t.getName(), pp), t, DB);
+            assertEquals(List.of(10 * oneGiB), receivedTargets);
+        } finally {
+            Config.tablet_reshard_target_size = oldTargetSize;
         }
     }
 

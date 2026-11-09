@@ -179,11 +179,13 @@ Range 分布表迁移仅支持从存算分离集群迁移到存算分离集群�
    enable_execute_script_on_frontend = true
    ```
 
-3. 在目标集群上将目标大小设置为一个极大值，以抑制由大小触发的 Tablet 自动分裂：
+3. 在目标集群上将目标大小设置为 `0`，关闭 Tablet 自动分裂和合并：
 
    ```SQL
-   ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "9223372036854775807");
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "0");
    ```
+
+   请勿改用极大值。迁移工具根据源表定义创建目标表，源表上设置的表属性 `tablet_reshard_target_size` 会一并带到目标表。这些表会以表属性为准，极大值对其不起作用。设置为 `0` 则会关闭所有表的自动分裂和合并。迁移工具提交的分裂按精确边界执行，不依赖该配置。
 
 4. 启动工具前，分别在源集群和目标集群上执行以下查询：
 

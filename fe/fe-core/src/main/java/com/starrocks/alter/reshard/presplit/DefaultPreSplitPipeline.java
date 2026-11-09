@@ -292,7 +292,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         recordSamplerInvocation();
 
         int requestedTabletCount = TabletPreSplitCoordinator.selectPreSplitTabletCount(
-                new Estimates(fileTotalBytes, 0L), activeComputeNodeCount);
+                new Estimates(fileTotalBytes, 0L), activeComputeNodeCount, table);
 
         Map<Long, List<TabletRange>> oldTabletIdToRanges = new LinkedHashMap<>();
         for (IndexPreSplitTarget indexTarget : indexTargets) {
@@ -331,7 +331,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         PreSplitProfile.recordSourceTier(TIER_LABEL_DERIVED_TIER);
         PreSplitProfile.recordEstimatedInputBytes(fileTotalBytes);
         int requestedTabletCount = TabletPreSplitCoordinator.selectPreSplitTabletCount(
-                new Estimates(fileTotalBytes, 0L), activeComputeNodeCount);
+                new Estimates(fileTotalBytes, 0L), activeComputeNodeCount, table);
 
         Map<Long, List<TabletRange>> oldTabletIdToRanges = new LinkedHashMap<>();
         try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
@@ -560,7 +560,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
                 PreSplitProfile.Phase.PARTITION_AND_BOUNDARY_PLANNING)) {
             result = BoundaryPlanner.planRowQuantileBoundaries(
-                    sampleSet, effectiveTabletCount(sampleSet, requestedTabletCount, activeComputeNodeCount),
+                    sampleSet, effectiveTabletCount(sampleSet, requestedTabletCount, activeComputeNodeCount, table),
                     request.getSortKey());
         }
         return new TierOutcome(result, TIER_LABEL_DATA_TIER);
@@ -583,12 +583,12 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
      * than collapsing to the two-tablet floor on no evidence.
      */
     private static int effectiveTabletCount(SampleSet sampleSet, int requestedTabletCount,
-                                            int activeComputeNodeCount) {
+                                            int activeComputeNodeCount, OlapTable table) {
         Estimates sampledEstimates = sampleSet.getEstimates();
         if (sampledEstimates == null || sampledEstimates.totalBytes() <= 0L) {
             return requestedTabletCount;
         }
-        return TabletPreSplitCoordinator.selectPreSplitTabletCount(sampledEstimates, activeComputeNodeCount);
+        return TabletPreSplitCoordinator.selectPreSplitTabletCount(sampledEstimates, activeComputeNodeCount, table);
     }
 
     /**

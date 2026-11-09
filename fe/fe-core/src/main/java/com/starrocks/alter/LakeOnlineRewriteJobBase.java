@@ -341,8 +341,11 @@ public abstract class LakeOnlineRewriteJobBase
      *  before stage 1 — the base cannot see subclass config fields. */
     protected abstract void validateRewriteConfig() throws AlterCancelException;
 
-    protected int selectRequestedTabletCount(PendingPartitionPlan plan, int activeComputeNodeCount) {
-        long targetSize = Config.tablet_reshard_target_size;
+    /**
+     * Tablet count for the rewritten partition, sized against {@code targetSize}, the table's target
+     * ({@link OlapTable#getTabletReshardTargetSize()}). A zero target preserves the base tablet count.
+     */
+    protected int selectRequestedTabletCount(PendingPartitionPlan plan, int activeComputeNodeCount, long targetSize) {
         if (targetSize == 0) {
             int tabletCount = Math.max(1, plan.baseIndex.getTablets().size());
             LOG.debug("online rewrite job {} preserves {} tablets for partition {} "
@@ -535,7 +538,8 @@ public abstract class LakeOnlineRewriteJobBase
     protected void planPartitionShadow(PendingPartitionPlan plan, OlapTable table, String dbName)
             throws AlterCancelException {
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
-        int requestedTabletCount = selectRequestedTabletCount(plan, activeComputeNodeCount);
+        long targetSize = table.getTabletReshardTargetSize();
+        int requestedTabletCount = selectRequestedTabletCount(plan, activeComputeNodeCount, targetSize);
         List<Tuple> boundaries;
         if (colocateRanges == null) {
             boundaries = requestedTabletCount == 1
@@ -544,7 +548,7 @@ public abstract class LakeOnlineRewriteJobBase
         } else {
             RangeColocateRewriteLayout layout =
                     new RangeColocateRewriteLayout(colocateRanges, getShadowRangeColumns(), colocateColumnCount);
-            boundaries = planColocateBoundaries(layout, plan, table, dbName, requestedTabletCount);
+            boundaries = planColocateBoundaries(layout, plan, table, dbName, requestedTabletCount, targetSize);
             LOG.info("{} {}: partition {} plans {} shadow tablets over {} colocate "
                             + "ranges, tablets per colocate range: {}", rangeJobLogPrefix(), jobId,
                     plan.physicalPartitionId, boundaries.size() + 1, colocateRanges.size(),
@@ -600,19 +604,20 @@ public abstract class LakeOnlineRewriteJobBase
     /**
      * Plan the boundaries of one partition of a table in a range colocate group: the ColocateRange bounds plus
      * sampled cuts inside the ColocateRanges (see {@link RangeColocateRewriteLayout}). A zero
-     * {@code tablet_reshard_target_size} keeps the base tablet count of each ColocateRange; otherwise the requested
+     * {@code targetSize} (the table's target) keeps the base tablet count of each ColocateRange; otherwise the requested
      * count is shared among the ColocateRanges by their share of the sample. A sampling failure or an empty
      * sample (an empty partition) gives one tablet per ColocateRange. So does a requested count of one, without
      * sampling: no ColocateRange can get a second tablet.
      */
     private List<Tuple> planColocateBoundaries(RangeColocateRewriteLayout layout, PendingPartitionPlan plan,
-                                               OlapTable table, String dbName, int requestedTabletCount) {
+                                               OlapTable table, String dbName, int requestedTabletCount,
+                                               long targetSize) {
         if (requestedTabletCount <= 1 || !layout.usesSampledCuts()) {
             return layout.colocateBoundaries();
         }
         try {
             int[] baseTabletCounts = null;
-            if (Config.tablet_reshard_target_size == 0) {
+            if (targetSize == 0) {
                 baseTabletCounts = layout.tabletCountsOfBaseTablets(plan.baseIndex.getTablets());
                 if (Arrays.stream(baseTabletCounts).allMatch(count -> count == 1)) {
                     return layout.colocateBoundaries();
@@ -1547,7 +1552,7 @@ public abstract class LakeOnlineRewriteJobBase
         // ADMIN SET FRONTEND CONFIG landing mid-decision make the gate below, the window the charge is
         // compared against, and the window the message reports all disagree - so a value dropped to 0
         // after the gate had passed could still grant the retry the operator just disabled. Same rule as
-        // selectRequestedTabletCount above and TabletReshardUtils.adaptiveSplitBound.
+        // the single target-size read in planPartitionShadow above and TabletReshardUtils.adaptiveSplitBound.
         int retryWindowSecond = Config.lake_online_rewrite_partition_retry_timeout_second;
         if (retryWindowSecond <= 0) {
             LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {} and retrying is "
