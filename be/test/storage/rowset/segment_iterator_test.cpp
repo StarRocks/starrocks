@@ -3762,4 +3762,104 @@ TEST_F(SegmentIteratorTest, SegmentIteratorDictFilterFastPathDeduplicationTest) 
     }
 }
 
+TEST_F(SegmentIteratorTest, NonTopNScanThroughputBenchmark) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+
+    constexpr size_t kNumRows = 50000;
+    constexpr size_t kChunkSize = 4096;
+    constexpr int kIterations = 7;
+
+    std::string file_name = kSegmentDir + "/non_topn_scan_throughput_bench";
+    DeferOp defer([&] { (void)_fs->delete_file(file_name); });
+
+    TabletSchemaBuilder schema_builder;
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(32)
+                                                          .create(2, /*nullable=*/false, TYPE_INT)
+                                                          .create(3, /*nullable=*/false, TYPE_BIGINT)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, kNumRows);
+    static constexpr const char* kDictVals[4] = {"alpha", "bravo", "charlie", "delta"};
+    for (size_t i = 0; i < kNumRows; ++i) {
+        write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(Slice(kDictVals[i & 3])));
+        write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        write_chunk->get_column_by_index(2)->as_mutable_ptr()->append_datum(Datum(static_cast<int64_t>(i * 10)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, kNumRows);
+
+    auto run_scan_once = [&](bool enable_rf_pushdown, uint64_t* elapsed_ns_out) -> size_t {
+        OlapReaderStatistics stats;
+        SegmentReadOptions seg_opts;
+        seg_opts.fs = _fs;
+        seg_opts.stats = &stats;
+        seg_opts.tablet_schema = tablet_schema;
+        seg_opts.chunk_size = kChunkSize;
+        seg_opts.enable_join_runtime_filter_pushdown = enable_rf_pushdown;
+        seg_opts.enable_predicate_col_late_materialize = true;
+
+        auto* ne_pred = pool.add(new_column_ne_predicate(get_type_info(TYPE_VARCHAR), 0, "none"));
+        auto* ge_pred = pool.add(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "0"));
+        PredicateAndNode pred_root;
+        pred_root.add_child(PredicateColumnNode{ne_pred});
+        pred_root.add_child(PredicateColumnNode{ge_pred});
+        seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+        MonotonicStopWatch sw;
+        sw.start();
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(full_schema, seg_opts));
+        auto read_chunk = ChunkFactory::new_chunk(full_schema, kChunkSize);
+        size_t rows = 0;
+        while (true) {
+            read_chunk->reset();
+            Status st = iter->get_next(read_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK(st.ok()) << st;
+            rows += read_chunk->num_rows();
+        }
+        iter->close();
+        *elapsed_ns_out = sw.elapsed_time();
+        EXPECT_EQ(stats.runtime_stats_filtered, 0);
+        return rows;
+    };
+
+    // Warm up page cache and instruction cache for both paths.
+    uint64_t warmup_ns = 0;
+    EXPECT_EQ(run_scan_once(false, &warmup_ns), kNumRows);
+    EXPECT_EQ(run_scan_once(true, &warmup_ns), kNumRows);
+
+    std::vector<uint64_t> disabled_samples_ns;
+    std::vector<uint64_t> enabled_samples_ns;
+    disabled_samples_ns.reserve(kIterations);
+    enabled_samples_ns.reserve(kIterations);
+
+    for (int i = 0; i < kIterations; ++i) {
+        uint64_t ns_disabled = 0;
+        uint64_t ns_enabled = 0;
+        EXPECT_EQ(run_scan_once(false, &ns_disabled), kNumRows);
+        EXPECT_EQ(run_scan_once(true, &ns_enabled), kNumRows);
+        disabled_samples_ns.push_back(ns_disabled);
+        enabled_samples_ns.push_back(ns_enabled);
+    }
+
+    std::sort(disabled_samples_ns.begin(), disabled_samples_ns.end());
+    std::sort(enabled_samples_ns.begin(), enabled_samples_ns.end());
+    const uint64_t median_disabled_ns = disabled_samples_ns[kIterations / 2];
+    const uint64_t median_enabled_ns = enabled_samples_ns[kIterations / 2];
+    const double disabled_mrows_per_sec =
+            median_disabled_ns > 0 ? (static_cast<double>(kNumRows) * 1e3 / median_disabled_ns) : 0.0;
+    const double enabled_mrows_per_sec =
+            median_enabled_ns > 0 ? (static_cast<double>(kNumRows) * 1e3 / median_enabled_ns) : 0.0;
+
+    LOG(INFO) << "NonTopNScanThroughputBenchmark (rows=" << kNumRows << "): "
+              << "rf_pushdown=false median=" << median_disabled_ns << " ns (" << disabled_mrows_per_sec << " Mrows/s), "
+              << "rf_pushdown=true median=" << median_enabled_ns << " ns (" << enabled_mrows_per_sec << " Mrows/s)";
+
+    EXPECT_GT(median_disabled_ns, 0u);
+    EXPECT_GT(median_enabled_ns, 0u);
+}
+
 } // namespace starrocks
