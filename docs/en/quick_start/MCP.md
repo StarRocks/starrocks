@@ -4,6 +4,8 @@ sidebar_position: 10
 description: "Analyze complex data with Claude and the StarRocks MCP server on a shared-data cluster."
 ---
 
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
+
 # Claude + StarRocks MCP
 
 Stand up a small StarRocks cluster on object storage, load a real public dataset, and ask **Claude** plain-English questions about it through the **StarRocks MCP server**. Claude discovers the schema, writes the SQL (including multi-table joins), and renders charts. All data lives in object storage on **MinIO**.
@@ -133,11 +135,9 @@ This directory contains just enough to get you going. It deliberately contains *
 
 ## Acquire a MinIO AIStor license
 
-MinIO AIStor requires a license to run. You can use an existing license, or you can request a new MinIO AIStor Free Tier license.
+<AIStorLicense />
 
-To request a new MinIO AIStor Free Tier license, go to the [MinIO AIStor pricing](https://min.io/pricing) page and select Get Started under the Free tier to obtain a free license. The free tier license allows you to run MinIO AIStor on a single compute resource with one or more drives.
-
-Place the license file in your local clone of the `StarRocks/demo` repo you cloned in the previous step, in the `demo/documentation-samples/MCP` directory.
+For this tutorial, that is the `demo/documentation-samples/MCP` directory in your local clone of the `StarRocks/demo` repository.
 
 ## Bring up StarRocks and MinIO
 
