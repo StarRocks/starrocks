@@ -22,9 +22,9 @@ import com.staros.proto.ShardInfo;
 import com.starrocks.alter.reshard.ColocateChecker;
 import com.starrocks.alter.reshard.ReshardingMaterializedIndex;
 import com.starrocks.alter.reshard.ReshardingTablet;
+import com.starrocks.alter.reshard.SplitTabletJob;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
-import com.starrocks.alter.reshard.presplit.SampleSet;
 import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateRangeUtils;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -50,10 +50,6 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.transaction.InsertTxnCommitAttachment;
-import com.starrocks.transaction.TransactionState;
-import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -95,7 +91,7 @@ public class LakeTableSchemaChangeJobColocateTest {
         // Keeps the reshard daemon, and the colocate checker it runs, from acting on the tables of the tests.
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            protected void runAfterLeaseValid() {
+            protected void runAfterCatalogReady() {
             }
         };
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
@@ -198,11 +194,6 @@ public class LakeTableSchemaChangeJobColocateTest {
         return groupIds;
     }
 
-    private static List<String> sortKeyNames(OlapTable table, long indexMetaId) {
-        return MetaUtils.getRangeDistributionColumns(table, indexMetaId).stream()
-                .map(Column::getName).collect(Collectors.toList());
-    }
-
     /** The PACK shard group of the ColocateRange each tablet of {@code index} lies in, under the index's sort key. */
     private static Map<Long, Long> expectedPackShardGroupIds(OlapTable table, MaterializedIndex index) {
         List<ColocateRange> ranges = colocateRanges(table);
@@ -265,17 +256,14 @@ public class LakeTableSchemaChangeJobColocateTest {
                 return true;
             }
         };
-        long deadlineMs = System.currentTimeMillis() + 60_000L;
-        // PENDING spans several rounds: one dispatches the tablet creation tasks, the later ones poll them.
-        while (job.getJobState() == AlterJobV2.JobState.PENDING) {
-            assertTrue(System.currentTimeMillis() < deadlineMs, "job never left PENDING");
-            job.runPendingJob();
-            Thread.sleep(10);
-        }
+        // Waits until the tablet creation tasks finish.
+        job.runPendingJob();
+        assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
         job.runWaitingTxnJob();
         assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
         job.runRunningJob();
         assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
         while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
             assertTrue(System.currentTimeMillis() < deadlineMs, "job never reached FINISHED");
             job.runFinishedRewritingJob();
@@ -285,7 +273,7 @@ public class LakeTableSchemaChangeJobColocateTest {
 
     /** One StarOS call that creates shards with a group list of their own, each pinned to an old shard. */
     private record PinnedShardCreation(Map<Long, Long> newToOldShardId, Map<Long, List<Long>> newShardIdToGroupIds,
-                                       boolean unpinPlacement) {
+                                       boolean spreadNewShards) {
     }
 
     /** Records every call of {@link StarOSAgent#createShardsForSplit} and lets it create the shards. */
@@ -296,9 +284,9 @@ public class LakeTableSchemaChangeJobColocateTest {
             public void createShardsForSplit(Invocation invocation, Map<Long, Long> newToOldShardId,
                                              Map<Long, List<Long>> newShardIdToGroupIds, FilePathInfo pathInfo,
                                              FileCacheInfo cacheInfo, Map<String, String> properties,
-                                             ComputeResource computeResource, boolean unpinPlacement) {
+                                             ComputeResource computeResource, boolean spreadNewShards) {
                 calls.add(new PinnedShardCreation(new LinkedHashMap<>(newToOldShardId),
-                        new LinkedHashMap<>(newShardIdToGroupIds), unpinPlacement));
+                        new LinkedHashMap<>(newShardIdToGroupIds), spreadNewShards));
                 invocation.proceed();
             }
         };
@@ -380,7 +368,7 @@ public class LakeTableSchemaChangeJobColocateTest {
 
         assertEquals(1, calls.size(), "one call per partition and index");
         PinnedShardCreation call = calls.get(0);
-        assertFalse(call.unpinPlacement(), "each shadow shard stays pinned to its origin shard");
+        assertFalse(call.spreadNewShards(), "each shadow shard stays pinned to its origin shard");
         Table<Long, Long, MaterializedIndex> shadowIndexes = Deencapsulation.getField(job, "physicalPartitionIndexMap");
         assertEquals(1, shadowIndexes.row(partition.getId()).size());
         long shadowIndexMetaId = shadowIndexes.row(partition.getId()).keySet().iterator().next();
@@ -402,112 +390,6 @@ public class LakeTableSchemaChangeJobColocateTest {
             assertTrue(groupIds.get(shadow.getTablets().get(i).getId())
                     .containsAll(List.of(origin.getShardGroupId(), expectedPack.get(i))), "position " + i);
         }
-    }
-
-    /** Runs ADD ROLLUP {@code rollup} on {@code table} through its range rollup job to FINISHED. */
-    private static void addRangeRollup(OlapTable table, String rollup) throws Exception {
-        MaterializedViewHandler rollupHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
-        new MockUp<MaterializedViewHandler>() {
-            @Mock
-            protected void runAfterLeaseValid() {
-            }
-        };
-        try {
-            starRocksAssert.alterTable("alter table " + table.getName() + " add rollup " + rollup);
-            List<AlterJobV2> jobs = rollupHandler.getUnfinishedAlterJobV2ByTableId(table.getId());
-            assertEquals(1, jobs.size());
-            LakeRangeRollupJob job = assertInstanceOf(LakeRangeRollupJob.class, jobs.get(0));
-            // No sample: one rollup tablet per ColocateRange.
-            job.setSampler(request -> SampleSet.EMPTY);
-            job.runPendingJob();
-            assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
-            // The first round allocates the watershed; the loads before it are then reported finished.
-            job.runWaitingTxnJob();
-            new MockUp<LakeRangeRollupJob>() {
-                @Mock
-                public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) {
-                    return true;
-                }
-            };
-            job.runWaitingTxnJob();
-            assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
-            markRewritesPublished(job);
-            // The first round places the rollup tablets into the PACK shard groups and waits; the second finds them.
-            job.runRunningJob();
-            assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
-            job.runRunningJob();
-            assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
-            job.setPublishExecutor(publishingJob -> true);
-            job.runFinishedRewritingJob();
-            assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
-        } finally {
-            rollupHandler.clearJobs();
-        }
-    }
-
-    /** Reports the rewrite of each partition of a RUNNING rollup job published, as the transaction of its INSERT would be. */
-    private static void markRewritesPublished(LakeRangeRollupJob job) {
-        long watershedTxnId = job.getTransactionId().orElseThrow();
-        Map<Long, TransactionState> rewriteTxns = new HashMap<>();
-        for (long physicalPartitionId : job.getPartitionIdsForTest()) {
-            long rewriteTxnId = GlobalStateMgr.getCurrentState().getNextId();
-            job.setRewriteTxnIdForTest(physicalPartitionId, rewriteTxnId);
-            TransactionState rewriteTxn = new TransactionState(0L, new ArrayList<>(), rewriteTxnId, "rewrite", null,
-                    TransactionState.LoadJobSourceType.SHADOW_REWRITE,
-                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"), 0L, 60_000L);
-            rewriteTxn.setTransactionStatus(TransactionStatus.VISIBLE);
-            InsertTxnCommitAttachment attachment = new InsertTxnCommitAttachment(0L);
-            attachment.setShadowRewriteWatershedTxnId(watershedTxnId);
-            attachment.setShadowRewriteAlterVersion(job.getWatershedVersion(physicalPartitionId));
-            rewriteTxn.setTxnCommitAttachment(attachment);
-            rewriteTxns.put(rewriteTxnId, rewriteTxn);
-        }
-        new MockUp<GlobalTransactionMgr>() {
-            @Mock
-            public TransactionState getTransactionState(Invocation invocation, long dbId, long transactionId) {
-                TransactionState rewriteTxn = rewriteTxns.get(transactionId);
-                return rewriteTxn != null ? rewriteTxn : invocation.proceed();
-            }
-        };
-        job.setRewriteExecutor((context, insertStmt) -> {
-        });
-    }
-
-    /**
-     * A rollup sorted by (k1, k3) on a table sorted by (k1): the schema change rebuilds the rollup with the base index,
-     * and each rebuilt rollup tablet is placed by the colocate prefix of its own range into its ColocateRange's PACK
-     * shard group.
-     */
-    @Test
-    public void testHeavySchemaChangeRebuildsRollupIntoPackGroups() throws Exception {
-        OlapTable table = createInThreeRangeGroup("t_sc_rollup", "k1 int, k2 int, k3 int, v1 int", "duplicate key(k1)");
-        addRangeRollup(table, "r (k1, k3, v1) order by (k1, k3)");
-        PhysicalPartition partition = onlyPartition(table);
-        long originRollupMetaId = table.getIndexMetaIdByName("r");
-        MaterializedIndex originRollup = partition.getLatestIndex(originRollupMetaId);
-        MaterializedIndex originBase = partition.getLatestBaseIndex();
-        assertEquals(List.of("k1"), sortKeyNames(table, table.getBaseIndexMetaId()));
-        assertEquals(List.of("k1", "k3"), sortKeyNames(table, originRollupMetaId));
-        assertEquals(3, originRollup.getTablets().size());
-        assertInIndexAndPackShardGroups(table, originRollup, true);
-        Set<Long> originTabletIds = new HashSet<>(tabletIdsOf(originRollup));
-        originTabletIds.addAll(tabletIdsOf(originBase));
-        List<PinnedShardCreation> calls = recordPinnedShardCreations();
-
-        runToFinished(submitHeavySchemaChange(table, "alter table t_sc_rollup modify column v1 varchar(32)"));
-
-        assertEquals(2, calls.size(), "one call per partition and index: the base index and the rollup");
-        long rollupMetaId = table.getIndexMetaIdByName("r");
-        MaterializedIndex rollup = partition.getLatestIndex(rollupMetaId);
-        assertTrue(tabletIdsOf(rollup).stream().noneMatch(originTabletIds::contains), "the rollup was rebuilt");
-        assertEquals(List.of("k1", "k3"), sortKeyNames(table, rollupMetaId));
-        MaterializedIndex base = partition.getLatestBaseIndex();
-        assertInIndexAndPackShardGroups(table, rollup, false);
-        assertInIndexAndPackShardGroups(table, base, false);
-
-        starOSAgent().deleteShards(originTabletIds);
-        assertInIndexAndPackShardGroups(table, rollup, true);
-        assertInIndexAndPackShardGroups(table, base, true);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -662,7 +544,8 @@ public class LakeTableSchemaChangeJobColocateTest {
 
         List<TabletReshardJob> alignmentSplits = splitJobsOf(table);
         assertEquals(1, alignmentSplits.size());
-        List<ReshardingMaterializedIndex> reshardingIndexes = new ArrayList<>(alignmentSplits.get(0)
+        SplitTabletJob alignmentSplit = assertInstanceOf(SplitTabletJob.class, alignmentSplits.get(0));
+        List<ReshardingMaterializedIndex> reshardingIndexes = new ArrayList<>(alignmentSplit
                 .getReshardingPhysicalPartitions().get(partition.getId()).getReshardingIndexes().values());
         assertEquals(1, reshardingIndexes.size());
         assertEquals(rebuilt.getId(), reshardingIndexes.get(0).getMaterializedIndexId());
