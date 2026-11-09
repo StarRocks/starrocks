@@ -50,11 +50,11 @@ public:
 
 TEST_F(ArrowConverterTest, NullStructDoesNotFilterHiddenDecimalOverflow) {
     auto amounts = arrow::ArrayFromJSON(arrow::decimal128(38, 0),
-                                       R"(["42", "99999999999999999999999999999999999999", "7", null,
+                                        R"(["42", "99999999999999999999999999999999999999", "7", null,
                                            "99999999999999999999999999999999999999"])");
     auto validity = arrow::ArrayFromJSON(arrow::boolean(), "[true, null, true, true, true]");
     auto array_result = arrow::StructArray::Make({amounts}, {arrow::field("amount", amounts->type())},
-                                               validity->null_bitmap(), validity->null_count());
+                                                 validity->null_bitmap(), validity->null_count());
     ASSERT_OK(array_result.status());
     auto array = array_result.ValueOrDie();
     ASSERT_OK(array->ValidateFull());
@@ -67,17 +67,18 @@ TEST_F(ArrowConverterTest, NullStructDoesNotFilterHiddenDecimalOverflow) {
         TypeDescriptor raw_type;
         ConvertFuncTree plan;
         bool need_cast = false;
-        ASSERT_STATUS_OK(ParquetScanner::build_dest(array->type().get(), &type, true, &raw_type, &plan, need_cast, strict));
+        ASSERT_STATUS_OK(
+                ParquetScanner::build_dest(array->type().get(), &type, true, &raw_type, &plan, need_cast, strict));
         ASSERT_FALSE(need_cast);
         MutableColumnPtr column = ColumnHelper::create_column(raw_type, true);
         Filter filter(5, 1);
-        ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&plan, 1, array.get(), column.get(), 0, 0,
-                                                                &filter, nullptr));
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, nullptr));
         auto sliced = array->Slice(1);
-        ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&plan, 2, sliced.get(), column.get(), 0, 1,
-                                                                &filter, nullptr));
-        ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&plan, 2, sliced.get(), column.get(), 2, 3,
-                                                                &filter, nullptr));
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 2, sliced.get(), column.get(), 0, 1, &filter, nullptr));
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 2, sliced.get(), column.get(), 2, 3, &filter, nullptr));
         column->check_or_die();
         EXPECT_EQ(5, column->size());
         EXPECT_EQ("{amount:42}", column->debug_item(0));
@@ -91,16 +92,16 @@ TEST_F(ArrowConverterTest, NullStructDoesNotFilterHiddenDecimalOverflow) {
 
 TEST_F(ArrowConverterTest, NestedStructNullMasksDecimalOverflowAcrossSlices) {
     auto amounts = arrow::ArrayFromJSON(arrow::decimal128(38, 0),
-                                       R"(["42", "99999999999999999999999999999999999999",
+                                        R"(["42", "99999999999999999999999999999999999999",
                                            "99999999999999999999999999999999999999", null, "7"])");
     auto inner_validity = arrow::ArrayFromJSON(arrow::boolean(), "[true, true, null, true, true]");
     auto inner_result = arrow::StructArray::Make({amounts}, {arrow::field("amount", amounts->type())},
-                                               inner_validity->null_bitmap(), inner_validity->null_count());
+                                                 inner_validity->null_bitmap(), inner_validity->null_count());
     ASSERT_OK(inner_result.status());
     auto inner = inner_result.ValueOrDie();
     auto outer_validity = arrow::ArrayFromJSON(arrow::boolean(), "[true, null, true, true, true]");
     auto array_result = arrow::StructArray::Make({inner}, {arrow::field("inner", inner->type())},
-                                               outer_validity->null_bitmap(), outer_validity->null_count());
+                                                 outer_validity->null_bitmap(), outer_validity->null_count());
     ASSERT_OK(array_result.status());
     auto array = array_result.ValueOrDie();
     ASSERT_OK(array->ValidateFull());
@@ -116,17 +117,18 @@ TEST_F(ArrowConverterTest, NestedStructNullMasksDecimalOverflowAcrossSlices) {
         TypeDescriptor raw_type;
         ConvertFuncTree plan;
         bool need_cast = false;
-        ASSERT_STATUS_OK(ParquetScanner::build_dest(array->type().get(), &type, true, &raw_type, &plan, need_cast, strict));
+        ASSERT_STATUS_OK(
+                ParquetScanner::build_dest(array->type().get(), &type, true, &raw_type, &plan, need_cast, strict));
         ASSERT_FALSE(need_cast);
         MutableColumnPtr column = ColumnHelper::create_column(raw_type, true);
         Filter filter(5, 1);
-        ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&plan, 1, array.get(), column.get(), 0, 0,
-                                                                &filter, nullptr));
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, nullptr));
         auto sliced = array->Slice(1);
-        ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&plan, 2, sliced.get(), column.get(), 0, 1,
-                                                                &filter, nullptr));
-        ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(&plan, 2, sliced.get(), column.get(), 2, 3,
-                                                                &filter, nullptr));
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 2, sliced.get(), column.get(), 0, 1, &filter, nullptr));
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 2, sliced.get(), column.get(), 2, 3, &filter, nullptr));
         column->check_or_die();
         ASSERT_EQ(5, column->size());
         EXPECT_EQ(Filter(5, 1), filter);
