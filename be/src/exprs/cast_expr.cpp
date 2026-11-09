@@ -610,7 +610,8 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
             return new CastStructExpr(node, std::move(field_casts), std::move(source_field_indices));
         }
     }
-    if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) && to_type.is_complex_type()) {
+    if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) &&
+        (to_type.is_complex_type() || to_type.is_geo_type())) {
         return new MustNullExpr(node);
     }
 
