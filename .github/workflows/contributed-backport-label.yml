@@ -48,20 +48,19 @@ jobs:
           if [[ -z "$src" ]]; then
             echo "not a backport PR; nothing to do"; exit 0
           fi
-          # Keep each downstream's marker; old cd-contributed maps to PAI-contributed.
-          src_labels=$(gh pr view "$src" -R "$REPO" --json labels -q '.labels[].name')
-          labels=()
-          if echo "$src_labels" | grep -qx 'PAI-contributed' || echo "$src_labels" | grep -qx 'cd-contributed'; then
-            labels+=(PAI-contributed)
-          fi
-          if echo "$src_labels" | grep -qx 'MS-contributed'; then
-            labels+=(MS-contributed)
-          fi
-          if [[ ${#labels[@]} -eq 0 ]]; then
+          # Does the source (main) PR carry the contributed marker? Accept the old
+          # `cd-contributed` or the new `PAI-contributed` during the rename transition.
+          if gh pr view "$src" -R "$REPO" --json labels -q '.labels[].name' | grep -qxE 'cd-contributed|PAI-contributed'; then
+            gh label create PAI-contributed -R "$REPO" -c 5319e7 -f >/dev/null 2>&1 || true
+            gh pr edit "$PR_NUMBER" -R "$REPO" --add-label PAI-contributed
+            echo "added PAI-contributed to #$PR_NUMBER (source main #$src)"
+          else
             echo "source main #$src has no contributed marker; skip"
           fi
-          for label in "${labels[@]}"; do
-            gh label create "$label" -R "$REPO" -c 5319e7 -f >/dev/null 2>&1 || true
-            gh pr edit "$PR_NUMBER" -R "$REPO" --add-label "$label"
-            echo "added $label to #$PR_NUMBER (source main #$src)"
-          done
+          if gh pr view "$src" -R "$REPO" --json labels -q '.labels[].name' | grep -qx 'MS-contributed'; then
+            gh label create MS-contributed -R "$REPO" -c 5319e7 -f >/dev/null 2>&1 || true
+            gh pr edit "$PR_NUMBER" -R "$REPO" --add-label MS-contributed
+            echo "added MS-contributed to #$PR_NUMBER (source main #$src)"
+          else
+            echo "source main #$src has no MS-contributed marker; skip"
+          fi
