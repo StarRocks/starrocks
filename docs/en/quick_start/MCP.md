@@ -53,6 +53,10 @@ The **Olist dataset** is downloaded automatically when you load the data via `ka
 Apple Silicon: StarRocks leans on AVX2 (x86); use an ARM build or expect slower emulation.
 :::
 
+### A MinIO AIStor license
+
+The instructions for acquiring a free tier license will be provided after you clone the demo repository.
+
 ---
 
 ## Terminology
@@ -127,6 +131,14 @@ This directory contains just enough to get you going. It deliberately contains *
 
 ---
 
+## Acquire a MinIO AIStor license
+
+MinIO AIStor requires a license to run. You can use an existing license, or you can request a new MinIO AIStor Free Tier license.
+
+To request a new MinIO AIStor Free Tier license, go to the [MinIO AIStor pricing](https://min.io/pricing) page and select Get Started under the Free tier to obtain a free license. The free tier license allows you to run MinIO AIStor on a single compute resource with one or more drives.
+
+Place the license file in your local clone of the `StarRocks/demo` repo you cloned in the previous step, in the `demo/documentation-samples/MCP` directory.
+
 ## Bring up StarRocks and MinIO
 
 ```bash
@@ -150,7 +162,7 @@ If the CN is not reporting healthy just wait a few seconds and check again — i
 
 ## Create a bucket in MinIO
 
-Open the MinIO console at [http://localhost:9001](http://localhost:9001) (login `miniouser` / `M!n10R0cks`), click **Create Bucket**, and create the bucket `my-starrocks-bucket`.
+Open the MinIO console at [http://localhost:9001](http://localhost:9001) (login `miniouser` / `M!n10R0cks`), click **Add Bucket**, and create the bucket `my-starrocks-bucket`.
 
 ---
 
