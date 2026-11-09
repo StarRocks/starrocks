@@ -419,15 +419,17 @@ Status BinaryPlainPageDecoder<Type>::next_range_with_filter(
         }
 
         auto data_column = ColumnHelper::get_data_column(dst);
-        RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(data_column, *temp_data_column, selection, num_rows));
+        RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(data_column, *temp_data_column, selection, num_rows,
+                                                                  selected_count));
 
         if (dst->is_nullable()) {
             auto* nullable_column = down_cast<NullableColumn*>(dst);
             if (null != nullptr) {
                 // Append null flags for selected rows if null_data is provided
                 auto* temp_nullable = down_cast<NullableColumn*>(temp_eval_column->as_mutable_raw_ptr());
-                RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(
-                        nullable_column->null_column_raw_ptr(), *temp_nullable->null_column(), selection, num_rows));
+                RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(nullable_column->null_column_raw_ptr(),
+                                                                          *temp_nullable->null_column(), selection,
+                                                                          num_rows, selected_count));
                 nullable_column->update_has_null();
             } else {
                 // The page has no null flags (all values are not-null), but destination can still be nullable.

@@ -20,10 +20,12 @@
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "common/config_exec_flow_fwd.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_streaming_sink_operator.h"
+#include "exec/sorted_streaming_aggregator.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
@@ -332,6 +334,61 @@ TEST_F(StreamingAggSinkExecuteModeTest,
         EXPECT_EQ(20, out_col->get_data()[0]);
         EXPECT_EQ(40, out_col->get_data()[1]);
     }
+}
+
+TEST_F(StreamingAggSinkExecuteModeTest,
+       sorted_streaming_build_group_by_columns_precomputes_selected_and_short_circuits_empty) {
+    SortedStreamingAggregator aggregator(convert_to_aggregator_params(_tnode));
+    aggregator._agg_stat = &_agg_stat;
+    aggregator._cmp_vector = {0, 0, 0, 0};
+
+    auto col0 = Int32Column::create();
+    col0->append(10);
+    col0->append(20);
+    col0->append(30);
+    col0->append(40);
+
+    auto col1_data = Int64Column::create();
+    col1_data->append(100);
+    col1_data->append(200);
+    col1_data->append(300);
+    col1_data->append(400);
+    auto col1_null = NullColumn::create();
+    col1_null->append(0);
+    col1_null->append(1);
+    col1_null->append(1);
+    col1_null->append(0);
+    auto col1 = NullableColumn::create(std::move(col1_data), std::move(col1_null));
+
+    aggregator._group_by_columns = {col0, col1};
+
+    // Mixed selection (selector[i] == 0 means selected under PositiveSelect = false)
+    Filter mixed_selector = {0, 1, 0, 1};
+    MutableColumns out_cols;
+    out_cols.emplace_back(Int32Column::create());
+    out_cols.emplace_back(NullableColumn::create(Int64Column::create(), NullColumn::create()));
+
+    ASSERT_TRUE(aggregator._build_group_by_columns(4, mixed_selector, out_cols).ok());
+    ASSERT_EQ(2u, out_cols[0]->size());
+    ASSERT_EQ(2u, out_cols[1]->size());
+    const auto* out_col0 = down_cast<const Int32Column*>(out_cols[0].get());
+    EXPECT_EQ(10, out_col0->get_data()[0]);
+    EXPECT_EQ(30, out_col0->get_data()[1]);
+    const auto* out_col1 = down_cast<const NullableColumn*>(out_cols[1].get());
+    const auto* out_col1_data = down_cast<const Int64Column*>(out_col1->data_column().get());
+    EXPECT_EQ(100, out_col1_data->get_data()[0]);
+    EXPECT_EQ(300, out_col1_data->get_data()[1]);
+    EXPECT_FALSE(out_col1->is_null(0));
+    EXPECT_TRUE(out_col1->is_null(1));
+
+    // Empty selection (selector = {1, 1, 1, 1} -> selected_count == 0 under PositiveSelect = false).
+    // Place a nullptr sentinel in _group_by_columns to verify that _build_group_by_columns short-circuits
+    // before entering the per-column loop when selected_count == 0.
+    Filter none_selector = {1, 1, 1, 1};
+    aggregator._group_by_columns = {nullptr, nullptr};
+    ASSERT_TRUE(aggregator._build_group_by_columns(4, none_selector, out_cols).ok());
+    EXPECT_EQ(2u, out_cols[0]->size());
+    EXPECT_EQ(2u, out_cols[1]->size());
 }
 
 } // namespace starrocks::pipeline
