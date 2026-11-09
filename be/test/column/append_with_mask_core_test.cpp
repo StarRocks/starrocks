@@ -585,4 +585,171 @@ TEST(AppendWithMaskCoreTest, sparseSelectionDoesNotOverAllocateCapacity) {
     }
 }
 
+TEST(AppendWithMaskCoreTest, appendWithPrecomputedSelectedCountAndSparseBitmask) {
+    // 1. Test 5-argument append_with_mask<true> and append_with_mask<false> on Int64Column,
+    // BinaryColumn, and NullableColumn (with nulls and without nulls) across all-selected,
+    // none-selected, and mixed masks.
+    constexpr size_t kRows = 64;
+    auto int_src = Int64Column::create();
+    auto bin_src = BinaryColumn::create();
+    auto null_with_nulls_src = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    auto null_no_nulls_src = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    for (size_t i = 0; i < kRows; ++i) {
+        int_src->append(static_cast<int64_t>(i * 7));
+        bin_src->append("val_" + std::to_string(i));
+        null_no_nulls_src->append_datum(Datum(static_cast<int64_t>(i * 3)));
+        if (i % 5 == 0) {
+            null_with_nulls_src->append_nulls(1);
+        } else {
+            null_with_nulls_src->append_datum(Datum(static_cast<int64_t>(i * 3)));
+        }
+    }
+
+    std::vector<uint8_t> all_mask(kRows, 1);
+    std::vector<uint8_t> none_mask(kRows, 0);
+    std::vector<uint8_t> mixed_mask(kRows, 0);
+    size_t mixed_pos_selected = 0;
+    for (size_t i = 0; i < kRows; ++i) {
+        if (i % 3 == 0) {
+            mixed_mask[i] = 1;
+            ++mixed_pos_selected;
+        }
+    }
+
+    struct MaskCase {
+        const std::vector<uint8_t>* mask;
+        size_t pos_selected;
+        size_t neg_selected;
+    };
+    const std::vector<MaskCase> cases = {
+            {&all_mask, kRows, 0},
+            {&none_mask, 0, kRows},
+            {&mixed_mask, mixed_pos_selected, kRows - mixed_pos_selected},
+    };
+
+    for (const auto& tc : cases) {
+        // PositiveSelect = true
+        {
+            auto int_dst = Int64Column::create();
+            ASSERT_TRUE(append_with_mask<true>(int_dst.get(), *int_src, tc.mask->data(), kRows, tc.pos_selected).ok());
+            ASSERT_EQ(tc.pos_selected, int_dst->size());
+
+            auto bin_dst = BinaryColumn::create();
+            ASSERT_TRUE(append_with_mask<true>(bin_dst.get(), *bin_src, tc.mask->data(), kRows, tc.pos_selected).ok());
+            ASSERT_EQ(tc.pos_selected, bin_dst->size());
+
+            auto null_with_dst = NullableColumn::create(Int64Column::create(), NullColumn::create());
+            ASSERT_TRUE(append_with_mask<true>(null_with_dst.get(), *null_with_nulls_src, tc.mask->data(), kRows,
+                                               tc.pos_selected)
+                                .ok());
+            ASSERT_EQ(tc.pos_selected, null_with_dst->size());
+
+            auto null_no_dst = NullableColumn::create(Int64Column::create(), NullColumn::create());
+            ASSERT_TRUE(append_with_mask<true>(null_no_dst.get(), *null_no_nulls_src, tc.mask->data(), kRows,
+                                               tc.pos_selected)
+                                .ok());
+            ASSERT_EQ(tc.pos_selected, null_no_dst->size());
+            EXPECT_FALSE(null_no_dst->has_null());
+
+            size_t out_idx = 0;
+            for (size_t i = 0; i < kRows; ++i) {
+                if ((*tc.mask)[i] != 0) {
+                    EXPECT_EQ(int_src->get_data()[i], int_dst->get_data()[out_idx]);
+                    EXPECT_EQ(bin_src->get_slice(i).to_string(), bin_dst->get_slice(out_idx).to_string());
+                    EXPECT_EQ(null_with_nulls_src->is_null(i), null_with_dst->is_null(out_idx));
+                    if (!null_with_nulls_src->is_null(i)) {
+                        EXPECT_EQ(null_with_nulls_src->get(i).get_int64(), null_with_dst->get(out_idx).get_int64());
+                    }
+                    EXPECT_EQ(null_no_nulls_src->get(i).get_int64(), null_no_dst->get(out_idx).get_int64());
+                    ++out_idx;
+                }
+            }
+            EXPECT_EQ(tc.pos_selected, out_idx);
+        }
+
+        // PositiveSelect = false
+        {
+            auto int_dst = Int64Column::create();
+            ASSERT_TRUE(append_with_mask<false>(int_dst.get(), *int_src, tc.mask->data(), kRows, tc.neg_selected).ok());
+            ASSERT_EQ(tc.neg_selected, int_dst->size());
+
+            auto bin_dst = BinaryColumn::create();
+            ASSERT_TRUE(append_with_mask<false>(bin_dst.get(), *bin_src, tc.mask->data(), kRows, tc.neg_selected).ok());
+            ASSERT_EQ(tc.neg_selected, bin_dst->size());
+
+            auto null_with_dst = NullableColumn::create(Int64Column::create(), NullColumn::create());
+            ASSERT_TRUE(append_with_mask<false>(null_with_dst.get(), *null_with_nulls_src, tc.mask->data(), kRows,
+                                                tc.neg_selected)
+                                .ok());
+            ASSERT_EQ(tc.neg_selected, null_with_dst->size());
+
+            auto null_no_dst = NullableColumn::create(Int64Column::create(), NullColumn::create());
+            ASSERT_TRUE(append_with_mask<false>(null_no_dst.get(), *null_no_nulls_src, tc.mask->data(), kRows,
+                                                tc.neg_selected)
+                                .ok());
+            ASSERT_EQ(tc.neg_selected, null_no_dst->size());
+            EXPECT_FALSE(null_no_dst->has_null());
+
+            size_t out_idx = 0;
+            for (size_t i = 0; i < kRows; ++i) {
+                if ((*tc.mask)[i] == 0) {
+                    EXPECT_EQ(int_src->get_data()[i], int_dst->get_data()[out_idx]);
+                    EXPECT_EQ(bin_src->get_slice(i).to_string(), bin_dst->get_slice(out_idx).to_string());
+                    EXPECT_EQ(null_with_nulls_src->is_null(i), null_with_dst->is_null(out_idx));
+                    if (!null_with_nulls_src->is_null(i)) {
+                        EXPECT_EQ(null_with_nulls_src->get(i).get_int64(), null_with_dst->get(out_idx).get_int64());
+                    }
+                    EXPECT_EQ(null_no_nulls_src->get(i).get_int64(), null_no_dst->get(out_idx).get_int64());
+                    ++out_idx;
+                }
+            }
+            EXPECT_EQ(tc.neg_selected, out_idx);
+        }
+    }
+
+    // 2. Test 1% sparse selectivity (count = 4096, 41 selected at i % 100 == 0) for both
+    // PositiveSelect = true and PositiveSelect = false on Int64Column, verifying exact output
+    // values and exact vector capacity (41) with zero over-allocation.
+    constexpr size_t kSparseCount = 4096;
+    constexpr size_t kExpectedSparseSelected = 41;
+    auto sparse_src = Int64Column::create();
+    for (size_t i = 0; i < kSparseCount; ++i) {
+        sparse_src->append(static_cast<int64_t>(100000 + i));
+    }
+
+    // PositiveSelect = true (mask[i] = 1 at i % 100 == 0)
+    {
+        std::vector<uint8_t> pos_mask(kSparseCount, 0);
+        for (size_t i = 0; i < kSparseCount; i += 100) {
+            pos_mask[i] = 1;
+        }
+        auto dst = Int64Column::create();
+        ASSERT_TRUE(
+                append_with_mask<true>(dst.get(), *sparse_src, pos_mask.data(), kSparseCount, kExpectedSparseSelected)
+                        .ok());
+        ASSERT_EQ(kExpectedSparseSelected, dst->size());
+        EXPECT_EQ(41u, dst->get_data().capacity());
+        for (size_t idx = 0; idx < kExpectedSparseSelected; ++idx) {
+            EXPECT_EQ(static_cast<int64_t>(100000 + idx * 100), dst->get_data()[idx]);
+        }
+    }
+
+    // PositiveSelect = false (mask[i] = 0 at i % 100 == 0, 1 elsewhere)
+    {
+        std::vector<uint8_t> neg_mask(kSparseCount, 1);
+        for (size_t i = 0; i < kSparseCount; i += 100) {
+            neg_mask[i] = 0;
+        }
+        auto dst = Int64Column::create();
+        ASSERT_TRUE(
+                append_with_mask<false>(dst.get(), *sparse_src, neg_mask.data(), kSparseCount, kExpectedSparseSelected)
+                        .ok());
+        ASSERT_EQ(kExpectedSparseSelected, dst->size());
+        EXPECT_EQ(41u, dst->get_data().capacity());
+        for (size_t idx = 0; idx < kExpectedSparseSelected; ++idx) {
+            EXPECT_EQ(static_cast<int64_t>(100000 + idx * 100), dst->get_data()[idx]);
+        }
+    }
+}
+
 } // namespace starrocks

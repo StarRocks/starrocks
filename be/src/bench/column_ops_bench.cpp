@@ -49,6 +49,7 @@
 #include "column/append_with_mask.h"
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 
 namespace starrocks {
 
@@ -523,6 +524,31 @@ BENCHMARK_TEMPLATE(BM_AppendWithMask_Binary, kClustered, false)
         ->Arg(50)
         ->Arg(90)
         ->Arg(100);
+
+static void BM_AppendWithMask_NullableInt64_Alternating(benchmark::State& state) {
+    const int selectivity = static_cast<int>(state.range(0));
+    const size_t n = kChunk;
+    auto data_col = Int64Column::create();
+    auto null_col = NullColumn::create();
+    for (size_t i = 0; i < n; ++i) {
+        data_col->append(static_cast<int64_t>(i));
+        null_col->append(static_cast<uint8_t>((i % 7 == 0) ? 1 : 0));
+    }
+    auto src = NullableColumn::create(std::move(data_col), std::move(null_col));
+    std::vector<uint8_t> mask(n);
+    generate_pattern_mask(mask.data(), n, selectivity, kAlternating);
+
+    auto dst = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    for (auto _ : state) {
+        dst->resize(0);
+        Status st = append_with_mask<true>(dst.get(), *src, mask.data(), n);
+        benchmark::DoNotOptimize(st);
+        benchmark::DoNotOptimize(dst->size());
+    }
+    state.SetItemsProcessed(state.iterations() * n);
+}
+
+BENCHMARK(BM_AppendWithMask_NullableInt64_Alternating)->Arg(0)->Arg(1)->Arg(10)->Arg(50)->Arg(100);
 
 static void GenerateAppendInt32MatrixArgs(benchmark::Benchmark* b) {
     for (int64_t n : {16, 64, 512, 4096, 65536}) {
