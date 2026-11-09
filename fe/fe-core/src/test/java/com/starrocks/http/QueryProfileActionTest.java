@@ -13,9 +13,12 @@
 // limitations under the License.
 package com.starrocks.http;
 
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.http.action.QueryProfileAction;
 import okhttp3.Request;
 import okhttp3.Response;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -25,24 +28,11 @@ import java.lang.reflect.Method;
 public class QueryProfileActionTest extends StarRocksHttpTestCase {
 
     private static final String QUERY_PLAN_URI = "/query_profile";
-<<<<<<< HEAD
-=======
     private static final String QUERY_ID = "eaff21d2-3734-11ee-909f-8e20563011de";
-
-    // The access check is off by default; these tests turn it on and restore the default afterwards.
-    @BeforeEach
-    public void enableAccessCheck() {
-        Config.authorization_enable_query_profile_access_check = true;
-    }
 
     @AfterEach
     public void restoreDefaults() {
         ProfileManager.getInstance().clearProfiles();
-        Config.authorization_enable_query_profile_access_check = false;
-    }
-
-    private static void pushProfileRunBy(String user) {
-        pushProfile(user, "select count(*) from lineorder");
     }
 
     private static void pushProfile(String user, String sql) {
@@ -54,19 +44,6 @@ public class QueryProfileActionTest extends StarRocksHttpTestCase {
         summary.addInfoString(ProfileManager.SQL_STATEMENT, sql);
         profile.addChild(summary);
         ProfileManager.getInstance().pushProfile(null, profile);
-    }
-
-    // The web gate asks for NODE, which the stub always grants; only the profile rule asks for OPERATE.
-    private static void stubOperate(boolean granted) {
-        new MockUp<Authorizer>() {
-            @Mock
-            public void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)
-                    throws AccessDeniedException {
-                if (privilegeType == PrivilegeType.OPERATE && !granted) {
-                    throw new AccessDeniedException("Access denied; OPERATE on SYSTEM required");
-                }
-            }
-        };
     }
 
     private Response getProfilePageAsRoot() throws IOException {
@@ -82,45 +59,12 @@ public class QueryProfileActionTest extends StarRocksHttpTestCase {
     public void testMultiLineSqlIsHtmlEncoded() throws IOException {
         // Only the first line of the statement shares a line with "Sql Statement"; the payload is on the second.
         pushProfile("root", "select 'line1',\n'<img src=x onerror=\"alert(1)\">' as c2");
-        stubOperate(true);
         Response response = getProfilePageAsRoot();
         String body = response.body().string();
         Assertions.assertEquals(200, response.code(), body);
         Assertions.assertFalse(body.contains("<img src=x"), body);
         Assertions.assertTrue(body.contains("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;"), body);
     }
-
-    @Test
-    public void testOwnerReadsOwnProfileWithoutOperate() throws IOException {
-        pushProfileRunBy("root");
-        stubOperate(false);
-        Response response = getProfilePageAsRoot();
-        String body = response.body().string();
-        Assertions.assertEquals(200, response.code(), body);
-        Assertions.assertTrue(body.contains("Query ID: " + QUERY_ID), body);
-    }
-
-    @Test
-    public void testOtherUsersProfileDeniedWithoutOperate() throws IOException {
-        pushProfileRunBy("someone_else");
-        stubOperate(false);
-        Response response = getProfilePageAsRoot();
-        String body = response.body().string();
-        Assertions.assertEquals(403, response.code(), body);
-        Assertions.assertTrue(body.contains("Access denied"), body);
-        Assertions.assertFalse(body.contains("Sql Statement"), body);
-    }
-
-    @Test
-    public void testOperateHolderReadsOtherUsersProfile() throws IOException {
-        pushProfileRunBy("someone_else");
-        stubOperate(true);
-        Response response = getProfilePageAsRoot();
-        String body = response.body().string();
-        Assertions.assertEquals(200, response.code(), body);
-        Assertions.assertTrue(body.contains("Query ID: " + QUERY_ID), body);
-    }
->>>>>>> 8e42fd5 ([BugFix] HTML-encode every line on the FE web console /query_profile page (backport #82641) (#82653))
 
     private void sendHttp() throws IOException {
         Request request = new Request.Builder()
