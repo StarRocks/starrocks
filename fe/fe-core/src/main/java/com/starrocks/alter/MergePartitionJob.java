@@ -23,6 +23,7 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -67,6 +68,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.OptimizeRange;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -261,6 +263,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             DistributionDesc distributionDesc, long warehouseId) throws DdlException {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         ExpressionRangePartitionInfo sourcePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        List<Column> partitionColumns = sourcePartitionInfo.getPartitionColumns(olapTable.getIdToColumn());
 
         // Group source partitions by target partition ranges and calculate sizes
         // This handles the n:m relationship between source and target partitions
@@ -281,7 +284,6 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             if (sourcePartition == null) {
                 continue;
             }
-            LOG.info("create temp partition from partition values: {} {}", partitionValues, sourcePartitionId);
 
             AddPartitionClause addPartitionClause;
             try (AutoCloseableLock ignore = new AutoCloseableLock(
@@ -296,12 +298,31 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
 
             PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
             List<String> partitionNames;
+            Range<PartitionKey> targetRange;
             if (partitionDesc instanceof RangePartitionDesc) {
+<<<<<<< HEAD
                 partitionNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
+=======
+                RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
+                partitionNames = rangePartitionDesc.getPartitionNames();
+                Preconditions.checkState(rangePartitionDesc.getSingleRangePartitionDescs().size() == 1);
+                targetRange = getRange(rangePartitionDesc.getSingleRangePartitionDescs().get(0).getPartitionKeyDesc(),
+                        partitionColumns);
+>>>>>>> 732b120 ([BugFix][RB-919] Leave merged partitions alone when merging partitions again (#82408))
             } else {
                 throw new DdlException("Unsupported partitionDesc");
             }
             Preconditions.checkState(partitionNames.size() == 1);
+            // A source partition that spans its whole target partition has nothing to merge. It is the partition an
+            // earlier merge into the same granularity made, whose rewrite would only copy it under its own name, or a
+            // coarser one, which does not fit into the target partition of its lower bound. Leave it as it is. No
+            // other source partition maps to the same target partition, since that one would overlap this one.
+            if (range.encloses(targetRange)) {
+                LOG.info("merge partition job {} leaves partition {} {} as it is, it already spans target partition {} {}",
+                        jobId, sourcePartition.getName(), range, partitionNames.get(0), targetRange);
+                continue;
+            }
+            LOG.info("create temp partition from partition values: {} {}", partitionValues, sourcePartitionId);
             targetPartitionToSourceIds.computeIfAbsent(partitionNames.get(0), k -> Lists.newArrayList()).add(sourcePartitionId);
             targetPartitionToSourceDataSize.merge(partitionNames.get(0), sourcePartition.getDataSize(), Long::sum);
             targetPartitionToAddPartitionClause.put(partitionNames.get(0), addPartitionClause);
@@ -342,16 +363,54 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                 LOG.warn(ex);
                 throw new DdlException(ex.getMessage());
             }
-            Partition partition = olapTable.getPartition(partitionName, true);
-            if (partition == null) {
-                throw new DdlException("Partition " + partitionName
-                        + " does not exist in table " + olapTable.getName());
+            Partition partition;
+            // Loads may add partitions to the table meanwhile, since automatic partition creation goes on in OPTIMIZE
+            // state, so look the partitions up under the table lock.
+            try (AutoCloseableLock ignore = new AutoCloseableLock(
+                    new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ)) {
+                partition = olapTable.getPartition(partitionName, true);
+                if (partition == null) {
+                    // addPartitions skips a temp partition whose name a partition already has (IF NOT EXISTS).
+                    if (olapTable.getPartition(partitionName) != null) {
+                        throw new DdlException("Cannot merge partitions "
+                                + getPartitionNames(olapTable, targetSourcePartitionIds) + " into partition "
+                                + partitionName + ": table " + olapTable.getName()
+                                + " already has a partition named " + partitionName);
+                    }
+                    throw new DdlException("Partition " + partitionName
+                            + " does not exist in table " + olapTable.getName());
+                }
             }
             LOG.info("create temp partition {} from {}", partitionName, targetSourcePartitionIds);
             for (Long sourcePartitionId : targetSourcePartitionIds) {
                 tempPartitionIdToSourcePartitionIds.put(partition.getId(), sourcePartitionId);
             }
         }
+    }
+
+    /**
+     * The range of the partition that the key desc of an automatic partition describes.
+     */
+    private static Range<PartitionKey> getRange(PartitionKeyDesc partitionKeyDesc, List<Column> partitionColumns)
+            throws DdlException {
+        try {
+            PartitionKey lower = PartitionKey.createPartitionKey(partitionKeyDesc.getLowerValues(), partitionColumns);
+            PartitionKey upper = partitionKeyDesc.isMax()
+                    ? PartitionKey.createInfinityPartitionKey(partitionColumns, true)
+                    : PartitionKey.createPartitionKey(partitionKeyDesc.getUpperValues(), partitionColumns);
+            return Range.closedOpen(lower, upper);
+        } catch (AnalysisException e) {
+            throw new DdlException("Invalid range of merged partition " + partitionKeyDesc + ": " + e.getMessage());
+        }
+    }
+
+    private static List<String> getPartitionNames(OlapTable olapTable, List<Long> partitionIds) {
+        return partitionIds.stream()
+                .map(olapTable::getPartition)
+                .filter(partition -> partition != null)
+                .map(Partition::getName)
+                .sorted()
+                .collect(Collectors.toList());
     }
 
     /**
