@@ -189,7 +189,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.buildFrom;
@@ -2034,10 +2033,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             // For MCV we can take the unmatched values of the preserve side and the matched ones of the joined MCVs
             // For Buckets we keep the values of the preserved side
             Histogram rawHistogram = raw.getHistogram();
-            Map<String, Long> mcv = new HashMap<>(rawHistogram.getMCV());
-            mcv.putAll(current.getHistogram().getMCV());
-            Histogram histogram = new Histogram(raw.getHistogram().getBuckets(), mcv);
-
+            Histogram currentHistogram = current.getHistogram();
+            Histogram histogram = rawHistogram;
+            if (rawHistogram != null && currentHistogram != null) {
+                Map<String, Long> mcv = new HashMap<>(rawHistogram.getMCV());
+                mcv.putAll(currentHistogram.getMCV());
+                histogram = new Histogram(rawHistogram.getBuckets(), mcv);
+            }
             restored.put(column, ColumnStatistic.buildFrom(current)
                     .setMinValue(raw.getMinValue())
                     .setMaxValue(raw.getMaxValue())
