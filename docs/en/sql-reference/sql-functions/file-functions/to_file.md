@@ -38,8 +38,8 @@ Returns a FILE value. If `struct_expr` is NULL, returns NULL.
 - Missing fields and explicit NULL values become NULL. No defaults are filled in, including for `offset` and `size`.
 - For each non-NULL STRUCT, exactly one of `uri` and `inline` must be non-NULL. Missing fields count as NULL.
 - Integer inputs are widened to BIGINT. Untyped NULL is accepted for every field. Other input types require an explicit CAST.
-- `offset` and `size` can be NULL; non-NULL values must be greater than or equal to zero. A row that violates these rules or the `uri`/`inline` rule causes the query to fail. To return NULL for such rows instead, use [try_to_file](try_to_file.md).
-- URI syntax, MIME types, checksums, and consistency between size and payload length are not validated.
+- For URI references, `offset` and `size` can be NULL; non-NULL values must be greater than or equal to zero. For inline content, both fields must be NULL. A row that violates these rules or the `uri`/`inline` rule causes the query to fail. To return NULL for such rows instead, use [try_to_file](try_to_file.md).
+- URI syntax, MIME types, checksums, and the referenced byte range are not validated.
 - `inline` contains raw bytes. Empty strings and empty binary values count as non-NULL and are preserved.
 
 ## Examples
@@ -61,15 +61,15 @@ SELECT to_file(named_struct('uri', 'https://example.com/a.jpg', 'content_type', 
 ### Example 2: Construct inline content
 
 ```sql
-SELECT to_file(named_struct('inline', to_binary('610062', 'hex'), 'size', 3)) AS f;
+SELECT to_file(named_struct('inline', to_binary('610062', 'hex'))) AS f;
 ```
 
 ```plaintext
-+-------------------------------------------------------------------------------------------+
-| f                                                                                         |
-+-------------------------------------------------------------------------------------------+
-| {"uri":null,"offset":null,"size":3,"content_type":null,"checksum":null,"inline":"610062"} |
-+-------------------------------------------------------------------------------------------+
++----------------------------------------------------------------------------------------------+
+| f                                                                                            |
++----------------------------------------------------------------------------------------------+
+| {"uri":null,"offset":null,"size":null,"content_type":null,"checksum":null,"inline":"610062"} |
++----------------------------------------------------------------------------------------------+
 ```
 
 ### Example 3: NULL argument

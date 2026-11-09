@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/file_column.h"
@@ -59,8 +60,8 @@ TEST(FileFunctionsTest, ReorderedFieldsAndBinaryPayload) {
                              TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARCHAR)});
     auto input = ColumnHelper::create_column(type, false);
     std::string bytes("a\0b", 3);
-    input->append_datum(Datum(DatumStruct{Datum(Slice(bytes)), Datum(int64_t(3)), Datum(), Datum(Slice("opaque")),
-                                          Datum(int64_t(0)), Datum(Slice("arbitrary"))}));
+    input->append_datum(Datum(DatumStruct{Datum(Slice(bytes)), Datum(), Datum(), Datum(Slice("opaque")),
+                                          Datum(), Datum(Slice("arbitrary"))}));
     input->append_datum(Datum(DatumStruct{Datum(), Datum(std::numeric_limits<int64_t>::max()),
                                           Datum(Slice("not a URI")), Datum(), Datum(), Datum()}));
     auto context = make_context(type);
@@ -70,8 +71,8 @@ TEST(FileFunctionsTest, ReorderedFieldsAndBinaryPayload) {
     ASSERT_TRUE(result.value()->is_file());
     auto actual = result.value()->get(0).get_struct();
     EXPECT_TRUE(actual[FileColumn::URI].is_null());
-    EXPECT_EQ(0, actual[FileColumn::OFFSET].get_int64());
-    EXPECT_EQ(3, actual[FileColumn::SIZE].get_int64());
+    EXPECT_TRUE(actual[FileColumn::OFFSET].is_null());
+    EXPECT_TRUE(actual[FileColumn::SIZE].is_null());
     EXPECT_EQ("arbitrary", actual[FileColumn::CONTENT_TYPE].get_slice().to_string());
     EXPECT_EQ("opaque", actual[FileColumn::CHECKSUM].get_slice().to_string());
     EXPECT_EQ(bytes, actual[FileColumn::INLINE].get_slice().to_string());
@@ -176,8 +177,12 @@ TEST(FileFunctionsTest, RejectInvalidValues) {
             {{Datum(), Datum(), Datum(), Datum()}, "exactly one of 'uri' and 'inline'"},
             {{Datum(Slice("")), Datum(Slice("")), Datum(), Datum()}, "exactly one of 'uri' and 'inline'"},
             {{Datum(Slice("private-uri")), Datum(), Datum(int64_t(-1)), Datum()}, "'offset' must be >= 0"},
-            {{Datum(), Datum(Slice("private-bytes")), Datum(), Datum(std::numeric_limits<int64_t>::min())},
-             "'size' must be >= 0"}};
+            {{Datum(Slice("private-uri")), Datum(), Datum(), Datum(std::numeric_limits<int64_t>::min())},
+             "'size' must be >= 0"},
+            {{Datum(), Datum(Slice("private-bytes")), Datum(int64_t(0)), Datum()},
+             "'offset' and 'size' to be NULL for inline content"},
+            {{Datum(), Datum(Slice("private-bytes")), Datum(), Datum(int64_t(3))},
+             "'offset' and 'size' to be NULL for inline content"}};
     auto context = make_context(type);
     for (const auto& test : cases) {
         for (bool constant : {false, true}) {
@@ -212,59 +217,57 @@ TEST(FileFunctionsTest, RejectInvalidValues) {
     }
 }
 
-class FileConstructorCowTest : public testing::TestWithParam<FileFunction> {};
+class FileConstructorIsolationTest : public testing::TestWithParam<FileFunction> {};
 
-TEST_P(FileConstructorCowTest, CopyOnWriteIsolation) {
+TEST_P(FileConstructorIsolationTest, FilterSourceAndResultTogether) {
     auto type = struct_type({"uri", "size"}, {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_BIGINT)});
     auto context = make_context(type);
     for (bool nullable : {false, true}) {
-        for (bool mutate_input : {false, true}) {
+        for (bool output_first : {false, true}) {
             auto source = ColumnHelper::create_column(type, nullable);
             source->append_datum(Datum(DatumStruct{Datum(Slice("a")), Datum(int64_t(1))}));
-            source->append_datum(Datum(DatumStruct{Datum(Slice("b")), Datum(int64_t(2))}));
+            if (nullable) {
+                source->append_nulls(1);
+            } else {
+                source->append_datum(Datum(DatumStruct{Datum(Slice("b")), Datum(int64_t(2))}));
+            }
+            source->append_datum(Datum(DatumStruct{Datum(Slice("c")), Datum(int64_t(3))}));
+            source->append_datum(Datum(DatumStruct{Datum(Slice("d")), Datum(int64_t(4))}));
             ColumnPtr input = std::move(source);
             auto result = GetParam()(context.get(), {input});
             ASSERT_TRUE(result.ok()) << result.status();
             ColumnPtr output = std::move(result).value();
             const auto* input_data = down_cast<const StructColumn*>(ColumnHelper::get_data_column(input.get()));
             const auto* output_data = down_cast<const FileColumn*>(ColumnHelper::get_data_column(output.get()));
-            EXPECT_EQ(input_data->fields()[0].get(), output_data->fields()[FileColumn::URI].get());
-            EXPECT_EQ(input_data->fields()[1].get(), output_data->fields()[FileColumn::SIZE].get());
+            EXPECT_NE(input_data->fields()[0].get(), output_data->fields()[FileColumn::URI].get());
+            EXPECT_NE(input_data->fields()[1].get(), output_data->fields()[FileColumn::SIZE].get());
             if (nullable) {
-                EXPECT_EQ(down_cast<const NullableColumn*>(input.get())->null_column().get(),
+                EXPECT_NE(down_cast<const NullableColumn*>(input.get())->null_column().get(),
                           down_cast<const NullableColumn*>(output.get())->null_column().get());
             }
-            if (mutate_input) {
-                auto writable = Column::mutate(std::move(input));
-                writable->append_datum(Datum(DatumStruct{Datum(Slice("c")), Datum(int64_t(3))}));
-                if (nullable) {
-                    auto* value = down_cast<NullableColumn*>(writable.get());
-                    value->null_column_data()[0] = 1;
-                    value->update_has_null();
-                }
-                EXPECT_EQ(2, output->size());
-                EXPECT_FALSE(output->is_null(0));
-                EXPECT_EQ("a", output->get(0).get_struct()[FileColumn::URI].get_slice().to_string());
-                EXPECT_EQ(2, output->get(1).get_struct()[FileColumn::SIZE].get_int64());
-            } else {
-                auto writable = Column::mutate(std::move(output));
-                writable->append_datum(
-                        Datum(DatumStruct{Datum(Slice("c")), Datum(), Datum(int64_t(3)), Datum(), Datum(), Datum()}));
-                if (nullable) {
-                    auto* value = down_cast<NullableColumn*>(writable.get());
-                    value->null_column_data()[0] = 1;
-                    value->update_has_null();
-                }
-                EXPECT_EQ(2, input->size());
-                EXPECT_FALSE(input->is_null(0));
-                EXPECT_EQ("a", input->get(0).get_struct()[0].get_slice().to_string());
-                EXPECT_EQ(2, input->get(1).get_struct()[1].get_int64());
+            const std::array<std::string, 3> expected_input = {
+                    input->debug_item(1), input->debug_item(2), input->debug_item(3)};
+            const std::array<std::string, 3> expected_output = {
+                    output->debug_item(1), output->debug_item(2), output->debug_item(3)};
+            Chunk chunk;
+            chunk.append_column(output_first ? output : input, 0);
+            chunk.append_column(output_first ? input : output, 1);
+            // Exercise the actual raw-mutation consumer, without calling Column::mutate() in the test.
+            Filter filter = {0, 1, 1, 1};
+            ASSERT_EQ(3, chunk.filter(filter));
+            ASSERT_EQ(3, input->size());
+            ASSERT_EQ(3, output->size());
+            input->check_or_die();
+            output->check_or_die();
+            for (size_t row = 0; row < 3; ++row) {
+                EXPECT_EQ(expected_input[row], input->debug_item(row));
+                EXPECT_EQ(expected_output[row], output->debug_item(row));
             }
         }
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(FileFunctions, FileConstructorCowTest,
+INSTANTIATE_TEST_SUITE_P(FileFunctions, FileConstructorIsolationTest,
                          testing::Values(FileFunctions::to_file, FileFunctions::try_to_file));
 
 TEST(FileFunctionsTest, EmptyBatch) {
@@ -275,11 +278,11 @@ TEST(FileFunctionsTest, EmptyBatch) {
     EXPECT_EQ(0, result.value()->size());
 }
 
-TEST(FileFunctionsTest, GettersShareFieldsAndMergeOuterNulls) {
+TEST(FileFunctionsTest, GettersIsolateFieldsAndMergeOuterNulls) {
     const std::string bytes("a\0b", 3);
     for (bool outer_null : {false, true}) {
         auto file = FileColumn::create();
-        // A FILE from another producer need not obey TO_FILE's construction rules.
+        // Populate every field to test raw projection independently of constructor validation.
         file->append_datum(Datum(DatumStruct{Datum(Slice("uri")), Datum(int64_t(7)), Datum(int64_t(3)),
                                              Datum(Slice("image/jpeg")), Datum(Slice("opaque")), Datum(Slice(bytes))}));
         file->append_default();
@@ -292,6 +295,8 @@ TEST(FileFunctionsTest, GettersShareFieldsAndMergeOuterNulls) {
             nulls->get_data()[0] = 1;
             input = NullableColumn::create(input, std::move(nulls));
         }
+        Chunk chunk;
+        chunk.append_column(input, 0);
         for (size_t i = 0; i < kGetters.size(); ++i) {
             SCOPED_TRACE(i);
             auto context = std::unique_ptr<FunctionContext>(FunctionContext::create_context(
@@ -301,13 +306,13 @@ TEST(FileFunctionsTest, GettersShareFieldsAndMergeOuterNulls) {
             EXPECT_EQ(3, result.value()->size());
             const auto* projected = down_cast<const NullableColumn*>(result.value().get());
             const auto* field = down_cast<const NullableColumn*>(fields[i].get());
-            EXPECT_EQ(field->data_column().get(), projected->data_column().get());
+            EXPECT_NE(field->data_column().get(), projected->data_column().get());
             if (outer_null) {
                 EXPECT_TRUE(result.value()->is_null(0));
                 EXPECT_FALSE(fields[i]->is_null(0));
                 EXPECT_NE(field->null_column().get(), projected->null_column().get());
             } else {
-                EXPECT_EQ(fields[i].get(), result.value().get());
+                EXPECT_NE(fields[i].get(), result.value().get());
                 if (kFieldTypes[i] == TYPE_BIGINT) {
                     EXPECT_EQ(i == FileColumn::OFFSET ? 7 : 3, result.value()->get(0).get_int64());
                 } else {
@@ -322,6 +327,20 @@ TEST(FileFunctionsTest, GettersShareFieldsAndMergeOuterNulls) {
             } else {
                 EXPECT_EQ("", result.value()->get(2).get_slice().to_string());
             }
+            chunk.append_column(result.value(), static_cast<SlotId>(i + 1));
+        }
+        std::vector<std::array<std::string, 2>> expected;
+        for (const auto& column : chunk.columns()) {
+            expected.push_back({column->debug_item(0), column->debug_item(2)});
+        }
+        Filter filter = {1, 0, 1};
+        ASSERT_EQ(2, chunk.filter(filter));
+        for (size_t i = 0; i < chunk.columns().size(); ++i) {
+            const auto& column = chunk.columns()[i];
+            ASSERT_EQ(2, column->size());
+            column->check_or_die();
+            EXPECT_EQ(expected[i][0], column->debug_item(0));
+            EXPECT_EQ(expected[i][1], column->debug_item(1));
         }
     }
 }

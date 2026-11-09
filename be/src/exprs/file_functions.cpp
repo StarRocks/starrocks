@@ -81,6 +81,8 @@ StatusOr<NullColumnPtr> validate_file_fields(const std::array<ColumnPtr, FileCol
         const char* error = nullptr;
         if (fields[FileColumn::URI]->is_null(row) == fields[FileColumn::INLINE]->is_null(row)) {
             error = "TO_FILE requires exactly one of 'uri' and 'inline' to be non-NULL";
+        } else if (!fields[FileColumn::INLINE]->is_null(row) && (!offset.is_null(row) || !size.is_null(row))) {
+            error = "TO_FILE requires 'offset' and 'size' to be NULL for inline content";
         } else if (!offset.is_null(row) && offset.value(row) < 0) {
             error = "TO_FILE field 'offset' must be >= 0";
         } else if (!size.is_null(row) && size.value(row) < 0) {
@@ -171,14 +173,16 @@ StatusOr<ColumnPtr> to_file_impl(FunctionContext* context, const Columns& column
     ColumnPtr result = FileColumn::create(std::move(fields));
     if (nulls != nullptr) {
         result = NullableColumn::create(result, nulls);
+        nulls.reset();
     }
     if (input->is_constant()) {
         result = ConstColumn::create(std::move(result), input->size());
     }
-    return result;
+    // Chunk filters columns in place without acquiring COW ownership, including their children.
+    return Column::mutate(std::move(result));
 }
 
-// Project the field through the FILE's outer NULLs without copying its data.
+// Project the field through the FILE's outer NULLs.
 template <FileColumn::FileField Field>
 StatusOr<ColumnPtr> get_file_field(const Columns& columns) {
     const auto& input = columns[0];
@@ -198,7 +202,8 @@ StatusOr<ColumnPtr> get_file_field(const Columns& columns) {
     if (input->is_constant()) {
         result = ConstColumn::create(std::move(result), input->size());
     }
-    return result;
+    // The source FILE and this field may be filtered together in the same Chunk.
+    return Column::mutate(std::move(result));
 }
 
 } // namespace

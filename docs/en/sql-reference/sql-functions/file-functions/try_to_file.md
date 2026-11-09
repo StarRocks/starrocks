@@ -24,7 +24,7 @@ FILE try_to_file(STRUCT struct_expr)
 
 ## Return value
 
-Returns a FILE value. A NULL STRUCT returns NULL. A non-NULL STRUCT returns NULL if `uri` and `inline` are both NULL or both non-NULL, or if a non-NULL `offset` or `size` is negative.
+Returns a FILE value. If conversion to FILE fails, returns NULL.
 
 ## Usage notes
 

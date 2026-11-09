@@ -24,7 +24,7 @@ FILE try_to_file(STRUCT struct_expr)
 
 ## 戻り値
 
-FILE 値を返します。NULL STRUCT は NULL を返します。非 NULL STRUCT では、`uri` と `inline` が両方 NULL または両方非 NULL の場合、あるいは非 NULL の `offset` または `size` が負の場合、その行は NULL を返します。
+FILE 値を返します。FILE への変換に失敗した場合は、NULL を返します。
 
 ## 使用上の注意
 

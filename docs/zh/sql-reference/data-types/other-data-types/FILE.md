@@ -29,7 +29,7 @@ FILE 是一种标量类型，用于描述一个文件或文件内部的一段字
 一个 FILE 值属于以下两种形式之一：
 
 - **引用**：`uri` 有值，通常同时带有 `offset` 和 `size`，`inline` 为 NULL。
-- **内联内容**：`inline` 保存内容字节，`uri` 为 NULL。`offset` 和 `size` 可选。
+- **内联内容**：`inline` 保存内容字节，`uri`、`offset` 和 `size` 必须均为 NULL。
 
 ## 输出格式
 

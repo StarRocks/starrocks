@@ -1,6 +1,6 @@
 -- name: test_to_file
 select to_file(named_struct('content_type', 'image/jpeg', 'URI', 's3://bucket/a.jpg'));
-select to_file(named_struct('inline', to_binary('610062', 'hex'), 'size', 3, 'uri', NULL, 'offset', 0, 'checksum', 'opaque'));
+select to_file(named_struct('inline', to_binary('610062', 'hex'), 'size', NULL, 'uri', NULL, 'offset', NULL, 'checksum', 'opaque'));
 select to_file(named_struct('inline', to_binary('', 'hex')));
 select to_file(named_struct('uri', '', 'offset', 0, 'size', 0));
 select to_file(NULL) is null, to_file(cast(NULL as struct<uri varchar(20)>)) is null;
@@ -8,6 +8,8 @@ select to_file(named_struct('content_type', 'image/jpeg'));
 select to_file(named_struct('inline', to_binary('', 'hex'), 'uri', ''));
 select to_file(named_struct('uri', 'a', 'offset', -1));
 select to_file(named_struct('inline', to_binary('61', 'hex'), 'size', -1));
+select to_file(named_struct('inline', to_binary('61', 'hex'), 'offset', 0));
+select to_file(named_struct('inline', to_binary('61', 'hex'), 'size', 3));
 create database test_to_file_${uuid0};
 use test_to_file_${uuid0};
 create table input_files (id int, uri char(16), payload varbinary, file_size int, metadata struct<uri varchar(256), size int>)
@@ -27,8 +29,8 @@ drop database test_to_file_${uuid0};
 -- name: test_file_getters
 select fl_get_uri(f), fl_get_offset(f), fl_get_size(f), fl_get_content_type(f), fl_get_checksum(f), fl_get_inline(f) is null
 from (select to_file(named_struct('URI', 'a.jpg', 'size', 12, 'offset', 0, 'checksum', 'opaque', 'content_type', 'image/jpeg')) f) t;
-select fl_get_uri(f) is null, fl_get_offset(f) is null, fl_get_size(f), fl_get_content_type(f) is null, fl_get_checksum(f) is null, hex(fl_get_inline(f))
-from (select to_file(named_struct('inline', to_binary('610062', 'hex'), 'size', 3)) f) t;
+select fl_get_uri(f) is null, fl_get_offset(f) is null, fl_get_size(f) is null, fl_get_content_type(f) is null, fl_get_checksum(f) is null, hex(fl_get_inline(f))
+from (select to_file(named_struct('inline', to_binary('610062', 'hex'))) f) t;
 select length(fl_get_uri(to_file(named_struct('uri', '')))), length(fl_get_inline(to_file(named_struct('inline', to_binary('', 'hex')))));
 select fl_get_uri(NULL) is null;
 
@@ -46,7 +48,7 @@ create table input_files (id int, uri varchar(256), payload varbinary, file_offs
 duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
 insert into input_files values
 (1, 'a.jpg', NULL, 0, 12),
-(2, NULL, to_binary('610062', 'hex'), NULL, 3),
+(2, NULL, to_binary('610062', 'hex'), NULL, NULL),
 (3, NULL, NULL, 0, 0),
 (4, 'both', to_binary('61', 'hex'), 0, 1),
 (5, 'negative-offset', NULL, -1, 1),

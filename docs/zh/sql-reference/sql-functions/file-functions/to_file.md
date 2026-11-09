@@ -38,8 +38,8 @@ FILE to_file(STRUCT struct_expr)
 - 缺失字段和显式 NULL 均填为 NULL，不补默认值，包括 `offset` 和 `size`。
 - 对于每个非 NULL STRUCT，`uri` 和 `inline` 必须恰好一个非 NULL；字段缺失等同于 NULL。
 - 整数输入扩宽为 BIGINT。每个字段都接受未定型 NULL。其他输入类型需要显式 CAST。
-- `offset`、`size` 可以为 NULL；非 NULL 值必须大于等于 0。任意一行违反此规则或 `uri`/`inline` 二选一规则，查询都会失败。如需对这类行返回 NULL，请使用 [try_to_file](try_to_file.md)。
-- 不校验 URI 格式、MIME 类型、校验和，以及 size 与实际字节长度是否一致。
+- URI 引用的 `offset`、`size` 可以为 NULL；非 NULL 值必须大于等于 0。内联内容的 `offset`、`size` 必须均为 NULL。任意一行违反此规则或 `uri`/`inline` 二选一规则，查询都会失败。如需对这类行返回 NULL，请使用 [try_to_file](try_to_file.md)。
+- 不校验 URI 格式、MIME 类型、校验和，以及引用的字节范围。
 - `inline` 保存原始字节。空字符串和零长度二进制值仍算非 NULL，并会被保留。
 
 ## 示例
@@ -61,15 +61,15 @@ SELECT to_file(named_struct('uri', 'https://example.com/a.jpg', 'content_type', 
 ### 示例 2：构造内联内容
 
 ```sql
-SELECT to_file(named_struct('inline', to_binary('610062', 'hex'), 'size', 3)) AS f;
+SELECT to_file(named_struct('inline', to_binary('610062', 'hex'))) AS f;
 ```
 
 ```plaintext
-+-------------------------------------------------------------------------------------------+
-| f                                                                                         |
-+-------------------------------------------------------------------------------------------+
-| {"uri":null,"offset":null,"size":3,"content_type":null,"checksum":null,"inline":"610062"} |
-+-------------------------------------------------------------------------------------------+
++----------------------------------------------------------------------------------------------+
+| f                                                                                            |
++----------------------------------------------------------------------------------------------+
+| {"uri":null,"offset":null,"size":null,"content_type":null,"checksum":null,"inline":"610062"} |
++----------------------------------------------------------------------------------------------+
 ```
 
 ### 示例 3：NULL 参数

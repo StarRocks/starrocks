@@ -24,7 +24,7 @@ FILE try_to_file(STRUCT struct_expr)
 
 ## 返回值
 
-返回 FILE 值。NULL STRUCT 返回 NULL。对于非 NULL STRUCT，`uri` 和 `inline` 都为 NULL、都非 NULL，或非 NULL 的 `offset`、`size` 小于 0 时，该行返回 NULL。
+返回 FILE 值。如果转换 FILE 失败，则直接返回 NULL。
 
 ## 使用说明
 
