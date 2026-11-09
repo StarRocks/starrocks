@@ -953,6 +953,37 @@ PROPERTIES (
 - `flat_json.sparsity.factor` (オプション): 同名の列の割合のしきい値。同名の列の割合がこの値よりも低い場合、その列はFlat JSONによって抽出されません。このパラメータは、`flat_json.enable`が`true`に設定されている場合にのみ有効です。デフォルト値: `0.3`。
 - `flat_json.column.max` (オプション): Flat JSONによって抽出できるサブフィールドの最大数。このパラメータは、`flat_json.enable`が`true`に設定されている場合にのみ有効です。デフォルト値: `100`。
 
+<<<<<<< HEAD
+=======
+### クラウドネイティブテーブルで Light-weight Tablet Creation を有効にする
+
+*クラウドネイティブ（共有データ）テーブルでのみ利用できます*
+
+クラウドネイティブテーブルで Light-weight Tablet Creation を有効にすると、通常の `CreateReplicaTask` の BE/CN ノードへのディスパッチをスキップできます。
+
+`light_weight_tablet_creation` を `true` に設定すると、次のようになります。
+
+- DDL 操作（CREATE TABLE や ADD PARTITION など）では `CreateReplicaTask` の発行がスキップされ、作成時に v1 タブレットメタデータやスキーマファイルがオブジェクトストレージに書き込まれません。
+
+- 初期タブレットメタデータは、オブジェクトストレージに事前に格納されるのではなく、必要に応じて FE から遅延取得されます。
+
+このプロパティを CREATE TABLE 実行時に明示的に設定しない場合、FE 設定 `lake_enable_light_weight_tablet_creation`（デフォルト: `false`）に従います。
+
+### 範囲ベースの分散を使用するテーブルのタブレット目標サイズ
+
+*範囲ベースの分散を使用するテーブルでのみ利用できます*
+
+プロパティ `tablet_reshard_target_size` を設定すると、範囲ベースの分散を使用するテーブルに独自のタブレット目標サイズを指定できます。同じ名前の FE 設定 `tablet_reshard_target_size` が正の値の場合、このテーブルでは、タブレットの自動分割と自動統合にその設定ではなくこの値が使用されます。単位: バイト。値は正の整数である必要があります。
+
+```SQL
+PROPERTIES (
+    "tablet_reshard_target_size" = "4294967296"
+)
+```
+
+このプロパティにデフォルト値はなく、設定しない場合は FE 設定 `tablet_reshard_target_size` に従います。範囲ベースの分散を使用しないテーブルに設定すると、`tablet_reshard_target_size is only supported for range-distributed tables` というエラーになります。このプロパティは [ALTER TABLE](ALTER_TABLE.md) で変更または削除できます。詳細については、[データ分散 - タブレットの目標サイズ](../../../table_design/data_distribution/Data_distribution.md#タブレットの目標サイズ)を参照してください。
+
+>>>>>>> 389dfaac411... [Enhancement][RB-96] Add the tablet_reshard_target_size table property for range-distributed tables (#68535)
 ### 統計情報の自動収集で特定のテーブルをスキップする
 
 `enable_statistic_auto_collect` を `false` に設定すると、統計情報の自動収集でそのテーブルがスキップされます。デフォルト: `true`。

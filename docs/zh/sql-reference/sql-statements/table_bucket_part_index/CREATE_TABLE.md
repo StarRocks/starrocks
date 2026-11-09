@@ -1005,6 +1005,37 @@ PROPERTIES (
 - `flat_json.sparsity.factor`（可选）：同名列的比例阈值。如果同名列的比例低于此值，则 Flat JSON 不会提取该列。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.3`。
 - `flat_json.column.max`（可选）：Flat JSON 可提取的最大子字段数。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`100`。
 
+<<<<<<< HEAD
+=======
+### 为云原生表启用轻量级 Tablet 创建
+
+*仅适用于云原生（存算分离）表*
+
+为云原生表启用 Light-weight Tablet Creation 后，表可以跳过通常向 BE/CN 节点分发的 `CreateReplicaTask`。
+
+将 `light_weight_tablet_creation` 设置为 `true` 后：
+
+- DDL 操作（例如 CREATE TABLE 和 ADD PARTITION）会跳过 `CreateReplicaTask` 的下发，并且在创建时不会将 v1 Tablet 元数据或 Schema 文件写入对象存储。
+
+- 初始 Tablet 元数据不会预先写入对象存储，而是在需要时从 FE 延迟获取。
+
+如果未在 CREATE TABLE 时显式设置此属性，则该属性遵循 FE 配置 `lake_enable_light_weight_tablet_creation`（默认值：`false`）。
+
+### 为基于范围分布的表指定 Tablet 目标大小
+
+*仅适用于基于范围分布的表*
+
+通过属性 `tablet_reshard_target_size` 可以为基于范围分布的表单独指定 Tablet 目标大小。当同名的 FE 配置项 `tablet_reshard_target_size` 为正数时，该表自动拆分、合并 Tablet 会以该属性值代替配置项的值。单位：字节。取值必须为正整数。
+
+```SQL
+PROPERTIES (
+    "tablet_reshard_target_size" = "4294967296"
+)
+```
+
+该属性没有默认值，未设置时以 FE 配置项 `tablet_reshard_target_size` 作为目标大小。在其他分布方式的表上设置该属性时，语句会报错 `tablet_reshard_target_size is only supported for range-distributed tables`。可以通过 [ALTER TABLE](ALTER_TABLE.md) 修改或删除该属性。更多信息，请参阅[数据分布 - Tablet 目标大小](../../../table_design/data_distribution/Data_distribution.md#tablet-目标大小)。
+
+>>>>>>> 389dfaac411... [Enhancement][RB-96] Add the tablet_reshard_target_size table property for range-distributed tables (#68535)
 ### 在自动采集统计信息时跳过某张表
 
 将 `enable_statistic_auto_collect` 设置为 `false` 后，自动采集统计信息时会跳过该表。默认值：`true`。

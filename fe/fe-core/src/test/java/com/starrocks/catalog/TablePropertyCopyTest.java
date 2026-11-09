@@ -92,4 +92,36 @@ public class TablePropertyCopyTest {
         Assertions.assertTrue(copied.hasDelete());
         Assertions.assertTrue(copied.hasForbiddenGlobalDict());
     }
+<<<<<<< HEAD
+=======
+
+    // enableChangeDataCapture is a derived scalar field (built from the properties map, not re-derived on
+    // copy). ADD PARTITION copies the table via TableProperty.copy(), so the copy must carry the field or the
+    // new partition's tablets are created with change data capture off even though the table enabled it.
+    @Test
+    public void testCopyPreservesEnableChangeDataCapture() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_CHANGE_DATA_CAPTURE, "true");
+        TableProperty original = new TableProperty(properties);
+        original.buildEnableChangeDataCapture();
+        Assertions.assertTrue(original.enableChangeDataCapture());
+
+        Assertions.assertTrue(original.copy().enableChangeDataCapture());
+    }
+
+    // The tablet split/merge target size is derived from the map like enableChangeDataCapture, so the copy
+    // must carry the field and the map entry together.
+    @Test
+    public void testCopyPreservesTabletReshardTargetSize() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "1073741824");
+        TableProperty original = new TableProperty(properties);
+        original.buildTabletReshardTargetSize();
+
+        TableProperty copied = original.copy();
+        Assertions.assertEquals(1073741824L, copied.getTabletReshardTargetSize());
+        Assertions.assertEquals("1073741824",
+                copied.getProperties().get(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE));
+    }
+>>>>>>> 389dfaac411... [Enhancement][RB-96] Add the tablet_reshard_target_size table property for range-distributed tables (#68535)
 }
