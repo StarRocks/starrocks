@@ -4555,8 +4555,16 @@ public class SchemaChangeHandler extends AlterHandler {
                 ? schemaChangeJobV2.cancel(reason, true)
                 : schemaChangeJobV2.cancel(reason);
         if (!cancelled) {
-            throw new DdlException("Job can not be cancelled. State: " + schemaChangeJobV2.getJobState()
-                    + (force ? "" : " (consider retrying with CANCEL ALTER TABLE ... FORCE if the publish is stuck)"));
+            String hint;
+            if (!force) {
+                hint = " (consider retrying with CANCEL ALTER TABLE ... FORCE if the publish is stuck)";
+            } else if (schemaChangeJobV2.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING) {
+                // The no-op publish failed. The job no longer publishes on its own, so it waits for this retry.
+                hint = " (the no-op publish failed; retry CANCEL ALTER TABLE ... FORCE)";
+            } else {
+                hint = "";
+            }
+            throw new DdlException("Job can not be cancelled. State: " + schemaChangeJobV2.getJobState() + hint);
         }
     }
 
