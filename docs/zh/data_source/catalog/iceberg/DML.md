@@ -253,7 +253,7 @@ WHERE <condition>
 
 ### 使用说明
 
-- 仅支持 **format-version 2** 的 Iceberg 表。对 V1 和 V3 表执行 UPDATE 会在分析阶段被拒绝。
+- 仅支持 **format-version 2** 的 Iceberg 表。对 V1、V3 和 V4 表执行 UPDATE 会在分析阶段被拒绝。
 - 必须指定 `WHERE` 子句，以防误更新全表。
 - 不支持更新分区列。 如需修改分区归属，请使用 `INSERT OVERWRITE`。
 - 不允许在 `SET` 中赋值给隐藏的元数据列 `_file` 和 `_pos`。
@@ -367,7 +367,7 @@ ON <merge_condition>
 
 ### 使用说明
 
-- 仅支持 **format-version 2** 的 Iceberg 表。对 V1、V3 表或非 Iceberg 表（例如原生 OLAP 表）执行 MERGE INTO 会在分析阶段被拒绝。
+- 仅支持 **format-version 2** 的 Iceberg 表。对 V1、V3、V4 表或非 Iceberg 表（例如原生 OLAP 表）执行 MERGE INTO 会在分析阶段被拒绝。
 - 至少需要一个 `WHEN` 子句。
 - 每个目标行**最多只能被一个源行匹配**。若某个目标行匹配了多个源行，语句会在运行时失败，而不是执行有歧义的变更。必要时请提前对源进行去重或聚合。
 - 在 `WHEN MATCHED ... THEN UPDATE` 子句中不能更新分区列。
