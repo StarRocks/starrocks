@@ -212,6 +212,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
     protected boolean isCommitting = false;
 
     protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
+    // Whether the history row is to be recorded when the write lock is released. Guarded by the write lock.
+    private boolean historyPending = false;
 
     // this request id is only used for checking if a load begin request is a duplicate request.
     protected TUniqueId requestId;
@@ -252,7 +254,26 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
     }
 
     protected void writeUnlock() {
+        // The history row is taken once the lock is released: toThrift() looks the transaction
+        // up, and the transaction manager must not be entered with the job lock held.
+        boolean record = historyPending && lock.getWriteHoldCount() == 1;
+        if (record) {
+            historyPending = false;
+        }
         lock.writeLock().unlock();
+        if (record) {
+            LoadsHistoryWriter.offer(this::toThrift);
+        }
+    }
+
+    // Record the final state of this job in loads_history, after the write lock is released
+    // when the caller holds it.
+    private void recordHistoryAfterUnlock() {
+        if (lock.isWriteLockedByCurrentThread()) {
+            historyPending = true;
+        } else {
+            LoadsHistoryWriter.offer(this::toThrift);
+        }
     }
 
     @Override
@@ -740,6 +761,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
         // can be remove due to label expiration so soon as possible
         finishTimestamp = createTimestamp;
         state = JobState.UNKNOWN;
+        recordHistoryAfterUnlock();
     }
 
     private void executeLoad() {
@@ -864,6 +886,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
         } else {
             state = JobState.CANCELLED;
         }
+        recordHistoryAfterUnlock();
     }
 
     private void executeFinish() {
@@ -878,6 +901,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
         }
         // when load job finished, there is no need to hold the tasks which are the biggest memory consumers.
         idToTasks.clear();
+        recordHistoryAfterUnlock();
     }
 
     public boolean checkDataQuality() {

@@ -529,6 +529,24 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - タイプ: 瞬時値
 - 説明: ロード Sink クローズスレッドプールの最大スレッド数。`load_sink_close_thread_pool_num_max` で設定します。
 
+## `loads_history_dropped_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: `_statistics_.loads_history` に書き込まれる前に Leader FE が破棄した完了済みロードレコードの合計数。メモリ内キューが満杯の場合 (`loads_history_queue_max_rows`、デフォルト 100000、または `loads_history_queue_max_bytes`)、またはレコードの書き込みが 3 回連続で失敗した場合に破棄されます。破棄されたレコードは、後でバックストップ同期によってコピーされます (`loads_history_sync_interval_second` を参照)。
+
+## `loads_history_flush_latency_ms`
+
+- 単位: ミリ秒
+- タイプ: 瞬時値
+- 説明: 完了済みロードレコードを `_statistics_.loads_history` に最後に正常にバッチ書き込みしたときの所要時間。
+
+## `loads_history_queue_rows`
+
+- 単位: カウント
+- タイプ: 瞬時値
+- 説明: Leader FE のメモリ内で `_statistics_.loads_history` への書き込みを待っている完了済みロードレコードの数。
+
 ## `local_column_pool_bytes (Deprecated)`
 
 ## `low_cardinality_dict_cache_bytes`

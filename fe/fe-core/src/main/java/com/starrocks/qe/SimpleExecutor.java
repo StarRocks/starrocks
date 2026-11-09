@@ -28,6 +28,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.SqlParser;
@@ -87,19 +88,32 @@ public class SimpleExecutor {
     }
 
     public void executeDML(String sql) {
-        executeDMLOrControl(sql, SqlType.DML);
+        executeDMLOrControl(sql, SqlType.DML, null);
+    }
+
+    /**
+     * Execute a DML statement whose text is too large to log, writing {@code auditText}
+     * to the internal audit log and error log in place of the statement.
+     */
+    public void executeDML(String sql, String auditText) {
+        executeDMLOrControl(sql, SqlType.DML, auditText);
     }
 
     public void executeControl(String sql) {
-        executeDMLOrControl(sql, SqlType.CONTROL);
+        executeDMLOrControl(sql, SqlType.CONTROL, null);
     }
 
-    private void executeDMLOrControl(String sql, SqlType type) {
+    private void executeDMLOrControl(String sql, SqlType type, String auditText) {
         ConnectContext prev = ConnectContext.get();
         try {
             ConnectContext context = createConnectContext();
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-            sql = formatSQL(sql, parsedStmt);
+            if (auditText != null) {
+                // The executor logs the statement text when it fails or is retried; keep the
+                // values the summary stands for out of the log there as well.
+                parsedStmt.setOrigStmt(new OriginStatement(auditText, 0));
+            }
+            sql = auditText != null ? auditText : formatSQL(sql, parsedStmt);
             if (type == SqlType.DML) {
                 Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be DML statement");
             }

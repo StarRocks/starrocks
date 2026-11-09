@@ -111,6 +111,7 @@ import com.starrocks.load.loadv2.InsertLoadTxnCallbackFactory;
 import com.starrocks.load.loadv2.LoadErrorUtils;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
+import com.starrocks.load.loadv2.LoadsHistoryWriter;
 import com.starrocks.metric.ConnectorMetricsMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
@@ -3736,8 +3737,12 @@ public class StmtExecutor {
 
             context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
             InsertLoadJob loadJob = null;
+            // The FE's own writes to the load history tables are not load jobs: one runs every few
+            // seconds, and as jobs they would push the user's loads out of the kept labels.
+            boolean internalLoadHistoryWrite = isInternalStmt
+                    && LoadsHistoryWriter.isInternalLoadTable(database.getFullName(), targetTable.getName());
             if (!(targetTable.isIcebergTable() || targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
-                    targetTable.isBlackHoleTable())) {
+                    targetTable.isBlackHoleTable() || internalLoadHistoryWrite)) {
                 InsertLoadTxnCallback insertLoadTxnCallback =
                         InsertLoadTxnCallbackFactory.of(context, database.getId(), targetTable);
                 // insert, update and delete job

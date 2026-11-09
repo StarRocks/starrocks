@@ -848,21 +848,6 @@ public class StreamLoadMgr implements MemoryTrackable {
         return Estimator.estimate(idToStreamLoadTask, 20);
     }
 
-    public long getLatestFinishTime() {
-        long latestTime = -1L;
-        readLock();
-        try {
-            for (AbstractStreamLoadTask task : idToStreamLoadTask.values()) {
-                if (task instanceof StreamLoadTask && ((StreamLoadTask) task).isFinal()) {
-                    latestTime = Math.max(latestTime, ((StreamLoadTask) task).getFinishTimestampMs());
-                }
-            }
-        } finally {
-            readUnlock();
-        }
-        return latestTime;
-    }
-
     public Map<Long, Long> getRunningTaskCount() {
         readLock();
         try {

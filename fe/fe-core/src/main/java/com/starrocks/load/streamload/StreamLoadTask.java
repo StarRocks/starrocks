@@ -45,6 +45,7 @@ import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.LoadConstants;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.load.loadv2.LoadsHistoryWriter;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
@@ -1087,7 +1088,9 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     this.channels.set(i, State.CANCELLED);
                 }
                 this.state = State.CANCELLED;
+                this.endTimeMs = System.currentTimeMillis();
                 writeUnlock();
+                recordFinalState();
             }
         } catch (Exception e) {
             LOG.warn("stream load " + label + " abort txn fail, errmsg: " + e.getMessage());
@@ -1345,6 +1348,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 coord.cancel(txnStatusChangeReason);
                 QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
             }
+            applyBackendAttachment(txnState);
             for (int i = 0; i < channelNum; i++) {
                 this.channels.set(i, State.CANCELLED);
             }
@@ -1358,6 +1362,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             // sync stream load related query info should unregister here
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
+        recordFinalState();
         WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "StreamLoad: label[" + label + "]");
     }
 
@@ -1383,6 +1388,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     public void afterVisible(TransactionState txnState) {
         writeLock();
         try {
+            applyBackendAttachment(txnState);
             for (int i = 0; i < channelNum; i++) {
                 channels.set(i, State.FINISHED);
             }
@@ -1395,6 +1401,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         } finally {
             writeUnlock();
         }
+        recordFinalState();
         WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "StreamLoad: label[" + label + "]");
     }
 
@@ -1432,6 +1439,29 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         }
         endTimeMs = System.currentTimeMillis();
         state = State.CANCELLED;
+        recordFinalState();
+    }
+
+    /**
+     * Take the row counters and the tracking URL a backend sent with its commit or abort request.
+     * The request handler passes them to {@link #setLoadState} only after the transaction call
+     * returned, which is after the callback that ends this task and records its row; the
+     * transaction carries the same attachment, so the callback reads it from there first.
+     * Caller holds the write lock.
+     */
+    private void applyBackendAttachment(TransactionState txnState) {
+        TxnCommitAttachment attachment = txnState.getTxnCommitAttachment();
+        if (attachment instanceof ManualLoadTxnCommitAttachment || attachment instanceof RLTaskTxnCommitAttachment) {
+            setLoadState(attachment, errorMsg);
+        }
+    }
+
+    /**
+     * Hand the row of this task to the loads_history writer once it reached FINISHED or
+     * CANCELLED. Called without the task lock held; the conversion takes the read lock itself.
+     */
+    private void recordFinalState() {
+        LoadsHistoryWriter.offerAll(this::toThrift);
     }
 
     /**
@@ -1484,6 +1514,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
         if (becameVisible) {
+            recordFinalState();
             WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "StreamLoad: label[" + label + "]");
         }
     }
@@ -1513,6 +1544,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         } finally {
             writeUnlock();
         }
+        recordFinalState();
     }
 
     private void replayTxnAttachment(TransactionState txnState) {

@@ -529,6 +529,24 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: The maximum number of threads in the load sink close thread pool, set by `load_sink_close_thread_pool_num_max`.
 
+## `loads_history_dropped_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of finished load records that the Leader FE dropped before they could be written to `_statistics_.loads_history`. A record is dropped when the in-memory queue is full (`loads_history_queue_max_rows`, default 100000, or `loads_history_queue_max_bytes`) or when writing it failed three times in a row. Dropped records are copied later by the backstop sync (see `loads_history_sync_interval_second`).
+
+## `loads_history_flush_latency_ms`
+
+- Unit: ms
+- Type: Instantaneous
+- Description: Duration of the last successful batch write of finished load records to `_statistics_.loads_history`.
+
+## `loads_history_queue_rows`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of finished load records waiting in the memory of the Leader FE to be written to `_statistics_.loads_history`.
+
 ## `local_column_pool_bytes (Deprecated)`
 
 ## `low_cardinality_dict_cache_bytes`
