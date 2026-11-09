@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.FunctionPreimage;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -45,6 +46,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -751,6 +754,20 @@ public class IcebergFunctionPreimageTest {
                 converter.convert(List.of(year2024, month13), context).toString());
         // strict conversion never uses preimages
         Assertions.assertNull(converter.convertStrict(List.of(year2024, monthIn), context));
+    }
+
+    @Test
+    public void testConjunctPreimageNotConvertible() {
+        // a conjunct preimage the visitor cannot convert (here: a column outside the schema) is skipped
+        ColumnRefOperator unknown = new ColumnRefOperator(9, IntegerType.INT, "unknown", true, false);
+        ScalarOperator derived = new BinaryPredicateOperator(BinaryType.EQ, unknown, ConstantOperator.createInt(1));
+        ScalarOperator iEq = new BinaryPredicateOperator(BinaryType.EQ, I, ConstantOperator.createInt(1));
+        try (MockedStatic<FunctionPreimage> mocked = Mockito.mockStatic(FunctionPreimage.class,
+                Mockito.CALLS_REAL_METHODS)) {
+            mocked.when(() -> FunctionPreimage.deriveConjuncts(Mockito.anyList(), Mockito.any()))
+                    .thenReturn(List.of(derived));
+            Assertions.assertEquals(Expressions.equal("i", 1).toString(), convert(iEq).toString());
+        }
     }
 
     @Test
