@@ -406,6 +406,19 @@ TEST_F(LanceConnectorTest, RejectsNestedDecimalNarrowingAndScaleChanges) {
     }
 }
 
+TEST_F(LanceConnectorTest, PreservesLegacyDecimalMapping) {
+    arrow::Decimal128Builder builder(arrow::decimal128(18, 2));
+    ASSERT_TRUE(builder.Append(arrow::Decimal128(12345)).ok());
+    std::shared_ptr<arrow::Array> array;
+    ASSERT_TRUE(builder.Finish(&array).ok());
+    const auto* tuple = tuple_for_type(TypeDescriptor::create_decimalv2_type(18, 2));
+    ASSERT_NE(nullptr, tuple);
+    auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("id", array->type())}), 1, {array});
+    ChunkPtr chunk;
+    ASSERT_OK(LanceNativeReader::convert_batch(_state.get(), tuple, batch, &chunk));
+    EXPECT_EQ("123.45", chunk->get_column_by_index(0)->get(0).get_decimal().to_string());
+}
+
 TEST_F(LanceConnectorTest, PreservesUnsignedIntegerRange) {
     const auto* tuple = tuple_for_type(TypeDescriptor(TYPE_BIGINT));
     ASSERT_NE(nullptr, tuple);
