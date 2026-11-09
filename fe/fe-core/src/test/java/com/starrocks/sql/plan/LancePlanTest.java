@@ -65,9 +65,9 @@ public class LancePlanTest extends PlanTestBase {
                 new Column("id", INT),
                 new Column("embedding", LanceApiConverter.parseType("fixed_size_list<float32, 128>"))
         );
-        LanceTable table = new LanceTable(20001, "vectors_table", columns, "s3://bucket/vectors", catalogName);
+        LanceTable table = new LanceTable(20001, catalogName, "vectors_table", columns, "s3://bucket/vectors");
         metadata.addTable("db1", table);
-        metadata.addTable("db1", new LanceTable(20002, "events", columns, "s3://bucket/events", catalogName));
+        metadata.addTable("db1", new LanceTable(20002, catalogName, "events", columns, "s3://bucket/events"));
 
         metadataMgr.registerMockedMetadata(catalogName, metadata);
     }
@@ -86,7 +86,7 @@ public class LancePlanTest extends PlanTestBase {
                 collectAllScanRangeParams(pair.second);
         org.junit.jupiter.api.Assertions.assertFalse(tScanRangeLocationsList.isEmpty());
         com.starrocks.thrift.THdfsScanRange hdfsScanRange = tScanRangeLocationsList.get(0).scan_range.hdfs_scan_range;
-        org.junit.jupiter.api.Assertions.assertTrue(hdfsScanRange.isUse_lance_jni_reader());
+        org.junit.jupiter.api.Assertions.assertFalse(hdfsScanRange.isSetDeprecated_use_lance_jni_reader());
         org.junit.jupiter.api.Assertions.assertFalse(hdfsScanRange.isSetLance_split_info());
     }
 

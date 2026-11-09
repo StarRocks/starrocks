@@ -25,7 +25,7 @@ description: "進行中のALTER TABLE操作の実行状態を表示します。�
 - ロールアップインデックスの追加または削除操作の実行を表示します。
 
     ```sql
-    SHOW ALTER TABLE ROLLUP [FROM db_name]
+    SHOW ALTER TABLE ROLLUP [FROM db_name] [WHERE TableName|CreateTime|FinishedTime|State] [ORDER BY] [LIMIT]
     ```
 
 ## パラメータ
@@ -37,6 +37,8 @@ description: "進行中のALTER TABLE操作の実行状態を表示します。�
   - `ROLLUP` が指定された場合、このステートメントはロールアップインデックスの追加または削除操作を表示します。
 
 - `db_name`: 任意。`db_name` が指定されていない場合、デフォルトで現在のデータベースが使用されます。
+
+- `WHERE`、`ORDER BY`、`LIMIT`: 任意。すべての alter タイプで使用できます。指定できる列は `TableName`、`CreateTime`、完了時刻、`State` です。完了時刻の列名は `COLUMN` と `OPTIMIZE` では `FinishTime`、`ROLLUP` では `FinishedTime` です。`ROLLUP` ではどちらの表記も受け付けます。
 
 ## 例
 
@@ -56,11 +58,12 @@ description: "進行中のALTER TABLE操作の実行状態を表示します。�
     SHOW ALTER TABLE ROLLUP FROM example_db;
     ```
 
-3. 指定されたテーブルでのカラムの変更またはテーブルスキーマの最適化の最新の操作の実行を表示します。
+3. 指定されたテーブルでのカラムの変更、テーブルスキーマの最適化、またはロールアップインデックスの追加の最新の操作の実行を表示します。
 
     ```sql
     SHOW ALTER TABLE COLUMN WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1;
     SHOW ALTER TABLE OPTIMIZE WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1; 
+    SHOW ALTER TABLE ROLLUP WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1;
     ```
 
 ## 参照

@@ -17,6 +17,7 @@ package com.starrocks.sql;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.PlanFragment;
@@ -123,8 +124,15 @@ public class IcebergPlannerUtils {
      * <p>
      * A self-referential DML scans the target table more than once; among identity-equal
      * candidates, the DML target is the scan producing the output row-locator slots
-     * ({@code _file}/{@code _pos} at output positions 0/1). Falls back to the first match
-     * when those slots cannot be resolved.
+     * ({@code _file}/{@code _pos} at output positions 0/1). When those slots cannot be resolved,
+     * falls back to the first scan that projects row locators ({@link IcebergScanNode#isUsedForDelete()}),
+     * then to the first match.
+     * <p>
+     * Equality-delete scans are never candidates: their synthetic table carries the target's
+     * identity, but they read delete files and plan no data files. Under the equality-delete
+     * rewrite the row locators come out of a UNION and cannot be resolved, so the fallback
+     * must land on one of the two data scans, which share the same planning result, and not on
+     * a same-table subquery scan (possibly of another snapshot) that happens to come first.
      */
     private static IcebergScanNode findScanNodeFor(ExecPlan execPlan, IcebergTable targetTable) {
         if (execPlan == null || execPlan.getScanNodes() == null || targetTable == null) {
@@ -133,6 +141,7 @@ public class IcebergPlannerUtils {
         List<IcebergScanNode> candidates = Lists.newArrayList();
         for (PlanNode node : execPlan.getScanNodes()) {
             if (node instanceof IcebergScanNode scanNode
+                    && !isEqualityDeleteScan(scanNode)
                     && scanNode.getIcebergTable().equals(targetTable)) {
                 candidates.add(scanNode);
             }
@@ -141,7 +150,18 @@ public class IcebergPlannerUtils {
             return candidates.isEmpty() ? null : candidates.get(0);
         }
         IcebergScanNode rowLocatorProducer = findRowLocatorProducingScan(execPlan, candidates);
-        return rowLocatorProducer != null ? rowLocatorProducer : candidates.get(0);
+        if (rowLocatorProducer != null) {
+            return rowLocatorProducer;
+        }
+        return candidates.stream()
+                .filter(IcebergScanNode::isUsedForDelete)
+                .findFirst()
+                .orElse(candidates.get(0));
+    }
+
+    private static boolean isEqualityDeleteScan(IcebergScanNode scanNode) {
+        IcebergMORParams morParams = scanNode.getMORParams();
+        return morParams != null && morParams.getScanTaskType() == IcebergMORParams.ScanTaskType.EQ_DELETE;
     }
 
     /**

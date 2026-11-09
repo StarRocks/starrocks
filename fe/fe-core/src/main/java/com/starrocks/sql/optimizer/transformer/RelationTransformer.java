@@ -36,7 +36,6 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorTableVersion;
-import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -663,7 +662,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
         LogicalScanOperator scanOperator;
         if (node.getTable().isNativeTableOrMaterializedView()) {
-            DistributionSpec distributionSpec = getTableDistributionSpec(node, columnMetaToColRefMap);
+            boolean parallelRangeScan = session.getSessionVariable().isParallelRangeScan();
+            DistributionSpec distributionSpec = parallelRangeScan ? DistributionSpec.createAnyDistributionSpec()
+                    : getTableDistributionSpec(node, columnMetaToColRefMap);
             if (node.isMetaQuery()) {
                 scanOperator = LogicalMetaScanOperator.builder().setTable(node.getTable())
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
@@ -684,7 +685,12 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .setSelectedTabletIds(node.getTabletIds())
                         .build();
             } else {
+                // A named tablet whose partition pruning drops is left out, so the scan reads nothing from it.
+                List<Long> tabletIds = new ArrayList<>(
+                        TabletClause.resolve((OlapTable) node.getTable(), node.getPartitionNames(),
+                                node.getTabletIds()).keySet());
                 scanOperator = LogicalOlapScanOperator.builder()
+                        .setParallelRangeScan(parallelRangeScan)
                         .setTable(node.getTable())
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
                         .setColumnMetaToColRefMap(columnMetaToColRefMap)
@@ -695,7 +701,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                                 : new PartitionNames(node.getPartitionNames().isTemp(),
                                 node.getPartitionNames().getPartitionNames(), node.getPartitionNames().getPos()))
                         .setSelectedTabletId(Lists.newArrayList())
-                        .setHintsTabletIds(node.getTabletIds())
+                        .setHintsTabletIds(tabletIds)
                         .setHintsReplicaIds(node.getReplicaIds())
                         .setHasTableHints(node.hasTableHints())
                         .setUsePkIndex(node.isUsePkIndex())
@@ -766,12 +772,12 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                     new LogicalEsScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                             columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
                             null, null);
-            EsTablePartitions esTablePartitions = ((LogicalEsScanOperator) scanOperator).getEsTablePartitions();
+            EsTable.MetaSnapshot metaSnapshot = ((LogicalEsScanOperator) scanOperator).getMetaSnapshot();
             EsTable table = (EsTable) scanOperator.getTable();
-            if (esTablePartitions == null) {
-                if (table.getLastMetaDataSyncException() != null) {
+            if (metaSnapshot.getPartitions() == null) {
+                if (metaSnapshot.getSyncException() != null) {
                     throw new StarRocksPlannerException("fetch es table [" + table.getName() + "] metadata failure: " +
-                            table.getLastMetaDataSyncException().getLocalizedMessage(), ErrorType.USER_ERROR);
+                            metaSnapshot.getSyncException().getLocalizedMessage(), ErrorType.USER_ERROR);
                 }
                 throw new StarRocksPlannerException("EsTable metadata has not been synced, Try it later",
                         ErrorType.USER_ERROR);
@@ -1375,6 +1381,17 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         return new LogicalPlan(projectBuilder, outputs, List.of());
     }
 
+    // leftOp/rightOp are the join's own column refs, shared with its ON predicate. A string-to-string
+    // cast evaluates to its input, and folding one away retypes that shared ref in place, so never
+    // build one here.
+    private ScalarOperator castToCommonType(ScalarOperator op, Type commonType) {
+        Type type = op.getType();
+        if (type.equals(commonType) || (type.isStringType() && commonType.isStringType())) {
+            return op;
+        }
+        return foldCast(new CastOperator(commonType, op, true));
+    }
+
     private ScalarOperator createCoalesceOperator(ScalarOperator leftOp, ScalarOperator rightOp) {
         Type leftType = leftOp.getType();
         Type rightType = rightOp.getType();
@@ -1383,10 +1400,8 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             commonType = leftType;
         }
 
-        ScalarOperator leftCasted = leftType.equals(commonType)
-                ? leftOp : foldCast(new CastOperator(commonType, leftOp, true));
-        ScalarOperator rightCasted = rightType.equals(commonType)
-                ? rightOp : foldCast(new CastOperator(commonType, rightOp, true));
+        ScalarOperator leftCasted = castToCommonType(leftOp, commonType);
+        ScalarOperator rightCasted = castToCommonType(rightOp, commonType);
 
         Type[] argTypes = new Type[] {commonType, commonType};
         com.starrocks.catalog.Function coalesceFunction =

@@ -15,7 +15,6 @@
 #include "exec/pipeline/ai/ai_project_runtime.h"
 
 #include <algorithm>
-#include <cstdlib>
 #include <limits>
 #include <new>
 #include <unordered_set>
@@ -40,10 +39,6 @@
 namespace starrocks::pipeline {
 namespace {
 
-constexpr std::string_view kApiKeyEnvironment = "AI_FUNCTION_MODEL_API_KEY";
-constexpr std::string_view kEndpointEnvironment = "AI_FUNCTION_MODEL_ENDPOINT";
-constexpr std::string_view kSystemChatConfigId = "__system_chat__";
-constexpr std::string_view kSystemEmbeddingConfigId = "__system_embedding__";
 constexpr int64_t kNanosecondsPerMillisecond = 1'000'000;
 
 Status invalid_projection() {
@@ -71,10 +66,6 @@ bool contains_only_ascii_whitespace(std::string_view value) {
 
 bool contains_control_character(std::string_view value) {
     return std::any_of(value.begin(), value.end(), [](unsigned char byte) { return byte <= 0x1f || byte == 0x7f; });
-}
-
-bool has_invalid_api_key_byte(std::string_view api_key) {
-    return api_key.empty() || contains_control_character(api_key);
 }
 
 int64_t saturating_timeout_deadline(int64_t now_ns, int64_t timeout_ms) {
@@ -128,8 +119,8 @@ void close_expr_contexts_noexcept(const std::vector<ExprContext*>& contexts, Run
 } // namespace
 
 StatusOr<std::shared_ptr<AIProjectExpressionProjection>> AIProjectExpressionProjection::create(
-        AIProjectProjectionSpec spec) {
-    if (spec.empty()) {
+        AIProjectProjectionSpec spec, size_t max_input_file_bytes) {
+    if (spec.empty() || max_input_file_bytes == 0) {
         return invalid_projection();
     }
 
@@ -161,10 +152,9 @@ StatusOr<std::shared_ptr<AIProjectExpressionProjection>> AIProjectExpressionProj
                 if (ai_expression == nullptr) {
                     return invalid_projection();
                 }
-                const auto route = spec.model_configs().find(ai_expression->model_config_id());
+                const auto route = spec.model_configs().find(ai_expression->provider_id());
                 if (route == spec.model_configs().end() || route->second.capability != ai_expression->capability() ||
-                    route->second.source != ai_expression->model_source() ||
-                    (ai_expression->requires_default_model() && contains_only_ascii_whitespace(route->second.model))) {
+                    contains_only_ascii_whitespace(route->second.model)) {
                     return invalid_projection();
                 }
                 continue;
@@ -178,13 +168,15 @@ StatusOr<std::shared_ptr<AIProjectExpressionProjection>> AIProjectExpressionProj
                 return invalid_projection();
             }
         }
-        return std::shared_ptr<AIProjectExpressionProjection>(new AIProjectExpressionProjection(std::move(spec)));
+        return std::shared_ptr<AIProjectExpressionProjection>(
+                new AIProjectExpressionProjection(std::move(spec), max_input_file_bytes));
     } catch (const std::bad_alloc&) {
         return Status::MemoryLimitExceeded("Failed to allocate AI project expression projection");
     }
 }
 
-AIProjectExpressionProjection::AIProjectExpressionProjection(AIProjectProjectionSpec spec) : _spec(std::move(spec)) {}
+AIProjectExpressionProjection::AIProjectExpressionProjection(AIProjectProjectionSpec spec, size_t max_input_file_bytes)
+        : _spec(std::move(spec)), _max_input_file_bytes(max_input_file_bytes) {}
 
 AIProjectExpressionProjection::~AIProjectExpressionProjection() {
     close(_prepared_state);
@@ -388,7 +380,7 @@ StatusOr<AIProjectPreparedSubchunk> AIProjectExpressionProjection::prepare_subch
                     ai_output.replace_existing = true;
                     ai_output.result_type = ai_expression->type();
                     ai_output.result_kind = ai_expression->result_kind();
-                    ai_output.model_config_id = ai_expression->model_config_id();
+                    ai_output.provider_id = ai_expression->provider_id();
                     ai_output.capability = ai_expression->capability();
                     prepared.ai_outputs.emplace_back(std::move(ai_output));
                 }
@@ -425,14 +417,31 @@ StatusOr<AIProjectPreparedSubchunk> AIProjectExpressionProjection::prepare_subch
             if (ai_expression == nullptr) {
                 return invalid_projection();
             }
-            ASSIGN_OR_RETURN(AIFunctionInputBatch batch,
-                             ai_expression->build_input_batch(
-                                     context, input.get(),
-                                     _spec.model_configs().at(std::string(ai_expression->model_config_id())).model));
+            const auto& model_config = _spec.model_configs().at(std::string(ai_expression->provider_id()));
+            ASSIGN_OR_RETURN(
+                    AIFunctionInputBatch batch,
+                    ai_expression->build_input_batch(context, input.get(), model_config.model, _max_input_file_bytes));
             if (batch.rows.size() != rows) {
                 return Status::InternalError("AI project expression returned an invalid input batch");
             }
             RETURN_IF_ERROR(context->get_udf_error());
+
+            // Provider defaults are constant for this expression. Merge once for the
+            // subchunk and let every dispatched row borrow the immutable result.
+            if (model_config.dimensions.has_value() &&
+                (batch.options == nullptr ||
+                 std::none_of(batch.options->members().begin(), batch.options->members().end(),
+                              [](const auto& member) { return member.key == "dimensions"; })) &&
+                std::any_of(batch.rows.begin(), batch.rows.end(),
+                            [](const auto& row) { return row.action == AIFunctionRowAction::DISPATCH; })) {
+                AIProviderOptions::Members members =
+                        batch.options == nullptr ? AIProviderOptions::Members{} : batch.options->members();
+                members.emplace_back(AIProviderOption{.key = "dimensions",
+                                                      .serialized_json = std::to_string(*model_config.dimensions),
+                                                      .kind = AIProviderOptionKind::NUMBER});
+                ASSIGN_OR_RETURN(auto options, AIProviderOptions::create(std::move(members)));
+                batch.options = std::make_shared<const AIProviderOptions>(std::move(options));
+            }
 
             MutableColumnPtr placeholder = ColumnHelper::create_column(context->root()->type(), true);
             placeholder->append_nulls(rows);
@@ -443,7 +452,7 @@ StatusOr<AIProjectPreparedSubchunk> AIProjectExpressionProjection::prepare_subch
                     .replace_existing = true,
                     .result_type = ai_expression->type(),
                     .result_kind = ai_expression->result_kind(),
-                    .model_config_id = std::string(ai_expression->model_config_id()),
+                    .provider_id = std::string(ai_expression->provider_id()),
                     .capability = ai_expression->capability(),
             });
         }
@@ -500,61 +509,34 @@ StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> AIProjectDispatcherSubmi
                 contains_control_character(model_config.model)) {
                 return Status::InvalidArgument("AI function model configuration is invalid");
             }
-            if (model_config.capability != AICapability::CHAT &&
-                model_config.capability != AICapability::TEXT_EMBEDDING) {
+            if (model_config.capability != AICapability::CHAT && model_config.capability != AICapability::EMBEDDING) {
                 return Status::InvalidArgument("AI function model capability is invalid");
             }
             Route route{.endpoint = model_config.endpoint, .capability = model_config.capability};
-            if (model_config.source == TAIModelSource::SYSTEM) {
-                if (!model_config.api_key.empty() || model_config.timeout_ms.has_value() ||
-                    model_config.dimensions.has_value()) {
-                    return Status::InvalidArgument("AI function model configuration is invalid");
-                }
-                std::string endpoint_environment;
-                std::string key_environment;
-                if (id == kSystemChatConfigId && model_config.capability == AICapability::CHAT) {
-                    endpoint_environment = kEndpointEnvironment;
-                    key_environment = kApiKeyEnvironment;
-                } else if (id == kSystemEmbeddingConfigId && model_config.capability == AICapability::TEXT_EMBEDDING) {
-                    endpoint_environment = "AI_FUNCTION_EMBEDDING_ENDPOINT";
-                    key_environment = "AI_FUNCTION_EMBEDDING_API_KEY";
-                } else {
-                    return Status::InvalidArgument("AI function model configuration is invalid");
-                }
-                RETURN_IF_ERROR(validate_ai_https_url(model_config.endpoint));
-                const char* allowed_endpoint = std::getenv(endpoint_environment.c_str());
-                if (allowed_endpoint == nullptr || model_config.endpoint != allowed_endpoint) {
-                    return Status::InvalidArgument("AI function model endpoint is unavailable or invalid");
-                }
-                const char* api_key = std::getenv(key_environment.c_str());
-                if (api_key == nullptr || has_invalid_api_key_byte(api_key)) {
-                    return Status::InvalidArgument("AI function model credential is unavailable or invalid");
-                }
-                route.api_key = api_key;
-            } else if (model_config.source == TAIModelSource::PROVIDER) {
-                if (id == kSystemChatConfigId || id == kSystemEmbeddingConfigId ||
-                    contains_only_ascii_whitespace(model_config.model) ||
-                    contains_control_character(model_config.api_key) ||
-                    (model_config.timeout_ms.has_value() &&
-                     (*model_config.timeout_ms <= 0 || *model_config.timeout_ms > std::numeric_limits<long>::max())) ||
-                    (model_config.dimensions.has_value() &&
-                     (model_config.capability != AICapability::TEXT_EMBEDDING || *model_config.dimensions <= 0))) {
-                    return Status::InvalidArgument("AI function provider configuration is invalid");
-                }
-                route.api_key = model_config.api_key;
-                route.attempt_timeout_ms = model_config.timeout_ms.value_or(0);
-                route.dimensions = model_config.dimensions;
-                RETURN_IF_ERROR(route.api_key.empty() ? validate_ai_http_url(route.endpoint)
-                                                      : validate_ai_https_url(route.endpoint));
-            } else {
-                return Status::InvalidArgument("AI function model configuration is invalid");
+            ASSIGN_OR_RETURN(route.provider, create_ai_provider(model_config.protocol, model_config.capability));
+            if (model_config.protocol != AIProviderProtocol::OPENAI ||
+                contains_only_ascii_whitespace(model_config.model) ||
+                contains_control_character(model_config.api_key) ||
+                (model_config.timeout_ms.has_value() &&
+                 (*model_config.timeout_ms <= 0 || *model_config.timeout_ms > std::numeric_limits<long>::max())) ||
+                (model_config.dimensions.has_value() &&
+                 (model_config.capability != AICapability::EMBEDDING || *model_config.dimensions <= 0))) {
+                return Status::InvalidArgument("AI function provider configuration is invalid");
             }
+            route.api_key = model_config.api_key;
+            route.attempt_timeout_ms = model_config.timeout_ms.value_or(0);
+            RETURN_IF_ERROR(validate_ai_http_url(route.endpoint));
             auto resolved_endpoint = resolve_http_endpoint(route.endpoint, OutboundHttpAddressPolicy::BLOCK_LINK_LOCAL);
             if (!resolved_endpoint.ok()) {
                 return Status::InvalidArgument("AI function model endpoint is unavailable or invalid");
             }
             route.resolved_endpoint =
                     std::make_shared<const ResolvedHttpEndpoint>(std::move(resolved_endpoint).value());
+            route.dispatcher = std::make_unique<AITaskDispatcher>(
+                    services->admission_controller, services->http_client, route.provider.get(),
+                    services->completion_executor, services->clock, services->random, services->metrics,
+                    AITaskDispatcherOptions{.max_retries = config.max_retries,
+                                            .max_throttle_retries = config.max_retries_on_throttle});
             routes.emplace(id, std::move(route));
         }
         return std::shared_ptr<AIProjectDispatcherSubmitter>(new AIProjectDispatcherSubmitter(
@@ -572,18 +554,14 @@ AIProjectDispatcherSubmitter::AIProjectDispatcherSubmitter(std::map<std::string,
                                                            std::weak_ptr<QueryContext> query_context,
                                                            std::shared_ptr<AIQueryMemoryAccount> memory_account,
                                                            const AIServices& services, AIRuntimeConfig config)
-        : _routes(std::move(routes)),
-          _workgroup_key(workgroup_key),
+        : _workgroup_key(workgroup_key),
           _query_id(query_id),
           _query_context(std::move(query_context)),
           _memory_account(std::move(memory_account)),
           _memory(_memory_account->memory_context()),
           _clock(services.clock),
           _config(std::move(config)),
-          _dispatcher(services.admission_controller, services.http_client, &_provider, services.completion_executor,
-                      services.clock, services.random, services.metrics,
-                      AITaskDispatcherOptions{.max_retries = _config.max_retries,
-                                              .max_throttle_retries = _config.max_retries_on_throttle}) {}
+          _routes(std::move(routes)) {}
 
 StatusOr<std::unique_ptr<AIProjectTaskHandle>> AIProjectDispatcherSubmitter::submit(AIProjectTaskRequest request,
                                                                                     AITaskCallback&& callback) {
@@ -592,40 +570,16 @@ StatusOr<std::unique_ptr<AIProjectTaskHandle>> AIProjectDispatcherSubmitter::sub
     }
 
     AIDispatchRequest dispatch_request;
-    std::optional<AIProviderOptions> merged_options;
     SCOPED_CLEANUP({
         clear_in_physical_scope(_memory, &callback);
         clear_in_physical_scope(_memory, &dispatch_request.lifecycle);
-        clear_in_physical_scope(_memory, &merged_options);
     });
     try {
-        const auto route_it = _routes.find(request.model_config_id);
+        const auto route_it = _routes.find(request.provider_id);
         if (route_it == _routes.end() || route_it->second.capability != request.capability) {
             return Status::InvalidArgument("AI function model configuration is invalid");
         }
         const Route& route = route_it->second;
-        const AIProviderOptions* options = request.options;
-        if (route.dimensions.has_value() &&
-            (options == nullptr || std::none_of(options->members().begin(), options->members().end(),
-                                                [](const auto& member) { return member.key == "dimensions"; }))) {
-            Status prepare_status;
-            auto prepare_options = [&] {
-                AIProviderOptions::Members members =
-                        options == nullptr ? AIProviderOptions::Members{} : options->members();
-                members.emplace_back(AIProviderOption{.key = "dimensions",
-                                                      .serialized_json = std::to_string(*route.dimensions),
-                                                      .kind = AIProviderOptionKind::NUMBER});
-                auto prepared = AIProviderOptions::create(std::move(members));
-                prepare_status = prepared.status();
-                if (prepared.ok()) {
-                    merged_options.emplace(std::move(prepared).value());
-                }
-            };
-            _memory.run_in_physical_scope([](void* opaque) { (*static_cast<decltype(prepare_options)*>(opaque))(); },
-                                          &prepare_options);
-            RETURN_IF_ERROR(prepare_status);
-            options = &*merged_options;
-        }
         auto handle = std::make_unique<DispatcherTaskHandle>();
         const int64_t now_ns = _clock->monotonic_now_ns();
         const int64_t request_deadline_ns = saturating_timeout_deadline(now_ns, _config.request_timeout_ms);
@@ -642,8 +596,9 @@ StatusOr<std::unique_ptr<AIProjectTaskHandle>> AIProjectDispatcherSubmitter::sub
                                     .model = request.model,
                                     .api_key = route.api_key,
                                     .prompt = request.prompt,
-                                    .options = options,
+                                    .options = request.options,
                                     .capability = route.capability,
+                                    .media = request.media,
                             },
                     .request_deadline_ns = request_deadline_ns,
                     .attempt_timeout_ms = route.attempt_timeout_ms,
@@ -679,7 +634,7 @@ StatusOr<std::unique_ptr<AIProjectTaskHandle>> AIProjectDispatcherSubmitter::sub
         _memory.run_in_physical_scope([](void* opaque) { (*static_cast<decltype(build_dispatch_request)*>(opaque))(); },
                                       &build_dispatch_request);
 
-        auto dispatcher_handle = _dispatcher.submit(std::move(dispatch_request), std::move(callback));
+        auto dispatcher_handle = route.dispatcher->submit(std::move(dispatch_request), std::move(callback));
         if (!dispatcher_handle.ok()) {
             return dispatcher_handle.status();
         }

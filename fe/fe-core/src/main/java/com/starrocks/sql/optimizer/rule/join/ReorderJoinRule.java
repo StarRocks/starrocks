@@ -201,7 +201,8 @@ public class ReorderJoinRule extends Rule {
                 Integer childIdx = innerJoinRoot.second.second;
 
                 MultiJoinNode multiJoinNode = MultiJoinNode.toMultiJoinNode(child);
-                if (!multiJoinNode.checkDependsPredicate()) {
+                // A single atom means the root itself can't be flattened, e.g. it has a non-deterministic predicate
+                if (multiJoinNode.getAtoms().size() < 2 || !multiJoinNode.checkDependsPredicate()) {
                     continue;
                 }
 
@@ -251,13 +252,16 @@ public class ReorderJoinRule extends Rule {
             Collections.reverse(innerJoinTrees);
             for (OptExpression innerJoinRoot : innerJoinTrees) {
                 MultiJoinNode multiJoinNode = MultiJoinNode.toMultiJoinNode(innerJoinRoot);
-                if (!multiJoinNode.checkDependsPredicate()) {
+                // A single atom means the root itself can't be flattened, e.g. it has a non-deterministic predicate
+                if (multiJoinNode.getAtoms().size() < 2 || !multiJoinNode.checkDependsPredicate()) {
                     continue;
                 }
                 enumerate(new JoinReorderLeftDeep(context), context, innerJoinRoot, multiJoinNode, true);
                 // If there is no statistical information, the DP and greedy reorder algorithm are disabled,
-                // and the query plan degenerates to the left deep tree
+                // and the query plan degenerates to the left deep tree, unless
+                // cbo_join_reorder_with_unknown_stats asks to reorder on the estimates anyway
                 if (Utils.hasUnknownColumnsStats(innerJoinRoot) &&
+                        !context.getSessionVariable().isCboJoinReorderWithUnknownStats() &&
                         (!FeConstants.runningUnitTest || FeConstants.isReplayFromQueryDump)) {
                     continue;
                 }

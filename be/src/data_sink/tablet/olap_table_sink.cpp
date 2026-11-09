@@ -76,6 +76,7 @@
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "runtime/service_contexts.h"
 #include "storage/storage_engine.h"
+#include "storage_primitive/flat_json_config.h"
 #include "storage_primitive/tablet_column.h"
 
 static const uint8_t VALID_SEL_FAILED = 0x0;
@@ -118,6 +119,12 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     }
     _enable_data_file_bundling = table_sink.enable_data_file_bundling;
     _is_multi_statements_txn = table_sink.is_multi_statements_txn;
+    if (table_sink.__isset.flat_json_config) {
+        FlatJsonConfig flat_json_config;
+        flat_json_config.update(table_sink.flat_json_config);
+        flat_json_config.to_pb(&_flat_json_config);
+        _has_flat_json_config = true;
+    }
     _enable_lake_per_partition_coordinator_txn_log = table_sink.enable_lake_per_partition_coordinator_txn_log;
     _keys_type = table_sink.keys_type;
     if (table_sink.__isset.null_expr_in_auto_increment) {
@@ -244,6 +251,11 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _ts_profile->wait_response_timer = ADD_CHILD_TIMER(_profile, "WaitResponseTime", "SendDataTime");
     _ts_profile->serialize_chunk_timer = ADD_CHILD_TIMER(_profile, "SerializeChunkTime", "SendRpcTime");
     _ts_profile->compress_timer = ADD_CHILD_TIMER(_profile, "CompressTime", "SendRpcTime");
+    _ts_profile->raw_input_bytes_counter = ADD_CHILD_COUNTER(_profile, "RawInputBytes", TUnit::BYTES, "SendRpcTime");
+    _ts_profile->serialized_bytes_counter = ADD_CHILD_COUNTER(_profile, "SerializedBytes", TUnit::BYTES, "SendRpcTime");
+    _ts_profile->compressed_input_bytes_counter =
+            ADD_CHILD_COUNTER(_profile, "CompressedInputBytes", TUnit::BYTES, "SendRpcTime");
+    _ts_profile->compressed_bytes_counter = ADD_CHILD_COUNTER(_profile, "CompressedBytes", TUnit::BYTES, "SendRpcTime");
     _ts_profile->client_rpc_timer = ADD_TIMER(_profile, "RpcClientSideTime");
     _ts_profile->server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
     _ts_profile->server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");

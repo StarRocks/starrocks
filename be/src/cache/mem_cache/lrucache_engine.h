@@ -66,6 +66,8 @@ public:
     Status prune() override;
 
 private:
+    // Whether this write may evict other entries. A write that may not is still accepted
+    // when it fits in the free space.
     bool _check_write(size_t charge, const MemCacheWriteOptions& options) const;
 
     std::atomic<bool> _initialized = false;

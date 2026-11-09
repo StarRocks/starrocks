@@ -111,6 +111,33 @@ public class AnalyzeShowAlterTest {
     }
 
     @Test
+    public void testOrderByResolvesAgainstTheAnsweringLayout() {
+        // The three layouts disagree on where a column sits, and the index the analyzer produces is
+        // handed straight to ListComparator. Resolving against the wrong list does not fail - it
+        // sorts by whatever sits at that position in the list that actually answers.
+        assertOrderByIndex("SHOW ALTER TABLE COLUMN FROM db ORDER BY State", 9);
+        assertOrderByIndex("SHOW ALTER TABLE ROLLUP FROM db ORDER BY State", 8);
+        assertOrderByIndex("SHOW ALTER MATERIALIZED VIEW FROM db ORDER BY State", 8);
+        // OPTIMIZE used to fall through to SchemaChangeProcDir's list and come back with 9, which
+        // is Timeout in OptimizeProcDir's.
+        assertOrderByIndex("SHOW ALTER TABLE OPTIMIZE FROM db ORDER BY State", 6);
+
+        // A column only one layout has resolves there and is rejected elsewhere.
+        assertOrderByIndex("SHOW ALTER TABLE OPTIMIZE FROM db ORDER BY Operation", 4);
+        analyzeFail("SHOW ALTER TABLE COLUMN FROM db ORDER BY Operation",
+                "Title name[Operation] does not exist");
+        assertOrderByIndex("SHOW ALTER TABLE COLUMN FROM db ORDER BY SchemaVersion", 7);
+        analyzeFail("SHOW ALTER TABLE OPTIMIZE FROM db ORDER BY SchemaVersion",
+                "Title name[SchemaVersion] does not exist");
+    }
+
+    private static void assertOrderByIndex(String sql, int expectedIndex) {
+        ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess(sql);
+        Assertions.assertEquals(1, statement.getOrderByPairs().size(), sql);
+        Assertions.assertEquals(expectedIndex, statement.getOrderByPairs().get(0).getIndex(), sql);
+    }
+
+    @Test
     public void normalTest() {
         analyzeSuccess("SHOW ALTER TABLE COLUMN ORDER BY CreateTime DESC LIMIT 1;");
         analyzeFail("SHOW ALTER TABLE COLUMN FROM errordb",

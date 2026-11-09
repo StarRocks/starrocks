@@ -1,4 +1,4 @@
---name: test_prune_with_dict_column @system
+-- name: test_prune_with_dict_column @system
 CREATE TABLE `scs3` (
   `v1` bigint(20) NULL COMMENT "",
   `str` string NULL COMMENT "",

@@ -29,8 +29,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.owasp.encoder.Encode;
 
 import java.io.IOException;
+import java.util.Collections;
 
 /**
  * The /query web page lists cached profiles under the SHOW PROFILELIST rule once the access check is on: the
@@ -41,6 +43,11 @@ public class QueryActionTest extends StarRocksHttpTestCase {
 
     private static final String ROOT_SQL = "select 'owned_by_root'";
     private static final String OTHER_SQL = "select 'owned_by_someone_else'";
+    // The page HTML-encodes cell values, so the quotes in the statements above appear as entities.
+    private static final String ROOT_SQL_HTML = Encode.forHtml(ROOT_SQL);
+    private static final String OTHER_SQL_HTML = Encode.forHtml(OTHER_SQL);
+    private static final String XSS_PAYLOAD = "<img src=x onerror=\"alert(1)\">";
+    private static final String XSS_PAYLOAD_HTML = "&lt;img src=x onerror=&#34;alert(1)&#34;&gt;";
 
     @BeforeEach
     public void enableAccessCheck() {
@@ -56,9 +63,16 @@ public class QueryActionTest extends StarRocksHttpTestCase {
     }
 
     private static void pushProfile(String queryId, String user, String sql) {
+        pushProfile(queryId, null, user, sql);
+    }
+
+    private static void pushProfile(String queryId, String customQueryId, String user, String sql) {
         RuntimeProfile profile = new RuntimeProfile("Query");
         RuntimeProfile summary = new RuntimeProfile("Summary");
         summary.addInfoString(ProfileManager.QUERY_ID, queryId);
+        if (customQueryId != null) {
+            summary.addInfoString(ProfileManager.CUSTOM_QUERY_ID, customQueryId);
+        }
         summary.addInfoString(ProfileManager.QUERY_TYPE, "Query");
         summary.addInfoString(ProfileManager.USER, user);
         summary.addInfoString(ProfileManager.SQL_STATEMENT, sql);
@@ -95,16 +109,16 @@ public class QueryActionTest extends StarRocksHttpTestCase {
     public void testWithoutOperateOnlyOwnQueriesAreListed() throws IOException {
         stubOperate(false);
         String body = getQueryPageAsRoot();
-        Assertions.assertTrue(body.contains(ROOT_SQL), body);
-        Assertions.assertFalse(body.contains(OTHER_SQL), body);
+        Assertions.assertTrue(body.contains(ROOT_SQL_HTML), body);
+        Assertions.assertFalse(body.contains(OTHER_SQL_HTML), body);
     }
 
     @Test
     public void testOperateHolderSeesEveryQuery() throws IOException {
         stubOperate(true);
         String body = getQueryPageAsRoot();
-        Assertions.assertTrue(body.contains(ROOT_SQL), body);
-        Assertions.assertTrue(body.contains(OTHER_SQL), body);
+        Assertions.assertTrue(body.contains(ROOT_SQL_HTML), body);
+        Assertions.assertTrue(body.contains(OTHER_SQL_HTML), body);
     }
 
     @Test
@@ -112,7 +126,27 @@ public class QueryActionTest extends StarRocksHttpTestCase {
         Config.authorization_enable_query_profile_access_check = false;
         stubOperate(false);
         String body = getQueryPageAsRoot();
-        Assertions.assertTrue(body.contains(ROOT_SQL), body);
-        Assertions.assertTrue(body.contains(OTHER_SQL), body);
+        Assertions.assertTrue(body.contains(ROOT_SQL_HTML), body);
+        Assertions.assertTrue(body.contains(OTHER_SQL_HTML), body);
+    }
+
+    @Test
+    public void testCellValuesAreHtmlEncoded() throws IOException {
+        stubOperate(true);
+        String shortSql = "select '" + XSS_PAYLOAD + "'";
+        String longSql = "select '" + XSS_PAYLOAD + "', '"
+                + String.join("", Collections.nCopies(Config.ui_queries_sql_statement_max_length, "x")) + "'";
+        pushProfile("q_xss_short", "root", shortSql);
+        pushProfile("q_xss_long", XSS_PAYLOAD, "root", longSql);
+
+        String body = getQueryPageAsRoot();
+        // The page itself has an <img> logo in the navigation bar, so look for the payload rather than any <img>.
+        Assertions.assertFalse(body.contains(XSS_PAYLOAD), body);
+        // short statement, truncated long statement and custom query id
+        Assertions.assertTrue(body.contains("<td>select &#39;" + XSS_PAYLOAD_HTML + "&#39;</td>"), body);
+        Assertions.assertTrue(body.contains("\">select &#39;" + XSS_PAYLOAD_HTML), body);
+        Assertions.assertTrue(body.contains("<td>" + XSS_PAYLOAD_HTML + "</td>"), body);
+        // full long statement in the hover tooltip
+        Assertions.assertTrue(body.contains("<span title=\"" + Encode.forHtmlAttribute(longSql) + "\">"), body);
     }
 }

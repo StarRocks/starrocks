@@ -42,6 +42,7 @@ import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.CandidateWorkerProvider;
+import com.starrocks.qe.scheduler.LanceWorkerSelector;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
@@ -65,7 +66,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Hybrid backend selector for hive table.
@@ -106,8 +106,6 @@ public class HDFSBackendSelector implements BackendSelector {
     // and the largest scan data is not more than 1.1 times of the average value
     private final double kMaxImbalanceRatio = 1.1;
     public static final int CONSISTENT_HASH_RING_VIRTUAL_NUMBER = 256;
-
-    private static final AtomicInteger NEXT_LANCE_WORKER_INDEX = new AtomicInteger();
 
     class HdfsScanRangeHasher {
         String basePath;
@@ -304,6 +302,12 @@ public class HDFSBackendSelector implements BackendSelector {
                 end.setEmpty(true);
                 end.setHas_more(hasMore);
                 for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
+                    // Eager Lance scans need terminal markers only where this scan has data.
+                    if (scanNode instanceof LanceScanNode &&
+                            !assignment.getOrDefault(computeNode.getId(), Collections.emptyMap())
+                                    .containsKey(scanNode.getId().asInt())) {
+                        continue;
+                    }
                     assignment.put(computeNode.getId(), scanNode.getId().asInt(), end);
                 }
             }
@@ -357,13 +361,8 @@ public class HDFSBackendSelector implements BackendSelector {
         if (scanNode instanceof LanceScanNode) {
             // Whole-dataset Lance scans have no replica locality or native file-cache affinity.
             // Rotate across the provider's connector workers, including its compute-node preference.
-            List<ComputeNode> workers = new ArrayList<>(workerProvider.getAllWorkers());
-            if (workers.isEmpty()) {
-                throw new StarRocksException("Failed to find backend to execute");
-            }
             for (TScanRangeLocations scanRangeLocations : locations) {
-                int index = Math.floorMod(NEXT_LANCE_WORKER_INDEX.getAndIncrement(), workers.size());
-                ComputeNode worker = workers.get(index);
+                ComputeNode worker = LanceWorkerSelector.selectWorker(workerProvider);
                 recordScanRangeAssignment(worker, null, List.of(worker), scanRangeLocations);
             }
             recordScanRangeStatistic();

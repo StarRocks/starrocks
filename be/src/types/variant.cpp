@@ -687,8 +687,16 @@ StatusOr<VariantValue> VariantValue::get_object_by_key(const VariantMetadata& me
         return VariantValue();
     }
 
+    return get_object_field_at_index(static_cast<uint32_t>(field_index));
+}
+
+StatusOr<VariantValue> VariantValue::get_object_field_at_index(uint32_t index) const {
+    ASSIGN_OR_RETURN(const auto info, get_object_info());
+    if (index >= info.num_elements) {
+        return Status::VariantError("Variant object field index is out of bounds");
+    }
     const uint32_t offset = inline_read_little_endian_unsigned32(
-            _value.data() + info.offset_start_offset + field_index * info.offset_size, info.offset_size);
+            _value.data() + info.offset_start_offset + index * info.offset_size, info.offset_size);
     const uint32_t final_offset = inline_read_little_endian_unsigned32(
             _value.data() + info.offset_start_offset + info.num_elements * info.offset_size, info.offset_size);
     if (offset >= final_offset) {

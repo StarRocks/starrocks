@@ -470,6 +470,22 @@ public class CachingMvPlanContextBuilder {
                 return;
             }
             synchronized (AST_TO_MV_MAP) {
+                // Re-check at the point of publication, not only at entry. getAstKeysOfMV above parses and
+                // analyzes the define query, which is slow enough that the mv can be dropped, replaced or
+                // have rewrite turned off while it runs -- this path is asynchronous and also runs from
+                // the mv activation task.
+                //
+                // Without the re-check such an entry is never removed: the remover is
+                // #evictMaterializedViewCache, and a drop that already ran it has nothing left to walk.
+                // With it, the two orders are both covered. If the drop has already unregistered the mv
+                // (Database#unprotectDropTable removes it from the catalog before calling onDrop, which is
+                // what evicts), this sees it and publishes nothing. If it has not, its eviction is still to
+                // come and, since that walks the whole map rather than recomputing keys, it removes what we
+                // publish here.
+                if (!isStillCacheable(mv)) {
+                    LOG.info("skip putting mv into ast cache, it is no longer cacheable: {}", mv.getName());
+                    return;
+                }
                 for (AstKey astKey : astKeys) {
                     AST_TO_MV_MAP.computeIfAbsent(astKey, ignored -> Sets.newHashSet()).add(mv);
                 }
@@ -480,6 +496,22 @@ public class CachingMvPlanContextBuilder {
             LOG.warn("put to mv into ast cache failed: {}, cost:{}(ms)", mv.getName(),
                     System.currentTimeMillis() - startTime, e);
         }
+    }
+
+    /**
+     * Whether {@code mv} still belongs in the ast cache: it is the object the catalog currently holds under
+     * its id, and it still has text-based rewrite enabled.
+     * <p>
+     * Reference identity on purpose. {@link com.starrocks.catalog.Table#equals} is by id, so an object that
+     * the catalog has already replaced would pass an equality test while no longer being the mv anyone will
+     * rewrite against.
+     */
+    private boolean isStillCacheable(MaterializedView mv) {
+        if (!mv.isEnableRewrite()) {
+            return false;
+        }
+        // Plain map lookups, no metadata lock taken -- see LocalMetastore#getMaterializedView.
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedView(mv.getMvId()) == mv;
     }
 
     private List<AstKey> getAstKeysOfMV(MaterializedView mv) {
@@ -555,8 +587,9 @@ public class CachingMvPlanContextBuilder {
      * Submit an async task to be executed in MV plan cache executor.
      * @param taskName: the name of the task.
      * @param task: the task to be executed.
+     * @return the future of the task, completed once the task finishes.
      */
-    public static void submitAsyncTask(String taskName, Supplier<Void> task) {
+    public static CompletableFuture<?> submitAsyncTask(String taskName, Supplier<Void> task) {
         CompletableFuture<?> future = CompletableFuture.supplyAsync(task, MV_PLAN_CACHE_EXECUTOR);
         long startTime = System.currentTimeMillis();
         future.whenComplete((result, e) -> {
@@ -567,6 +600,7 @@ public class CachingMvPlanContextBuilder {
                 LOG.warn("async task {} failed: {}, cost: {}ms", taskName, e.getMessage(), duration, e);
             }
         });
+        return future;
     }
 
     public static String getMVPlanCacheStats() {

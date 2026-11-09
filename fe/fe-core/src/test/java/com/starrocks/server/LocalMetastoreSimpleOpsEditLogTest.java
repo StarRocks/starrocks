@@ -33,6 +33,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.RecyclePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -1403,6 +1404,55 @@ public class LocalMetastoreSimpleOpsEditLogTest {
 
         // 6. Verify follower state
         Assertions.assertNull(followerTable.getPartition(PARTITION_ID));
+    }
+
+    @Test
+    public void testForceDropPartitionWithRetention() throws Exception {
+        // 1. Create table with partition
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        OlapTable table = createRangePartitionedOlapTable(TABLE_ID, TABLE_NAME);
+        db.registerTableUnlocked(table);
+
+        // 2. Force drop the partition, keeping its tablets for a retention period
+        List<String> partitionNames = List.of("p1");
+        DropPartitionClause clause = new DropPartitionClause(false, partitionNames, false, true, NodePosition.ZERO);
+        clause.setResolvedPartitionNames(partitionNames);
+        long retentionPeriod = 600L;
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        metastore.dropPartition(db, table, clause, retentionPeriod);
+
+        // 3. Verify master state - partition is gone from the table, kept non-recoverable in the recycle bin
+        Assertions.assertNull(table.getPartition(PARTITION_ID));
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        RecyclePartitionInfo recycled = recycleBin.getRecyclePartitionInfo(PARTITION_ID);
+        Assertions.assertNotNull(recycled);
+        Assertions.assertFalse(recycled.isRecoverable());
+        Assertions.assertEquals(retentionPeriod, recycled.getRetentionPeriod());
+
+        // 4. The journal carries the retention period
+        DropPartitionsInfo replayInfo = (DropPartitionsInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_DROP_PARTITIONS);
+        Assertions.assertTrue(replayInfo.isForceDrop());
+        Assertions.assertEquals(retentionPeriod, replayInfo.getRetentionPeriod());
+
+        // 5. Test follower replay
+        LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
+                new CatalogRecycleBin(), null);
+        Database followerDb = new Database(DB_ID, DB_NAME);
+        followerMetastore.unprotectCreateDb(followerDb);
+        OlapTable followerTable = createRangePartitionedOlapTable(TABLE_ID, TABLE_NAME);
+        followerDb.registerTableUnlocked(followerTable);
+        // OlapTable.dropPartition uses GlobalStateMgr's recycle bin, so clear the master's entry first
+        recycleBin.removePartitionFromRecycleBin(PARTITION_ID);
+
+        followerMetastore.replayDropPartitions(replayInfo);
+
+        // 6. Verify follower state
+        Assertions.assertNull(followerTable.getPartition(PARTITION_ID));
+        recycled = recycleBin.getRecyclePartitionInfo(PARTITION_ID);
+        Assertions.assertNotNull(recycled);
+        Assertions.assertFalse(recycled.isRecoverable());
+        Assertions.assertEquals(retentionPeriod, recycled.getRetentionPeriod());
     }
 
     @Test

@@ -1,0 +1,20 @@
+-- name: test_deltalake_cast_predicate_pushdown
+-- description: A cast that changes the column type must not be stripped when pushing a predicate down to the
+-- Delta kernel. cast(col_date AS varchar) < '2024-04-25 00:00:01' compares strings, so '2024-04-25' matches;
+-- it used to be pushed as col_date < '2024-04-25', which pruned the 2024-04-25 partition.
+-- Fixture (DATE partition, 3 rows for each of 2024-04-24 .. 2024-04-27): delta_oss_db.delta_lake_par_col_date.
+
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+select col_date, count(*) from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where cast(col_date as varchar) < '2024-04-25 00:00:01' group by col_date order by col_date;
+select col_date, count(*) from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where cast(col_date as varchar) >= '2024-04-25 00:00:01' group by col_date order by col_date;
+-- control: no cast, still pruned
+function: assert_explain_verbose_contains("select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where col_date < '2024-04-25'", "partitions=1/4")
+
+drop catalog delta_test_${uuid0};

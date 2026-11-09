@@ -14,6 +14,7 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
+import com.starrocks.authentication.AuthCredentials;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.arrow.flight.sql.auth2.ArrowFlightSqlBasicCredentialValidator;
@@ -28,7 +29,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
@@ -46,7 +46,7 @@ class ArrowFlightSqlBasicCredentialValidatorTest {
         // mock authenticate
         try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
             mocked.when(() -> AuthenticationHandler
-                            .authenticate(any(ConnectContext.class), eq("user"), eq("0.0.0.0"), any()))
+                            .authenticate(any(ConnectContext.class), any(AuthCredentials.class)))
                     .thenAnswer(invocation -> {
                         ConnectContext ctx = invocation.getArgument(0);
                         ctx.setQualifiedUser("user");

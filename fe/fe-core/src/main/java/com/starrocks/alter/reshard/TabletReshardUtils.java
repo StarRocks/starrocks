@@ -19,10 +19,13 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Config;
+import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
@@ -38,7 +41,8 @@ public class TabletReshardUtils {
 
     // Reshard size invariants — DO NOT change individually.
     //
-    // Let T = Config.tablet_reshard_target_size.
+    // Let T = the table's target size (OlapTable.getTabletReshardTargetSize(): its tablet_reshard_target_size
+    // property when in force, else Config.tablet_reshard_target_size).
     //   splitThreshold     = ceil(1.5 * T)   (split fires when dataSize >= splitThreshold)
     //   mergePairThreshold = ceil(0.8 * T)   (merge fires when pair sum < mergePairThreshold)
     //   mergeGroupCap      = T               (merge groups packed up to mergeGroupCap)
@@ -85,18 +89,17 @@ public class TabletReshardUtils {
         return target;
     }
 
-    public static boolean needSplit(long dataSize) {
+    public static boolean needSplit(long dataSize, long targetSize) {
         // Reuse calcSplitCount so we never trigger when no actual split would be produced
         // (e.g., tablet_reshard_max_split_count <= 1).
-        return calcSplitCount(dataSize, Config.tablet_reshard_target_size) > 1;
+        return calcSplitCount(dataSize, targetSize) > 1;
     }
 
-    public static boolean needMerge(long minAdjacentTabletPairSize) {
-        long target = Config.tablet_reshard_target_size;
-        if (target <= 0) {
+    public static boolean needMerge(long minAdjacentTabletPairSize, long targetSize) {
+        if (targetSize <= 0) {
             return false;
         }
-        return minAdjacentTabletPairSize < mergePairThreshold(target);
+        return minAdjacentTabletPairSize < mergePairThreshold(targetSize);
     }
 
     /**
@@ -253,6 +256,23 @@ public class TabletReshardUtils {
             // throwing from a scheduling decision.
             return false;
         }
+    }
+
+    /**
+     * Whether {@code ALTER TABLE ... COMPACT} on this table should run as UNSHARE compaction when a
+     * partition has a tablet that still shares files with its split siblings.
+     *
+     * <p>True for a shared-data, range-distributed primary-key table with file bundling whose merge is
+     * supported. A tablet merge only accepts a tablet that owns all of its files, and UNSHARE compaction
+     * is what rewrites the shared ones into private files, so compacting such a table that way is what
+     * makes a later merge possible. Other tables keep the ordinary manual compaction: a table whose merge
+     * is unsupported gains nothing from the extra rewrite, and without file bundling UNSHARE is not
+     * served at all.
+     */
+    public static boolean compactUnsharesSharedFiles(OlapTable table) {
+        return table != null && table.isCloudNativeTable() && table.isRangeDistribution()
+                && table.getKeysType() == KeysType.PRIMARY_KEYS && table.isFileBundling()
+                && !tabletMergeUnsupported(table);
     }
 
     /** Per-tablet split fan-out cap for this table. */
@@ -489,5 +509,23 @@ public class TabletReshardUtils {
             sb.append(" (first ").append(shown).append(" of ").append(tablets.size()).append(')');
         }
         return sb.toString();
+    }
+
+    // Bounds are compared by value: a bound decoded from the compute node can carry a different scalar
+    // type than the FE tuple for the same value, which Tuple.equals would treat as different.
+    static boolean sameLowerBound(Range<Tuple> a, Range<Tuple> b) {
+        if (a.isMinimum() || b.isMinimum()) {
+            return a.isMinimum() && b.isMinimum();
+        }
+        return a.getLowerBound().compareTo(b.getLowerBound()) == 0
+                && a.isLowerBoundIncluded() == b.isLowerBoundIncluded();
+    }
+
+    static boolean sameUpperBound(Range<Tuple> a, Range<Tuple> b) {
+        if (a.isMaximum() || b.isMaximum()) {
+            return a.isMaximum() && b.isMaximum();
+        }
+        return a.getUpperBound().compareTo(b.getUpperBound()) == 0
+                && a.isUpperBoundIncluded() == b.isUpperBoundIncluded();
     }
 }

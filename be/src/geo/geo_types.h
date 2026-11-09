@@ -52,6 +52,14 @@ using S2Point = Vector3_d;
 
 namespace starrocks {
 
+enum class GeoPointPolygonRelation { OUTSIDE, BOUNDARY, INSIDE };
+
+struct GeoCartesianCentroid {
+    double x = 0;
+    double y = 0;
+    double z = 0;
+};
+
 class GeoShape {
 public:
     virtual ~GeoShape() = default;
@@ -115,6 +123,8 @@ public:
 
     GeoShapeType type() const override { return GEO_SHAPE_LINE_STRING; }
     const S2Polyline* polyline() const { return _polyline.get(); }
+    double length_meters() const;
+    GeoCartesianCentroid centroid_vector() const;
 
     std::string as_wkt() const override;
 
@@ -126,6 +136,38 @@ private:
     std::unique_ptr<S2Polyline> _polyline;
 };
 
+// Prepared spherical LINESTRING/MULTILINESTRING components for exact point-to-edge distance queries.
+// S2 implementation details stay in geo_types.cpp so expression code does not depend on S2 headers.
+class GeoSphericalLine {
+public:
+    GeoSphericalLine();
+    ~GeoSphericalLine();
+    GeoSphericalLine(GeoSphericalLine&&) noexcept;
+    GeoSphericalLine& operator=(GeoSphericalLine&&) noexcept;
+
+    GeoSphericalLine(const GeoSphericalLine&) = delete;
+    GeoSphericalLine& operator=(const GeoSphericalLine&) = delete;
+
+    GeoParseStatus add_component(const GeoCoordinateList& coordinates);
+    bool distance(const GeoPoint& point, double* meters) const;
+    bool dwithin(const GeoPoint& point, double meters) const;
+
+private:
+    class Impl;
+    std::unique_ptr<Impl> _impl;
+};
+
+// Reusable buffer for GeoPolygon::point_relation_direct; opaque so callers don't need S2 headers.
+class GeoRingScratch {
+public:
+    GeoRingScratch();
+    ~GeoRingScratch();
+
+private:
+    friend class GeoPolygon;
+    std::vector<S2Point> _points;
+};
+
 class GeoPolygon : public GeoShape {
 public:
     GeoPolygon();
@@ -133,10 +175,31 @@ public:
 
     GeoParseStatus from_coords(const GeoCoordinateListList& list);
 
+    // Validate one closed spherical ring without constructing a polygon.
+    // Uses the same coordinate preparation and S2 topology policy as from_coords.
+    static bool is_valid_ring(const GeoCoordinateList& coordinates);
+
+    // Check small rings directly with the same S2 predicates; large rings use is_valid_ring.
+    static bool is_valid_ring_direct(const GeoCoordinateList& coordinates);
+
+    // Upper bound for the direct O(V^2) ring checks (validation and point relation);
+    // chosen by a paired sweep over 4..512 vertices.
+    static constexpr size_t kMaxDirectVertices = 512;
+
+    // False means not applicable; the caller must use point_relation on a full polygon.
+    static bool point_relation_direct(const GeoCoordinateList& coordinates, const GeoPoint& point,
+                                      GeoRingScratch* scratch, GeoPointPolygonRelation* relation);
+
     GeoShapeType type() const override { return GEO_SHAPE_POLYGON; }
     const S2Polygon* polygon() const { return _polygon.get(); }
 
     bool contains(const GeoShape* rhs) const override;
+    bool intersects_inclusive(const GeoPolygon& rhs) const;
+    GeoPointPolygonRelation point_relation(const GeoPoint& point) const;
+    bool intersects_interior(const GeoPolygon& rhs) const;
+    double area_square_meters() const;
+    double perimeter_meters() const;
+    GeoCartesianCentroid centroid_vector() const;
     std::string as_wkt() const override;
 
 protected:
@@ -166,57 +229,5 @@ protected:
 private:
     std::unique_ptr<S2Cap> _cap;
 };
-
-#if 0
-class GeoMultiPoint : public GeoShape {
-public:
-    GeoPolygon();
-    ~GeoPolygon() override;
-
-    GeoShapeType type() const override { return GEO_SHAPE_POLYGON; }
-    const std::vector<S2Point>& points() const { return _points; }
-
-private:
-    std::vector<S2Point> _points;
-};
-
-class GeoMultiLine : public GeoShape {
-public:
-    GeoMultiLine();
-    ~GeoMultiLine() override;
-
-    GeoShapeType type() const override { return GEO_SHAPE_MULTI_LINE_STRING; }
-    const std::vector<S2Polyline*>& polylines() const { return _polylines; }
-
-private:
-    std::vector<S2Polyline> _polylines;
-};
-
-class GeoMultiPolygon : public GeoShape {
-public:
-    GeoMultiPolygon();
-    ~GeoMultiPolygon() override;
-
-    GeoShapeType type() const override { return GEO_SHAPE_MULTI_POLYGON; }
-
-    const std::vector<S2Polygon>& polygons() const { return _polygons; }
-
-
-    bool contains(const GeoShape* rhs) override;
-private:
-    std::vector<S2Polygon> _polygons;
-};
-
-#if 0
-class GeoEnvelope : public GeoShape {
-public:
-};
-
-class GeoCircle : public GeoShape {
-public:
-};
-#endif
-
-#endif
 
 } // namespace starrocks

@@ -24,7 +24,7 @@ namespace starrocks {
 struct InConstPredicateBuilder {
     template <LogicalType ltype>
     Expr* operator()(const TExprNode& node) {
-        if constexpr (lt_is_collection<ltype> || ltype == TYPE_JSON || ltype == TYPE_VARIANT) {
+        if constexpr (lt_is_collection<ltype> || lt_is_semi_structured<ltype>) {
             return new VectorizedInConstPredicateGeneric(node);
         } else {
             return new VectorizedInConstPredicate<ltype>(node);

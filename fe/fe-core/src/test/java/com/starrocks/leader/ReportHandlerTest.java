@@ -62,6 +62,7 @@ import com.starrocks.thrift.TTaskType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.thrift.TException;
@@ -734,20 +735,22 @@ public class ReportHandlerTest {
             mockSubmitCapture();
 
             // session-1 disables flat_json (and bumps the version) when session-2 takes the write lock.
+            // The mock is JVM-wide: inject only for this thread and table, and always take the real lock.
+            // Stubbing lock/unlock out leaked TabletChecker's locks and hung testHandleUpdateTableSchema.
+            final Thread testThread = Thread.currentThread();
             final boolean[] injected = {false};
             new MockUp<Locker>() {
                 @Mock
-                public void lockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType) {
-                    if (lockType == LockType.WRITE && !injected[0]) {
+                public void lockTablesWithIntensiveDbLock(Invocation inv, Long dbId, List<Long> tableList,
+                                                          LockType lockType) {
+                    if (Thread.currentThread() == testThread && lockType == LockType.WRITE
+                            && tableList.contains(table.getId()) && !injected[0]) {
                         injected[0] = true;
                         FlatJsonConfig live = table.getFlatJsonConfig();
                         live.setFlatJsonEnable(false);
                         live.incVersion();
                     }
-                }
-
-                @Mock
-                public void unLockTablesWithIntensiveDbLock(Long dbId, List<Long> tableList, LockType lockType) {
+                    inv.proceed();
                 }
             };
 

@@ -21,7 +21,6 @@
 #include <Poco/Net/ServerSocket.h>
 #include <Poco/Net/SocketAddress.h>
 #include <Poco/Net/StreamSocket.h>
-#include <Poco/Timestamp.h>
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/client/DefaultRetryStrategy.h>
@@ -31,6 +30,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -345,19 +345,23 @@ TEST(PocoSessionTimeoutTest, StalledPeerCostsOneTimeoutNotThree) {
     const Poco::Timespan request(5 * 1000000);
     const Poco::URI uri("https://127.0.0.1:" + std::to_string(listener.address().port()) + "/");
 
-    Poco::Timestamp started;
+    int64_t elapsed_us;
     {
         auto session = makeHTTPSession(uri, ConnectionTimeouts(connect, request, request), false);
         Poco::Net::HTTPRequest req(Poco::Net::HTTPRequest::HTTP_GET, "/", Poco::Net::HTTPMessage::HTTP_1_1);
         Poco::Net::HTTPResponse response;
+        // Session construction can initialize the TLS context and load CA certificates. Only
+        // measure the request, using a monotonic clock so wall-clock adjustments cannot affect it.
+        const auto started = std::chrono::steady_clock::now();
         EXPECT_THROW(
                 {
                     session->sendRequest(req);
                     session->receiveResponse(response);
                 },
                 Poco::TimeoutException);
+        elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - started)
+                             .count();
     }
-    const int64_t elapsed_us = started.elapsed();
 
     stop.store(true, std::memory_order_relaxed);
     acceptor.join();

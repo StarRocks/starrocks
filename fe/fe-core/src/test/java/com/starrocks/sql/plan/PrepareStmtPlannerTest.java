@@ -15,7 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.Config;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.qe.PrepareStmtContext;
@@ -36,7 +36,6 @@ import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.common.AIModelConfigs;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -47,13 +46,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.thrift.TAIModelConfiguration;
-import com.starrocks.thrift.TAIModelSource;
+import com.starrocks.thrift.TAIProvider;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
+import com.starrocks.utframe.AIProviderTestUtil;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -85,12 +84,12 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
 
     @BeforeAll
     public static void setUpAIConfiguration() throws Exception {
-        oldEndpoint = Config.ai_default_chat_endpoint;
-        oldModel = Config.ai_default_chat_model;
-        oldProvider = Config.ai_default_chat_provider;
-        Config.ai_default_chat_endpoint = "https://unit.test.example/v1/chat/completions";
-        Config.ai_default_chat_model = "unit-test-model";
-        Config.ai_default_chat_provider = AIModelConfigs.OPENAI_COMPATIBLE_PROVIDER;
+        oldEndpoint = AIProviderTestUtil.chatProperty("endpoint");
+        oldModel = AIProviderTestUtil.chatProperty("model");
+        oldProvider = AIProviderTestUtil.chatProperty("protocol");
+        AIProviderTestUtil.setChatProperty("endpoint", "https://unit.test.example/v1/chat/completions");
+        AIProviderTestUtil.setChatProperty("model", "unit-test-model");
+        AIProviderTestUtil.setChatProperty("protocol", "openai");
 
         starRocksAssert.withTable("CREATE TABLE `pq_dup3` (\n" +
                 "  `k1` int NOT NULL,\n" +
@@ -206,9 +205,9 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
 
     @AfterAll
     public static void restoreAIConfiguration() {
-        Config.ai_default_chat_endpoint = oldEndpoint;
-        Config.ai_default_chat_model = oldModel;
-        Config.ai_default_chat_provider = oldProvider;
+        AIProviderTestUtil.setChatProperty("endpoint", oldEndpoint);
+        AIProviderTestUtil.setChatProperty("model", oldModel);
+        AIProviderTestUtil.setChatProperty("protocol", oldProvider);
     }
 
     @Test
@@ -225,6 +224,73 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
     }
 
     @Test
+    public void testCachedPointQueryRejectsParallelMode() throws Exception {
+        SessionVariable saved = connectContext.getSessionVariable().clone();
+        try {
+            connectContext.getSessionVariable().setRangeScanExecutionMode("colocate");
+            PreparedQuery prepared = prepare("select v1 from tprimary where pk = ?");
+            ExecPlan cached = execute(prepared, bigint(1));
+            Assertions.assertSame(cached.getPhysicalPlan(), execute(prepared, bigint(2)).getPhysicalPlan());
+            Assertions.assertTrue(prepared.context().isCached());
+            String before = cached.getExplainString(TExplainLevel.VERBOSE);
+
+            connectContext.getSessionVariable().setRangeScanExecutionMode("parallel");
+            SemanticException failure = Assertions.assertThrows(SemanticException.class,
+                    () -> execute(prepared, bigint(3)));
+            Assertions.assertTrue(failure.getMessage().contains("range_scan_execution_mode=parallel"));
+            Assertions.assertTrue(failure.getMessage().contains("an aggregate is required"));
+            Assertions.assertEquals(2, scanPredicateValue(cached));
+            Assertions.assertEquals(before, cached.getExplainString(TExplainLevel.VERBOSE));
+            Assertions.assertTrue(prepared.context().isCached());
+            Assertions.assertSame(cached, prepared.context().getExecPlan());
+            Assertions.assertTrue(connectContext.getSessionVariable().isParallelRangeScan());
+
+            connectContext.getSessionVariable().setRangeScanExecutionMode("colocate");
+            Assertions.assertSame(cached.getPhysicalPlan(), execute(prepared, bigint(4)).getPhysicalPlan());
+            Assertions.assertEquals(4, scanPredicateValue(cached));
+        } finally {
+            connectContext.setSessionVariable(saved);
+        }
+    }
+
+    /**
+     * A hit re-prunes partitions and tablets on the table the cached scan is bound to, without the meta lock. That
+     * is fine for the private copy planning off snapshots binds it to, but cbo_use_lock_db plans on the live table
+     * under the lock, and a cached plan would go on pruning that live table unlocked, racing a concurrent INSERT
+     * OVERWRITE or partition change. Such a plan is not cached.
+     */
+    @Test
+    public void testPointQueryPlannedOnTheLiveTableIsNotCached() throws Exception {
+        boolean cboUseDBLock = connectContext.getSessionVariable().isCboUseDBLock();
+        connectContext.getSessionVariable().setCboUseDBLock(true);
+        try {
+            PreparedQuery prepared = prepare("select v1 from tprimary where pk = ?");
+            ExecPlan first = execute(prepared, bigint(1));
+            ExecPlan second = execute(prepared, bigint(2));
+            Assertions.assertAll(
+                    () -> Assertions.assertFalse(prepared.context().isCached(),
+                            "a plan bound to the live table was cached"),
+                    () -> Assertions.assertNotSame(first.getPhysicalPlan(), second.getPhysicalPlan()),
+                    () -> Assertions.assertEquals(2, scanPredicateValue(second)));
+        } finally {
+            connectContext.getSessionVariable().setCboUseDBLock(cboUseDBLock);
+        }
+    }
+
+    @Test
+    public void testCachedPointQueryScansACopyOfTheTable() throws Exception {
+        PreparedQuery prepared = prepare("select v1 from tprimary where pk = ?");
+        execute(prepared, bigint(1));
+        ExecPlan hit = execute(prepared, bigint(2));
+        Table live = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "tprimary");
+        PhysicalOlapScanOperator scan = findPhysicalOperator(hit.getPhysicalPlan(), PhysicalOlapScanOperator.class);
+        Assertions.assertAll(
+                () -> Assertions.assertTrue(prepared.context().isCached()),
+                () -> Assertions.assertEquals(live.getId(), scan.getTable().getId()),
+                () -> Assertions.assertNotSame(live, scan.getTable(), "the cached plan scans the live table"));
+    }
+
+    @Test
     public void testProviderPreparedStatementRefreshesConfigurationAfterAlterAndRecreation() throws Exception {
         AIProviderMgr manager = GlobalStateMgr.getCurrentState().getAIProviderMgr();
         String name = "prepared_ai_provider";
@@ -232,24 +298,25 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
                 "endpoint", "https://models.example.test/v1/chat/completions",
                 "model", "first-model", "api_key", "first-test-key", "timeout_ms", "1200"), "");
         PreparedQuery prepared = prepare(
-                "select ai_custom_query('" + name + "', ?) from tprimary where pk = ?");
+                "select ai_complete(provider => '" + name
+                        + "', model => 'explicit-model', prompt => ?) from tprimary where pk = ?");
         try {
             ExecPlan first = execute(prepared, new StringLiteral("first prompt"), bigint(1));
-            TAIModelConfiguration firstConfiguration = preparedConfiguration(first).deepCopy();
+            TAIProvider firstConfiguration = preparedConfiguration(first).deepCopy();
             manager.alterProvider(name, Map.of("model", "second-model", "api_key", "second-test-key",
                     "endpoint", "https://altered.example.test/v1/chat/completions", "timeout_ms", "2400"), false);
             ExecPlan second = execute(prepared, new StringLiteral("second prompt"), bigint(2));
-            TAIModelConfiguration secondConfiguration = preparedConfiguration(second).deepCopy();
+            TAIProvider secondConfiguration = preparedConfiguration(second).deepCopy();
             Assertions.assertFalse(prepared.context().isCached());
             Assertions.assertNotSame(first.getPhysicalPlan(), second.getPhysicalPlan());
-            Assertions.assertEquals("first-model", preparedConfiguration(first).getChat().getModel());
-            Assertions.assertEquals("first-test-key", preparedConfiguration(first).getChat().getApi_key());
-            Assertions.assertEquals(1200, preparedConfiguration(first).getChat().getTimeout_ms());
-            Assertions.assertEquals("second-model", preparedConfiguration(second).getChat().getModel());
-            Assertions.assertEquals("second-test-key", preparedConfiguration(second).getChat().getApi_key());
+            Assertions.assertEquals("first-model", preparedConfiguration(first).getParams().get("model"));
+            Assertions.assertEquals("first-test-key", preparedConfiguration(first).getParams().get("api_key"));
+            Assertions.assertEquals("1200", preparedConfiguration(first).getParams().get("timeout_ms"));
+            Assertions.assertEquals("second-model", preparedConfiguration(second).getParams().get("model"));
+            Assertions.assertEquals("second-test-key", preparedConfiguration(second).getParams().get("api_key"));
             Assertions.assertEquals("https://altered.example.test/v1/chat/completions",
-                    preparedConfiguration(second).getChat().getEndpoint());
-            Assertions.assertEquals(2400, preparedConfiguration(second).getChat().getTimeout_ms());
+                    preparedConfiguration(second).getParams().get("endpoint"));
+            Assertions.assertEquals("2400", preparedConfiguration(second).getParams().get("timeout_ms"));
 
             manager.dropProvider(name, false);
             Assertions.assertThrows(SemanticException.class,
@@ -261,10 +328,9 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
             Assertions.assertFalse(prepared.context().isCached());
             Assertions.assertNotSame(second.getPhysicalPlan(), third.getPhysicalPlan());
             Assertions.assertNotEquals(originalId, recreatedId);
-            Assertions.assertEquals(TAIModelSource.PROVIDER, preparedConfiguration(third).getSource());
-            Assertions.assertEquals("third-model", preparedConfiguration(third).getChat().getModel());
-            Assertions.assertEquals("third-test-key", preparedConfiguration(third).getChat().getApi_key());
-            Assertions.assertFalse(preparedConfiguration(third).getChat().isSetTimeout_ms());
+            Assertions.assertEquals("third-model", preparedConfiguration(third).getParams().get("model"));
+            Assertions.assertEquals("third-test-key", preparedConfiguration(third).getParams().get("api_key"));
+            Assertions.assertFalse(preparedConfiguration(third).getParams().containsKey("timeout_ms"));
             Assertions.assertEquals(firstConfiguration, preparedConfiguration(first));
             Assertions.assertEquals(secondConfiguration, preparedConfiguration(second));
         } finally {
@@ -274,13 +340,13 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"ai_custom_query", "ai_custom_embedding"})
+    @ValueSource(strings = {"ai_complete", "ai_embed"})
     public void testProviderSelectorMustBeKnownAtPrepareTime(String function) {
         boolean oldEnablePrepare = connectContext.getSessionVariable().isEnablePrepareStmt();
         connectContext.getSessionVariable().setEnablePrepareStmt(true);
         try {
             StatementBase statement = SqlParser.parseSingleStatement(
-                    "prepare unresolved_provider from select " + function + "(?, 'prompt')",
+                    "prepare unresolved_provider from select " + function + "('prompt', ?, 'model')",
                     connectContext.getSessionVariable().getSqlMode());
             SemanticException error = Assertions.assertThrows(SemanticException.class,
                     () -> Analyzer.analyze(statement, connectContext));
@@ -290,19 +356,40 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
         }
     }
 
-    private static TAIModelConfiguration preparedConfiguration(ExecPlan plan) {
-        List<Map<String, TAIModelConfiguration>> configurations = plan.getFragments().stream()
+    private static TAIProvider preparedConfiguration(ExecPlan plan) {
+        List<Map<String, TAIProvider>> configurations = plan.getFragments().stream()
                 .flatMap(fragment -> fragment.getPlanRoot().treeToThrift().getNodes().stream())
                 .filter(node -> node.getNode_type() == TPlanNodeType.AI_PROJECT_NODE)
-                .map(node -> node.getAi_project_node().getAi_model_configs()).toList();
+                .map(node -> node.getAi_project_node().getAi_provider_mapping()).toList();
         Assertions.assertFalse(configurations.isEmpty());
-        TAIModelConfiguration configuration = configurations.get(0).get("provider:0");
+        TAIProvider configuration = configurations.get(0).values().iterator().next();
         configurations.forEach(configs -> {
-            Assertions.assertEquals(Set.of("provider:0"), configs.keySet());
-            Assertions.assertEquals(configuration, configs.get("provider:0"));
+            Assertions.assertEquals(Set.of(configs.values().iterator().next().getId()), configs.keySet());
+            Assertions.assertEquals(configuration, configs.values().iterator().next());
         });
-        Assertions.assertEquals(TAIModelSource.PROVIDER, configuration.getSource());
         return configuration;
+    }
+
+    @Test
+    public void testPreparedDefaultProviderIsResolvedOnEachExecute() throws Exception {
+        AIProviderMgr manager = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        String previous = manager.getDefaultProvider(AIProviderType.CHAT).getName();
+        String replacement = "prepared_default_replacement";
+        manager.createProvider(replacement, AIProviderType.CHAT,
+                Map.of("endpoint", "http://models.example.test/v1/chat/completions", "model", "replacement-model"), "");
+        try {
+            PreparedQuery prepared = prepare("select ai_complete(?) from tprimary where pk = ?");
+            ExecPlan first = execute(prepared, new StringLiteral("prompt"), bigint(1));
+            String firstModel = preparedConfiguration(first).getParams().get("model");
+            manager.setDefaultProvider(replacement);
+            ExecPlan second = execute(prepared, new StringLiteral("prompt"), bigint(1));
+            Assertions.assertEquals("replacement-model", preparedConfiguration(second).getParams().get("model"));
+            Assertions.assertEquals(firstModel, preparedConfiguration(first).getParams().get("model"));
+            Assertions.assertFalse(prepared.context().isCached());
+        } finally {
+            manager.setDefaultProvider(previous);
+            manager.dropProvider(replacement, true);
+        }
     }
 
     @Test
@@ -838,7 +925,6 @@ public class PrepareStmtPlannerTest extends PlanTestBase {
         }
         return bindings;
     }
-
 
     // every constant reachable from the physical tree, so a select-list parameter frozen at its first value shows up
     private static Set<String> planConstants(ExecPlan plan) {

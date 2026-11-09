@@ -91,7 +91,7 @@ TEST_F(FileUtilsTest, TestCopyFile) {
     ASSERT_TRUE(src_file->close().ok());
 
     std::string dst_file_name = _s_test_data_path + "/abcd123456.txt";
-    fs::copy_file(src_file_name, dst_file_name);
+    ASSERT_OK(fs::copy_file(src_file_name, dst_file_name));
 
     ASSERT_EQ(4194317, std::filesystem::file_size(dst_file_name));
 }

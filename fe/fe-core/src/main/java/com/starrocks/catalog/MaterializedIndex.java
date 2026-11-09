@@ -127,6 +127,20 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     // PublishVersionRequest requests to BE nodes.
     private long visibleTxnId;
 
+    // For a SHADOW index of a lake table, the watershed txn id W of the alter job that exposed it.
+    // LakeTableTxnStateListener rejects the commit of a transaction with an id at or above W that did not write
+    // this index (lake compaction is exempt, see checkShadowIndexesLoaded). An id above W only means it was drawn
+    // after W, possibly before the exposure finished. A writer that begins its transaction before resolving
+    // tablets still sees the index: it resolves them under the table READ lock, and the exposure holds the table
+    // WRITE lock. 0 when not stamped: an index no lake alter exposed, or a shadow index loaded from an image
+    // written by an FE without this field (replaying the exposure from the journal stamps it). The stamp stays on
+    // the index after the alter makes it NORMAL, but the commit check only looks at SHADOW indexes. Kept apart
+    // from visibleTxnId because it must not change which transactions publish to the index (a LakeRollupJob leaves
+    // its index visible to every transaction), and persisted, unlike visibleTxnId, so the commit check survives
+    // an FE restart.
+    @SerializedName(value = "shadowWatershedTxnId")
+    private long shadowWatershedTxnId = 0;
+
     // Tablet distribution balance stat
     private AtomicReference<BalanceStat> balanceStat = new AtomicReference<>(BalanceStat.BALANCED_STAT);
 
@@ -189,6 +203,19 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
      */
     public boolean visibleForTransaction(long txnId) {
         return state == IndexState.NORMAL || visibleTxnId <= txnId;
+    }
+
+    /**
+     * @return the watershed txn id of the lake alter job that exposed this SHADOW index, or 0 if none was
+     *         stamped. See {@link #shadowWatershedTxnId}.
+     */
+    public long getShadowWatershedTxnId() {
+        return shadowWatershedTxnId;
+    }
+
+    public void setShadowWatershedTxnId(long shadowWatershedTxnId) {
+        Preconditions.checkState(state == IndexState.SHADOW);
+        this.shadowWatershedTxnId = shadowWatershedTxnId;
     }
 
     /**

@@ -37,7 +37,7 @@ MySQL > SELECT ST_AsText(ST_Point(24.7, 56.7));
 +---------------------------------+
 ```
 
-对于 `GEOGRAPHY`，该函数保留全部七种 OGC 几何类型和 `EMPTY` 成员。输入为 `NULL` 时返回 `NULL`。
+对于原生 `GEOMETRY` 和 `GEOGRAPHY`，该函数保留全部七种 OGC 几何类型、`EMPTY` 和空子元素。输入为 `NULL` 时返回 `NULL`。序列化不会更改输入 CRS 或坐标。
 
 ```SQL
 SELECT ST_AsText(ST_GeogFromText('GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING (1 2, 3 4))'));
@@ -45,4 +45,12 @@ SELECT ST_AsText(ST_GeogFromText('GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING (1
 
 ```text
 GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING (1 2, 3 4))
+```
+
+```SQL
+SELECT ST_AsText(ST_GeomFromText('POINT (1000000 2000000)', 'EPSG:3857'));
+```
+
+```text
+POINT (1000000 2000000)
 ```

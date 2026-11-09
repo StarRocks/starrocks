@@ -36,7 +36,6 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
@@ -47,6 +46,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
@@ -449,6 +449,28 @@ public class ExpressionAnalyzer {
         public Visitor(AnalyzeState analyzeState, ConnectContext session) {
             this.analyzeState = analyzeState;
             this.session = session;
+        }
+
+        @Override
+        public Void visit(ParseNode node, Scope scope) {
+            node.accept(this, scope);
+            if (node instanceof Expr expression) {
+                checkNestedGeoType(expression.getType(), expression);
+                if (expression instanceof FunctionCallExpr call && call.getFn() != null) {
+                    // The final argument type also covers varargs.
+                    for (Type argumentType : call.getFn().getArgs()) {
+                        checkNestedGeoType(argumentType, expression);
+                    }
+                }
+            }
+            return null;
+        }
+
+        private void checkNestedGeoType(Type type, Expr expression) {
+            if (type.hasNestedGeoType()) {
+                throw new SemanticException("Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT: "
+                        + type.toSql() + " in " + ExprToSql.toSql(expression), expression.getPos());
+            }
         }
 
         @Override
@@ -1154,8 +1176,9 @@ public class ExpressionAnalyzer {
                 node.setFn(fn);
                 node.setType(fn.getReturnType());
                 FunctionAnalyzer.analyze(node);
-                verifyNoAiInConditionalFunction(node);
+                verifyNoAIInConditionalFunction(node);
                 checkGetQueryProfileAccess(node);
+                Authorizer.checkAIFunctionUsage(session, node);
                 return null;
             }
 
@@ -1180,8 +1203,9 @@ public class ExpressionAnalyzer {
                     node.setFn(fn);
                     node.setType(fn.getReturnType());
                     FunctionAnalyzer.analyze(node);
-                    verifyNoAiInConditionalFunction(node);
+                    verifyNoAIInConditionalFunction(node);
                     checkGetQueryProfileAccess(node);
+                    Authorizer.checkAIFunctionUsage(session, node);
                     return null;
                 }
                 // Try to provide a more user-friendly error message for positional calls
@@ -1196,8 +1220,9 @@ public class ExpressionAnalyzer {
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
-            verifyNoAiInConditionalFunction(node);
+            verifyNoAIInConditionalFunction(node);
             checkGetQueryProfileAccess(node);
+            Authorizer.checkAIFunctionUsage(session, node);
             return null;
         }
 
@@ -1210,7 +1235,7 @@ public class ExpressionAnalyzer {
             }
         }
 
-        private void verifyNoAiInConditionalFunction(FunctionCallExpr node) {
+        private void verifyNoAIInConditionalFunction(FunctionCallExpr node) {
             String resolvedFunctionName = node.getFn().functionName();
             if (FunctionSet.IF.equalsIgnoreCase(resolvedFunctionName)
                     || FunctionSet.IFNULL.equalsIgnoreCase(resolvedFunctionName)
@@ -1694,7 +1719,7 @@ public class ExpressionAnalyzer {
             String funcType = node.getFuncType();
             if (funcType.equalsIgnoreCase(FunctionSet.DATABASE) || funcType.equalsIgnoreCase(FunctionSet.SCHEMA)) {
                 node.setType(VarcharType.VARCHAR);
-                node.setStrValue(ClusterNamespace.getNameFromFullName(session.getDatabase()));
+                node.setStrValue(session.getDatabase());
             } else if (funcType.equalsIgnoreCase(FunctionSet.USER)
                     || funcType.equalsIgnoreCase(FunctionSet.SESSION_USER)) {
                 node.setType(VarcharType.VARCHAR);

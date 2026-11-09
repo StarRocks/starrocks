@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard.presplit;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionRef;
 
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -26,8 +27,8 @@ import java.util.Map;
  * Restricts a multi-partition pre-split to partitions named by the INSERT.
  * Logical names are the deterministic auto-partition names derived from sampled values; catalog
  * names are the real or temporary partitions that the load will write. Static overwrite supplies
- * an explicit source-to-temp mapping, while a regular explicit INSERT starts with an identity map
- * and can fall back to range matching for custom temporary names.
+ * an explicit source-to-temp mapping, while a regular explicit INSERT, or a Broker Load that names its
+ * partitions, starts with an identity map and can fall back to range matching for custom temporary names.
  */
 final class PreSplitPartitionScope {
 
@@ -54,11 +55,16 @@ final class PreSplitPartitionScope {
             return unrestricted();
         }
         PartitionRef partitionRef = insertStmt.getTargetPartitionNames();
+        return explicit(partitionRef.getPartitionNames(), partitionRef.isTemp());
+    }
+
+    /** Exactly the named partitions, all real or all temporary, each mapped to itself. */
+    static PreSplitPartitionScope explicit(Collection<String> partitionNames, boolean temporary) {
         Map<String, String> identity = new LinkedHashMap<>();
-        for (String partitionName : partitionRef.getPartitionNames()) {
+        for (String partitionName : partitionNames) {
             identity.put(normalize(partitionName), partitionName);
         }
-        return new PreSplitPartitionScope(true, partitionRef.isTemp(), identity);
+        return new PreSplitPartitionScope(true, temporary, identity);
     }
 
     static PreSplitPartitionScope staticOverwrite(

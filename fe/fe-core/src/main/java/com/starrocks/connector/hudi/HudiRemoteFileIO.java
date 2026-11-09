@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileScanContext;
@@ -120,6 +121,17 @@ public class HudiRemoteFileIO implements RemoteFileIO {
         ImmutableMap.Builder<RemotePathKey, List<RemoteFileDesc>> resultPartitions = ImmutableMap.builder();
         List<RemoteFileDesc> fileDescs = Lists.newArrayList();
 
+        // Everything above is local: a missing table location throws without touching storage, so the
+        // guard belongs here rather than at the method's entry, where it would report a wait that never
+        // happens (and in error mode would mask the argument error). From here on createHudiContext reads
+        // the table's Hudi timeline -- and, with the metadata table enabled, that table too -- before the
+        // partition's file slices are listed. CachingRemoteFileIO sits in front, so reaching here means
+        // the listing was not cached and really goes out. This is the only door out of the Hudi connector
+        // that does not pass through the HMS client: everything else in HudiMetadata is hmsOps.
+        //
+        // Outside the try on purpose: the catch below wraps everything in StarRocksConnectorException, and
+        // the refusal error mode raises has to reach the caller as itself.
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             createHudiContext(scanContext);
             if (scanContext.hudiLastInstant == null) {

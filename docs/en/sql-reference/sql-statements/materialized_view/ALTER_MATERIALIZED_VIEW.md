@@ -28,6 +28,7 @@ ALTER MATERIALIZED VIEW can:
   - `foreign_key_constraints`
   - `colocate_with`
   - `excluded_refresh_tables`
+  - `file_bundling` (shared-data clusters only, from v26.2 onwards)
   - All session variable-related properties. For information on session variables, see [System variables](../../System_variable.md).
 
 :::tip
@@ -59,7 +60,7 @@ ALTER MATERIALIZED VIEW [db_name.]<mv_name>
 | ACTIVE                  | no           |Set the status of the materialized view to active. StarRocks automatically sets a materialized view to inactive if any of its base tables is changed, for example, dropped and re-created, to prevent the situation that original metadata mismatches the changed base table. Inactive materialized views cannot be used for query acceleration or query rewrite. You can use this SQL to activate the materialized view after changing the base tables. |
 | INACTIVE                | no           | Set the status of the materialized view to inactive. An inactive asynchronous materialized view cannot be refreshed. But you can still query it as a table. |
 | SWAP WITH               | no           | Perform an atomic exchange with another asynchronous materialized view after necessary consistency checks. |
-| ORDER BY                | no           | Change the sort key of the materialized view to the listed columns online, without recreating the materialized view. Supported only for range-distributed asynchronous materialized views in shared-data clusters (from v4.2 onwards). The listed columns must be output columns of the materialized view. For Duplicate Key materialized views the sort key can be any subset of the columns; for Aggregate and Unique Key materialized views the sort key must consist of exactly the key columns. The materialized view's refresh is paused for the duration of the rewrite and resumed automatically when it completes; the materialized view remains queryable throughout and the new sort order takes effect atomically. |
+| ORDER BY                | no           | Change the sort key of the materialized view to the listed columns online, without recreating the materialized view. Supported only for range-distributed asynchronous materialized views in shared-data clusters (from v4.2 onwards). On a materialized view with `colocate_with`, the new sort key must start with the colocated columns, in the same order and with the same types. If `colocate_with` specifies only the colocation group and the new sort key is longer than the colocated columns, the property is rewritten to the explicit form `<colocation_group>:<colocated_column>[,<colocated_column>]`, which `SHOW CREATE MATERIALIZED VIEW` returns from then on. The listed columns must be output columns of the materialized view. For Duplicate Key materialized views the sort key can be any subset of the columns; for Aggregate and Unique Key materialized views the sort key must consist of exactly the key columns. The materialized view's refresh is paused for the duration of the rewrite and resumed automatically when it completes; the materialized view remains queryable throughout and the new sort order takes effect atomically. |
 | key                     | no           | The name of the property to alter, see [SQL Reference - CREATE MATERIALIZED VIEW - Parameters](CREATE_MATERIALIZED_VIEW.md#parameters) for details.<br />**NOTE**<br />If you want to alter a session variable-related property of the materialized view, you must add a `session.` prefix to the property, for example, `session.insert_timeout`. You do not need to specify the prefix for non-session properties, for example, `mv_rewrite_staleness_second`. |
 | value                   | no           | The value of the property to alter.                         |
 
@@ -132,4 +133,10 @@ Example 11: Change the sort key of a range-distributed materialized view to `(k2
 
 ```SQL
 ALTER MATERIALIZED VIEW order_mv ORDER BY (k2, k1);
+```
+
+Example 12: Enable File Bundling for a materialized view in a shared-data cluster (from v26.2 onwards). `file_bundling` must be the only property in the statement. The change runs as an asynchronous job, and you can check its progress with [SHOW ALTER TABLE COLUMN](../table_bucket_part_index/SHOW_ALTER.md). The restrictions on changing `file_bundling` are the same as for tables. See the `file_bundling` property in [CREATE TABLE](../table_bucket_part_index/CREATE_TABLE.md).
+
+```SQL
+ALTER MATERIALIZED VIEW order_mv SET ("file_bundling" = "true");
 ```

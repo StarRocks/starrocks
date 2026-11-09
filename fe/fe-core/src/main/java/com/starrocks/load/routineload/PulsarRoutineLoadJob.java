@@ -331,8 +331,9 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     // Refresh `currentPulsarPartitions` against the broker. The slow step is a FE -> BE brpc
     // (PulsarUtil.getAllPulsarPartitions), so we must not hold the per-job writeLock across it -
     // otherwise readers (admin RPCs, SHOW ROUTINE LOAD, processTimeoutTasks) stall for the
-    // full RPC plus retries. Three phases: snapshot under readLock, fetch with no lock, apply
-    // under writeLock with a configVersion guard to discard a mid-flight ALTER.
+    // full RPC plus retries. Three phases: snapshot under readLock, fetch with no lock through a
+    // usable compute resource (see resolveFetchComputeResource), apply under writeLock with a
+    // configVersion guard to discard a mid-flight ALTER.
     @Override
     protected void refreshPartitionsIfNeeded() throws StarRocksException {
         FetchSnapshot snapshot;
@@ -362,7 +363,8 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         Exception fetchError = null;
         try {
             newPartitions = PulsarUtil.getAllPulsarPartitions(snapshot.serviceUrl, snapshot.topic,
-                    snapshot.subscription, snapshotConvertedCustomProperties(), snapshot.computeResource);
+                    snapshot.subscription, snapshotConvertedCustomProperties(),
+                    resolveFetchComputeResource(snapshot.computeResource));
         } catch (Exception e) {
             fetchError = e;
         }
@@ -565,6 +567,10 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     public List<String> getAllPulsarPartitions() throws StarRocksException {
+        return getAllPulsarPartitions(computeResource);
+    }
+
+    private List<String> getAllPulsarPartitions(ComputeResource computeResource) throws StarRocksException {
         // Get custom properties like tokens.
         return PulsarUtil.getAllPulsarPartitions(serviceUrl, topic,
                 subscription, snapshotConvertedCustomProperties(), computeResource);
@@ -618,7 +624,9 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         if (customPulsarPartitions.isEmpty()) {
             return;
         }
-        List<String> allPulsarPartitions = getAllPulsarPartitions();
+        // acquire a local compute resource so the validation RPC is routed to the job's
+        // warehouse (shared-data mode) without writing the not-yet-scheduled job's field
+        List<String> allPulsarPartitions = getAllPulsarPartitions(acquireComputeResource());
         for (String customPartition : customPulsarPartitions) {
             if (!allPulsarPartitions.contains(customPartition)) {
                 throw new LoadException("there is a custom pulsar partition " + customPartition

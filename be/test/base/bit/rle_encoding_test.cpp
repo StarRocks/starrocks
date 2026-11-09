@@ -39,6 +39,7 @@
 #include <iomanip>
 #include <limits>
 #include <ostream>
+#include <random>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -533,6 +534,66 @@ TEST_F(TestRle, TestGetBatchWithDictOutOfRange) {
     std::vector<int> to_check(2048);
     auto n = decoder.GetBatchWithDict(dict.data(), dict.size(), &to_check[0], 2048);
     ASSERT_EQ(-1, n);
+}
+
+// GetBitBatchAsBytes decodes exactly what GetBatch does for 1-bit RLE data: repeated and literal runs, batch
+// sizes that cut runs anywhere, mixing with GetBatch on one stream, and a truncated stream.
+TEST(Rle, GetBitBatchAsBytesMatchesGetBatch) {
+    std::mt19937 rng(53);
+    for (int pattern = 0; pattern < 4; pattern++) {
+        std::vector<int16_t> values(30000);
+        for (size_t i = 0; i < values.size(); i++) {
+            switch (pattern) {
+            case 0: // sparse zeros: short repeated runs with literal groups between them
+                values[i] = rng() % 20 != 0;
+                break;
+            case 1: // random: literal runs
+                values[i] = rng() % 2;
+                break;
+            case 2: // long runs
+                values[i] = (i / 1000) % 2;
+                break;
+            default: // all ones: one long repeated run
+                values[i] = 1;
+                break;
+            }
+        }
+        faststring buffer;
+        RleEncoder<int16_t> encoder(&buffer, 1);
+        for (auto v : values) encoder.Put(v);
+        encoder.Flush();
+
+        RleDecoder<int16_t> decoder(buffer.data(), static_cast<int>(buffer.size()), 1);
+        size_t pos = 0;
+        bool use_bytes = true;
+        while (pos < values.size()) {
+            size_t n = std::min<size_t>(values.size() - pos, 1 + rng() % 3000);
+            if (use_bytes) {
+                std::vector<uint8_t> got(n);
+                ASSERT_TRUE(decoder.GetBitBatchAsBytes(got.data(), n)) << "pattern " << pattern << " pos " << pos;
+                for (size_t i = 0; i < n; i++) {
+                    ASSERT_EQ(values[pos + i], got[i]) << "pattern " << pattern << " value " << pos + i;
+                }
+            } else {
+                std::vector<int16_t> got(n);
+                ASSERT_TRUE(decoder.GetBatch(got.data(), n)) << "pattern " << pattern << " pos " << pos;
+                for (size_t i = 0; i < n; i++) {
+                    ASSERT_EQ(values[pos + i], got[i]) << "pattern " << pattern << " value " << pos + i;
+                }
+            }
+            pos += n;
+            use_bytes = rng() % 4 != 0;
+        }
+
+        // a stream cut in the middle fails the same way as GetBatch
+        int cut = static_cast<int>(buffer.size() / 2);
+        RleDecoder<int16_t> short_decoder(buffer.data(), cut, 1);
+        RleDecoder<int16_t> short_reference(buffer.data(), cut, 1);
+        std::vector<uint8_t> got(values.size());
+        std::vector<int16_t> expected(values.size());
+        ASSERT_EQ(short_reference.GetBatch(expected.data(), values.size()),
+                  short_decoder.GetBitBatchAsBytes(got.data(), values.size()));
+    }
 }
 
 } // namespace starrocks

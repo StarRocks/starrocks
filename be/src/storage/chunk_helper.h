@@ -18,7 +18,6 @@
 #include <memory>
 
 #include "column/chunk.h"
-#include "column/segmented_chunk.h"
 #include "column/vectorized_fwd.h"
 #include "storage/olap_common.h"
 #include "tablet_schema.h"

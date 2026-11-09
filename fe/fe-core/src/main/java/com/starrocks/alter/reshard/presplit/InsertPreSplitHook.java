@@ -32,6 +32,8 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StatementBase.ExplainLevel;
@@ -57,11 +59,13 @@ import java.util.Set;
  * the statement-shape pre-filters, {@link SelectRelation} extraction, the
  * mutually-exclusive strategy selection, the per-path config gate, the
  * per-session opt-out, and target resolve + authorization. The conservative-skip
- * statement gates live alongside them: the statement-shape and load-properties
- * gates in {@link #passesCommonPreFilters}, and the materialized-view gate in
- * {@link #resolveEligibleTable}. Each {@link InsertPreSplitSource} supplies the
- * source-specific detection + resolve, and the submit flow (plus the
- * automatic-partition gate) lives in {@link PreSplitFlow}.
+ * statement gates live alongside them: the statement-shape gates in
+ * {@link #passesCommonPreFilters}, and the materialized-view gate in
+ * {@link #resolveEligibleTable}, which admits a view only as its own system
+ * refresh's static overwrite, and only a view without a row id (incremental
+ * views go to the derived tier instead). Each {@link InsertPreSplitSource}
+ * supplies the source-specific detection + resolve, and the submit flow (plus
+ * the automatic-partition gate) lives in {@link PreSplitFlow}.
  *
  * <p>The entry point is fail-safe: any throw is swallowed and the load proceeds
  * without pre-split, because the hook runs before the planner and must never
@@ -127,30 +131,34 @@ public final class InsertPreSplitHook {
             PreSplitPartitionScope partitionScope =
                     PreSplitPartitionScope.staticOverwrite(sourcePartitionNames, temporaryPartitionNames);
             // Classify the target BEFORE tryRunEligibleInsert, which returns on a set-operation or CTE
-            // query shape before it ever looks at the target. A materialized view refreshed by one of
+            // query shape before it ever looks at the target. An incremental view refreshed by one of
             // those shapes would otherwise be dropped with nothing recorded, even though the derived
             // tier does not care what the refresh query looks like.
             ResolvedTable resolvedTable = resolveTarget(insertStmt, context);
-            if (resolvedTable != null && resolvedTable.olapTable() instanceof MaterializedView) {
-                // Establish that the derived tier can carve this view BEFORE the feature flag gets a
-                // say: an ordinary async view's full refresh is also an INSERT OVERWRITE and lands
-                // here, and consulting the flag first would count every such refresh against this
-                // feature's own config gate, describing a view pre-split was never a candidate for.
-                // The skip reason itself is the same one resolveEligibleTable would record -- that
-                // resolver has always declined materialized-view targets -- so this only reports it
-                // earlier, and spares those refreshes a table lock they gain nothing from.
-                if (!MaterializedViewRowIdBoundaries.isDerivable(resolvedTable.olapTable())) {
-                    PreSplitMetrics.recordEligibilitySkip(SkipReason.MATERIALIZED_VIEW_TARGET);
+            // An incremental view goes to the derived tier; a view without a row id falls through to the
+            // sampled route, where resolveEligibleTable decides (see there for why only the system
+            // static overwrite admits a view).
+            if (resolvedTable != null && resolvedTable.olapTable() instanceof MaterializedView materializedView) {
+                if (materializedView.getRowIdStrategy() != null) {
+                    // Decided before the feature flag gets a say, so an incremental view this tier cannot
+                    // key is not counted against this feature's own config gate.
+                    if (!MaterializedViewRowIdBoundaries.isDerivable(materializedView)) {
+                        PreSplitMetrics.recordEligibilitySkip(SkipReason.MATERIALIZED_VIEW_TARGET);
+                        return;
+                    }
+                    // A multi-partition refresh of an auto-increment view is declined before the flag gets a
+                    // say: turning the flag on would not make it eligible, so charging it to the config gate
+                    // would misreport it. One counter serves the whole view, so each partition's ids sit in
+                    // one band of the id space. Fingerprints are uniform in every partition, so a fingerprint
+                    // view goes on to the flow, which carves all of them with the same cuts.
+                    if (partitionScope.catalogPartitionNames().size() != 1
+                            && !MaterializedViewRowIdBoundaries.isFingerprintRowId(materializedView)) {
+                        PreSplitMetrics.recordEligibilitySkip(SkipReason.MULTIPLE_TEMPORARY_PARTITIONS);
+                        return;
+                    }
+                    runStaticOverwriteMaterializedViewPreSplit(resolvedTable, context, partitionScope, estimates);
                     return;
                 }
-                // Part of identifying the candidate, not of serving it: turning the flag on would not make
-                // a multi-partition refresh eligible, so charging it to the config gate would misreport it.
-                if (partitionScope.catalogPartitionNames().size() != 1) {
-                    PreSplitMetrics.recordEligibilitySkip(SkipReason.MULTIPLE_TEMPORARY_PARTITIONS);
-                    return;
-                }
-                runStaticOverwriteMaterializedViewPreSplit(resolvedTable, context, partitionScope, estimates);
-                return;
             }
             tryRunEligibleInsert(insertStmt, context, -1L, partitionScope, true);
         } catch (Throwable unexpected) {
@@ -161,9 +169,9 @@ public final class InsertPreSplitHook {
     }
 
     /**
-     * Derived-tier route for a static overwrite whose target is a materialized view. The sampled
-     * sources cannot serve one (see {@link #resolveEligibleTable}), but an incremental view's hidden
-     * row-id sort key needs no sample at all.
+     * Derived-tier route for a static overwrite whose target is an incremental materialized view. The
+     * sampled sources cannot serve one (see {@link #resolveEligibleTable}), but its hidden row-id sort
+     * key needs no sample at all.
      *
      * <p>Deliberately does NOT run {@link #authorizeTargetSideEffects}. That re-check guards the
      * sampled paths because they read source data through an internal ROOT context, so it verifies the
@@ -231,7 +239,8 @@ public final class InsertPreSplitHook {
             return;
         }
         try (PreSplitProfile.Scope ignored = PreSplitProfile.startAttempt(context, source.loadKind())) {
-            ResolvedTable resolvedTable = resolveEligibleTable(insertStmt, context);
+            boolean admitPctView = staticOverwrite && insertStmt.isSystem();
+            ResolvedTable resolvedTable = resolveEligibleTable(insertStmt, context, admitPctView);
             if (resolvedTable == null) {
                 PreSplitProfile.recordOutcome("SKIPPED: TARGET_NOT_ELIGIBLE");
                 return;
@@ -242,7 +251,16 @@ public final class InsertPreSplitHook {
                 PreSplitProfile.recordOutcome("SKIPPED: UNSUPPORTED_TARGET_COLUMN_LIST");
                 return;
             }
-            authorizeTargetSideEffects(resolvedTable, context);
+            // A view gets here only as its own refresh (admitPctView), so the target re-check is skipped
+            // for the reason runStaticOverwriteMaterializedViewPreSplit skips it: the refresh already
+            // required privileges on the view, the INSERT check never applies to a view, and a denial
+            // thrown here would be swallowed into a silent no-op. Its USAGE check on a non-default
+            // warehouse is skipped with it, which widens nothing: the sampler runs on the compute
+            // resource the refresh itself writes with. The SELECT re-check on the source, which the
+            // ROOT sampler reads, still runs in prepare.
+            if (!(resolvedTable.olapTable() instanceof MaterializedView)) {
+                authorizeTargetSideEffects(resolvedTable, context);
+            }
 
             PreSplitFlow.Prepared prepared = source.prepare(
                     insertStmt, selectRelation, resolvedTable.olapTable(), resolvedTable.database(), context);
@@ -263,6 +281,40 @@ public final class InsertPreSplitHook {
         }
     }
 
+    /**
+     * Cheap statement-shape gates, all of them about WHERE the load writes.
+     *
+     * <p>Deliberately no {@code PROPERTIES(...)} gate. There used to be one, declining any statement
+     * written with a properties clause, and it was removed because it could not name a property it
+     * was protecting against:
+     *
+     * <ul>
+     *   <li>Most of {@code LoadStmt.PROPERTIES_SET} is shared load vocabulary that an INSERT ignores
+     *       outright -- {@code partial_update}, {@code timezone}, {@code priority},
+     *       {@code load_mem_limit}, the JSON options, {@code warehouse} -- read only by
+     *       {@code LoadJob#setJobProperties}, which for an INSERT runs after {@code InsertPlanner}
+     *       built the plan and the coordinator is already executing, and consumed from there only by
+     *       {@code BrokerLoadJob}. On this path they are SHOW LOAD bookkeeping.</li>
+     *   <li>The ones that ARE live only remove rows: {@code strict_mode} filters at the scan,
+     *       {@code max_filter_ratio} decides commit-or-abort, {@code merge_condition} turns the
+     *       upsert conditional. None of them can move a row to a different tablet, so none can make
+     *       a boundary invalid -- the worst case is tablets sized below target, and pre-split is a
+     *       sizing optimization.</li>
+     *   <li>{@code enable_push_down_schema} makes the load read the FILES() columns at the target's
+     *       types while the sampler reads them as BE inferred them. That divergence is NOT specific
+     *       to the property: {@code Config.files_enable_insert_push_down_column_type} defaults to
+     *       true and {@code QueryAnalyzer#resolveTableRef} applies the push-down to the table this
+     *       hook pre-resolved, so every pre-split INSERT-from-FILES already samples raw types and
+     *       loads pushed-down ones, properties or not.</li>
+     * </ul>
+     *
+     * <p>The gate's other stated purpose -- never reshard for a statement that is about to fail
+     * property validation -- was arbitrary in the same way. This hook runs pre-analysis, so it
+     * cannot tell whether the statement will fail on an unknown column, a type mismatch or a source
+     * privilege either; a reshard is data-preserving, so an unused split costs tablet metadata
+     * churn, not correctness. Guarding one narrow slice of "may fail analysis" while ignoring the
+     * rest bought nothing.
+     */
     private static boolean passesCommonPreFilters(InsertStmt insertStmt, ConnectContext context) {
         // An explicit target column list is validated after target resolution:
         // the source-agnostic targetColumnListIsPreSplitSafe gate plus each
@@ -280,24 +332,12 @@ public final class InsertPreSplitHook {
         if (context.getTxnId() != 0 || insertStmt.getTxnId() != DmlStmt.INVALID_TXN_ID) {
             return false;
         }
-        if (insertStmt.isStaticKeyPartitionInsert()) {
+        // The online range rewrite copies a partition onto itself while its job owns the target's tablets, so there is
+        // nothing to split and nothing to record.
+        if (insertStmt.isShadowRewrite()) {
             return false;
         }
-        return !carriesLoadProperties(insertStmt);
-    }
-
-    /**
-     * Whether the statement was written with a {@code PROPERTIES(...)} clause, which can change the
-     * row set the load writes (max_filter_ratio, strict_mode, ...) relative to what the sampler saw.
-     *
-     * <p>Deliberately not {@code getProperties().isEmpty()}: {@code InsertAnalyzer#analyzeProperties}
-     * fills that map with the session defaults for max_filter_ratio / strict_mode / timeout, so after
-     * analysis it is never empty. {@link #passesCommonPreFilters} runs before analysis and would not
-     * notice, but {@link #passesDynamicOverwritePreFilters} runs after it and would reject every
-     * statement. Both ask the parse-time question so the two gates cannot drift apart.
-     */
-    private static boolean carriesLoadProperties(InsertStmt insertStmt) {
-        return !insertStmt.getUserSpecifiedPropertyKeys().isEmpty();
+        return !insertStmt.isStaticKeyPartitionInsert();
     }
 
     private static boolean passesDynamicOverwritePreFilters(
@@ -311,10 +351,7 @@ public final class InsertPreSplitHook {
         if (context.getTxnId() != 0 || insertStmt.getTxnId() != DmlStmt.INVALID_TXN_ID) {
             return false;
         }
-        if (insertStmt.isSpecifyPartitionNames() || insertStmt.isStaticKeyPartitionInsert()) {
-            return false;
-        }
-        return !carriesLoadProperties(insertStmt);
+        return !insertStmt.isSpecifyPartitionNames() && !insertStmt.isStaticKeyPartitionInsert();
     }
 
     private static boolean passesStaticOverwritePreFilters(InsertStmt insertStmt, ConnectContext context) {
@@ -324,11 +361,8 @@ public final class InsertPreSplitHook {
         if (insertStmt.isExplain() && !ExplainLevel.ANALYZE.equals(insertStmt.getExplainLevel())) {
             return false;
         }
-        if (context.getTxnId() != 0 || insertStmt.getTxnId() != DmlStmt.INVALID_TXN_ID
-                || insertStmt.isStaticKeyPartitionInsert()) {
-            return false;
-        }
-        return !carriesLoadProperties(insertStmt);
+        return context.getTxnId() == 0 && insertStmt.getTxnId() == DmlStmt.INVALID_TXN_ID
+                && !insertStmt.isStaticKeyPartitionInsert();
     }
 
     /**
@@ -345,7 +379,7 @@ public final class InsertPreSplitHook {
      *       value (has a default, is nullable, auto-increment, or generated) —
      *       mirrors InsertAnalyzer's "must be explicitly mentioned" rule, so a list
      *       missing a required column is skipped rather than resharded;</li>
-     *   <li>every range-distribution (sort) key column of EVERY visible index (base
+     *   <li>every non-generated range-distribution (sort) key column of EVERY visible index (base
      *       plus any rollup) is present -- an omitted key is defaulted for every row,
      *       collapsing the data on that key and making split boundaries degenerate
      *       for whichever index the omitted column belongs to.</li>
@@ -388,7 +422,9 @@ public final class InsertPreSplitHook {
             }
         }
         for (Column sortKey : unionOfVisibleIndexSortKeyColumns(target, sortKeyColumns)) {
-            if (!listed.contains(sortKey.getName().toLowerCase())) {
+            // A generated sort-key column can never be listed; the sources compute it from the columns it
+            // reads, and decline with the reason when the list omits one of them.
+            if (!sortKey.isGeneratedColumn() && !listed.contains(sortKey.getName().toLowerCase())) {
                 return false;   // a sort-key column is missing -> degenerate split
             }
         }
@@ -414,32 +450,49 @@ public final class InsertPreSplitHook {
     }
 
     /**
-     * Whether the target column list names every base (non-generated) column
-     * exactly once, in schema order — i.e. it is semantically identical to
-     * omitting the list. Used by the INSERT-from-table source, whose column
-     * mapping assumes the full base schema in order; partial / reordered lists
-     * are not yet supported there.
+     * Whether the SELECT's projection shape is one every source can reproduce in its own sampling
+     * sub-query: a bare {@code SELECT *} (single star, no qualifier / EXCLUDE / alias) or an
+     * explicit list without stars, with no DISTINCT and no GROUP BY / HAVING / ORDER BY / LIMIT.
      *
-     * <p>Returns true when there is no target column list or when the list is a
-     * full, in-order identity list.
+     * <p>A WHERE clause is allowed here and gated separately by each source
+     * ({@link SamplingPredicateGate}), because a predicate the sampler can copy verbatim keeps the
+     * sampled row set equal to the loaded one. The rejected clauses are the ones that genuinely
+     * change that row set: DISTINCT collapses duplicates, GROUP BY / HAVING aggregate, and
+     * ORDER BY pairs with LIMIT to keep a deterministic prefix.
      *
-     * <p>Package-private (not private) so the unit test can drive it directly.
+     * <p>Expressions in an explicit list are checked later by {@link InsertSelectSourceColumns}:
+     * only the target columns needed for partitioning and range distribution must be direct
+     * source-column refs, and an expression may reference nothing beyond the resolved source
+     * relation.
+     *
+     * <p>Shared by both {@link InsertPreSplitSource} implementations, and package-private so the
+     * unit tests can drive it directly.
      */
-    static boolean targetColumnListIsFullIdentity(InsertStmt insertStmt, OlapTable target) {
-        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
-        if (targetColumnNames == null || targetColumnNames.isEmpty()) {
-            return true;
-        }
-        List<Column> baseColumns = target.getBaseSchemaWithoutGeneratedColumn();
-        if (targetColumnNames.size() != baseColumns.size()) {
+    static boolean hasSupportedProjectionShape(SelectRelation selectRelation) {
+        SelectList selectList = selectRelation.getSelectList();
+        if (selectList == null || selectList.isDistinct()) {
             return false;
         }
-        for (int i = 0; i < baseColumns.size(); i++) {
-            if (!targetColumnNames.get(i).equalsIgnoreCase(baseColumns.get(i).getName())) {
+        List<SelectListItem> items = selectList.getItems();
+        if (items.isEmpty()) {
+            return false;
+        }
+        SelectListItem first = items.get(0);
+        if (items.size() == 1 && first.isStar()) {
+            if (first.getTblName() != null || !first.getExcludedColumns().isEmpty() || first.getAlias() != null) {
                 return false;
             }
+        } else {
+            for (SelectListItem item : items) {
+                if (item.isStar()) {
+                    return false;
+                }
+            }
         }
-        return true;
+        return !selectRelation.hasGroupByClause()
+                && !selectRelation.hasHavingClause()
+                && !selectRelation.hasOrderByClause()
+                && !selectRelation.hasLimit();
     }
 
     private static SelectRelation extractSelectRelation(InsertStmt insertStmt) {
@@ -480,22 +533,25 @@ public final class InsertPreSplitHook {
         return olapTable == null ? null : new ResolvedTable(database, olapTable);
     }
 
-    private static ResolvedTable resolveEligibleTable(InsertStmt insertStmt, ConnectContext context) {
+    private static ResolvedTable resolveEligibleTable(
+            InsertStmt insertStmt, ConnectContext context, boolean admitPctView) {
         ResolvedTable resolvedTable = resolveTarget(insertStmt, context);
         if (resolvedTable == null) {
             return null;
         }
         OlapTable olapTable = resolvedTable.olapTable();
-        // Materialized-view targets have always been declined here; this only records the reason
-        // instead of returning silently, so an operator can tell it apart from the statement never
-        // having been a pre-split candidate. An eligible incremental view is served by the derived
-        // tier, which reaches its target without going through this resolver.
+        // A declined view records its reason rather than returning silently, so an operator can tell it
+        // apart from the statement never having been a pre-split candidate.
         //
-        // The exclusion is not one rule: an INCREMENTAL view is keyed by its hidden row-id column,
-        // which no sampled source can map back to a column of the refresh query, so sampling cannot
-        // serve it at all. A PCT view is keyed by ordinary columns and could in principle be sampled
-        // -- it is declined by this pre-existing conservative gate, not by a technical limit.
-        if (olapTable instanceof MaterializedView) {
+        // User DML into a view reaches the generic routes -- the pre-analysis hook runs before
+        // InsertAnalyzer rejects it -- so those routes keep declining every view. An INCREMENTAL view
+        // is keyed by its hidden row-id column, which no sampled source can map back to a column of
+        // the refresh query; an eligible one is served by the derived tier, which reaches its target
+        // without going through this resolver. A PCT view refreshed by the system (admitPctView: the
+        // static-overwrite route of a system statement) is keyed by ordinary columns and is sampled
+        // like a table.
+        if (olapTable instanceof MaterializedView materializedView
+                && !(admitPctView && materializedView.getRowIdStrategy() == null)) {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.MATERIALIZED_VIEW_TARGET);
             return null;
         }

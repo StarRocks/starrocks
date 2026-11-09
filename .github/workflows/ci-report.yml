@@ -88,17 +88,20 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           PR_NUMBER=`echo ${PR_NUMBER}`
-          pr_info=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName,headRefName,state,title`
+          pr_info=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName,headRefName,state,title,labels`
           base_ref=$(echo ${pr_info} | jq -r .baseRefName)
           head_ref=$(echo ${pr_info} | jq -r .headRefName)
           pr_state=$(echo ${pr_info} | jq -r .state)
           pr_title=$(echo ${pr_info} | jq -r .title)
+          synced_from_cd=$(echo ${pr_info} | jq -r '[.labels[].name] | index("PAI-contributed") != null')
           echo "BASE_REF=${base_ref}" >> $GITHUB_OUTPUT
           echo "HEAD_REF=${head_ref}" >> $GITHUB_OUTPUT
           echo "PR_STATE=${pr_state}" >> $GITHUB_OUTPUT
           echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_OUTPUT
 
-          if [[ "${pr_title}" == *"[UT]"* || "${pr_title}" == *"[Doc]"* ]]; then
+          # A PR synced from CelerData (label PAI-contributed) already passed coverage there;
+          # its code is not new here.
+          if [[ "${pr_title}" == *"[UT]"* || "${pr_title}" == *"[Doc]"* || "${synced_from_cd}" == "true" ]]; then
             echo "SKIP_COV=true" >> $GITHUB_OUTPUT
           else
             echo "SKIP_COV=false" >> $GITHUB_OUTPUT
@@ -156,7 +159,13 @@ jobs:
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/ . --recursive
             tar zxf fe_ut_report.tar.gz
           fi
-          if [[ "${BASE_REF}" == "main" ]] && [[ "$size" == 0 || "${SKIP_COV}" == "true" ]]; then
+          if [[ "${BASE_REF}" == "main" && "${SKIP_COV}" == "true" ]]; then
+            # SKIP_COV skips the check: post its status as passed instead of running the checker
+            # on an "empty" fixture, which is an old full report that can still fail the PR.
+            GH_TOKEN=${{ secrets.GITHUB_TOKEN }} gh api "repos/${{ github.repository }}/statuses/${HEAD_SHA}" \
+              -f state=success -f context="Fe Cover Checker" -f description="Skipped: [UT]/[Doc] PR or synced from CelerData" >/dev/null \
+              || echo "::warning::Failed to post the skipped coverage status"
+          elif [[ "${BASE_REF}" == "main" && "$size" == 0 ]]; then
             cd ${GITHUB_WORKSPACE}
             rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
             export JAVA_HOME=/var/local/env/jdk1.8.0_202;
@@ -397,7 +406,13 @@ jobs:
           be_ut_res_path=${oss_path}/flag/be_ut_res
           size=$(ossutil64 --config-file ~/.ossutilconfig ls ${be_ut_res_path} | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
-          if [[ "$size" != "0" && "$SKIP_COV" != "true" ]]; then
+          if [[ "$SKIP_COV" == "true" ]]; then
+            # SKIP_COV skips the check: post its status as passed instead of running the checker
+            # on an "empty" fixture, which is an old full report that can still fail the PR.
+            GH_TOKEN=${{ secrets.GITHUB_TOKEN }} gh api "repos/${{ github.repository }}/statuses/${HEAD_SHA}" \
+              -f state=success -f context="Be Cover Checker" -f description="Skipped: [UT]/[Doc] PR or synced from CelerData" >/dev/null \
+              || echo "::warning::Failed to post the skipped coverage status"
+          elif [[ "$size" != "0" ]]; then
             ossutil64 --config-file ~/.ossutilconfig cp ${be_ut_res_path} . >/dev/null
             res=`cat be_ut_res`
             if [[ "$res" != "0" ]]; then
@@ -496,6 +511,7 @@ jobs:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
       bucket_prefix: ${{ needs.INFO.outputs.BUCKET_PREFIX }}
+      SKIP_COV: ${{ needs.INFO.outputs.SKIP_COV }}
       # Scratch dir, deliberately not the tracked `java-extensions/`. See FE_UT_UNPACK_DIR.
       JAVA_EXT_UT_UNPACK_DIR: java-extensions-ut-report
     steps:
@@ -516,7 +532,16 @@ jobs:
             rm -rf ${JAVA_EXT_UT_UNPACK_DIR} && mkdir ${JAVA_EXT_UT_UNPACK_DIR} && cd ${JAVA_EXT_UT_UNPACK_DIR}
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/java_extension_ut_report.tar.gz . --recursive
             tar zxf java_extension_ut_report.tar.gz
-          elif [[ "${BASE_REF}" == "main" ]]; then
+          fi
+          # Same as the FE report.
+          if [[ "${BASE_REF}" == "main" && "${SKIP_COV}" == "true" ]]; then
+            # SKIP_COV skips the check: post its status as passed instead of running the checker
+            # on an "empty" fixture, which is an old full report that can still fail the PR.
+            GH_TOKEN=${{ secrets.GITHUB_TOKEN }} gh api "repos/${{ github.repository }}/statuses/${HEAD_SHA}" \
+              -f state=success -f context="Java-Extensions Cover Checker" -f description="Skipped: [UT]/[Doc] PR or synced from CelerData" >/dev/null \
+              || echo "::warning::Failed to post the skipped coverage status"
+          elif [[ "${BASE_REF}" == "main" && "$size" == 0 ]]; then
+            cd ${GITHUB_WORKSPACE}
             rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
             export JAVA_HOME=/var/local/env/jdk1.8.0_202;
             export PATH=$JAVA_HOME/bin:$PATH;
@@ -542,7 +567,7 @@ jobs:
 
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
-        if: steps.publish_report.outcome == 'success' && env.BASE_REF == 'main'
+        if: steps.publish_report.outcome == 'success' && env.BASE_REF == 'main' && env.SKIP_COV != 'true'
         env:
           code_path: ${{ github.workspace }}/${{ env.JAVA_EXT_UT_UNPACK_DIR }}
         run: |

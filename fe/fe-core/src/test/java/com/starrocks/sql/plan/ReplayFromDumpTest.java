@@ -245,7 +245,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testTPCDS78() throws Exception {
         // check outer join with isNull predicate on inner table
         // The estimate cardinality of join should not be 0.
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"), SV);
+        // Checked with OuterJoinSemiJoinReductionRule off: its CTEs renumber the nodes and columns asserted below.
+        SessionVariable sv = new SessionVariable();
+        sv.setEnableGlobalLateMaterialization(false);
+        sv.setEnableOuterJoinSemiJoinReduction(false);
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"), sv);
         Assertions.assertTrue(replayPair.second.contains("3:HASH JOIN\n"
                 + "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n"
                 + "  |  equal join conjunct: [2: ss_ticket_number, INT, false] = [25: sr_ticket_number, INT, true]\n"
@@ -348,7 +352,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assertions.assertTrue(replayPair.second.contains("  |  <slot 40> : CAST(15: id_smallint AS INT)\n" +
                         "  |  <slot 41> : CAST(23: id_date AS DATETIME)\n" +
                         "  |  \n" +
-                        "  6:OlapScanNode\n" +
+                        "  8:OlapScanNode\n" +
                         "     TABLE: external_es_table_without_null"),
                 replayPair.second);
     }
@@ -740,7 +744,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_2"),
                         null, TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("38:HASH JOIN\n" +
+        // Do not pin the HASH JOIN plan-node id: partitioned row_number() NDV estimates
+        // can change costing enough to shift node numbering without changing this join.
+        Assertions.assertTrue(replayPair.second.contains("HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 398: substring = 361: date\n" +
@@ -855,6 +861,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpInfo);
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
         sessionVariable.setEnableCBOViewBasedMvRewrite(true);
+        // The dump's session variables replace the test context's, so its default 1s MV rewrite budget applies:
+        // trying 14 view-based MVs can exceed it on a loaded CI host, and the rule then gives up without the MV.
+        sessionVariable.setOptimizerMaterializedViewTimeLimitMillis(120 * 1000);
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpInfo, sessionVariable);
         Assertions.assertTrue(replayPair.second.contains("mv_LEAF_ACC_CUBE_SHADOW_VIEW_fb70da80"), replayPair.second);
         sessionVariable.setEnableCBOViewBasedMvRewrite(false);

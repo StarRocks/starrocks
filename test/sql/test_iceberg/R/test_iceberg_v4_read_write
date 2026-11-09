@@ -1,0 +1,184 @@
+-- name: test_iceberg_v4_read_write
+create external catalog iceberg_v4_rw_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+create database iceberg_v4_rw_${uuid0}.db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/v4_rw_${uuid0}/db_${uuid0}"
+);
+-- result:
+-- !result
+set catalog iceberg_v4_rw_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t(
+    id int,
+    v string,
+    p int
+) partition by(p) properties ("format-version" = "4");
+-- result:
+-- !result
+set connector_sink_shuffle_mode = 'force';
+-- result:
+-- !result
+set pipeline_sink_dop = 1;
+-- result:
+-- !result
+insert into t select x, concat('a', x), x % 2 from table(generate_series(1, 20)) s(x);
+-- result:
+-- !result
+insert into t select x, concat('b', x), x % 2 from table(generate_series(21, 40)) s(x);
+-- result:
+-- !result
+select sum(if(path like '%.avro', 1, 0)), sum(if(path like '%.parquet', 1, 0)) > 0 from t$manifests;
+-- result:
+0	1
+-- !result
+select count(*), sum(id), min(id), max(id) from t;
+-- result:
+40	820	1	40
+-- !result
+select count(*) from t where p = 1;
+-- result:
+20
+-- !result
+select count(*) from t where id > 30;
+-- result:
+10
+-- !result
+select p, count(*) from t group by p order by p;
+-- result:
+0	20
+1	20
+-- !result
+select record_count, file_count, position_delete_record_count, position_delete_file_count
+    from t$partitions order by record_count, position_delete_record_count;
+-- result:
+20	2	0	0
+20	2	0	0
+-- !result
+select data_file.content, count(*) from t$entries where status != 2 group by data_file.content order by 1;
+-- result:
+0	4
+-- !result
+set plan_mode = 'distributed';
+-- result:
+-- !result
+select count(*), sum(id) from t;
+-- result:
+40	820
+-- !result
+select id from t where id < 10 order by id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+-- !result
+set plan_mode = 'local';
+-- result:
+-- !result
+[UC]alter table t execute rewrite_data_files("rewrite_all" = "true");
+select count(*), sum(id) from t;
+-- result:
+40	820
+-- !result
+select content, record_count from t$files order by content, record_count;
+-- result:
+0	20
+0	20
+-- !result
+alter table t execute expire_snapshots(older_than = '2099-01-01 00:00:00');
+-- result:
+-- !result
+select count(*) from t$snapshots;
+-- result:
+1
+-- !result
+select count(*), sum(id) from t;
+-- result:
+40	820
+-- !result
+insert overwrite t select 1000, 'z', 0;
+-- result:
+-- !result
+select p, count(*), sum(id) from t group by p order by p;
+-- result:
+0	1	1000
+1	20	400
+-- !result
+create table u(id int) properties ("format-version" = "3");
+-- result:
+-- !result
+insert into u values (1), (2), (3);
+-- result:
+-- !result
+alter table u set ("format-version" = "4");
+-- result:
+-- !result
+insert into u values (4);
+-- result:
+-- !result
+select sum(if(path like '%.avro', 1, 0)) > 0, sum(if(path like '%.parquet', 1, 0)) > 0 from u$manifests;
+-- result:
+1	1
+-- !result
+select id from u order by id;
+-- result:
+1
+2
+3
+4
+-- !result
+set plan_mode = 'distributed';
+-- result:
+-- !result
+select id from u order by id;
+-- result:
+1
+2
+3
+4
+-- !result
+set plan_mode = 'local';
+-- result:
+-- !result
+set pipeline_sink_dop = 0;
+-- result:
+-- !result
+set connector_sink_shuffle_mode = 'auto';
+-- result:
+-- !result
+drop table t force;
+-- result:
+-- !result
+drop table u force;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_v4_rw_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/v4_rw_${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

@@ -18,11 +18,15 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.util.concurrent.lock.LightWeightLock;
 import com.starrocks.common.util.concurrent.lock.LockException;
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
+import com.starrocks.common.util.concurrent.lock.LockHolder;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockParams;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.MultiUserLock;
 import com.starrocks.common.util.concurrent.lock.NotSupportLockException;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Invocation;
@@ -33,7 +37,11 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
 
 public class TestLockInterface {
     @BeforeEach
@@ -92,6 +100,127 @@ public class TestLockInterface {
         Assertions.assertTrue(lockManager.isOwner(rid3, locker, LockType.READ));
 
         locker.lockTablesWithIntensiveDbLock(database.getId(), Lists.newArrayList(rid2, rid3), LockType.WRITE);
+    }
+
+    /**
+     * Matched by thread among several owners of the same lock, and answered without copying the owner set:
+     * the snapshot-copy check asks this on every planning copy, inside the lock table's mutex.
+     */
+    @Test
+    public void testIsOwnedByCurrentThreadAmongOtherOwners() throws Exception {
+        long dbId = 43L;
+        long tableId = 44L;
+        LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+        // lock() itself copies a LightWeightLock's owners when a second owner arrives, so copies are
+        // counted around the ownership queries only.
+        AtomicInteger ownerCopies = new AtomicInteger();
+        new MockUp<MultiUserLock>() {
+            @Mock
+            public Set<LockHolder> getOwners(Invocation invocation) {
+                ownerCopies.incrementAndGet();
+                return invocation.proceed();
+            }
+        };
+        new MockUp<LightWeightLock>() {
+            @Mock
+            public Set<LockHolder> getOwners(Invocation invocation) {
+                ownerCopies.incrementAndGet();
+                return invocation.proceed();
+            }
+        };
+        BiConsumer<Boolean, Boolean> assertOwned = (read, write) -> {
+            int copiesBefore = ownerCopies.get();
+            Assertions.assertEquals(read, lockManager.isOwnedByCurrentThread(tableId, LockType.READ));
+            Assertions.assertEquals(write, lockManager.isOwnedByCurrentThread(tableId, LockType.WRITE));
+            Assertions.assertEquals(read || write, lockManager.isReadOrWriteOwnedByCurrentThread(tableId));
+            Assertions.assertEquals(copiesBefore, ownerCopies.get());
+        };
+
+        CountDownLatch otherHolds = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Thread other = new Thread(() -> {
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+            try {
+                otherHolds.countDown();
+                release.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+            }
+        });
+        other.start();
+        try {
+            Assertions.assertTrue(otherHolds.await(30, TimeUnit.SECONDS));
+            // Owned, but by the other thread only.
+            assertOwned.accept(false, false);
+
+            Locker holder = new Locker();
+            holder.lockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+            try {
+                assertOwned.accept(true, false);
+                // IS on the database is neither READ nor WRITE.
+                Assertions.assertFalse(lockManager.isReadOrWriteOwnedByCurrentThread(dbId));
+            } finally {
+                holder.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+            }
+            assertOwned.accept(false, false);
+        } finally {
+            release.countDown();
+            other.join();
+        }
+
+        Locker writer = new Locker();
+        writer.lockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+        try {
+            assertOwned.accept(false, true);
+        } finally {
+            writer.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+        }
+        assertOwned.accept(false, false);
+    }
+
+    /** One thread holding READ and WRITE on the same table at once: each is answered on its own. */
+    @Test
+    public void testIsOwnedByCurrentThreadHoldingReadAndWrite() {
+        long dbId = 45L;
+        long tableId = 46L;
+        LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+        try {
+            locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+            try {
+                Assertions.assertTrue(lockManager.isOwnedByCurrentThread(tableId, LockType.READ));
+                Assertions.assertTrue(lockManager.isOwnedByCurrentThread(tableId, LockType.WRITE));
+                Assertions.assertTrue(lockManager.isReadOrWriteOwnedByCurrentThread(tableId));
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.WRITE);
+            }
+            Assertions.assertTrue(lockManager.isOwnedByCurrentThread(tableId, LockType.READ));
+            Assertions.assertFalse(lockManager.isOwnedByCurrentThread(tableId, LockType.WRITE));
+            Assertions.assertTrue(lockManager.isReadOrWriteOwnedByCurrentThread(tableId));
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+        }
+        Assertions.assertFalse(lockManager.isReadOrWriteOwnedByCurrentThread(tableId));
+    }
+
+    /** The test-base hook fails while the test thread holds a metadata lock, and only then. */
+    @Test
+    public void testAssertNoMetaLockHeldFailsOnlyWhileALockIsHeld() {
+        // The lock-primitive tests of this class swap in a fresh LockManager without releasing what they took.
+        LockHoldDepth.reset();
+        LockTestUtils.assertNoMetaLockHeld();
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(47L, 48L, LockType.READ);
+        try {
+            Assertions.assertThrows(AssertionError.class, LockTestUtils::assertNoMetaLockHeld);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(47L, 48L, LockType.READ);
+        }
+        LockTestUtils.assertNoMetaLockHeld();
     }
 
     @Test

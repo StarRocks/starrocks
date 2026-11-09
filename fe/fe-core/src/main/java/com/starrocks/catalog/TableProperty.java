@@ -292,6 +292,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // the default automatic bucket size
     private long bucketSize = 0;
 
+    // Tablet split/merge target size of a range-distributed table; 0 means it follows the FE configuration.
+    // Volatile because the tablet reshard daemon and stat scan read it without the table lock.
+    private volatile long tabletReshardTargetSize = 0;
+
     // the default mutable bucket number
     private long mutableBucketNum = 0;
 
@@ -357,6 +361,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "enableStatisticCollectOnFirstLoadSet")
     private boolean enableStatisticCollectOnFirstLoadSet = false;
 
+    private boolean enableStatisticAutoCollect = true;
+
     // table level query timeout in seconds
     // default value -1 means use cluster query_timeout
     @SerializedName(value = "tableQueryTimeout")
@@ -414,6 +420,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.enableReplicatedStorage = other.enableReplicatedStorage;
         this.storageType = other.storageType;
         this.bucketSize = other.bucketSize;
+        this.tabletReshardTargetSize = other.tabletReshardTargetSize;
         this.mutableBucketNum = other.mutableBucketNum;
         this.enableLoadProfile = other.enableLoadProfile;
         this.loadInitialOpenPartitionNumber = other.loadInitialOpenPartitionNumber;
@@ -438,6 +445,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.lakeCompactionMaxParallel = other.lakeCompactionMaxParallel;
         this.enableStatisticCollectOnFirstLoad = other.enableStatisticCollectOnFirstLoad;
         this.enableStatisticCollectOnFirstLoadSet = other.enableStatisticCollectOnFirstLoadSet;
+        this.enableStatisticAutoCollect = other.enableStatisticAutoCollect;
         this.tableQueryTimeout = other.tableQueryTimeout;
         this.cloudNativeFastSchemaEvolutionV2 = other.cloudNativeFastSchemaEvolutionV2;
     }
@@ -524,12 +532,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildLocation();
                 buildStorageCoolDownTTL();
                 buildEnableStatisticCollectOnFirstLoad();
+                buildEnableStatisticAutoCollect();
                 buildCloudNativeFastSchemaEvolutionV2();
                 buildLakeCompactionMaxParallel();
                 buildLightWeightTabletCreation();
                 buildTableQueryTimeout();
                 buildDataCacheEnable();
                 buildLoadInitialOpenPartitionNumber();
+                buildTabletReshardTargetSize();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -1314,6 +1324,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enableStatisticCollectOnFirstLoad;
     }
 
+    public boolean enableStatisticAutoCollect() {
+        return enableStatisticAutoCollect;
+    }
+
     public boolean isSetEnableStatisticCollectOnFirstLoad() {
         // Older versions persisted "false" only when the user explicitly disabled this table property,
         // but also wrote the default "true" on table creation. Preserve explicit false while avoiding
@@ -1339,6 +1353,22 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public long getBucketSize() {
         return bucketSize;
+    }
+
+    // An empty value is how ALTER TABLE ... SET ("tablet_reshard_target_size" = "") is journaled; it removes the
+    // property, so the map never keeps the empty string.
+    public TableProperty buildTabletReshardTargetSize() {
+        String value = properties.get(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
+        if (value != null && value.isEmpty()) {
+            properties.remove(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
+            value = null;
+        }
+        tabletReshardTargetSize = value == null ? 0 : Long.parseLong(value);
+        return this;
+    }
+
+    public long getTabletReshardTargetSize() {
+        return tabletReshardTargetSize;
     }
 
     public long getMutableBucketNum() {
@@ -1463,6 +1493,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildEnableStatisticAutoCollect() {
+        enableStatisticAutoCollect = Boolean.parseBoolean(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT, "true"));
+        return this;
+    }
+
     public TableProperty buildCloudNativeFastSchemaEvolutionV2() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
             cloudNativeFastSchemaEvolutionV2 = Boolean.parseBoolean(
@@ -1546,6 +1582,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMutableBucketNum();
         buildCompactionStrategy();
         buildLoadInitialOpenPartitionNumber();
+        // Rebuilt from the raw map rather than serialized: an older FE that checkpoints after a rollback keeps
+        // the map entry but drops unknown fields, which would silently re-enable collection on roll-forward.
+        buildEnableStatisticAutoCollect();
+        // Rebuilt from the raw map rather than serialized: an older FE that checkpoints after a rollback keeps the
+        // map entry but drops unknown fields, so a serialized value would be lost on roll-forward while the map
+        // still lists the property. Rebuilding also drops the empty value an older FE stores when it replays a clear.
+        buildTabletReshardTargetSize();
         // NOTE: new properties should not be built here, just add SerializedName to the field.
     }
 }

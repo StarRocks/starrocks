@@ -34,11 +34,11 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
-#include "storage/lake/update_manager.h"
 #include "storage/rowset/segment.h"
 #include "storage/sort_key_sampler.h"
 #include "storage/tablet_range.h"
@@ -1363,7 +1363,7 @@ Status get_tablet_split_ranges_from_pk_index_impl(TabletManager* tablet_manager,
     const size_t target_sample_count = static_cast<size_t>(split_count) * kSamplesPerSplit;
 
     std::vector<std::string> encoded_samples;
-    auto* block_cache = tablet_manager->update_mgr()->block_cache();
+    auto* block_cache = tablet_manager->primary_key_mgr()->block_cache();
     for (const auto* sstable_pb : overlapping_sstables) {
         // Weight each SST's share of the sample budget by its size, so the quantiles picked downstream
         // stay data-volume weighted the way the previous byte-interval sampling made them. Within one
@@ -2279,7 +2279,7 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     // fallback must inherit this flushed metadata rather than the input snapshot.
     TEST_SYNC_POINT_CALLBACK("tablet_splitter:pk_flush", nullptr);
     ASSIGN_OR_RETURN(TabletMetadataPtr old_tablet_metadata,
-                     tablet_manager->update_mgr()->flush_pk_memtable(tablet_metadata, new_version));
+                     tablet_manager->primary_key_mgr()->flush_pk_memtable(tablet_metadata, new_version));
     if (status.ok() && !is_external_boundaries && separate_sort) {
         status = get_tablet_split_ranges_from_pk_index_impl(tablet_manager, old_tablet_metadata,
                                                             splitting_tablet.new_tablet_ids_size(), &split_ranges,

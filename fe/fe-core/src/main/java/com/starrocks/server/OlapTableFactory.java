@@ -17,6 +17,7 @@ package com.starrocks.server;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -47,12 +48,14 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.ColocatePropertyInfo;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.IndexAnalyzer;
@@ -502,6 +505,18 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE)) {
+                if (!table.isRangeDistribution()) {
+                    throw new DdlException(PropertyAnalyzer.TABLET_RESHARD_TARGET_SIZE_RANGE_ONLY_MSG);
+                }
+                String value = properties.remove(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
+                try {
+                    table.setTabletReshardTargetSize(PropertyAnalyzer.analyzeTableTabletReshardTargetSize(value, false));
+                } catch (SemanticException e) {
+                    throw new DdlException(e.getMessage(), e);
+                }
+            }
+
             try {
                 long mutableBucketNum = PropertyAnalyzer.analyzeLongProp(properties,
                         PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM, 0);
@@ -524,20 +539,34 @@ public class OlapTableFactory implements AbstractTableFactory {
                         PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, true));
             }
 
+            if (properties != null &&
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT)) {
+                try {
+                    table.setEnableStatisticAutoCollect(PropertyAnalyzer.analyzeBooleanPropStrictly(properties,
+                            PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT, true));
+                } catch (SemanticException e) {
+                    throw new DdlException(e.getMessage(), e);
+                }
+            }
+
             try {
-                table.setBaseCompactionForbiddenTimeRanges(PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties));
+                String forbiddenTimeRanges = PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties);
+                CompactionControlScheduler.toQuartzExpression(forbiddenTimeRanges);
+                table.setBaseCompactionForbiddenTimeRanges(forbiddenTimeRanges);
                 if (!table.getBaseCompactionForbiddenTimeRanges().isEmpty()) {
                     if (table instanceof OlapTable) {
                         OlapTable olapTable = (OlapTable) table;
                         if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS
-                                || olapTable.isCloudNativeTableOrMaterializedView()) {
+                                && !olapTable.isCloudNativeTableOrMaterializedView()) {
                             throw new SemanticException("Property " +
                                     PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES +
-                                    " not support primary keys table or cloud native table");
+                                    " not support shared-nothing primary keys table");
                         }
                     }
-                    GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
-                            table.getId(), table.getBaseCompactionForbiddenTimeRanges());
+                    if (!table.isCloudNativeTableOrMaterializedView()) {
+                        GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
+                                table.getId(), forbiddenTimeRanges);
+                    }
                 }
                 if (properties != null) {
                     properties.remove(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
@@ -706,17 +735,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                         shortKeyColumnCount, baseIndexStorageType, keysType, null);
             }
 
-            // check colocation properties and set up colocate group before tablet creation.
-            // Must be after setIndexMeta because range colocate needs baseIndexMeta to resolve sort key columns.
-            String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-            if (StringUtils.isNotEmpty(colocateGroup)) {
-                if (!distributionInfo.supportColocate()) {
-                    throw new DdlException("random distribution does not support 'colocate_with'");
-                }
-
-                colocateTableIndex.addTableToGroup(db, table, colocateGroup, false /* afterTabletCreation */);
-            }
-
             for (AlterClause alterClause : stmt.getRollupAlterClauseList()) {
                 AddRollupClause addRollupClause = (AddRollupClause) alterClause;
 
@@ -739,6 +757,32 @@ public class OlapTableFactory implements AbstractTableFactory {
                 long rollupIndexMetaId = metastore.getNextId();
                 table.setIndexMeta(rollupIndexMetaId, addRollupClause.getRollupName(), rollupColumns, schemaVersion,
                         rollupSchemaHash, rollupShortKeyColumnCount, rollupIndexStorageType, keysType);
+            }
+
+            // check colocation properties and set up colocate group before tablet creation.
+            // Must be after setIndexMeta because range colocate needs baseIndexMeta to resolve sort key columns,
+            // and after the rollup index metas are set: the sort key of every rollup of a range table must start
+            // with the table's colocate columns, and it is checked before the table joins the group so that a
+            // rejected CREATE TABLE leaves no member behind. The base colocate columns are checked against the
+            // group by addTableToGroup; a rollup column is a copy of its base column.
+            String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+            if (StringUtils.isNotEmpty(colocateGroup)) {
+                if (!distributionInfo.supportColocate()) {
+                    throw new DdlException("random distribution does not support 'colocate_with'");
+                }
+                if (table.isRangeDistribution() && !stmt.getRollupAlterClauseList().isEmpty()) {
+                    List<Column> colocateColumns = MetaUtils.getRangeColocateColumns(table,
+                            ColocatePropertyInfo.of(colocateGroup).getColocateColumnNames());
+                    for (AlterClause alterClause : stmt.getRollupAlterClauseList()) {
+                        String rollupName = ((AddRollupClause) alterClause).getRollupName();
+                        List<Column> routingColumns = MetaUtils.getRangeDistributionColumns(table,
+                                table.getIndexMetaIdByName(rollupName));
+                        MaterializedViewHandler.checkRangeColocateRollupPrefix(colocateColumns, rollupName,
+                                routingColumns);
+                    }
+                }
+
+                colocateTableIndex.addTableToGroup(db, table, colocateGroup, false /* afterTabletCreation */);
             }
 
             // analyze version info

@@ -236,6 +236,14 @@ private:
 
     void _add_uncheck(const Range<T>& r);
 
+    // True iff |ranges| is ascending and non-overlapping, which the linear merges below require. Checked on
+    // the data rather than taken from _is_sorted: an intersection of a reversed range keeps _is_sorted == true.
+    static bool _is_ascending(const std::vector<Range<T>>& ranges);
+
+    // Append to |result| the intersection of two ascending, non-overlapping range lists, in O(n + m).
+    static void _intersect_sorted(const std::vector<Range<T>>& lhs, const std::vector<Range<T>>& rhs,
+                                  SparseRange<T>* result);
+
     std::vector<Range<T>> _ranges;
     bool _is_sorted = true;
 };
@@ -324,8 +332,42 @@ inline std::string SparseRange<T>::to_string() const {
 }
 
 template <typename T>
+inline bool SparseRange<T>::_is_ascending(const std::vector<Range<T>>& ranges) {
+    for (size_t i = 1; i < ranges.size(); i++) {
+        if (ranges[i - 1].end() > ranges[i].begin()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+template <typename T>
+inline void SparseRange<T>::_intersect_sorted(const std::vector<Range<T>>& lhs, const std::vector<Range<T>>& rhs,
+                                              SparseRange<T>* result) {
+    size_t i = 0;
+    size_t j = 0;
+    while (i < lhs.size() && j < rhs.size()) {
+        const auto& r1 = lhs[i];
+        const auto& r2 = rhs[j];
+        if (r1.has_intersection(r2)) {
+            result->_add_uncheck(r1.intersection(r2));
+        }
+        // The range that ends first cannot intersect anything after the other one.
+        if (r1.end() <= r2.end()) {
+            i++;
+        } else {
+            j++;
+        }
+    }
+}
+
+template <typename T>
 inline SparseRange<T> SparseRange<T>::intersection(const SparseRange<T>& rhs) const {
     SparseRange result;
+    if (_is_ascending(_ranges) && _is_ascending(rhs._ranges)) {
+        _intersect_sorted(_ranges, rhs._ranges, &result);
+        return result;
+    }
     for (const auto& r1 : _ranges) {
         for (const auto& r2 : rhs._ranges) {
             if (r1.has_intersection(r2)) {
@@ -377,8 +419,55 @@ inline SparseRange<T>& SparseRange<T>::operator&=(const SparseRange<T>& rhs) {
 
 template <typename T>
 inline SparseRange<T>& SparseRange<T>::operator|=(const SparseRange<T>& rhs) {
-    for (size_t i = 0; i < rhs.size(); i++) {
-        add(rhs[i]);
+    if (rhs.empty()) {
+        return *this;
+    }
+    if (_ranges.empty() || _ranges.back().end() < rhs._ranges.front().begin() || !_is_ascending(_ranges) ||
+        !_is_ascending(rhs._ranges)) {
+        for (size_t i = 0; i < rhs.size(); i++) {
+            add(rhs[i]);
+        }
+        return *this;
+    }
+    // Linear merge with the same result as add()-ing every range of |rhs| in turn. add() merges a range
+    // of |rhs| with everything it overlaps or abuts, but never merges two abutting ranges of |this| on
+    // its own, so a merged range only absorbs a range of |this| that touches one of the |rhs| ranges
+    // already in it. Ranges of |rhs| are sorted and disjoint, so the last one merged in ends furthest.
+    struct Merged {
+        Range<T> range;
+        bool has_rhs;
+        T rhs_end;
+    };
+    std::vector<Merged> merged;
+    merged.reserve(_ranges.size() + rhs._ranges.size());
+    size_t i = 0;
+    size_t j = 0;
+    while (i < _ranges.size() || j < rhs._ranges.size()) {
+        if (j == rhs._ranges.size() || (i < _ranges.size() && _ranges[i].begin() < rhs._ranges[j].begin())) {
+            const Range<T>& r = _ranges[i++];
+            if (!merged.empty() && merged.back().has_rhs && r.begin() <= merged.back().rhs_end) {
+                merged.back().range =
+                        Range<T>(merged.back().range.begin(), std::max(merged.back().range.end(), r.end()));
+            } else {
+                merged.push_back({r, false, T{0}});
+            }
+        } else {
+            const Range<T>& r = rhs._ranges[j++];
+            Merged m{r, true, r.end()};
+            // Every earlier merged range starts no later than |r|, so |r| touches it iff r.begin() <= its end.
+            while (!merged.empty() && r.begin() <= merged.back().range.end()) {
+                const Merged& prev = merged.back();
+                m.range = Range<T>(std::min(prev.range.begin(), m.range.begin()),
+                                   std::max(prev.range.end(), m.range.end()));
+                merged.pop_back();
+            }
+            merged.push_back(m);
+        }
+    }
+    _ranges.clear();
+    _ranges.reserve(merged.size());
+    for (const auto& m : merged) {
+        _ranges.emplace_back(m.range);
     }
     return *this;
 }
@@ -444,14 +533,17 @@ inline SparseRangeIterator<T> SparseRangeIterator<T>::intersection(const SparseR
     DCHECK(std::is_sorted(ranges.begin(), ranges.end(),
                           [](const auto& l, const auto& r) { return l.begin() < r.begin(); }));
 
-    for (size_t i = 0; i < ranges.size(); ++i) {
-        const auto& r1 = ranges[i];
-        for (const auto& r2 : rhs._ranges) {
-            if (r1.end() < r2.begin()) {
-                break;
-            }
-            if (r1.has_intersection(r2)) {
-                result->_add_uncheck(r1.intersection(r2));
+    if (SparseRange<T>::_is_ascending(ranges) && SparseRange<T>::_is_ascending(rhs._ranges)) {
+        SparseRange<T>::_intersect_sorted(ranges, rhs._ranges, result);
+    } else {
+        for (const auto& r1 : ranges) {
+            for (const auto& r2 : rhs._ranges) {
+                if (r1.end() < r2.begin()) {
+                    break;
+                }
+                if (r1.has_intersection(r2)) {
+                    result->_add_uncheck(r1.intersection(r2));
+                }
             }
         }
     }

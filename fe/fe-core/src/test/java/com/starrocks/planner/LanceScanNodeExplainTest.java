@@ -16,12 +16,17 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LanceTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TPlanNode;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
@@ -40,6 +45,17 @@ public class LanceScanNodeExplainTest {
         scan.cardinality = 12;
         scan.avgRowSize = 8.5F;
         return scan;
+    }
+
+    @Test
+    public void testLanceCatalogTypeInMetricsAndThrift() {
+        Assertions.assertEquals("lance", StmtExecutor.toCatalogType(Table.TableType.LANCE));
+        TPlanNode thrift = new TPlanNode();
+        LanceScanNode scan = newScan();
+        scan.setScanOptimizeOption(new ScanOptimizeOption());
+        scan.toThrift(thrift);
+        Assertions.assertEquals("lance", thrift.getConnector_scan_node().getCatalog_type());
+        Assertions.assertEquals("lance", thrift.getConnector_scan_node().getConnector_name());
     }
 
     @ParameterizedTest

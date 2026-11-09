@@ -134,7 +134,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: 秒
 - 変更可能: はい
-- 説明: 最後のベースコンパクションからの時間間隔。この設定項目はベースコンパクションをトリガーする条件の一つです。
+- 説明: 最後のベースコンパクションからの時間間隔。共有なしテーブルでは、ベースコンパクションのトリガー条件の一つです。共有データの主キーテーブルと、Base and Cumulative ポリシーを使用する非主キーテーブルでは、同一タブレットで前回のベースコンパクションが正常に完了してから、自動ベースコンパクションが少なくともこの時間だけ待機します。Size Tiered ポリシーを使用する非主キーテーブルでは、この間隔は削除バージョン数のしきい値によるベースコンパクションの強制だけを無効にし、通常のレベル選択は変更しません。手動コンパクションはこの制限の対象外です。
 - 導入バージョン: -
 
 ### base_compaction_num_threads_per_disk
@@ -404,6 +404,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 有効にすると、部分的なカラム更新によって生成される delta columns に対する compaction に「lazy」戦略を優先します。StarRocks は compaction の I/O を節約するために、delta-column ファイルをメインのセグメントファイルへ積極的にマージすることを避けます。実際には compaction 選択コードが部分カラム更新の rowset と複数の候補をチェックし、それらが見つかりこのフラグが true の場合、エンジンは compaction にさらに入力を追加するのを止めるか、空の rowset（レベル -1）のみをマージして delta columns を別に保持します。これにより compaction 時の即時 I/O と CPU が削減されますが、統合の遅延（セグメント数増加や一時的なストレージオーバーヘッドの可能性）というコストが発生します。正確性やクエリのセマンティクスに変更はありません。
 - 導入バージョン: v3.2.3
 
+### enable_light_pk_compaction_publish
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有なしクラスタの主キーテーブルで軽量コンパクション publish を使用するかどうかを指定します。この設定は共有なしテーブルにのみ適用されます。共有データの主キーテーブルは常に軽量コンパクション publish を使用するため、このパラメーターを `false` にしても共有データテーブルの軽量 publish パスは無効になりません。
+- 導入バージョン: -
+
 ### enable_new_load_on_memory_limit_exceeded
 
 - デフォルト: false
@@ -620,6 +629,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 主キーテーブルの単一コンパクションでマージできる最大 rowset 数。
 - 導入バージョン: -
 
+### max_update_compaction_num_level_minus_one_rowsets
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: Rowset
+- 変更可能: はい
+- 説明: 主キーテーブルの size-tiered コンパクションで一度に選択する level=-1 の Rowset の最大数。設定値が 2 未満の場合は 2 として扱います。level=-1 には行数が 0、または推定有効バイト数が 0 の Rowset が含まれます。他のレベルと一緒にマージする場合、この設定は入力の合計数を制限しません。
+- 導入バージョン: -
+
 ### memory_limitation_per_thread_for_schema_change
 
 - デフォルト: 2
@@ -806,7 +824,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データモードでのプライマリキーインデックス並列実行用のスレッドプールの最大スレッド数。0 は CPU コア数の半分に自動設定されることを意味します。
+- 説明: 共有データモードでのプライマリキーインデックス並列実行用のスレッドプールの最大スレッド数。0 は CPU コア数に自動設定されることを意味し、スレッド数は少なくとも 1 になります。実行時にこのパラメータを 0 に設定すると、自動設定に戻ります。
 - 導入バージョン: -
 
 ### pk_index_parallel_rebuild_mem_ratio
@@ -888,6 +906,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: Bytes
 - 変更可能: はい
 - 説明: インポートまたはコンパクションで生成されるデータがこの閾値を超えたときに、システムは PK インデックスファイルを即座に構築します。デフォルトは 100MB です。
+- 導入バージョン: -
+
+### pk_index_del_sst_min_rows
+
+- デフォルト: 1000000
+- タイプ: Int
+- 単位: 行
+- 変更可能: はい
+- 説明: 共有データクラスタの主キーテーブルに適用されます。ロードで生成された削除ファイルの行数がこの値以上の場合、システムはロード時にそのファイルの PK インデックスファイルも構築します。ロードの公開時には、削除された各キーをメモリ上の PK インデックスに書き込む代わりに、そのファイルを直接取り込みます。この条件は `pk_index_eager_build_threshold_bytes` と併せて機能し、削除ファイルがいずれかの条件を満たすとインデックスファイルが構築されます。`0` 以下に設定するとこの条件は無効になります。
 - 導入バージョン: -
 
 ### primary_key_limit_size
@@ -987,6 +1014,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: バイト
 - 変更可能: はい
 - 説明: サイズ階層型コンパクションポリシーの最小レベルのデータサイズ。この値より小さい rowset はすぐにデータコンパクションをトリガーします。
+- 導入バージョン: -
+
+### skip_pindex_l1_l2_check_in_insert
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: shared-nothing クラスタのローカル永続主キーインデックスへの挿入時に、イミュータブルな L1/L2 ファイルの重複キーチェックをスキップするかどうか。デフォルトの `true` では L0 memtable のみをチェックし、チェックに伴うディスク読み取りを回避して、shared-data クラスタのクラウドネイティブ主キーインデックスと動作を揃えます。`false` に設定するとイミュータブルインデックスのチェックを再開します。この設定はインデックス内部の整合性チェックを制御し、主キーテーブルに対する SQL INSERT 文の更新セマンティクスは変更しません。
 - 導入バージョン: -
 
 ### snapshot_expire_time_sec
@@ -1171,6 +1207,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: ストレージとコンピュートの分離テーブル（shared-data table）tablet メタデータ取得操作（`get_tablet_stats`、`get_tablet_metadatas` など）のスレッド数。
 - 導入バージョン: v3.5.16, v4.0.9
+
+### tablet_writer_add_segment_lock_timeout_ms
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: shared-nothing クラスターのセカンダリ BE が segment 複製リクエストを受信する際の、ロック待機時間の合計上限です。`0` 以下の値は `be_exit_after_disk_write_hang_second` をミリ秒に換算した値を使用し、正の値はその上限を上書きします。LoadChannel のミューテックスと LocalTabletsChannel の共有ロックは、BRPC リクエストハンドラーの開始時に一度だけ計算した同じ期限を使用します。いずれかのロック待機がタイムアウトすると、segment の書き込みを投入する前に RPC がタイムアウトエラーを返します。RPC タイムアウトとは独立しており、その後の segment flush や commit の処理時間は制限しません。segment 複製の受信経路にのみ適用されます。writer のハングによる終了判定とは計測開始時点が異なるため、BE 終了前のロックタイムアウトを保証するものではありません。
+- 導入バージョン: -
 
 ### transaction_apply_worker_count
 

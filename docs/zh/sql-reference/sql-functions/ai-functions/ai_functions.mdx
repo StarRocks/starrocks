@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "在 SQL 中使用 AI 函数，并通过 TopN 下推减少 AI 输入行数。"
+description: "了解 AI Provider、AI 函数与使用权限的关系，在 SQL 中调用模型服务处理文本。"
 sidebar_position: 10
 ---
 
@@ -10,7 +10,91 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 <Experimental />
 
-AI 函数支持在 SQL 中调用已配置的模型服务。文本生成函数参见 [ai_complete](ai_complete.md)。
+AI 函数支持在 SQL 中调用模型服务，对文本进行生成、分类、提取、翻译、摘要和向量化处理。您可以对常量文本调用函数，也可以在查询中处理文本列。
+
+## AI Provider 与 AI 函数
+
+AI Provider 是集群中统一管理的模型服务配置，保存端点、协议、默认模型和可选的访问凭证。AI 函数通过 Provider 获取这些配置，SQL 中不需要重复填写端点和凭证。
+
+- `ai_embed` 使用 `embedding` 类型的 Provider。
+- `ai_complete` 及其他文本辅助函数使用 `chat` 类型的 Provider。
+- 这些 AI 函数当前要求 Provider 使用 `openai` 协议，端点和模型也需要支持对应的聊天或向量能力。
+
+调用函数时，可以通过 `provider` 指定 Provider，也可以使用对应类型的集群默认 Provider。不同类型的默认值独立维护。省略 `model` 时使用所选 Provider 的默认模型，也可以显式指定该服务支持的其他模型。
+
+Provider 的创建、配置属性和管理语法参见 [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md)；默认值的设置参见 [SET DEFAULT AI PROVIDER](../../sql-statements/cluster-management/ai_provider/SET_DEFAULT_AI_PROVIDER.md)。
+
+## AI 函数权限 {/* #ai-function-privileges */}
+
+执行一次 AI 函数调用，需要同时具备两类使用权限：
+
+- **函数权限**：允许使用相应的 AI 函数。
+- **Provider 权限**：允许访问本次调用所选的 Provider，使用默认 Provider 时同样需要检查。
+
+两类权限不能互相替代。管理 Provider 需要 SYSTEM OPERATE 权限；具备 Provider 管理权限并不等于普通用户已获得函数和 Provider 的使用权限。查询涉及的表、列和视图权限仍然适用。
+
+详细规则参见 [AI 权限项](../../../administration/user_privs/authorization/privilege_item.md#ai-function-privileges)。授权、撤权和查看授权的语法分别参见 [GRANT](../../sql-statements/account-management/GRANT.md#ai-函数与-provider)、[REVOKE](../../sql-statements/account-management/REVOKE.md#ai-函数与-provider) 和 [SHOW GRANTS](../../sql-statements/account-management/SHOW_GRANTS.md)。
+
+## 开始使用
+
+以下示例使用阿里云百炼北京地域的 OpenAI 兼容接口。请先开通百炼模型服务，将 `YOUR_DASHSCOPE_API_KEY` 替换为北京地域的 API Key，并使用具备 Provider 管理权限及相应函数、Provider 使用权限的账号执行。
+
+### Chat Provider：生成文本
+
+创建使用 `qwen-plus` 模型的 chat Provider，然后调用 `ai_complete`：
+
+```sql
+CREATE AI PROVIDER bailian_chat TYPE chat
+PROPERTIES (
+    "endpoint" = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "protocol" = "openai",
+    "model" = "qwen-plus",
+    "api_key" = "YOUR_DASHSCOPE_API_KEY"
+);
+
+-- 显式指定 Provider，使用其默认模型。
+SELECT ai_complete(
+    prompt => '用一句话解释什么是列式存储。',
+    provider => 'bailian_chat',
+    options => json_object('enable_thinking', false)
+);
+
+-- 设置默认 chat Provider 后，调用时可以省略 provider。
+SET bailian_chat AS DEFAULT AI PROVIDER;
+
+SELECT ai_complete(
+    prompt => '用一句话解释什么是列式存储。',
+    options => json_object('enable_thinking', false)
+);
+```
+
+### Embedding Provider：生成文本向量
+
+创建使用 `text-embedding-v4` 模型的 embedding Provider，设置输出维度为 256，然后调用 `ai_embed`：
+
+```sql
+CREATE AI PROVIDER bailian_embedding TYPE embedding
+PROPERTIES (
+    "endpoint" = "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
+    "protocol" = "openai",
+    "model" = "text-embedding-v4",
+    "dimensions" = "256",
+    "api_key" = "YOUR_DASHSCOPE_API_KEY"
+);
+
+-- 显式指定 Provider，返回文本向量。
+SELECT ai_embed(
+    input => '列式存储适合分析查询。',
+    provider => 'bailian_embedding'
+);
+
+-- 设置默认 embedding Provider，不影响默认 chat Provider。
+SET bailian_embedding AS DEFAULT AI PROVIDER;
+
+SELECT ai_embed('列式存储适合分析查询。');
+```
+
+完整的函数语法、参数规则和示例参见 [AI 文本类函数](ai_text_functions.md)。模型调用会把输入文本发送到 Provider 的端点；请根据数据出站要求选择服务，并考虑查询行数、延迟和调用费用。
 
 ## 减少 AI 输入行数 {/* #reducing-ai-input-rows */}
 

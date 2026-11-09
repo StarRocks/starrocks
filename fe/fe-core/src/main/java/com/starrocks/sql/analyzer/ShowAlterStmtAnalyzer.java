@@ -21,6 +21,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.proc.OptimizeProcDir;
+import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -52,8 +54,8 @@ public class ShowAlterStmtAnalyzer {
         private final HashMap<String, Expr> filterMap = new HashMap<>();
 
         // ROLLUP and MATERIALIZED VIEW rows both come from RollupProcDir, whose column names
-        // differ from SchemaChangeProcDir's. Remembered so a predicate can be checked against
-        // the layout that will actually answer.
+        // differ from SchemaChangeProcDir's. Remembered so the where and order by clauses can
+        // be resolved against the layout that will actually answer.
         private ShowAlterStmt.AlterType alterType;
 
         private boolean isRollupLayout() {
@@ -129,7 +131,19 @@ public class ShowAlterStmtAnalyzer {
                     SlotRef slotRef = (SlotRef) orderByElement.getExpr();
                     int index = 0;
                     try {
-                        index = SchemaChangeProcDir.analyzeColumn(slotRef.getColumnName());
+                        // Resolve against the columns the statement will actually return. The three
+                        // layouts part company early -- State is index 9 for a schema change, 8 for
+                        // a rollup and 6 for an optimize -- so resolving everything against one of
+                        // them sorts by whatever sits at that position in the others. The branches
+                        // here match the ones handleShowAlterTable uses to pick the proc path, and
+                        // the ones ShowResultMetaFactory uses to pick the column names.
+                        if (isRollupLayout()) {
+                            index = RollupProcDir.analyzeColumn(rollupColumnName(slotRef.getColumnName()));
+                        } else if (alterType == ShowAlterStmt.AlterType.OPTIMIZE) {
+                            index = OptimizeProcDir.analyzeColumn(slotRef.getColumnName());
+                        } else {
+                            index = SchemaChangeProcDir.analyzeColumn(slotRef.getColumnName());
+                        }
                     } catch (AnalysisException e) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
                     }
@@ -196,6 +210,10 @@ public class ShowAlterStmtAnalyzer {
         // filter is keyed by and the one the error messages name.
         private String finishTimeColumnName() {
             return isRollupLayout() ? "FinishedTime" : "FinishTime";
+        }
+
+        private String rollupColumnName(String columnName) {
+            return "FinishTime".equalsIgnoreCase(columnName) ? "FinishedTime" : columnName;
         }
 
         private void analyzeSubPredicate(Expr subExpr) {
