@@ -6100,8 +6100,7 @@ TEST_F(LakeTabletReshardTest, test_identical_tablet_reloads_a_stale_source_index
                                                               source->version(), 11, 110, 0, /*include_delete=*/false));
     {
         ScopedPkIndexFlush flush;
-        ASSIGN_OR_ABORT(source,
-                        other_node.primary_key_manager->flush_pk_memtable(source, source->version(), std::nullopt));
+        ASSIGN_OR_ABORT(source, other_node.primary_key_manager->flush_pk_memtable(source, source->version()));
     }
     ASSERT_OK(put_tablet_metadata(source));
     ASSERT_GT(source->sstable_meta().sstables_size(), 0);
@@ -6144,7 +6143,7 @@ TEST_F(LakeTabletReshardTest, test_pk_flush_refuses_an_index_newer_than_its_meta
 
     {
         ScopedPkIndexFlush flush;
-        EXPECT_FALSE(_primary_key_manager->flush_pk_memtable(older, older->version(), std::nullopt).ok());
+        EXPECT_FALSE(_primary_key_manager->flush_pk_memtable(older, older->version()).ok());
     }
     EXPECT_EQ(newer->version(), _primary_key_manager->get_primary_index_data_version(tablet_id));
 

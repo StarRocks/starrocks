@@ -1948,13 +1948,8 @@ protected:
         txn_info.set_txn_id(txn_id);
         txn_info.set_txn_type(TXN_NORMAL);
         txn_info.set_commit_time(1);
-<<<<<<< HEAD
-        return lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), base_version,
-                                     base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
-=======
         return lake::publish_version(tablet_manager, lake::PublishTabletInfo(tablet_id), base_version, base_version + 1,
-                                     std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt);
->>>>>>> db00e5f48fb... [BugFix][RB-96] Reload a stale primary index before a reshard flush (#68470)
+                                     std::span<const TxnInfoPB>(&txn_info, 1), false);
     }
 
     StatusOr<TabletMetadataPtr> publish_followup_delete(int64_t tablet_id, int64_t base_version, int32_t delete_key) {
