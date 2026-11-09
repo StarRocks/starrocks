@@ -14,6 +14,7 @@
 
 #include "storage/runtime_filter_predicate.h"
 
+#include <atomic>
 #include <cstring>
 #include <limits>
 #include <mutex>
@@ -39,6 +40,7 @@ struct PoolStaticDictMaskEntry {
 
 using PoolStaticDictMasks = std::unordered_map<ColumnId, PoolStaticDictMaskEntry>;
 
+std::atomic<size_t> g_pool_static_dict_masks_count{0};
 std::mutex g_pool_static_dict_masks_mutex;
 std::unordered_map<const ObjectPool*, PoolStaticDictMasks> g_pool_static_dict_masks;
 
@@ -46,7 +48,9 @@ struct PoolStaticDictMaskCleanup {
     explicit PoolStaticDictMaskCleanup(const ObjectPool* pool) : pool(pool) {}
     ~PoolStaticDictMaskCleanup() {
         std::lock_guard<std::mutex> lock(g_pool_static_dict_masks_mutex);
-        g_pool_static_dict_masks.erase(pool);
+        if (g_pool_static_dict_masks.erase(pool) > 0) {
+            g_pool_static_dict_masks_count.fetch_sub(1, std::memory_order_release);
+        }
     }
     const ObjectPool* pool;
 };
@@ -58,6 +62,9 @@ void RuntimeFilterPredicatesRewriter::set_static_dict_mask(ObjectPool* obj_pool,
         return;
     }
     if (column_id == std::numeric_limits<ColumnId>::max()) {
+        if (LIKELY(g_pool_static_dict_masks_count.load(std::memory_order_acquire) == 0)) {
+            return;
+        }
         std::lock_guard<std::mutex> lock(g_pool_static_dict_masks_mutex);
         if (auto it = g_pool_static_dict_masks.find(obj_pool); it != g_pool_static_dict_masks.end()) {
             it->second.clear();
@@ -68,6 +75,9 @@ void RuntimeFilterPredicatesRewriter::set_static_dict_mask(ObjectPool* obj_pool,
     {
         std::lock_guard<std::mutex> lock(g_pool_static_dict_masks_mutex);
         auto [it, inserted] = g_pool_static_dict_masks.try_emplace(obj_pool);
+        if (inserted) {
+            g_pool_static_dict_masks_count.fetch_add(1, std::memory_order_release);
+        }
         need_register_cleanup = inserted;
         it->second[column_id] = PoolStaticDictMaskEntry{mask, is_nullable};
     }
@@ -79,8 +89,11 @@ void RuntimeFilterPredicatesRewriter::set_static_dict_mask(ObjectPool* obj_pool,
 Status RuntimeFilterPredicatesRewriter::rewrite(ObjectPool* obj_pool, RuntimeFilterPredicates& preds,
                                                 const std::vector<std::unique_ptr<ColumnIterator>>& column_iterators,
                                                 const Schema& schema) {
+    if (preds.empty()) {
+        return Status::OK();
+    }
     PoolStaticDictMasks pool_masks;
-    if (obj_pool != nullptr) {
+    if (obj_pool != nullptr && g_pool_static_dict_masks_count.load(std::memory_order_acquire) > 0) {
         std::lock_guard<std::mutex> lock(g_pool_static_dict_masks_mutex);
         if (auto it = g_pool_static_dict_masks.find(obj_pool); it != g_pool_static_dict_masks.end()) {
             pool_masks = std::move(it->second);
@@ -126,6 +139,7 @@ Status RuntimeFilterPredicatesRewriter::rewrite(ObjectPool* obj_pool, RuntimeFil
             dict_pred->set_static_dict_mask(it->second.mask, is_nullable && it->second.is_nullable);
         }
         predicates[i] = dict_pred;
+        preds._has_dict_filters = true;
     }
     return Status::OK();
 }

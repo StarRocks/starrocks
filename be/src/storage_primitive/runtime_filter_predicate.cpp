@@ -392,15 +392,23 @@ bool RuntimeFilterPredicates::any_filter_ready() const {
 }
 
 Status RuntimeFilterPredicates::refresh_dict_filters() {
+    if (LIKELY(!_has_dict_filters)) {
+        return Status::OK();
+    }
     for (auto* pred : _rf_predicates) {
-        RETURN_IF_ERROR(pred->refresh_if_updated(_driver_sequence));
+        if (pred->is_dict_filter()) {
+            RETURN_IF_ERROR(pred->refresh_if_updated(_driver_sequence));
+        }
     }
     return Status::OK();
 }
 
 bool RuntimeFilterPredicates::has_always_false_dict_filter() const {
+    if (LIKELY(!_has_dict_filters)) {
+        return false;
+    }
     for (const auto* pred : _rf_predicates) {
-        if (pred->is_always_false()) {
+        if (pred->is_dict_filter() && pred->is_always_false()) {
             return true;
         }
     }
