@@ -895,7 +895,7 @@ public abstract class MVRefreshProcessor {
         } else if (mv.getPartitionInfo().isUnPartitioned() && DeltaLakePartitionTraits.isTableVersionTracked(table)) {
             // TODO: a partitioned mv never fully refreshes on a Delta change (needsRefreshBasedOnNonRefTables skips
             //  non-PCT tables), so recording the version could mark partitions built from an older version as fresh.
-            return Lists.newArrayList(PartitionUtil.getPartitionNames(table));
+            return DeltaLakePartitionTraits.versionTrackingPartitionNames(table);
         } else {
             return Lists.newArrayList();
         }

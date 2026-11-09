@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.partitiontraits;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.DeltaLakePartitionKey;
@@ -35,8 +36,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
- * MV freshness of an unpartitioned Delta table is tracked by its table version, recorded under the table's name, its
- * only partition. Partitioned Delta tables are not tracked: listing their partitions scans all their data files.
+ * MV freshness of a Delta table is tracked by its table version, recorded under the table's name. This holds for
+ * partitioned tables too: the version covers all partitions, and listing them would scan all the data files.
  */
 public class DeltaLakePartitionTraits extends DefaultTraits {
     private static final Logger LOG = LogManager.getLogger(DeltaLakePartitionTraits.class);
@@ -57,7 +58,7 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
     }
 
     public static boolean isTableVersionTracked(Table table) {
-        return table.isUnPartitioned() && versionOf(table) >= 0;
+        return versionOf(table) >= 0;
     }
 
     private static long versionOf(Table table) {
@@ -66,6 +67,13 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
         }
         Snapshot snapshot = ((DeltaLakeTable) table).getDeltaSnapshot();
         return snapshot == null ? -1 : snapshot.getVersion();
+    }
+
+    /**
+     * @return the partition names to record the table version under, instead of listing the partitions
+     */
+    public static List<String> versionTrackingPartitionNames(Table table) {
+        return Lists.newArrayList(table.getName());
     }
 
     @Override

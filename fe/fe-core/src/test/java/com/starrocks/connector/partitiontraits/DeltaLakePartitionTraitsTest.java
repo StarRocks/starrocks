@@ -120,9 +120,19 @@ public class DeltaLakePartitionTraitsTest {
     }
 
     @Test
-    public void partitionedTableIsNotTrackedAndAlwaysStale() {
+    public void partitionedTableIsTrackedByItsVersionUnderTheTableName() {
         DeltaLakeTable table = partitionedTable(7);
-        assertFalse(DeltaLakePartitionTraits.isTableVersionTracked(table));
+        assertTrue(DeltaLakePartitionTraits.isTableVersionTracked(table));
+        assertEquals(List.of(TBL), DeltaLakePartitionTraits.versionTrackingPartitionNames(table));
+        assertEquals(Set.of(), updatedPartitionNames(table, baseTableInfo(table), refreshedFrom(table, TBL)));
+
+        DeltaLakeTable current = partitionedTable(8);
+        assertEquals(Set.of(TBL), updatedPartitionNames(current, baseTableInfo(current), refreshedFrom(table, TBL)));
+    }
+
+    @Test
+    public void partitionedTableWithoutARecordedVersionIsStale() {
+        DeltaLakeTable table = partitionedTable(7);
         assertEquals(Set.of(TBL), updatedPartitionNames(table, baseTableInfo(table),
                 new MaterializedView.AsyncRefreshContext()));
     }
