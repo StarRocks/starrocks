@@ -947,7 +947,8 @@ public class LakeTableIndexFastPathJobTest {
         new MockUp<Utils>() {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
-                                       ComputeResource computeResource, boolean useAggregatePublish) {
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       boolean isRetryPublish) {
                 publishedTxns.add(txnInfo);
                 publishedVersions.add(newVersion);
             }
@@ -1242,7 +1243,8 @@ public class LakeTableIndexFastPathJobTest {
         new MockUp<Utils>() {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
-                                       ComputeResource computeResource, boolean useAggregatePublish) {
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       boolean isRetryPublish) {
                 publishedVersions.add(new long[] {baseVersion, newVersion});
             }
         };

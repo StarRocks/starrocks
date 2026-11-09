@@ -105,7 +105,8 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
             LOG(INFO) << "Try delete for full vacuum: " << path;
             RETURN_IF_ERROR(metafile_deleter.delete_file(path));
             for (const auto& metadata : metadatas) {
-                tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(metadata->id(), version));
+                tablet_mgr->metacache()->erase(
+                        MetacacheKey::tablet_metadata(tablet_mgr->tablet_metadata_location(metadata->id(), version)));
             }
             bundle_expired_metas.push_back(name);
         }

@@ -587,6 +587,70 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
     }
 
     @Test
+    public void testRuntimeFilterProbeSlotsCarryFileBounds() throws Exception {
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(20));
+        SlotDescriptor k1Slot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        k1Slot.setType(INT);
+        k1Slot.setColumn(new Column("k1", INT));
+        localTupleDescriptor.addSlot(k1Slot);
+        SlotDescriptor k2Slot = new SlotDescriptor(new SlotId(2), localTupleDescriptor);
+        k2Slot.setType(INT);
+        k2Slot.setColumn(new Column("k2", INT));
+        localTupleDescriptor.addSlot(k2Slot);
+
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_3).commit();
+        List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableB, Maps.newHashMap());
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        FileScanTask task = Lists.newArrayList(mockedNativeTableB.newScan().includeColumnStats().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(task);
+        // without probe slots (and without the min/max optimization) no bounds are sent
+        Assertions.assertFalse(scanRangeSource.buildScanRange(task, task.file(), partitionId).isSetMin_max_values());
+
+        scanRangeSource.setRuntimeFilterProbeSlotIds(Set.of(k1Slot.getId().asInt()));
+        THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), partitionId);
+        Assertions.assertEquals(Set.of(k1Slot.getId().asInt()), range.getMin_max_values().keySet());
+        Assertions.assertEquals(1, range.getMin_max_values().get(k1Slot.getId().asInt()).getMin_int_value());
+        Assertions.assertEquals(2, range.getMin_max_values().get(k1Slot.getId().asInt()).getMax_int_value());
+    }
+
+    // A time-travel read binds the slots to the snapshot schema: the bounds are looked up by the name there, not in
+    // the current schema where the column was renamed since.
+    @Test
+    public void testRuntimeFilterProbeSlotBoundsUseReadSchema() throws Exception {
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(21));
+        SlotDescriptor k1Slot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        k1Slot.setType(INT);
+        k1Slot.setColumn(new Column("k1", INT));
+        localTupleDescriptor.addSlot(k1Slot);
+
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_3).commit();
+        long snapshotId = mockedNativeTableB.currentSnapshot().snapshotId();
+        Schema snapshotSchema = mockedNativeTableB.schema();
+        mockedNativeTableB.updateSchema().renameColumn("k1", "k1_renamed").commit();
+
+        List<Column> schema = Lists.newArrayList(new Column("k1_renamed", INT), new Column("k2", INT));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableB, Maps.newHashMap())
+                .withReadMetadata(snapshotSchema, IcebergMetadata.getSnapshotSpecs(mockedNativeTableB, snapshotId));
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+        scanRangeSource.setRuntimeFilterProbeSlotIds(Set.of(k1Slot.getId().asInt()));
+
+        FileScanTask task = Lists.newArrayList(
+                mockedNativeTableB.newScan().useSnapshot(snapshotId).includeColumnStats().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(task);
+        THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), partitionId);
+        Assertions.assertEquals(1, range.getMin_max_values().get(k1Slot.getId().asInt()).getMin_int_value());
+        Assertions.assertEquals(2, range.getMin_max_values().get(k1Slot.getId().asInt()).getMax_int_value());
+    }
+
+    @Test
     public void testBuildScanRangeContainsLastUpdatedSequenceNumberExtendedColumn() throws Exception {
         TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(2));
         SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);

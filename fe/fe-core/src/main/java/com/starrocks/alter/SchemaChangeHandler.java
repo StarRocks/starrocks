@@ -2719,31 +2719,56 @@ public class SchemaChangeHandler extends AlterHandler {
      * Rejects a new range routing key that does not start with the colocate columns of the table's range
      * colocate group: the same columns, in the same order, with the types the group stores. Every member of
      * the group is aligned on these leading columns. The colocate columns are the table's current first N
-     * routing columns, N being the group's colocate column count. Two columns are the same column when their
-     * unique ids are equal, or, when either has no unique id, when their names are equal: a table created
-     * before unique ids were assigned has the same unset id on every column. Does nothing for a table that
-     * is not in a range colocate group.
+     * routing columns, N being the group's colocate column count. Does nothing for a table that is not in a
+     * range colocate group.
      */
     public static void checkRangeColocatePrefix(OlapTable table, List<Column> newRoutingColumns)
             throws DdlException {
+        checkRangeColocatePrefix(table, newRoutingColumns,
+                table.isMaterializedView() ? "a materialized view" : "a table", null);
+    }
+
+    /**
+     * {@link #checkRangeColocatePrefix(OlapTable, List)} with the subject of the message given: the routing
+     * key checked can be that of another index of the table, a rollup or a synchronous materialized view.
+     * {@code hint}, when not null, is appended to the message. Does nothing for a table that is not in a
+     * range colocate group.
+     */
+    public static void checkRangeColocatePrefix(OlapTable table, List<Column> routingColumns, String subject,
+                                                @Nullable String hint) throws DdlException {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         ColocateTableIndex.GroupId groupId = colocateTableIndex.getRangeColocateGroupId(table.getId());
         if (groupId == null) {
             return;
         }
         ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(groupId);
-        int colocateColumnCount = groupSchema.getColocateColumnCount();
-        List<Column> colocateColumns = MetaUtils.getRangeDistributionColumns(table).subList(0, colocateColumnCount);
-        boolean matches = newRoutingColumns.size() >= colocateColumnCount;
+        List<Column> colocateColumns = MetaUtils.getRangeDistributionColumns(table)
+                .subList(0, groupSchema.getColocateColumnCount());
+        checkRangeColocatePrefix(colocateColumns, groupSchema.getDistributionColTypes(), routingColumns, subject, hint);
+    }
+
+    /**
+     * Rejects a routing key that does not start with {@code colocateColumns}: the same columns in the same
+     * order, and, when {@code colocateTypes} is given, with those types. Two columns are the same column when
+     * their unique ids are equal, or, when either has no unique id, when their names are equal: a table
+     * created before unique ids were assigned has the same unset id on every column. {@code subject} names
+     * whose sort key it is in the message ("a table", "rollup r of a table"); {@code hint}, when not null, is
+     * appended to the message.
+     */
+    public static void checkRangeColocatePrefix(List<Column> colocateColumns, @Nullable List<Type> colocateTypes,
+                                                List<Column> routingColumns, String subject, @Nullable String hint)
+            throws DdlException {
+        int colocateColumnCount = colocateColumns.size();
+        boolean matches = routingColumns.size() >= colocateColumnCount;
         for (int i = 0; matches && i < colocateColumnCount; i++) {
-            Column newColumn = newRoutingColumns.get(i);
-            matches = isSameColumn(newColumn, colocateColumns.get(i))
-                    && newColumn.getType().equals(groupSchema.getDistributionColTypes().get(i));
+            Column routingColumn = routingColumns.get(i);
+            matches = isSameColumn(routingColumn, colocateColumns.get(i))
+                    && (colocateTypes == null || routingColumn.getType().equals(colocateTypes.get(i)));
         }
         if (!matches) {
-            throw new DdlException("The sort key of a " + (table.isMaterializedView() ? "materialized view" : "table")
-                    + " in a range colocate group must start with its colocate columns " + unprefixedNames(colocateColumns)
-                    + " (same order and types). Got: " + unprefixedNames(newRoutingColumns));
+            throw new DdlException("The sort key of " + subject + " in a range colocate group must start with its "
+                    + "colocate columns " + unprefixedNames(colocateColumns) + " (same order and types). Got: "
+                    + unprefixedNames(routingColumns) + (hint == null ? "" : " " + hint));
         }
     }
 

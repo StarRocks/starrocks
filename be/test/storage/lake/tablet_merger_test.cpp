@@ -7169,7 +7169,8 @@ TEST_F(LakeTabletMergerTest, test_merge_retry_cache_complete_returns_without_rec
     }
     // A recomputed merge would have to read the sources back.
     for (auto id : {source0, source1}) {
-        _tablet_manager->metacache()->erase(_tablet_manager->tablet_metadata_location(id, 1));
+        _tablet_manager->metacache()->erase(
+                starrocks::lake::MetacacheKey::TEST_from_string(_tablet_manager->tablet_metadata_location(id, 1)));
     }
 
     int metadata_reads = 0;
@@ -7974,6 +7975,84 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_source_flush_persists_unflushed
         }
         EXPECT_NE(IndexValue(NullIndexValue), values[1]);
     }
+}
+
+// The merge runs on the compute node that serves the first source and flushes every source's index there. That node
+// can still cache another source's index at an older version: the source was served there, moved to another node and
+// was published there since. Flushed as is, that index would hand the merged tablet SSTs that describe the old
+// version, and because the merged tablet replays only the rowsets above its highest watermark, which belongs to the
+// right source here, the left source's newer keys would be missing from its index. The flush reloads such an index
+// from the metadata it is given instead.
+TEST_F(LakeTabletMergerTest, test_tablet_merging_reloads_a_stale_source_index) {
+    enum class LeftIndex { kStale, kEvicted, kCurrent };
+    for (auto left_index : {LeftIndex::kStale, LeftIndex::kEvicted, LeftIndex::kCurrent}) {
+        SCOPED_TRACE(static_cast<int>(left_index));
+        const int64_t left_id = next_id();
+        const int64_t right_id = next_id();
+        const int64_t target_id = next_id();
+        prepare_tablet_dirs(target_id);
+        ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100, /*include_delete=*/false));
+        ASSIGN_OR_ABORT(auto right, create_lifecycle_source(right_id, 50, 100, 60, 600, /*include_delete=*/false));
+        const int64_t created_version = left->version();
+        // Two more versions of the left source: on another node for kStale and kEvicted, so this node's index of it
+        // stays at the version it was created at, and on this node for kCurrent.
+        auto other_node = make_other_compute_node();
+        auto* left_writer = left_index == LeftIndex::kCurrent ? _tablet_manager.get() : other_node.tablet_manager.get();
+        ASSIGN_OR_ABORT(left, publish_followup_upsert_delete_on(left_writer, left_id, left->version(), 11, 110, 0,
+                                                                /*include_delete=*/false));
+        ASSIGN_OR_ABORT(left, publish_followup_upsert_delete_on(left_writer, left_id, left->version(), 12, 120, 10));
+        ASSIGN_OR_ABORT(right, publish_followup_upsert_delete(right_id, right->version(), 61, 610, 0, false));
+        ASSIGN_OR_ABORT(right, publish_followup_upsert_delete(right_id, right->version(), 62, 620, 0, false));
+        ASSERT_EQ(left->version(), right->version());
+        ASSERT_EQ(left_index == LeftIndex::kCurrent ? left->version() : created_version,
+                  _primary_key_manager->get_primary_index_data_version(left_id));
+        if (left_index == LeftIndex::kEvicted) _primary_key_manager->unload_and_remove_primary_index(left_id);
+
+        std::unordered_map<int64_t, TabletMetadataPtr> published;
+        {
+            ScopedPkIndexFlush flush;
+            ASSERT_OK(publish_resharding_merge({left, right}, target_id, left->version(), left->version() + 1,
+                                               next_id(), published));
+        }
+        const auto& merged = published.at(target_id);
+        ASSERT_GT(merged->sstable_meta().sstables_size(), 0) << "the source SSTs must be carried, not rebuilt";
+        expect_lifecycle_oracle(merged, {{11, 110}, {12, 120}, {60, 600}, {61, 610}, {62, 620}}, {10});
+
+        // A write after the merge goes through the merged tablet's index: an upsert of a key the index missed would
+        // add a second row for it, and a delete of such a key would be lost.
+        _primary_key_manager->unload_and_remove_primary_index(target_id);
+        ASSIGN_OR_ABORT(auto written, publish_followup_upsert_delete(target_id, merged->version(), 11, 111, 12));
+        expect_lifecycle_oracle(written, {{11, 111}, {60, 600}, {61, 610}, {62, 620}}, {10, 12});
+    }
+}
+
+// A retried merge flushes its sources again, and each flush first checks the cached index against the base version.
+// The first attempt's flush leaves every source's index at the base version, so the retry passes that check.
+TEST_F(LakeTabletMergerTest, test_tablet_merging_retry_passes_the_source_index_version_check) {
+    const int64_t left_id = next_id();
+    const int64_t right_id = next_id();
+    const int64_t target_id = next_id();
+    prepare_tablet_dirs(target_id);
+    ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100, /*include_delete=*/false));
+    ASSIGN_OR_ABORT(auto right, create_lifecycle_source(right_id, 50, 100, 60, 600, /*include_delete=*/false));
+    ASSIGN_OR_ABORT(left, publish_followup_upsert_delete(left_id, left->version(), 11, 110, 0, false));
+    ASSIGN_OR_ABORT(right, publish_followup_upsert_delete(right_id, right->version(), 61, 610, 0, false));
+
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    {
+        ScopedPkIndexFlush flush;
+        set_failpoint_mode("tablet_reshard_between_metadata_writes", FailPointTriggerModeType::ENABLE);
+        auto failed = publish_resharding_merge({left, right}, target_id, left->version(), left->version() + 1,
+                                               next_id(), published);
+        set_failpoint_mode("tablet_reshard_between_metadata_writes", FailPointTriggerModeType::DISABLE);
+        ASSERT_FALSE(failed.ok());
+        EXPECT_EQ(left->version(), _primary_key_manager->get_primary_index_data_version(left_id));
+        EXPECT_EQ(right->version(), _primary_key_manager->get_primary_index_data_version(right_id));
+        published.clear();
+        ASSERT_OK(publish_resharding_merge({left, right}, target_id, left->version(), left->version() + 1, next_id(),
+                                           published));
+    }
+    expect_lifecycle_oracle(published.at(target_id), {{10, 100}, {11, 110}, {60, 600}, {61, 610}}, {});
 }
 
 // One source flush can write several SSTs when the index rotates its memtables as it loads; the merge carries every

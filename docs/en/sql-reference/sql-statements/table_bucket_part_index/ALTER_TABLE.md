@@ -505,7 +505,7 @@ SPLIT is unaffected, and a Primary Key table whose `ORDER BY` is its primary key
 
 For range-distributed tables in shared-data clusters, split and merge jobs on the same table can run concurrently when their target physical partitions do not overlap. Jobs that touch the same physical partition conflict, even if they target different materialized indexes. This also applies to pre-split jobs triggered by concurrent loads into different partitions.
 
-A physical partition becomes available for another split or merge when its job finishes or aborts. The table remains in `TABLET_RESHARD` state while any split or merge job is active, so schema changes and other incompatible ALTER operations remain blocked. The table returns to `NORMAL` after all active split and merge jobs finish or abort.
+A physical partition becomes available for another split or merge when its job finishes or aborts. The table remains in `TABLET_RESHARD` state while any split or merge job is active. In this state, you can still add, drop, and replace partitions (including temporary partitions), truncate partitions, modify partition properties, rename the table, its partitions, rollups, and columns, change the table comment, and swap the table with another table. A partition (other than a temporary partition) that a job is splitting or merging can be dropped only with `DROP PARTITION ... FORCE`, which cannot be recovered. Other ALTER TABLE statements, such as schema changes, are rejected until the jobs finish. To check the status of the jobs, query `information_schema.tablet_reshard_jobs`. The table returns to `NORMAL` after all active split and merge jobs finish or abort.
 
 All participating FEs must support this concurrency policy. Before rolling back to an older FE version, wait for all split and merge jobs to finish or abort.
 
@@ -772,7 +772,7 @@ PROPERTIES: Support setting timeout time and the default timeout time is one day
 `ORDER BY`: defines an independent sort key for the rollup that can differ from the base table's sort key. It is supported only for range-distribution tables in shared-data clusters (from v4.2 onwards), and lets queries that filter or aggregate on the rollup's leading sort-key columns be served by the rollup. The following limitations apply:
 
 - The table must be a Duplicate Key, Aggregate, or Unique Key table. Primary Key tables are not supported.
-- The table must not be a colocate table.
+- On a table with `colocate_with`, the rollup's `ORDER BY` must start with the colocated columns, in the same order and with the same types.
 - A column in the rollup's sort key cannot be dropped, and its type cannot be changed. The only allowed change is increasing the length of a VARCHAR column on its own (without repositioning it or changing another attribute) when it is applied by fast schema evolution. `ORDER BY ... FROM <rollup>` is not supported for such a rollup.
 - Multiple such rollups are supported. Each `ALTER TABLE` statement adds one rollup (add several rollups with separate statements). The rollup is always derived from the base index; `FROM <another_rollup>` is not supported. The table must not carry a synchronous materialized view.
 

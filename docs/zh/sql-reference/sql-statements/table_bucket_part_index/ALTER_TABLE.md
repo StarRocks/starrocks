@@ -506,7 +506,7 @@ SPLIT 不受影响；排序键即主键的主键表仍可正常 MERGE。
 
 对于存算分离集群中的范围分布表，同一张表上的拆分、合并任务可以并发执行，前提是目标物理分区不重叠。涉及同一物理分区的任务会相互冲突，即使它们操作的是不同的物化索引。并发导入不同分区时触发的预拆分任务也遵循此规则。
 
-一个任务完成或中止后，其目标物理分区即可接受新的拆分、合并任务。只要表上仍有拆分、合并任务在执行，表就保持 `TABLET_RESHARD` 状态，Schema Change 等不兼容的 ALTER 操作仍会被阻止。所有进行中的拆分、合并任务完成或中止后，表才恢复为 `NORMAL` 状态。
+一个任务完成或中止后，其目标物理分区即可接受新的拆分、合并任务。只要表上仍有拆分、合并任务在执行，表就保持 `TABLET_RESHARD` 状态。此时仍可以增加、删除和替换分区（包括临时分区），清空分区，修改分区属性，重命名表、分区、rollup 和列，修改表注释，以及与其他表执行 SWAP。正在拆分或合并的分区（临时分区除外）只能用 `DROP PARTITION ... FORCE` 删除，删除后不能恢复。Schema Change 等其他 ALTER TABLE 语句会被拒绝，需要等任务结束后再执行。任务状态可以查询 `information_schema.tablet_reshard_jobs`。所有进行中的拆分、合并任务完成或中止后，表才恢复为 `NORMAL` 状态。
 
 参与处理的所有 FE 都必须支持此并发策略。回退到较旧的 FE 版本前，应等待所有拆分、合并任务完成或中止。
 
@@ -772,7 +772,7 @@ PROPERTIES：支持设置超时时间，默认超时时间为一天。
 `ORDER BY`：为 Rollup 定义独立于基表的排序键（可与基表排序键不同）。仅支持存算分离集群中的 Range 分布表（自 v4.2 起），可使按 Rollup 排序键前缀列进行过滤或聚合的查询命中该 Rollup。有以下限制：
 
 - 表必须为明细表（Duplicate Key）、聚合表（Aggregate）或更新表（Unique Key），不支持主键表（Primary Key）。
-- 表不能为 Colocate 表。
+- 如果表设置了 `colocate_with`，Rollup 的 `ORDER BY` 必须以 Colocated Column 开头，列的顺序和类型均须与之一致。
 - 不能删除 Rollup 排序键中的列，也不能修改这些列的类型。唯一的例外是：可以单独增加 VARCHAR 列的长度（通过 Fast Schema Evolution 完成），但不能同时调整该列的位置或修改其他属性。此类 Rollup 不支持 `ORDER BY ... FROM <rollup>`。
 - 支持添加多个此类 Rollup。每条 `ALTER TABLE` 语句添加一个 Rollup（添加多个 Rollup 需分多条语句执行）。该 Rollup 始终基于基表索引构建，不支持 `FROM <其他 Rollup>`。表不能包含同步物化视图。
 

@@ -174,6 +174,9 @@ ORDER BY (column_name [ASC | DESC] [NULLS FIRST | NULLS LAST], ...)
 - `location`: テーブルのファイルパス。データベースレベルのロケーションなしで AWS Glue を使用する場合に必須です。
 - `file_format`: ファイル形式。`parquet` (デフォルト) のみがサポートされています。
 - `compression_codec`: 圧縮アルゴリズム。オプション: SNAPPY, GZIP, ZSTD, LZ4 (デフォルト: `zstd`)。
+- `write.metadata.metrics.default`: StarRocks がデータファイルに書き込む列統計のデフォルトの metrics モード。オプション: `none`, `counts`, `truncate(N)`, `full` (デフォルト: `truncate(16)`)。`none` は統計を書き込まず、`counts` は値の数と NULL の数のみを書き込み、`truncate(N)` は上下限も書き込み、STRING と BINARY の上下限を N 文字 (バイト) に切り詰めます。`full` は切り詰めない上下限を書き込みます。
+- `write.metadata.metrics.column.<col>`: 列 `<col>` の metrics モード。デフォルトを上書きします。オプションは `write.metadata.metrics.default` と同じです。
+- `write.metadata.metrics.max-inferred-column-defaults`: `write.metadata.metrics.default` が設定されていない場合、先頭の N 列のみがデフォルトの `truncate(16)` を使用し、残りの列は `none` になります (デフォルト: `100`)。
 
 ### 例
 

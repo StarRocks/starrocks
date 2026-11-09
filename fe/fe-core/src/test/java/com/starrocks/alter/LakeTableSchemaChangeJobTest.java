@@ -1128,7 +1128,7 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                        long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
-                                       boolean useAggregatePublish) {
+                                       boolean useAggregatePublish, boolean isRetryPublish) {
                 publishCalls.incrementAndGet();
                 lastNoOp.set(txnInfo.noOpPublish);
             }
@@ -1435,6 +1435,46 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
+    public void testPublishRetrySetsIsRetryPublish() throws Exception {
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        LakeTable retryTable = createTable(connectContext,
+                "CREATE TABLE t_publish_retry(c0 INT) duplicate key(c0) distributed by hash(c0) buckets 3 " +
+                        "PROPERTIES('file_bundling'='false')");
+        Config.enable_fast_schema_evolution_in_share_data_mode = false;
+        alterTable(connectContext, "ALTER TABLE t_publish_retry ADD COLUMN c1 BIGINT AS c0 + 2");
+        LakeTableSchemaChangeJob job = getAlterJob(retryTable);
+        drivePendingJob(job);
+        job.runWaitingTxnJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        // The first publish of the origin tablets fails after the shadow tablets were sent.
+        List<Boolean> shadowFlags = new ArrayList<>();
+        List<Boolean> originFlags = new ArrayList<>();
+        AtomicBoolean failOrigin = new AtomicBoolean(true);
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       boolean isRetryPublish) {
+                (txnInfo.txnId == -1L ? originFlags : shadowFlags).add(isRetryPublish);
+                if (txnInfo.txnId == -1L && failOrigin.getAndSet(false)) {
+                    throw new RuntimeException("injected publish failure");
+                }
+            }
+        };
+        Assertions.assertFalse(job.lakePublishVersion());
+        Assertions.assertTrue(job.lakePublishVersion());
+        Assertions.assertEquals(List.of(false, true), shadowFlags);
+        Assertions.assertEquals(List.of(false, true), originFlags);
+    }
+
+    @Test
     public void testPublishVersion() throws Exception {
         LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
@@ -1543,7 +1583,8 @@ public class LakeTableSchemaChangeJobTest {
         new MockUp<Utils>() {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
-                                       ComputeResource computeResource, boolean useAggregatePublish) {
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       boolean isRetryPublish) {
                 publishedTxns.add(txnInfo);
                 publishedVersions.add(newVersion);
             }

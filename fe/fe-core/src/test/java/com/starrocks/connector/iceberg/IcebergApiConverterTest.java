@@ -461,6 +461,269 @@ public class IcebergApiConverterTest {
         assertMinimalDecimalBound(metrics.upperBounds().get(4), 38, 5, d128Upper);
     }
 
+    private static Table metricsTable(Schema schema, Map<String, String> props) {
+        Table nativeTable = mock(Table.class);
+        when(nativeTable.schema()).thenReturn(schema);
+        when(nativeTable.properties()).thenReturn(props);
+        when(nativeTable.sortOrder()).thenReturn(SortOrder.unsorted());
+        return nativeTable;
+    }
+
+    private static ByteBuffer str(String s) {
+        return Conversions.toByteBuffer(Types.StringType.get(), s);
+    }
+
+    private static ByteBuffer bin(byte... bytes) {
+        return ByteBuffer.wrap(bytes);
+    }
+
+    private static Metrics fullMetrics(Map<Integer, ByteBuffer> lower, Map<Integer, ByteBuffer> upper) {
+        Map<Integer, Long> sizes = new HashMap<>();
+        Map<Integer, Long> counts = new HashMap<>();
+        Map<Integer, Long> nulls = new HashMap<>();
+        for (Integer id : lower.keySet()) {
+            sizes.put(id, 100L);
+            counts.put(id, 10L);
+            nulls.put(id, 1L);
+        }
+        return new Metrics(10L, sizes, counts, nulls, null, lower, upper);
+    }
+
+    @Test
+    public void testApplyWriteMetricsConfigWithoutPropertyUsesIcebergDefault() {
+        // No write.metadata.metrics.* property: Iceberg's default truncate(16) applies, like Spark and Trino.
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "c1", Types.StringType.get()),
+                Types.NestedField.optional(2, "c2", Types.IntegerType.get()));
+        String longStr = "abcdefghijklmnopqrstuvwxyz";
+        Map<Integer, ByteBuffer> lower = new HashMap<>(Map.of(1, str(longStr), 2, Conversions.toByteBuffer(
+                Types.IntegerType.get(), 1)));
+        Map<Integer, ByteBuffer> upper = new HashMap<>(lower);
+        Metrics metrics = fullMetrics(lower, upper);
+
+        for (Map<String, String> props : List.of(Map.<String, String>of(), Map.of("write.format.default", "parquet"))) {
+            Metrics result = IcebergApiConverter.applyWriteMetricsConfig(metrics, metricsTable(schema, props));
+            assertEquals(str(longStr.substring(0, 16)), result.lowerBounds().get(1));
+            assertEquals(str("abcdefghijklmnoq"), result.upperBounds().get(1));
+            assertEquals(Conversions.toByteBuffer(Types.IntegerType.get(), 1), result.lowerBounds().get(2));
+            assertEquals(2, result.valueCounts().size());
+        }
+
+        // max-inferred-column-defaults limits how many columns get the inferred default; the rest get none.
+        Metrics result = IcebergApiConverter.applyWriteMetricsConfig(metrics, metricsTable(schema,
+                Map.of("write.metadata.metrics.max-inferred-column-defaults", "1")));
+        assertEquals(str(longStr.substring(0, 16)), result.lowerBounds().get(1));
+        assertFalse(result.lowerBounds().containsKey(2));
+        assertFalse(result.valueCounts().containsKey(2));
+
+        // default = none disables the stats of every column.
+        result = IcebergApiConverter.applyWriteMetricsConfig(metrics, metricsTable(schema,
+                Map.of("write.metadata.metrics.default", "none")));
+        assertTrue(result.columnSizes().isEmpty());
+        assertTrue(result.valueCounts().isEmpty());
+        assertTrue(result.nullValueCounts().isEmpty());
+        assertTrue(result.lowerBounds().isEmpty());
+        assertTrue(result.upperBounds().isEmpty());
+    }
+
+    @Test
+    public void testApplyWriteMetricsConfigKeepsSortColumnBounds() {
+        // Iceberg keeps at least truncate(16) for sort columns even when the default is none or counts, so
+        // file-level pruning on the sort key keeps working. An explicit column mode still wins.
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "c1", Types.StringType.get()),
+                Types.NestedField.optional(2, "c2", Types.StringType.get()),
+                Types.NestedField.optional(3, "c3", Types.StringType.get()));
+        String value = "abcdefghijklmnopqrstuvwxyz";
+        Map<Integer, ByteBuffer> lower = new HashMap<>(Map.of(1, str(value), 2, str(value), 3, str(value)));
+        Metrics metrics = fullMetrics(lower, new HashMap<>(lower));
+        Table nativeTable = metricsTable(schema, Map.of("write.metadata.metrics.default", "counts",
+                "write.metadata.metrics.column.c3", "none"));
+        when(nativeTable.sortOrder()).thenReturn(SortOrder.builderFor(schema).asc("c1").asc("c3").build());
+
+        Metrics result = IcebergApiConverter.applyWriteMetricsConfig(metrics, nativeTable);
+        assertEquals(str(value.substring(0, 16)), result.lowerBounds().get(1));
+        assertEquals(10L, result.valueCounts().get(1));
+        assertFalse(result.lowerBounds().containsKey(2));
+        assertEquals(10L, result.valueCounts().get(2));
+        assertFalse(result.lowerBounds().containsKey(3));
+        assertFalse(result.valueCounts().containsKey(3));
+    }
+
+    @Test
+    public void testApplyWriteMetricsConfigNestedFields() {
+        // Nested fields are addressed by their dotted name (s.a); list and map fields follow the same lookup.
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "s", Types.StructType.of(
+                        Types.NestedField.optional(2, "a", Types.StringType.get()),
+                        Types.NestedField.optional(3, "b", Types.StringType.get()))),
+                Types.NestedField.optional(4, "l", Types.ListType.ofOptional(5, Types.StringType.get())),
+                Types.NestedField.optional(6, "m", Types.MapType.ofOptional(7, 8,
+                        Types.StringType.get(), Types.StringType.get())));
+        String value = "abcdefghijklmnopqrstuvwxyz";
+        Map<Integer, ByteBuffer> lower = new HashMap<>();
+        for (int id : new int[] {2, 3, 5, 7, 8}) {
+            lower.put(id, str(value));
+        }
+        Metrics metrics = fullMetrics(lower, new HashMap<>(lower));
+        Map<String, String> props = Map.of(
+                "write.metadata.metrics.column.s.a", "none",
+                "write.metadata.metrics.column.s.b", "full",
+                "write.metadata.metrics.column.l.element", "counts",
+                "write.metadata.metrics.column.m.value", "truncate(4)");
+        Metrics result = IcebergApiConverter.applyWriteMetricsConfig(metrics, metricsTable(schema, props));
+
+        assertFalse(result.valueCounts().containsKey(2));
+        assertFalse(result.lowerBounds().containsKey(2));
+        assertEquals(str(value), result.lowerBounds().get(3));
+        assertEquals(10L, result.valueCounts().get(5));
+        assertFalse(result.lowerBounds().containsKey(5));
+        // m.key is unset: the inferred default truncate(16)
+        assertEquals(str(value.substring(0, 16)), result.lowerBounds().get(7));
+        assertEquals(str("abcd"), result.lowerBounds().get(8));
+        assertEquals(str("abce"), result.upperBounds().get(8));
+    }
+
+    @Test
+    public void testApplyWriteMetricsConfigDropsInvalidUtf8StringBound() {
+        // BE reports a string column's raw bytes; a bound that is not valid UTF-8 is dropped, not a failure.
+        Schema schema = new Schema(Types.NestedField.optional(1, "c1", Types.StringType.get()));
+        Map<Integer, ByteBuffer> lower = new HashMap<>(Map.of(1, bin((byte) 0xF0)));
+        Map<Integer, ByteBuffer> upper = new HashMap<>(Map.of(1, bin((byte) 0xF0)));
+        Metrics result = IcebergApiConverter.applyWriteMetricsConfig(fullMetrics(lower, upper),
+                metricsTable(schema, Map.of()));
+        assertFalse(result.lowerBounds().containsKey(1));
+        assertFalse(result.upperBounds().containsKey(1));
+        assertEquals(10L, result.valueCounts().get(1));
+        assertEquals(1L, result.nullValueCounts().get(1));
+    }
+
+    @Test
+    public void testApplyWriteMetricsConfigModes() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "c1", Types.StringType.get()),
+                Types.NestedField.optional(2, "c2", Types.StringType.get()),
+                Types.NestedField.optional(3, "c3", Types.StringType.get()),
+                Types.NestedField.optional(4, "c4", Types.StringType.get()),
+                Types.NestedField.optional(5, "c5", Types.BinaryType.get()),
+                Types.NestedField.optional(6, "c6", Types.IntegerType.get()),
+                Types.NestedField.optional(7, "c7", Types.StringType.get()));
+        Map<Integer, ByteBuffer> lower = new HashMap<>();
+        Map<Integer, ByteBuffer> upper = new HashMap<>();
+        for (int id = 1; id <= 4; id++) {
+            lower.put(id, str("aaaaaaaaaaaaaaaaaaaaaaaa"));
+            upper.put(id, str("bbbbbbbbbbbbbbbbbbbbbbbb"));
+        }
+        lower.put(5, bin((byte) 1, (byte) 2, (byte) 3, (byte) 4, (byte) 5, (byte) 6));
+        upper.put(5, bin((byte) 1, (byte) 2, (byte) 3, (byte) 4, (byte) 5, (byte) 6));
+        lower.put(6, Conversions.toByteBuffer(Types.IntegerType.get(), -5));
+        upper.put(6, Conversions.toByteBuffer(Types.IntegerType.get(), 5));
+        // c7: an upper bound with no larger prefix cannot be truncated, so it is dropped.
+        String maxChar = new String(Character.toChars(Character.MAX_CODE_POINT));
+        lower.put(7, str(maxChar.repeat(3)));
+        upper.put(7, str(maxChar.repeat(3)));
+        Metrics metrics = fullMetrics(lower, upper);
+
+        Map<String, String> props = new HashMap<>();
+        props.put("write.metadata.metrics.column.c1", "full");
+        props.put("write.metadata.metrics.column.c2", "none");
+        props.put("write.metadata.metrics.column.c3", "counts");
+        props.put("write.metadata.metrics.column.c4", "truncate(4)");
+        props.put("write.metadata.metrics.column.c5", "truncate(4)");
+        props.put("write.metadata.metrics.column.c6", "truncate(4)");
+        props.put("write.metadata.metrics.column.c7", "truncate(2)");
+        Metrics result = IcebergApiConverter.applyWriteMetricsConfig(metrics, metricsTable(schema, props));
+
+        assertEquals(10L, result.recordCount());
+        // full
+        assertEquals(str("aaaaaaaaaaaaaaaaaaaaaaaa"), result.lowerBounds().get(1));
+        assertEquals(str("bbbbbbbbbbbbbbbbbbbbbbbb"), result.upperBounds().get(1));
+        // none: every stat of the column is gone, column size included
+        assertFalse(result.columnSizes().containsKey(2));
+        assertFalse(result.valueCounts().containsKey(2));
+        assertFalse(result.nullValueCounts().containsKey(2));
+        assertFalse(result.lowerBounds().containsKey(2));
+        assertFalse(result.upperBounds().containsKey(2));
+        // counts
+        assertEquals(100L, result.columnSizes().get(3));
+        assertEquals(10L, result.valueCounts().get(3));
+        assertEquals(1L, result.nullValueCounts().get(3));
+        assertFalse(result.lowerBounds().containsKey(3));
+        assertFalse(result.upperBounds().containsKey(3));
+        // truncate(4) on STRING: min is a prefix, max is a prefix with the last char incremented
+        assertEquals(str("aaaa"), result.lowerBounds().get(4));
+        assertEquals(str("bbbc"), result.upperBounds().get(4));
+        assertEquals(10L, result.valueCounts().get(4));
+        // truncate(4) on BINARY
+        assertEquals(bin((byte) 1, (byte) 2, (byte) 3, (byte) 4), result.lowerBounds().get(5));
+        assertEquals(bin((byte) 1, (byte) 2, (byte) 3, (byte) 5), result.upperBounds().get(5));
+        // truncate on a non string/binary type keeps the bound
+        assertEquals(Conversions.toByteBuffer(Types.IntegerType.get(), -5), result.lowerBounds().get(6));
+        assertEquals(Conversions.toByteBuffer(Types.IntegerType.get(), 5), result.upperBounds().get(6));
+        // untruncatable max dropped, min still truncated
+        assertEquals(str(maxChar.repeat(2)), result.lowerBounds().get(7));
+        assertFalse(result.upperBounds().containsKey(7));
+    }
+
+    @Test
+    public void testApplyWriteMetricsConfigFollowsIcebergInferredDefault() {
+        // Once a metrics property is set, unset columns follow Iceberg's default: truncate(16) for the first
+        // 100 columns (max-inferred-column-defaults), none past them.
+        List<Types.NestedField> fields = new ArrayList<>();
+        for (int id = 1; id <= 102; id++) {
+            fields.add(Types.NestedField.optional(id, "c" + id, Types.StringType.get()));
+        }
+        Schema schema = new Schema(fields);
+        String value = "abcdefghijklmnopqrstuvwxyz";
+        Map<Integer, ByteBuffer> lower = new HashMap<>();
+        for (int id = 1; id <= 102; id++) {
+            lower.put(id, str(value));
+        }
+        Metrics metrics = fullMetrics(lower, new HashMap<>(lower));
+        Metrics result = IcebergApiConverter.applyWriteMetricsConfig(metrics,
+                metricsTable(schema, Map.of("write.metadata.metrics.column.c1", "full")));
+
+        assertEquals(str(value), result.lowerBounds().get(1));
+        assertEquals(str(value.substring(0, 16)), result.lowerBounds().get(2));
+        assertEquals(str(value.substring(0, 16)), result.lowerBounds().get(100));
+        assertFalse(result.lowerBounds().containsKey(101));
+        assertFalse(result.valueCounts().containsKey(102));
+
+        // An explicit default switches the inference off.
+        result = IcebergApiConverter.applyWriteMetricsConfig(metrics,
+                metricsTable(schema, Map.of("write.metadata.metrics.default", "counts")));
+        assertTrue(result.lowerBounds().isEmpty());
+        assertEquals(102, result.valueCounts().size());
+    }
+
+    @Test
+    public void testApplyWriteMetricsConfigAfterDecimalFixup() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "c1", Types.DecimalType.of(9, 2)),
+                Types.NestedField.optional(2, "c2", Types.DecimalType.of(9, 2)));
+        Map<Integer, ByteBuffer> lowerBounds = new HashMap<>();
+        Map<Integer, ByteBuffer> upperBounds = new HashMap<>();
+        lowerBounds.put(1, rawLittleEndianStat(-12345L, 4));
+        upperBounds.put(1, rawLittleEndianStat(123456L, 4));
+        lowerBounds.put(2, rawLittleEndianStat(1L, 4));
+        upperBounds.put(2, rawLittleEndianStat(2L, 4));
+        TIcebergColumnStats columnStats = new TIcebergColumnStats();
+        columnStats.setLower_bounds(lowerBounds);
+        columnStats.setUpper_bounds(upperBounds);
+        TIcebergDataFile dataFile = new TIcebergDataFile();
+        dataFile.setFormat("parquet");
+        dataFile.setColumn_stats(columnStats);
+
+        Table nativeTable = metricsTable(schema, Map.of("write.metadata.metrics.column.c2", "none"));
+        Metrics metrics = IcebergApiConverter.applyWriteMetricsConfig(
+                IcebergApiConverter.buildDataFileMetrics(dataFile, nativeTable), nativeTable);
+        // c1 gets the inferred truncate(16), which leaves a decimal bound alone: still minimal big-endian.
+        assertMinimalDecimalBound(metrics.lowerBounds().get(1), 9, 2, -12345L);
+        assertMinimalDecimalBound(metrics.upperBounds().get(1), 9, 2, 123456L);
+        assertFalse(metrics.lowerBounds().containsKey(2));
+        assertFalse(metrics.upperBounds().containsKey(2));
+    }
+
     // Mimics ParquetFileWriter::_statistics' EncodeMin/EncodeMax for decimal32/decimal64: the raw
     // native-endian (little-endian) fixed-width Parquet INT32/INT64 physical statistic.
     private static ByteBuffer rawLittleEndianStat(long unscaledValue, int width) {

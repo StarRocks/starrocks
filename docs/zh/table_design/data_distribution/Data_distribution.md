@@ -865,6 +865,7 @@ PRIMARY KEY (tenant_id, created_time, id);
 - 建表后可以在线变更排序键（`ALTER TABLE ... ORDER BY`、添加或删除键列、扩宽整数类型的排序键列），前提是新排序键仍以 Colocated Column 开头，且这些列的顺序和类型不变。不支持删除 Colocated Column、调整其顺序或修改其类型。变更完成后，表仍属于原 Colocation Group，Colocate Join 不受影响。
 - 默认的 Colocated Column 即为排序列。
 - 如果 `colocate_with` 只指定了 Colocation Group，而排序键变更后包含的列多于 Colocated Column，StarRocks 会将该属性改写为显式列出 Colocated Column 的形式 `<colocation_group>:<colocated_column>[,<colocated_column>]`，此后 `SHOW CREATE TABLE` 中显示的即为该形式。
+- 支持 Rollup 和同步物化视图，但其排序键必须以 Colocated Column 开头，列的顺序和类型均须与之一致。在 `CREATE TABLE ... ROLLUP (...)` 中定义的 Rollup 以键列为排序键，写在其中的 `ORDER BY` 不会生效，因此这类 Rollup 的键列必须以 Colocated Column 开头。同步物化视图的排序键是 `SELECT` 列表开头的非聚合列，顺序与 `SELECT` 中一致；如果视图不含 `GROUP BY`、聚合函数或 `DISTINCT`，排序键取 `SELECT` 列表的前缀（最多三列、不超过 36 字节；遇到 VARCHAR 列时取到该列为止，遇到不能作为键的类型（如 FLOAT、DOUBLE）时在该列之前截止），`ORDER BY` 对它不起作用。如需为这类视图自行指定排序键，请改用 `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)`。表上已有 Rollup 或同步物化视图时，不支持上述排序键变更。
 :::
 
 ```SQL
@@ -906,10 +907,10 @@ PROPERTIES (
 | DDL | 原因 |
 | --- | --- |
 | 不包含 `ORDER BY` 子句的 `ALTER TABLE ... ADD ROLLUP ...` | 普通同步 Rollup 依赖基表与 Rollup 表 Tablet 一一对应且行顺序一致，基于范围的分布无法满足这一前提。请改用 `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)`：在存算分离集群中的范围分布表上，该语句会构建带独立排序键的 Rollup，且支持添加多个此类 Rollup（每条 `ALTER TABLE` 语句添加一个）。 |
-| `CREATE MATERIALIZED VIEW ... AS ...`（同步物化视图，未指定 `REFRESH` 和 `DISTRIBUTED BY` 子句） | 同步物化视图本质上是一个普通同步 Rollup，受相同限制。 |
+| `CREATE MATERIALIZED VIEW ... AS ...`（同步物化视图，未指定 `REFRESH` 和 `DISTRIBUTED BY` 子句） | 存算分离集群中的明细表、聚合表和更新表支持同步物化视图，参见 [CREATE MATERIALIZED VIEW](../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md)。其他情况下，同步物化视图本质上是一个普通同步 Rollup，受相同限制。 |
 | `ALTER TABLE ... MERGE TABLETS`（排序键与主键不同的主键表；基于大小的自动合并也会跳过该形态） | 这类表按主键空间的 range 路由数据，而 Segment 按排序键排列，因此合并时无法判定源 Tablet 之间共享的 Segment 中某一行仍归属于哪个源。SPLIT 不受影响；排序键即主键的主键表仍可正常 MERGE。 |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE 会对分区重新分布数据/重新分桶，与基于范围的 tablet 边界不兼容。 |
-| 在设置了 `colocate_with` 的表上使用 `CREATE TABLE ... ROLLUP (...)` | Rollup 的 tablet 按基表的排序键切分，数据却按 Rollup 自己的排序键分布，读取该 Rollup 的 Colocate Join 可能返回错误结果。这类表同样不支持 `ALTER TABLE ... ADD ROLLUP`。 |
+| 在设置了 `colocate_with` 的表上使用 `CREATE TABLE ... ROLLUP (...)`、`ALTER TABLE ... ADD ROLLUP ...` 或 `CREATE MATERIALIZED VIEW`，且 Rollup 或同步物化视图的排序键不以 Colocated Column 开头 | Rollup 和同步物化视图的 tablet 必须与 Colocation Group 对齐，只有排序键以 Colocated Column 开头，表中所有索引才能保持对齐。不含 `GROUP BY`、聚合函数或 `DISTINCT` 的同步物化视图无法自行指定排序键，这时请改用 `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)`。 |
 
 对于类似 Rollup 的聚合场景，请使用**异步物化视图**，并显式指定 `REFRESH` 子句或 `DISTRIBUTED BY` 子句，例如：
 

@@ -14,6 +14,9 @@
 
 package com.starrocks.authentication;
 
+import com.fasterxml.jackson.core.JsonPointer;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Preconditions;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
@@ -51,6 +54,8 @@ public class OpenIdConnectVerifier {
             JWSAlgorithm.RS256, JWSAlgorithm.RS384, JWSAlgorithm.RS512,
             JWSAlgorithm.ES256, JWSAlgorithm.ES384, JWSAlgorithm.ES512);
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     /**
      * Verify an OIDC id-token against a cached {@link JWKSource} (the path used by HTTP / Arrow
      * Flight Bearer and the MySQL JWT provider, with key rotation and outage tolerance handled by
@@ -59,12 +64,12 @@ public class OpenIdConnectVerifier {
     public static JWTClaimsSet verify(String idToken,
                                       String userName,
                                       JWKSource<SecurityContext> jwkSource,
-                                      String principalFiled,
+                                      String principalField,
                                       String[] requiredIssuer,
                                       String[] requiredAudience) throws AuthenticationException {
         try {
             SignedJWT signedJWT = verifySignature(idToken, jwkSource);
-            checkClaims(signedJWT, userName, principalFiled, requiredIssuer, requiredAudience);
+            checkClaims(signedJWT, userName, principalField, requiredIssuer, requiredAudience);
             // Handed back so a caller that also reads a claim (group resolution) works on the set
             // this method already parsed and verified, instead of parsing the token a second time.
             return signedJWT.getJWTClaimsSet();
@@ -93,10 +98,10 @@ public class OpenIdConnectVerifier {
     public static JWTClaimsSet verify(String idToken,
                                       String userName,
                                       JWKSet jwkSet,
-                                      String principalFiled,
+                                      String principalField,
                                       String[] requiredIssuer,
                                       String[] requiredAudience) throws AuthenticationException {
-        return verify(idToken, userName, new ImmutableJWKSet<>(jwkSet), principalFiled, requiredIssuer,
+        return verify(idToken, userName, new ImmutableJWKSet<>(jwkSet), principalField, requiredIssuer,
                 requiredAudience);
     }
 
@@ -106,11 +111,11 @@ public class OpenIdConnectVerifier {
      * security integration; the real signature check still runs afterwards in {@link #verify}, so a
      * forged token cannot benefit.
      */
-    public static String extractPrincipal(String idToken, String principalFiled) throws AuthenticationException {
+    public static String extractPrincipal(String idToken, String principalField) throws AuthenticationException {
         try {
-            String principal = SignedJWT.parse(idToken).getJWTClaimsSet().getStringClaim(principalFiled);
+            String principal = resolveClaimValue(SignedJWT.parse(idToken).getJWTClaimsSet(), principalField);
             if (principal == null) {
-                throw new AuthenticationException("Can not get specified principal " + principalFiled)
+                throw new AuthenticationException("Can not get specified principal " + principalField)
                         .withReason(AuthFailureReason.CLAIM_MISMATCH);
             }
             return principal;
@@ -172,7 +177,7 @@ public class OpenIdConnectVerifier {
      */
     private static void checkClaims(SignedJWT signedJWT,
                                     String userName,
-                                    String principalFiled,
+                                    String principalField,
                                     String[] requiredIssuer,
                                     String[] requiredAudience) throws Exception {
         JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
@@ -195,14 +200,31 @@ public class OpenIdConnectVerifier {
                     .withReason(AuthFailureReason.CLAIM_MISMATCH);
         }
 
-        String jwtUserName = claims.getStringClaim(principalFiled);
+        String jwtUserName = resolveClaimValue(claims, principalField);
         if (jwtUserName == null) {
-            throw new AuthenticationException("Can not get specified principal " + principalFiled)
+            throw new AuthenticationException("Can not get specified principal " + principalField)
                     .withReason(AuthFailureReason.CLAIM_MISMATCH);
         }
         if (!jwtUserName.equalsIgnoreCase(userName)) {
             throw new AuthenticationException("Login name " + userName + " is not matched to user " + jwtUserName)
                     .withReason(AuthFailureReason.CLAIM_MISMATCH);
         }
+    }
+
+    /**
+     * Resolves a claim value from the JWT claims set.
+     * If {@code principalField} starts with {@code /}, it is treated as an
+     * <a href="https://datatracker.ietf.org/doc/html/rfc6901">RFC 6901 JSON Pointer</a>
+     * and evaluated using Jackson's {@link JsonPointer}. Otherwise, a flat
+     * top-level lookup is performed for backward compatibility.
+     */
+    static String resolveClaimValue(JWTClaimsSet claims, String principalField) throws ParseException {
+        if (!principalField.startsWith("/")) {
+            return claims.getStringClaim(principalField);
+        }
+
+        JsonNode tree = MAPPER.valueToTree(claims.toJSONObject());
+        JsonNode result = tree.at(JsonPointer.compile(principalField));
+        return result.isTextual() ? result.textValue() : null;
     }
 }

@@ -385,7 +385,7 @@ TEST_F(NoOpPublishTest, no_op_publish_bypasses_stale_metacache) {
     stale_metadata->set_version(2);
     stale_metadata->set_commit_time(kStaleSentinelCommitTime);
     auto stale_path = _tablet_mgr->tablet_metadata_location(tablet_id, 2);
-    _tablet_mgr->metacache()->cache_tablet_metadata(stale_path, stale_metadata);
+    _tablet_mgr->metacache()->cache_tablet_metadata(MetacacheKey::tablet_metadata(stale_path), stale_metadata);
 
     TxnInfoPB txn_info;
     txn_info.set_txn_id(txn_id);
@@ -673,7 +673,8 @@ TEST_F(CalNewBaseVersionTest, cache_only_version_not_adopted) {
 
     auto meta_v2 = std::make_shared<TabletMetadataPB>(*_tablet_metadata);
     meta_v2->set_version(2);
-    _tablet_mgr->metacache()->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(tablet_id, 2), meta_v2);
+    _tablet_mgr->metacache()->cache_tablet_metadata(
+            MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(tablet_id, 2)), meta_v2);
     set_primary_index_data_version(tablet_id, 2);
 
     auto txns = make_txns();
@@ -691,7 +692,8 @@ TEST_F(CalNewBaseVersionTest, cache_only_version_not_adopted_on_bundled_metadata
 
     auto meta_v2 = std::make_shared<TabletMetadataPB>(*_tablet_metadata);
     meta_v2->set_version(2);
-    _tablet_mgr->metacache()->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(tablet_id, 2), meta_v2);
+    _tablet_mgr->metacache()->cache_tablet_metadata(
+            MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(tablet_id, 2)), meta_v2);
     _tablet_mgr->cache_bundled_metadata_partition_marker(tablet_id);
     set_primary_index_data_version(tablet_id, 2);
 

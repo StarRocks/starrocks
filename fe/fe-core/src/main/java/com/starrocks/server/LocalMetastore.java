@@ -1690,6 +1690,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                             "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
                                             " please use \"DROP PARTITION <partition> FORCE\".");
                         }
+                        // A tablet split or merge reserves its publish version without registering a transaction,
+                        // so the check above cannot see it, and a recovered partition would sit below that version.
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            if (stateMgr.getTabletReshardJobMgr()
+                                    .isPhysicalPartitionReshardingLocked(olapTable, physicalPartition.getId())) {
+                                throw new DdlException("A tablet split or merge is in progress on the partition [" +
+                                        partitionName + "]. Wait until it completes, or use " +
+                                        "\"DROP PARTITION <partition> FORCE\" to drop it forcibly (cannot be recovered).");
+                            }
+                        }
                     }
                 }
             }
@@ -2660,7 +2670,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     + table.getColocateGroup() + "', cannot create range colocate tablets");
         }
         int colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
-        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
+        // Expand with the sort key of the index being created, not the base index's: every index routes its rows by its
+        // own sort key, which starts with the colocate columns but can be shorter or longer than the base sort key.
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table, index.getMetaId());
 
         for (ColocateRange colocateRange : colocateRanges) {
             List<Long> shardIds = stateMgr.getStarOSAgent().createShards(1,

@@ -25,6 +25,7 @@ set(EXEC_FILES
         ./exec/pipeline/multi_cast_local_exchange_test.cpp
         ./exec/pipeline/fetch_task_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
+        ./exec/data_sinks/iceberg_encryption_signal_test.cpp
         ./formats/parquet/decrypt_metadata_module_test.cpp
         ./formats/parquet/encrypted_file_reader_test.cpp
         ./exec/data_sinks/pipeline_sink_builder_test.cpp
@@ -293,6 +294,7 @@ SET(DW_TEST_FILES
     ./storage/lake/shared_data_vector_index_test.cpp
     ./storage/lake/vector_index_build_task_test.cpp
     ./storage/lake/lake_delvec_loader_test.cpp
+    ./storage/lake/lake_grouped_range_reader_test.cpp
     ./storage/lake/lake_meta_reader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
     ./storage/lake/lake_persistent_index_selection_test.cpp
@@ -309,6 +311,7 @@ SET(DW_TEST_FILES
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
     ./storage/lake/lake_merged_del_op_offset_test.cpp
+    ./storage/lake/lake_merged_bundled_segments_test.cpp
     ./storage/lake/lake_multi_statement_bundle_mix_test.cpp
     ./storage/lake/lake_multi_statement_publish_test.cpp
     ./storage/lake/tablet_merger_test.cpp
@@ -403,6 +406,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/unique_rowset_id_generator_test.cpp
     ./storage/rowset_update_state_test.cpp
     ./storage/rowset/zone_map_index_test.cpp
+    ./storage/query/range_group_task_test.cpp
     ./storage/rows_mapper_test.cpp
     ./storage/row_store_encoder_test.cpp
     ./storage/schema_change_test.cpp

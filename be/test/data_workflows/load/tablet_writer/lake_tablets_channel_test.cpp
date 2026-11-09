@@ -1613,7 +1613,7 @@ TEST_P(LakeTabletsChannelMultiSenderTest, test_dont_write_txn_log) {
             auto metacache = _tablet_manager->metacache();
             for (auto tablet_id : {10086, 10087, 10088, 10089}) {
                 auto txn_log_path = _tablet_manager->txn_log_location(tablet_id, kTxnId);
-                ASSERT_TRUE(metacache->lookup_txn_log(txn_log_path));
+                ASSERT_TRUE(metacache->lookup_txn_log(starrocks::lake::MetacacheKey::txn_log(txn_log_path)));
                 ASSERT_TRUE(FileSystem::Default()->path_exists(txn_log_path).is_not_found());
             }
         } else if (sender_id == 0) {
