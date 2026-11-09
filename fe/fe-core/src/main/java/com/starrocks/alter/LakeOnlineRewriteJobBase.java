@@ -1911,7 +1911,7 @@ public abstract class LakeOnlineRewriteJobBase
                 Long watershedVersion = state.watershedVersion;
                 Preconditions.checkState(watershedVersion != null,
                         "watershed version not captured for partition " + physicalPartitionId);
-                publishInfos.add(new PartitionPublishInfo(shadowTablets, originTablets,
+                publishInfos.add(new PartitionPublishInfo(physicalPartitionId, shadowTablets, originTablets,
                         commitVersion, rewriteTxnId, watershedVersion, Boolean.TRUE.equals(state.sourceEmpty)));
             }
         } catch (AlterCancelException e) {
@@ -1943,17 +1943,20 @@ public abstract class LakeOnlineRewriteJobBase
                 shadowTxnInfo.shadowRewriteAlterVersion = info.watershedVersion;
                 // Empty at the watershed: BE synthesizes an empty op_schema_change@W with no source load.
                 shadowTxnInfo.shadowRewriteSourceEmpty = info.sourceEmpty;
+                // A retry lets the tablets an earlier attempt already published answer from storage.
+                boolean isRetryPublish = getAndMarkLakePublishSent(info.physicalPartitionId);
                 if (!isFileBundling) {
                     Utils.publishVersion(info.shadowTablets, shadowTxnInfo, 1, info.commitVersion,
-                            computeResource, false);
+                            computeResource, false, isRetryPublish);
                     Utils.publishVersion(info.originTablets, originTxnInfo, info.commitVersion - 1,
-                            info.commitVersion, computeResource, false);
+                            info.commitVersion, computeResource, false, isRetryPublish);
                 } else {
                     AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
                     Utils.createSubRequestForAggregatePublish(info.shadowTablets, Lists.newArrayList(shadowTxnInfo),
-                            1, info.commitVersion, null, computeResource, request);
+                            1, info.commitVersion, null, computeResource, request, false, isRetryPublish);
                     Utils.createSubRequestForAggregatePublish(info.originTablets, Lists.newArrayList(originTxnInfo),
-                            info.commitVersion - 1, info.commitVersion, null, computeResource, request);
+                            info.commitVersion - 1, info.commitVersion, null, computeResource, request, false,
+                            isRetryPublish);
                     List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
                     Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null,
                             vectorIndexBuildInfos);
@@ -1968,6 +1971,7 @@ public abstract class LakeOnlineRewriteJobBase
     }
 
     private static final class PartitionPublishInfo {
+        final long physicalPartitionId;
         final List<Tablet> shadowTablets;
         final List<Tablet> originTablets;
         final long commitVersion;
@@ -1975,8 +1979,9 @@ public abstract class LakeOnlineRewriteJobBase
         final long watershedVersion;
         final boolean sourceEmpty;
 
-        PartitionPublishInfo(List<Tablet> shadowTablets, List<Tablet> originTablets,
+        PartitionPublishInfo(long physicalPartitionId, List<Tablet> shadowTablets, List<Tablet> originTablets,
                              long commitVersion, long rewriteTxnId, long watershedVersion, boolean sourceEmpty) {
+            this.physicalPartitionId = physicalPartitionId;
             this.shadowTablets = shadowTablets;
             this.originTablets = originTablets;
             this.commitVersion = commitVersion;
@@ -2140,6 +2145,7 @@ public abstract class LakeOnlineRewriteJobBase
         // and new loads do not queue forever waiting for the cancelled alter's missing version.
         boolean advanceVersionForForce = force && jobState == JobState.FINISHED_REWRITING && tableExists();
         if (advanceVersionForForce) {
+            markLakeNoOpPublishSent();
             if (!lakePublishVersionWithSkip(errMsg)) {
                 return false;
             }

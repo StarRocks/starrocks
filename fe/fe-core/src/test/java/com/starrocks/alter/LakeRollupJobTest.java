@@ -754,6 +754,53 @@ public class LakeRollupJobTest {
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, baseTable.getState());
     }
 
+    @Test
+    public void testPublishRetrySetsIsRetryPublishPerPartition() throws Exception {
+        createBaseTable("base_table_publish_retry");
+        LakeRollupJob job = createJob("create materialized view mv_publish_retry as "
+                + "select k2, k1 from base_table_publish_retry order by k2;");
+        new MockUp<LakeRollupJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        job.runPendingJob();
+        job.runWaitingTxnJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        // The table has two partitions. The first attempt fails on the first partition's request, so the second
+        // partition is never sent: the next attempt is a retry for the first partition only.
+        List<Boolean> flags = new ArrayList<>();
+        AtomicBoolean failSend = new AtomicBoolean(true);
+        new MockUp<Utils>() {
+            @Mock
+            public void createSubRequestForAggregatePublish(List<com.starrocks.catalog.Tablet> tablets,
+                    List<com.starrocks.proto.TxnInfoPB> txnInfos, long baseVersion, long newVersion,
+                    Map<com.starrocks.system.ComputeNode, List<Long>> nodeToTablets, ComputeResource computeResource,
+                    AggregatePublishVersionRequest request, boolean preferSharedInitialMetadata,
+                    boolean isRetryPublish) {
+                flags.add(isRetryPublish);
+            }
+
+            @Mock
+            public void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
+                    long baseVersion, ComputeResource computeResource,
+                    Map<Long, Double> compactionScores,
+                    Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                    java.util.List<com.starrocks.proto.VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
+                if (failSend.getAndSet(false)) {
+                    throw new RuntimeException("injected publish failure");
+                }
+            }
+        };
+        Assertions.assertFalse(job.lakePublishVersion());
+        Assertions.assertTrue(job.lakePublishVersion());
+        // Rollup tablets then origin tablets of each partition.
+        Assertions.assertEquals(List.of(false, false, true, true, false, false), flags);
+    }
+
     private static OlapTable createBaseTable(String tableName) throws Exception {
         starRocksAssert.withTable("CREATE TABLE " + tableName + "\n" +
                 "(\n" +
