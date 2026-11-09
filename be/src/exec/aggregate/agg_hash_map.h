@@ -1067,13 +1067,11 @@ struct AggHashMapWithSerializedKeyFixedSize
     static constexpr size_t max_fixed_size = sizeof(FixedSizeSliceKey);
 
     Buffer<FixedSizeSliceKey> keys;
-    Buffer<size_t> hashes;
 
     template <class... Args>
     AggHashMapWithSerializedKeyFixedSize(int chunk_size, Args&&... args)
             : Base(chunk_size, std::forward<Args>(args)...), _chunk_size(chunk_size) {
         keys.resize(chunk_size);
-        hashes.resize(chunk_size);
         auto* buffer = reinterpret_cast<uint8_t*>(keys.data());
         memset(buffer, 0x0, max_fixed_size * _chunk_size);
     }
@@ -1096,8 +1094,9 @@ struct AggHashMapWithSerializedKeyFixedSize
                 keys[i].u.size = slice_sizes[i];
             }
         }
+        size_t* hash_values = reinterpret_cast<size_t*>(agg_states->data());
         for (size_t i = 0; i < chunk_size; i++) {
-            hashes[i] = this->hash_map.hash_function()(keys[i]);
+            hash_values[i] = this->hash_map.hash_function()(keys[i]);
         }
 
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
@@ -1105,21 +1104,21 @@ struct AggHashMapWithSerializedKeyFixedSize
 
         for (size_t i = 0; i < chunk_size; ++i) {
             if (__prefetch_dist != 0 && __prefetch_index < chunk_size) {
-                this->hash_map.prefetch_hash(hashes[__prefetch_index++]);
+                this->hash_map.prefetch_hash(hash_values[__prefetch_index++]);
             }
             FixedSizeSliceKey& key = keys[i];
+            const size_t hashval = hash_values[i];
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
-                    _emplace_key_with_hash(key, hashes[i], (*agg_states)[i], allocate_func,
-                                           [&]() { hash_table_size++; });
+                    _emplace_key_with_hash(key, hashval, (*agg_states)[i], allocate_func, [&]() { hash_table_size++; });
                 } else {
-                    _find_key((*agg_states)[i], (*not_founds)[i], key, hashes[i]);
+                    _find_key((*agg_states)[i], (*not_founds)[i], key, hashval);
                 }
             } else if constexpr (HTBuildOp::allocate) {
-                _emplace_key_with_hash(key, hashes[i], (*agg_states)[i], allocate_func,
+                _emplace_key_with_hash(key, hashval, (*agg_states)[i], allocate_func,
                                        FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
             } else if constexpr (HTBuildOp::fill_not_found) {
-                _find_key((*agg_states)[i], (*not_founds)[i], key, hashes[i]);
+                _find_key((*agg_states)[i], (*not_founds)[i], key, hashval);
             }
         }
     }
@@ -1204,6 +1203,7 @@ struct AggHashMapWithSerializedKeyFixedSize
         if (auto iter = this->hash_map.find(std::forward<Args>(args)...); iter != this->hash_map.end()) {
             target_state = iter->second;
         } else {
+            target_state = nullptr;
             not_found = 1;
         }
     }
