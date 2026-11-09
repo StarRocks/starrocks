@@ -297,14 +297,15 @@ TEST_F(LanceConnectorTest, DecodesHalfFloatBitsIncludingNestedSlices) {
             ASSERT_OK(LanceNativeReader::convert_batch(_state.get(), tuple, batch->Slice(1, 7), &chunk));
             ASSERT_EQ(7, chunk->num_rows());
             for (size_t i = 0; i < 7; ++i) {
-                auto value = chunk->get_column_by_index(0)->get(i);
-                if (shape == 2) value = value.get_struct()[0];
-                if (shape != 0) value = value.get_array()[0];
+                const auto row = chunk->get_column_by_index(0)->get(i);
+                const Datum* value = &row;
+                if (shape == 2) value = &value->get_struct()[0];
+                if (shape != 0) value = &value->get_array()[0];
                 if (i == 6) {
-                    EXPECT_TRUE(value.is_null());
+                    EXPECT_TRUE(value->is_null());
                     continue;
                 }
-                const double number = target == TYPE_FLOAT ? value.get_float() : value.get_double();
+                const double number = target == TYPE_FLOAT ? value->get_float() : value->get_double();
                 if (i == 0) {
                     EXPECT_EQ(1.0, number);
                 }
@@ -394,10 +395,11 @@ TEST_F(LanceConnectorTest, RejectsNestedDecimalNarrowingAndScaleChanges) {
             auto status = LanceNativeReader::convert_batch(_state.get(), tuple, batch, &chunk);
             if (target.precision == 20 && target.scale == 0) {
                 ASSERT_OK(status);
-                auto value = chunk->get_column_by_index(0)->get(0);
-                if (shape == 1) value = value.get_struct()[0];
-                if (shape == 2) value = value.get_array()[0];
-                EXPECT_EQ(static_cast<int128_t>(1000000000000000000LL) * 10, value.get_array()[0].get_int128());
+                const auto row = chunk->get_column_by_index(0)->get(0);
+                const Datum* value = &row;
+                if (shape == 1) value = &value->get_struct()[0];
+                if (shape == 2) value = &value->get_array()[0];
+                EXPECT_EQ(static_cast<int128_t>(1000000000000000000LL) * 10, value->get_array()[0].get_int128());
             } else {
                 EXPECT_TRUE(status.is_data_quality_error()) << status;
                 EXPECT_EQ(nullptr, chunk);
