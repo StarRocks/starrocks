@@ -3528,4 +3528,90 @@ TEST_F(SegmentIteratorTest, TopNAndHighSelectivityJoinRuntimeFilterTest) {
     }
 }
 
+TEST_F(SegmentIteratorTest, RuntimeFilterPredicatesFastPathTest) {
+    using namespace starrocks::test;
+    ObjectPool pool;
+
+    auto dict_words = BinaryColumn::create();
+    dict_words->append(Slice("a_word"));
+    dict_words->append(Slice("z_word"));
+
+    auto* str_rf = MinMaxRuntimeFilter<TYPE_VARCHAR>::create_with_range<false>(&pool, Slice("m_word"), true, false);
+    RuntimeFilterProbeDescriptor str_rf_desc;
+    str_rf_desc.set_runtime_filter(str_rf);
+
+    auto* int_rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&pool, 100, true, false);
+    RuntimeFilterProbeDescriptor int_rf_desc;
+    int_rf_desc.set_runtime_filter(int_rf);
+
+    RuntimeFilterPredicate base_pred(&int_rf_desc, 1);
+    DictColumnRuntimeFilterPredicate dict_pred(0, dict_words, str_rf, /*is_nullable=*/false);
+    EXPECT_FALSE(base_pred.is_dict_filter());
+    EXPECT_TRUE(dict_pred.is_dict_filter());
+
+    RuntimeFilterPredicates rf_preds;
+    EXPECT_FALSE(rf_preds.has_dict_filters());
+
+    rf_preds.add_predicate(&base_pred);
+    EXPECT_FALSE(rf_preds.has_dict_filters());
+    ASSERT_OK(rf_preds.refresh_dict_filters());
+    EXPECT_FALSE(rf_preds.has_always_false_dict_filter());
+
+    rf_preds.add_predicate(&dict_pred);
+    EXPECT_TRUE(rf_preds.has_dict_filters());
+    ASSERT_OK(rf_preds.refresh_dict_filters());
+    EXPECT_FALSE(rf_preds.has_always_false_dict_filter());
+
+    // Also verify RuntimeFilterPredicatesRewriter::rewrite sets has_dict_filters() only when a column is
+    // dictionary-encoded.
+    std::string file_name = kSegmentDir + "/rf_fast_path_rewriter_test";
+    DeferOp defer([&] { (void)_fs->delete_file(file_name); });
+    TabletSchemaBuilder schema_builder;
+    std::shared_ptr<TabletSchema> tablet_schema = schema_builder.create(1, /*nullable=*/false, TYPE_VARCHAR)
+                                                          .set_length(32)
+                                                          .create(2, /*nullable=*/false, TYPE_INT)
+                                                          .build();
+    Schema full_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto write_chunk = ChunkFactory::new_chunk(full_schema, 30);
+    for (int i = 0; i < 30; ++i) {
+        write_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(
+                Datum(Slice(i % 2 == 0 ? "a_word" : "z_word")));
+        write_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    auto segment = write_and_open_segment(_fs, file_name, tablet_schema, *write_chunk, 30);
+
+    ASSIGN_OR_ABORT(auto col_iter0, segment->new_column_iterator(tablet_schema->column(0), nullptr));
+    ASSIGN_OR_ABORT(auto col_iter1, segment->new_column_iterator(tablet_schema->column(1), nullptr));
+    ASSIGN_OR_ABORT(auto rfile0, _fs->new_random_access_file(file_name));
+    ASSIGN_OR_ABORT(auto rfile1, _fs->new_random_access_file(file_name));
+    OlapReaderStatistics stats;
+    ColumnIteratorOptions iter_opts0;
+    iter_opts0.read_file = rfile0.get();
+    iter_opts0.stats = &stats;
+    iter_opts0.check_dict_encoding = true;
+    ASSERT_OK(col_iter0->init(iter_opts0));
+    ColumnIteratorOptions iter_opts1;
+    iter_opts1.read_file = rfile1.get();
+    iter_opts1.stats = &stats;
+    iter_opts1.check_dict_encoding = false;
+    ASSERT_OK(col_iter1->init(iter_opts1));
+
+    std::vector<std::unique_ptr<ColumnIterator>> col_iters;
+    col_iters.emplace_back(std::move(col_iter0));
+    col_iters.emplace_back(std::move(col_iter1));
+
+    // Non-dict INT runtime filter remains has_dict_filters() == false after rewrite.
+    RuntimeFilterPredicates int_only_preds;
+    int_only_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&int_rf_desc, 1)));
+    ASSERT_OK(RuntimeFilterPredicatesRewriter::rewrite(&pool, int_only_preds, col_iters, full_schema));
+    EXPECT_FALSE(int_only_preds.has_dict_filters());
+
+    // Dict VARCHAR runtime filter transitions to has_dict_filters() == true after rewrite.
+    RuntimeFilterPredicates dict_rewritten_preds;
+    dict_rewritten_preds.add_predicate(pool.add(new RuntimeFilterPredicate(&str_rf_desc, 0)));
+    EXPECT_FALSE(dict_rewritten_preds.has_dict_filters());
+    ASSERT_OK(RuntimeFilterPredicatesRewriter::rewrite(&pool, dict_rewritten_preds, col_iters, full_schema));
+    EXPECT_TRUE(dict_rewritten_preds.has_dict_filters());
+}
+
 } // namespace starrocks

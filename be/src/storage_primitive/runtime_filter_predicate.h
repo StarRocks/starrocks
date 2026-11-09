@@ -47,6 +47,7 @@ public:
     ColumnId get_column_id() const { return _column_id; }
     RuntimeFilterProbeDescriptor* get_rf_desc() const { return _rf_desc; }
     bool has_rf() const { return _rf != nullptr; }
+    bool is_dict_filter() const { return _is_dict_filter; }
     bool init(int32_t driver_sequence);
     virtual Status init() { return Status::OK(); }
     virtual Status refresh_if_updated(int32_t driver_sequence = -1) { return Status::OK(); }
@@ -65,6 +66,7 @@ protected:
     const RuntimeFilter* _rf = nullptr;
     // whether _rf passes every row, see RuntimeFilter::is_pass_all; computed once, since it compares the bounds.
     bool _pass_all = false;
+    bool _is_dict_filter = false;
     ColumnId _column_id;
     // Holds hash_values plus the bucket-aware scratch vectors, reused across chunks.  Each
     // HdfsScanner/OlapChunkSource gets its own RuntimeFilterPredicate instances
@@ -82,12 +84,14 @@ public:
                                      std::vector<std::string> dict_words, bool is_nullable = true)
             : RuntimeFilterPredicate(rf_desc, column_id),
               _dict_words(std::move(dict_words)),
-              _is_nullable(is_nullable) {}
+              _is_nullable(is_nullable) {
+        _is_dict_filter = true;
+    }
     DictColumnRuntimeFilterPredicate(ColumnId column_id, ColumnPtr dict_words, const RuntimeFilter* rf,
                                      bool is_nullable = true)
-            : RuntimeFilterPredicate(column_id, rf),
-              _dict_words_col(std::move(dict_words)),
-              _is_nullable(is_nullable) {}
+            : RuntimeFilterPredicate(column_id, rf), _dict_words_col(std::move(dict_words)), _is_nullable(is_nullable) {
+        _is_dict_filter = true;
+    }
     ~DictColumnRuntimeFilterPredicate() override = default;
 
     Status init() override;
@@ -133,8 +137,14 @@ public:
     RuntimeFilterPredicates() = default;
     RuntimeFilterPredicates(int32_t driver_sequence) : _driver_sequence(driver_sequence) {}
 
-    void add_predicate(RuntimeFilterPredicate* pred) { _rf_predicates.emplace_back(pred); }
+    void add_predicate(RuntimeFilterPredicate* pred) {
+        _rf_predicates.emplace_back(pred);
+        if (pred != nullptr && pred->is_dict_filter()) {
+            _has_dict_filters = true;
+        }
+    }
     bool empty() const { return _rf_predicates.empty(); }
+    bool has_dict_filters() const { return _has_dict_filters; }
 
     Status evaluate(Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to);
     std::vector<RuntimeFilterPredicate*> rf_predicates() const { return _rf_predicates; }
@@ -169,6 +179,7 @@ private:
     void _update_selectivity_map();
 
     State _state = INIT;
+    bool _has_dict_filters = false;
     std::vector<RuntimeFilterPredicate*> _rf_predicates;
     struct SamplingCtx {
         RuntimeFilterPredicate* pred = nullptr;
