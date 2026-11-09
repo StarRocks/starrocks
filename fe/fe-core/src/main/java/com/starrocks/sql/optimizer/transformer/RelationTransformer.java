@@ -684,6 +684,10 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .setSelectedTabletIds(node.getTabletIds())
                         .build();
             } else {
+                // A named tablet whose partition pruning drops is left out, so the scan reads nothing from it.
+                List<Long> tabletIds = new ArrayList<>(
+                        TabletClause.resolve((OlapTable) node.getTable(), node.getPartitionNames(),
+                                node.getTabletIds()).keySet());
                 scanOperator = LogicalOlapScanOperator.builder()
                         .setParallelRangeScan(parallelRangeScan)
                         .setTable(node.getTable())
@@ -696,7 +700,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                                 : new PartitionNames(node.getPartitionNames().isTemp(),
                                 node.getPartitionNames().getPartitionNames(), node.getPartitionNames().getPos()))
                         .setSelectedTabletId(Lists.newArrayList())
-                        .setHintsTabletIds(node.getTabletIds())
+                        .setHintsTabletIds(tabletIds)
                         .setHintsReplicaIds(node.getReplicaIds())
                         .setHasTableHints(node.hasTableHints())
                         .setUsePkIndex(node.isUsePkIndex())
