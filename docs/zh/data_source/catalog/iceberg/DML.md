@@ -153,15 +153,6 @@ WHERE <condition>
   - `IS NULL` 和 `IS NOT NULL`
   - 带 `IN` 或 `EXISTS` 的子查询
 
-<<<<<<< HEAD
-=======
-### 使用说明
-
-- 对 Iceberg V2 表执行 DELETE 会写入 Position Delete 文件。自 v26.2 起，对格式版本 3 及以上的 Iceberg 表执行 DELETE 会改为在 Puffin 文件中写入 Deletion Vector，每个数据文件对应一个 Deletion Vector。
-- 如果 DELETE 涉及的数据文件已有删除记录（例如之前的 Deletion Vector 或 Position Delete 文件），这些删除记录会合并到该数据文件新的 Deletion Vector 中。随后，仅作用于该数据文件的删除文件会从表中移除，同时作用于其他数据文件的 Position Delete 文件则会保留。
-- `iceberg_delete_*` 指标在统计格式版本 3 及以上的表上的 DELETE 时，`delete_type` 为 `deletion_vector`。参见 [监控指标](../../../administration/management/monitoring/metric_details/i-p.md)。
-
->>>>>>> 681f4cdd658... [Doc] Document Iceberg format version 4 support (#68999)
 ### 示例
 
 #### Basic DELETE 操作

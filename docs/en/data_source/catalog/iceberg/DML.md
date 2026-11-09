@@ -164,15 +164,6 @@ WHERE <condition>
   - `IS NULL` and `IS NOT NULL`
   - Sub-queries with `IN` or `EXISTS`
 
-<<<<<<< HEAD
-=======
-### Usage notes
-
-- On Iceberg V2 tables, DELETE writes position delete files. From v26.2 onwards, DELETE on Iceberg tables of format version 3 or later writes deletion vectors in Puffin files instead, one deletion vector per data file.
-- If a data file that DELETE touches already has deletes, such as an earlier deletion vector or position delete files, they are merged into its new deletion vector. The delete files scoped to that data file are then removed from the table, while position delete files that also apply to other data files are kept.
-- The `iceberg_delete_*` metrics report DELETE on tables of format version 3 or later with `delete_type` set to `deletion_vector`. See [Metrics](../../../administration/management/monitoring/metric_details/i-p.md).
-
->>>>>>> 681f4cdd658... [Doc] Document Iceberg format version 4 support (#68999)
 ### Examples
 
 #### Basic DELETE operations

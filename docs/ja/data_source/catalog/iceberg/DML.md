@@ -153,15 +153,6 @@ WHERE <condition>
   - `IS NULL` および `IS NOT NULL`
   - `IN` または `EXISTS` を含むサブクエリ
 
-<<<<<<< HEAD
-=======
-### 使用上の注意
-
-- Iceberg V2 テーブルに対する DELETE は位置削除ファイルを書き込みます。v26.2 以降、フォーマットバージョン 3 以降の Iceberg テーブルに対する DELETE は、代わりに Puffin ファイルに削除ベクトルを書き込みます。削除ベクトルはデータファイルごとに 1 つです。
-- DELETE の対象となるデータファイルに既存の削除（以前の削除ベクトルや位置削除ファイルなど）がある場合、それらはそのデータファイルの新しい削除ベクトルにマージされます。その後、そのデータファイルのみに適用される削除ファイルはテーブルから削除され、他のデータファイルにも適用される位置削除ファイルは保持されます。
-- `iceberg_delete_*` 指標は、フォーマットバージョン 3 以降のテーブルに対する DELETE を `delete_type` が `deletion_vector` として報告します。[モニタリング指標](../../../administration/management/monitoring/metric_details/i-p.md) を参照してください。
-
->>>>>>> 681f4cdd658... [Doc] Document Iceberg format version 4 support (#68999)
 ### 例
 
 #### 基本的な DELETE 操作
