@@ -62,7 +62,7 @@ struct PageFixture {
         }
 
         PageBuilderOptions options;
-        options.data_page_size = 256 * 1024;
+        options.data_page_size = std::max<uint32_t>(256 * 1024, kPageRows * sizeof(CppType));
         BitshufflePageBuilder<Type> builder(options);
         const size_t added = builder.add(reinterpret_cast<const uint8_t*>(values.get()), kPageRows);
         if (added != kPageRows) {
@@ -82,8 +82,8 @@ struct PageFixture {
 };
 
 // Ascending, unique rowids drawn from a fixed seed so every run and every build sees the same input.
-std::vector<rowid_t> make_rowids(size_t selectivity_pct) {
-    const size_t k = static_cast<size_t>(kPageRows) * selectivity_pct / 100;
+std::vector<rowid_t> make_rowids_count(size_t count) {
+    const size_t k = std::min<size_t>(count, kPageRows);
     std::vector<rowid_t> all(kPageRows);
     std::iota(all.begin(), all.end(), 0);
     std::mt19937 rng(42);
@@ -91,6 +91,11 @@ std::vector<rowid_t> make_rowids(size_t selectivity_pct) {
     all.resize(k);
     std::sort(all.begin(), all.end());
     return all;
+}
+
+std::vector<rowid_t> make_rowids(size_t selectivity_pct) {
+    const size_t k = static_cast<size_t>(kPageRows) * selectivity_pct / 100;
+    return make_rowids_count(k);
 }
 
 // column_mode:
@@ -197,12 +202,140 @@ void register_type(const char* type_name) {
     }
 }
 
+constexpr size_t kWideSchemaCols = 105;
+
+struct WideColumnSlot {
+    MutableColumnPtr column;
+    PageDecoder* decoder = nullptr;
+    const std::vector<uint8_t>* null_flags = nullptr;
+
+    virtual ~WideColumnSlot() = default;
+    virtual Status init(bool nullable) = 0;
+};
+
+template <LogicalType StorageType, LogicalType ColumnLogicalType>
+struct TypedColumnSlot final : WideColumnSlot {
+    PageFixture<StorageType> page;
+
+    Status init(bool nullable) override {
+        RETURN_IF_ERROR(page.init());
+        decoder = page.decoder.get();
+        null_flags = &page.null_flags;
+        column = ChunkFactory::column_from_field_type(ColumnLogicalType, nullable);
+        return Status::OK();
+    }
+};
+
+std::unique_ptr<WideColumnSlot> make_wide_column_slot(size_t col_idx) {
+    switch (col_idx % 15) {
+    case 0:
+        return std::make_unique<TypedColumnSlot<TYPE_TINYINT, TYPE_TINYINT>>();
+    case 1:
+        return std::make_unique<TypedColumnSlot<TYPE_SMALLINT, TYPE_SMALLINT>>();
+    case 2:
+        return std::make_unique<TypedColumnSlot<TYPE_INT, TYPE_INT>>();
+    case 3:
+        return std::make_unique<TypedColumnSlot<TYPE_BIGINT, TYPE_BIGINT>>();
+    case 4:
+        return std::make_unique<TypedColumnSlot<TYPE_LARGEINT, TYPE_LARGEINT>>();
+    case 5:
+        return std::make_unique<TypedColumnSlot<TYPE_FLOAT, TYPE_FLOAT>>();
+    case 6:
+        return std::make_unique<TypedColumnSlot<TYPE_DOUBLE, TYPE_DOUBLE>>();
+    case 7:
+        return std::make_unique<TypedColumnSlot<TYPE_DATE, TYPE_DATE>>();
+    case 8:
+        return std::make_unique<TypedColumnSlot<TYPE_DATETIME, TYPE_DATETIME>>();
+    case 9:
+        return std::make_unique<TypedColumnSlot<TYPE_INT, TYPE_DECIMAL32>>();
+    case 10:
+        return std::make_unique<TypedColumnSlot<TYPE_BIGINT, TYPE_DECIMAL64>>();
+    case 11:
+        return std::make_unique<TypedColumnSlot<TYPE_LARGEINT, TYPE_DECIMAL128>>();
+    case 12:
+        return std::make_unique<TypedColumnSlot<TYPE_INT256, TYPE_INT256>>();
+    case 13:
+        return std::make_unique<TypedColumnSlot<TYPE_INT256, TYPE_DECIMAL256>>();
+    case 14:
+    default:
+        return std::make_unique<TypedColumnSlot<TYPE_BOOLEAN, TYPE_BOOLEAN>>();
+    }
+}
+
+void run_wide_schema_read_by_rowids(benchmark::State& state, int column_mode, size_t num_rowids) {
+    const bool nullable = (column_mode != 0);
+    const bool has_nullmap = (column_mode == 2);
+    const std::vector<rowid_t> rowids = make_rowids_count(num_rowids);
+
+    std::vector<std::unique_ptr<WideColumnSlot>> slots;
+    slots.reserve(kWideSchemaCols);
+    for (size_t c = 0; c < kWideSchemaCols; ++c) {
+        auto slot = make_wide_column_slot(c);
+        if (Status st = slot->init(nullable); !st.ok()) {
+            state.SkipWithError(st.to_string().c_str());
+            return;
+        }
+        size_t count = rowids.size();
+        Column* target = has_nullmap ? down_cast<NullableColumn*>(slot->column.get())->data_column_raw_ptr()
+                                     : slot->column.get();
+        if (Status st = slot->decoder->read_by_rowids(0, rowids.data(), &count, target);
+            !st.ok() || count != rowids.size() || target->size() != rowids.size()) {
+            state.SkipWithError("wide schema read_by_rowids self-check failed");
+            return;
+        }
+        slot->column->resize(0);
+        slot->column->reserve(rowids.size());
+        slots.emplace_back(std::move(slot));
+    }
+
+    for (auto _ : state) {
+        for (size_t c = 0; c < kWideSchemaCols; ++c) {
+            WideColumnSlot& slot = *slots[c];
+            slot.column->resize(0);
+            size_t count = rowids.size();
+            if (has_nullmap) {
+                auto* nc = down_cast<NullableColumn*>(slot.column.get());
+                Status st = slot.decoder->read_by_rowids(0, rowids.data(), &count, nc->data_column_raw_ptr());
+                std::vector<uint8_t> null_flags;
+                null_flags.reserve(count);
+                for (size_t i = 0; i < count; i++) {
+                    null_flags.emplace_back((*slot.null_flags)[rowids[i]]);
+                }
+                nc->null_column_raw_ptr()->append_numbers(null_flags.data(), null_flags.size());
+                nc->update_has_null();
+                benchmark::DoNotOptimize(st);
+                benchmark::DoNotOptimize(count);
+            } else {
+                Status st = slot.decoder->read_by_rowids(0, rowids.data(), &count, slot.column.get());
+                benchmark::DoNotOptimize(st);
+                benchmark::DoNotOptimize(count);
+            }
+        }
+        benchmark::ClobberMemory();
+    }
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * static_cast<int64_t>(kWideSchemaCols) *
+                            static_cast<int64_t>(rowids.size()));
+}
+
+void register_wide_schema() {
+    for (int column_mode : {0, 1, 2}) {
+        for (size_t num_rowids : {size_t(1), size_t(10), size_t(163)}) {
+            const std::string name = std::string("BM_BitShuffleReadByRowidsWideSchema/") + std::to_string(column_mode) +
+                                     "/" + std::to_string(num_rowids);
+            benchmark::RegisterBenchmark(name.c_str(), [column_mode, num_rowids](benchmark::State& state) {
+                run_wide_schema_read_by_rowids(state, column_mode, num_rowids);
+            });
+        }
+    }
+}
+
 [[maybe_unused]] const bool registered = [] {
     register_type<TYPE_INT>("INT");
     register_type<TYPE_BIGINT>("BIGINT");
     register_type<TYPE_DATE>("DATE");
     register_type<TYPE_DATETIME>("DATETIME");
     register_type<TYPE_BOOLEAN>("BOOLEAN");
+    register_wide_schema();
     return true;
 }();
 
