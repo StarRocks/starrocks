@@ -1756,6 +1756,70 @@ TEST_F(BitShufflePageTest, WideSchema105ColumnsReadByRowids) {
     }
 }
 
+TEST_F(BitShufflePageTest, ReadByRowidsUnsignedDestinationColumns) {
+    constexpr size_t kPageRows = 256;
+    const rowid_t rowids[] = {0, 7, 63, 128, 255, 300};
+
+    // 1. TYPE_INT page decoded into UInt32Column (used by ArrayColumnIterator / MapColumnIterator
+    //    when reading bitshuffle-encoded TYPE_INT length/offset streams).
+    {
+        ReadByRowidsPage<TYPE_INT> int_page;
+        int_page.build(kPageRows);
+
+        auto uint32_col = UInt32Column::create();
+        uint32_col->append(999U);
+        size_t count = std::size(rowids);
+        ASSERT_TRUE(int_page.decoder->read_by_rowids(0, rowids, &count, uint32_col.get()).ok());
+        ASSERT_EQ(5, count);
+        ASSERT_EQ(6, uint32_col->size());
+        EXPECT_EQ(999U, uint32_col->get_data()[0]);
+        for (size_t i = 0; i < count; ++i) {
+            EXPECT_EQ(static_cast<uint32_t>(int_page.src[rowids[i]]), uint32_col->get_data()[i + 1]) << "i=" << i;
+        }
+
+        auto nullable_uint32 = NullableColumn::create(UInt32Column::create(), NullColumn::create());
+        size_t nullable_count = std::size(rowids);
+        ASSERT_TRUE(int_page.decoder->read_by_rowids(0, rowids, &nullable_count, nullable_uint32.get()).ok());
+        ASSERT_EQ(5, nullable_count);
+        ASSERT_EQ(5, nullable_uint32->size());
+        const auto* data_col = down_cast<const UInt32Column*>(nullable_uint32->data_column_raw_ptr());
+        for (size_t i = 0; i < nullable_count; ++i) {
+            EXPECT_FALSE(nullable_uint32->is_null(i));
+            EXPECT_EQ(static_cast<uint32_t>(int_page.src[rowids[i]]), data_col->get_data()[i]) << "i=" << i;
+        }
+    }
+
+    // 2. TYPE_TINYINT page decoded into NullColumn / UInt8Column (used by ArrayColumnIterator /
+    //    MapColumnIterator / StructColumnIterator / JsonFlatColumnIterator when reading
+    //    bitshuffle-encoded TYPE_TINYINT null streams).
+    {
+        ReadByRowidsPage<TYPE_TINYINT> tinyint_page;
+        tinyint_page.build(kPageRows);
+
+        auto null_col = NullColumn::create();
+        null_col->append(1U);
+        size_t count = std::size(rowids);
+        ASSERT_TRUE(tinyint_page.decoder->read_by_rowids(0, rowids, &count, null_col.get()).ok());
+        ASSERT_EQ(5, count);
+        ASSERT_EQ(6, null_col->size());
+        EXPECT_EQ(1U, null_col->get_data()[0]);
+        for (size_t i = 0; i < count; ++i) {
+            EXPECT_EQ(static_cast<uint8_t>(tinyint_page.src[rowids[i]]), null_col->get_data()[i + 1]) << "i=" << i;
+        }
+
+        auto nullable_uint8 = NullableColumn::create(UInt8Column::create(), NullColumn::create());
+        size_t nullable_count = std::size(rowids);
+        ASSERT_TRUE(tinyint_page.decoder->read_by_rowids(0, rowids, &nullable_count, nullable_uint8.get()).ok());
+        ASSERT_EQ(5, nullable_count);
+        ASSERT_EQ(5, nullable_uint8->size());
+        const auto* data_col = down_cast<const UInt8Column*>(nullable_uint8->data_column_raw_ptr());
+        for (size_t i = 0; i < nullable_count; ++i) {
+            EXPECT_FALSE(nullable_uint8->is_null(i));
+            EXPECT_EQ(static_cast<uint8_t>(tinyint_page.src[rowids[i]]), data_col->get_data()[i]) << "i=" << i;
+        }
+    }
+}
+
 TEST_F(BitShufflePageTest, ReadByRowidsNoRttiGuard) {
     std::string test_file = __FILE__;
     auto pos = test_file.rfind("be/test/storage/rowset/bitshuffle_page_test.cpp");
@@ -1774,8 +1838,11 @@ TEST_F(BitShufflePageTest, ReadByRowidsNoRttiGuard) {
             << "BitShufflePageDecoder::read_by_rowids must not use dynamic_cast (RTTI overhead in point-lookup hot "
                "path)";
     EXPECT_EQ(std::string::npos, fn_body.find("typeid")) << "BitShufflePageDecoder::read_by_rowids must not use typeid";
-    EXPECT_NE(std::string::npos, fn_body.find("down_cast<BaseCol*>(target_col)"))
-            << "BitShufflePageDecoder::read_by_rowids must use down_cast<BaseCol*>(target_col)";
+    EXPECT_EQ(std::string::npos, fn_body.find("down_cast<BaseCol*>"))
+            << "BitShufflePageDecoder::read_by_rowids must not use down_cast<BaseCol*>, which fails on unsigned "
+               "destinations (UInt32Column / UInt8Column)";
+    EXPECT_NE(std::string::npos, fn_body.find("accept_mutable"))
+            << "BitShufflePageDecoder::read_by_rowids must resolve mutable raw data via accept_mutable";
 }
 
 } // namespace starrocks

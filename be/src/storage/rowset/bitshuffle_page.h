@@ -428,6 +428,73 @@ inline Status BitShufflePageDecoder<Type>::next_batch(const SparseRange<>& range
     return Status::OK();
 }
 
+class BitShuffleRawDataVisitor final : public ColumnVisitorMutable {
+public:
+    BitShuffleRawDataVisitor(size_t add_count, size_t elem_size) : _add_count(add_count), _elem_size(elem_size) {}
+
+    uint8_t* dst_raw() const { return _dst_raw; }
+    size_t orig_size() const { return _orig_size; }
+
+    Status visit(Int8Column* col) override { return visit_fixed(col); }
+    Status visit(UInt8Column* col) override { return visit_fixed(col); }
+    Status visit(Int16Column* col) override { return visit_fixed(col); }
+    Status visit(UInt16Column* col) override { return visit_fixed(col); }
+    Status visit(Int32Column* col) override { return visit_fixed(col); }
+    Status visit(UInt32Column* col) override { return visit_fixed(col); }
+    Status visit(Int64Column* col) override { return visit_fixed(col); }
+    Status visit(UInt64Column* col) override { return visit_fixed(col); }
+    Status visit(Int128Column* col) override { return visit_fixed(col); }
+    Status visit(FloatColumn* col) override { return visit_fixed(col); }
+    Status visit(DoubleColumn* col) override { return visit_fixed(col); }
+    Status visit(DateColumn* col) override { return visit_fixed(col); }
+    Status visit(TimestampColumn* col) override { return visit_fixed(col); }
+    Status visit(DecimalColumn* col) override { return visit_fixed(col); }
+    Status visit(Decimal32Column* col) override { return visit_fixed(col); }
+    Status visit(Decimal64Column* col) override { return visit_fixed(col); }
+    Status visit(Decimal128Column* col) override { return visit_fixed(col); }
+    Status visit(Decimal256Column* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumn<int96_t>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumn<uint24_t>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumn<decimal12_t>* col) override { return visit_fixed(col); }
+
+    Status visit(FixedLengthColumnBase<int8_t>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<uint8_t>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<int16_t>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<uint16_t>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<int32_t>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<uint32_t>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<int64_t>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<uint64_t>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<int128_t>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<int256_t>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<float>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<double>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<DateValue>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<DecimalV2Value>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<TimestampValue>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<int96_t>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<uint24_t>* col) override { return visit_fixed(col); }
+    Status visit(FixedLengthColumnBase<decimal12_t>* col) override { return visit_fixed(col); }
+
+private:
+    template <typename ColType>
+    Status visit_fixed(ColType* col) {
+        using ValType = typename ColType::ValueType;
+        if (UNLIKELY(sizeof(ValType) != _elem_size)) {
+            return Status::NotSupported("element size mismatch");
+        }
+        _orig_size = col->size();
+        col->resize_uninitialized(_orig_size + _add_count);
+        _dst_raw = col->mutable_raw_data() + _orig_size * sizeof(ValType);
+        return Status::OK();
+    }
+
+    size_t _add_count;
+    size_t _elem_size;
+    size_t _orig_size = 0;
+    uint8_t* _dst_raw = nullptr;
+};
+
 template <LogicalType Type>
 inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids,
                                                           size_t* count, Column* column) {
@@ -458,30 +525,28 @@ inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_
             }
 
             if (LIKELY(!target_col->is_nullable() && !target_col->is_constant())) {
-                using ValueType = typename StorageColumnType<Type>::ValueType;
-                using BaseCol = FixedLengthColumnBase<ValueType>;
-                static_assert(sizeof(ValueType) == sizeof(CppType), "ValueType and CppType size mismatch");
-
-                auto* fc = down_cast<BaseCol*>(target_col);
-                size_t orig_size = fc->size();
-                fc->resize_uninitialized(orig_size + total);
-                uint8_t* dst_raw = fc->mutable_raw_data() + orig_size * sizeof(CppType);
-                for (size_t i = 0; i < total; i++) {
-                    ordinal_t ord = rowids[i] - first_ordinal_in_page;
-                    if (UNLIKELY(ord >= _num_elements)) {
-                        break;
+                BitShuffleRawDataVisitor visitor(total, sizeof(CppType));
+                if (LIKELY(target_col->accept_mutable(&visitor).ok())) {
+                    uint8_t* dst_raw = visitor.dst_raw();
+                    size_t orig_size = visitor.orig_size();
+                    for (size_t i = 0; i < total; i++) {
+                        ordinal_t ord = rowids[i] - first_ordinal_in_page;
+                        if (UNLIKELY(ord >= _num_elements)) {
+                            break;
+                        }
+                        std::memcpy(dst_raw + read_count * sizeof(CppType), get_data(ord * SIZE_OF_TYPE),
+                                    sizeof(CppType));
+                        read_count++;
                     }
-                    std::memcpy(dst_raw + read_count * sizeof(CppType), get_data(ord * SIZE_OF_TYPE), sizeof(CppType));
-                    read_count++;
+                    if (read_count < total) {
+                        target_col->resize(orig_size + read_count);
+                    }
+                    if (nullable_col != nullptr) {
+                        nullable_col->null_column_data().resize(orig_size + read_count, 0);
+                    }
+                    *count = read_count;
+                    return Status::OK();
                 }
-                if (read_count < total) {
-                    fc->resize(orig_size + read_count);
-                }
-                if (nullable_col != nullptr) {
-                    nullable_col->null_column_data().resize(orig_size + read_count, 0);
-                }
-                *count = read_count;
-                return Status::OK();
             }
         }
     }
