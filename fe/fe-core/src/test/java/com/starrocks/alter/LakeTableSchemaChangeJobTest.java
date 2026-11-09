@@ -38,6 +38,7 @@ import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.Range;
@@ -1072,6 +1073,12 @@ public class LakeTableSchemaChangeJobTest {
                 "shadow tablets must be cleaned up by removeShadowIndex on force-cancel");
     }
 
+    private void cancelAlterColumn(boolean force) throws Exception {
+        String sql = "CANCEL ALTER TABLE COLUMN FROM " + DB_NAME + "." + table.getName() + (force ? " FORCE" : "");
+        CancelAlterTableStmt stmt = (CancelAlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getSchemaChangeHandler().cancel(stmt);
+    }
+
     @Test
     public void testNoNormalPublishAfterPartialForceNoOpPublish() throws Exception {
         LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
@@ -1104,7 +1111,22 @@ public class LakeTableSchemaChangeJobTest {
                 normalPublishTxnIds.add(txnInfo.txnId);
             }
         };
-        Assertions.assertFalse(schemaChangeJob.cancel("force-cancel", /*force=*/ true));
+        // Go through the statement so the error the operator sees is checked too.
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.addAlterJobV2(schemaChangeJob);
+        boolean oldForceEnabled = Config.enable_admin_skip_committed_txn;
+        Config.enable_admin_skip_committed_txn = true;
+        try {
+            DdlException e = Assertions.assertThrows(DdlException.class, () -> cancelAlterColumn(false));
+            Assertions.assertTrue(e.getMessage().contains("consider retrying with CANCEL ALTER TABLE ... FORCE"),
+                    e.getMessage());
+            e = Assertions.assertThrows(DdlException.class, () -> cancelAlterColumn(true));
+            Assertions.assertTrue(e.getMessage().contains("the no-op publish failed; retry CANCEL ALTER TABLE ... FORCE"),
+                    e.getMessage());
+        } finally {
+            Config.enable_admin_skip_committed_txn = oldForceEnabled;
+            handler.clearJobs();
+        }
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
         for (int i = 0; i < 3 && schemaChangeJob.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING; i++) {
             schemaChangeJob.runFinishedRewritingJob();
