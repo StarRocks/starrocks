@@ -72,12 +72,11 @@ alter table t partition by date_trunc('month',k) distributed by hash(k) buckets 
 function: wait_optimize_table_finish()
 function: print_query_columns("show partitions from t", "PartitionName", "Buckets")
 
-<<<<<<< HEAD
 -- name: test_merge_partitions_specify_distributition_fail
 create table t(k date, v int) partition by date_trunc('day', k) distributed by hash(k) buckets 3;
 alter table t partition by date_trunc('month',k) distributed by hash(v) buckets 4 between '2020-02-01' and '2020-02-28';
 alter table t partition by date_trunc('month',k) distributed by random between '2020-02-01' and '2020-02-28';
-=======
+
 -- name: test_merge_partitions_again
 create table t(k datetime, v int) partition by date_trunc('hour', k) distributed by hash(k) buckets 3;
 insert into t values ('2020-01-01 00:00:00', 1), ('2020-01-01 01:00:00', 2), ('2020-01-01 02:00:00', 3);
@@ -93,4 +92,3 @@ alter table t partition by date_trunc('day', k);
 function: wait_optimize_table_finish()
 function: print_query_columns("show partitions from t order by PartitionName", "PartitionName")
 select * from t order by k;
->>>>>>> 732b120 ([BugFix][RB-919] Leave merged partitions alone when merging partitions again (#82408))
