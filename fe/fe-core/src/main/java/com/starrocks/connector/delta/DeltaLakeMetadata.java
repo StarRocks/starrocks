@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ExternalScanPredicates;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
@@ -207,17 +208,6 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         }
     }
 
-    // Column predicates implied by function predicates (year(c) = 2024 -> c >= ... and c < ...), so the kernel skips
-    // files on them; pruning only, so a failure never fails the query.
-    private static List<ScalarOperator> derivePreimages(List<ScalarOperator> conjuncts, StructType schema) {
-        try {
-            return DeltaLakePreimagePredicates.forFileSkipping(conjuncts, schema);
-        } catch (RuntimeException e) {
-            LOG.debug("failed to derive delta lake preimage predicates", e);
-            return List.of();
-        }
-    }
-
     private CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> buildFileScanTaskIterator(
             Table table, ScalarOperator operator, boolean enableCollectColumnStats) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
@@ -233,12 +223,14 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         // ScalarOperationToDeltaLakeExpr into a string-domain comparison, which never equals a 'yyyy-MM-dd'
         // partition value and would prune every file (wrong empty result / under-estimated cardinality). Keep them
         // out of the pushed predicate and evaluate them StarRocks-side against each file's partition values below.
-        PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+        ExternalScanPredicates.PartitionResidual residual = ExternalScanPredicates.splitStringPartitionCast(
                 scalarOperators, identityStringPartitionColumns(deltaLakeTable, partitionColumns));
         ScalarOperationToDeltaLakeExpr.DeltaLakeContext deltaLakeContext =
                 new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, partitionColumns);
         List<ScalarOperator> pushable = residual.pushable;
-        List<ScalarOperator> preimages = derivePreimages(pushable, schema);
+        // column predicates implied by function predicates (year(c) = 2024 -> c >= ... and c < ...), so the kernel
+        // skips files on them
+        List<ScalarOperator> preimages = DeltaLakePreimagePredicates.forFileSkipping(pushable, schema);
         if (!preimages.isEmpty()) {
             pushable = new ArrayList<>(pushable);
             pushable.addAll(preimages);
@@ -369,7 +361,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     // Partition columns of string type. Delta partitioning is always identity, so every string partition column is
-    // an identity string partition column for PartitionCastPredicatePruner.split. Package-private for testing.
+    // an identity string partition column for ExternalScanPredicates.splitStringPartitionCast. Package-private for testing.
     static Set<String> identityStringPartitionColumns(DeltaLakeTable table, Set<String> partitionColumns) {
         Set<String> lowerPartitionColumns = new HashSet<>();
         for (String name : partitionColumns) {

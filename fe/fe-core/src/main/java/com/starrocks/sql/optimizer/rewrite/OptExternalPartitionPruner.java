@@ -37,7 +37,6 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
-import com.starrocks.connector.hive.HivePreimagePredicates;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitUtils;
 import com.starrocks.planner.PartitionColumnFilter;
@@ -442,19 +441,15 @@ public class OptExternalPartitionPruner {
         if (!(operator.getTable() instanceof HiveTable)) {
             return conjuncts;
         }
-        try {
-            List<ScalarOperator> preimages = HivePreimagePredicates.derive(conjuncts, operator.getColRefToColumnMetaMap(),
-                    partitionColumns);
-            if (preimages.isEmpty()) {
-                return conjuncts;
-            }
-            List<ScalarOperator> result = new ArrayList<>(conjuncts);
-            result.addAll(preimages);
-            return result;
-        } catch (RuntimeException e) {
-            LOG.debug("failed to derive hive preimage predicates", e);
+        List<ScalarOperator> preimages = ExternalScanPredicates.forPartitionPruning(ExternalScanPredicates.Connector.HIVE,
+                conjuncts, ExternalScanPredicates.scanTemporalColumns(operator.getColRefToColumnMetaMap()),
+                partitionColumns);
+        if (preimages.isEmpty()) {
             return conjuncts;
         }
+        List<ScalarOperator> result = new ArrayList<>(conjuncts);
+        result.addAll(preimages);
+        return result;
     }
 
     private static void classifyConjuncts(LogicalScanOperator operator,

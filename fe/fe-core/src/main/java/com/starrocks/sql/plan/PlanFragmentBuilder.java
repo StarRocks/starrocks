@@ -59,7 +59,12 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.delta.DeltaLakePreimagePredicates;
+<<<<<<< HEAD
 import com.starrocks.connector.iceberg.IcebergPreimageScanPredicates;
+=======
+import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
+import com.starrocks.connector.jdbc.JDBCPushDownSQLBuilder;
+>>>>>>> 6dd6febe1ed... [Enhancement][RB-225] Unify predicate normalization for external table scans (#69004)
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AIProjectNode;
@@ -1778,17 +1783,6 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
-        private List<ScalarOperator> deriveDeltaLakePreimagePredicates(PhysicalScanOperator node,
-                                                                       List<ScalarOperator> predicates) {
-            try {
-                return DeltaLakePreimagePredicates.forScan(predicates, node.getColRefToColumnMetaMap());
-            } catch (RuntimeException e) {
-                // pruning only: never fail the query for it
-                LOG.debug("failed to derive delta lake preimage predicates", e);
-                return List.of();
-            }
-        }
-
         @Override
         public PlanFragment visitPhysicalDeltaLakeScan(OptExpression optExpression, ExecPlan context) {
             PhysicalDeltaLakeScanOperator node = (PhysicalDeltaLakeScanOperator) optExpression.getOp();
@@ -1821,7 +1815,8 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
                 // column predicates implied by function predicates, so the BE prunes row groups on them; BE-only
-                for (ScalarOperator predicate : deriveDeltaLakePreimagePredicates(node, predicates)) {
+                for (ScalarOperator predicate : DeltaLakePreimagePredicates.forScan(predicates,
+                        node.getColRefToColumnMetaMap())) {
                     deltaLakeScanNode.getConjuncts()
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
@@ -2130,17 +2125,11 @@ public class PlanFragmentBuilder {
 
         private List<ScalarOperator> deriveIcebergPreimagePredicates(PhysicalScanOperator node,
                                                                      List<ScalarOperator> predicates) {
-            if (predicates.isEmpty() || !(node.getTable() instanceof IcebergTable icebergTable)) {
+            if (!(node.getTable() instanceof IcebergTable icebergTable)) {
                 return List.of();
             }
-            try {
-                return IcebergPreimageScanPredicates.derive(predicates,
-                        icebergTable.getNativeTable().schema().asStruct(), node.getColRefToColumnMetaMap());
-            } catch (RuntimeException e) {
-                // pruning only: never fail the query for it
-                LOG.debug("failed to derive iceberg preimage predicates", e);
-                return List.of();
-            }
+            return ScalarOperatorToIcebergExpr.scanPreimages(predicates,
+                    icebergTable.getNativeTable().schema().asStruct(), node.getColRefToColumnMetaMap());
         }
 
         public PlanFragment buildIcebergScanNode(OptExpression expression, ExecPlan context) {
