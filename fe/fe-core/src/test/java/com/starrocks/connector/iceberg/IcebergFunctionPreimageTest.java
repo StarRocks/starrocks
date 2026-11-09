@@ -487,15 +487,13 @@ public class IcebergFunctionPreimageTest {
             }
         }
 
-        // a constant in an overlap or gap has no exact form: not under NOT, for NE or for strict conversion;
-        // IN keeps every instant the constant names (both of an overlap, none of a gap)
+        // a constant in an overlap or gap has no exact form: not under NOT, for NE, for IN or for strict conversion
         for (LocalDateTime k : List.of(LocalDateTime.of(2024, 11, 3, 1, 30), LocalDateTime.of(2024, 3, 10, 2, 30))) {
             BinaryPredicateOperator eq = new BinaryPredicateOperator(BinaryType.EQ, TZ, ConstantOperator.createDatetime(k));
             Assertions.assertEquals(Expressions.alwaysTrue(),
                     convert(new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, eq)));
             Assertions.assertEquals(Expressions.alwaysTrue(), convert(
                     new BinaryPredicateOperator(BinaryType.NE, TZ, ConstantOperator.createDatetime(k))));
-<<<<<<< HEAD
             // IN keeps every candidate instant of the constant
             Evaluator inEvaluator = new Evaluator(Types.StructType.of(SCHEMA.findField("tz")), convert(
                     new InPredicateOperator(false, TZ, ConstantOperator.createDatetime(k),
@@ -505,16 +503,6 @@ public class IcebergFunctionPreimageTest {
                 if (local.equals(k) || local.equals(k.plusDays(1))) {
                     Assertions.assertTrue(inEvaluator.eval(row(ChronoUnit.MICROS.between(Instant.EPOCH, instant))),
                             "tz in " + k + " pruned " + instant);
-=======
-            Expression in = convert(new InPredicateOperator(false, TZ,
-                    ConstantOperator.createDatetime(k), ConstantOperator.createDatetime(k.plusDays(1))));
-            Evaluator evaluator = new Evaluator(Types.StructType.of(SCHEMA.findField("tz")), in);
-            for (Instant instant : instants) {
-                LocalDateTime local = LocalDateTime.ofInstant(instant, zone);
-                if (local.equals(k) || local.equals(k.plusDays(1))) {
-                    Assertions.assertTrue(evaluator.eval(row(ChronoUnit.MICROS.between(Instant.EPOCH, instant))),
-                            in + " pruned " + instant);
->>>>>>> d56124f1bf8... [BugFix][RB-225] Stop pushing down Delta Lake predicates through a type-changing cast (#68936)
                 }
             }
             Assertions.assertNull(converter.convertStrict(List.of(eq), context));
