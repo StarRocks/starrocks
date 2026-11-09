@@ -595,7 +595,9 @@ public class TransactionStmtExecutor {
                     context.getSessionVariable().getQueryTimeoutS(),
                     context.getCurrentWarehouseId(),
                     coord,
-                    insertLoadTxnCallback);
+                    insertLoadTxnCallback,
+                    InsertLoadJob.statementKindOf(dmlStmt, execPlan),
+                    context.getRemoteIP());
             loadJob.setJobProperties(dmlStmt.getProperties());
             jobId = loadJob.getId();
             coord.setLoadJobId(jobId);

@@ -37,6 +37,7 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -51,9 +52,12 @@ import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -62,6 +66,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
@@ -74,6 +79,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.time.ZoneId;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
@@ -551,6 +557,163 @@ public class LoadJobTest {
         Assertions.assertFalse(unsetInfo.isSetLoad_start_time_ms());
         Assertions.assertFalse(unsetInfo.isSetLoad_commit_time_ms());
         Assertions.assertFalse(unsetInfo.isSetLoad_finish_time_ms());
+    }
+
+    @Test
+    public void testToThrift_jobColumns(@Mocked Coordinator coordinator, @Mocked DeleteStmt deleteStmt,
+                                        @Mocked InsertStmt insertStmt, @Mocked GlobalTransactionMgr txnMgr) {
+        TransactionState txnState = new TransactionState();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouseAllowNull(anyLong);
+                minTimes = 0;
+                result = null;
+
+                globalStateMgr.getGlobalTransactionMgr();
+                minTimes = 0;
+                result = txnMgr;
+
+                txnMgr.getTransactionState(anyLong, anyLong);
+                minTimes = 0;
+                result = txnState;
+            }
+        };
+
+        // A broker load that has not started: no transaction yet, no table ids, no statement,
+        // no client, nothing visible.
+        LoadJob brokerJob = new BrokerLoadJob();
+        TLoadInfo info = brokerJob.toThrift();
+        Assertions.assertFalse(info.isSetTxn_id());
+        Assertions.assertFalse(info.isSetTable_id());
+        Assertions.assertFalse(info.isSetStatement());
+        Assertions.assertFalse(info.isSetClient_ip());
+        Assertions.assertFalse(info.isSetVisible_time_ms());
+        Assertions.assertFalse(info.isSetBe_ids());
+        Assertions.assertFalse(info.isSetError_code());
+        Assertions.assertFalse(info.isSetCpu_ns());
+        Assertions.assertFalse(info.isSetPeak_mem_bytes());
+        Assertions.assertEquals(0L, info.getSink_bytes());
+
+        // Once the job ran on two backends and its transaction became visible.
+        brokerJob.initLoadProgress(new TUniqueId(1, 2), Sets.newHashSet(new TUniqueId(3, 4)), Lists.newArrayList(2L, 1L));
+        Deencapsulation.setField(brokerJob, "state", JobState.FINISHED);
+        Deencapsulation.setField(brokerJob, "visibleTimestamp", 1_700_000_000_000L);
+        info = brokerJob.toThrift();
+        Assertions.assertEquals("1,2", info.getBe_ids());
+        Assertions.assertEquals(1_700_000_000_000L, info.getVisible_time_ms());
+
+        // A FINISHED job restored from an edit log that predates visibleTimestamp only reports a
+        // visible time when the transaction itself is VISIBLE: an INSERT whose publish wait timed
+        // out is FINISHED while its transaction is still COMMITTED.
+        Deencapsulation.setField(brokerJob, "visibleTimestamp", -1L);
+        Deencapsulation.setField(brokerJob, "finishTimestamp", 1_700_000_000_500L);
+        txnState.setTransactionStatus(TransactionStatus.COMMITTED);
+        Assertions.assertFalse(brokerJob.toThrift().isSetVisible_time_ms());
+        txnState.setTransactionStatus(TransactionStatus.VISIBLE);
+        txnState.setFinishTime(1_700_000_000_400L);
+        Assertions.assertEquals(1_700_000_000_400L, brokerJob.toThrift().getVisible_time_ms());
+        txnState.setFinishTime(0L);
+        Assertions.assertEquals(1_700_000_000_500L, brokerJob.toThrift().getVisible_time_ms());
+
+        // INSERT jobs carry the target table, the statement kind and the submitting client.
+        InsertLoadJob insertJob = new InsertLoadJob("insert_label", 1L, 7L, 9L, "load_id", "root",
+                System.currentTimeMillis(), 10L, 0L, coordinator, null, "UPDATE", "10.0.0.1");
+        info = insertJob.toThrift();
+        Assertions.assertEquals(7L, info.getTable_id());
+        Assertions.assertEquals(9L, info.getTxn_id());
+        Assertions.assertEquals("UPDATE", info.getStatement());
+        Assertions.assertEquals("10.0.0.1", info.getClient_ip());
+        Assertions.assertFalse(info.isSetVisible_time_ms());
+
+        // Statement classification used when the insert job is registered.
+        Assertions.assertEquals("DELETE", InsertLoadJob.statementKindOf(deleteStmt, null));
+        new Expectations() {
+            {
+                insertStmt.getQueryStatement();
+                minTimes = 0;
+                result = null;
+            }
+        };
+        Assertions.assertEquals("INSERT_SELECT", InsertLoadJob.statementKindOf(insertStmt, null));
+    }
+
+    @Test
+    public void testJoinForLoadsColumn() {
+        Assertions.assertEquals("", LoadJob.joinForLoadsColumn(", ", Lists.newArrayList()));
+        Assertions.assertEquals("1,2", LoadJob.joinForLoadsColumn(",", Lists.newArrayList(1L, 2L)));
+
+        // 53 load ids of 36 characters fit a varchar(2048) column; further ids are left out
+        // as a whole instead of being cut in the middle.
+        String loadId = "0a1b2c3d-0000-0000-0000-00000000000f";
+        String fits = LoadJob.joinForLoadsColumn(", ", Collections.nCopies(53, loadId));
+        Assertions.assertEquals(53 * 36 + 52 * 2, fits.length());
+        String capped = LoadJob.joinForLoadsColumn(", ", Collections.nCopies(80, loadId));
+        Assertions.assertEquals(fits, capped);
+        Assertions.assertTrue(capped.length() <= LoadJob.LOADS_VARCHAR_COLUMN_LENGTH);
+        Assertions.assertTrue(capped.endsWith(loadId));
+
+        // A broker load with that many load ids still exposes a value that fits.
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouseAllowNull(anyLong);
+                minTimes = 0;
+                result = null;
+            }
+        };
+        LoadJob brokerJob = new BrokerLoadJob();
+        Deencapsulation.setField(brokerJob, "loadIds", Lists.newArrayList(Collections.nCopies(80, loadId)));
+        Assertions.assertEquals(fits, brokerJob.toThrift().getLoad_id());
+
+        // A retry starts under load ids of its own.
+        brokerJob.reset();
+        Assertions.assertFalse(brokerJob.toThrift().isSetLoad_id());
+    }
+
+    @Test
+    public void testCommitThrottleIsKeptOnTheJob() {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouseAllowNull(anyLong);
+                minTimes = 0;
+                result = null;
+            }
+        };
+        LoadJob brokerJob = new BrokerLoadJob();
+
+        TransactionState txnState = new TransactionState();
+        txnState.setWriteEndTimeMs(1_700_000_000_000L);
+        txnState.setAllowCommitTimeMs(1_700_000_000_300L);
+        brokerJob.captureCommitThrottle(txnState);
+        // The job does not find its transaction any more: it has been purged.
+        Assertions.assertEquals(300L, brokerJob.toThrift().getCommit_throttle_ms());
+
+        // A transaction the limiter never evaluated does not overwrite the value.
+        brokerJob.captureCommitThrottle(new TransactionState());
+        Assertions.assertEquals(300L, brokerJob.toThrift().getCommit_throttle_ms());
     }
 
     @Test
