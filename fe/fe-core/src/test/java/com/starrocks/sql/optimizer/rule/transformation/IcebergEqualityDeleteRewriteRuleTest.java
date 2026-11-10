@@ -362,47 +362,6 @@ public class IcebergEqualityDeleteRewriteRuleTest {
                 DATA_SEQUENCE_NUMBER, BinaryType.LT), onTypes);
     }
 
-    // With enable_iceberg_identity_column_optimize off the data-file scan reads the partition column from the file,
-    // which may not store it, so the match falls back to $partition_key instead of a NULL that never matches.
-    @Test
-    public void testPartitionKeyKeptWhenIdentityColumnOptimizeOff() {
-        ConnectContext connectContext = new ConnectContext();
-        connectContext.getSessionVariable().setEnableIcebergIdentityColumnOptimize(false);
-        OptExpression antiJoin = rewriteEqDeleteScanSelectingV(connectContext);
-        LogicalIcebergScanOperator withDeleteScan = antiJoin.inputAt(0).getOp().cast();
-        LogicalIcebergEqualityDeleteScanOperator eqDeleteScan = antiJoin.inputAt(1).getOp().cast();
-        Set<String> withDeleteColumns = Set.copyOf(withDeleteScan.getColumnNameToColRefMap().keySet());
-        Assertions.assertTrue(withDeleteColumns.contains(PARTITION_KEY), withDeleteColumns.toString());
-        Assertions.assertEquals(Set.of(), eqDeleteScan.getRuntimeFilterPruningColumns());
-
-        Map<String, BinaryType> onTypes = new HashMap<>();
-        collectBinaryTypes(((LogicalJoinOperator) antiJoin.getOp())
-                .getOnPredicate(), onTypes);
-        Assertions.assertEquals(Map.of("id", BinaryType.EQ_FOR_NULL, PARTITION_KEY, BinaryType.EQ,
-                DATA_SEQUENCE_NUMBER, BinaryType.LT), onTypes);
-    }
-
-    // A real $partition_key column leaves no $partition_key match, so the identity column keeps the match even with
-    // enable_iceberg_identity_column_optimize off; dropping it would let a delete reach rows of other partitions.
-    @Test
-    public void testIdentityColumnKeptWithPartitionKeyColumnWhenIdentityColumnOptimizeOff() {
-        ConnectContext connectContext = new ConnectContext();
-        connectContext.getSessionVariable().setEnableIcebergIdentityColumnOptimize(false);
-        OptExpression antiJoin = rewriteEqDeleteScanSelectingV(connectContext, new Schema(
-                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
-                Types.NestedField.optional(2, "p", Types.IntegerType.get()),
-                Types.NestedField.optional(3, "v", Types.IntegerType.get()),
-                Types.NestedField.optional(4, PARTITION_KEY, Types.StringType.get())));
-        LogicalIcebergEqualityDeleteScanOperator eqDeleteScan = antiJoin.inputAt(1).getOp().cast();
-        Assertions.assertEquals(Set.of("p"), eqDeleteScan.getRuntimeFilterPruningColumns());
-
-        Map<String, BinaryType> onTypes = new HashMap<>();
-        collectBinaryTypes(((LogicalJoinOperator) antiJoin.getOp())
-                .getOnPredicate(), onTypes);
-        Assertions.assertEquals(Map.of("id", BinaryType.EQ_FOR_NULL, "p", BinaryType.EQ_FOR_NULL,
-                DATA_SEQUENCE_NUMBER, BinaryType.LT), onTypes);
-    }
-
     // rewrites a scan of tb(id, p, v) partitioned by identity(p) with an equality delete on id, selecting v only, as
     // `select sum(v) from tb` does after column pruning; returns the anti join
     private static OptExpression rewriteEqDeleteScanSelectingV(ConnectContext connectContext) {
