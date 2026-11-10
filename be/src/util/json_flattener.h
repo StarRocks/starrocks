@@ -100,6 +100,8 @@ public:
     uint32_t hits = 0;
     // for json-uint, json-uint is uint64_t, check the maximum value and downgrade to bigint
     uint64_t max_uint = 0;
+    // the most negative integer seen; with max_uint, tells whether a numeric type holds every integer exactly
+    int64_t min_int = 0;
     // same key may appear many times in json, so we need avoid duplicate compute hits
     uint32_t last_row = -1;
     uint32_t multi_times = 0;
@@ -203,6 +205,10 @@ private:
     static size_t _count_nodes(const JsonFlatPath* node);
     // A key left out of the trie ends up in the remain column, so the remain filter must report it.
     void _add_remain_key(const std::string_view& key);
+    // Readers test only the last component of a path against the remain filter, so a subtree that goes
+    // to the remain column must report every key in it, not just its root.
+    void _add_remain_keys_in(const vpack::Slice& value);
+    void _add_remain_subtree(const JsonFlatPath* node);
 
 private:
     bool _has_remain = false;
@@ -365,12 +371,15 @@ private:
     // equals or merge, dst-src: 1-N/1-1
     struct MergeTask {
         // to avoid create column with find type
-        Expr* cast_expr;
+        Expr* cast_expr = nullptr;
 
         bool is_merge = false;
         bool need_cast = false;
+        // Convert a scalar sub-column of src_type to JSON value by value (see _to_json).
+        bool to_json = false;
         // Extract the destination type from a JSON sub-column value by value (see _from_json).
         bool from_json = false;
+        LogicalType src_type = TYPE_UNKNOWN;
 
         int dst_index = -1;
         std::vector<int> src_index;
@@ -386,8 +395,12 @@ private:
         std::unique_ptr<JsonFlattener> flattener;
     };
 
+    // Sets up the conversion of a source sub-column of src_type to the destination type at dst_index.
+    // `compaction`: the destination is written to a segment, see _from_json.
+    void _init_conversion(MergeTask* task, int dst_index, LogicalType src_type, bool compaction);
     Status _equals(const MergeTask& task, const Columns& columns);
     Status _cast(const MergeTask& task, const ColumnPtr& columns);
+    Status _to_json(const MergeTask& task, const ColumnPtr& col);
     Status _from_json(const MergeTask& task, const ColumnPtr& col);
     Status _merge(const MergeTask& task, const Columns& columns);
     void _flat(const FlatTask& task, const Columns& columns);
