@@ -47,15 +47,22 @@ inline constexpr double kArchPrefetchL2Scale = 1.0;
 inline constexpr size_t kArchDefaultAggPrefetchDist = 16;
 #endif
 
-inline size_t agg_prefetch_min_bytes() {
-    static const long l2 = []() {
-        const long v = CpuInfo::get_l2_cache_size();
+inline constexpr long resolve_agg_l2_cache_bytes(long raw_l2_bytes) {
 #if defined(__x86_64__)
-        return v > 0 ? v : 2L * 1024 * 1024;
+    return raw_l2_bytes > 0 ? raw_l2_bytes : 2L * 1024 * 1024;
 #else
-        return v > 0 ? v : 1L * 1024 * 1024;
+    return raw_l2_bytes > 0 ? raw_l2_bytes : 1L * 1024 * 1024;
 #endif
-    }();
+}
+
+inline long resolve_agg_l2_cache_bytes(const std::vector<long>& cache_sizes) {
+    const long raw_l2 =
+            cache_sizes.size() > static_cast<size_t>(CpuInfo::L2_CACHE) ? cache_sizes[CpuInfo::L2_CACHE] : 0L;
+    return resolve_agg_l2_cache_bytes(raw_l2);
+}
+
+inline size_t agg_prefetch_min_bytes() {
+    static const long l2 = resolve_agg_l2_cache_bytes(CpuInfo::get_cache_sizes());
     // Ratio read live (mutable knob); L2 size is constant so it is cached.
     return static_cast<size_t>(static_cast<double>(l2) * kArchPrefetchL2Scale * config::agg_prefetch_l2_ratio);
 }

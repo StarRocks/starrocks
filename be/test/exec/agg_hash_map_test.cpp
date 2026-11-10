@@ -646,10 +646,22 @@ TEST(HashMapTest, ArchAwarePrefetchGateAndDistance) {
 #if defined(__x86_64__)
     EXPECT_DOUBLE_EQ(2.0, kArchPrefetchL2Scale);
     EXPECT_EQ(8u, kArchDefaultAggPrefetchDist);
+    constexpr long kExpectedFallbackL2Bytes = 2L * 1024 * 1024;
 #else
     EXPECT_DOUBLE_EQ(1.0, kArchPrefetchL2Scale);
     EXPECT_EQ(16u, kArchDefaultAggPrefetchDist);
+    constexpr long kExpectedFallbackL2Bytes = 1L * 1024 * 1024;
 #endif
+
+    // Undetected raw L2 cache sizes (0, -1, or uninitialized empty cache_sizes vector) must use the
+    // architecture-specific fallback (2 MiB on x86_64, 1 MiB otherwise) rather than CpuInfo::DEFAULT_L2_CACHE_SIZE.
+    EXPECT_EQ(kExpectedFallbackL2Bytes, resolve_agg_l2_cache_bytes(0L));
+    EXPECT_EQ(kExpectedFallbackL2Bytes, resolve_agg_l2_cache_bytes(-1L));
+    EXPECT_EQ(512L * 1024, resolve_agg_l2_cache_bytes(512L * 1024));
+    EXPECT_EQ(kExpectedFallbackL2Bytes, resolve_agg_l2_cache_bytes(std::vector<long>{}));
+    EXPECT_EQ(kExpectedFallbackL2Bytes, resolve_agg_l2_cache_bytes(std::vector<long>{32768L, 0L, 0L}));
+    EXPECT_EQ(kExpectedFallbackL2Bytes, resolve_agg_l2_cache_bytes(std::vector<long>{32768L, -1L, 0L}));
+    EXPECT_EQ(512L * 1024, resolve_agg_l2_cache_bytes(std::vector<long>{49152L, 512L * 1024, 16L * 1024 * 1024}));
 
     // Config initialization sets arch-tuned distance before first prefetch call, and an explicit 16 on the
     // very first call to agg_hash_map_default_prefetch_dist() is preserved without being overwritten.
@@ -671,6 +683,9 @@ TEST(HashMapTest, ArchAwarePrefetchGateAndDistance) {
     EXPECT_EQ(0u, agg_prefetch_min_bytes());
     config::agg_prefetch_l2_ratio = 1.0;
     const size_t min_at_one = agg_prefetch_min_bytes();
+    const size_t expected_min_at_one = static_cast<size_t>(
+            static_cast<double>(resolve_agg_l2_cache_bytes(CpuInfo::get_cache_sizes())) * kArchPrefetchL2Scale);
+    EXPECT_EQ(expected_min_at_one, min_at_one);
     EXPECT_GT(min_at_one, 0u);
     config::agg_prefetch_l2_ratio = 2.0;
     EXPECT_EQ(min_at_one * 2, agg_prefetch_min_bytes());
