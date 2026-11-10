@@ -909,25 +909,19 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
                 continue;
             }
 
-<<<<<<< HEAD:be/src/exec/arrow_to_starrocks_converter.cpp
 #ifndef __APPLE__
-            RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(conv_func->children[i].get(), num_elements,
-                                                                    child_array.get(), child_col, array_start_idx,
-                                                                    chunk_start_idx, chunk_filter, ctx));
-#else
-            return Status::NotSupported("Parquet nested type conversion is not supported on this build");
-#endif
-=======
             // A child's own validity does not include its parent's. Merge both so converters
-            // skip values hidden by a NULL struct, including nested VARIANT payloads.
+            // skip values hidden by a NULL struct.
             auto child_array = struct_array->GetFlattenedField(child_index);
             if (!child_array.ok()) {
                 return Status::InternalError(child_array.status().ToString());
             }
-            RETURN_IF_ERROR(convert_arrow_array_to_column(conv_func->children[i].get(), num_elements,
-                                                          child_array->get(), child_col, array_start_idx,
-                                                          chunk_start_idx, chunk_filter, ctx));
->>>>>>> 4cd3f4d ([BugFix] Propagate parent NULLs in Arrow STRUCT conversion (#82579)):be/src/column/arrow/arrow_to_starrocks_converter.cpp
+            RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(conv_func->children[i].get(), num_elements,
+                                                                    child_array->get(), child_col, array_start_idx,
+                                                                    chunk_start_idx, chunk_filter, ctx));
+#else
+            return Status::NotSupported("Parquet nested type conversion is not supported on this build");
+#endif
         }
 
         return Status::OK();

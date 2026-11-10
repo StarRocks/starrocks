@@ -28,12 +28,7 @@
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
 #include "column/column_helper.h"
-<<<<<<< HEAD:be/test/exec/arrow_converter_test.cpp
-=======
-#include "column/map_column.h"
 #include "column/struct_column.h"
-#include "column/variant_column.h"
->>>>>>> 4cd3f4d ([BugFix] Propagate parent NULLs in Arrow STRUCT conversion (#82579)):be/test/column/arrow_to_starrocks_converter_test.cpp
 #include "column/vectorized_fwd.h"
 #include "exec/arrow_to_starrocks_converter.h"
 #include "exec/file_scanner/parquet_scanner.h"
@@ -60,127 +55,8 @@ std::tuple<bool, Status> get_conv_func(const TypeDescriptor& type, const TypeDes
     convert_to_arrow_type(to_arrow_type, &arrow_type);
     TypeDescriptor raw_type;
     bool need_cast = false;
-<<<<<<< HEAD:be/test/exec/arrow_converter_test.cpp
     auto st = ParquetScanner::build_dest(arrow_type.get(), &type, is_nullable, &raw_type, &cf, need_cast, false);
     return {need_cast, st};
-=======
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type, true, &raw_type, &plan, need_cast, true));
-    ASSERT_FALSE(need_cast);
-    auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
-    Filter filter(3, 1);
-    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 3, array.get(), column.get(), 0, 0, &filter, nullptr));
-    ASSERT_EQ("{score:7}", column->debug_item(0));
-    ASSERT_TRUE(column->is_null(1));
-    ASSERT_EQ("{score:NULL}", column->debug_item(2));
-}
-
-TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMissingComplexStructChildren) {
-    TypeDescriptor map_type(TYPE_MAP);
-    map_type.children = {TYPE_VARCHAR_DESC, TYPE_INT_DESC};
-    TypeDescriptor struct_type(TYPE_STRUCT);
-    struct_type.field_names = {"value"};
-    struct_type.children.emplace_back(TYPE_INT);
-    std::vector<std::shared_ptr<arrow::DataType>> arrow_children = {
-            arrow::list(arrow::int32()), arrow::map(arrow::utf8(), arrow::int32()),
-            arrow::struct_({arrow::field("value", arrow::int32())})};
-    std::vector<TypeDescriptor> children = {TYPE_ARRAY_INT_DESC, map_type, struct_type};
-    for (size_t i = 0; i < children.size(); ++i) {
-        SCOPED_TRACE(children[i].debug_string());
-        auto arrow_type =
-                arrow::struct_({arrow::field("legacy", arrow_children[i]), arrow::field("keep", arrow::int32())});
-        auto array = arrow::ArrayFromJSON(arrow_type, R"([{"keep":7},null,{"keep":9}])");
-        TypeDescriptor type(TYPE_STRUCT);
-        type.field_names = {"new", "keep"};
-        type.children = {children[i], TYPE_INT_DESC};
-        TypeDescriptor raw_type;
-        ConvertFuncTree plan;
-        bool need_cast = false;
-        ASSERT_STATUS_OK(
-                build_arrow_column_convert_plan(arrow_type.get(), &type, true, &raw_type, &plan, need_cast, true));
-        ASSERT_FALSE(need_cast);
-        ASSERT_EQ(type.children[0], raw_type.children[0]);
-        auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
-        Filter filter(3, 1);
-        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 3, array.get(), column.get(), 0, 0, &filter, nullptr));
-        ASSERT_EQ("{new:NULL,keep:7}", column->debug_item(0));
-        ASSERT_TRUE(column->is_null(1));
-        ASSERT_EQ("{new:NULL,keep:9}", column->debug_item(2));
-    }
-}
-
-TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanRejectsInvalidNestedType) {
-    auto arrow_type = arrow::int32();
-    TypeDescriptor raw_type_desc;
-    ConvertFuncTree conv_func;
-    bool need_cast = false;
-
-    auto st = build_arrow_column_convert_plan(arrow_type.get(), &TYPE_ARRAY_INT_DESC, true, &raw_type_desc, &conv_func,
-                                              need_cast, false);
-    ASSERT_FALSE(st.ok());
-    ASSERT_NE(std::string::npos, st.message().find("does not match"));
-}
-
-// An unshredded variant arrives from lake formats (e.g. Paimon) as struct<value: binary, metadata: binary>.
-static std::shared_ptr<arrow::DataType> make_arrow_variant_type() {
-    return arrow::struct_({arrow::field("value", arrow::binary()), arrow::field("metadata", arrow::binary())});
-}
-
-TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanVariantAndConvert) {
-    auto arrow_type = make_arrow_variant_type();
-    TypeDescriptor type_desc(TYPE_VARIANT);
-    TypeDescriptor raw_type_desc;
-    ConvertFuncTree conv_func;
-    bool need_cast = false;
-
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
-                                                     need_cast, false));
-    ASSERT_FALSE(need_cast);
-    ASSERT_EQ(TYPE_VARIANT, raw_type_desc.type);
-    ASSERT_NE(nullptr, conv_func.func);
-
-    // Real variant encoding: metadata is the minimal empty dictionary {version=1, dictSize=0,
-    // offset=0} and each value is a short string (header 0x09 = length 2 << 2 | SHORT_STRING).
-    // VariantMetadata/VariantValue DCHECK these invariants when the rows are read back.
-    constexpr std::string_view kMetadata("\x01\x00\x00", 3);
-    constexpr std::string_view kValue0("\x09v0", 3);
-    constexpr std::string_view kValue2("\x09v2", 3);
-    auto value_builder = std::make_shared<arrow::BinaryBuilder>();
-    auto metadata_builder = std::make_shared<arrow::BinaryBuilder>();
-    arrow::StructBuilder struct_builder(arrow_type, arrow::default_memory_pool(), {value_builder, metadata_builder});
-    ASSERT_OK(struct_builder.Append());
-    ASSERT_OK(value_builder->Append(kValue0));
-    ASSERT_OK(metadata_builder->Append(kMetadata));
-    // AppendNull() recursively appends nulls to the child builders as well.
-    ASSERT_OK(struct_builder.AppendNull());
-    ASSERT_OK(struct_builder.Append());
-    ASSERT_OK(value_builder->Append(kValue2));
-    ASSERT_OK(metadata_builder->Append(kMetadata));
-    std::shared_ptr<arrow::Array> array;
-    ASSERT_OK(struct_builder.Finish(&array));
-    ASSERT_OK(array->ValidateFull());
-    ASSERT_EQ(3, array->length());
-    auto column = create_arrow_column_convert_dest(type_desc, raw_type_desc, need_cast, true);
-    ASSERT_TRUE(column->is_nullable());
-    Filter chunk_filter;
-    chunk_filter.resize(array->length(), 1);
-    ArrowConvertContext ctx;
-    ASSERT_STATUS_OK(convert_arrow_array_to_column(&conv_func, array->length(), array.get(), column.get(), 0, 0,
-                                                   &chunk_filter, &ctx));
-
-    ASSERT_EQ(3, column->size());
-    auto* nullable_column = down_cast<NullableColumn*>(column.get());
-    ASSERT_FALSE(nullable_column->is_null(0));
-    ASSERT_TRUE(nullable_column->is_null(1));
-    ASSERT_FALSE(nullable_column->is_null(2));
-    auto* variant_column = down_cast<VariantColumn*>(nullable_column->data_column_raw_ptr());
-    ASSERT_EQ(3, variant_column->size());
-    VariantRowRef row;
-    ASSERT_TRUE(variant_column->try_get_row_ref(0, &row));
-    ASSERT_EQ(kMetadata, row.get_metadata().raw());
-    ASSERT_EQ(kValue0, row.get_value().raw());
-    ASSERT_TRUE(variant_column->try_get_row_ref(2, &row));
-    ASSERT_EQ(kMetadata, row.get_metadata().raw());
-    ASSERT_EQ(kValue2, row.get_value().raw());
 }
 
 TEST_F(ArrowConverterTest, NullStructDoesNotFilterHiddenDecimalOverflow) {
@@ -203,14 +79,17 @@ TEST_F(ArrowConverterTest, NullStructDoesNotFilterHiddenDecimalOverflow) {
         ConvertFuncTree plan;
         bool need_cast = false;
         ASSERT_STATUS_OK(
-                build_arrow_column_convert_plan(array->type().get(), &type, true, &raw_type, &plan, need_cast, strict));
+                ParquetScanner::build_dest(array->type().get(), &type, true, &raw_type, &plan, need_cast, strict));
         ASSERT_FALSE(need_cast);
-        auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
+        auto column = ColumnHelper::create_column(type, true);
         Filter filter(5, 1);
-        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, nullptr));
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, nullptr));
         auto sliced = array->Slice(1);
-        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 2, sliced.get(), column.get(), 0, 1, &filter, nullptr));
-        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 2, sliced.get(), column.get(), 2, 3, &filter, nullptr));
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 2, sliced.get(), column.get(), 0, 1, &filter, nullptr));
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 2, sliced.get(), column.get(), 2, 3, &filter, nullptr));
         column->check_or_die();
         EXPECT_EQ(5, column->size());
         EXPECT_EQ("{amount:42}", column->debug_item(0));
@@ -222,25 +101,13 @@ TEST_F(ArrowConverterTest, NullStructDoesNotFilterHiddenDecimalOverflow) {
     }
 }
 
-TEST_F(ArrowConverterTest, NestedStructNullMasksVariantPayloadAcrossSlices) {
-    constexpr std::string_view kMetadata("\x01\x00\x00", 3);
-    constexpr std::string_view kValue("\x09ok", 3);
-    constexpr std::string_view kVariantNull("\x00", 1);
-    auto values = std::make_shared<arrow::BinaryBuilder>();
-    auto metadata = std::make_shared<arrow::BinaryBuilder>();
-    auto variant_type = arrow::struct_(
-            {arrow::field("value", arrow::binary(), false), arrow::field("metadata", arrow::binary(), false)});
-    arrow::StructBuilder variants(variant_type, arrow::default_memory_pool(), {values, metadata});
-    for (int i = 0; i < 6; ++i) {
-        ASSERT_OK(variants.Append(i != 3));
-        // Required physical children may hold empty placeholders under a NULL ancestor.
-        ASSERT_OK(values->Append(i >= 1 && i <= 3 ? std::string_view{} : (i == 4 ? kVariantNull : kValue)));
-        ASSERT_OK(metadata->Append(i >= 1 && i <= 3 ? std::string_view{} : kMetadata));
-    }
-    std::shared_ptr<arrow::Array> payload;
-    ASSERT_OK(variants.Finish(&payload));
+TEST_F(ArrowConverterTest, NestedStructNullMasksDecimalOverflowAcrossSlices) {
+    auto amounts = arrow::ArrayFromJSON(arrow::decimal128(38, 0),
+                                        R"(["42", "99999999999999999999999999999999999999",
+                                           "99999999999999999999999999999999999999", null, "7",
+                                           "99999999999999999999999999999999999999"])");
     auto inner_validity = arrow::ArrayFromJSON(arrow::boolean(), "[true, true, null, true, true, true]");
-    auto inner_result = arrow::StructArray::Make({payload}, {arrow::field("payload", variant_type)},
+    auto inner_result = arrow::StructArray::Make({amounts}, {arrow::field("amount", amounts->type())},
                                                  inner_validity->null_bitmap(), inner_validity->null_count());
     ASSERT_OK(inner_result.status());
     auto inner = inner_result.ValueOrDie();
@@ -252,104 +119,47 @@ TEST_F(ArrowConverterTest, NestedStructNullMasksVariantPayloadAcrossSlices) {
     ASSERT_OK(array->ValidateFull());
 
     TypeDescriptor inner_type(TYPE_STRUCT);
-    inner_type.field_names = {"payload"};
-    inner_type.children = {TypeDescriptor(TYPE_VARIANT)};
+    inner_type.field_names = {"amount"};
+    inner_type.children = {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 0)};
     TypeDescriptor type(TYPE_STRUCT);
     type.field_names = {"inner"};
     type.children = {inner_type};
-    TypeDescriptor raw_type;
-    ConvertFuncTree plan;
-    bool need_cast = false;
-    ASSERT_STATUS_OK(
-            build_arrow_column_convert_plan(array->type().get(), &type, true, &raw_type, &plan, need_cast, true));
-    ASSERT_FALSE(need_cast);
-    auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
-    Filter filter(6, 1);
-    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, nullptr));
-    auto sliced = array->Slice(1);
-    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 2, sliced.get(), column.get(), 0, 1, &filter, nullptr));
-    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 3, sliced.get(), column.get(), 2, 3, &filter, nullptr));
-    column->check_or_die();
-    ASSERT_EQ(6, column->size());
-    EXPECT_EQ(Filter(6, 1), filter);
-    EXPECT_TRUE(column->is_null(1));
-    auto* outer_column = down_cast<StructColumn*>(down_cast<NullableColumn*>(column.get())->data_column_raw_ptr());
-    auto inner_column_result = outer_column->field_column_raw_ptr("inner");
-    ASSERT_TRUE(inner_column_result.ok());
-    auto* inner_column = down_cast<NullableColumn*>(inner_column_result.value());
-    EXPECT_TRUE(inner_column->is_null(1));
-    EXPECT_TRUE(inner_column->is_null(2));
-    auto payload_result =
-            down_cast<StructColumn*>(inner_column->data_column_raw_ptr())->field_column_raw_ptr("payload");
-    ASSERT_TRUE(payload_result.ok());
-    auto* payload_column = down_cast<NullableColumn*>(payload_result.value());
-    for (int i = 1; i <= 3; ++i) {
-        ASSERT_TRUE(payload_column->is_null(i)) << "row " << i;
+    for (bool strict : {false, true}) {
+        SCOPED_TRACE(strict);
+        TypeDescriptor raw_type;
+        ConvertFuncTree plan;
+        bool need_cast = false;
+        ASSERT_STATUS_OK(
+                ParquetScanner::build_dest(array->type().get(), &type, true, &raw_type, &plan, need_cast, strict));
+        ASSERT_FALSE(need_cast);
+        auto column = ColumnHelper::create_column(type, true);
+        Filter filter(6, 1);
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, nullptr));
+        auto sliced = array->Slice(1);
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 2, sliced.get(), column.get(), 0, 1, &filter, nullptr));
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 3, sliced.get(), column.get(), 2, 3, &filter, nullptr));
+        column->check_or_die();
+        ASSERT_EQ(6, column->size());
+        EXPECT_EQ(Filter({1, 1, 1, 1, 1, static_cast<uint8_t>(strict ? 0 : 1)}), filter);
+        EXPECT_TRUE(column->is_null(1));
+        EXPECT_EQ("{inner:{amount:42}}", column->debug_item(0));
+        EXPECT_EQ("{inner:{amount:7}}", column->debug_item(4));
+        auto* outer_column = down_cast<StructColumn*>(down_cast<NullableColumn*>(column.get())->data_column_raw_ptr());
+        auto inner_column_result = outer_column->field_column_raw_ptr("inner");
+        ASSERT_TRUE(inner_column_result.ok());
+        auto* inner_column = down_cast<NullableColumn*>(inner_column_result.value());
+        EXPECT_TRUE(inner_column->is_null(1));
+        EXPECT_TRUE(inner_column->is_null(2));
+        auto amount_result =
+                down_cast<StructColumn*>(inner_column->data_column_raw_ptr())->field_column_raw_ptr("amount");
+        ASSERT_TRUE(amount_result.ok());
+        for (int i = 1; i <= 3; ++i) {
+            EXPECT_TRUE(amount_result.value()->is_null(i)) << "row " << i;
+        }
     }
-    auto* variant_column = down_cast<VariantColumn*>(payload_column->data_column_raw_ptr());
-    for (int i : {0, 4, 5}) {
-        ASSERT_FALSE(payload_column->is_null(i));
-        VariantRowRef row;
-        ASSERT_TRUE(variant_column->try_get_row_ref(i, &row));
-        EXPECT_EQ(kMetadata, row.get_metadata().raw());
-        EXPECT_EQ(i == 4 ? kVariantNull : kValue, row.get_value().raw());
-        EXPECT_EQ(i == 4, row.is_null());
-    }
-}
-
-TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanRejectsInvalidVariantLayout) {
-    TypeDescriptor type_desc(TYPE_VARIANT);
-    TypeDescriptor raw_type_desc;
-    bool need_cast = false;
-
-    auto non_struct = arrow::binary();
-    ConvertFuncTree conv_func0;
-    auto st = build_arrow_column_convert_plan(non_struct.get(), &type_desc, true, &raw_type_desc, &conv_func0,
-                                              need_cast, false);
-    ASSERT_FALSE(st.ok());
-    ASSERT_NE(std::string::npos, st.message().find("does not match"));
-
-    auto missing_metadata = arrow::struct_({arrow::field("value", arrow::binary())});
-    ConvertFuncTree conv_func1;
-    st = build_arrow_column_convert_plan(missing_metadata.get(), &type_desc, true, &raw_type_desc, &conv_func1,
-                                         need_cast, false);
-    ASSERT_FALSE(st.ok());
-    ASSERT_NE(std::string::npos, st.message().find("struct<value: binary, metadata: binary>"));
-
-    auto wrong_value_type =
-            arrow::struct_({arrow::field("value", arrow::utf8()), arrow::field("metadata", arrow::binary())});
-    ConvertFuncTree conv_func2;
-    st = build_arrow_column_convert_plan(wrong_value_type.get(), &type_desc, true, &raw_type_desc, &conv_func2,
-                                         need_cast, false);
-    ASSERT_FALSE(st.ok());
-    ASSERT_NE(std::string::npos, st.message().find("struct<value: binary, metadata: binary>"));
-}
-
-TEST_F(ArrowConverterTest, VariantConverterRejectsMismatchedStructArray) {
-    auto arrow_type = make_arrow_variant_type();
-    TypeDescriptor type_desc(TYPE_VARIANT);
-    TypeDescriptor raw_type_desc;
-    ConvertFuncTree conv_func;
-    bool need_cast = false;
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
-                                                     need_cast, false));
-
-    // The plan was built for struct<value: binary, metadata: binary> but the actual batch carries
-    // a different layout (e.g. after an unexpected schema change), which must fail instead of
-    // reinterpreting the columns.
-    auto mismatched_type =
-            arrow::struct_({arrow::field("value", arrow::utf8()), arrow::field("metadata", arrow::binary())});
-    auto array = arrow::ArrayFromJSON(mismatched_type, R"([{"value": "v0", "metadata": "m0"}])");
-    auto variant_column = VariantColumn::create();
-    std::vector<uint8_t> null_data(array->length(), 0);
-    Filter chunk_filter;
-    chunk_filter.resize(array->length(), 1);
-    ArrowConvertContext ctx;
-    auto st = conv_func.func(array.get(), 0, array->length(), variant_column.get(), 0, null_data.data(), &chunk_filter,
-                             &ctx, &conv_func);
-    ASSERT_FALSE(st.ok());
-    ASSERT_NE(std::string::npos, st.message().find("struct<value: binary, metadata: binary>"));
->>>>>>> 4cd3f4d ([BugFix] Propagate parent NULLs in Arrow STRUCT conversion (#82579)):be/test/column/arrow_to_starrocks_converter_test.cpp
 }
 
 template <typename ArrowType, bool is_nullable = false, typename CType = typename arrow::TypeTraits<ArrowType>::CType,
