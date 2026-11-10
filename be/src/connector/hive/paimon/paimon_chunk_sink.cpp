@@ -715,7 +715,7 @@ public:
                                                                 arrow_pool.get()));
         }
         RETURN_IF_ERROR(check_memory());
-        ASSIGN_OR_RETURN(auto ids, bucket_ids(context->sink, schema, batch, native_pool));
+        std::vector<int32_t> ids(batch->num_rows(), 0);
         if (context->sink.bucket_count > 0) {
             const auto slot = context->sink.routing_bucket_slot_id;
             if (!chunk->is_slot_exist(slot)) return Status::InvalidArgument("Paimon routed bucket column is missing");
@@ -725,9 +725,12 @@ public:
                 return Status::InvalidArgument("Paimon bucket route must be INT");
             for (size_t row = 0; row < ids.size(); ++row) {
                 const auto value = route->get(row);
-                if (value.is_null() || value.get_int32() != ids[row]) {
-                    return Status::InvalidArgument("Paimon native bucket differs from pre-exchange routing");
+                if (value.is_null()) return Status::InvalidArgument("Paimon bucket route must not be null");
+                const int32_t bucket = value.get_int32();
+                if (bucket < 0 || bucket >= context->sink.bucket_count) {
+                    return Status::InvalidArgument("Paimon bucket route is out of range");
                 }
+                ids[row] = bucket;
             }
         }
         using Group = std::pair<std::map<std::string, std::string>, int32_t>;
