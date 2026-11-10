@@ -397,8 +397,14 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             ColumnStatistic colStat = statistics.getColumnStatistic(col);
             var skewInfo = DataSkew.getColumnSkewInfo(statistics, colStat, DataSkew.Thresholds.withMcvLimit(1));
             if (skewInfo.isSkewed()) {
+                //if NULL and MCV pick dominant one
+                boolean useNull = skewInfo.hasNullSkew();
+                if (skewInfo.hasNullSkew() && skewInfo.hasMcvSkew()) {
+                    double topMcvFraction = skewInfo.maybeMcvs().get().get(0).second / statistics.getOutputRowCount();
+                    useNull = colStat.getNullsFraction() >= topMcvFraction;
+                }
 
-                if (skewInfo.type() == DataSkew.SkewType.SKEWED_NULL) {
+                if (useNull) {
                     return List.of(new SkewedInfo(col, ConstantOperator.createNull(col.getType())));
                 }
 
@@ -412,4 +418,5 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
         }
         return Collections.emptyList();
     }
+
 }
