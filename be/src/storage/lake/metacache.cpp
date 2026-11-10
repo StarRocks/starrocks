@@ -200,10 +200,6 @@ CacheValuePtr make_cache_value(CacheValue value) {
 }
 } // namespace
 
-void Metacache::cache_value_deleter(const CacheKey&, void* value) {
-    delete_cache_value(static_cast<CacheValue*>(value));
-}
-
 int64_t metacache_capacity(int64_t mem_limit, int32_t percent) {
     return mem_limit * std::clamp(percent, 0, 100) / 100;
 }
@@ -214,9 +210,9 @@ Metacache::Metacache(int64_t tablet_metadata_capacity, int64_t segment_metadata_
 
 Metacache::~Metacache() = default;
 
-void Metacache::cache_value_deleter(const CacheKey& /*key*/, void* value) {
+void Metacache::cache_value_deleter(const CacheKey&, void* value) {
     TEST_SYNC_POINT_CALLBACK("lake::Metacache::cache_value_deleter", value);
-    delete static_cast<CacheValue*>(value);
+    delete_cache_value(static_cast<CacheValue*>(value));
 }
 
 void Metacache::insert(Cache* cache, std::string_view key, CacheValue* ptr, size_t size) {
