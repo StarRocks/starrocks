@@ -505,6 +505,18 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE)) {
+                if (!table.isRangeDistribution()) {
+                    throw new DdlException(PropertyAnalyzer.TABLET_RESHARD_TARGET_SIZE_RANGE_ONLY_MSG);
+                }
+                String value = properties.remove(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
+                try {
+                    table.setTabletReshardTargetSize(PropertyAnalyzer.analyzeTableTabletReshardTargetSize(value, false));
+                } catch (SemanticException e) {
+                    throw new DdlException(e.getMessage(), e);
+                }
+            }
+
             try {
                 long mutableBucketNum = PropertyAnalyzer.analyzeLongProp(properties,
                         PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM, 0);

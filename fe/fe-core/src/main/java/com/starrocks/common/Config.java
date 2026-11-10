@@ -5473,8 +5473,15 @@ public class Config extends ConfigBase {
 
     /**
      * Tablet splitting and merging will make tablet size around this value.
+     *
+     * <p>While this value is positive, a range-distributed table with the tablet_reshard_target_size table
+     * property uses that property in its place. Zero disables automatic split and merge for every table,
+     * including tables with the property.
      */
-    @ConfField(mutable = true, comment = "Tablet splitting and merging will make tablet size around this value.")
+    @ConfField(mutable = true, comment = "Tablet splitting and merging will make tablet size around this value. "
+            + "While it is positive, a range-distributed table with the tablet_reshard_target_size table property "
+            + "uses that property instead. Zero disables automatic split and merge for every table, including "
+            + "tables with the property.")
     public static long tablet_reshard_target_size = 10L * 1024L * 1024L * 1024L;
 
     /**
@@ -5505,10 +5512,16 @@ public class Config extends ConfigBase {
      * lowers both the width this rule aims for and the tablet count at which it stops. The adaptive walk
      * floors its child count and will not act until a tablet is worth two whole targets, so unlike
      * the size rule it does not produce children below the target it aimed at.
+     *
+     * <p>That target never exceeds the table's own target size (the tablet_reshard_target_size table
+     * property of a range-distributed table that has one, else the tablet_reshard_target_size
+     * configuration), so a value at or above it turns the adaptive split off for that table.
      */
     @ConfField(mutable = true, comment = "Minimum size of a tablet produced by pre-split, and the lower "
             + "bound on the target an under-provisioned index splits at. Should be no larger than "
-            + "tablet_reshard_target_size; setting it at or above that disables the adaptive split.")
+            + "tablet_reshard_target_size; setting it at or above a table's target size (its "
+            + "tablet_reshard_target_size table property if it has one, else the tablet_reshard_target_size "
+            + "configuration) disables the adaptive split for that table.")
     public static long tablet_reshard_min_split_size = 2L * 1024L * 1024L * 1024L;
 
     @ConfField(mutable = true, comment = "TTL in milliseconds for the range-colocate checker's "
@@ -5655,19 +5668,24 @@ public class Config extends ConfigBase {
 
     /**
      * Target tablet size Sample-Based Tablet Pre-Split sizes a load's split count against, in bytes.
-     * Zero (the default) inherits tablet_reshard_target_size.
+     * Zero (the default) inherits tablet_reshard_target_size. A range-distributed table with the
+     * tablet_reshard_target_size table property is pre-split against that property instead while the
+     * tablet_reshard_target_size configuration is positive.
      *
      * <p>Exists so pre-split can be tuned independently of the background split/merge daemon.
-     * The daemon keeps every tablet in the cluster near tablet_reshard_target_size, so lowering
-     * that value to buy more write parallelism for one load would also shrink every unrelated
-     * tablet. Lowering this value instead only affects how finely a load's target partitions are
-     * pre-split; the daemon still converges them back toward tablet_reshard_target_size afterwards,
-     * so a load can be written in parallel without permanently raising the cluster's tablet count.
+     * The daemon keeps each table's tablets near that table's target (its tablet_reshard_target_size
+     * property while set and the tablet_reshard_target_size configuration is positive, otherwise that
+     * configuration), so lowering a target to buy more write parallelism for one load would also shrink
+     * every unrelated tablet that follows it. Lowering this value instead only affects how finely a load's
+     * target partitions are pre-split; the daemon still converges them back toward their table's target
+     * afterwards, so a load can be written in parallel without permanently raising the cluster's tablet count.
      */
     @ConfField(mutable = true, comment = "Target tablet size in bytes that Sample-Based Tablet "
             + "Pre-Split sizes a load's split count against. Zero (default) inherits "
-            + "tablet_reshard_target_size. Lower it to give a load more write parallelism without "
-            + "shrinking every tablet in the cluster: the background split/merge daemon keeps using "
+            + "tablet_reshard_target_size. A range-distributed table with the tablet_reshard_target_size table "
+            + "property is pre-split against that property instead while the tablet_reshard_target_size "
+            + "configuration is positive. Lower it to give a load more write parallelism without shrinking "
+            + "every tablet in the cluster: the background split/merge daemon keeps using "
             + "tablet_reshard_target_size, so it merges the finer tablets back afterwards.")
     public static long tablet_pre_split_target_size = 0L;
 

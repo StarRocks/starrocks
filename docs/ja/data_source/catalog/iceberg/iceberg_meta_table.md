@@ -32,7 +32,7 @@ description: "StarRocks v3.4.1 以降で Iceberg テーブルのメタデータ�
 
 ## Iceberg v3 Row Lineage メタデータ列
 
-バージョン v4.1 以降、Iceberg v3 テーブル（format-version = 3）の場合、StarRocks は以下の Row Lineage メタデータ列のクエリをサポートしています：
+バージョン v4.1 以降、フォーマットバージョン 3 以降の Iceberg テーブルの場合、StarRocks は以下の Row Lineage メタデータ列のクエリをサポートしています：
 
 | メタデータ列                      | 説明                                                                                           |
 | :-------------------------------- | :--------------------------------------------------------------------------------------------- |
@@ -50,7 +50,7 @@ SELECT _row_id, _last_updated_sequence_number, * FROM [<catalog>.][<database>.]t
 - `_row_id` 列には、データファイルに `firstRowId` メタデータが必要です。データファイルに `firstRowId` がない場合、クエリはエラーで失敗します。
 - 新規挿入データの場合、`_row_id` は `firstRowId + row_position` で計算され、`_last_updated_sequence_number` はファイルレベルの `dataSequenceNumber` になります。
 - コンパクション（Iceberg OPTIMIZE / rewrite-data-files など）後、コンパクターが Iceberg v3 仕様に従って `_row_id` と `_last_updated_sequence_number` をデータファイルの物理列として書き込んだ場合、StarRocks は各行の物理列値を読み取り、コンパクション後も行リネージ情報を保持します。
-- これらのメタデータ列は Iceberg v3 テーブル（format-version = 3）でのみ使用可能です。
+- これらのメタデータ列は フォーマットバージョン 3 以降の Iceberg テーブルでのみ使用可能です。
 
 :::
 
@@ -185,7 +185,7 @@ SELECT * FROM [<catalog>.][<database>.]table$files;
 | sort_id            | このファイルのソート順序を表す ID。                          |
 | equality_ids       | Equality Delete ファイルでの等価比較に使用されるフィールド ID のセット。 |
 | key_metadata       | このファイルを暗号化するために使用される暗号化キーに関するメタデータ（該当する場合）。 |
-| first_row_id       | フォーマットバージョン 3 のテーブルにおける、データファイルの最初の行の行 ID。削除ファイルの場合は `NULL`。 |
+| first_row_id       | フォーマットバージョン 3 以降のテーブルにおける、データファイルの最初の行の行 ID。削除ファイルの場合は `NULL`。 |
 | referenced_data_file | 削除ベクトルまたはファイル単位の位置削除ファイルが適用されるデータファイルの場所。データファイルの場合は `NULL`。 |
 | content_offset     | Puffin ファイル内の削除ベクトルのオフセット。その他のファイルの場合は `NULL`。 |
 | content_size_in_bytes | Puffin ファイル内の削除ベクトルのサイズ。その他のファイルの場合は `NULL`。 |

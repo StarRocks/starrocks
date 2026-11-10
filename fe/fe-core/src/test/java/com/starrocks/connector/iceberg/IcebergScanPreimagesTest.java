@@ -44,7 +44,7 @@ import java.util.Map;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-public class IcebergPreimageScanPredicatesTest {
+public class IcebergScanPreimagesTest {
     private static final Schema SCHEMA = new Schema(
             Types.NestedField.optional(1, "d", Types.DateType.get()),
             Types.NestedField.optional(2, "ts", Types.TimestampType.withoutZone()),
@@ -74,7 +74,7 @@ public class IcebergPreimageScanPredicatesTest {
     }
 
     private static List<ScalarOperator> derive(ScalarOperator... conjuncts) {
-        return IcebergPreimageScanPredicates.derive(List.of(conjuncts), SCHEMA.asStruct(), COLUMNS);
+        return ScalarOperatorToIcebergExpr.scanPreimages(List.of(conjuncts), SCHEMA.asStruct(), COLUMNS);
     }
 
     private static List<String> strings(List<ScalarOperator> predicates) {
@@ -112,12 +112,9 @@ public class IcebergPreimageScanPredicatesTest {
 
     @Test
     public void testInListAndConjunctPair() {
-        // one OR over the IN values
-        List<ScalarOperator> in = derive(new InPredicateOperator(false, year(D),
-                ConstantOperator.createInt(2023), ConstantOperator.createInt(2025)));
-        Assertions.assertEquals(1, in.size());
-        Assertions.assertInstanceOf(CompoundPredicateOperator.class, in.get(0));
-        Assertions.assertTrue(((CompoundPredicateOperator) in.get(0)).isOr());
+        // the OR over the IN values would be evaluated on every row next to the IN itself, so it is not derived
+        Assertions.assertTrue(derive(new InPredicateOperator(false, year(D),
+                ConstantOperator.createInt(2023), ConstantOperator.createInt(2025))).isEmpty());
 
         // year(d) = 2024 and month(d) = 3 narrows to March, and the year range is not duplicated
         List<String> pair = strings(derive(

@@ -58,7 +58,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
-import com.starrocks.connector.iceberg.IcebergPreimageScanPredicates;
+import com.starrocks.connector.delta.DeltaLakePreimagePredicates;
+import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AIProjectNode;
@@ -1808,6 +1809,12 @@ public class PlanFragmentBuilder {
                     deltaLakeScanNode.getConjuncts()
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
+                // column predicates implied by function predicates, so the BE prunes row groups on them; BE-only
+                for (ScalarOperator predicate : DeltaLakePreimagePredicates.forScan(predicates,
+                        node.getColRefToColumnMetaMap())) {
+                    deltaLakeScanNode.getConjuncts()
+                            .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                }
 
                 deltaLakeScanNode.setupScanRangeSource(
                         context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
@@ -2113,17 +2120,11 @@ public class PlanFragmentBuilder {
 
         private List<ScalarOperator> deriveIcebergPreimagePredicates(PhysicalScanOperator node,
                                                                      List<ScalarOperator> predicates) {
-            if (predicates.isEmpty() || !(node.getTable() instanceof IcebergTable icebergTable)) {
+            if (!(node.getTable() instanceof IcebergTable icebergTable)) {
                 return List.of();
             }
-            try {
-                return IcebergPreimageScanPredicates.derive(predicates,
-                        icebergTable.getNativeTable().schema().asStruct(), node.getColRefToColumnMetaMap());
-            } catch (RuntimeException e) {
-                // pruning only: never fail the query for it
-                LOG.debug("failed to derive iceberg preimage predicates", e);
-                return List.of();
-            }
+            return ScalarOperatorToIcebergExpr.scanPreimages(predicates,
+                    icebergTable.getNativeTable().schema().asStruct(), node.getColRefToColumnMetaMap());
         }
 
         public PlanFragment buildIcebergScanNode(OptExpression expression, ExecPlan context) {

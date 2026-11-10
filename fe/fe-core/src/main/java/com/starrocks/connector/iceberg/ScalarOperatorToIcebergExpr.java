@@ -17,10 +17,12 @@ package com.starrocks.connector.iceberg;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.LocalTimeBounds;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -36,6 +38,8 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.sql.optimizer.rewrite.ExternalScanPredicates;
+import com.starrocks.sql.optimizer.rewrite.FunctionPreimage;
 import com.starrocks.sql.optimizer.rule.tree.VariantPathRewriteRule;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -58,9 +62,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.apache.iceberg.expressions.Expressions.and;
@@ -142,7 +146,11 @@ public class ScalarOperatorToIcebergExpr {
         }
         if (usePreimage(effectiveContext)) {
             // preimages that need several conjuncts together, e.g. year(c) = 2024 and month(c) = 3
-            for (Expression expr : IcebergFunctionPreimage.deriveConjuncts(operators, resolver(effectiveContext))) {
+            for (ScalarOperator derived : FunctionPreimage.deriveConjuncts(operators, resolver(effectiveContext))) {
+                Expression expr = derived.accept(visitor, effectiveContext);
+                if (expr == null) {
+                    continue;
+                }
                 try {
                     Binder.bind(context.getSchema(), expr, false);
                     expressions.add(expr);
@@ -158,42 +166,25 @@ public class ScalarOperatorToIcebergExpr {
     }
 
     /**
-     * Only the preimages of the function predicates among {@code conjuncts}: {@code year(c) = 2024} yields
-     * {@code c >= 2024-01-01 and c < 2025-01-01}. Each result is a pruning-only superset of its conjunct, bound
-     * successfully to the schema, and still unbound (it names columns). Empty when preimages are disabled.
+     * The columns of {@code schema} a function preimage may be put on, see {@link FunctionPreimage}.
      */
-    public List<Expression> derivePreimages(List<ScalarOperator> conjuncts, IcebergContext context) {
-        if (!usePreimage(context)) {
-            return List.of();
-        }
-        IcebergFunctionPreimage.ColumnResolver resolver = resolver(context);
-        List<Expression> derived = Lists.newArrayList();
-        for (ScalarOperator conjunct : conjuncts) {
-            Expression expr = null;
-            if (conjunct instanceof BinaryPredicateOperator binary && getColumnName(binary.getChild(0)) == null) {
-                expr = IcebergFunctionPreimage.deriveComparison(binary.getChild(0), binary.getBinaryType(),
-                        List.of(binary.getChild(1)), resolver);
-            } else if (conjunct instanceof InPredicateOperator in && !in.isNotIn()
-                    && getColumnName(in.getChild(0)) == null) {
-                expr = IcebergFunctionPreimage.deriveComparison(in.getChild(0), BinaryType.EQ, in.getListChildren(),
-                        resolver);
-            } else if (conjunct instanceof CallOperator call) {
-                expr = IcebergFunctionPreimage.derivePredicateCall(call, resolver);
-            }
-            if (expr != null) {
-                derived.add(expr);
-            }
-        }
-        derived.addAll(IcebergFunctionPreimage.deriveConjuncts(conjuncts, resolver));
-        return derived.stream().filter(expr -> {
-            try {
-                Binder.bind(context.getSchema(), expr, false);
-                return true;
-            } catch (ValidationException e) {
-                LOG.debug("binding the preimage {} failed", expr);
-                return false;
-            }
-        }).collect(Collectors.toList());
+    public static FunctionPreimage.ColumnResolver preimageResolver(Types.StructType schema) {
+        return resolver(new IcebergContext(schema));
+    }
+
+    /**
+     * Plain {@code column op constant} predicates implied by the function predicates of an Iceberg scan, for the BE
+     * to prune row groups (Parquet statistics and page index) with: {@code year(c) = 2024} prunes Iceberg files
+     * through the preimage above but no row group inside them, since the BE only prunes on a bare column. Only DATE
+     * and DATETIME columns of the scan are handled; the bounds are local times, which is also how the BE reads a
+     * timestamptz column. See {@link ExternalScanPredicates#forBeConjuncts}.
+     */
+    public static List<ScalarOperator> scanPreimages(List<ScalarOperator> conjuncts, Types.StructType schema,
+                                                     Map<ColumnRefOperator, Column> colRefToColumn) {
+        FunctionPreimage.ColumnResolver scan = ExternalScanPredicates.scanTemporalColumns(colRefToColumn);
+        FunctionPreimage.ColumnResolver iceberg = preimageResolver(schema);
+        return ExternalScanPredicates.forBeConjuncts(ExternalScanPredicates.Connector.ICEBERG, conjuncts,
+                (operand, kind) -> scan.accepts(operand, kind) && iceberg.accepts(operand, kind));
     }
 
     public static class IcebergContext {
@@ -319,25 +310,16 @@ public class ScalarOperatorToIcebergExpr {
                 return null;
             }
             LocalDateTime local = timestampTzLocalTime(operator.getChild(1), icebergType);
-            if (local != null && IcebergFunctionPreimage.isDstAmbiguous(icebergType, local)) {
+            if (local != null && LocalTimeBounds.isAmbiguous(local)) {
                 // the superset covers both instants of an overlap; a strict or negated conversion needs a subset
-                return context.isStrict() || context.isInsideNot() ? null : IcebergFunctionPreimage.compare(
-                        new IcebergFunctionPreimage.Column(columnName, icebergType), operator.getBinaryType(), local);
+                return context.isStrict() || context.isInsideNot() ? null
+                        : toExpression(columnName, LocalTimeBounds.superset(operator.getBinaryType(), local));
             }
             Type.TypeID typeID = icebergType.typeId();
             Object literalValue = getLiteralValue(operator.getChild(1), icebergType);
 
             if (literalValue == null) {
                 return null;
-            }
-            LocalDateTime ambiguous = ambiguousLocalTime(operator.getChild(1), icebergType);
-            if (ambiguous != null) {
-                // The constant names two instants (DST overlap) or none (DST gap), so no single instant compares the
-                // same. Lower bounds take the earlier candidate and upper bounds the later one, a pruning-only
-                // superset: not valid under NOT, for NE or for strict conversion.
-                return context.isStrict() || context.isInsideNot() ? null : IcebergFunctionPreimage.compare(
-                        new IcebergFunctionPreimage.Column(columnName, icebergType),
-                        operator.getBinaryType(), ambiguous);
             }
             if (typeID == Type.TypeID.BOOLEAN) {
                 literalValue = convertBoolLiteralValue(literalValue);
@@ -379,7 +361,7 @@ public class ScalarOperatorToIcebergExpr {
             }
             if (operator.getListChildren().stream().anyMatch(child -> {
                 LocalDateTime local = timestampTzLocalTime(child, icebergType);
-                return local != null && IcebergFunctionPreimage.isDstAmbiguous(icebergType, local);
+                return local != null && LocalTimeBounds.isAmbiguous(local);
             })) {
                 if (operator.isNotIn() || context.isStrict() || context.isInsideNot()) {
                     return null;
@@ -390,7 +372,7 @@ public class ScalarOperatorToIcebergExpr {
                     if (local == null) {
                         return null;
                     }
-                    instants.addAll(IcebergFunctionPreimage.equalInstants(icebergType, local));
+                    instants.addAll(LocalTimeBounds.equalInstants(local));
                 }
                 return in(columnName, instants);
             }
@@ -408,10 +390,6 @@ public class ScalarOperatorToIcebergExpr {
             // TODO: Some functions within ScalarOperatorFunctions could be computed on frontends.
             // Maybe we can obtain the result first and then convert it into an Iceberg expression.
             if (literalValues.stream().anyMatch(Objects::isNull)) {
-                return null;
-            }
-            // a constant in a DST overlap or gap has no single instant, see visitBinaryPredicate
-            if (operator.getListChildren().stream().anyMatch(child -> ambiguousLocalTime(child, icebergType) != null)) {
                 return null;
             }
 
@@ -445,7 +423,7 @@ public class ScalarOperatorToIcebergExpr {
 
         @Override
         public Expression visitCall(CallOperator call, IcebergContext context) {
-            return usePreimage(context) ? IcebergFunctionPreimage.derivePredicateCall(call, resolver(context)) : null;
+            return usePreimage(context) ? startsWithPredicate(call, context) : null;
         }
 
         @Override
@@ -458,8 +436,42 @@ public class ScalarOperatorToIcebergExpr {
          */
         private Expression derivePreimage(ScalarOperator call, BinaryType op, List<ScalarOperator> values,
                                           IcebergContext context) {
-            return usePreimage(context)
-                    ? IcebergFunctionPreimage.deriveComparison(call, op, values, resolver(context)) : null;
+            if (!usePreimage(context)) {
+                return null;
+            }
+            ScalarOperator preimage = FunctionPreimage.deriveComparison(call, op, values, resolver(context));
+            return preimage == null ? null : preimage.accept(this, context);
+        }
+
+        private static Expression toExpression(String columnName, List<LocalTimeBounds.Bound> bounds) {
+            if (bounds == null) {
+                return null;
+            }
+            Expression result = null;
+            for (LocalTimeBounds.Bound bound : bounds) {
+                Expression expr;
+                switch (bound.op()) {
+                    case EQ:
+                        expr = equal(columnName, bound.micros());
+                        break;
+                    case GE:
+                        expr = greaterThanOrEqual(columnName, bound.micros());
+                        break;
+                    case GT:
+                        expr = greaterThan(columnName, bound.micros());
+                        break;
+                    case LT:
+                        expr = lessThan(columnName, bound.micros());
+                        break;
+                    case LE:
+                        expr = lessThanOrEqual(columnName, bound.micros());
+                        break;
+                    default:
+                        return null;
+                }
+                result = result == null ? expr : and(result, expr);
+            }
+            return result;
         }
     }
 
@@ -467,39 +479,49 @@ public class ScalarOperatorToIcebergExpr {
      * A preimage is a pruning-only superset, so it is not valid under NOT or for strict conversion.
      */
     private static boolean usePreimage(IcebergContext context) {
-        if (context.isStrict() || context.isInsideNot()) {
-            return false;
-        }
-        // Without a session (e.g. a metadata-prefetch thread) neither the switch nor the session time zone is known.
-        ConnectContext connectContext = ConnectContext.get();
-        return connectContext != null
-                && connectContext.getSessionVariable().isEnableIcebergFunctionPredicatePruning();
-    }
-
-    private static IcebergFunctionPreimage.ColumnResolver resolver(IcebergContext context) {
-        return operand -> {
-            String columnName = getColumnName(operand);
-            Type type = columnName == null ? null : IcebergExprVisitor.getResultType(columnName, context);
-            return type == null ? null : new IcebergFunctionPreimage.Column(columnName, type);
-        };
+        return !context.isStrict() && !context.isInsideNot()
+                && ExternalScanPredicates.isFunctionPruningEnabled(ExternalScanPredicates.Connector.ICEBERG);
     }
 
     /**
-     * The local time of a constant compared with a timestamptz column, when it falls in a DST overlap or gap of the
-     * session time zone; null otherwise.
+     * Function preimages go on columns of the table whose Iceberg type orders like the preimage's bounds.
      */
-    private static LocalDateTime ambiguousLocalTime(ScalarOperator operator, Type icebergType) {
-        if (!Types.TimestampType.withZone().equals(icebergType) || !(operator instanceof ConstantOperator constant)
-                || constant.isNull()) {
+    private static FunctionPreimage.ColumnResolver resolver(IcebergContext context) {
+        return (operand, kind) -> {
+            Type type = columnType(operand, context);
+            if (type == null) {
+                return false;
+            }
+            switch (kind) {
+                case TEMPORAL:
+                    return type.typeId() == Type.TypeID.DATE || type.typeId() == Type.TypeID.TIMESTAMP;
+                case STRING:
+                    return type.typeId() == Type.TypeID.STRING;
+                default:
+                    return false;
+            }
+        };
+    }
+
+    private static Type columnType(ScalarOperator operand, IcebergContext context) {
+        String columnName = getColumnName(operand);
+        return columnName == null ? null : IcebergExprVisitor.getResultType(columnName, context);
+    }
+
+    /**
+     * {@code starts_with(s, 'abc')} on a string column.
+     */
+    private static Expression startsWithPredicate(CallOperator call, IcebergContext context) {
+        if (!FunctionSet.STARTS_WITH.equalsIgnoreCase(call.getFnName()) || call.getChildren().size() != 2) {
             return null;
         }
-        Optional<ConstantOperator> datetime = constant.getType().isDatetime() ? Optional.of(constant)
-                : constant.castTo(DateType.DATETIME);
-        if (datetime.isEmpty() || datetime.get().isNull()) {
+        Type type = columnType(call.getChild(0), context);
+        ScalarOperator prefix = call.getChild(1);
+        if (type == null || type.typeId() != Type.TypeID.STRING || !(prefix instanceof ConstantOperator constant)
+                || constant.isNull() || !constant.getType().isStringType()) {
             return null;
         }
-        LocalDateTime local = datetime.get().getDatetime();
-        return TimeUtils.getTimeZone().toZoneId().getRules().getValidOffsets(local).size() == 1 ? null : local;
+        return startsWith(getColumnName(call.getChild(0)), constant.getVarchar());
     }
 
     private static Object getLiteralValue(ScalarOperator operator, Type icebergType) {
@@ -674,9 +696,8 @@ public class ScalarOperatorToIcebergExpr {
                         zoneId = ZoneOffset.UTC;
                     }
 
-                    long value = operator.getDatetime().atZone(zoneId).toEpochSecond() * 1000
-                            * 1000 * 1000 + operator.getDatetime().getNano();
-                    return TimeUnit.MICROSECONDS.convert(value, TimeUnit.NANOSECONDS);
+                    // counting in nanoseconds would overflow before 1677 and after 2262
+                    return LocalTimeBounds.toMicros(operator.getDatetime().atZone(zoneId).toInstant());
                 case VARBINARY:
                 case BINARY:
                     return operator.getBinary();

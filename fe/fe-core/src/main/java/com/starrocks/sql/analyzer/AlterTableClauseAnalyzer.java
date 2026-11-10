@@ -503,6 +503,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             } catch (AnalysisException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE)) {
+            if (!(table instanceof OlapTable) || !((OlapTable) table).isRangeDistribution()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        PropertyAnalyzer.TABLET_RESHARD_TARGET_SIZE_RANGE_ONLY_MSG);
+            }
+            PropertyAnalyzer.analyzeTableTabletReshardTargetSize(
+                    properties.get(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE), true);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).equalsIgnoreCase("true") &&
                     !properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE).equalsIgnoreCase("false")) {
@@ -1465,7 +1472,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()
                 : Maps.newHashMap(clause.getProperties());
         try {
-            long tabletReshardTargetSize = PropertyAnalyzer.analyzeTabletReshardTargetSize(copiedProperties, true);
+            long tabletReshardTargetSize = PropertyAnalyzer.analyzeTabletReshardTargetSize(copiedProperties, true,
+                    ((OlapTable) table).getTabletReshardTargetSize());
             clause.setTabletReshardTargetSize(tabletReshardTargetSize);
         } catch (Exception e) {
             throw new SemanticException(e.getMessage(), e);
@@ -1521,7 +1529,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()
                 : Maps.newHashMap(clause.getProperties());
         try {
-            long tabletReshardTargetSize = PropertyAnalyzer.analyzeTabletReshardTargetSize(copiedProperties, true);
+            long tabletReshardTargetSize = PropertyAnalyzer.analyzeTabletReshardTargetSize(copiedProperties, true,
+                    ((OlapTable) table).getTabletReshardTargetSize());
             clause.setTabletReshardTargetSize(tabletReshardTargetSize);
         } catch (Exception e) {
             throw new SemanticException(e.getMessage(), e);

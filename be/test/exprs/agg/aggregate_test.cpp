@@ -806,18 +806,21 @@ TEST_F(AggregateTest, test_sum_distinct) {
                                                       DecimalV2Value(21));
 }
 
-// multi_distinct_count/sum have no V1 implementation any more: every func_version resolves to the V2 one.
+// multi_distinct_count/sum have a single implementation registered under their own names: every func_version
+// resolves to it, and the old "..._count2/_sum2" aliases are gone.
 TEST_F(AggregateTest, test_multi_distinct_resolves_to_v2_for_every_func_version) {
-    ASSERT_NE(nullptr, get_aggregate_function("multi_distinct_count2", TYPE_INT, TYPE_BIGINT, false));
-    ASSERT_NE(nullptr, get_aggregate_function("multi_distinct_sum2", TYPE_INT, TYPE_BIGINT, false));
+    auto* count = get_aggregate_function("multi_distinct_count", TYPE_INT, TYPE_BIGINT, false);
+    auto* sum = get_aggregate_function("multi_distinct_sum", TYPE_INT, TYPE_BIGINT, false);
+    ASSERT_NE(nullptr, count);
+    ASSERT_NE(nullptr, sum);
     for (int func_version : {0, 1, 7, 8}) {
-        EXPECT_EQ(get_aggregate_function("multi_distinct_count2", TYPE_INT, TYPE_BIGINT, false),
-                  get_aggregate_function("multi_distinct_count", TYPE_INT, TYPE_BIGINT, false,
-                                         TFunctionBinaryType::BUILTIN, func_version));
-        EXPECT_EQ(get_aggregate_function("multi_distinct_sum2", TYPE_INT, TYPE_BIGINT, false),
-                  get_aggregate_function("multi_distinct_sum", TYPE_INT, TYPE_BIGINT, false,
-                                         TFunctionBinaryType::BUILTIN, func_version));
+        EXPECT_EQ(count, get_aggregate_function("multi_distinct_count", TYPE_INT, TYPE_BIGINT, false,
+                                                TFunctionBinaryType::BUILTIN, func_version));
+        EXPECT_EQ(sum, get_aggregate_function("multi_distinct_sum", TYPE_INT, TYPE_BIGINT, false,
+                                              TFunctionBinaryType::BUILTIN, func_version));
     }
+    EXPECT_EQ(nullptr, get_aggregate_function("multi_distinct_count2", TYPE_INT, TYPE_BIGINT, false));
+    EXPECT_EQ(nullptr, get_aggregate_function("multi_distinct_sum2", TYPE_INT, TYPE_BIGINT, false));
 }
 
 TEST_F(AggregateTest, test_decimal_multi_distinct_sum) {
