@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.ErrorCode;
@@ -34,6 +35,7 @@ import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -661,6 +663,14 @@ public class TabletStatMgrTest {
         BasicStatsMeta meta = new BasicStatsMeta(SCAN_DB_ID, TABLE_ID, Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap());
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddBasicStatsMeta(meta);
+        // The other cases mock SystemInfoService, so the cluster info of the shared GlobalStateMgr may have
+        // been built without its backend map; this case collects no stats from backends.
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ImmutableMap<Long, Backend> getIdToBackend() {
+                return ImmutableMap.of();
+            }
+        };
         try {
             new TabletStatMgr().runAfterCatalogReady();
 
