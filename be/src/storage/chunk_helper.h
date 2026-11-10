@@ -15,7 +15,9 @@
 #pragma once
 
 // NOTE: This file is included by 200+ files. Be cautious when adding more includes to avoid unnecessary recompilation or increased build dependencies.
+#include <cstdint>
 #include <memory>
+#include <string_view>
 
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
@@ -94,6 +96,9 @@ public:
 
     // Padding one char column
     static void padding_char_column(const starrocks::TabletSchemaCSPtr& tschema, const Field& field, Column* column);
+
+    // Reject column capacity overflow with chunk, tablet, and transaction context.
+    static Status reject_if_over_capacity(const Chunk& chunk, std::string_view what, int64_t tablet_id, int64_t txn_id);
 
     // Reorder columns of `chunk` according to the order of |tuple_desc|.
     static void reorder_chunk(const TupleDescriptor& tuple_desc, Chunk* chunk);

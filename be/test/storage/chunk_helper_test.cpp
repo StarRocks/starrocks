@@ -14,9 +14,15 @@
 
 #include "storage/chunk_helper.h"
 
+#include <string>
+#include <string_view>
+
+#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -25,6 +31,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -289,6 +296,32 @@ TEST_F(ChunkHelperTest, SegmentedChunk) {
         ColumnPtr str_column1 = column1->clone_selective(index.data(), 0, index.size());
         EXPECT_EQ("['str2', 'str3', 'str5', 'str10001', 'str20001']", str_column1->debug_string());
     }
+}
+
+TEST_F(ChunkHelperTest, reject_if_over_capacity_reports_column_failure_context) {
+    // ConstColumn stores one value, so exercising its row limit does not allocate billions of rows.
+    const size_t capacity_limit = Column::MAX_CAPACITY_LIMIT;
+    auto value = BinaryColumn::create();
+    value->append(Slice("value"));
+    Chunk chunk;
+    chunk.append_column(ConstColumn::create(std::move(value), capacity_limit), 0);
+    ASSERT_OK(ChunkHelper::reject_if_over_capacity(chunk, "source chunk", 10001, 4242));
+
+    chunk.set_num_rows(capacity_limit + 1);
+    const auto cause = chunk.capacity_limit_reached();
+    ASSERT_TRUE(cause.is_capacity_limit_exceeded()) << cause;
+    const auto status = ChunkHelper::reject_if_over_capacity(chunk, "source chunk", 10001, 4242);
+    ASSERT_TRUE(status.is_capacity_limit_exceeded()) << status;
+
+    const auto message = status.message();
+    SCOPED_TRACE(message);
+    EXPECT_NE(std::string_view::npos, message.find("Column capacity limit exceeded"));
+    EXPECT_NE(std::string_view::npos, message.find("source chunk"));
+    EXPECT_NE(std::string_view::npos, message.find("tablet:10001"));
+    EXPECT_NE(std::string_view::npos, message.find("txn:4242"));
+    EXPECT_NE(std::string_view::npos, message.find("num_rows:" + std::to_string(capacity_limit + 1)));
+    EXPECT_NE(std::string_view::npos, message.find(cause.message()));
+    EXPECT_EQ(std::string_view::npos, message.find("single statement"));
 }
 
 class ChunkPipelineAccumulatorTest : public ::testing::Test {
