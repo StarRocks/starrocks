@@ -2547,14 +2547,52 @@ TEST_F(JsonScannerTruncatedDocTest, mid_document_syntax_error_positions) {
     EXPECT_EQ(2, multi_buf_result.rows);
     EXPECT_EQ(2, multi_buf_result.filtered);
 
-    // 5. Single-buffer fatal TAPE_ERROR termination: simdjson::ondemand::document_stream treats a mid-document
-    // TAPE_ERROR as fatal for the remainder of that buffer without double-counting the failed document.
+    // 5. Consecutive mid-document syntax errors flanked by valid rows in a single NDJSON buffer:
+    // advance() rebuilds the stream at _last_begin_offset and skips each failed record so subsequent
+    // valid records in the same buffer are recovered rather than silently dropped.
     auto single_buf_result =
             scan(TBrokerRangeDesc(), kK13Names,
                  {valid1 + "\n" + kMissingValueDocument + "\n" + kMissingValueDocument + "\n" + valid2});
     EXPECT_TRUE(single_buf_result.status.is_end_of_file()) << single_buf_result.status;
-    EXPECT_EQ(1, single_buf_result.rows);
-    EXPECT_EQ(1, single_buf_result.filtered);
+    EXPECT_EQ(2, single_buf_result.rows);
+    EXPECT_EQ(2, single_buf_result.filtered);
+
+    // 6. Single-buffer resync across malformed record shapes (missing-value, missing-comma, trailing-comma)
+    // and positions (first record bad, middle record bad).
+    const std::string v = R"({"k1":"a","k2":1})";
+    for (const std::string& bad :
+         {std::string(R"({"k1":"x","k2":})"), std::string(R"({"k1":"x" "k2":9})"), std::string(R"({"k1":"x",})")}) {
+        auto mid_res = scan({v + "\n" + bad + "\n" + v + "\n" + v});
+        EXPECT_TRUE(mid_res.status.is_end_of_file()) << bad << ": " << mid_res.status;
+        EXPECT_EQ(3, mid_res.rows) << bad;
+        EXPECT_EQ(1, mid_res.filtered) << bad;
+
+        auto first_res = scan({bad + "\n" + v + "\n" + v});
+        EXPECT_TRUE(first_res.status.is_end_of_file()) << bad << ": " << first_res.status;
+        EXPECT_EQ(2, first_res.rows) << bad;
+        EXPECT_EQ(1, first_res.filtered) << bad;
+    }
+
+    // 7. Trailing missing-comma record at the end of a single buffer: stage 1 truncates at the missing comma,
+    // so skipping the failed record in advance() hits INCOMPLETE_ARRAY_OR_OBJECT and surfaces a non-EOF error.
+    auto trailing_missing_comma = scan({v + "\n" + v + "\n" + R"({"k1":"x" "k2":9})"});
+    EXPECT_TRUE(trailing_missing_comma.status.is_data_quality_error()) << trailing_missing_comma.status;
+    EXPECT_EQ(2, trailing_missing_comma.filtered);
+
+    // 8. Multi-batch stream with a mid-document error in the middle of the buffer recovers all remaining rows.
+    config::json_parse_many_batch_size = 64;
+    std::string multi_batch_body;
+    for (int i = 0; i < 40; i++) {
+        if (i == 15) {
+            multi_batch_body += R"({"k1":"bad","k2":})"
+                                "\n";
+        }
+        multi_batch_body += "{\"k1\":\"" + std::to_string(i) + "\",\"k2\":" + std::to_string(i) + "}\n";
+    }
+    auto multi_batch_res = scan({multi_batch_body});
+    EXPECT_TRUE(multi_batch_res.status.is_end_of_file()) << multi_batch_res.status;
+    EXPECT_EQ(40, multi_batch_res.rows);
+    EXPECT_EQ(1, multi_batch_res.filtered);
 }
 
 TEST_F(JsonScannerTest, test_simdjson_v511_big_integer_and_unicode_escapes) {
