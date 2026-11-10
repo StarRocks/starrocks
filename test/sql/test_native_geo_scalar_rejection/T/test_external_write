@@ -1,0 +1,21 @@
+-- name: test_external_geo_writes
+function: create_iceberg_catalog("geo_write_${uuid0}", "${iceberg_sql_test_catalog_type}")
+CREATE DATABASE geo_write_${uuid0}.db_${uuid0};
+CREATE TABLE geo_write_${uuid0}.db_${uuid0}.sink (wkt VARCHAR(64), wkb VARBINARY);
+INSERT INTO geo_write_${uuid0}.db_${uuid0}.sink VALUES ('ordinary', NULL);
+function: assert_query_error_contains("INSERT INTO geo_write_${uuid0}.db_${uuid0}.sink SELECT ST_GeogFromText('POINT (1 2)'), NULL", "Cannot write native geo values to external table column")
+function: assert_query_error_contains("INSERT INTO geo_write_${uuid0}.db_${uuid0}.sink SELECT NULL, ST_GeogFromText('POINT (1 2)')", "Use ST_AsText/ST_AsBinary")
+function: assert_query_error_contains("INSERT INTO FILES('path'='file:///tmp/geo_write_${uuid0}/', 'format'='parquet') SELECT ST_GeogFromText('POINT (1 2)') AS g", "Cannot write native geo values to external table column")
+function: assert_query_error_contains("INSERT INTO FILES('path'='file:///tmp/geo_write_${uuid0}/', 'format'='orc') SELECT ST_GeogFromText('POINT (1 2)') AS g", "Cannot write native geo values to external table column")
+function: assert_query_error_contains("INSERT INTO FILES('path'='file:///tmp/geo_write_${uuid0}/', 'format'='csv') SELECT ST_GeogFromText('POINT (1 2)') AS g", "Cannot write native geo values to external table column")
+INSERT INTO geo_write_${uuid0}.db_${uuid0}.sink SELECT ST_AsText(g), ST_AsBinary(g) FROM (SELECT ST_GeogFromText('POINT (1 2)') AS g) t;
+function: assert_query_error_contains("INSERT INTO geo_write_${uuid0}.db_${uuid0}.sink SELECT ST_GeomFromText('POINT (1 2)', 'EPSG:3857'), NULL", "Cannot write native geo values to external table column")
+function: assert_query_error_contains("INSERT INTO geo_write_${uuid0}.db_${uuid0}.sink SELECT NULL, ST_GeomFromText('POINT (1 2)', 'EPSG:3857')", "Use ST_AsText/ST_AsBinary")
+function: assert_query_error_contains("INSERT INTO FILES('path'='file:///tmp/geo_write_${uuid0}/', 'format'='parquet') SELECT ST_GeomFromText('POINT (1 2)', 'EPSG:3857') AS g", "Cannot write native geo values to external table column")
+function: assert_query_error_contains("INSERT INTO FILES('path'='file:///tmp/geo_write_${uuid0}/', 'format'='orc') SELECT ST_GeomFromText('POINT (1 2)', 'EPSG:3857') AS g", "Cannot write native geo values to external table column")
+function: assert_query_error_contains("INSERT INTO FILES('path'='file:///tmp/geo_write_${uuid0}/', 'format'='csv') SELECT ST_GeomFromText('POINT (1 2)', 'EPSG:3857') AS g", "Cannot write native geo values to external table column")
+INSERT INTO geo_write_${uuid0}.db_${uuid0}.sink SELECT ST_AsText(g), ST_AsBinary(g) FROM (SELECT ST_GeomFromText('POINT (1 2)', 'EPSG:3857') AS g) t;
+SELECT wkt, hex(wkb) FROM geo_write_${uuid0}.db_${uuid0}.sink ORDER BY wkt, hex(wkb);
+DROP TABLE geo_write_${uuid0}.db_${uuid0}.sink FORCE;
+DROP DATABASE geo_write_${uuid0}.db_${uuid0};
+DROP CATALOG geo_write_${uuid0};
