@@ -63,6 +63,7 @@ import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TCompressedPartitionMap;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.TIcebergPartitionInfo;
+import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TPartitionMap;
 import com.starrocks.thrift.TSortOrder;
@@ -590,7 +591,9 @@ public class IcebergTable extends Table {
         }
         tIcebergTable.setColumns(tColumns);
 
-        tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(iceSchema));
+        TIcebergSchema tIcebergSchema = IcebergApiConverter.getTIcebergSchema(iceSchema);
+        IcebergApiConverter.setMappedNames(tIcebergSchema, getNativeTable().properties());
+        tIcebergTable.setIceberg_schema(tIcebergSchema);
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
         if (comment == null || !comment.equals(EQUALITY_DELETE_TABLE_COMMENT)) {
             // Resolve partition source names against the read schema so the generated

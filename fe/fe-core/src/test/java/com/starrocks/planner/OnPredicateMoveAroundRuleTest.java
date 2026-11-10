@@ -297,6 +297,34 @@ public class OnPredicateMoveAroundRuleTest extends PlanTestBase {
        assertContains(plan2, "PREDICATES: 1: v1 >= 2, 3: v3 IS NOT NULL, 1: v1 > 1, 1: v1 < 4");
     }
 
+    // A non-deterministic predicate evaluates apart on each side, so a copy on the other side of `=` drops rows
+    // whose partner passed the original: it must stay on its own side only.
+    @Test
+    public void testNonDeterministicPredicateNotCopied() throws Exception {
+        String sql = "select * from (select * from t0 where if(random() < 0.5, v1 > 1, false)) t0 " +
+                "join t1 on t0.v1 = t1.v4";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "if(random() < 0.5, 1: v1 > 1, FALSE)");
+        assertNotContains(plan, "4: v4 > 1");
+
+        sql = "select * from t0 join (select * from t1 where if(random() < 0.5, v4 > 1, false)) t1 " +
+                "on t0.v1 = t1.v4";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "if(random() < 0.5, 4: v4 > 1, FALSE)");
+        assertNotContains(plan, "1: v1 > 1");
+
+        sql = "select * from (select * from t0 where if(random() < 0.5, v1 > 1, false)) t0 " +
+                "left semi join t1 on t0.v1 = t1.v4";
+        assertNotContains(getFragmentPlan(sql), "4: v4 > 1");
+
+        // the deterministic conjuncts on the same column are still copied
+        sql = "select * from (select * from t0 where if(random() < 0.5, v1 > 1, false) and v1 < 10) t0 " +
+                "join t1 on t0.v1 = t1.v4";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "4: v4 < 10");
+        assertNotContains(plan, "4: v4 > 1");
+    }
+
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("asofJoinComplexJoinCases")
     void testAsofComplexJoinCases(String sql, int expect) throws Exception {

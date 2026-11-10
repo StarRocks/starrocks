@@ -57,6 +57,7 @@ import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.EdgeAlgorithm;
@@ -1079,6 +1080,35 @@ public class IcebergApiConverterTest {
         } finally {
             ConnectContext.remove();
         }
+    }
+
+    @Test
+    public void testSetMappedNames() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "c1_new", Types.StringType.get()),
+                Types.NestedField.optional(3, "c2", Types.IntegerType.get()));
+        // c1 was renamed to c1_new after the table was migrated; c2 has no mapping entry
+        String mapping = "[{\"field-id\": 1, \"names\": [\"id\"]}, {\"field-id\": 2, \"names\": [\"c1_new\", \"c1\"]}]";
+
+        TIcebergSchema tSchema = IcebergApiConverter.getTIcebergSchema(schema);
+        IcebergApiConverter.setMappedNames(tSchema, Map.of(TableProperties.DEFAULT_NAME_MAPPING, mapping));
+        Assertions.assertFalse(tSchema.getFields().get(0).isSetMapped_names());
+        assertEquals(List.of("c1"), tSchema.getFields().get(1).getMapped_names());
+        Assertions.assertFalse(tSchema.getFields().get(2).isSetMapped_names());
+
+        // nested entries are not read: only the top-level names are sent
+        String nested = "[{\"field-id\": 2, \"names\": [\"c1_new\", \"c1\"], \"fields\": " +
+                "[{\"field-id\": 9, \"names\": [\"x\", \"y\"]}]}]";
+        TIcebergSchema nestedSchema = IcebergApiConverter.getTIcebergSchema(schema);
+        IcebergApiConverter.setMappedNames(nestedSchema, Map.of(TableProperties.DEFAULT_NAME_MAPPING, nested));
+        assertEquals(List.of("c1"), nestedSchema.getFields().get(1).getMapped_names());
+
+        // no mapping, or one that does not parse: nothing is set
+        TIcebergSchema withoutMapping = IcebergApiConverter.getTIcebergSchema(schema);
+        IcebergApiConverter.setMappedNames(withoutMapping, Map.of());
+        IcebergApiConverter.setMappedNames(withoutMapping, Map.of(TableProperties.DEFAULT_NAME_MAPPING, "{"));
+        Assertions.assertTrue(withoutMapping.getFields().stream().noneMatch(TIcebergSchemaField::isSetMapped_names));
     }
 
     @Test

@@ -14,6 +14,8 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -126,6 +128,7 @@ import static org.apache.iceberg.view.ViewProperties.COMMENT;
 
 public class IcebergApiConverter {
     private static final Logger LOG = LogManager.getLogger(IcebergApiConverter.class);
+    private static final ObjectMapper NAME_MAPPING_READER = new ObjectMapper();
     public static final String PARTITION_NULL_VALUE = "null";
     private static final Pattern ICEBERG_BUCKET_PATTERN = Pattern.compile("bucket\\[(\\d+)]");
     private static final Pattern ICEBERG_TRUNCATE_PATTERN = Pattern.compile("truncate\\[(\\d+)]");
@@ -601,6 +604,53 @@ public class IcebergApiConverter {
         }
         tIcebergSchema.setFields(fields);
         return tIcebergSchema;
+    }
+
+    // Older names of the top-level columns from the table's name mapping (schema.name-mapping.default). A data file
+    // without field ids may store a renamed column under one of them; the scan reads it from there when the file has
+    // no column of the current name.
+    public static void setMappedNames(TIcebergSchema tIcebergSchema, Map<String, String> tableProperties) {
+        String mappingJson = tableProperties.get(TableProperties.DEFAULT_NAME_MAPPING);
+        if (mappingJson == null) {
+            return;
+        }
+        // Read the top-level entries only: NameMappingParser indexes every nested name path, which grows with the
+        // product of the names at each level.
+        Map<Integer, List<String>> idToNames = new HashMap<>();
+        try {
+            JsonNode root = NAME_MAPPING_READER.readTree(mappingJson);
+            if (root == null || !root.isArray()) {
+                throw new IllegalArgumentException("not a JSON array");
+            }
+            for (JsonNode entry : root) {
+                JsonNode id = entry.get("field-id");
+                JsonNode names = entry.get("names");
+                if (id == null || !id.canConvertToInt() || names == null || !names.isArray()) {
+                    continue;
+                }
+                List<String> nameList = new ArrayList<>();
+                for (JsonNode name : names) {
+                    nameList.add(name.asText());
+                }
+                idToNames.put(id.asInt(), nameList);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to parse iceberg name mapping {}", mappingJson, e);
+            return;
+        }
+        for (TIcebergSchemaField field : tIcebergSchema.getFields()) {
+            List<String> names = idToNames.get(field.getField_id());
+            if (names == null) {
+                continue;
+            }
+            List<String> olderNames = names.stream()
+                    .filter(name -> !name.equals(field.getName()))
+                    .sorted()
+                    .toList();
+            if (!olderNames.isEmpty()) {
+                field.setMapped_names(olderNames);
+            }
+        }
     }
 
     private static TIcebergSchemaField getTIcebergSchemaField(Types.NestedField nestedField) {

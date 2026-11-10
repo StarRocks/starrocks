@@ -192,9 +192,17 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
         BinaryType binaryType = binaryPredicate.getBinaryType();
         ScalarOperator rewriteResult = null;
         if (binaryType.isEqual()) {
+            // a non-deterministic predicate evaluates apart on each side: a row could fail the copy while the row it
+            // joins passes the original
             if (domainProperty.contains(seed)) {
-                ReplaceShuttle shuttle = new ReplaceShuttle(Map.of(seed, offspring));
-                rewriteResult = shuttle.rewrite(domainProperty.getPredicateDesc(seed));
+                ScalarOperator deterministic = Utils.compoundAnd(
+                        Utils.extractConjuncts(domainProperty.getPredicateDesc(seed)).stream()
+                                .filter(e -> !Utils.hasNonDeterministicFunc(e))
+                                .collect(Collectors.toList()));
+                if (deterministic != null) {
+                    ReplaceShuttle shuttle = new ReplaceShuttle(Map.of(seed, offspring));
+                    rewriteResult = shuttle.rewrite(deterministic);
+                }
             }
         } else if (binaryType == BinaryType.LT || binaryType == BinaryType.LE) {
             if (domainProperty.contains(seed)) {
