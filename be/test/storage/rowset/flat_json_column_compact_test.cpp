@@ -2365,7 +2365,6 @@ TEST_F(FlatJsonColumnCompactTest, CompactJsonNullableToNonNullableOutputErrorWit
         EXPECT_TRUE(st.is_internal_error()) << "mode=" << static_cast<int>(mode) << " " << st.to_string();
     }
 }
-<<<<<<< HEAD
 // A compaction of flat and whole-JSON inputs reads the whole-JSON ones into the flat inputs' layout typed JSON
 // (TabletReader::init_compaction_column_paths), so it streams; every value survives, and the value stats of the
 // JSON sub-columns let the next compaction type the paths by their values.
@@ -2590,65 +2589,6 @@ TEST_F(FlatJsonColumnCompactTest, testCompactionKeepsPathOnlySomeInputsFlatten) 
         } else {
             ASSERT_NE(paths.end(), it) << JsonFlatPath::debug_flat_json(paths, deriver.flat_types(), true);
             EXPECT_EQ(c.expected, deriver.flat_types()[it - paths.begin()]);
-=======
-// Compaction reads flat inputs through a layout derived from their sub-columns' metadata, casting each source
-// sub-column to the derived type. Segments that flattened the same path to different types must still come out
-// of compaction with every value unchanged: past INT64_MAX, negative next to unsigned, past 2^53 next to doubles,
-// and strings that look like JSON text next to numbers. A numeric mix that a numeric type holds exactly keeps
-// that type, so the path stays flattened.
-TEST_F(FlatJsonColumnCompactTest, testCompactionReadLayoutKeepsValuesAcrossSegmentTypes) {
-    config::enable_json_flat_complex_type = false;
-    config::json_flat_sparsity_factor = 0.3;
-
-    struct Case {
-        std::string name;
-        std::vector<std::vector<std::string>> segments;
-        LogicalType expected_type; // derived type of "a"; TYPE_UNKNOWN: not checked
-    };
-    // clang-format off
-    std::vector<Case> cases = {
-        {"largeint", {{R"({"a": 18446744073709551615, "k": 1})", R"({"a": 18446744073709551614, "k": 2})"},
-                      {R"({"a": 18446744073709551613, "k": 3})"}}, TYPE_LARGEINT},
-        {"varchar_vs_bigint", {{R"({"a": "[oops", "k": 1})", R"({"a": "[1, 2]", "k": 2})",
-                                R"({"a": "{\"x\": 1}", "k": 3})", R"({"a": "\"q\"", "k": 4})"},
-                               {R"({"a": 5, "k": 5})"}}, TYPE_JSON},
-        {"bigint_vs_largeint", {{R"({"a": -3, "k": 1})"}, {R"({"a": 18446744073709551615, "k": 2})"}}, TYPE_JSON},
-        {"bigint_vs_double", {{R"({"a": 9007199254740993, "k": 1})"}, {R"({"a": 1.5, "k": 2})"}}, TYPE_JSON},
-        {"null_vs_bigint", {{R"({"a": null, "k": 1})"}, {R"({"a": 7, "k": 2})"}}, TYPE_UNKNOWN},
-        // Exact in DOUBLE: stays a DOUBLE sub-column through the compaction.
-        {"small_bigint_vs_double", {{R"({"a": 5, "k": 1})", R"({"a": -9007199254740992, "k": 2})"},
-                                    {R"({"a": 1.5, "k": 3})"}}, TYPE_DOUBLE},
-    };
-    // clang-format on
-
-    for (const auto& c : cases) {
-        SCOPED_TRACE(c.name);
-        std::vector<std::string> expected;
-        std::vector<SegmentHandle> handles;
-        for (size_t k = 0; k < c.segments.size(); k++) {
-            MutableColumns cols;
-            for (const auto& json : c.segments[k]) {
-                cols.emplace_back(normal_json(json, false));
-                expected.emplace_back(json);
-            }
-            handles.emplace_back(write_segment(cols, /*need_flat=*/true, fmt::format("/{}_{}.data", c.name, k),
-                                               /*is_compaction=*/false));
-            ASSERT_TRUE(handles.back().meta->json_meta().is_flat());
-        }
-
-        // Derive the read layout the way TabletReader does for a compaction of flat inputs.
-        std::vector<const ColumnReader*> readers;
-        for (auto& h : handles) {
-            readers.emplace_back(h.reader.get());
-        }
-        JsonPathDeriver deriver;
-        deriver.derived(readers);
-        const auto& paths = deriver.flat_paths();
-        if (c.expected_type != TYPE_UNKNOWN) {
-            auto it = std::find(paths.begin(), paths.end(), "a");
-            ASSERT_NE(paths.end(), it) << JsonFlatPath::debug_flat_json(paths, deriver.flat_types(), true);
-            EXPECT_EQ(c.expected_type, deriver.flat_types()[it - paths.begin()]);
->>>>>>> 29e5306 ([BugFix] Keep flat JSON values exact through the remain filter, compaction and load (#80642))
         }
 
         ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::ROOT, "root", 0));
@@ -2656,7 +2596,6 @@ TEST_F(FlatJsonColumnCompactTest, testCompactionReadLayoutKeepsValuesAcrossSegme
             ColumnAccessPath::insert_json_path(root.get(), deriver.flat_types()[j], paths[j]);
         }
         root->set_from_compaction(true);
-<<<<<<< HEAD
         MutableColumns chunks;
         for (auto* h : {&first, &second}) {
             MutableColumnPtr col = JsonColumn::create();
@@ -2823,7 +2762,70 @@ TEST_F(FlatJsonColumnCompactTest, testCompactionWritesWholeJsonPastBufferWithout
     EXPECT_EQ(R"({"a": 4, "b": "y"})", col->debug_item(4));
 }
 
-=======
+// Compaction reads flat inputs through a layout derived from their sub-columns' metadata, casting each source
+// sub-column to the derived type. Segments that flattened the same path to different types must still come out
+// of compaction with every value unchanged: past INT64_MAX, negative next to unsigned, past 2^53 next to doubles,
+// and strings that look like JSON text next to numbers. A numeric mix that a numeric type holds exactly keeps
+// that type, so the path stays flattened.
+TEST_F(FlatJsonColumnCompactTest, testCompactionReadLayoutKeepsValuesAcrossSegmentTypes) {
+    config::enable_json_flat_complex_type = false;
+    config::json_flat_sparsity_factor = 0.3;
+
+    struct Case {
+        std::string name;
+        std::vector<std::vector<std::string>> segments;
+        LogicalType expected_type; // derived type of "a"; TYPE_UNKNOWN: not checked
+    };
+    // clang-format off
+    std::vector<Case> cases = {
+        {"largeint", {{R"({"a": 18446744073709551615, "k": 1})", R"({"a": 18446744073709551614, "k": 2})"},
+                      {R"({"a": 18446744073709551613, "k": 3})"}}, TYPE_LARGEINT},
+        {"varchar_vs_bigint", {{R"({"a": "[oops", "k": 1})", R"({"a": "[1, 2]", "k": 2})",
+                                R"({"a": "{\"x\": 1}", "k": 3})", R"({"a": "\"q\"", "k": 4})"},
+                               {R"({"a": 5, "k": 5})"}}, TYPE_JSON},
+        {"bigint_vs_largeint", {{R"({"a": -3, "k": 1})"}, {R"({"a": 18446744073709551615, "k": 2})"}}, TYPE_JSON},
+        {"bigint_vs_double", {{R"({"a": 9007199254740993, "k": 1})"}, {R"({"a": 1.5, "k": 2})"}}, TYPE_JSON},
+        {"null_vs_bigint", {{R"({"a": null, "k": 1})"}, {R"({"a": 7, "k": 2})"}}, TYPE_UNKNOWN},
+        // Exact in DOUBLE: stays a DOUBLE sub-column through the compaction.
+        {"small_bigint_vs_double", {{R"({"a": 5, "k": 1})", R"({"a": -9007199254740992, "k": 2})"},
+                                    {R"({"a": 1.5, "k": 3})"}}, TYPE_DOUBLE},
+    };
+    // clang-format on
+
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.name);
+        std::vector<std::string> expected;
+        std::vector<SegmentHandle> handles;
+        for (size_t k = 0; k < c.segments.size(); k++) {
+            MutableColumns cols;
+            for (const auto& json : c.segments[k]) {
+                cols.emplace_back(normal_json(json, false));
+                expected.emplace_back(json);
+            }
+            handles.emplace_back(write_segment(cols, /*need_flat=*/true, fmt::format("/{}_{}.data", c.name, k),
+                                               /*is_compaction=*/false));
+            ASSERT_TRUE(handles.back().meta->json_meta().is_flat());
+        }
+
+        // Derive the read layout the way TabletReader does for a compaction of flat inputs.
+        std::vector<const ColumnReader*> readers;
+        for (auto& h : handles) {
+            readers.emplace_back(h.reader.get());
+        }
+        JsonPathDeriver deriver;
+        deriver.derived(readers);
+        const auto& paths = deriver.flat_paths();
+        if (c.expected_type != TYPE_UNKNOWN) {
+            auto it = std::find(paths.begin(), paths.end(), "a");
+            ASSERT_NE(paths.end(), it) << JsonFlatPath::debug_flat_json(paths, deriver.flat_types(), true);
+            EXPECT_EQ(c.expected_type, deriver.flat_types()[it - paths.begin()]);
+        }
+
+        ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::ROOT, "root", 0));
+        for (size_t j = 0; j < paths.size(); j++) {
+            ColumnAccessPath::insert_json_path(root.get(), deriver.flat_types()[j], paths[j]);
+        }
+        root->set_from_compaction(true);
 
         MutableColumns flat_chunks;
         for (auto& h : handles) {
@@ -2897,5 +2899,5 @@ TEST_F(FlatJsonColumnCompactTest, testReadVarcharSubColumnAsJsonKeepsStrings) {
         }
     }
 }
->>>>>>> 29e5306 ([BugFix] Keep flat JSON values exact through the remain filter, compaction and load (#80642))
+
 } // namespace starrocks
