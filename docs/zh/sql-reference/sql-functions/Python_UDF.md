@@ -25,6 +25,8 @@ import Experimental from '../../_assets/commonMarkdown/_experimental.mdx'
 - Python UDF 需要以下包： pyarrow
 - 使用环境变量在 BE 实例中设置 Python 解释器环境的位置。添加变量项 `python_envs` 并将其设置为 Python 解释器安装的位置，例如 `/opt/Python-3.8/`。
 
+可选：通过 BE 配置项 `python_worker_max_per_driver`（默认值：`3`）设置单个 Pipeline Driver 最多使用的本地 Python worker 进程数。每个 worker 独立运行 Python，因此调大该值可以让同一个 Driver 的更多 UDF 调用并行执行（例如 UDF 在 Scan 中求值时），代价是 worker 进程更多。修改该配置无需重启 BE。
+
 ## 开发和使用 Python UDF
 
 语法：

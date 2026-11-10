@@ -18,6 +18,7 @@
 #include <sys/types.h>
 
 #include <atomic>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -185,9 +186,12 @@ private:
     Status _fork_py_worker(std::unique_ptr<LocalPyWorker>* child_process);
     StatusOr<std::shared_ptr<PyWorker>> _acquire_worker(int32_t driver_id, size_t reusable, std::string* url);
 
-    const size_t max_worker_per_driver = 2;
     std::mutex _mutex;
     std::unordered_map<int32_t, std::vector<std::shared_ptr<PyWorker>>> _processes;
+    // Workers being started per driver, counted against python_worker_max_per_driver so that
+    // concurrent acquires do not start more than the limit.
+    std::unordered_map<int32_t, int32_t> _num_starting;
+    std::condition_variable _worker_started;
 };
 
 // TODO: support config PYTHONPATH

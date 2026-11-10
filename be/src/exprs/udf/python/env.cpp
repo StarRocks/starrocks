@@ -25,6 +25,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <condition_variable>
 #include <csignal>
 #include <memory>
 #include <mutex>
@@ -278,43 +280,61 @@ StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t dri
         return child_process;
     }
     std::shared_ptr<PyWorker> worker;
+    std::vector<std::shared_ptr<PyWorker>> dead_workers;
     {
-        // try to find a worker from pool
-        std::lock_guard guard(_mutex);
-        auto& workers = _processes[driver_id];
-        if (workers.size() > max_worker_per_driver) {
-            worker = workers[ThreadLocalRandomUniform(static_cast<int32_t>(max_worker_per_driver))];
-            // Take the worker while holding the lock, so that cleanup_expired_worker cannot expire
-            // it before the caller connects.
-            if (!worker->is_dead()) {
+        std::unique_lock lock(_mutex);
+        size_t limit = std::max(1, config::python_worker_max_per_driver);
+        while (true) {
+            auto& workers = _processes[driver_id];
+            auto dead_begin = std::partition(workers.begin(), workers.end(),
+                                             [](const std::shared_ptr<PyWorker>& w) { return !w->is_dead(); });
+            dead_workers.insert(dead_workers.end(), std::make_move_iterator(dead_begin),
+                                std::make_move_iterator(workers.end()));
+            workers.erase(dead_begin, workers.end());
+
+            // Prefer the worker with the fewest connected stubs. Start another one instead while
+            // every worker is in use and the driver is below its limit.
+            auto least_used = std::min_element(workers.begin(), workers.end(), [](const auto& a, const auto& b) {
+                return a->num_clients() < b->num_clients();
+            });
+            auto& num_starting = _num_starting[driver_id];
+            bool below_limit = workers.size() + num_starting < limit;
+            if (least_used != workers.end() && ((*least_used)->num_clients() == 0 || !below_limit)) {
+                // Take the worker while holding the lock, so that cleanup_expired_worker cannot
+                // expire it before the caller connects.
+                worker = *least_used;
                 worker->touch();
                 worker->add_client();
+                break;
             }
+            if (below_limit) {
+                ++num_starting;
+                break;
+            }
+            // Every allowed worker is still starting: wait for one instead of exceeding the limit.
+            _worker_started.wait(lock);
         }
     }
-    if (worker && worker->is_dead()) {
-        worker->terminate_and_wait();
-        std::lock_guard guard(_mutex);
-        auto& workers = _processes[driver_id];
-        workers.erase(std::remove(workers.begin(), workers.end(), worker), workers.end());
+    for (auto& dead : dead_workers) {
+        dead->terminate_and_wait();
     }
-    if (worker != nullptr && !worker->is_dead()) {
+    if (worker != nullptr) {
         *url = worker->url();
         return worker;
     }
 
     std::unique_ptr<LocalPyWorker> uniq_worker;
-    RETURN_IF_ERROR(_fork_py_worker(&uniq_worker));
+    Status st = _fork_py_worker(&uniq_worker);
+    std::lock_guard guard(_mutex);
+    --_num_starting[driver_id];
+    // Wake the callers waiting for a worker, also on failure so that one of them starts another.
+    _worker_started.notify_all();
+    RETURN_IF_ERROR(st);
     *url = uniq_worker->url();
     worker = std::move(uniq_worker);
     worker->touch();
     worker->add_client();
-
-    {
-        // add to pool
-        std::lock_guard guard(_mutex);
-        _processes[driver_id].push_back(worker);
-    }
+    _processes[driver_id].push_back(worker);
     return worker;
 }
 
