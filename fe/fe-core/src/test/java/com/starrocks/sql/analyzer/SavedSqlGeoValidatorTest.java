@@ -19,6 +19,20 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.QueryPeriod;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UnitIdentifier;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
+import com.starrocks.sql.ast.expression.NamedArgument;
+import com.starrocks.sql.ast.expression.Parameter;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
@@ -26,12 +40,15 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -41,6 +58,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SavedSqlGeoValidatorTest {
     private static final String ERROR = "Nested GEOGRAPHY/GEOMETRY types are not supported in saved SQL definitions";
     private static final String BASE = " FROM geo_src";
+    private static final String PIVOT = "SELECT * FROM geo_src PIVOT ("
+            + "ARRAY_AGG(id ORDER BY cardinality([named_struct('g',%s),named_struct('g',NULL)])) FOR wkt IN ('test' AS a))";
     private static final String TABLE_OPTIONS =
             " DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1')";
     private static final String MV_OPTIONS =
@@ -98,7 +117,7 @@ class SavedSqlGeoValidatorTest {
         analyze("ALTER TABLE " + table + " ADD COLUMN " + column.replace("v VARCHAR", "v1 VARCHAR"));
         analyze("ALTER TABLE " + table + " ADD COLUMN (" + column.replace("v VARCHAR", "v2 VARCHAR") + ")");
         sql.ddl("CREATE BASELINE ON " + query + " USING " + query);
-        analyze(PIPE + scalar.replace("wkt", "col_string") + " IS NOT NULL");
+        CreatePipeStmt pipe = (CreatePipeStmt) analyze(PIPE + scalar.replace("wkt", "col_string") + " IS NOT NULL");
 
         MaterializedView mv = (MaterializedView) context.getGlobalStateMgr().getLocalMetastore()
                 .getTable("saved_geo", mvName);
@@ -144,7 +163,14 @@ class SavedSqlGeoValidatorTest {
 
         sql.ddl("ALTER MATERIALIZED VIEW " + mvName + " ADD COLUMN added AS " + scalar);
         sql.ddl("ALTER MATERIALIZED VIEW " + mvName + " DROP COLUMN removable");
-        checkQueryTraversal(geo, view);
+        assertAll(
+                () -> checkQueryTraversal(geo, view),
+                () -> reject("CREATE VIEW " + view + "_pivot AS " + PIVOT.formatted(geo)),
+                () -> checkRoundTrips(geo),
+                () -> checkDetachedExpressions(geo),
+                () -> roundTrip(pipe.getInsertStmt()),
+                () -> roundTrip(query),
+                () -> roundTrip(savedMv));
     }
 
     private static void checkQueryTraversal(String geo, String view) throws Exception {
@@ -171,14 +197,88 @@ class SavedSqlGeoValidatorTest {
                 () -> reject("CREATE MATERIALIZED VIEW mv_" + view + "_wrapper" + MV_OPTIONS
                         + "SELECT id FROM ((SELECT id FROM geo_src) ORDER BY " + constant + " LIMIT 1) t"));
 
-        analyze("CREATE VIEW tree_control AS SELECT id FROM " + view + " UNION ALL SELECT id" + BASE + " ORDER BY id");
-        analyze("CREATE VIEW tree_control AS WITH c AS (SELECT n FROM TABLE(UNNEST([1])) t(n)) SELECT n FROM c");
-        analyze("CREATE VIEW tree_control AS SELECT a.id FROM geo_src a JOIN [skew|b.id(1)] geo_src b ON a.id=b.id");
-        analyze("CREATE VIEW tree_control AS SELECT * FROM geo_src PIVOT (SUM(id) FOR wkt IN ('test'))");
+        roundTrip("SELECT id FROM " + view + " UNION ALL SELECT id" + BASE + " ORDER BY id");
+        roundTrip("WITH c AS (SELECT n FROM TABLE(UNNEST([1])) t(n)) SELECT n FROM c");
+        roundTrip("SELECT a.id FROM geo_src a JOIN [skew|b.id(1)] geo_src b ON a.id=b.id");
+        roundTrip("SELECT * FROM geo_src PIVOT (SUM(id) FOR wkt IN ('test' AS a))");
     }
 
-    private static void analyze(String statement) throws Exception {
-        UtFrameUtils.parseStmtWithNewParser(statement, context);
+    private static void checkRoundTrips(String geo) {
+        List<Executable> checks = new ArrayList<>();
+        for (String shape : List.of(PIVOT,
+                "SELECT ARRAY_AGG(id ORDER BY cardinality([%s])) AS a" + BASE,
+                "SELECT GROUP_CONCAT(wkt ORDER BY cardinality([%s]) SEPARATOR '|') AS a" + BASE,
+                "SELECT SUM(id) OVER (PARTITION BY cardinality([%s]) ORDER BY id "
+                        + "ROWS BETWEEN 2 PRECEDING AND 1 FOLLOWING) AS a" + BASE,
+                "SELECT ROW_NUMBER() OVER (PARTITION BY id ORDER BY cardinality([%s])) AS a" + BASE,
+                "SELECT id FROM geo_src CROSS JOIN LATERAL UNNEST([%s]) AS u(x)",
+                "SELECT id FROM geo_src, generate_series(1, cardinality([%s])) AS s(n)",
+                "SELECT id" + BASE + " UNION ALL (SELECT cardinality([%s]) AS id" + BASE + " ORDER BY id LIMIT 1)",
+                "SELECT id" + BASE + " WHERE EXISTS (SELECT 1" + BASE + " WHERE cardinality([%s]) > 0)",
+                "SELECT count(*) AS n" + BASE + " GROUP BY cardinality([%s])",
+                "SELECT count(*) AS n" + BASE + " GROUP BY GROUPING SETS ((cardinality([%s])), (id))",
+                "SELECT count(*) AS n" + BASE + " HAVING SUM(cardinality([%s])) > 0")) {
+            checks.add(() -> assertNested(analyze(shape.formatted(geo))));
+            checks.add(() -> roundTrip(shape.formatted("id")));
+        }
+
+        String normalized = "SELECT 1 FROM TABLE(UNNEST([%s])) AS t(n)";
+        checks.add(() -> assertNested(analyze(normalized.formatted(geo.replace("wkt", "'POINT (1 2)'")))));
+        List.of(normalized.formatted("1"),
+                "SELECT id" + BASE + " WHERE cardinality([id]) > 0",
+                "SELECT a.id FROM geo_src a JOIN geo_src b ON a.id=b.id AND cardinality([a.id]) > 0",
+                "WITH c AS (SELECT cardinality([id]) AS n" + BASE + ") SELECT 1 FROM c",
+                "SELECT (SELECT cardinality([1])) AS n",
+                "SELECT 1 AS id FROM (VALUES (cardinality([1]))) t(n)",
+                "(SELECT 1 AS id) ORDER BY cardinality([1])",
+                "(WITH c AS (SELECT [1] AS a) SELECT 1 AS id FROM c) ORDER BY 1",
+                "WITH c AS (SELECT [1] AS a) (SELECT 1 AS id FROM c) ORDER BY 1",
+                "SELECT id FROM ((SELECT id" + BASE + ") ORDER BY cardinality([id]) LIMIT 1) t",
+                "SELECT cardinality([id]) AS a, map{1:wkt}[1] AS m, (named_struct('g',id)).g AS s" + BASE)
+                .forEach(statement -> checks.add(() -> roundTrip(statement)));
+        assertAll(checks);
+    }
+
+    private static void checkDetachedExpressions(String geo) throws Exception {
+        String card = "cardinality([" + geo + "])";
+        QueryStatement query = (QueryStatement) analyze("SELECT " + card + " AS n" + BASE);
+        SelectRelation select = (SelectRelation) query.getQueryRelation();
+        Expr expr = select.getOutputExpression().get(0);
+        TableRelation table = (TableRelation) select.getRelation();
+        detachedExpressions(table, expr).forEach(SavedSqlGeoValidatorTest::assertNested);
+        detachedExpressions(table, new IntLiteral(1)).forEach(SavedSqlGeoValidator::validate);
+
+        QueryStatement ordered = (QueryStatement) analyze("SELECT ARRAY_AGG(id ORDER BY " + card + ") AS a" + BASE);
+        FunctionCallExpr aggregate = (FunctionCallExpr) ordered.getQueryRelation().getOutputExpression().get(0);
+        aggregate.setChild(1, new IntLiteral(1));
+        assertNested(aggregate);
+    }
+
+    private static List<ParseNode> detachedExpressions(TableRelation table, Expr expr) {
+        table.setQueryPeriod(new QueryPeriod(QueryPeriod.PeriodType.VERSION, expr));
+        return List.of(table, new Parameter(0, expr), new NamedArgument("arg", expr),
+                new IntervalLiteral(expr, new UnitIdentifier("DAY")),
+                new TableFunctionRelation(new FunctionCallExpr("generate_series", List.of(new IntLiteral(1), expr))));
+    }
+
+    private static void assertNested(ParseNode definition) {
+        SemanticException error = assertThrows(SemanticException.class, () -> SavedSqlGeoValidator.validate(definition),
+                () -> AstToSQLBuilder.toSQL(definition));
+        assertTrue(error.getMessage().contains(ERROR), error::getMessage);
+    }
+
+    private static void roundTrip(String statement) throws Exception {
+        roundTrip(analyze(statement));
+    }
+
+    private static void roundTrip(StatementBase definition) {
+        SavedSqlGeoValidator.validate(definition);
+        String serialized = AstToSQLBuilder.toSQL(definition);
+        assertDoesNotThrow(() -> analyze(serialized), () -> "Could not reanalyze: " + serialized);
+    }
+
+    private static StatementBase analyze(String statement) throws Exception {
+        return UtFrameUtils.parseStmtWithNewParser(statement, context);
     }
 
     private static void reject(String statement) {
