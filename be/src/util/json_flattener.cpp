@@ -874,9 +874,24 @@ void dfs_downgrade_uint(JsonFlatPath* node) {
     }
 }
 
+static void dfs_mark_remain(JsonFlatPath* node) {
+    node->remain = true;
+    for (auto& [_, child] : node->children) {
+        dfs_mark_remain(child.get());
+    }
+}
+
 // why dfs? because need compute parent isn't extract base on bottom-up, stack is not suitable
 uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& absolute_path,
                                         std::vector<std::pair<JsonFlatPath*, std::string>>* hit_leaf) {
+    // A key repeated within one row has more than one value there, and a sub-column holds one value per row, so
+    // neither the key nor anything below it can be flattened: keep the subtree in the remain, which stores the
+    // document as it is. The leaf check below has always refused such a key; an object was still flattened, and
+    // the copies of a repeated object then shared one set of sub-columns.
+    if (!absolute_path.empty() && node->multi_times > 0) {
+        dfs_mark_remain(node);
+        return 0;
+    }
     // Type conflict: node has both object and primitive values, flatten as TYPE_JSON
     if (!absolute_path.empty() && !node->children.empty()) {
         if (node->base_type_count > 0) {
@@ -1102,6 +1117,12 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
                 continue;
             }
         }
+        // A key may repeat in stored JSON. Flattening it twice would add two values to one row of a column.
+        if (UNLIKELY(child->second->last_row == _row_stamp)) {
+            _duplicate = true;
+            return false;
+        }
+        child->second->last_row = _row_stamp;
 
         if (child->second->children.empty()) {
             // leaf node
@@ -1119,6 +1140,9 @@ bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath*
             if constexpr (REMAIN) {
                 builder->addUnchecked(k.data(), k.size(), vpack::Value(vpack::ValueType::Object));
                 _flatten_json<REMAIN>(v, child->second.get(), builder, hit_count);
+                if (_duplicate) {
+                    return false;
+                }
                 builder->close();
             } else {
                 if (!_flatten_json<REMAIN>(v, child->second.get(), builder, hit_count)) {
@@ -1167,17 +1191,34 @@ void JsonFlattener::_flatten(const Column* json_column, const JsonColumn* json_d
         }
         // to count how many columns hit in json, for append default value
         uint32_t hit_count = 0;
+        _row_stamp++;
+        _duplicate = false;
         if constexpr (HAS_REMAIN) {
             vpack::Builder builder;
             builder.add(vpack::Value(vpack::ValueType::Object));
             _flatten_json<HAS_REMAIN>(vslice, _dst_root.get(), &builder, &hit_count);
-            builder.close();
-            _remain->append(JsonValue(builder.slice()));
+            if (LIKELY(!_duplicate)) {
+                builder.close();
+                _remain->append(JsonValue(builder.slice()));
+            }
         } else {
             _flatten_json<HAS_REMAIN>(vslice, _dst_root.get(), nullptr, &hit_count);
         }
 
-        if (UNLIKELY(hit_count < _dst_paths.size())) {
+        if (UNLIKELY(_duplicate)) {
+            // Drop what the row added so far and fill it again by looking each path up the way a read of the
+            // whole JSON does. The remain keeps the whole row, so rebuilding the JSON gives back every key, except
+            // that a copy of a repeated object lacking a key the looked-up copy has gains that key's value.
+            for (size_t k = 0; k < _dst_paths.size(); k++) {
+                if (_flat_columns[k]->size() > row) {
+                    _flat_columns[k]->resize(row);
+                }
+            }
+            _flatten_duplicate_row(vslice, _dst_root.get());
+            if constexpr (HAS_REMAIN) {
+                _remain->append(obj);
+            }
+        } else if (UNLIKELY(hit_count < _dst_paths.size())) {
             for (auto& col : _flat_columns) {
                 if (col->size() != row + 1) {
                     DCHECK_EQ(col->size(), row);
@@ -1195,6 +1236,22 @@ void JsonFlattener::_flatten(const Column* json_column, const JsonColumn* json_d
     }
 }
 
+void JsonFlattener::_flatten_duplicate_row(const vpack::Slice& value, const JsonFlatPath* root) {
+    for (auto& [name, child] : root->children) {
+        auto v = value.isObject() ? value.get(vpack::StringRef(name.data(), name.size())) : vpack::Slice::noneSlice();
+        if (child->children.empty()) {
+            auto* c = down_cast<NullableColumn*>(_flat_columns[child->index].get());
+            if (v.isNone()) {
+                c->append_nulls(1);
+            } else {
+                flat_json::JSON_EXTRACT_FUNC.at(child->type)(&v, c);
+            }
+        } else {
+            _flatten_duplicate_row(v, child.get());
+        }
+    }
+}
+
 MutableColumns JsonFlattener::mutable_result() {
     MutableColumns res;
     for (size_t i = 0; i < _flat_columns.size(); i++) {
@@ -1207,6 +1264,33 @@ MutableColumns JsonFlattener::mutable_result() {
     }
     return res;
 }
+
+namespace {
+// The keys that occur more than once in the object `obj`; stored JSON keeps repeated keys. Most objects have none,
+// and a sorted object keeps its index in key order, where a repeated key is adjacent: that case costs one pass over
+// the index and allocates nothing.
+phmap::flat_hash_set<std::string_view> repeated_keys(const vpack::Slice& obj) {
+    phmap::flat_hash_set<std::string_view> repeated;
+    if (obj.isSorted()) {
+        const vpack::ValueLength n = obj.length();
+        for (vpack::ValueLength i = 1; i < n; i++) {
+            auto key = obj.keyAt(i).stringView();
+            if (key == obj.keyAt(i - 1).stringView()) {
+                repeated.insert(key);
+            }
+        }
+        return repeated;
+    }
+    phmap::flat_hash_set<std::string_view> seen;
+    for (vpack::ObjectIterator it(obj, true); it.valid(); it.next()) {
+        auto key = it.key().stringView();
+        if (!seen.insert(key).second) {
+            repeated.insert(key);
+        }
+    }
+    return repeated;
+}
+} // namespace
 
 JsonMerger::JsonMerger(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain)
         : _src_paths(std::move(paths)), _has_remain(has_remain) {
@@ -1224,6 +1308,15 @@ void JsonMerger::set_exclude_paths(const std::vector<std::string>& exclude_paths
     for (auto& path : _exclude_paths) {
         auto* leaf = JsonFlatPath::normalize_from_path(path, _src_root.get());
         leaf->op = JsonFlatPath::OP_EXCLUDE;
+        const JsonFlatPath* node = _src_root.get();
+        for (std::string_view rest = path; !rest.empty();) {
+            auto [key, next] = JsonFlatPath::split_path(rest);
+            node = node->children.at(key).get();
+            if (!next.empty()) {
+                _above_excluded.insert(node);
+            }
+            rest = next;
+        }
     }
 }
 
@@ -1352,7 +1445,15 @@ void JsonMerger::_merge_impl(size_t rows, JsonColumn& json_result, NullColumn& n
 
 template <bool IN_TREE>
 void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::Slice* remain, vpack::Builder* builder,
-                                         size_t index) {
+                                         size_t index, bool keep_excluded) {
+    // The keys this object repeats, collected once, on its first key at or above an excluded path.
+    std::optional<phmap::flat_hash_set<std::string_view>> repeated;
+    auto is_repeated = [&](std::string_view key) {
+        if (!repeated.has_value()) {
+            repeated = repeated_keys(*remain);
+        }
+        return repeated->contains(key);
+    };
     vpack::ObjectIterator it(*remain, true);
     for (; it.valid(); it.next()) {
         auto k = it.key().stringView();
@@ -1368,13 +1469,21 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
         }
         auto* child = iter->second.get();
         if (child->op == JsonFlatPath::OP_EXCLUDE) {
+            // An excluded path moves to a sub-column, which holds a single value (JsonFlattener takes the one a
+            // read of the whole JSON finds). Keep every copy of a repeated key here instead, and the path in every
+            // copy of a repeated object above it, so rebuilding the JSON, which prefers the remain, still gives
+            // back each of them.
+            if (keep_excluded || is_repeated(k)) {
+                builder->addUnchecked(k.data(), k.size(), v);
+            }
             continue;
         }
         if (v.isObject()) {
+            const bool keep = keep_excluded || (_above_excluded.contains(child) && is_repeated(k));
             if (child->op == JsonFlatPath::OP_IGNORE) {
-                _merge_json_with_remain<false>(child, &v, builder, index);
+                _merge_json_with_remain<false>(child, &v, builder, index, keep);
             } else if (child->op == JsonFlatPath::OP_ROOT) {
-                _merge_json_with_remain<true>(child, &v, builder, index);
+                _merge_json_with_remain<true>(child, &v, builder, index, keep);
             } else {
                 DCHECK(child->op == JsonFlatPath::OP_INCLUDE || child->op == JsonFlatPath::OP_NEW_LEVEL);
                 bool has_value = false;
@@ -1390,9 +1499,9 @@ void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::
                 // Use IN_TREE=false for empty remain to build from flat columns only,
                 // IN_TREE=true otherwise to merge remain and flat columns
                 if (v.isEmptyObject()) {
-                    _merge_json_with_remain<false>(child, &v, &temp_builder, index);
+                    _merge_json_with_remain<false>(child, &v, &temp_builder, index, keep);
                 } else {
-                    _merge_json_with_remain<true>(child, &v, &temp_builder, index);
+                    _merge_json_with_remain<true>(child, &v, &temp_builder, index, keep);
                 }
                 temp_builder.close();
                 auto temp_slice = temp_builder.slice();
