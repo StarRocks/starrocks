@@ -66,6 +66,7 @@ import org.mockito.Mockito;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -90,6 +91,8 @@ public class TabletStatMgrTest {
     private static final AtomicInteger STUBBED_NODE_COUNT = new AtomicInteger();
     // The bound the scan handed to the drain on the last runScan.
     private static int capturedBound;
+    // The merge signal the scan handed to the drain on the last runScan.
+    private static long capturedMinAdjacentTabletPairSize;
 
     private static final AtomicInteger NODE_COUNT_RESOLUTIONS = new AtomicInteger();
 
@@ -731,6 +734,7 @@ public class TabletStatMgrTest {
     private long runScan(boolean leader, int stubbedNodeCount, long... tabletSizes) {
         long[] captured = {-1L};
         capturedBound = -1;
+        capturedMinAdjacentTabletPairSize = -1L;
         STUBBED_NODE_COUNT.set(stubbedNodeCount);
         NODE_COUNT_RESOLUTIONS.set(0);
 
@@ -755,6 +759,7 @@ public class TabletStatMgrTest {
                     long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize, int adaptiveBound) {
                 captured[0] = maxAdaptiveSplitTabletSize;
                 capturedBound = adaptiveBound;
+                capturedMinAdjacentTabletPairSize = minAdjacentTabletPairSize;
             }
         };
 
@@ -840,12 +845,20 @@ public class TabletStatMgrTest {
      * to 1 GiB, and the same tablet splits.
      */
     private long runScanAgainstPinnedTargets() {
+        return runScanWithMinimum(2L << 30, 4, 3L << 30);
+    }
+
+    /**
+     * Runs one scan with the cluster target pinned at 10 GiB and tablet_reshard_min_split_size at the given
+     * value, so the fill floor these cases reason about does not drift with the configuration defaults.
+     */
+    private long runScanWithMinimum(long minSplitSize, int stubbedNodeCount, long... tabletSizes) {
         long savedTargetSize = Config.tablet_reshard_target_size;
         long savedMinSplitSize = Config.tablet_reshard_min_split_size;
         Config.tablet_reshard_target_size = 10L << 30;
-        Config.tablet_reshard_min_split_size = 2L << 30;
+        Config.tablet_reshard_min_split_size = minSplitSize;
         try {
-            return runScan(true, 4, 3L << 30);
+            return runScan(true, stubbedNodeCount, tabletSizes);
         } finally {
             Config.tablet_reshard_target_size = savedTargetSize;
             Config.tablet_reshard_min_split_size = savedMinSplitSize;
@@ -863,6 +876,46 @@ public class TabletStatMgrTest {
         scanTableTargetSize = 1L << 30;
         assertEquals(3L << 30, runScanAgainstPinnedTargets(),
                 "a range table's own target must be the steady target the adaptive target narrows");
+    }
+
+    @Test
+    public void aStalledIndexEmitsTheEarlySignal() {
+        // Two 4 GiB tablets on three nodes: neither is worth two of the 8/3 GiB adaptive target, but the
+        // planner now fills the third slot with a split down to the 2 GiB floor. Without this signal only the
+        // 15 GiB size rule would ever reach that planner.
+        assertEquals(4L << 30, runScanWithMinimum(2L << 30, 3, 4L << 30, 4L << 30));
+    }
+
+    @Test
+    public void tenNodesStalledAtEightTabletsEmitTheEarlySignal() {
+        long[] sizes = new long[8];
+        Arrays.fill(sizes, 4L << 30);
+        assertEquals(4L << 30, runScanWithMinimum(2L << 30, 10, sizes));
+    }
+
+    @Test
+    public void noEarlySignalForTabletsUnderTwoFloors() {
+        // A third child of either 3 GiB tablet would be 1.5 GiB, under the floor: the planner has nothing to do.
+        assertEquals(0L, runScanWithMinimum(2L << 30, 3, 3L << 30, 3L << 30));
+    }
+
+    @Test
+    public void aMinimumAtTheTargetSilencesTheFillSignal() {
+        assertEquals(0L, runScanWithMinimum(10L << 30, 3, 4L << 30, 4L << 30));
+    }
+
+    @Test
+    public void aFilledIndexEmitsNeitherSignal() {
+        // What the fill leaves on three nodes: three tablets, whose adjacent pairs are all far under the merge
+        // threshold. The index is at its bound, so no early signal, and at the merge floor, so no merge signal
+        // either -- the fill never hands auto-merge an index to narrow again.
+        assertEquals(0L, runScanWithMinimum(2L << 30, 3, 2L << 30, 2L << 30, 4L << 30));
+        assertEquals(Long.MAX_VALUE, capturedMinAdjacentTabletPairSize, "a filled index must not signal a merge");
+
+        // Control: one tablet more puts the index above the floor, and the same scan does signal the merge,
+        // so the assertion above is about the width and not about a capture that never fires.
+        runScanWithMinimum(2L << 30, 3, 2L << 30, 2L << 30, 2L << 30, 2L << 30);
+        assertEquals(4L << 30, capturedMinAdjacentTabletPairSize);
     }
 
     @Test
