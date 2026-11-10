@@ -19,8 +19,8 @@
 #include "runtime/exec_env.h"
 
 #ifdef WITH_STARCACHE
-#include "cache/block_cache/starcache_wrapper.h"
 #include "cache/block_cache/peer_cache_wrapper.h"
+#include "cache/block_cache/starcache_wrapper.h"
 #endif
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
