@@ -113,7 +113,7 @@ TEST_F(AdaptiveSliceHashSetTest, SerializeRoundTripsAfterTheSwitch) {
     MemPool pool;
     ASSERT_NO_FATAL_FAILURE(reserve_past_the_threshold(&pool));
 
-    DistinctAggregateStateV2<TYPE_VARCHAR, TYPE_BIGINT> src;
+    DistinctAggregateState<TYPE_VARCHAR, TYPE_BIGINT> src;
     auto keys = make_keys();
     for (const auto& key : keys) {
         src.update(&pool, Slice(key));
@@ -125,7 +125,7 @@ TEST_F(AdaptiveSliceHashSetTest, SerializeRoundTripsAfterTheSwitch) {
     src.serialize(buffer.data());
 
     MemPool merged_pool;
-    DistinctAggregateStateV2<TYPE_VARCHAR, TYPE_BIGINT> merged;
+    DistinctAggregateState<TYPE_VARCHAR, TYPE_BIGINT> merged;
     merged.deserialize_and_merge(&merged_pool, buffer.data(), buffer.size());
     EXPECT_EQ(kNumKeys, merged.distinct_count());
 
