@@ -4441,6 +4441,8 @@ void TabletUpdatesTest::test_skip_apply(bool enable_persistent_index) {
     ASSERT_OK(execute_script(fmt::format("System.print(StorageEngine.skip_apply({}))", _tablet->tablet_id()), output));
     ASSERT_NE(std::string::npos, output.find(fmt::format("txn:{} version:3 status:OK", rs3->txn_id()))) << output;
     ASSERT_FALSE(updates->is_error());
+    // A repeated request must not skip the next version, which never failed.
+    ASSERT_TRUE(updates->skip_apply(&skipped_txn_id, &skipped_version).is_not_supported());
     // Version 3 applies as an empty load: neither its upserts nor its deletes are visible.
     ASSERT_EQ(N, read_tablet_and_compare(_tablet, 3, keys));
     EditVersion applied_version;

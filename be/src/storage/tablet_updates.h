@@ -569,6 +569,9 @@ private:
     mutable std::mutex _apply_running_lock;
     // make sure at most 1 thread is read or write primary index
     mutable std::shared_timed_mutex _index_lock;
+    // Serializes the manual repairs recover() and skip_apply(), so a repeated request checks the
+    // error state only after the previous repair has finished and resumed apply.
+    std::mutex _repair_lock;
     // apply process is running currently
     bool _apply_running = false;
 

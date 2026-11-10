@@ -5823,6 +5823,7 @@ int64_t TabletUpdates::max_rowset_creation_time() {
 }
 
 Status TabletUpdates::recover() {
+    std::lock_guard repair_lock(_repair_lock);
     if (!_error) {
         // no need to recover
         return Status::OK();
@@ -5878,6 +5879,9 @@ Status TabletUpdates::recover() {
 
 Status TabletUpdates::skip_apply(int64_t* txn_id, EditVersion* version) {
     const auto tablet_id = _tablet.tablet_id();
+    // Held until apply has resumed, so an overlapping request sees the cleared error state instead of
+    // skipping the next transaction, which never failed.
+    std::lock_guard repair_lock(_repair_lock);
     if (!_error) {
         return Status::NotSupported(
                 strings::Substitute("tablet $0 is not in error state, only a failed apply can be skipped", tablet_id));
