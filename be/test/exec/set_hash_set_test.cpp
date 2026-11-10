@@ -388,4 +388,26 @@ TEST_F(SetHashSetTest, intersect_failpoint_by_rows_full_chunk) {
     ASSERT_EQ(kChunkSize, hit);
 }
 
+TEST_F(SetHashSetTest, except_buffer_state_init_reserves_overflow_padding) {
+    ExceptBufferState buffer_state;
+    ASSERT_OK(buffer_state.init(_runtime_state.get()));
+    ASSERT_NE(nullptr, buffer_state.buffer);
+
+    const size_t expected_payload_bytes = buffer_state.max_one_row_size * _runtime_state->chunk_size();
+    EXPECT_EQ(expected_payload_bytes + SLICE_MEMEQUAL_OVERFLOW_PADDING, buffer_state.mem_pool.total_allocated_bytes());
+
+    // Place a key in the last row slot of the initial buffer with non-matching bytes in the 15-byte
+    // overflow padding tail and verify ExceptSliceFlagEqual ignores the tail mismatch.
+    uint8_t* tail_slot = buffer_state.buffer + (_runtime_state->chunk_size() - 1) * buffer_state.max_one_row_size;
+    std::memset(tail_slot, 'k', buffer_state.max_one_row_size);
+    std::memset(tail_slot + buffer_state.max_one_row_size, 0x11, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+
+    std::vector<uint8_t> probe_buf(buffer_state.max_one_row_size + SLICE_MEMEQUAL_OVERFLOW_PADDING, 0xEE);
+    std::memset(probe_buf.data(), 'k', buffer_state.max_one_row_size);
+
+    ExceptSliceFlag lhs(tail_slot, buffer_state.max_one_row_size);
+    ExceptSliceFlag rhs(probe_buf.data(), buffer_state.max_one_row_size);
+    EXPECT_TRUE(ExceptSliceFlagEqual()(lhs, rhs));
+}
+
 } // namespace starrocks
