@@ -24,6 +24,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.scheduler.history.TaskRunHistoryTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SystemVariable;
@@ -45,6 +46,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -57,6 +59,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 public class SimpleExecutorTest {
 
@@ -260,6 +263,34 @@ public class SimpleExecutorTest {
             executor.executeDQL("select 1", 30);
         } finally {
             defaults.setSqlSelectLimit(originalLimit);
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testCallerBoundQueryDisablesShortCircuit() {
+        assumeFalse(RunMode.isSharedDataMode());
+        SessionVariable defaults = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable();
+        boolean originalShortCircuit = defaults.isEnableShortCircuit();
+        defaults.setEnableShortCircuit(true);
+        try {
+            ConnectContext caller = UtFrameUtils.createDefaultCtx();
+            List<Boolean> shortCircuitSettings = new ArrayList<>();
+            SimpleExecutor executor = new SimpleExecutor("testExecutor", TResultSinkType.HTTP_PROTOCAL) {
+                @Override
+                public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                    shortCircuitSettings.add(context.getSessionVariable().isEnableShortCircuit());
+                    return List.of();
+                }
+            };
+
+            executor.executeDQLAsCaller("select 1", 30, caller);
+            executor.executeDQL("select 1", 30);
+
+            assertEquals(List.of(false, true), shortCircuitSettings);
+            assertTrue(caller.getSessionVariable().isEnableShortCircuit());
+        } finally {
+            defaults.setEnableShortCircuit(originalShortCircuit);
             ConnectContext.remove();
         }
     }

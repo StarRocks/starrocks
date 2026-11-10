@@ -213,6 +213,8 @@ public class SimpleExecutor {
         variables.setQueryTimeoutS(timeout);
         variables.setInsertTimeoutS(timeout);
 
+        // Short-circuit RPCs bypass the coordinator's fragment cancellation path.
+        variables.setEnableShortCircuit(false);
         variables.setEnableMaterializedViewRewrite(false);
         variables.setEnableSPMRewrite(false);
         variables.setEnableProfile(false);
