@@ -451,6 +451,10 @@ public:
 
     // Flat JSON compactions written as their chunks arrive instead of buffering the whole output segment.
     METRIC_DEFINE_INT_COUNTER(flat_json_compaction_streaming_total, MetricUnit::OPERATIONS);
+    // Compaction reads of a JSON column whose whole-JSON inputs are read into the flat inputs' layout.
+    METRIC_DEFINE_INT_COUNTER(flat_json_compaction_mixed_inputs_total, MetricUnit::OPERATIONS);
+    // Flat JSON compactions that outgrew their buffer without a flat layout and wrote the segment as whole JSON.
+    METRIC_DEFINE_INT_COUNTER(flat_json_compaction_plain_fallback_total, MetricUnit::OPERATIONS);
 
     // data cache metrics
     METRIC_DEFINE_INT_GAUGE(datacache_mem_quota_bytes, MetricUnit::BYTES);

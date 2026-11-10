@@ -22,13 +22,7 @@
 #include <vector>
 
 #include "column/column.h"
-<<<<<<< HEAD
-=======
 #include "column/column_helper.h"
-#include "column/flat_json/json_flat_path.h"
-#include "column/flat_json/json_flattener.h"
-#include "column/flat_json/json_merger.h"
->>>>>>> cf33ef6 ([Enhancement] Stream flat JSON compaction of mixed flat and whole-JSON inputs (#81425))
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -39,12 +33,8 @@
 #include "gutil/casts.h"
 #include "storage/rowset/column_writer.h"
 #include "types/constexpr.h"
-<<<<<<< HEAD
 #include "util/json_flattener.h"
 #include "util/starrocks_metrics.h"
-=======
-#include "types/type_descriptor.h"
->>>>>>> cf33ef6 ([Enhancement] Stream flat JSON compaction of mixed flat and whole-JSON inputs (#81425))
 
 namespace starrocks {
 
@@ -104,11 +94,11 @@ Status FlatJsonColumnCompactor::append(const Column& column) {
 }
 
 Status FlatJsonColumnCompactor::_start_plain_streaming() {
-    FlatJsonMetrics::instance()->flat_json_compaction_plain_fallback_total.increment(1);
+    StarRocksMetrics::instance()->flat_json_compaction_plain_fallback_total.increment(1);
     VLOG(2) << "FlatJsonColumnCompactor writes whole json after " << _json_datas.size() << " chunks, "
             << _buffered_memory << " bytes without one flat layout";
     _plain_streaming = true;
-    MutableColumns buffered = std::move(_json_datas);
+    Columns buffered = std::move(_json_datas);
     _json_datas.clear();
     _estimate_size = 0;
     _buffered_memory = 0;
@@ -133,7 +123,7 @@ Status FlatJsonColumnCompactor::_write_plain(const Column& column) {
     auto merged = merger.merge(json_col->get_flat_fields());
     if (column.is_nullable()) {
         ColumnPtr nullable = NullableColumn::create(merged, down_cast<const NullableColumn&>(column).null_column());
-        down_cast<NullableColumn*>(nullable->as_mutable_raw_ptr())->set_has_null(column.has_null());
+        down_cast<NullableColumn*>(nullable.get())->set_has_null(column.has_null());
         return _json_writer->append(*nullable);
     }
     return _json_writer->append(*merged);

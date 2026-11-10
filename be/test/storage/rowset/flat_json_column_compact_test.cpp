@@ -279,14 +279,8 @@ protected:
     };
 
     // Write one JSON segment from `jsons`; segment nullability follows jsons[0]->is_nullable().
-<<<<<<< HEAD
     SegmentHandle write_segment(Columns& jsons, bool need_flat, const std::string& fname, bool is_compaction = true,
-                                bool simulate_legacy_root_footprint = false) {
-=======
-    SegmentHandle write_segment(MutableColumns& jsons, bool need_flat, const std::string& fname,
-                                bool is_compaction = true, bool simulate_legacy_root_footprint = false,
-                                size_t json_columns_in_segment = 1) {
->>>>>>> cf33ef6 ([Enhancement] Stream flat JSON compaction of mixed flat and whole-JSON inputs (#81425))
+                                bool simulate_legacy_root_footprint = false, size_t json_columns_in_segment = 1) {
         SegmentHandle handle;
         handle.fs = std::make_shared<MemoryFileSystem>();
         EXPECT_TRUE(handle.fs->create_dir(TEST_DIR).ok());
@@ -2356,203 +2350,6 @@ TEST_F(FlatJsonColumnCompactTest, CompactJsonNullableToNonNullableOutputErrorWit
         EXPECT_TRUE(st.is_internal_error()) << "mode=" << static_cast<int>(mode) << " " << st.to_string();
     }
 }
-<<<<<<< HEAD
-=======
-// Compaction reads flat inputs through a layout derived from their sub-columns' metadata, casting each source
-// sub-column to the derived type. Segments that flattened the same path to different types must still come out
-// of compaction with every value unchanged: past INT64_MAX, negative next to unsigned, past 2^53 next to doubles,
-// and strings that look like JSON text next to numbers. A numeric mix that a numeric type holds exactly keeps
-// that type, so the path stays flattened.
-// Without a zone map (json_flat_create_zonemap=false, or segments written before it) a BIGINT sub-column's range is
-// unknown, so it is taken as the whole BIGINT range: met with DOUBLE it no longer fits exactly and the path is read as
-// JSON, where the same data with a zone map stays DOUBLE. Values are kept either way.
-TEST_F(FlatJsonColumnCompactTest, testCompactionReadLayoutWithoutZoneMap) {
-    config::enable_json_flat_complex_type = false;
-    config::json_flat_sparsity_factor = 0.3;
-    const bool saved_zonemap = config::json_flat_create_zonemap;
-    DeferOp restore([&]() { config::json_flat_create_zonemap = saved_zonemap; });
-    const std::vector<std::vector<std::string>> segments = {{R"({"a": 5, "k": 1})", R"({"a": -3, "k": 2})"},
-                                                            {R"({"a": 1.5, "k": 3})"}};
-    for (bool zonemap : {true, false}) {
-        SCOPED_TRACE(zonemap ? "zone map" : "no zone map");
-        config::json_flat_create_zonemap = zonemap;
-        std::vector<std::string> expected;
-        std::vector<SegmentHandle> handles;
-        for (size_t k = 0; k < segments.size(); k++) {
-            MutableColumns cols;
-            for (const auto& json : segments[k]) {
-                cols.emplace_back(normal_json(json, false));
-                expected.emplace_back(json);
-            }
-            handles.emplace_back(write_segment(cols, true, fmt::format("/zonemap_{}_{}.data", zonemap, k), false));
-        }
-        std::vector<const ColumnReader*> readers;
-        for (auto& h : handles) {
-            readers.emplace_back(h.reader.get());
-        }
-        JsonPathDeriver deriver;
-        deriver.derived(readers);
-        const auto& paths = deriver.flat_paths();
-        auto it = std::find(paths.begin(), paths.end(), "a");
-        ASSERT_NE(paths.end(), it) << JsonFlatPath::debug_flat_json(paths, deriver.flat_types(), true);
-        EXPECT_EQ(zonemap ? TYPE_DOUBLE : TYPE_JSON, deriver.flat_types()[it - paths.begin()]);
-
-        ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::ROOT, "root", 0));
-        for (size_t j = 0; j < paths.size(); j++) {
-            ColumnAccessPath::insert_json_path(root.get(), deriver.flat_types()[j], paths[j]);
-        }
-        root->set_from_compaction(true);
-        MutableColumns chunks;
-        for (auto& h : handles) {
-            MutableColumnPtr col = JsonColumn::create();
-            ASSERT_OK(read_segment(h, ReadMode::kBatch, col.get(), root.get()));
-            chunks.emplace_back(std::move(col));
-        }
-        auto out = write_segment(chunks, true, fmt::format("/zonemap_{}_out.data", zonemap));
-        MutableColumnPtr col = JsonColumn::create();
-        ASSERT_OK(read_segment(out, ReadMode::kBatch, col.get()));
-        ASSERT_EQ(expected.size(), col->size());
-        auto* json_col = get_json_column(col);
-        for (size_t row = 0; row < expected.size(); row++) {
-            ASSIGN_OR_ABORT(auto want, JsonValue::parse(expected[row]));
-            EXPECT_EQ(0, want.compare(*json_col->get_object(row)))
-                    << "row " << row << ": want " << expected[row] << ", got " << col->debug_item(row);
-        }
-    }
-}
-
-TEST_F(FlatJsonColumnCompactTest, testCompactionReadLayoutKeepsValuesAcrossSegmentTypes) {
-    config::enable_json_flat_complex_type = false;
-    config::json_flat_sparsity_factor = 0.3;
-
-    struct Case {
-        std::string name;
-        std::vector<std::vector<std::string>> segments;
-        LogicalType expected_type; // derived type of "a"; TYPE_UNKNOWN: not checked
-    };
-    // clang-format off
-    std::vector<Case> cases = {
-        {"largeint", {{R"({"a": 18446744073709551615, "k": 1})", R"({"a": 18446744073709551614, "k": 2})"},
-                      {R"({"a": 18446744073709551613, "k": 3})"}}, TYPE_LARGEINT},
-        {"varchar_vs_bigint", {{R"({"a": "[oops", "k": 1})", R"({"a": "[1, 2]", "k": 2})",
-                                R"({"a": "{\"x\": 1}", "k": 3})", R"({"a": "\"q\"", "k": 4})"},
-                               {R"({"a": 5, "k": 5})"}}, TYPE_JSON},
-        {"bigint_vs_largeint", {{R"({"a": -3, "k": 1})"}, {R"({"a": 18446744073709551615, "k": 2})"}}, TYPE_JSON},
-        {"bigint_vs_double", {{R"({"a": 9007199254740993, "k": 1})"}, {R"({"a": 1.5, "k": 2})"}}, TYPE_JSON},
-        {"null_vs_bigint", {{R"({"a": null, "k": 1})"}, {R"({"a": 7, "k": 2})"}}, TYPE_UNKNOWN},
-        // Exact in DOUBLE: stays a DOUBLE sub-column through the compaction.
-        {"small_bigint_vs_double", {{R"({"a": 5, "k": 1})", R"({"a": -9007199254740992, "k": 2})"},
-                                    {R"({"a": 1.5, "k": 3})"}}, TYPE_DOUBLE},
-    };
-    // clang-format on
-
-    for (const auto& c : cases) {
-        SCOPED_TRACE(c.name);
-        std::vector<std::string> expected;
-        std::vector<SegmentHandle> handles;
-        for (size_t k = 0; k < c.segments.size(); k++) {
-            MutableColumns cols;
-            for (const auto& json : c.segments[k]) {
-                cols.emplace_back(normal_json(json, false));
-                expected.emplace_back(json);
-            }
-            handles.emplace_back(write_segment(cols, /*need_flat=*/true, fmt::format("/{}_{}.data", c.name, k),
-                                               /*is_compaction=*/false));
-            ASSERT_TRUE(handles.back().meta->json_meta().is_flat());
-        }
-
-        // Derive the read layout the way TabletReader does for a compaction of flat inputs.
-        std::vector<const ColumnReader*> readers;
-        for (auto& h : handles) {
-            readers.emplace_back(h.reader.get());
-        }
-        JsonPathDeriver deriver;
-        deriver.derived(readers);
-        const auto& paths = deriver.flat_paths();
-        if (c.expected_type != TYPE_UNKNOWN) {
-            auto it = std::find(paths.begin(), paths.end(), "a");
-            ASSERT_NE(paths.end(), it) << JsonFlatPath::debug_flat_json(paths, deriver.flat_types(), true);
-            EXPECT_EQ(c.expected_type, deriver.flat_types()[it - paths.begin()]);
-        }
-
-        ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::ROOT, "root", 0));
-        for (size_t j = 0; j < paths.size(); j++) {
-            ColumnAccessPath::insert_json_path(root.get(), deriver.flat_types()[j], paths[j]);
-        }
-        root->set_from_compaction(true);
-
-        MutableColumns flat_chunks;
-        for (auto& h : handles) {
-            MutableColumnPtr col = JsonColumn::create();
-            ASSERT_OK(read_segment(h, ReadMode::kBatch, col.get(), root.get()));
-            flat_chunks.emplace_back(std::move(col));
-        }
-
-        // Write the compaction output, then read it back as whole JSON.
-        _meta.reset(new ColumnMetaPB());
-        MutableColumnPtr read_col = JsonColumn::create();
-        ColumnWriterOptions writer_opts;
-        writer_opts.need_flat = true;
-        test_json(writer_opts, flat_chunks, read_col);
-
-        if (c.expected_type == TYPE_DOUBLE) {
-            // The output segment keeps the path flattened rather than moving it to the remain column.
-            bool flattened = false;
-            for (const auto& child : _meta->children_columns()) {
-                flattened |= child.name() == "a" && child.type() == TYPE_DOUBLE;
-            }
-            EXPECT_TRUE(flattened) << _meta->ShortDebugString();
-        }
-
-        ASSERT_EQ(expected.size(), read_col->size());
-        auto* json_col = get_json_column(read_col);
-        for (size_t row = 0; row < expected.size(); row++) {
-            ASSIGN_OR_ABORT(auto want, JsonValue::parse(expected[row]));
-            EXPECT_EQ(0, want.compare(*json_col->get_object(row)))
-                    << "row " << row << ": want " << expected[row] << ", got " << read_col->debug_item(row);
-        }
-    }
-}
-// A query that extracts a path as JSON from a VARCHAR sub-column (json_length(j->'$.a'), j->'$.a[0]') must get
-// each string back as a JSON string, not parsed as JSON text.
-TEST_F(FlatJsonColumnCompactTest, testReadVarcharSubColumnAsJsonKeepsStrings) {
-    const bool saved_lazy = config::enable_lazy_dynamic_flat_json;
-    DeferOp restore([&]() { config::enable_lazy_dynamic_flat_json = saved_lazy; });
-    config::enable_lazy_dynamic_flat_json = false;
-
-    const std::vector<std::string> strings = {"[1, 2]", "[oops", R"({"x": 1})", R"("q")", "plain"};
-    MutableColumns cols;
-    for (const auto& str : strings) {
-        vpack::Builder builder;
-        builder.openObject();
-        builder.add("a", vpack::Value(str));
-        builder.add("k", vpack::Value(1));
-        builder.close();
-        cols.emplace_back(normal_json(JsonValue(builder.slice()).to_string_uncheck(), false));
-    }
-    auto handle = write_segment(cols, /*need_flat=*/true, "/read_varchar_as_json.data", /*is_compaction=*/false);
-    ASSERT_TRUE(handle.meta->json_meta().is_flat());
-
-    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::ROOT, "root", 0));
-    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "a");
-
-    for (auto mode : {ReadMode::kBatch, ReadMode::kRange, ReadMode::kByRowid}) {
-        MutableColumnPtr col = JsonColumn::create();
-        ASSERT_OK(read_segment(handle, mode, col.get(), root.get()));
-        auto* json_col = down_cast<JsonColumn*>(col.get());
-        ASSERT_TRUE(json_col->is_flat_json());
-        const auto& a = json_col->get_flat_field("a");
-        ASSERT_EQ(strings.size(), a->size());
-        const auto* a_json =
-                down_cast<const JsonColumn*>(down_cast<const NullableColumn*>(a.get())->data_column().get());
-        for (size_t row = 0; row < strings.size(); row++) {
-            ASSERT_FALSE(a->is_null(row)) << "mode=" << static_cast<int>(mode) << " row " << row;
-            EXPECT_EQ(0, JsonValue::from_string(strings[row]).compare(*a_json->get_object(row)))
-                    << "mode=" << static_cast<int>(mode) << " row " << row << ": "
-                    << a_json->get_object(row)->to_string_uncheck();
-        }
-    }
-}
 // A compaction of flat and whole-JSON inputs reads the whole-JSON ones into the flat inputs' layout typed JSON
 // (TabletReader::init_compaction_column_paths), so it streams; every value survives, and the value stats of the
 // JSON sub-columns let the next compaction type the paths by their values.
@@ -2577,7 +2374,7 @@ TEST_F(FlatJsonColumnCompactTest, testMixedInputsStreamExactValuesAndRefineNextC
     expected.insert(expected.end(), plain_rows.begin(), plain_rows.end());
 
     auto check = [&](const SegmentHandle& h) {
-        MutableColumnPtr col = JsonColumn::create();
+        ColumnPtr col = JsonColumn::create();
         ASSERT_OK(read_segment(h, ReadMode::kBatch, col.get()));
         ASSERT_EQ(expected.size(), col->size());
         auto* json_col = get_json_column(col);
@@ -2592,14 +2389,14 @@ TEST_F(FlatJsonColumnCompactTest, testMixedInputsStreamExactValuesAndRefineNextC
         }
     };
     auto read_with_layout = [&](std::vector<SegmentHandle*> inputs, const std::vector<std::string>& paths,
-                                const std::vector<LogicalType>& types, MutableColumns* chunks) {
+                                const std::vector<LogicalType>& types, Columns* chunks) {
         ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::ROOT, "root", 0));
         for (size_t j = 0; j < paths.size(); j++) {
             ColumnAccessPath::insert_json_path(root.get(), types[j], paths[j]);
         }
         root->set_from_compaction(true);
         for (auto* h : inputs) {
-            MutableColumnPtr col = JsonColumn::create();
+            ColumnPtr col = JsonColumn::create();
             ASSERT_OK(read_segment(*h, ReadMode::kBatch, col.get(), root.get()));
             auto* json_col = get_json_column(col);
             ASSERT_TRUE(json_col->is_flat_json());
@@ -2608,13 +2405,13 @@ TEST_F(FlatJsonColumnCompactTest, testMixedInputsStreamExactValuesAndRefineNextC
         }
     };
 
-    MutableColumns flat_cols;
+    Columns flat_cols;
     for (const auto& json : flat_rows) {
         flat_cols.emplace_back(normal_json(json, false));
     }
     auto flat = write_segment(flat_cols, /*need_flat=*/true, "/mixed_flat.data", /*is_compaction=*/false);
     ASSERT_TRUE(flat.meta->json_meta().is_flat());
-    MutableColumns plain_cols;
+    Columns plain_cols;
     for (const auto& json : plain_rows) {
         plain_cols.emplace_back(normal_json(json, false));
     }
@@ -2628,14 +2425,14 @@ TEST_F(FlatJsonColumnCompactTest, testMixedInputsStreamExactValuesAndRefineNextC
     ASSERT_EQ((std::vector<std::string>{"a", "k", "s"}), paths);
     std::vector<LogicalType> types(paths.size(), TYPE_JSON);
 
-    MutableColumns chunks;
+    Columns chunks;
     read_with_layout({&flat, &plain}, paths, types, &chunks);
 
     // Written as it arrives, not buffered.
     config::compaction_memory_limit_per_worker = 8;
-    const int64_t streamed_before = FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value();
+    const int64_t streamed_before = StarRocksMetrics::instance()->flat_json_compaction_streaming_total.value();
     auto out = write_segment(chunks, /*need_flat=*/true, "/mixed_out.data");
-    EXPECT_EQ(streamed_before + 1, FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value());
+    EXPECT_EQ(streamed_before + 1, StarRocksMetrics::instance()->flat_json_compaction_streaming_total.value());
     ASSERT_TRUE(out.meta->json_meta().is_flat());
     size_t with_stats = 0;
     for (const auto& child : out.meta->children_columns()) {
@@ -2658,7 +2455,7 @@ TEST_F(FlatJsonColumnCompactTest, testMixedInputsStreamExactValuesAndRefineNextC
         EXPECT_EQ(TYPE_JSON, next.flat_types()[a - next.flat_paths().begin()]);
     }
 
-    MutableColumns next_chunks;
+    Columns next_chunks;
     read_with_layout({&out}, next.flat_paths(), next.flat_types(), &next_chunks);
     config::compaction_memory_limit_per_worker = saved_mem_limit;
     auto refined = write_segment(next_chunks, /*need_flat=*/true, "/mixed_refined.data");
@@ -2687,7 +2484,7 @@ TEST_F(FlatJsonColumnCompactTest, testStreamingThresholdCountsJsonValueMemory) {
             nulls->append(0);
         }
         auto json = JsonColumn::create();
-        MutableColumns fields;
+        Columns fields;
         fields.emplace_back(NullableColumn::create(std::move(data), std::move(nulls)));
         json->set_flat_columns({"a"}, {TYPE_JSON}, std::move(fields));
         return json;
@@ -2699,15 +2496,15 @@ TEST_F(FlatJsonColumnCompactTest, testStreamingThresholdCountsJsonValueMemory) {
 
     // A threshold between the two: reached by the memory of two chunks, not by their bytes.
     config::compaction_memory_limit_per_worker = static_cast<int64_t>(memory * 3 / 2 * 8);
-    MutableColumns chunks;
+    Columns chunks;
     for (int i = 0; i < 3; i++) {
         chunks.emplace_back(make_chunk());
     }
-    const int64_t streamed_before = FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value();
+    const int64_t streamed_before = StarRocksMetrics::instance()->flat_json_compaction_streaming_total.value();
     auto out = write_segment(chunks, /*need_flat=*/true, "/threshold_out.data");
-    EXPECT_EQ(streamed_before + 1, FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value());
+    EXPECT_EQ(streamed_before + 1, StarRocksMetrics::instance()->flat_json_compaction_streaming_total.value());
     ASSERT_TRUE(out.meta->json_meta().is_flat());
-    MutableColumnPtr col = JsonColumn::create();
+    ColumnPtr col = JsonColumn::create();
     ASSERT_OK(read_segment(out, ReadMode::kBatch, col.get()));
     ASSERT_EQ(3 * kRows, col->size());
     EXPECT_EQ(R"({"a": 7})", col->debug_item(7));
@@ -2753,7 +2550,7 @@ TEST_F(FlatJsonColumnCompactTest, testCompactionKeepsPathOnlySomeInputsFlatten) 
         config::compaction_memory_limit_per_worker = saved_mem_limit;
         std::vector<std::string> expected;
         auto load = [&](const std::function<std::string(int64_t)>& doc, int64_t from, const std::string& fname) {
-            MutableColumns cols;
+            Columns cols;
             auto json = JsonColumn::create();
             for (int64_t g = from; g < from + kRows; g++) {
                 expected.emplace_back(doc(g));
@@ -2784,9 +2581,9 @@ TEST_F(FlatJsonColumnCompactTest, testCompactionKeepsPathOnlySomeInputsFlatten) 
             ColumnAccessPath::insert_json_path(root.get(), deriver.flat_types()[j], paths[j]);
         }
         root->set_from_compaction(true);
-        MutableColumns chunks;
+        Columns chunks;
         for (auto* h : {&first, &second}) {
-            MutableColumnPtr col = JsonColumn::create();
+            ColumnPtr col = JsonColumn::create();
             ASSERT_OK(read_segment(*h, ReadMode::kBatch, col.get(), root.get()));
             chunks.emplace_back(std::move(col));
         }
@@ -2798,7 +2595,7 @@ TEST_F(FlatJsonColumnCompactTest, testCompactionKeepsPathOnlySomeInputsFlatten) 
         }
         EXPECT_EQ(c.expected != TYPE_UNKNOWN, sub_column) << out.meta->ShortDebugString();
 
-        MutableColumnPtr col = JsonColumn::create();
+        ColumnPtr col = JsonColumn::create();
         ASSERT_OK(read_segment(out, ReadMode::kBatch, col.get()));
         ASSERT_EQ(expected.size(), col->size());
         auto* json_col = get_json_column(col);
@@ -2824,7 +2621,7 @@ TEST_F(FlatJsonColumnCompactTest, testStreamingThresholdIsSharedByTheJsonColumns
             nulls->append(0);
         }
         auto json = JsonColumn::create();
-        MutableColumns fields;
+        Columns fields;
         fields.emplace_back(NullableColumn::create(std::move(data), std::move(nulls)));
         json->set_flat_columns({"a"}, {TYPE_JSON}, std::move(fields));
         return json;
@@ -2833,17 +2630,17 @@ TEST_F(FlatJsonColumnCompactTest, testStreamingThresholdIsSharedByTheJsonColumns
     // Three chunks stay under the budget of one column and exceed half of it.
     config::compaction_memory_limit_per_worker = static_cast<int64_t>(memory * 7 / 2 * 8);
     for (size_t json_columns : {1, 2}) {
-        MutableColumns chunks;
+        Columns chunks;
         for (int i = 0; i < 3; i++) {
             chunks.emplace_back(make_chunk());
         }
-        const int64_t streamed_before = FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value();
+        const int64_t streamed_before = StarRocksMetrics::instance()->flat_json_compaction_streaming_total.value();
         auto out = write_segment(chunks, true, fmt::format("/shared_budget_{}.data", json_columns), true, false,
                                  json_columns);
         EXPECT_EQ(streamed_before + (json_columns == 2 ? 1 : 0),
-                  FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value())
+                  StarRocksMetrics::instance()->flat_json_compaction_streaming_total.value())
                 << json_columns << " JSON columns";
-        MutableColumnPtr col = JsonColumn::create();
+        ColumnPtr col = JsonColumn::create();
         ASSERT_OK(read_segment(out, ReadMode::kBatch, col.get()));
         ASSERT_EQ(3 * kRows, col->size());
         EXPECT_EQ(R"({"a": 7})", col->debug_item(7));
@@ -2861,7 +2658,7 @@ TEST_F(FlatJsonColumnCompactTest, testDataDerivedLayoutLeavesPrefixConflictToRem
         flat_docs.emplace_back(fmt::format(R"({{"a": {}, "k": {}}})", i, i));
     }
     expected.insert(expected.end(), flat_docs.begin(), flat_docs.end());
-    MutableColumns chunks;
+    Columns chunks;
     chunks.emplace_back(more_flat_json(flat_docs, false));
     ASSERT_EQ((std::vector<std::string>{"a", "k"}), get_json_column(chunks.back())->flat_column_paths());
     for (int i = 10; i < 40; i++) {
@@ -2873,7 +2670,7 @@ TEST_F(FlatJsonColumnCompactTest, testDataDerivedLayoutLeavesPrefixConflictToRem
         EXPECT_NE("a", child.name());
         EXPECT_NE("a.b", child.name());
     }
-    MutableColumnPtr col = JsonColumn::create();
+    ColumnPtr col = JsonColumn::create();
     ASSERT_OK(read_segment(out, ReadMode::kBatch, col.get()));
     ASSERT_EQ(expected.size(), col->size());
     auto* json_col = get_json_column(col);
@@ -2891,7 +2688,7 @@ TEST_F(FlatJsonColumnCompactTest, testValueStatsWithUnknownTypeBitsReadAsJson) {
     const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
     DeferOp restore([&]() { config::compaction_memory_limit_per_worker = saved_mem_limit; });
     config::compaction_memory_limit_per_worker = 8;
-    MutableColumns chunks;
+    Columns chunks;
     // A flat chunk whose "a" is JSON-typed, as a mixed compaction writes it.
     auto data = JsonColumn::create();
     auto nulls = NullColumn::create();
@@ -2901,7 +2698,7 @@ TEST_F(FlatJsonColumnCompactTest, testValueStatsWithUnknownTypeBitsReadAsJson) {
         nulls->append(0);
     }
     auto json = JsonColumn::create();
-    MutableColumns fields;
+    Columns fields;
     fields.emplace_back(NullableColumn::create(std::move(data), std::move(nulls)));
     json->set_flat_columns({"a"}, {TYPE_JSON}, std::move(fields));
     chunks.emplace_back(std::move(json));
@@ -2927,20 +2724,20 @@ TEST_F(FlatJsonColumnCompactTest, testCompactionWritesWholeJsonPastBufferWithout
 
     const std::vector<std::string> rows = {R"({"a": 1, "b": "x"})", R"({"a": 2, "a": 3})", R"({"c": [1]})",
                                            R"({"a": 4, "b": "y"})"};
-    MutableColumns chunks;
+    Columns chunks;
     chunks.emplace_back(normal_json(rows[0], true));
     chunks.emplace_back(normal_json(rows[1], true));
     chunks.emplace_back(normal_json("NULL", true));
     chunks.emplace_back(flat_json(rows[2], true));
     chunks.emplace_back(more_flat_json({rows[3]}, true));
 
-    const int64_t fallback_before = FlatJsonMetrics::instance()->flat_json_compaction_plain_fallback_total.value();
+    const int64_t fallback_before = StarRocksMetrics::instance()->flat_json_compaction_plain_fallback_total.value();
     auto out = write_segment(chunks, /*need_flat=*/true, "/plain_fallback_out.data");
-    EXPECT_EQ(fallback_before + 1, FlatJsonMetrics::instance()->flat_json_compaction_plain_fallback_total.value());
+    EXPECT_EQ(fallback_before + 1, StarRocksMetrics::instance()->flat_json_compaction_plain_fallback_total.value());
     EXPECT_FALSE(out.meta->json_meta().is_flat());
     EXPECT_EQ(0, out.meta->children_columns_size());
 
-    MutableColumnPtr col = NullableColumn::create(JsonColumn::create(), NullColumn::create());
+    ColumnPtr col = NullableColumn::create(JsonColumn::create(), NullColumn::create());
     ASSERT_OK(read_segment(out, ReadMode::kBatch, col.get()));
     ASSERT_EQ(5, col->size());
     EXPECT_EQ(R"({"a": 1, "b": "x"})", col->debug_item(0));
@@ -2950,5 +2747,4 @@ TEST_F(FlatJsonColumnCompactTest, testCompactionWritesWholeJsonPastBufferWithout
     EXPECT_EQ(R"({"a": 4, "b": "y"})", col->debug_item(4));
 }
 
->>>>>>> cf33ef6 ([Enhancement] Stream flat JSON compaction of mixed flat and whole-JSON inputs (#81425))
 } // namespace starrocks

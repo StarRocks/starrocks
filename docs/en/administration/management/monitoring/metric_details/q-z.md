@@ -338,6 +338,18 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Number of valid rows read (excluding rows with invalid format). Labels: `file_format`, `scan_type`.
 
+## `starrocks_be_flat_json_compaction_mixed_inputs_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of times a compaction read a JSON column whose input segments are partly Flat JSON and partly whole JSON with the Flat JSON layout of the flat segments, every sub-column typed JSON. See `enable_compaction_flat_json_mixed_inputs`.
+
+## `starrocks_be_flat_json_compaction_plain_fallback_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of flat JSON compaction outputs written as whole JSON because the buffered input exceeded one eighth of `compaction_memory_limit_per_worker`, divided among the JSON columns written together, without one flat layout to write it with.
+
 ## `starrocks_be_flat_json_compaction_streaming_total`
 
 - Unit: Count

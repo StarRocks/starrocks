@@ -17,8 +17,8 @@
 #include <map>
 #include <optional>
 
-#include "column/flat_json/flat_json_internal.h"
 #include "storage/rowset/column_writer.h"
+#include "util/json_flattener.h"
 
 namespace starrocks {
 class BloomFilter;
@@ -77,13 +77,9 @@ protected:
     std::vector<std::unique_ptr<ColumnWriter>> _flat_writers;
     std::vector<std::string> _flat_paths;
     std::vector<LogicalType> _flat_types;
-<<<<<<< HEAD
     Columns _flat_columns;
-=======
-    MutableColumns _flat_columns;
     // One per sub-column writer; set for the JSON-typed sub-columns other than the remain.
     std::vector<std::optional<flat_json::JsonValueStats>> _value_stats;
->>>>>>> cf33ef6 ([Enhancement] Stream flat JSON compaction of mixed flat and whole-JSON inputs (#81425))
 
     Columns _json_datas;
     size_t _estimate_size = 0;
