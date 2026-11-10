@@ -298,6 +298,23 @@ public class FunctionAnalyzer {
     private static void checkGeoFunctionArguments(FunctionCallExpr call) {
         String name = call.getFunctionName();
         switch (name) {
+            case FunctionSet.ARRAY_SORT:
+            case FunctionSet.ARRAY_SORT_LAMBDA:
+            case FunctionSet.ARRAY_MAX:
+            case FunctionSet.ARRAY_MIN:
+            case FunctionSet.ARRAY_SORTBY:
+            case "array_top_n":
+            case FunctionSet.ARRAY_DISTINCT:
+            case FunctionSet.ARRAY_CONTAINS:
+            case FunctionSet.ARRAY_CONTAINS_ALL:
+            case FunctionSet.ARRAY_CONTAINS_SEQ:
+            case FunctionSet.ARRAY_POSITION:
+            case FunctionSet.ARRAY_REMOVE:
+            case FunctionSet.ARRAY_INTERSECT:
+            case FunctionSet.ARRAYS_OVERLAP:
+            case FunctionSet.ARRAY_UNIQUE_AGG:
+            case FunctionSet.NULLIF:
+            case FunctionSet.CRC32_HASH:
             case FunctionSet.ENCODE_SORT_KEY:
             case FunctionSet.ENCODE_FINGERPRINT_SHA256:
             case FunctionSet.ENCODE_FINGERPRINT_SHA256_V2:
@@ -323,6 +340,12 @@ public class FunctionAnalyzer {
                                                   FunctionCallExpr functionCallExpr) {
         if (fnParams.isStar() && !fnName.equals(FunctionSet.COUNT)) {
             throw new SemanticException("'*' can only be used in conjunction with COUNT: " + ExprToSql.toSql(functionCallExpr),
+                    functionCallExpr.getPos());
+        }
+
+        Type resultType = functionCallExpr.getType();
+        if (fnParams.getOrderByElemNum() > 0 && (resultType.isGeoType() || resultType.hasNestedGeoType())) {
+            throw new SemanticException("ORDER BY aggregation is not supported for geo results: " + resultType.toSql(),
                     functionCallExpr.getPos());
         }
 
@@ -446,6 +469,10 @@ public class FunctionAnalyzer {
                 throw new SemanticException(
                         fnName + " requires two parameters: " + ExprToSql.toSql(functionCallExpr),
                         functionCallExpr.getPos());
+            }
+
+            if (functionCallExpr.getChild(0).getType().hasNestedGeoType()) {
+                throw new SemanticException(fnName + " does not support nested geo values", functionCallExpr.getPos());
             }
 
             if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
