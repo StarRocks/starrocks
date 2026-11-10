@@ -5372,4 +5372,48 @@ TEST_F(FileReaderTest, test_read_variant_shredding_full_column_ignores_extended_
     ASSERT_EQ(R"({"extra":1,"kind":"identity","note":"n1"})", variant_row_json(variant_col, 2));
 }
 
+// The same path n is shredded as INT64 in one file and as DOUBLE in another. Reading both files into one column used to
+// merge n into a DOUBLE, which turned 2^53 + 1 into 2^53 and INT64_MAX into 9.2233720368547758e+18. The values of the
+// INT64 file must come back exact.
+TEST_F(FileReaderTest, test_read_variant_shredding_int64_and_double_files_merge_without_losing_precision) {
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    const auto read_file = [&](const std::string& file) {
+        const std::string path = "./be/test/formats/parquet/test_data/" + file;
+        auto file_reader = _create_file_reader(path);
+        Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+        auto ctx = _create_scan_context(slot_descs, path);
+        Status status = file_reader->init(&ctx->format_scan_context);
+        EXPECT_TRUE(status.ok()) << file << ": " << status.message();
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+        status = file_reader->get_next(&chunk);
+        EXPECT_TRUE(status.ok()) << file << ": " << status.message();
+        return chunk;
+    };
+    const auto variant_of = [](const ChunkPtr& chunk) {
+        const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+        return down_cast<const VariantColumn*>(nullable->data_column().get());
+    };
+
+    const ChunkPtr int64_chunk = read_file("variant_shredding_n_int64.parquet");
+    const ChunkPtr double_chunk = read_file("variant_shredding_n_double.parquet");
+    ASSERT_EQ(2, int64_chunk->num_rows());
+    ASSERT_EQ(1, double_chunk->num_rows());
+
+    // The order in which the files are appended must not matter.
+    for (const bool int64_first : {true, false}) {
+        auto merged = VariantColumn::create();
+        const VariantColumn* first = variant_of(int64_first ? int64_chunk : double_chunk);
+        const VariantColumn* second = variant_of(int64_first ? double_chunk : int64_chunk);
+        merged->append(*first, 0, first->size());
+        merged->append(*second, 0, second->size());
+        ASSERT_EQ(3, merged->size());
+
+        const size_t base = int64_first ? 0 : 1; // row of the first INT64 value
+        EXPECT_EQ(R"({"n":9007199254740993})", variant_row_json(merged.get(), base));
+        EXPECT_EQ(R"({"n":9223372036854775807})", variant_row_json(merged.get(), base + 1));
+        EXPECT_EQ(R"({"n":1.5})", variant_row_json(merged.get(), int64_first ? 2 : 0));
+    }
+}
+
 } // namespace starrocks::parquet

@@ -68,6 +68,18 @@ static MutableColumnPtr build_nullable_int16_column(const std::vector<int16_t>& 
     return NullableColumn::create(std::move(data), std::move(null));
 }
 
+static MutableColumnPtr build_nullable_double_column(const std::vector<double>& values,
+                                                     const std::vector<uint8_t>& is_null) {
+    auto data = DoubleColumn::create();
+    auto null = NullColumn::create();
+    DCHECK_EQ(values.size(), is_null.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        data->append(values[i]);
+        null->append(is_null[i]);
+    }
+    return NullableColumn::create(std::move(data), std::move(null));
+}
+
 static MutableColumnPtr build_nullable_varchar_column(const std::vector<std::string>& values,
                                                       const std::vector<uint8_t>& is_null) {
     auto data = BinaryColumn::create();
@@ -856,6 +868,93 @@ PARALLEL_TEST(VariantColumnTest, test_append_type_conflict_hoist_variant_via_mer
     ASSERT_EQ((std::vector<TypeDescriptor>{TypeDescriptor(TYPE_VARIANT)}), dst->shredded_types());
     assert_variant_row_json(dst.get(), 0, R"({"a":"x"})");
     assert_variant_row_json(dst.get(), 1, R"({"a":10})");
+}
+
+// The same path is a BIGINT in one file and a DOUBLE in another. A double holds 53 bits, so merging them into a DOUBLE
+// turned 2^53 + 1 into 2^53 and the largest BIGINT into 9.2233720368547758e+18. The path is hoisted to VARIANT, which
+// keeps the type of each value.
+PARALLEL_TEST(VariantColumnTest, test_append_bigint_into_double_path_keeps_the_exact_value) {
+    auto src = VariantColumn::create();
+    auto src_metadata = BinaryColumn::create();
+    auto src_remain = BinaryColumn::create();
+    append_primitive_int8_row(src_metadata.get(), src_remain.get(), 1);
+    append_primitive_int8_row(src_metadata.get(), src_remain.get(), 1);
+    MutableColumns src_typed;
+    src_typed.emplace_back(build_nullable_int64_column({9007199254740993LL, 9223372036854775807LL}, {0, 0}));
+    src->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(src_typed), std::move(src_metadata),
+                              std::move(src_remain));
+
+    auto dst = VariantColumn::create();
+    auto dst_metadata = BinaryColumn::create();
+    auto dst_remain = BinaryColumn::create();
+    append_primitive_int8_row(dst_metadata.get(), dst_remain.get(), 2);
+    MutableColumns dst_typed;
+    dst_typed.emplace_back(build_nullable_double_column({1.5}, {0}));
+    dst->set_shredded_columns({"a"}, {TYPE_DOUBLE_DESC}, std::move(dst_typed), std::move(dst_metadata),
+                              std::move(dst_remain));
+
+    dst->append(*src, 0, src->size());
+
+    ASSERT_EQ((std::vector<std::string>{"a"}), dst->shredded_paths());
+    ASSERT_EQ((std::vector<TypeDescriptor>{TypeDescriptor(TYPE_VARIANT)}), dst->shredded_types());
+    assert_variant_row_json(dst.get(), 0, R"({"a":1.5})");
+    assert_variant_row_json(dst.get(), 1, R"({"a":9007199254740993})");
+    assert_variant_row_json(dst.get(), 2, R"({"a":9223372036854775807})");
+}
+
+// The other order: the destination holds the BIGINT.
+PARALLEL_TEST(VariantColumnTest, test_append_double_into_bigint_path_keeps_the_exact_value) {
+    auto src = VariantColumn::create();
+    auto src_metadata = BinaryColumn::create();
+    auto src_remain = BinaryColumn::create();
+    append_primitive_int8_row(src_metadata.get(), src_remain.get(), 1);
+    MutableColumns src_typed;
+    src_typed.emplace_back(build_nullable_double_column({2.5}, {0}));
+    src->set_shredded_columns({"a"}, {TYPE_DOUBLE_DESC}, std::move(src_typed), std::move(src_metadata),
+                              std::move(src_remain));
+
+    auto dst = VariantColumn::create();
+    auto dst_metadata = BinaryColumn::create();
+    auto dst_remain = BinaryColumn::create();
+    append_primitive_int8_row(dst_metadata.get(), dst_remain.get(), 2);
+    MutableColumns dst_typed;
+    dst_typed.emplace_back(build_nullable_int64_column({9007199254740993LL}, {0}));
+    dst->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(dst_typed), std::move(dst_metadata),
+                              std::move(dst_remain));
+
+    dst->append(*src, 0, src->size());
+
+    ASSERT_EQ((std::vector<TypeDescriptor>{TypeDescriptor(TYPE_VARIANT)}), dst->shredded_types());
+    assert_variant_row_json(dst.get(), 0, R"({"a":9007199254740993})");
+    assert_variant_row_json(dst.get(), 1, R"({"a":2.5})");
+}
+
+// A SMALLINT fits a double exactly, so the typed DOUBLE path is kept.
+PARALLEL_TEST(VariantColumnTest, test_append_smallint_into_double_path_stays_typed_double) {
+    auto src = VariantColumn::create();
+    auto src_metadata = BinaryColumn::create();
+    auto src_remain = BinaryColumn::create();
+    append_primitive_int8_row(src_metadata.get(), src_remain.get(), 1);
+    MutableColumns src_typed;
+    src_typed.emplace_back(build_nullable_int16_column({12}, {0}));
+    src->set_shredded_columns({"a"}, {TYPE_SMALLINT_DESC}, std::move(src_typed), std::move(src_metadata),
+                              std::move(src_remain));
+
+    auto dst = VariantColumn::create();
+    auto dst_metadata = BinaryColumn::create();
+    auto dst_remain = BinaryColumn::create();
+    append_primitive_int8_row(dst_metadata.get(), dst_remain.get(), 2);
+    MutableColumns dst_typed;
+    dst_typed.emplace_back(build_nullable_double_column({1.5}, {0}));
+    dst->set_shredded_columns({"a"}, {TYPE_DOUBLE_DESC}, std::move(dst_typed), std::move(dst_metadata),
+                              std::move(dst_remain));
+
+    dst->append(*src, 0, src->size());
+
+    ASSERT_EQ((std::vector<TypeDescriptor>{TYPE_DOUBLE_DESC}), dst->shredded_types());
+    const auto* typed_a = down_cast<const NullableColumn*>(dst->typed_column_by_index(0));
+    ASSERT_EQ(1.5, typed_a->get(0).get_double());
+    ASSERT_EQ(12.0, typed_a->get(1).get_double());
 }
 
 // NOLINTNEXTLINE
