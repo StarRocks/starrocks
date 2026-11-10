@@ -178,6 +178,18 @@ description: "Alphabetical s"
 - 单位: 计数
 - 描述: 读取的有效行数（不包括格式无效的行）。标签: `file_format`, `scan_type`。
 
+## `starrocks_be_flat_json_compaction_mixed_inputs_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: Compaction 读取一个 JSON 列时，输入 segment 中一部分为 Flat JSON、一部分为完整 JSON，因而按 Flat JSON segment 的布局读取（所有子列为 JSON 类型）的次数。参见 `enable_compaction_flat_json_mixed_inputs`。
+
+## `starrocks_be_flat_json_compaction_plain_fallback_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: flat JSON compaction 中，已缓存的输入超过 `compaction_memory_limit_per_worker` 的八分之一（由一起写入的各 JSON 列平分）、但没有统一的扁平布局可用，因而将输出以完整 JSON 写出的次数。
+
 ## `starrocks_be_flat_json_compaction_streaming_total`
 
 - 单位: 计数
