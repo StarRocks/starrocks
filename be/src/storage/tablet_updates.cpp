@@ -5876,13 +5876,13 @@ Status TabletUpdates::recover() {
     return Status::OK();
 }
 
-Status TabletUpdates::skip_apply(int64_t txn_id) {
+Status TabletUpdates::skip_apply(int64_t* txn_id, EditVersion* version) {
     const auto tablet_id = _tablet.tablet_id();
     if (!_error) {
         return Status::NotSupported(
                 strings::Substitute("tablet $0 is not in error state, only a failed apply can be skipped", tablet_id));
     }
-    LOG(INFO) << "Tablet " << tablet_id << " begin skip apply of txn " << txn_id << ", error: " << _error_msg;
+    LOG(INFO) << "Tablet " << tablet_id << " begin skip apply, error: " << _error_msg;
     // The failed apply has stopped already. Keep apply stopped until the rowset is emptied.
     stop_and_wait_apply_done();
     DeferOp resume_apply([&]() {
@@ -5915,11 +5915,6 @@ Status TabletUpdates::skip_apply(int64_t txn_id) {
         if (rowset == nullptr) {
             return Status::InternalError(strings::Substitute("rowset $0 of version $1 not found, tablet:$2", rowset_id,
                                                              next->version.to_string(), tablet_id));
-        }
-        if (rowset->txn_id() != txn_id) {
-            return Status::InvalidArgument(
-                    strings::Substitute("txn $0 is not the next to apply, tablet:$1 next version:$2 next txn:$3",
-                                        txn_id, tablet_id, next->version.to_string(), rowset->txn_id()));
         }
         // An apply that failed after writing its meta has already deleted rows of older rowsets on
         // disk, and emptying its rowset would not undo that.
@@ -5980,11 +5975,13 @@ Status TabletUpdates::skip_apply(int64_t txn_id) {
             _rowset_stats[rowset_id] = std::move(stats);
         }
         skipped_info = std::make_unique<EditVersionInfo>(*next);
+        *txn_id = rowset->txn_id();
+        *version = next->version;
     }
     // Drop the update state and the primary index that the failed apply may have left half updated.
     _reset_apply_status(*skipped_info);
     _apply_failed_time = 0;
-    LOG(WARNING) << "Tablet " << tablet_id << " emptied rowset " << skipped_info->deltas[0] << " of txn " << txn_id
+    LOG(WARNING) << "Tablet " << tablet_id << " emptied rowset " << skipped_info->deltas[0] << " of txn " << *txn_id
                  << " version:" << skipped_info->version.to_string()
                  << " to skip its apply, cleared error: " << _error_msg;
     reset_error();

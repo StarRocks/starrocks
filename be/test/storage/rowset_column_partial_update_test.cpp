@@ -700,7 +700,11 @@ TEST_P(RowsetColumnPartialUpdateTest, skip_failed_partial_update_apply) {
     ASSERT_TRUE(tablet->updates()->is_error());
 
     // The skipped update leaves the data unchanged, and the same update applies normally afterwards.
-    ASSERT_OK(tablet->updates()->skip_apply(failed->txn_id()));
+    int64_t skipped_txn_id = -1;
+    EditVersion skipped_version;
+    ASSERT_OK(tablet->updates()->skip_apply(&skipped_txn_id, &skipped_version));
+    ASSERT_EQ(failed->txn_id(), skipped_txn_id);
+    ASSERT_TRUE(skipped_version == EditVersion(version, 0));
     ASSERT_FALSE(tablet->updates()->is_error());
     ASSERT_TRUE(check_tablet(tablet, version, N, unchanged));
     auto partial = create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schema, 1);

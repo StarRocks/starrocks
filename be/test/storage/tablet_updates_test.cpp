@@ -4418,7 +4418,9 @@ void TabletUpdatesTest::test_skip_apply(bool enable_persistent_index) {
     ASSERT_OK(_tablet->rowset_commit(2, create_rowset(_tablet, keys)));
     ASSERT_EQ(N, read_tablet(_tablet, 2));
     // Only a tablet in error state can skip.
-    ASSERT_TRUE(updates->skip_apply(0).is_not_supported());
+    int64_t skipped_txn_id = -1;
+    EditVersion skipped_version;
+    ASSERT_TRUE(updates->skip_apply(&skipped_txn_id, &skipped_version).is_not_supported());
 
     // Version 3 upserts new keys and deletes half of the old keys, but its apply fails.
     auto fp = failpoint::FailPointRegistry::GetInstance()->get("tablet_apply_normal_rowset_commit_internal_error");
@@ -4434,15 +4436,10 @@ void TabletUpdatesTest::test_skip_apply(bool enable_persistent_index) {
     fp->setMode(trigger_mode);
     ASSERT_TRUE(updates->is_error());
 
-    // Only the txn of the next version to apply can be skipped.
-    ASSERT_TRUE(updates->skip_apply(rs3->txn_id() + 1).is_invalid_argument());
-    ASSERT_TRUE(updates->is_error());
-
+    // The skip reports the txn and the version it dropped.
     std::string output;
-    ASSERT_OK(execute_script(
-            fmt::format("System.print(StorageEngine.skip_apply({}, {}))", _tablet->tablet_id(), rs3->txn_id()),
-            output));
-    ASSERT_NE(std::string::npos, output.find("status:OK")) << output;
+    ASSERT_OK(execute_script(fmt::format("System.print(StorageEngine.skip_apply({}))", _tablet->tablet_id()), output));
+    ASSERT_NE(std::string::npos, output.find(fmt::format("txn:{} version:3 status:OK", rs3->txn_id()))) << output;
     ASSERT_FALSE(updates->is_error());
     // Version 3 applies as an empty load: neither its upserts nor its deletes are visible.
     ASSERT_EQ(N, read_tablet_and_compare(_tablet, 3, keys));
@@ -4504,7 +4501,9 @@ TEST_F(TabletUpdatesTest, test_skip_apply_rejects_persisted_apply) {
     fp->setMode(trigger_mode);
     ASSERT_TRUE(updates->is_error());
 
-    ASSERT_TRUE(updates->skip_apply(rs3->txn_id()).is_already_exist());
+    int64_t skipped_txn_id = -1;
+    EditVersion skipped_version;
+    ASSERT_TRUE(updates->skip_apply(&skipped_txn_id, &skipped_version).is_already_exist());
     ASSERT_TRUE(updates->is_error());
 }
 
