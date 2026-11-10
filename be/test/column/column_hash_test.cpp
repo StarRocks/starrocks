@@ -324,6 +324,9 @@ TEST(MemequalPaddedTest, ZeroLengthAndUnequalLength) {
     const auto* b1 = reinterpret_cast<const char*>(buf1.data());
     const auto* b2 = reinterpret_cast<const char*>(buf2.data());
 
+    EXPECT_TRUE(memequal_padded(static_cast<const char*>(nullptr), 0, static_cast<const char*>(nullptr), 0));
+    EXPECT_TRUE(memequal_padded(static_cast<const uint8_t*>(nullptr), 0, static_cast<const uint8_t*>(nullptr), 0));
+    EXPECT_FALSE(memequal_padded(static_cast<const char*>(nullptr), 0, b2, 1));
     EXPECT_TRUE(memequal_padded(b1, 0, b2, 0));
     EXPECT_TRUE(memequal_padded(buf1.data(), 0, buf2.data(), 0));
     EXPECT_TRUE(SliceEqual()(Slice(b1, 0), Slice(b2, 0)));
