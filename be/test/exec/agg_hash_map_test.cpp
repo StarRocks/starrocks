@@ -993,6 +993,18 @@ TEST(PartitionHashMapSerializedKeyTest, AppendsStringAndSerializedKeys) {
     EXPECT_EQ(2U, nullable_string_map.hash_map.size());
 
     PartitionHashMapWithSerializedKey<SlicePartitionHashMap<PhmapSeed1>> serialized_map(4);
+    ASSERT_NE(nullptr, serialized_map.buffer);
+    EXPECT_EQ(serialized_map.max_one_row_size * 4 + SLICE_MEMEQUAL_OVERFLOW_PADDING,
+              serialized_map.inner_mem_pool->total_allocated_bytes());
+
+    uint8_t* last_row = serialized_map.buffer + 3 * serialized_map.max_one_row_size;
+    std::memset(last_row, 'p', serialized_map.max_one_row_size);
+    std::memset(last_row + serialized_map.max_one_row_size, 0x22, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+    std::vector<uint8_t> other_row(serialized_map.max_one_row_size + SLICE_MEMEQUAL_OVERFLOW_PADDING, 0xDD);
+    std::memset(other_row.data(), 'p', serialized_map.max_one_row_size);
+    EXPECT_TRUE(SliceEqual()(Slice(last_row, serialized_map.max_one_row_size),
+                             Slice(other_row.data(), serialized_map.max_one_row_size)));
+
     auto res3 = serialized_map.append_chunk<false>(chunk, {string_column}, &mem_pool, &obj_pool, nullptr, nullptr);
     ASSERT_TRUE(res3.ok());
     EXPECT_EQ(2U, serialized_map.hash_map.size());
