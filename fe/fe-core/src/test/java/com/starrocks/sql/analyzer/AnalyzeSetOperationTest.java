@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -23,6 +24,9 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -95,6 +99,40 @@ public class AnalyzeSetOperationTest {
         Assertions.assertEquals(IntegerType.TINYINT, outColumns.get(1).getType());
         Assertions.assertTrue(outColumns.get(1).isNullable());
     }
+
+    @Test
+    public void testNestedGeoUnionAllCasts() {
+        // Exercise the planner with an analyzed nested geo expression while 7.0a is active in production.
+        new MockUp<ExpressionAnalyzer.Visitor>() {
+            @Mock
+            public Void visit(Invocation invocation, ParseNode node, Scope scope) {
+                ExpressionAnalyzer.Visitor visitor = invocation.getInvokedInstance();
+                return node.accept(visitor, scope);
+            }
+        };
+
+        for (String geo : List.of("ST_GeogFromText(CAST(v1 AS VARCHAR))",
+                "ST_GeomFromText(CAST(v1 AS VARCHAR),'EPSG:3857')")) {
+            LogicalPlan nullLeaf = transformUnion("SELECT [" + geo + "] AS z FROM t0"
+                    + " UNION ALL SELECT [] AS z FROM t0");
+            Assertions.assertTrue(nullLeaf.getOutputColumn().get(0).getType().hasNestedGeoType());
+
+            SemanticException error = Assertions.assertThrows(SemanticException.class, () ->
+                    transformUnion("SELECT map{CAST(1 AS INT):" + geo + "} AS z FROM t0"
+                            + " UNION ALL SELECT map{CAST(1 AS BIGINT):" + geo + "} AS z FROM t0"));
+            Assertions.assertTrue(error.getMessage().contains("is not supported for geo types"));
+        }
+
+        LogicalPlan ordinary = transformUnion("SELECT CAST(v1 AS INT) FROM t0"
+                + " UNION ALL SELECT CAST(v1 AS BIGINT) FROM t0");
+        Assertions.assertEquals(IntegerType.BIGINT, ordinary.getOutputColumn().get(0).getType());
+    }
+
+    private LogicalPlan transformUnion(String sql) {
+        QueryRelation relation = ((QueryStatement) AnalyzeTestUtil.analyzeWithoutTestView(sql)).getQueryRelation();
+        return new RelationTransformer(new ColumnRefFactory(), getConnectContext()).transform(relation);
+    }
+
 
     @Test
     public void testWithSort() {

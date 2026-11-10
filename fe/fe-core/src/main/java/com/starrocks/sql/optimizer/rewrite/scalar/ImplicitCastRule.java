@@ -406,7 +406,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         node.getChildren().set(index, makeImplicitCast(returnType, node.getChild(index)));
     }
 
-    static ScalarOperator makeImplicitCast(Type returnType, ScalarOperator child) {
+    public static ScalarOperator makeImplicitCast(Type returnType, ScalarOperator child) {
         Type sourceType = child.getType();
         checkImplicitCastAllowed(sourceType, returnType);
         if (returnType.hasNestedGeoType() && sourceType.hasNestedGeoType()) {
