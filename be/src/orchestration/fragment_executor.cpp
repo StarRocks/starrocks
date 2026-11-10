@@ -614,8 +614,6 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
 Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const TExecPlanFragmentParams& unique_request = request.unique();
-    // BE-local stream/routine loads have no channel_id and already registered their pipes.
-    // Bind those pipes before register_ctx() exposes the fragment to cancellation.
     if (request.common().query_options.query_type == TQueryType::LOAD) {
         std::vector<std::unique_ptr<FragmentAttachment>> attachments;
         auto bind_pipes = [&](const std::vector<TScanRangeParams>& scan_ranges) -> Status {
@@ -624,6 +622,7 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                     continue;
                 }
                 const auto& broker_range = scan_range.scan_range.broker_scan_range;
+                // skip merge commit or transaction streamload which has been handled by StreamLoadContextHandle
                 if (broker_range.__isset.channel_id) {
                     continue;
                 }
