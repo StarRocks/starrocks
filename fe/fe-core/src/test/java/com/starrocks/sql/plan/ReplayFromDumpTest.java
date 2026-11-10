@@ -18,6 +18,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -27,6 +28,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.thrift.TExplainLevel;
@@ -38,6 +40,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Stream;
 
 public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
@@ -1316,6 +1320,39 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 TExplainLevel.NORMAL);
         PlanTestBase.assertContains(replayPair.second, "0:OlapScanNode\n"
                 + "     TABLE: llm_account_scores");
+    }
+
+    @Test
+    public void testUnionPredicateColumnPruning() throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(
+                getDumpInfoFromFile("query_dump/union_predicate_column_pruning"));
+        // Use default aggregate pushdown: getPlanFragment() disables it and hides the failure.
+        var execPlan = UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second;
+        String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(plan, "MultiCastDataSinks", "TABLE: mv", "UNION");
+
+        var scans = execPlan.getScanNodes().stream()
+                .filter(scan -> scan instanceof OlapScanNode olap && olap.getOlapTable().getName().equals("t"))
+                .toList();
+        Assertions.assertEquals(2, scans.size());
+        for (var scan : scans) {
+            Assertions.assertEquals(1, scan.getConjuncts().size());
+            PlanTestBase.assertContains(scan.getExplainString(), ": source,", "] = 1");
+        }
+
+        var nodes = new ArrayList<>(List.of(execPlan.getPhysicalPlan()));
+        int unionCount = 0;
+        for (int i = 0; i < nodes.size(); i++) {
+            OptExpression node = nodes.get(i);
+            if (node.getOp() instanceof PhysicalUnionOperator union) {
+                unionCount++;
+                Assertions.assertNull(union.getPredicate());
+                Assertions.assertEquals(List.of("id"), union.getOutputColumnRefOp().stream()
+                        .map(column -> column.getName()).toList());
+            }
+            nodes.addAll(node.getInputs());
+        }
+        Assertions.assertEquals(2, unionCount);
     }
 
     @Test

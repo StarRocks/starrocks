@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -47,6 +48,13 @@ public class PruneUnionColumnsRule extends TransformationRule {
                         .map(Lists::newArrayList)
                         .collect(Collectors.toList()))
                 .build();
+
+        OptExpression result = OptExpression.create(luo, input.getInputs());
+        // Push the predicate while the full output-to-child mappings are still available.
+        if (luo.getPredicate() != null) {
+            PushDownPredicateSetRule.doProcess(new LogicalFilterOperator(luo.getPredicate()), result, true);
+            luo.setPredicate(null);
+        }
 
         List<ColumnRefOperator> outputs = luo.getOutputColumnRefOp();
 
@@ -94,6 +102,10 @@ public class PruneUnionColumnsRule extends TransformationRule {
             luo.getChildOutputColumns().set(childIdx, childOutputsAfterPruned.get(childIdx));
         }
 
-        return Collections.singletonList(OptExpression.create(luo, input.getInputs()));
+        if (input.getOp().getPredicate() == null &&
+                outputs.equals(((LogicalUnionOperator) input.getOp()).getOutputColumnRefOp())) {
+            return Collections.emptyList();
+        }
+        return Collections.singletonList(result);
     }
 }
