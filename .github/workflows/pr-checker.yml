@@ -155,8 +155,28 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull -q || true)
           echo "versions=$(python3 lib/sync_branch_map.py versions --repo sr)" >> "$GITHUB_OUTPUT"
 
+  backport-template-check:
+    needs: title-check
+    runs-on: [self-hosted, quick]
+    if: >
+      (
+        startsWith(github.event.pull_request.title, '[BugFix]') ||
+        startsWith(github.event.pull_request.title, '[Enhancement]') ||
+        startsWith(github.event.pull_request.title, '[Doc]') ||
+        startsWith(github.event.pull_request.title, '[UT]')
+      ) && !contains(github.event.pull_request.title, 'cherry-pick') && !contains(github.event.pull_request.title, 'backport')
+    env:
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Check backport checklist template
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true)
+          python3 scripts/check-pr-backport-template.py --repo "$REPO" --pr "$PR_NUMBER"
+
   backport-check-subtask:
-    needs: [ title-check, backport-versions ]
+    needs: [ title-check, backport-versions, backport-template-check ]
     runs-on: ubuntu-latest
     if: >
       (
@@ -190,11 +210,15 @@ jobs:
 
   backport-check:
     runs-on: ubuntu-latest
-    needs: backport-check-subtask
-    if: always() && needs.backport-check-subtask.result != 'skipped'
+    needs: [backport-check-subtask, backport-template-check]
+    if: >
+      always() &&
+      (needs.backport-check-subtask.result != 'skipped' || needs.backport-template-check.result != 'skipped')
     steps:
       - name: Check subtask status
-        if: needs.backport-check-subtask.result == 'failure'
+        if: >
+          contains(fromJSON('["failure", "cancelled"]'), needs.backport-check-subtask.result) ||
+          contains(fromJSON('["failure", "cancelled"]'), needs.backport-template-check.result)
         run: |
           exit 1
 
