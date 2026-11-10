@@ -232,19 +232,49 @@ TEST_F(PaimonChunkSinkTest, NativeFixedBucketRoutingMatchesPublicCalculatorAndCh
     ExprExecutor::close(expr, &state);
 }
 
-TEST_F(PaimonChunkSinkTest, FailedRouteAndWriterBoundsFailBeforeNativeRowWrite) {
+TEST_F(PaimonChunkSinkTest, FixedBucketSinkUsesRoutedBucket) {
     auto ctx = context(true);
+    auto rows = chunk({1});
+    ObjectPool pool;
+    auto* expr = pool.add(new ExprContext(pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 0))));
+    ASSERT_OK(ExprExecutor::prepare(expr, &state));
+    ASSERT_OK(ExprExecutor::open(expr, &state));
+    auto calculated = calculate_paimon_bucket_ids_in_shim(ctx->sink, rows, {expr});
+    ASSERT_TRUE(calculated.ok()) << calculated.status();
+    // An intentionally different in-range route isolates whether the sink consumes the route
+    // column. Real routing must always calculate the native bucket before the exchange.
+    const int32_t routed_bucket = (calculated.value()[0] + 1) % ctx->sink.bucket_count;
+    auto route = Int32Column::create();
+    route->append(routed_bucket);
+    rows->append_column(std::move(route), 99);
     connector::PaimonChunkSink sink(ctx, 0);
     ASSERT_OK(sink.init(nullptr, &profile, &manager));
-    auto rows = chunk({1});
-    auto bad = Int32Column::create();
-    bad->append(-1);
-    rows->append_column(std::move(bad), 99);
-    EXPECT_FALSE(sink.add(rows).ok());
-    EXPECT_FALSE(sink.finish().ok());
-    EXPECT_TRUE(sink.is_finished()); // An add failure must not hang cancellation/pending_finish.
-    sink.rollback();
-    EXPECT_TRUE(state.sink_commit_infos().empty());
+    ASSERT_OK(sink.add(rows));
+    ASSERT_OK(sink.finish());
+    ASSERT_TRUE(await(sink));
+    ASSERT_OK(sink.status());
+    ASSERT_EQ(1, state.sink_commit_infos().size());
+    const auto& info = state.sink_commit_infos()[0].paimon_commit_info;
+    ASSERT_FALSE(info.owned_files.empty());
+    EXPECT_TRUE(std::filesystem::exists(root + "/bucket-" + std::to_string(routed_bucket)));
+    ExprExecutor::close(expr, &state);
+}
+
+TEST_F(PaimonChunkSinkTest, FailedRouteAndWriterBoundsFailBeforeNativeRowWrite) {
+    for (int32_t bucket : {-1, 8}) {
+        auto ctx = context(true);
+        connector::PaimonChunkSink sink(ctx, 0);
+        ASSERT_OK(sink.init(nullptr, &profile, &manager));
+        auto rows = chunk({1});
+        auto bad = Int32Column::create();
+        bad->append(bucket);
+        rows->append_column(std::move(bad), 99);
+        EXPECT_FALSE(sink.add(rows).ok());
+        EXPECT_FALSE(sink.finish().ok());
+        EXPECT_TRUE(sink.is_finished()); // An add failure must not hang cancellation/pending_finish.
+        sink.rollback();
+        EXPECT_TRUE(state.sink_commit_infos().empty());
+    }
 }
 
 TEST_F(PaimonChunkSinkTest, RejectsSchemaChangeBeforeWritingAndNeverRemovesSchema) {
