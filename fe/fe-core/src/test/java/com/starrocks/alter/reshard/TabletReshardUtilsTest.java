@@ -404,6 +404,41 @@ public class TabletReshardUtilsTest {
         assertEquals(1L << 30, TabletReshardUtils.adaptiveTargetSize(100L << 30, 1L << 30, 8));
     }
 
+    @Test
+    public void adaptiveSplitFloor_isTheMinimumWhileItSitsBelowTheTarget() {
+        // The setup pins the minimum at 2 GiB.
+        assertEquals(2L << 30, TabletReshardUtils.adaptiveSplitFloor(10L << 30));
+    }
+
+    @Test
+    public void adaptiveTargetSize_usesTheFloorItIsHandedNotTheConfiguration() {
+        // A caller reads the floor once and hands it to both the target and the fill. Change the configuration
+        // after that reading: the target must follow the floor it was given, or the two could disagree.
+        long floor = TabletReshardUtils.adaptiveSplitFloor(10L << 30);
+        Config.tablet_reshard_min_split_size = 10L << 30;   // would switch the rule off if read again
+        assertEquals(3L << 30, TabletReshardUtils.adaptiveTargetSize(24L << 30, 10L << 30, 8, floor));
+        assertEquals(10L << 30, TabletReshardUtils.adaptiveTargetSize(24L << 30, 10L << 30, 8),
+                "the three-argument form still reads the configuration");
+        assertEquals(10L << 30, TabletReshardUtils.adaptiveTargetSize(24L << 30, 10L << 30, 8, 0L),
+                "a zero floor leaves the steady-state target alone");
+    }
+
+    @Test
+    public void adaptiveSplitFloor_isOffWhereTheAdaptiveTargetIsOff() {
+        // A minimum at or above the target is the documented off switch of the adaptive rule; the floor must
+        // read as "no child at all" there, not as a floor equal to the target.
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(2L << 30));
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(1L << 30));
+        // A target that disables reshard altogether.
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(0L));
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(-3L));
+        // A non-positive minimum has no validator on it; it must not turn into "children of any size".
+        Config.tablet_reshard_min_split_size = 0L;
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(10L << 30));
+        Config.tablet_reshard_min_split_size = -1L;
+        assertEquals(0L, TabletReshardUtils.adaptiveSplitFloor(10L << 30));
+    }
+
     /**
      * Static check of the convergence invariants. These two inequalities are what prevent
      * split↔merge oscillation. If they ever fail, the algorithm can ping-pong indefinitely.
