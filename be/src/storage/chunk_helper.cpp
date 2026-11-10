@@ -357,6 +357,20 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
     }
 }
 
+<<<<<<< HEAD
+=======
+Status ChunkHelper::reject_if_over_capacity(const Chunk& chunk, std::string_view what, int64_t tablet_id,
+                                            int64_t txn_id) {
+    Status st = chunk.capacity_limit_reached();
+    if (st.ok()) {
+        return st;
+    }
+    return Status::CapacityLimitExceed(
+            strings::Substitute("Column capacity limit exceeded in $0 for tablet:$1 txn:$2 num_rows:$3: $4",
+                                std::string(what), tablet_id, txn_id, chunk.num_rows(), std::string(st.message())));
+}
+
+>>>>>>> 8283076 ([BugFix] Clarify column capacity limit errors (#82749))
 void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_indexes, const Schema& schema,
                                        const starrocks::TabletSchemaCSPtr& tschema, Chunk* chunk) {
     for (auto field_index : char_column_indexes) {
