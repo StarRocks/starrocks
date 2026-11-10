@@ -215,6 +215,105 @@ public class LakeTableAlterMetaJobTest {
         Assertions.assertEquals(List.of(false, false), normalFlags);
     }
 
+    // Intercepts both publish paths: the no-op publish fails until noOpFails is cleared, and a normal publish
+    // succeeds, as it does on BE when it finds the version the no-op publish wrote in the metacache.
+    private static void mockPublishWithFailingNoOp(java.util.concurrent.atomic.AtomicBoolean noOpFails,
+                                                   java.util.concurrent.atomic.AtomicInteger normalPublishes,
+                                                   java.util.concurrent.CountDownLatch normalPublishGate) {
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish, boolean isRetryPublish) throws Exception {
+                if (Boolean.TRUE.equals(txnInfo.noOpPublish)) {
+                    if (noOpFails.get()) {
+                        throw new RuntimeException("injected no-op publish failure");
+                    }
+                    return;
+                }
+                normalPublishes.incrementAndGet();
+                normalPublishGate.await();
+            }
+
+            @Mock
+            public void aggregatePublishVersion(List<Tablet> tablets, List<TxnInfoPB> txnInfos, long baseVersion,
+                                                long newVersion, Map<Long, Double> compactionScores,
+                                                Map<Long, com.starrocks.catalog.TabletRange> tabletRanges,
+                                                Map<com.starrocks.system.ComputeNode, List<Long>> nodeToTablets,
+                                                com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                                Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                                                List<com.starrocks.proto.VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                                boolean preferSharedInitialMetadata, boolean isRetryPublish)
+                    throws Exception {
+                publishVersion(tablets, txnInfos.get(0), baseVersion, newVersion, computeResource, true,
+                        isRetryPublish);
+            }
+        };
+    }
+
+    // Runs the FINISHED_REWRITING step until its publish, if it sends one, has finished and been consumed.
+    private void runFinishedRewritingJobToCompletion() throws Exception {
+        for (int i = 0; i < 3 && job.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING; i++) {
+            job.runFinishedRewritingJob();
+            if (job.publishVersionFuture != null) {
+                job.publishVersionFuture.get();
+            }
+        }
+    }
+
+    @Test
+    public void testNoNormalPublishAfterPartialForceNoOpPublish() throws Exception {
+        job.runPendingJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        java.util.concurrent.atomic.AtomicBoolean noOpFails = new java.util.concurrent.atomic.AtomicBoolean(true);
+        java.util.concurrent.atomic.AtomicInteger normalPublishes = new java.util.concurrent.atomic.AtomicInteger();
+        mockPublishWithFailingNoOp(noOpFails, normalPublishes, new java.util.concurrent.CountDownLatch(0));
+
+        // The no-op publish fails part way, so the job stays in FINISHED_REWRITING. A normal publish would succeed on
+        // the versions the no-op publish wrote and finish the job without the alter, so none may be sent.
+        Assertions.assertFalse(job.cancel("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        runFinishedRewritingJobToCompletion();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertEquals(0, normalPublishes.get());
+
+        // Only a FORCE cancel retry finishes the job.
+        noOpFails.set(false);
+        Assertions.assertTrue(job.cancel("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertTrue(job.isForceSkippedAtCommitted());
+        Assertions.assertEquals(0, normalPublishes.get());
+    }
+
+    @Test
+    public void testInFlightNormalPublishDroppedAfterPartialForceNoOpPublish() throws Exception {
+        job.runPendingJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        java.util.concurrent.atomic.AtomicBoolean noOpFails = new java.util.concurrent.atomic.AtomicBoolean(true);
+        java.util.concurrent.atomic.AtomicInteger normalPublishes = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.CountDownLatch gate = new java.util.concurrent.CountDownLatch(1);
+        mockPublishWithFailingNoOp(noOpFails, normalPublishes, gate);
+
+        // A normal publish is running when the FORCE cancel's no-op publish fails part way. The normal publish then
+        // succeeds, possibly on a version the no-op publish wrote, so its result must not finish the job.
+        job.runFinishedRewritingJob();
+        Assertions.assertNotNull(job.publishVersionFuture);
+        Assertions.assertFalse(job.cancel("force cancel", /*force=*/ true));
+        gate.countDown();
+        Assertions.assertTrue(job.publishVersionFuture.get());
+        runFinishedRewritingJobToCompletion();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertEquals(1, normalPublishes.get());
+
+        noOpFails.set(false);
+        Assertions.assertTrue(job.cancel("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+    }
+
     @Test
     public void testJobState() throws Exception {
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
