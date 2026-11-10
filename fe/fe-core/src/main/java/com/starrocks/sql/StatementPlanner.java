@@ -99,6 +99,7 @@ import com.starrocks.transaction.RemoteTransactionMgr;
 import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -359,9 +360,13 @@ public class StatementPlanner {
                 return;
             }
             for (Field field : query.getQueryRelation().getRelationFields().getAllFields()) {
-                if (field.getType().isScalarType(PrimitiveType.GEOMETRY)) {
-                    throw new SemanticException(
-                            "GEOMETRY query results are not supported; use ST_AsText or ST_AsBinary", query.getPos());
+                Type type = field.getType();
+                boolean nestedGeo = type.hasNestedGeoType();
+                if (nestedGeo || type.isScalarType(PrimitiveType.GEOMETRY)) {
+                    String resultType = nestedGeo ? "Nested GEOGRAPHY/GEOMETRY" : "GEOMETRY";
+                    String hint = nestedGeo ? " on geo elements" : "";
+                    throw new SemanticException(resultType + " query results are not supported; use ST_AsText or ST_AsBinary"
+                            + hint, query.getPos());
                 }
             }
         }

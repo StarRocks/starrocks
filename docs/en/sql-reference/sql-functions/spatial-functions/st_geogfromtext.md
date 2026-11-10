@@ -25,7 +25,15 @@ Coordinates use spherical `OGC:CRS84` semantics: longitude must be in `[-180, 18
 
 Returns a `GEOGRAPHY` value. Returns `NULL` if an argument is `NULL`, the WKT is invalid, a coordinate is outside the supported range, or `srid` is not `4326`.
 
-Native `GEOGRAPHY` and `GEOMETRY` values cannot be nested in `ARRAY`, `MAP`, or `STRUCT`. Analysis rejects these types even when an outer expression returns a scalar or the geo value is `NULL`.
+In queries, compatible native geo values can be used as `ARRAY` elements, `MAP` values, or `STRUCT` fields. You can construct these containers, read elements and fields, use `cardinality` or `array_length`, expand arrays with `UNNEST`, and use `array_map`, `array_filter`, or unordered `array_agg` and `map_agg` without `DISTINCT`.
+
+A `MAP` key cannot contain geo values. Operations that require geo equality, ordering, or hashing are rejected, including comparisons, sorting, and deduplication. Saved SQL definitions, including views, materialized views, SQL UDFs, generated columns, SQL plan baselines, and pipes, cannot use nested geo expressions.
+
+To return a container to the client, convert its geo elements or fields with `ST_AsText` or `ST_AsBinary` first. Scalar `GEOGRAPHY` can be returned directly. Scalar `GEOMETRY` also requires explicit conversion.
+
+```sql
+SELECT array_map(x -> ST_AsText(x), [ST_GeogFromText('POINT (1 2)')]);
+```
 
 ## Examples
 
