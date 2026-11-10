@@ -927,6 +927,9 @@ public class ExpressionAnalyzer {
                         "subquery must return the same number of columns as provided by the IN predicate",
                         node.getPos());
             }
+            if (leftTypes.stream().anyMatch(Type::isGeoType) || rightTypes.stream().anyMatch(Type::isGeoType)) {
+                throw new SemanticException("InPredicate of GEOGRAPHY/GEOMETRY types is not supported", node.getPos());
+            }
             for (int i = 0; i < rightTypes.size(); ++i) {
                 if (leftTypes.get(i).isJsonType() || rightTypes.get(i).isJsonType() || leftTypes.get(i).isMapType() ||
                         rightTypes.get(i).isMapType() || leftTypes.get(i).isStructType() ||
