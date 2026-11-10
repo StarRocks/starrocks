@@ -16,16 +16,11 @@
 
 #include <optional>
 #include <string>
-#include <string_view>
 
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/types.pb.h"
 
 namespace starrocks {
-
-// Numeric SRID associated with OGC:CRS84 in native GEO descriptors.
-inline constexpr int32_t kCrs84Srid = 4326;
-std::optional<int32_t> derive_geo_srid(std::string_view crs);
 
 // Normalized semantic metadata. Missing wire fields become
 // UNKNOWN / empty CRS / default subdescriptors; only parsed SRID retains presence.

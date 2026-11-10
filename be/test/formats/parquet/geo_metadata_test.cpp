@@ -40,6 +40,7 @@
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/predicate_tree/predicate_tree.h"
+#include "types/geo_srid.h"
 
 namespace starrocks::parquet {
 namespace {

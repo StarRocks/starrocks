@@ -16,6 +16,8 @@
 
 #include <charconv>
 
+#include "types/geo_srid.h"
+
 namespace starrocks {
 namespace {
 
