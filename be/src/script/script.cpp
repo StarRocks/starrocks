@@ -363,6 +363,26 @@ public:
         return strings::Substitute("recover tablet:$0 status:$1", std::to_string(tablet_id), st.message());
     }
 
+    // Skip the stuck apply of a primary key tablet that a failed apply put in error state.
+    // See TabletUpdates::skip_apply for what is dropped.
+    static std::string skip_apply(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        if (tablet->updates() == nullptr) {
+            return "not support skip apply";
+        }
+        int64_t txn_id = -1;
+        EditVersion version;
+        Status st = tablet->updates()->skip_apply(&txn_id, &version);
+        if (!st.ok()) {
+            return strings::Substitute("skip apply tablet:$0 status:$1", tablet_id, st.to_string());
+        }
+        return strings::Substitute("skip apply tablet:$0 txn:$1 version:$2 status:OK", tablet_id, txn_id,
+                                   version.to_string());
+    }
+
     static std::string get_tablet_meta_json(int64_t tablet_id) {
         auto tablet = get_tablet(tablet_id);
         if (!tablet) {
@@ -599,6 +619,7 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, ls_tablet_dir);
             REG_STATIC_METHOD(StorageEngineRef, set_error_state);
             REG_STATIC_METHOD(StorageEngineRef, recover_tablet);
+            REG_STATIC_METHOD(StorageEngineRef, skip_apply);
         }
     }
 };
