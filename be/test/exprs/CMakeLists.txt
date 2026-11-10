@@ -30,6 +30,7 @@ set(EXPR_TEST_FILES
     array_expr_test.cpp
     case_expr_test.cpp
     cast_expr_core_test.cpp
+    cast_geo_null_test.cpp
     cast_expr_test.cpp
     function_context_core_test.cpp
     expr_test.cpp
@@ -110,6 +111,7 @@ set(EXPR_TEST_FILES
     table_function/unnest_geo_test.cpp
     table_function/subdivide_bitmap_core_test.cpp
     udf/python/env_test.cpp
+    udf/udf_call_stub_test.cpp
     unary_function_test.cpp
     unnest_core_test.cpp
     unnest_variant_test.cpp

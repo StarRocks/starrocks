@@ -480,19 +480,19 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
 
 パラメータ：
 
-- `tablet_reshard_target_size`：SPLIT または MERGE 実行後の Tablet の目標サイズ。デフォルト値：10 GB。Tablet ID を明示的に指定している場合は、このパラメータを指定する必要はありません。
+- `tablet_reshard_target_size`：SPLIT または MERGE 実行後の Tablet の目標サイズ。デフォルト値：同じ名前のテーブルプロパティ `tablet_reshard_target_size` が設定されている場合はその値、それ以外の場合は FE 設定 `tablet_reshard_target_size`（デフォルト：10 GB）。バックグラウンドの自動分割と自動マージも同じデフォルト値を使用します。以下ではこれを「テーブルの目標サイズ」と呼びます。Tablet ID を明示的に指定している場合は、このパラメータを指定する必要はありません。
 
-  Tablet ID を指定しない手動 SPLIT では、目標サイズに正の値が必要です。FE 設定 `tablet_reshard_target_size` が `0` の場合は、`PROPERTIES` で正の値を指定してください。指定しないと、`Invalid tablet_reshard_target_size: 0` というエラーになります。以下の 1.5 倍の分割しきい値は、目標サイズが正の値の場合にのみ適用されます。
+  Tablet ID を指定しない手動 SPLIT では、目標サイズに正の値が必要です。FE 設定 `tablet_reshard_target_size` が `0` の場合は、テーブルプロパティ `tablet_reshard_target_size` が設定されていても、`PROPERTIES` で正の値を指定してください。指定しないと、`Invalid tablet_reshard_target_size: 0` というエラーになります。以下の 1.5 倍の分割しきい値は、目標サイズが正の値の場合にのみ適用されます。
 
   - SPLIT が実行される条件：
-    - Tablet のサイズが `tablet_reshard_target_size` の 1.5 倍（すなわち `ceil(1.5 × tablet_reshard_target_size)`）**以上**であること。デフォルトの 10 GB の場合、Tablet が 15 GB に達した時点で分割されます。このしきい値は、バックグラウンドの自動分割と手動で実行する `ALTER TABLE ... SPLIT` の両方に適用されます。自動分割では FE 設定 `tablet_reshard_target_size` を使用し、手動 SPLIT では `PROPERTIES` で指定した値を使用します（指定しない場合は同じ FE 設定を使用します）。Tablet ID を指定した場合も同様で、しきい値未満の Tablet は分割されません。条件を満たす Tablet が 1 つもない場合、ステートメントは `No tablets need to split in table ...` というエラーになります。
+    - Tablet のサイズが `tablet_reshard_target_size` の 1.5 倍（すなわち `ceil(1.5 × tablet_reshard_target_size)`）**以上**であること。デフォルトの 10 GB の場合、Tablet が 15 GB に達した時点で分割されます。このしきい値は、バックグラウンドの自動分割と手動で実行する `ALTER TABLE ... SPLIT` の両方に適用されます。自動分割ではテーブルの目標サイズを使用し、手動 SPLIT では `PROPERTIES` で指定した値を使用します（指定しない場合はテーブルの目標サイズを使用します）。Tablet ID を指定した場合も同様で、しきい値未満の Tablet は分割されません。条件を満たす Tablet が 1 つもない場合、ステートメントは `No tablets need to split in table ...` というエラーになります。
     - 現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満であること。
 
-  - また、Tablet が属するマテリアライズドインデックスの Tablet 数が、ウェアハウスのコンピュートノード数（`tablet_reshard_max_split_count` により上限が課されるため、この設定を小さくするとより早く停止します）を下回っており、かつその Tablet のサイズがそのルールのターゲットサイズの 2 倍に達した場合は、上記のしきい値に達する前に分割されます。そのターゲットサイズとは、インデックスのデータ量を上記のスロット数で割ったサイズであり、`tablet_reshard_min_split_size` を下限とします。したがってデフォルトの 2 GB では、データ量がまだこの下限を超えていないインデックスは、Tablet が 4 GB に達した時点で分割されます。これにより、作成直後のパーティションがクラスター全体の書き込み並列度により早く到達できます。このルールは、バックグラウンドの自動分割と、Tablet ID も `tablet_reshard_target_size` も指定しない手動 SPLIT に適用されます。いずれかを指定するとこのルールは無効になり、上記のしきい値のみで判定されます。クラスター全体で無効にするには、`tablet_reshard_min_split_size` を `tablet_reshard_target_size` 以上に設定します。
+  - また、Tablet が属するマテリアライズドインデックスの Tablet 数が、ウェアハウスのコンピュートノード数（`tablet_reshard_max_split_count` により上限が課されるため、この設定を小さくするとより早く停止します）を下回っており、かつその Tablet のサイズがそのルールのターゲットサイズの 2 倍に達した場合は、上記のしきい値に達する前に分割されます。そのターゲットサイズとは、インデックスのデータ量を上記のスロット数で割ったサイズであり、テーブルの目標サイズを超えず、`tablet_reshard_min_split_size` を下限とします。したがってデフォルトの 2 GB では、データ量がまだこの下限を超えていないインデックスは、Tablet が 4 GB に達した時点で分割されます。これにより、作成直後のパーティションがクラスター全体の書き込み並列度により早く到達できます。このルールは、バックグラウンドの自動分割と、Tablet ID も `tablet_reshard_target_size` も指定しない手動 SPLIT に適用されます。いずれかを指定するとこのルールは無効になり、上記のしきい値のみで判定されます。`tablet_reshard_min_split_size` をテーブルの目標サイズ以上に設定すると、そのテーブルではこのルールが無効になります。クラスター全体で無効にするには、`tablet_reshard_min_split_size` を FE 設定 `tablet_reshard_target_size` 以上、かつ各テーブルに設定されたテーブルプロパティ `tablet_reshard_target_size` 以上に設定します。
 
   - MERGE を実行するには、FE 設定 `tablet_reshard_enable_tablet_merge` を `true` に設定する必要があります（デフォルト：`false`）。無効の場合、Tablet は自動的にマージされず、`ALTER TABLE ... MERGE` も拒否されます。有効にした場合、MERGE は次のように動作します：
-    - 自動マージは、マテリアライズドインデックス内のいずれかの隣接する 2 つの Tablet の合計サイズが `tablet_reshard_target_size` の 80%（すなわち `ceil(0.8 × tablet_reshard_target_size)`）を**下回る**と実行されます。この判定には FE 設定 `tablet_reshard_target_size` を使用します。デフォルトの 10 GB の場合、隣接する 2 つの Tablet の合計が 8 GB 未満になった時点でマージされます。
-    - 自動マージと、Tablet ID を指定しない手動 MERGE は、同じ方法でマージ対象の Tablet を選択します。手動 MERGE では `PROPERTIES` で指定した値を使用します（指定しない場合は同じ FE 設定を使用します）。マージ対象となるのは `ceil(0.8 × tablet_reshard_target_size)` 未満の Tablet のみです。隣接するこれらの Tablet はレンジ順にグループ化され、各グループの合計サイズは `tablet_reshard_target_size` を超えません。間にこれより大きい Tablet がある場合、グループはそこで区切られます。マージによって、マテリアライズドインデックスの Tablet 数が並列度の下限を下回ることはありません。この下限は、ウェアハウスのコンピュートノード数（`tablet_reshard_max_split_count` を上限とし、2 以上）です。マージできる Tablet が 1 つもない場合、手動のステートメントは `No tablets need to merge in table ...` というエラーになります。
+    - 自動マージは、マテリアライズドインデックス内のいずれかの隣接する 2 つの Tablet の合計サイズが `tablet_reshard_target_size` の 80%（すなわち `ceil(0.8 × tablet_reshard_target_size)`）を**下回る**と実行されます。この判定にはテーブルの目標サイズを使用します。デフォルトの 10 GB の場合、隣接する 2 つの Tablet の合計が 8 GB 未満になった時点でマージされます。
+    - 自動マージと、Tablet ID を指定しない手動 MERGE は、同じ方法でマージ対象の Tablet を選択します。手動 MERGE では `PROPERTIES` で指定した値を使用します（指定しない場合はテーブルの目標サイズを使用します）。マージ対象となるのは `ceil(0.8 × tablet_reshard_target_size)` 未満の Tablet のみです。隣接するこれらの Tablet はレンジ順にグループ化され、各グループの合計サイズは `tablet_reshard_target_size` を超えません。間にこれより大きい Tablet がある場合、グループはそこで区切られます。マージによって、マテリアライズドインデックスの Tablet 数が並列度の下限を下回ることはありません。この下限は、ウェアハウスのコンピュートノード数（`tablet_reshard_max_split_count` を上限とし、2 以上）です。マージできる Tablet が 1 つもない場合、手動のステートメントは `No tablets need to merge in table ...` というエラーになります。
     - Tablet ID を指定した手動 MERGE は、Tablet のサイズや並列度の下限を確認せず、指定したグループをそのままマージします。各グループは、同じパーティションかつ同じマテリアライズドインデックス内の、連続する 2 つ以上の Tablet で構成する必要があります。
     - 自動マージと手動 MERGE のいずれも、他の Tablet とデータファイルを共有しなくなった Tablet のみをマージします。SPLIT で生成された Tablet は、コンパクションで書き換えられるまで元の Tablet のデータファイルを共有するため、再びマージする前に、そのパーティションに対して `ALTER TABLE ... COMPACT` を実行してください。
     - いずれの場合も、現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満である必要があります。
@@ -896,6 +896,7 @@ SET ("key" = "value")
 - `bucket_size` (v3.2 以降でサポート)
 - `base_compaction_forbidden_time_ranges` (v3.2.13 以降でサポート)
 - `enable_statistic_auto_collect`
+- `tablet_reshard_target_size` (Range 分散テーブルのみ。`""` に設定すると削除されます)。[Tablet サイズの調整](#tablet-サイズの調整) を参照してください。
 
 :::note
 
@@ -1442,7 +1443,7 @@ ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 
 ### Tablet の分割または結合
 
-- 表内にあるすべての条件を満たすタブレットを、10 GB (デフォルト) を目標サイズとして分割する。
+- 表内にあるすべての条件を満たすタブレットを、テーブルの目標サイズ (デフォルトは 10 GB) に従って分割する。
 
 ```SQL
 ALTER TABLE table1 SPLIT TABLETS;

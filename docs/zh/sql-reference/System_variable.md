@@ -616,6 +616,12 @@ FROM test;
 - 默认值：true
 - 引入版本：v3.5.1
 
+### enable_delta_lake_function_predicate_pruning
+
+* 描述：对 Delta Lake 表列取函数后的谓词，是否用于跳过数据文件。StarRocks 会把这类谓词转换为该列本身的条件，例如把 `year(dt) = 2024` 转换为 `dt >= '2024-01-01' AND dt < '2025-01-01'`，从而通过分区值和文件列统计信息跳过文件，并通过 Parquet row group 的列统计信息跳过 row group。适用的函数与 `enable_iceberg_function_predicate_pruning` 相同。原谓词仍会对数据行求值。设置为 `false` 时按原方式规划这类查询，例如用于对比结果。
+* 默认值：true
+* 引入版本：v26.3
+
 ### enable_distinct_agg_over_window
 
 * **描述**: 控制优化器重写，将带有 WINDOW 子句的 DISTINCT 聚合调用转换为等价的基于 join 的计划。启用时（`true`，默认值），QueryOptimizer.invoke convertDistinctAggOverWindowToNullSafeEqualJoin 将会：
@@ -684,6 +690,12 @@ FROM test;
 * 描述：是否开启资源组粒度的[查询队列](../administration/management/resource_management/query_queues.md)。
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
+
+### enable_hive_function_predicate_pruning
+
+* 描述：对 Hive 表日期或日期时间列取函数后的谓词，是否用于裁剪分区。StarRocks 会把这类谓词转换为该列本身的条件，例如把 `year(dt) = 2024` 转换为 `dt >= '2024-01-01' AND dt < '2025-01-01'`，从而在分区列上裁剪分区，并通过 row group 的列统计信息跳过 row group。适用于 `enable_iceberg_function_predicate_pruning` 中列出的日期和时间函数。原谓词仍会对数据行求值。设置为 `false` 时按原方式规划这类查询，例如用于对比结果。
+* 默认值：true
+* 引入版本：v26.3
 
 ### enable_iceberg_eq_delete_runtime_filter_pruning
 

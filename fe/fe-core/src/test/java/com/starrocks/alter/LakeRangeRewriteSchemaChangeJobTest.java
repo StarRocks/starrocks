@@ -288,16 +288,54 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
             Config.tablet_reshard_target_size = 1024;
             int expected = TabletPreSplitCoordinator.selectTabletCount(
-                    new Estimates(plan.partitionDataSize, 0L), activeComputeNodeCount);
+                    new Estimates(plan.partitionDataSize, 0L), activeComputeNodeCount, Config.tablet_reshard_target_size);
             Assertions.assertEquals(expected,
-                    job.selectRequestedTabletCount(plan, activeComputeNodeCount));
+                    job.selectRequestedTabletCount(plan, activeComputeNodeCount,
+                            table.getTabletReshardTargetSize()));
 
             Config.tablet_reshard_target_size = -1;
             Assertions.assertThrows(IllegalStateException.class,
-                    () -> job.selectRequestedTabletCount(plan, activeComputeNodeCount));
+                    () -> job.selectRequestedTabletCount(plan, activeComputeNodeCount,
+                            table.getTabletReshardTargetSize()));
         } finally {
             Config.tablet_reshard_target_size = oldTargetSize;
         }
+    }
+
+    @Test
+    public void testPlanPartitionShadowSizesAgainstTableTargetSize() throws Exception {
+        long oldTargetSize = Config.tablet_reshard_target_size;
+        long oneGiB = 1L << 30;
+        List<Long> receivedTargets = new ArrayList<>();
+        new MockUp<TabletPreSplitCoordinator>() {
+            @Mock
+            public int selectTabletCount(Estimates estimates, int activeComputeNodeCount, long targetSize) {
+                receivedTargets.add(targetSize);
+                return 1;
+            }
+        };
+        try {
+            Config.tablet_reshard_target_size = 10 * oneGiB;
+            PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+            MaterializedIndex baseIndex = partition.getLatestIndex(table.getBaseIndexMetaId());
+            LakeRangeRewriteSchemaChangeJob job = newJob(stubSampler(List.of()));
+
+            job.planPartitionShadow(newPlanWithDataSize(partition, baseIndex, 10 * oneGiB), table, DB_NAME);
+            Assertions.assertEquals(List.of(10 * oneGiB), receivedTargets);
+
+            table.setTabletReshardTargetSize(oneGiB);
+            receivedTargets.clear();
+            job.planPartitionShadow(newPlanWithDataSize(partition, baseIndex, 10 * oneGiB), table, DB_NAME);
+            Assertions.assertEquals(List.of(oneGiB), receivedTargets);
+        } finally {
+            Config.tablet_reshard_target_size = oldTargetSize;
+        }
+    }
+
+    private PendingPartitionPlan newPlanWithDataSize(PhysicalPartition partition, MaterializedIndex baseIndex,
+                                                     long dataSize) {
+        return new PendingPartitionPlan(partition.getId(), baseIndex, baseIndex.getShardGroupId(),
+                table.getPartition(partition.getParentId()).getName(), dataSize, table.getName(), partition);
     }
 
     @Test

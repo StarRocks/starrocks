@@ -41,7 +41,8 @@ public class TabletReshardUtils {
 
     // Reshard size invariants — DO NOT change individually.
     //
-    // Let T = Config.tablet_reshard_target_size.
+    // Let T = the table's target size (OlapTable.getTabletReshardTargetSize(): its tablet_reshard_target_size
+    // property when in force, else Config.tablet_reshard_target_size).
     //   splitThreshold     = ceil(1.5 * T)   (split fires when dataSize >= splitThreshold)
     //   mergePairThreshold = ceil(0.8 * T)   (merge fires when pair sum < mergePairThreshold)
     //   mergeGroupCap      = T               (merge groups packed up to mergeGroupCap)
@@ -88,18 +89,17 @@ public class TabletReshardUtils {
         return target;
     }
 
-    public static boolean needSplit(long dataSize) {
+    public static boolean needSplit(long dataSize, long targetSize) {
         // Reuse calcSplitCount so we never trigger when no actual split would be produced
         // (e.g., tablet_reshard_max_split_count <= 1).
-        return calcSplitCount(dataSize, Config.tablet_reshard_target_size) > 1;
+        return calcSplitCount(dataSize, targetSize) > 1;
     }
 
-    public static boolean needMerge(long minAdjacentTabletPairSize) {
-        long target = Config.tablet_reshard_target_size;
-        if (target <= 0) {
+    public static boolean needMerge(long minAdjacentTabletPairSize, long targetSize) {
+        if (targetSize <= 0) {
             return false;
         }
-        return minAdjacentTabletPairSize < mergePairThreshold(target);
+        return minAdjacentTabletPairSize < mergePairThreshold(targetSize);
     }
 
     /**

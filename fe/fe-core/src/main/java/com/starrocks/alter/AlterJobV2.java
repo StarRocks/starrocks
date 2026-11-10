@@ -737,12 +737,19 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     // Call before sending a FORCE cancel's no-op publish. A no-op publish that fails part way leaves the job in
-    // FINISHED_REWRITING, where normal publishes resume; from then on they are never sent as retries.
+    // FINISHED_REWRITING, and from then on publishVersion() refuses to finish it: only another FORCE cancel can.
     protected void markLakeNoOpPublishSent() {
         lakeNoOpPublishSent = true;
     }
 
     protected boolean publishVersion() {
+        // The no-op publish may have written some partition's commit version with the job's gtid but without the
+        // alter's changes. A normal publish that reaches such a partition while BE still caches that version takes
+        // it as its own and succeeds, and the job would finish without the alter applied there. This also drops the
+        // result of a normal publish that was still running when the no-op publish was sent.
+        if (lakeNoOpPublishSent) {
+            return false;
+        }
         if (publishVersionFuture == null) {
             ThreadPoolExecutor executor = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor();
             try {

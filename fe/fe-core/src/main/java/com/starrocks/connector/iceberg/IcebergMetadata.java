@@ -95,6 +95,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ExternalScanPredicates;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticUtils;
@@ -534,8 +535,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         // executeMetadataDelete. Metadata (whole-file) delete stays sound only when every candidate file is
         // entirely matched or entirely unmatched by the whole predicate.
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
-        PartitionCastPredicatePruner.PartitionResidual residual =
-                PartitionCastPredicatePruner.split(conjuncts, identityStringPartitionColumns(icebergTable));
+        ExternalScanPredicates.PartitionResidual residual =
+                ExternalScanPredicates.splitStringPartitionCast(conjuncts, identityStringPartitionColumns(icebergTable));
         boolean droppedExists = residual.pushable.size() + residual.residual.size() < conjuncts.size();
         if (droppedExists) {
             // A cast-on-string conjunct references a non-partition column (or a mixed OR): a file may contain
@@ -646,8 +647,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         // StarRocks-side per partition and delete matching files individually. Anything else keeps the existing
         // row-filter delete. canDeleteUsingMetadata guarantees the whole predicate is partition level here.
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
-        PartitionCastPredicatePruner.PartitionResidual residual =
-                PartitionCastPredicatePruner.split(conjuncts, identityStringPartitionColumns(icebergTable));
+        ExternalScanPredicates.PartitionResidual residual =
+                ExternalScanPredicates.splitStringPartitionCast(conjuncts, identityStringPartitionColumns(icebergTable));
 
         DeleteFiles deleteFiles = nativeTbl.newDelete();
         String deleteDesc;
@@ -1446,7 +1447,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         // Cast-on-string-partition-column conjuncts (e.g. CAST(c AS DATETIME) = <ts>) are pruned unsoundly
         // by Iceberg's native string comparison, so keep them out of the pushed predicate and evaluate them
         // here against each file's partition values (consistent with the backend filter).
-        PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+        ExternalScanPredicates.PartitionResidual residual = ExternalScanPredicates.splitStringPartitionCast(
                 scalarOperators, identityStringPartitionColumns(icebergTable));
         boolean existPartitionTransformedEvolution = icebergTable.hasPartitionTransformedEvolution();
         Expression icebergPredicate = convertPredicate(icebergTable, residual.pushable);
@@ -1601,7 +1602,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
             // See collectTableStatisticsAndCacheIcebergSplit: keep cast-on-string-partition conjuncts out of the
             // pushed predicate and evaluate them here so pruning stays consistent with the backend filter.
-            PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+            ExternalScanPredicates.PartitionResidual residual = ExternalScanPredicates.splitStringPartitionCast(
                     scalarOperators, identityStringPartitionColumns(icebergTable));
             Expression icebergPredicate = convertPredicate(icebergTable, residual.pushable);
             baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, predicateSearchKey);
@@ -2207,7 +2208,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         // value never equals the rendered '...00:00:00' string, so the deletes would not be applied and already
         // deleted rows would leak back into the result. Keep such conjuncts out of the pushed predicate and instead
         // filter the returned delete files against their partition values StarRocks-side.
-        PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+        ExternalScanPredicates.PartitionResidual residual = ExternalScanPredicates.splitStringPartitionCast(
                 scalarOperators, identityStringPartitionColumns(icebergTable));
         Expression icebergPredicate = convertPredicate(icebergTable, residual.pushable);
 
@@ -2526,7 +2527,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         // domain, so a manifest whose partition range definitely cannot satisfy them is still pruned. A kept
         // manifest is counted in full (manifest-level granularity), so the result stays a safe over-estimate.
         Set<String> stringPartitionColumns = identityStringPartitionColumns(icebergTable);
-        PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+        ExternalScanPredicates.PartitionResidual residual = ExternalScanPredicates.splitStringPartitionCast(
                 Utils.extractConjuncts(predicate), stringPartitionColumns);
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
                 new ScalarOperatorToIcebergExpr.IcebergContext(nativeTbl.schema().asStruct());

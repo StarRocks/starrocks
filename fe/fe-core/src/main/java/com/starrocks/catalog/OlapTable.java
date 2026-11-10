@@ -2548,6 +2548,19 @@ public class OlapTable extends Table {
         return tableProperty.getBucketSize();
     }
 
+    // The table's own split/merge target size, or 0 when it follows the cluster-wide target.
+    // The table's size is in force only while the cluster-wide target is positive.
+    public long getTabletReshardTargetSizeOverride(long clusterTargetSize) {
+        return clusterTargetSize > 0 ? tableProperty.getTabletReshardTargetSize() : 0L;
+    }
+
+    // Effective tablet split/merge target size of this table.
+    public long getTabletReshardTargetSize() {
+        long clusterTargetSize = Config.tablet_reshard_target_size;
+        long override = getTabletReshardTargetSizeOverride(clusterTargetSize);
+        return override > 0 ? override : clusterTargetSize;
+    }
+
     public Long getMutableBucketNum() {
         return tableProperty.getMutableBucketNum();
     }
@@ -2561,6 +2574,13 @@ public class OlapTable extends Table {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE,
                         String.valueOf(bucketSize));
         tableProperty.buildBucketSize();
+    }
+
+    public void setTabletReshardTargetSize(long size) {
+        Preconditions.checkArgument(size > 0, "tablet_reshard_target_size must be positive: %s", size);
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE,
+                String.valueOf(size));
+        tableProperty.buildTabletReshardTargetSize();
     }
 
     public void setMutableBucketNum(long bucketNum) {
@@ -3435,6 +3455,13 @@ public class OlapTable extends Table {
         Long bucketSize = getAutomaticBucketSize();
         if (bucketSize > 0) {
             properties.put(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, bucketSize.toString());
+        }
+
+        // tablet split/merge target size of a range-distributed table
+        long tabletReshardTargetSize = tableProperty.getTabletReshardTargetSize();
+        if (tabletReshardTargetSize > 0) {
+            properties.put(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE,
+                    String.valueOf(tabletReshardTargetSize));
         }
 
         // mutable bucket num
