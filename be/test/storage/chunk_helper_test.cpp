@@ -14,14 +14,15 @@
 
 #include "storage/chunk_helper.h"
 
+#include <string>
+#include <string_view>
+
+#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
-<<<<<<< HEAD
-=======
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
->>>>>>> 8283076 ([BugFix] Clarify column capacity limit errors (#82749))
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -30,6 +31,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

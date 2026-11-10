@@ -29,6 +29,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "storage/olap_type_infra.h"
@@ -357,8 +358,6 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
     }
 }
 
-<<<<<<< HEAD
-=======
 Status ChunkHelper::reject_if_over_capacity(const Chunk& chunk, std::string_view what, int64_t tablet_id,
                                             int64_t txn_id) {
     Status st = chunk.capacity_limit_reached();
@@ -370,7 +369,6 @@ Status ChunkHelper::reject_if_over_capacity(const Chunk& chunk, std::string_view
                                 std::string(what), tablet_id, txn_id, chunk.num_rows(), std::string(st.message())));
 }
 
->>>>>>> 8283076 ([BugFix] Clarify column capacity limit errors (#82749))
 void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_indexes, const Schema& schema,
                                        const starrocks::TabletSchemaCSPtr& tschema, Chunk* chunk) {
     for (auto field_index : char_column_indexes) {
