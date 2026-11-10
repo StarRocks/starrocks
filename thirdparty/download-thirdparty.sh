@@ -514,6 +514,7 @@ cd -
 cd $TP_SOURCE_DIR/$SERDES_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $SERDES_SOURCE = "libserdes-7.3.1" ]; then
     patch -p0 < $TP_PATCH_DIR/libserdes-7.3.1.patch
+    patch -p1 < $TP_PATCH_DIR/libserdes-7.3.1-call-once.patch
     touch $PATCHED_MARK
 fi
 echo "Finished patching $SERDES_SOURCE"
