@@ -267,7 +267,9 @@ public class IcebergFileStats {
             // SR on Iceberg only support primitive type now, idToTypeMapping do not contains the corresponding id
             // for complex types like struct, map etc.
             Type.PrimitiveType type = idToTypeMapping.get(id);
-            if (type != null && !IcebergUtil.isPromotedDateBound(type, value)) {
+            // Spatial bounds are bounding box corners and cannot be compared as scalar min/max.
+            if (type != null && type.typeId() != Type.TypeID.GEOGRAPHY && type.typeId() != Type.TypeID.GEOMETRY
+                    && !IcebergUtil.isPromotedDateBound(type, value)) {
                 map.put(id, Conversions.fromByteBuffer(type, value));
             }
         });
