@@ -207,6 +207,7 @@ set(STORAGE_FILES
     lake/tablet_merger.cpp
     lake/tablet_merger_split_family.cpp
     lake/tablet_reshard.cpp
+    lake/replication_schema_utils.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
     lake/lake_proto_normalizer.cpp

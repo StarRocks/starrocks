@@ -140,6 +140,29 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Set it to `false` only while the cluster may still be downgraded to a version that predates the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
 - Introduced in: v4.2
 
+<<<<<<< HEAD
+=======
+### lake_replication_enable_light_schema_change
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Allows shared-data replication snapshots with live rowsets from compatible lightweight add/drop column changes. The source and target current schemas must match logically. Added columns must be ordinary scalar value columns with a default value or nullable semantics; key, sort, type, generated-column, nested-UID, external-index, bundled-file, and shared/range-tablet changes are not supported. When disabled, snapshots with live historical rowset schemas are rejected. Validated dropped columns are removed from segment footer metadata; their data pages are not rewritten. The setting is captured when each replication task starts.
+- Introduced in: -
+
+Enable this option only after **all target CNs** support it. A normalized replication transaction records its target schema and fails publish if that schema changes. Disabling this option prevents new admissions but does not change replay of already recorded transactions. Older CNs cannot safely replay these transaction logs; finish or abort pending normalized transactions before any downgrade and do not assume that disabling the option makes a downgrade safe.
+
+### lake_enable_publish_partial_meta
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a publish of a shared-data table with file bundling keeps the result of each tablet that the aggregator may not have received. A tablet whose publish finishes more than the publish RPC timeout plus 3 seconds after the request arrived, or whose publish is a retry, keeps its result in the local Data Cache of the node, never in object storage. A later retry on that node reads it back instead of applying the transactions again, so tablets that already finished are not redone on every retry of a slow partition. The entries are evicted like any other Data Cache entry. Takes effect only when Data Cache is enabled. Set the same value on all BE and CN nodes.
+- Introduced in: v4.2
+
+>>>>>>> 1bd91b8 ([Enhancement] Support light schema changes in shared-data replication (#80974))
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
