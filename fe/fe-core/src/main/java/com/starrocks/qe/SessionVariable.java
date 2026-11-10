@@ -908,6 +908,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
+    // Deprecated: an Iceberg identity partition column always takes its value from the partition metadata.
+    @Deprecated
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
 
     public static final String ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE =
@@ -3829,7 +3831,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboPredicateSubfieldPath;
     }
 
-    @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
+    // Deprecated and invisible, no effect: kept so that SET of it still succeeds.
+    @Deprecated
+    @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE, flag = VariableMgr.INVISIBLE)
     private boolean enableIcebergIdentityColumnOptimize = true;
 
     @VarAttr(name = ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE, flag = VariableMgr.INVISIBLE)
@@ -6487,14 +6491,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getLargeDecimalUnderlyingType() {
         return largeDecimalUnderlyingType;
-    }
-
-    public boolean getEnableIcebergIdentityColumnOptimize() {
-        return enableIcebergIdentityColumnOptimize;
-    }
-
-    public void setEnableIcebergIdentityColumnOptimize(boolean enableIcebergIdentityColumnOptimize) {
-        this.enableIcebergIdentityColumnOptimize = enableIcebergIdentityColumnOptimize;
     }
 
     public boolean getEnableIcebergCompactionWithRowLineage() {

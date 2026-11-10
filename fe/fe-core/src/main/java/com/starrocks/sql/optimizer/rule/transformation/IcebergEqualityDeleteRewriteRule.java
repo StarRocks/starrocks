@@ -470,7 +470,19 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         if (!context.getSessionVariable().isEnableIcebergEqDeleteRuntimeFilterPruning()) {
             return Set.of();
         }
+<<<<<<< HEAD
         Map<String, Column> scanColumns = scan.getColRefToColumnMetaMap().values().stream()
+=======
+        Set<String> scanColumnNames = scan.getColRefToColumnMetaMap().values().stream()
+                .map(Column::getName)
+                .collect(Collectors.toSet());
+        // DELETE, UPDATE and MERGE read row locators; keep every delete for them
+        if (scanColumnNames.contains(IcebergTable.FILE_PATH) || scanColumnNames.contains(IcebergTable.ROW_POSITION)) {
+            return Set.of();
+        }
+        // the full schema follows the read schema, so it has every column a partition field resolves to
+        Map<String, Column> tableColumns = icebergTable.getFullSchema().stream()
+>>>>>>> a0c2fd4 ([BugFix][RB-225] Fix wrong results: Iceberg renamed columns without field ids, NaN ORC bounds, identity partition values, non-deterministic join predicates (#82800))
                 .collect(Collectors.toMap(Column::getName, column -> column, (a, b) -> a));
         // DELETE, UPDATE and MERGE read row locators; keep every delete for them
         if (scanColumns.containsKey(IcebergTable.FILE_PATH) || scanColumns.containsKey(IcebergTable.ROW_POSITION)) {

@@ -191,10 +191,25 @@ public class OnPredicateMoveAroundRule extends TransformationRule {
         ScalarOperator offspring = binaryPredicate.getChild(1 - idx);
         BinaryType binaryType = binaryPredicate.getBinaryType();
         ScalarOperator rewriteResult = null;
+<<<<<<< HEAD
         if (binaryType.isEqual()) {
             if (domainProperty.contains(seed)) {
                 ReplaceShuttle shuttle = new ReplaceShuttle(Map.of(seed, offspring));
                 rewriteResult = shuttle.rewrite(domainProperty.getPredicateDesc(seed));
+=======
+        if (binaryType.isEquivalence()) {
+            // a non-deterministic predicate evaluates apart on each side: a row could fail the copy while the row it
+            // joins passes the original
+            if (domainProperty.contains(seed)) {
+                ScalarOperator deterministic = Utils.compoundAnd(
+                        Utils.extractConjuncts(domainProperty.getPredicateDesc(seed)).stream()
+                                .filter(e -> !Utils.hasNonDeterministicFunc(e))
+                                .collect(Collectors.toList()));
+                if (deterministic != null) {
+                    ReplaceShuttle shuttle = new ReplaceShuttle(Map.of(seed, offspring));
+                    rewriteResult = shuttle.rewrite(deterministic);
+                }
+>>>>>>> a0c2fd4 ([BugFix][RB-225] Fix wrong results: Iceberg renamed columns without field ids, NaN ORC bounds, identity partition values, non-deterministic join predicates (#82800))
             }
         } else if (binaryType == BinaryType.LT || binaryType == BinaryType.LE) {
             if (domainProperty.contains(seed)) {
