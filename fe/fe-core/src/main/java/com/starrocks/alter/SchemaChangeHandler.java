@@ -4555,8 +4555,11 @@ public class SchemaChangeHandler extends AlterHandler {
                 ? schemaChangeJobV2.cancel(reason, true)
                 : schemaChangeJobV2.cancel(reason);
         if (!cancelled) {
+            // A FORCE cancel of an unfinished job fails only when its no-op publish fails. The job then no longer
+            // publishes on its own and waits for the FORCE cancel to be retried.
             throw new DdlException("Job can not be cancelled. State: " + schemaChangeJobV2.getJobState()
-                    + (force ? "" : " (consider retrying with CANCEL ALTER TABLE ... FORCE if the publish is stuck)"));
+                    + (force ? " (the no-op publish failed; retry CANCEL ALTER TABLE ... FORCE)"
+                            : " (consider retrying with CANCEL ALTER TABLE ... FORCE if the publish is stuck)"));
         }
     }
 

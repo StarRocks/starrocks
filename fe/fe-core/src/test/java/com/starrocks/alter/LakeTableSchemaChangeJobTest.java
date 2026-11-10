@@ -38,6 +38,7 @@ import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.Range;
@@ -1070,6 +1071,82 @@ public class LakeTableSchemaChangeJobTest {
         Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
                 .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size(),
                 "shadow tablets must be cleaned up by removeShadowIndex on force-cancel");
+    }
+
+    private void cancelAlterColumn(boolean force) throws Exception {
+        String sql = "CANCEL ALTER TABLE COLUMN FROM " + DB_NAME + "." + table.getName() + (force ? " FORCE" : "");
+        CancelAlterTableStmt stmt = (CancelAlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getSchemaChangeHandler().cancel(stmt);
+    }
+
+    @Test
+    public void testNoNormalPublishAfterPartialForceNoOpPublish() throws Exception {
+        LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        drivePendingJob(schemaChangeJob);
+        schemaChangeJob.runWaitingTxnJob();
+        schemaChangeJob.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+
+        // The no-op publish fails, and a normal publish succeeds as it does on BE when it finds the version the
+        // no-op publish wrote in the metacache. Sending one would finish the job without the schema change.
+        AtomicBoolean noOpFails = new AtomicBoolean(true);
+        List<Long> normalPublishTxnIds = new ArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       boolean isRetryPublish) {
+                if (Boolean.TRUE.equals(txnInfo.noOpPublish)) {
+                    if (noOpFails.get()) {
+                        throw new RuntimeException("injected no-op publish failure");
+                    }
+                    return;
+                }
+                normalPublishTxnIds.add(txnInfo.txnId);
+            }
+        };
+        // Go through the statement so the error the operator sees is checked too.
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.addAlterJobV2(schemaChangeJob);
+        boolean oldForceEnabled = Config.enable_admin_skip_committed_txn;
+        Config.enable_admin_skip_committed_txn = true;
+        try {
+            DdlException e = Assertions.assertThrows(DdlException.class, () -> cancelAlterColumn(false));
+            Assertions.assertTrue(e.getMessage().contains("consider retrying with CANCEL ALTER TABLE ... FORCE"),
+                    e.getMessage());
+            e = Assertions.assertThrows(DdlException.class, () -> cancelAlterColumn(true));
+            Assertions.assertTrue(e.getMessage().contains("the no-op publish failed; retry CANCEL ALTER TABLE ... FORCE"),
+                    e.getMessage());
+        } finally {
+            Config.enable_admin_skip_committed_txn = oldForceEnabled;
+            handler.clearJobs();
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        for (int i = 0; i < 3 && schemaChangeJob.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING; i++) {
+            schemaChangeJob.runFinishedRewritingJob();
+            if (schemaChangeJob.publishVersionFuture != null) {
+                schemaChangeJob.publishVersionFuture.get();
+            }
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+        Assertions.assertTrue(normalPublishTxnIds.isEmpty());
+
+        // A FORCE cancel retry finishes the job and drops the shadow index.
+        noOpFails.set(false);
+        Assertions.assertTrue(schemaChangeJob.cancel("force-cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+        Assertions.assertTrue(schemaChangeJob.isForceSkippedAtCommitted());
+        Assertions.assertTrue(normalPublishTxnIds.isEmpty());
+        Partition partition = table.getPartitions().stream().findFirst().orElse(null);
+        Assertions.assertNotNull(partition);
+        Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
