@@ -28,7 +28,7 @@
 #include "formats/utils.h"
 #include "runtime/mem_pool.h"
 #include "runtime/type_info_allocator_adapter.h"
-#include "types/geo_type_descriptor.h"
+#include "types/geo_srid.h"
 #include "types/type_info.h"
 
 namespace starrocks::parquet {

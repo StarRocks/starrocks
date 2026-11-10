@@ -47,7 +47,7 @@
 #include "gutil/compiler_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "types/geo_type_descriptor.h"
+#include "types/geo_srid.h"
 
 namespace starrocks {
 
