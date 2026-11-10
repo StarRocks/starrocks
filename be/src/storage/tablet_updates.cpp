@@ -971,6 +971,7 @@ bool TabletUpdates::need_apply() const {
 
 DEFINE_FAIL_POINT(tablet_apply_normal_rowset_commit_internal_error);
 DEFINE_FAIL_POINT(tablet_apply_normal_rowset_commit_memory_exceed);
+DEFINE_FAIL_POINT(tablet_apply_column_partial_update_commit_internal_error);
 DEFINE_FAIL_POINT(tablet_apply_load_rowset_update_state_failed);
 DEFINE_FAIL_POINT(tablet_apply_load_index_failed);
 DEFINE_FAIL_POINT(tablet_apply_rowset_not_found);
@@ -1133,6 +1134,9 @@ Status TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo&
     auto span = Tracer::Instance().start_trace_tablet("apply_column_partial_update_commit", _tablet.tablet_id());
     auto scoped = trace::Scope(span);
     Status apply_st;
+
+    FAIL_POINT_TRIGGER_RETURN(tablet_apply_column_partial_update_commit_internal_error,
+                              Status::InternalError("inject tablet_apply_column_partial_update_commit_internal_error"));
 
     auto tablet_id = _tablet.tablet_id();
     uint32_t rowset_id = version_info.deltas[0];
