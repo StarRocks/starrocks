@@ -152,7 +152,7 @@ public class TabletStatMgr extends FrontendDaemon {
                                 indexRowCountMap.put(Pair.create(physicalPartition.getId(), index.getId()),
                                         indexRowCount);
                                 if (!olapTable.isTempPartition(partition.getId())
-                                        && index.getMetaId() == olapTable.getBaseIndexMetaId()) {
+                                        && index.getId() == olapTable.getBaseIndexId()) {
                                     totalRowCount += indexRowCount;
                                 }
                             } // end for indices

@@ -263,11 +263,11 @@ public class StatisticsCalcUtilsTest {
         OlapTable table = (OlapTable) connectContext.getGlobalStateMgr()
                 .getLocalMetastore().getDb("statistics_calc_utils_test")
                 .getTable("test_partition_table");
-        long baseMetaId = table.getBaseIndexMetaId();
-        long rollupMetaId = table.getIndexMetaIdByName("r1");
+        long baseMetaId = table.getBaseIndexId();
+        long rollupMetaId = table.getIndexIdByName("r1");
         for (Partition partition : table.getPartitions()) {
-            partition.getDefaultPhysicalPartition().getLatestIndex(baseMetaId).setRowCount(1000);
-            partition.getDefaultPhysicalPartition().getLatestIndex(rollupMetaId).setRowCount(10);
+            partition.getDefaultPhysicalPartition().getIndex(baseMetaId).setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getIndex(rollupMetaId).setRowCount(10);
         }
 
         Assertions.assertEquals(3000, StatisticsCalcUtils.getTableRowCount(
