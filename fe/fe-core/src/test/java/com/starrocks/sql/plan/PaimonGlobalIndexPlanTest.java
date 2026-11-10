@@ -44,6 +44,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
@@ -79,6 +80,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -278,6 +280,7 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
 
     @Test
     public void testVirtualIndexSqlPlansDistributedShards() throws Exception {
+        connectContext.setThreadLocalInfo();
         PaimonTable table = (PaimonTable) indexedMetadata.getTable(
                 connectContext, "pmn_db1", "unpartitioned_table");
         PaimonGlobalIndexRequest request = createVirtualIndexRequest(table);
@@ -287,10 +290,15 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
             // COUNT and args-only projections prune index_result, exercising the scan-predicate
             // getter/setter used by PruneHDFSScanColumnRule rather than only the two-column path.
             for (String projection : List.of("to_base64(index_result)", "count(*)", "args")) {
-                String plan = getFragmentPlan("SELECT " + projection + " FROM "
+                ExecPlan plan = planInternalIndexQuery("SELECT " + projection + " FROM "
                         + "`unpartitioned_table$global_index` WHERE args = '" + request.toTransportString() + "'");
-                assertContains(plan, "TABLE: unpartitioned_table$global_index",
+                assertContains(plan.getExplainString(TExplainLevel.NORMAL), "TABLE: unpartitioned_table$global_index",
                         "SNAPSHOT: " + request.getSnapshotId(), "SHARDS: 2");
+                SemanticException error = Assertions.assertThrows(SemanticException.class,
+                        () -> PlanFragmentBuilder.createPhysicalPlan(plan.getPhysicalPlan(), connectContext,
+                                plan.getOutputColumns(), plan.getColumnRefFactory(), plan.getColNames(),
+                                TResultSinkType.HTTP_PROTOCAL, true));
+                Assertions.assertTrue(error.getMessage().contains("Paimon Global Index tables are internal-only"));
             }
 
             SessionVariable defaults = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable();
@@ -302,6 +310,8 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
                 @Mock
                 public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
                     Assertions.assertSame(connectContext, context.getParent());
+                    Assertions.assertEquals(ConnectContext.InternalQueryPurpose.PAIMON_GLOBAL_INDEX,
+                            context.getInternalQueryPurpose());
                     ExecPlan plan = StatementPlanner.plan(SqlParser.parseOneWithStarRocksDialect(sql,
                             context.getSessionVariable()), context, TResultSinkType.HTTP_PROTOCAL);
                     String explain = plan.getExplainString(TExplainLevel.NORMAL);
@@ -345,7 +355,7 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
         try {
             for (String projection : List.of("to_base64(index_result)", "count(*)", "args")) {
                 for (String limit : List.of("", " LIMIT 1")) {
-                    ExecPlan plan = getExecPlan("SELECT " + projection + " FROM `unpartitioned_table$global_index` "
+                    ExecPlan plan = planInternalIndexQuery("SELECT " + projection + " FROM `unpartitioned_table$global_index` "
                             + "WHERE args = '" + transport + "' AND index_result IS NULL" + limit);
                     String explain = plan.getExplainString(TExplainLevel.NORMAL);
                     assertContains(explain, "SELECT", "index_result IS NULL", "SHARDS: 2");
@@ -381,7 +391,7 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
                 }
             }
 
-            ExecPlan argsOnlyPlan = getExecPlan("SELECT args FROM `unpartitioned_table$global_index` "
+            ExecPlan argsOnlyPlan = planInternalIndexQuery("SELECT args FROM `unpartitioned_table$global_index` "
                     + "WHERE '" + transport + "' = args LIMIT 1");
             PaimonIndexScanNode scan = (PaimonIndexScanNode) argsOnlyPlan.getScanNodes().get(0);
             Assertions.assertEquals(1, scan.getLimit());
@@ -398,7 +408,7 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
         for (String predicate : List.of("args <> 'request'", "args = ''", "args IS NULL",
                 "args = to_base64(index_result)", "args = 'request' OR index_result IS NULL")) {
             Exception exception = Assertions.assertThrows(Exception.class,
-                    () -> getExecPlan("SELECT args FROM `unpartitioned_table$global_index` WHERE " + predicate));
+                    () -> planInternalIndexQuery("SELECT args FROM `unpartitioned_table$global_index` WHERE " + predicate));
             Assertions.assertTrue(exception.getMessage().contains("exactly one non-empty string"),
                     exception.toString());
         }
@@ -415,6 +425,22 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
                 nativeTable.schema().id(), nativeTable.schema().timeMillis(), condition);
     }
 
+    private static ExecPlan planInternalIndexQuery(String sql) {
+        AtomicReference<ExecPlan> plan = new AtomicReference<>();
+        SimpleExecutor executor = new SimpleExecutor("paimon-index-plan-test", TResultSinkType.HTTP_PROTOCAL) {
+            @Override
+            public List<TResultBatch> executeDQL(String query, ConnectContext context) {
+                context.setCurrentCatalog(connectContext.getCurrentCatalog());
+                plan.set(StatementPlanner.plan(SqlParser.parseOneWithStarRocksDialect(query,
+                        context.getSessionVariable()), context));
+                return List.of();
+            }
+        };
+        executor.executeDQLAsCaller(sql, 30, connectContext, SessionVariable.DEFAULT_SELECT_LIMIT,
+                ConnectContext.InternalQueryPurpose.PAIMON_GLOBAL_INDEX);
+        return plan.get();
+    }
+
     @Test
     public void testVirtualIndexRejectsForgedLiteralBeforeShardPlanning() {
         PaimonTable table = (PaimonTable) indexedMetadata.getTable(
@@ -428,7 +454,7 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
                 children.get(0).getAsJsonObject().addProperty("t", "bigint");
             }
             String transport = Base64.getEncoder().encodeToString(request.toString().getBytes(StandardCharsets.UTF_8));
-            Exception failure = Assertions.assertThrows(Exception.class, () -> getExecPlan(
+            Exception failure = Assertions.assertThrows(Exception.class, () -> planInternalIndexQuery(
                     "SELECT index_result FROM `unpartitioned_table$global_index` WHERE args='" + transport + "'"));
             Assertions.assertTrue(failure.toString().contains("Paimon Global Index"), failure.toString());
         }
@@ -436,32 +462,48 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
     }
 
     @Test
-    public void testVirtualIndexPreservesDataCachePopulateDecision() throws Exception {
+    public void testVirtualIndexUsesInternalQueryDataCacheDefaults() throws Exception {
         PaimonTable table = (PaimonTable) indexedMetadata.getTable(
                 connectContext, "pmn_db1", "unpartitioned_table");
         String transport = createVirtualIndexRequest(table).toTransportString();
-        SessionVariable session = connectContext.getSessionVariable();
-        boolean scanCache = session.isEnableScanDataCache();
-        boolean populate = session.isEnablePopulateDataCache();
-        String mode = session.getDataCachePopulateMode().toString();
+        SessionVariable caller = connectContext.getSessionVariable();
+        SessionVariable defaults = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable();
+        boolean callerScanCache = caller.isEnableScanDataCache();
+        boolean callerPopulate = caller.isEnablePopulateDataCache();
+        String callerMode = caller.getDataCachePopulateMode().toString();
+        boolean defaultScanCache = defaults.isEnableScanDataCache();
+        boolean defaultPopulate = defaults.isEnablePopulateDataCache();
+        String defaultMode = defaults.getDataCachePopulateMode().toString();
         doAnswer(invocation -> List.of(new ConnectorIndexShard(0, 9)))
                 .when(indexedMetadata).getIndexShards(any(Table.class), anyLong(), anyMap());
         try {
-            session.setEnableScanDataCache(true);
-            session.setEnablePopulateDataCache(true);
+            // #80890 deliberately gives caller-bound internal queries fresh session defaults and
+            // copies only identity, SQL context and resource policy. Paimon's purpose/limit
+            // extensions must not reintroduce a full caller SessionVariable clone.
+            caller.setEnableScanDataCache(false);
+            caller.setEnablePopulateDataCache(false);
+            caller.setDataCachePopulateMode("never");
+            defaults.setEnableScanDataCache(true);
+            defaults.setEnablePopulateDataCache(true);
             for (String policy : List.of("never", "always", "auto")) {
-                session.setDataCachePopulateMode(policy);
-                ExecPlan plan = getExecPlan("SELECT index_result FROM `unpartitioned_table$global_index` "
+                defaults.setDataCachePopulateMode(policy);
+                ExecPlan plan = planInternalIndexQuery("SELECT index_result FROM `unpartitioned_table$global_index` "
                         + "WHERE args='" + transport + "'");
                 TPlanNode scan = plan.getScanNodes().get(0).treeToThrift().getNodes().get(0);
                 Assertions.assertTrue(scan.getHdfs_scan_node().isSetDatacache_options(), policy);
                 Assertions.assertEquals(policy.equals("always"),
                         scan.getHdfs_scan_node().getDatacache_options().isEnable_populate_datacache(), policy);
             }
+            Assertions.assertFalse(caller.isEnableScanDataCache());
+            Assertions.assertFalse(caller.isEnablePopulateDataCache());
+            Assertions.assertEquals("NEVER", caller.getDataCachePopulateMode().toString());
         } finally {
-            session.setEnableScanDataCache(scanCache);
-            session.setEnablePopulateDataCache(populate);
-            session.setDataCachePopulateMode(mode);
+            caller.setEnableScanDataCache(callerScanCache);
+            caller.setEnablePopulateDataCache(callerPopulate);
+            caller.setDataCachePopulateMode(callerMode);
+            defaults.setEnableScanDataCache(defaultScanCache);
+            defaults.setEnablePopulateDataCache(defaultPopulate);
+            defaults.setDataCachePopulateMode(defaultMode);
             doCallRealMethod().when(indexedMetadata).getIndexShards(any(Table.class), anyLong(), anyMap());
         }
     }

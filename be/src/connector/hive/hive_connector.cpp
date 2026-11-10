@@ -1183,6 +1183,8 @@ void HiveDataSourceProvider::prepare_scan_ranges(const std::vector<TScanRangePar
         const TScanRange& x = sc.scan_range;
         if (!x.__isset.hdfs_scan_range) continue;
         const THdfsScanRange& y = x.hdfs_scan_range;
+        // Paimon index ranges use file_length for a row count, not a byte size.
+        if (y.__isset.paimon_global_index_scan_range) continue;
         _max_file_length = std::max(_max_file_length, y.file_length);
     }
 }

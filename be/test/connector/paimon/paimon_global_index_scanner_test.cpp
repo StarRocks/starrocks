@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <functional>
 #include <future>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -320,6 +321,34 @@ TEST(PaimonGlobalIndexScannerTest, RejectsInvalidShardAndJson) {
     auto invalid_json = valid_scan_range();
     invalid_json.__set_query_json("not-json");
     EXPECT_TRUE(parse_request(invalid_json).is_invalid_argument());
+}
+
+TEST(PaimonGlobalIndexScannerTest, RejectsUnrepresentableExclusiveUpperBound) {
+    constexpr auto max_row_id = std::numeric_limits<int64_t>::max();
+    auto finite_range = valid_scan_range();
+    finite_range.__set_range_from(max_row_id - 1);
+    finite_range.__set_range_to(max_row_id - 1);
+    EXPECT_TRUE(parse_request(finite_range).ok());
+
+    RuntimeState runtime_state{TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)};
+    runtime_state.init_mem_trackers(TUniqueId());
+    MemoryFileSystem file_system;
+    HdfsScannerContext scanner_ctx;
+    auto scan_range = valid_hdfs_scan_range();
+    scan_range.paimon_global_index_scan_range.__set_range_to(max_row_id);
+    PaimonGlobalIndexScanner scanner;
+    ASSERT_TRUE(init_scanner(&scanner, &runtime_state, &scanner_ctx, &scan_range, &file_system).ok());
+    int factory_calls = 0;
+    PaimonGlobalIndexScannerTestAccessor::set_scan_factory(
+            &scanner, [&]() -> paimon::Result<std::unique_ptr<paimon::GlobalIndexScan>> {
+                ++factory_calls;
+                return paimon::Status::IOError("unexpected scan factory invocation");
+            });
+
+    Status status = scanner.do_open(&runtime_state);
+    EXPECT_TRUE(status.is_invalid_argument()) << status;
+    EXPECT_EQ(0, factory_calls);
+    EXPECT_FALSE(PaimonGlobalIndexScannerTestAccessor::has_resources(scanner));
 }
 
 TEST(PaimonGlobalIndexScannerTest, RejectsInconsistentEnvelope) {

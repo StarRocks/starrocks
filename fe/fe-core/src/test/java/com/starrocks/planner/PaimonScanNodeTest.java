@@ -632,7 +632,8 @@ public class PaimonScanNodeTest {
                     metadataMgr.getOptionalMetadata(anyString);
                     result = Optional.of(connectorMetadata);
                     connectorMetadata.evaluateIndex((Table) any, (IndexCondition) any, (TvrVersionRange) any);
-                    result = new StarRocksConnectorException("test distributed index failure");
+                    result = new IllegalArgumentException(
+                            "Paimon Global Index shard upper bound must be below Long.MAX_VALUE");
                 }
             };
 
@@ -661,12 +662,14 @@ public class PaimonScanNodeTest {
             desc.setTable(table);
             PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
             scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
-            IndexCondition condition = new IndexCondition(ConstantOperator.createBoolean(true), Map.of(1, 0));
-            scanNode.setupScanRangeLocations(desc, null, -1, condition);
+            ConstantOperator predicate = ConstantOperator.createBoolean(true);
+            IndexCondition condition = new IndexCondition(predicate, Map.of(1, 0));
+            scanNode.setupScanRangeLocations(desc, predicate, -1, condition);
 
             Assertions.assertEquals(1, captured.size());
             Assertions.assertFalse(captured.get(0).isDisableGlobalIndex());
             Assertions.assertNull(captured.get(0).getConnectorIndexResult());
+            Assertions.assertSame(predicate, captured.get(0).getPredicate());
             Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
             String explain = scanNode.getNodeExplainString("", com.starrocks.thrift.TExplainLevel.NORMAL);
             Assertions.assertTrue(explain.contains("RECOGNIZED INDEX CONDITION: true"), explain);

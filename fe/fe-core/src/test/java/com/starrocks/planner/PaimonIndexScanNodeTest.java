@@ -141,6 +141,10 @@ public class PaimonIndexScanNodeTest {
         String catalogName = "paimon_catalog";
         long snapshotId = 42L;
         Map<Integer, IndexType> requiredIndexes = Map.of(7, IndexType.RANGE);
+        ConnectorIndexShard firstShard = new ConnectorIndexShard(0L, 99L);
+        long finiteUpperBound = Long.MAX_VALUE - 1;
+        List<ConnectorIndexShard> validShards = List.of(firstShard,
+                new ConnectorIndexShard(finiteUpperBound, finiteUpperBound));
         new Expectations() {
             {
                 table.getId();
@@ -171,8 +175,9 @@ public class PaimonIndexScanNodeTest {
                 metadataMgr.getOptionalMetadata(catalogName);
                 result = Optional.of(connectorMetadata);
                 connectorMetadata.getIndexShards(table, snapshotId, requiredIndexes);
-                result = List.of(new ConnectorIndexShard(0L, 99L),
-                        new ConnectorIndexShard(100L, Long.MAX_VALUE));
+                returns(validShards, validShards,
+                        List.of(firstShard, new ConnectorIndexShard(100L, Long.MAX_VALUE)),
+                        List.of(firstShard, new ConnectorIndexShard(Long.MAX_VALUE, Long.MAX_VALUE)));
             }
         };
 
@@ -205,7 +210,9 @@ public class PaimonIndexScanNodeTest {
         Assertions.assertEquals(PaimonGlobalIndexRequest.CURRENT_VERSION,
                 first.getPaimon_global_index_scan_range().getProtocol_version());
         THdfsScanRange second = locations.get(1).getScan_range().getHdfs_scan_range();
-        Assertions.assertEquals(Long.MAX_VALUE, second.getLength());
+        Assertions.assertEquals(finiteUpperBound, second.getPaimon_global_index_scan_range().getRange_to());
+        Assertions.assertEquals(1L, second.getLength());
+        Assertions.assertEquals(1L, second.getFile_length());
         Assertions.assertEquals(1, second.getPaimon_global_index_scan_range().getShard_id());
         String staleSchema = PaimonGlobalIndexRequest.create(scanNode.getTablePath(), "main", snapshotId,
                 2L, 1000L, condition).toTransportString();
@@ -227,5 +234,13 @@ public class PaimonIndexScanNodeTest {
         Assertions.assertEquals(List.of(residual),
                 residualScan.setupScanRangeLocations(Utils.compoundAnd(requestPredicate, residual)));
         Assertions.assertEquals(locations, residualScan.getScanRangeLocations(0L));
+
+        for (int nodeId = 7; nodeId <= 8; nodeId++) {
+            PaimonIndexScanNode rejectedScan = new PaimonIndexScanNode(new PlanNodeId(nodeId), descriptor, indexTable);
+            IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class,
+                    () -> rejectedScan.setupScanRangeLocations(requestPredicate));
+            Assertions.assertTrue(error.getMessage().contains("upper bound"));
+            Assertions.assertTrue(rejectedScan.getScanRangeLocations(0L).isEmpty());
+        }
     }
 }

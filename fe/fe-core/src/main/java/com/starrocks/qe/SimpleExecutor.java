@@ -172,7 +172,8 @@ public class SimpleExecutor {
      * remaining timeout. It has its own query ID: inheriting a memory limit does not share a memory budget.
      */
     public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds, ConnectContext caller) {
-        return executeDQLAsCaller(sql, queryTimeoutSeconds, caller, OptionalLong.empty());
+        return executeDQLAsCaller(sql, queryTimeoutSeconds, caller, OptionalLong.empty(),
+                ConnectContext.InternalQueryPurpose.NONE);
     }
 
     /**
@@ -181,12 +182,24 @@ public class SimpleExecutor {
      */
     public List<TResultBatch> executeDQLAsCaller(
             String sql, int queryTimeoutSeconds, ConnectContext caller, long sqlSelectLimit) {
-        return executeDQLAsCaller(sql, queryTimeoutSeconds, caller, OptionalLong.of(sqlSelectLimit));
+        return executeDQLAsCaller(sql, queryTimeoutSeconds, caller, sqlSelectLimit,
+                ConnectContext.InternalQueryPurpose.NONE);
+    }
+
+    /**
+     * Sets a purpose on the child before planning while retaining caller authorization.
+     */
+    public List<TResultBatch> executeDQLAsCaller(
+            String sql, int queryTimeoutSeconds, ConnectContext caller, long sqlSelectLimit,
+            ConnectContext.InternalQueryPurpose purpose) {
+        return executeDQLAsCaller(sql, queryTimeoutSeconds, caller, OptionalLong.of(sqlSelectLimit), purpose);
     }
 
     private List<TResultBatch> executeDQLAsCaller(
-            String sql, int queryTimeoutSeconds, ConnectContext caller, OptionalLong sqlSelectLimitOverride) {
+            String sql, int queryTimeoutSeconds, ConnectContext caller, OptionalLong sqlSelectLimitOverride,
+            ConnectContext.InternalQueryPurpose purpose) {
         Preconditions.checkNotNull(caller, "caller context is required");
+        Preconditions.checkNotNull(purpose, "internal query purpose is required");
         ConnectContext prev = ConnectContext.get();
         try {
             if (caller.isStatementCancelled()) {
@@ -197,6 +210,7 @@ public class SimpleExecutor {
                 throw new SemanticException(name + " query timed out before execution");
             }
             ConnectContext context = createCallerQueryContext(caller, timeout);
+            context.setInternalQueryPurpose(purpose);
             sqlSelectLimitOverride.ifPresent(context.getSessionVariable()::setSqlSelectLimit);
             context.setThreadLocalInfo();
             return executeDQL(sql, context);

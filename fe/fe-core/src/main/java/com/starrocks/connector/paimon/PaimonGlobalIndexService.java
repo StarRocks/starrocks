@@ -55,7 +55,8 @@ public final class PaimonGlobalIndexService {
         this(table, request,
                 (sql, timeout) -> new SimpleExecutor("PaimonGlobalIndex", TResultSinkType.HTTP_PROTOCAL)
                         // Every shard bitmap is required, regardless of the caller's SELECT cap.
-                        .executeDQLAsCaller(sql, timeout, ConnectContext.get(), SessionVariable.DEFAULT_SELECT_LIMIT));
+                        .executeDQLAsCaller(sql, timeout, ConnectContext.get(), SessionVariable.DEFAULT_SELECT_LIMIT,
+                                ConnectContext.InternalQueryPurpose.PAIMON_GLOBAL_INDEX));
     }
 
     PaimonGlobalIndexService(

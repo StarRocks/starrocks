@@ -127,6 +127,11 @@ import static com.starrocks.common.util.Util.normalizeName;
 // We store session information here. Meanwhile, ConnectScheduler all
 // connect with its connection id.
 public class ConnectContext {
+    public enum InternalQueryPurpose {
+        NONE,
+        PAIMON_GLOBAL_INDEX
+    }
+
     private static final Logger LOG = LogManager.getLogger(ConnectContext.class);
     protected static ThreadLocal<ConnectContext> threadLocalInfo = new ThreadLocal<>();
 
@@ -245,6 +250,7 @@ public class ConnectContext {
     protected volatile boolean isForward = false;
 
     private ConnectContext parent;
+    private transient InternalQueryPurpose internalQueryPurpose = InternalQueryPurpose.NONE;
 
     private boolean relationAliasCaseInsensitive = false;
 
@@ -1398,6 +1404,15 @@ public class ConnectContext {
 
     public ConnectContext getParent() {
         return parent;
+    }
+
+    public InternalQueryPurpose getInternalQueryPurpose() {
+        return internalQueryPurpose;
+    }
+
+    // Set only on a newly created internal query context. This is not a session variable.
+    void setInternalQueryPurpose(InternalQueryPurpose purpose) {
+        this.internalQueryPurpose = purpose;
     }
 
     public void setRelationAliasCaseInSensitive(boolean relationAliasCaseInsensitive) {

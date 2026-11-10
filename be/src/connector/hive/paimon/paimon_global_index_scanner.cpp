@@ -21,6 +21,7 @@
 #include <paimon/utils/row_range_index.h>
 
 #include <chrono>
+#include <limits>
 #include <map>
 #include <optional>
 #include <string_view>
@@ -378,8 +379,10 @@ Status PaimonGlobalIndexScanner::_parse_request(const TPaimonGlobalIndexScanRang
         return Status::InvalidArgument(
                 fmt::format("Unsupported Paimon Global Index protocol version {}", scan_range.protocol_version));
     }
+    // Paimon adds one to the inclusive upper bound when creating a bitmap.
     if (scan_range.shard_id < 0 || scan_range.snapshot_id < 0 || scan_range.table_path.empty() ||
-        scan_range.range_from < 0 || scan_range.range_to < scan_range.range_from) {
+        scan_range.range_from < 0 || scan_range.range_to < scan_range.range_from ||
+        scan_range.range_to == std::numeric_limits<int64_t>::max()) {
         return Status::InvalidArgument(
                 fmt::format("Invalid Paimon Global Index shard [{}, {}]", scan_range.range_from, scan_range.range_to));
     }

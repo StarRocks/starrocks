@@ -87,6 +87,12 @@ public final class PaimonIndexScanNode extends ScanNode {
             throw new IllegalStateException("Paimon Global Index does not completely cover snapshot " + snapshotId);
         }
 
+        // Paimon converts the inclusive upper bound to an exclusive bound by adding one.
+        for (ConnectorIndexShard shard : shards) {
+            if (shard.getTo() == Long.MAX_VALUE) {
+                throw new IllegalArgumentException("Paimon Global Index shard upper bound must be below Long.MAX_VALUE");
+            }
+        }
         for (int shardId = 0; shardId < shards.size(); shardId++) {
             ConnectorIndexShard shard = shards.get(shardId);
             scanRanges.add(createScanRange(shardId, shard, queryJson, tablePath, snapshotId));
@@ -141,8 +147,7 @@ public final class PaimonIndexScanNode extends ScanNode {
         hdfs.setPaimon_global_index_scan_range(request);
         hdfs.setFull_path(tablePath + "/#global-index/" + shardId);
         hdfs.setOffset(0);
-        long rangeLength = shard.getTo() == Long.MAX_VALUE
-                ? Long.MAX_VALUE : shard.getTo() - shard.getFrom() + 1;
+        long rangeLength = shard.getTo() - shard.getFrom() + 1;
         hdfs.setLength(rangeLength);
         hdfs.setFile_length(rangeLength);
         hdfs.setFile_format(THdfsFileFormat.UNKNOWN);

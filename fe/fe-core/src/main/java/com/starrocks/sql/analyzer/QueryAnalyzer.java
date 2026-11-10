@@ -48,6 +48,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.concurrent.lock.SnapshotCopyValidator;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.paimon.PaimonIndexTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -899,6 +900,10 @@ public class QueryAnalyzer {
                     // name: a pre-resolved table skips it, so qualify it here, or an unqualified name in the
                     // current external catalog reaches the lookup without its catalog and database.
                     tableName.normalization(session);
+                }
+                if (table instanceof PaimonIndexTable
+                        && session.getInternalQueryPurpose() != ConnectContext.InternalQueryPurpose.PAIMON_GLOBAL_INDEX) {
+                    throw new SemanticException("Paimon Global Index tables are internal-only. Query the base table instead.");
                 }
                 // Taken before time travel binds, which reads the native table too.
                 if (table != null) {

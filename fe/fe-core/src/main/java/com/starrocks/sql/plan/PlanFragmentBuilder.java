@@ -61,6 +61,7 @@ import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.delta.DeltaLakePreimagePredicates;
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.connector.metadata.MetadataTable;
+import com.starrocks.connector.paimon.PaimonIndexTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AIProjectNode;
 import com.starrocks.planner.AggregateInfo;
@@ -1900,9 +1901,13 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalPaimonIndexScan(OptExpression optExpression, ExecPlan context) {
+            ConnectContext connectContext = context.getConnectContext();
+            if (connectContext == null || connectContext.getInternalQueryPurpose()
+                    != ConnectContext.InternalQueryPurpose.PAIMON_GLOBAL_INDEX) {
+                throw new SemanticException("Paimon Global Index tables are internal-only. Query the base table instead.");
+            }
             PhysicalPaimonIndexScanOperator node = (PhysicalPaimonIndexScanOperator) optExpression.getOp();
-            com.starrocks.connector.paimon.PaimonIndexTable indexTable =
-                    (com.starrocks.connector.paimon.PaimonIndexTable) node.getTable();
+            PaimonIndexTable indexTable = (PaimonIndexTable) node.getTable();
 
             context.getDescTbl().addReferencedTable(indexTable);
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();

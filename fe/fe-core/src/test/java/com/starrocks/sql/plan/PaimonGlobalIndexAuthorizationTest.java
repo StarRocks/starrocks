@@ -35,9 +35,11 @@ import com.starrocks.connector.paimon.PaimonGlobalIndexService;
 import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -46,6 +48,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -107,6 +110,7 @@ public class PaimonGlobalIndexAuthorizationTest extends ConnectorPlanTestBase {
     private static final String BASE_TABLE = CATALOG + ".db1.indexed_table";
     private static final String INDEX_TABLE = CATALOG + ".db1.`indexed_table$global_index`";
     private static final String QUERY = "SELECT id FROM " + BASE_TABLE + " WHERE id = 1";
+    private static final String DIRECT_QUERY = "SELECT index_result FROM " + INDEX_TABLE;
     private static Catalog nativeCatalog;
     private static PaimonMetadata metadata;
     private static PaimonTable table;
@@ -205,6 +209,7 @@ public class PaimonGlobalIndexAuthorizationTest extends ConnectorPlanTestBase {
             assertEquals(1, executions.get());
             assertNotNull(lastScanParams().getConnectorIndexResult());
             assertSame(caller, ConnectContext.get());
+            assertEquals(ConnectContext.InternalQueryPurpose.NONE, caller.getInternalQueryPurpose());
         }
     }
 
@@ -236,15 +241,44 @@ public class PaimonGlobalIndexAuthorizationTest extends ConnectorPlanTestBase {
     }
 
     @Test
-    public void testDirectVirtualTableQueryKeepsItsOwnPrivilegeCheck() throws Exception {
-        String sql = "SELECT to_base64(index_result) FROM " + INDEX_TABLE
-                + " WHERE args = '" + request.toTransportString() + "'";
-        ConnectContext caller = caller("index_base_only");
-        ErrorReportException error = assertThrows(ErrorReportException.class, () -> plan(sql, caller));
-        assertTrue(error.getMessage().contains("Access denied"), error.getMessage());
+    public void testDirectVirtualTableQueryIsInternalOnly() throws Exception {
+        for (String user : List.of("index_base_only", "index_virtual_only", "index_both", "index_all_tables")) {
+            ConnectContext context = caller(user);
+            assertInternalOnly(assertThrows(SemanticException.class, () -> plan(DIRECT_QUERY, context)));
+        }
+        connectContext.setThreadLocalInfo();
+        assertInternalOnly(assertThrows(SemanticException.class, () -> plan(DIRECT_QUERY, connectContext)));
         verify(metadata, never()).getIndexShards(any(Table.class), anyLong(), anyMap());
+    }
 
-        assertContains(plan(sql, caller("index_both")), "TABLE: indexed_table$global_index", "SHARDS: 1");
+    @Test
+    public void testNestedVirtualTableQueriesAreInternalOnly() {
+        connectContext.setThreadLocalInfo();
+        for (String sql : List.of("WITH q AS (" + DIRECT_QUERY + ") SELECT * FROM q",
+                "SELECT * FROM (" + DIRECT_QUERY + ") q",
+                "CREATE VIEW default_catalog.test_db.blocked_index_view AS " + DIRECT_QUERY,
+                "CREATE TABLE default_catalog.test_db.blocked_index_ctas AS " + DIRECT_QUERY)) {
+            assertInternalOnly(assertThrows(SemanticException.class, () -> Analyzer.analyze(
+                    SqlParser.parseOneWithStarRocksDialect(sql, connectContext.getSessionVariable()), connectContext)));
+        }
+        verify(metadata, never()).getIndexShards(any(Table.class), anyLong(), anyMap());
+    }
+
+    @Test
+    public void testGenericInternalExecutorsCannotQueryVirtualTable() throws Exception {
+        ConnectContext caller = caller("index_both");
+        SimpleExecutor executor = new SimpleExecutor("generic-internal-query", TResultSinkType.HTTP_PROTOCAL);
+        assertInternalOnly(assertThrows(SemanticException.class,
+                () -> executor.executeDQLAsCaller(DIRECT_QUERY, 30, caller)).getCause());
+        assertSame(caller, ConnectContext.get());
+        assertInternalOnly(assertThrows(SemanticException.class, () -> executor.executeDQL(DIRECT_QUERY, 30)).getCause());
+        assertSame(caller, ConnectContext.get());
+        verify(metadata, never()).getIndexShards(any(Table.class), anyLong(), anyMap());
+    }
+
+    private static void assertInternalOnly(Throwable error) {
+        assertNotNull(error);
+        assertTrue(error.getMessage().contains("Paimon Global Index tables are internal-only"), error.getMessage());
     }
 
     @Test
@@ -260,6 +294,7 @@ public class PaimonGlobalIndexAuthorizationTest extends ConnectorPlanTestBase {
         assertTrue(error.getCause().getMessage().contains("Access denied"), error.getCause().getMessage());
         assertEquals(0, executions.get());
         assertTrue(caller.isBypassAuthorizerCheck());
+        assertEquals(ConnectContext.InternalQueryPurpose.NONE, caller.getInternalQueryPurpose());
         assertSame(caller, ConnectContext.get());
     }
 
@@ -299,6 +334,7 @@ public class PaimonGlobalIndexAuthorizationTest extends ConnectorPlanTestBase {
                 assertEquals(caller.getCurrentUserIdentity(), context.getCurrentUserIdentity());
                 assertEquals(caller.getCurrentRoleIds(), context.getCurrentRoleIds());
                 assertFalse(context.isBypassAuthorizerCheck());
+                assertEquals(ConnectContext.InternalQueryPurpose.PAIMON_GLOBAL_INDEX, context.getInternalQueryPurpose());
                 assertContains(plan.getExplainString(TExplainLevel.NORMAL), "TABLE: indexed_table$global_index", "SHARDS: 1");
                 executions.incrementAndGet();
                 TResultBatch batch = new TResultBatch();
