@@ -2064,7 +2064,7 @@ protected:
         txn_info.set_txn_type(TXN_NORMAL);
         txn_info.set_commit_time(1);
         return lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), base_version,
-                                     base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt);
+                                     base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
     }
 
     // Runs an UNSHARE compaction on `tablet` and publishes it. The input metadata is persisted first because split

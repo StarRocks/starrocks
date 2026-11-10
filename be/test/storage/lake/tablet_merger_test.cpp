@@ -228,8 +228,6 @@ protected:
         result.final_sst_orphans = std::move(final_sst_orphans);
         return result;
     }
-<<<<<<< HEAD
-=======
 
     // Creates tablet |tablet_id| at version 1, of the two-column primary key schema, covering [|lower|, |upper|).
     void put_two_column_pk_tablet(int64_t tablet_id, int32_t lower, int32_t upper) {
@@ -304,37 +302,7 @@ protected:
         }
         return lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), base_version,
                                      base_version + static_cast<int64_t>(txn_infos.size()),
-                                     std::span<const TxnInfoPB>(txn_infos), false, std::nullopt);
-    }
-
-    // Runs |check| twice, with the cold index rebuild forced onto its parallel path and then onto its serial
-    // fallback, and expects each of the |cold_loads| loads of the index that |check| makes to take that path.
-    void run_on_both_rebuild_paths(int cold_loads, const std::function<void()>& check) {
-        for (const bool parallel : {true, false}) {
-            SCOPED_TRACE(parallel ? "parallel rebuild" : "serial rebuild");
-            std::optional<lake::RebuildMemPressureGuard> serial_guard;
-            std::optional<lake::ConfigResetGuard<int32_t>> ratio_guard;
-            if (parallel) {
-                ratio_guard.emplace(&config::pk_index_parallel_rebuild_mem_ratio, 100);
-            } else {
-                serial_guard.emplace();
-            }
-            int parallel_rebuilds = 0;
-            int serial_rebuilds = 0;
-            SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::load_from_lake_tablet:parallel",
-                                                  [&](void*) { ++parallel_rebuilds; });
-            SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::load_from_lake_tablet:serial",
-                                                  [&](void*) { ++serial_rebuilds; });
-            SyncPoint::GetInstance()->EnableProcessing();
-            DeferOp clear_callbacks([] {
-                SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::load_from_lake_tablet:parallel");
-                SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::load_from_lake_tablet:serial");
-                SyncPoint::GetInstance()->DisableProcessing();
-            });
-            check();
-            EXPECT_EQ(parallel ? cold_loads : 0, parallel_rebuilds);
-            EXPECT_EQ(parallel ? 0 : cold_loads, serial_rebuilds);
-        }
+                                     std::span<const TxnInfoPB>(txn_infos), false);
     }
 
     // Writes a delete vector of |rowids| as the only page of a new file |file_name| of |metadata|'s tablet, declared
@@ -412,7 +380,6 @@ protected:
         }
         return nullptr;
     }
->>>>>>> 132f4f1ac7c... [Enhancement][RB-96] Carry primary key index SSTs through a tablet merge instead of rebuilding the index (#69029)
 };
 
 TEST_F(LakeTabletMergerTest, test_tablet_merging_interval_projection_repeated_four_cycle_lifecycle) {
@@ -1590,8 +1557,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_sst_carry_or_fallback_lifecycle
             // watermarks 1 and 2 below the source's RSSIDs, which start at its recovery key 3.
             ConfigResetGuard<int32_t> no_index_compaction(&config::lake_pk_index_sst_min_compaction_versions, 1000);
             auto flush = [&](const TabletMetadataPtr& source) {
-                ASSIGN_OR_ABORT(auto flushed,
-                                _primary_key_manager->flush_pk_memtable(source, source->version(), std::nullopt));
+                ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(source, source->version()));
                 CHECK_OK(put_tablet_metadata(flushed));
                 return flushed;
             };
@@ -1822,8 +1788,8 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_carries_a_flushed_sst_raised_ab
     prepare_tablet_dirs(target_id);
     ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100, /*include_delete=*/false));
     ASSIGN_OR_ABORT(auto right, create_lifecycle_source(right_id, 50, 100, 60, 600, /*include_delete=*/false));
-    ASSIGN_OR_ABORT(left, _primary_key_manager->flush_pk_memtable(left, left->version(), std::nullopt));
-    ASSIGN_OR_ABORT(right, _primary_key_manager->flush_pk_memtable(right, right->version(), std::nullopt));
+    ASSIGN_OR_ABORT(left, _primary_key_manager->flush_pk_memtable(left, left->version()));
+    ASSIGN_OR_ABORT(right, _primary_key_manager->flush_pk_memtable(right, right->version()));
     auto mutable_left = std::make_shared<TabletMetadataPB>(*left);
     auto mutable_right = std::make_shared<TabletMetadataPB>(*right);
     ASSERT_EQ(1, mutable_left->sstable_meta().sstables_size());
@@ -9397,7 +9363,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_retry_carries_sstables_flushed_
 
     // The left source holds an SST below its run; its memtable is unflushed after the full compaction.
     ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100, /*include_delete=*/false));
-    ASSIGN_OR_ABORT(left, _primary_key_manager->flush_pk_memtable(left, left->version(), std::nullopt));
+    ASSIGN_OR_ABORT(left, _primary_key_manager->flush_pk_memtable(left, left->version()));
     ASSERT_OK(put_tablet_metadata(left));
     ASSIGN_OR_ABORT(left, publish_followup_upsert_delete(left_id, left->version(), 11, 110, 0,
                                                          /*include_delete=*/false));
@@ -9540,7 +9506,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_flush_replaces_a_source_whose_s
     prepare_tablet_dirs(target_id);
 
     ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100, /*include_delete=*/false));
-    ASSIGN_OR_ABORT(left, _primary_key_manager->flush_pk_memtable(left, left->version(), std::nullopt));
+    ASSIGN_OR_ABORT(left, _primary_key_manager->flush_pk_memtable(left, left->version()));
     ASSERT_OK(put_tablet_metadata(left));
     ASSIGN_OR_ABORT(left, publish_followup_upsert_delete(left_id, left->version(), 11, 110, 0,
                                                          /*include_delete=*/false));
@@ -9551,7 +9517,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_flush_replaces_a_source_whose_s
     ASSIGN_OR_ABORT(right, publish_followup_upsert_delete(right_id, right->version(), 61, 610, 0,
                                                           /*include_delete=*/false));
     ASSIGN_OR_ABORT(right, compact_tablet(right_id, right->version(), /*force_base=*/true));
-    ASSIGN_OR_ABORT(right, _primary_key_manager->flush_pk_memtable(right, right->version(), std::nullopt));
+    ASSIGN_OR_ABORT(right, _primary_key_manager->flush_pk_memtable(right, right->version()));
     ASSERT_OK(put_tablet_metadata(right));
 
     ASSERT_EQ(left->version(), right->version());
@@ -9633,7 +9599,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_on_another_node_carries_sstable
         const int32_t key = lower + 10;
         ASSIGN_OR_ABORT(auto source, create_lifecycle_source(tablet_id, lower, lower + 50, key, key * 10,
                                                              /*include_delete=*/false));
-        ASSIGN_OR_ABORT(source, _primary_key_manager->flush_pk_memtable(source, source->version(), std::nullopt));
+        ASSIGN_OR_ABORT(source, _primary_key_manager->flush_pk_memtable(source, source->version()));
         CHECK_OK(put_tablet_metadata(source));
         ASSIGN_OR_ABORT(source, publish_followup_upsert_delete(tablet_id, source->version(), key + 1, (key + 1) * 10, 0,
                                                                /*include_delete=*/false));
@@ -9869,7 +9835,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_split_child_with_only_older_row
     ASSERT_EQ(2, parent->rowsets_size());
     ASSERT_EQ(1, parent->rowsets(0).id());
     ASSERT_EQ(2, parent->rowsets(1).id());
-    ASSIGN_OR_ABORT(parent, _primary_key_manager->flush_pk_memtable(parent, parent->version(), std::nullopt));
+    ASSIGN_OR_ABORT(parent, _primary_key_manager->flush_pk_memtable(parent, parent->version()));
     ASSERT_OK(put_tablet_metadata(parent));
     ASSERT_GT(parent->sstable_meta().sstables_size(), 0);
     const std::vector<std::pair<int32_t, int32_t>> rows = {{10, 100}, {20, 200}, {30, 300}, {60, 600}, {70, 700}};
@@ -10028,12 +9994,12 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_falls_back_when_lowering_would_
     _primary_key_manager->unload_and_remove_primary_index(target_id);
     ASSIGN_OR_ABORT(auto written, publish_followup_upsert_delete(target_id, merged->version(), 20, 2000, 0,
                                                                  /*include_delete=*/false));
-    ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(written, written->version(), std::nullopt));
+    ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(written, written->version()));
     ASSERT_OK(put_tablet_metadata(flushed));
     ASSERT_GT(flushed->sstable_meta().sstables_size(), 0);
     ASSIGN_OR_ABORT(written, publish_followup_upsert_delete(target_id, flushed->version(), 30, 3000, 0,
                                                             /*include_delete=*/false));
-    ASSIGN_OR_ABORT(flushed, _primary_key_manager->flush_pk_memtable(written, written->version(), std::nullopt));
+    ASSIGN_OR_ABORT(flushed, _primary_key_manager->flush_pk_memtable(written, written->version()));
     ASSERT_OK(put_tablet_metadata(flushed));
     const auto candidates = index_filesets(*flushed);
     ASSERT_GE(candidates.size(), 2);
@@ -10108,7 +10074,7 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_carries_a_moved_modern_sst_whos
     ASSIGN_OR_ABORT(tablet,
                     publish_txns(tablet_id, tablet->version(), {write_two_column_load(tablet_id, {10, 20}, 10)}));
     ASSERT_EQ(4, tablet->rowsets(1).id());
-    ASSIGN_OR_ABORT(tablet, _primary_key_manager->flush_pk_memtable(tablet, tablet->version(), std::nullopt));
+    ASSIGN_OR_ABORT(tablet, _primary_key_manager->flush_pk_memtable(tablet, tablet->version()));
     ASSERT_OK(put_tablet_metadata(tablet));
     const PersistentIndexSstablePB y = tablet->sstable_meta().sstables(tablet->sstable_meta().sstables_size() - 1);
     ASSERT_FALSE(y.has_shared_rssid());

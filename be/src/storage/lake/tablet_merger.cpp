@@ -1532,18 +1532,12 @@ Status write_delvecs(TabletManager* tablet_manager, MergePlan* plan, int64_t txn
 }
 
 // Flushes each source's primary-key memtable so its sstables cover all its rows (the merged tablet's cold load
-<<<<<<< HEAD
-// skips rowsets below the last sstable's watermark), then carries the sstables over, or falls back to a rebuild.
-Status merge_sstables(TabletManager* tablet_manager, MergePlan* plan) {
-=======
 // skips rowsets below the last sstable's watermark), then carries the sstables over, leaving out the ones below their
 // source's RSSIDs, lowering the watermarks past them and giving owner 0 to the modern ones whose owner lies outside
 // them, or falls back to a rebuild. A fallback after the flush leaves the pages already copied into the merged
 // delete-vector file with nothing pointing at them, and when no live page uses that file, the next publish moves it
 // to the orphans.
-Status merge_sstables(TabletManager* tablet_manager, MergePlan* plan,
-                      std::optional<PublishPropertyPBRef> publish_property) {
->>>>>>> 132f4f1ac7c... [Enhancement][RB-96] Carry primary key index SSTs through a tablet merge instead of rebuilding the index (#69029)
+Status merge_sstables(TabletManager* tablet_manager, MergePlan* plan) {
     auto* target = plan->target.get();
     if (!uses_cloud_native_pk_index(*target)) return Status::OK();
     if (plan->rebuild_index) {
