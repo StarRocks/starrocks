@@ -15,7 +15,16 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.sql.ast.TableRelation;
+import mockit.Expectations;
+import mockit.Mocked;
+import org.apache.iceberg.Schema;
+import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.types.Types;
+import org.apache.iceberg.view.SQLViewRepresentation;
+import org.apache.iceberg.view.View;
+import org.apache.iceberg.view.ViewVersion;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -84,5 +93,112 @@ public class IcebergViewTest {
         assertNull(cteRelation.getName().getDb());
         assertEquals("iceberg_catalog", tableRelation.getName().getCatalog());
         assertEquals("sales", tableRelation.getName().getDb());
+    }
+
+    @Test
+    public void testEmptyDefaultNamespaceFallsBackToViewDatabase(@Mocked View icebergView,
+                                                                 @Mocked ViewVersion viewVersion,
+                                                                 @Mocked SQLViewRepresentation representation) {
+        // The Iceberg view spec allows an empty default-namespace. Reading such a view must not throw,
+        // and unqualified tables resolve in the database the view is stored in.
+        new Expectations() {
+            {
+                representation.sql();
+                result = "select * from orders";
+                minTimes = 1;
+
+                icebergView.sqlFor("starrocks");
+                result = representation;
+                minTimes = 1;
+
+                icebergView.properties();
+                result = Collections.emptyMap();
+                minTimes = 1;
+
+                icebergView.schema();
+                result = new Schema(Types.NestedField.optional(1, "id", Types.IntegerType.get()));
+                minTimes = 1;
+
+                icebergView.currentVersion();
+                result = viewVersion;
+                minTimes = 1;
+
+                viewVersion.defaultCatalog();
+                result = null;
+                minTimes = 1;
+
+                viewVersion.defaultNamespace();
+                result = Namespace.empty();
+                minTimes = 1;
+
+                icebergView.name();
+                result = "test_view";
+                minTimes = 1;
+
+                icebergView.location();
+                result = "hdfs://path/to/view";
+                minTimes = 1;
+            }
+        };
+
+        IcebergView view = (IcebergView) IcebergApiConverter.toView("iceberg_catalog", "sales", icebergView);
+        TableRelation relation = new TableRelation(new TableName(null, null, "orders"));
+
+        view.formatRelations(Lists.newArrayList(relation), new ArrayList<>());
+
+        assertEquals("iceberg_catalog", relation.getName().getCatalog());
+        assertEquals("sales", relation.getName().getDb());
+    }
+
+    @Test
+    public void testNonEmptyDefaultNamespaceIsStillUsed(@Mocked View icebergView,
+                                                        @Mocked ViewVersion viewVersion,
+                                                        @Mocked SQLViewRepresentation representation) {
+        new Expectations() {
+            {
+                representation.sql();
+                result = "select * from orders";
+                minTimes = 1;
+
+                icebergView.sqlFor("starrocks");
+                result = representation;
+                minTimes = 1;
+
+                icebergView.properties();
+                result = Collections.emptyMap();
+                minTimes = 1;
+
+                icebergView.schema();
+                result = new Schema(Types.NestedField.optional(1, "id", Types.IntegerType.get()));
+                minTimes = 1;
+
+                icebergView.currentVersion();
+                result = viewVersion;
+                minTimes = 1;
+
+                viewVersion.defaultCatalog();
+                result = null;
+                minTimes = 1;
+
+                viewVersion.defaultNamespace();
+                result = Namespace.of("other_db");
+                minTimes = 1;
+
+                icebergView.name();
+                result = "test_view";
+                minTimes = 1;
+
+                icebergView.location();
+                result = "hdfs://path/to/view";
+                minTimes = 1;
+            }
+        };
+
+        IcebergView view = (IcebergView) IcebergApiConverter.toView("iceberg_catalog", "sales", icebergView);
+        TableRelation relation = new TableRelation(new TableName(null, null, "orders"));
+
+        view.formatRelations(Lists.newArrayList(relation), new ArrayList<>());
+
+        assertEquals("other_db", relation.getName().getDb());
     }
 }
