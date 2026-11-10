@@ -157,9 +157,25 @@ Status JsonDocumentStreamParser::advance() noexcept {
         _doc_stream_offset + _doc_stream_itr.current_index() == _last_begin_offset) {
         // In simdjson 5.x, when the current document met a fatal error while being consumed by the caller,
         // next_document() copies doc.iter.error into stream->error and stops without advancing doc_index or
-        // marking the iterator finished until the next increment. Advance once more so the already-reported
-        // document is not surfaced a second time by get_current().
+        // marking the iterator finished. Rebuild the stream from _last_begin_offset and skip the failed
+        // document so subsequent documents in the buffer can still be parsed.
+        size_t cur_left_len = _len - _last_begin_offset;
+        size_t batch_size = config::enable_dynamic_batch_size_for_json_parse_many ? std::min(_batch_size, cur_left_len)
+                                                                                  : cur_left_len;
+        _doc_stream = _parser->iterate_many(_data + _last_begin_offset, cur_left_len, batch_size);
+        _doc_stream_offset = _last_begin_offset;
+        _doc_stream_itr = _doc_stream.begin();
         ++_doc_stream_itr;
+        if (_doc_stream_itr.error() != simdjson::SUCCESS &&
+            (batch_size >= cur_left_len || !_check_and_new_doc_stream_iterator())) {
+            if (_doc_stream_itr.error() == simdjson::EMPTY) {
+                return Status::EndOfFile("all documents of the stream are iterated");
+            }
+            auto err_msg = strings::Substitute("Failed to iterate document stream as object. error: $0",
+                                               simdjson::error_message(_doc_stream_itr.error()));
+            return status_from_json_parse_error(err_msg);
+        }
+        return Status::OK();
     }
     if (_doc_stream_itr != _doc_stream.end() ||
         /*
