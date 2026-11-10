@@ -101,7 +101,8 @@ public class QueryProfileAction extends WebBaseAction {
             getPageFooter(response.getContent());
             writeResponse(request, response);
         } else {
-            appendQueryProfile(response.getContent(), "query id " + encodedQueryId + " not found.");
+            // appendQueryProfile encodes every line, so pass the raw query id.
+            appendQueryProfile(response.getContent(), "query id " + queryId + " not found.");
             getPageFooter(response.getContent());
             writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
         }
@@ -113,12 +114,10 @@ public class QueryProfileAction extends WebBaseAction {
         BufferedReader reader = new BufferedReader(new StringReader(queryProfileStr));
         String line;
         try {
+            // Every line may carry user-controlled text: a multi-line SQL statement continues past the
+            // "Sql Statement" line, the formatted SQL view has no such line, and the analyze view echoes literals.
             while ((line = reader.readLine()) != null) {
-                if (line.contains(ProfileManager.SQL_STATEMENT)) {
-                    buffer.append(escapeHtmlInPreTag(line)).append("\n");
-                } else {
-                    buffer.append(line).append("\n");
-                }
+                buffer.append(escapeHtmlInPreTag(line)).append("\n");
             }
         } catch (IOException e) {
             LOG.warn("transform profile content error", e);

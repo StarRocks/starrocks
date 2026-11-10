@@ -20,6 +20,7 @@
 
 #include "column/array_column.h"
 #include "column/column_builder.h"
+#include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -31,6 +32,7 @@
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/sum.h"
+#include "exprs/agg_state_function.h"
 #include "exprs/arithmetic_operation.h"
 #include "exprs/function_context.h"
 #include "gen_cpp/Data_types.h"
@@ -3133,6 +3135,82 @@ TEST_F(AggregateTest, test_combinator_batch_destroy_with_selection) {
     test_combinator_batch_destroy_with_selection<AggStateMerge>();
     test_combinator_batch_destroy_with_selection<AggStateUnion>();
     test_combinator_batch_destroy_with_selection<AggStateIf>();
+}
+
+// AggStateFunction::execute must expand a const data argument before handing it to the
+// aggregate's convert_to_serialize_format: aggregate implementations down_cast the
+// input to a concrete data column, so a ConstColumn there silently yields corrupted
+// states, e.g. INSERT ... VALUES (..., avg_state(38)) that avg_merge later reads
+// back as garbage (or crashes the BE).
+TEST_F(AggregateTest, test_state_function_const_column) {
+    TypeDescriptor return_type_desc = TypeDescriptor(TYPE_DOUBLE);
+    TypeDescriptor arg_type_desc = TypeDescriptor(TYPE_BIGINT);
+    TypeDescriptor intermediate_type_desc = TypeDescriptor(TYPE_VARBINARY);
+    std::vector<TypeDescriptor> arg_type_descs = {arg_type_desc};
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({arg_type_desc}, return_type_desc));
+    auto ctx = context.get();
+
+    auto func = get_aggregate_function("avg", TYPE_BIGINT, TYPE_DOUBLE, false);
+    ASSERT_NE(func, nullptr);
+
+    AggStateDesc agg_state_desc("avg", return_type_desc, arg_type_descs, false, 1);
+    AggStateFunction state_func(agg_state_desc, intermediate_type_desc, {false});
+
+    // avg_state(38) evaluated over a 5-row chunk: the argument is a ConstColumn.
+    const size_t chunk_size = 5;
+    auto data_column = Int64Column::create();
+    data_column->append(38);
+    ColumnPtr const_column = ConstColumn::create(std::move(data_column), chunk_size);
+
+    Columns input_columns = {const_column};
+    auto result = state_func.execute(ctx, input_columns);
+    ASSERT_TRUE(result.ok());
+    ColumnPtr state_column = result.value();
+    ASSERT_EQ(chunk_size, state_column->size());
+
+    // Merging the per-row states back must reproduce avg(38, ..., 38) == 38.
+    auto merged = ManagedAggrState::create(ctx, func);
+    for (size_t i = 0; i < state_column->size(); ++i) {
+        func->merge(ctx, state_column.get(), merged->state(), i);
+    }
+    auto final_column = ColumnHelper::create_column(return_type_desc, false);
+    func->finalize_to_column(ctx, merged->state(), final_column.get());
+    ASSERT_EQ(1, final_column->size());
+    ASSERT_DOUBLE_EQ(38.0, final_column->get(0).get_double());
+}
+
+// Same for a const-NULL data argument (e.g. avg_state(NULL)): it must be expanded
+// into a nullable column instead of reaching the aggregate as a ConstColumn.
+TEST_F(AggregateTest, test_state_function_const_null_column) {
+    TypeDescriptor return_type_desc = TypeDescriptor(TYPE_DOUBLE);
+    TypeDescriptor arg_type_desc = TypeDescriptor(TYPE_BIGINT);
+    TypeDescriptor intermediate_type_desc = TypeDescriptor(TYPE_VARBINARY);
+    std::vector<TypeDescriptor> arg_type_descs = {arg_type_desc};
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({arg_type_desc}, return_type_desc));
+    auto ctx = context.get();
+
+    auto func = get_aggregate_function("avg", TYPE_BIGINT, TYPE_DOUBLE, true);
+    ASSERT_NE(func, nullptr);
+
+    AggStateDesc agg_state_desc("avg", return_type_desc, arg_type_descs, true, 1);
+    AggStateFunction state_func(agg_state_desc, intermediate_type_desc, {true});
+
+    const size_t chunk_size = 5;
+    Columns input_columns = {ColumnHelper::create_const_null_column(chunk_size)};
+    auto result = state_func.execute(ctx, input_columns);
+    ASSERT_TRUE(result.ok());
+    ColumnPtr state_column = result.value();
+    ASSERT_EQ(chunk_size, state_column->size());
+
+    // All-NULL input carries no state: merging it back must finalize to NULL.
+    auto merged = ManagedAggrState::create(ctx, func);
+    for (size_t i = 0; i < state_column->size(); ++i) {
+        func->merge(ctx, state_column.get(), merged->state(), i);
+    }
+    auto final_column = ColumnHelper::create_column(return_type_desc, true);
+    func->finalize_to_column(ctx, merged->state(), final_column.get());
+    ASSERT_EQ(1, final_column->size());
+    ASSERT_TRUE(final_column->is_null(0));
 }
 
 } // namespace starrocks

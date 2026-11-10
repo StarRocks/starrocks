@@ -693,8 +693,18 @@ Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
         for (size_t i = 0; i < size; i++) {
             dst_null_data[i] = src_null_data[i];
             if (!src_null_data[i]) {
+                // Arrow may encode pre-epoch INT96 with negative nanoseconds of day.
+                // Normalize before converting to microseconds and packing the timestamp.
+                constexpr int64_t nanos_per_day = SECS_PER_DAY * NANOSECS_PER_SEC;
+                int64_t nanos = static_cast<int64_t>(src_data[i].lo);
+                int64_t julian = static_cast<int64_t>(src_data[i].hi) + nanos / nanos_per_day;
+                nanos %= nanos_per_day;
+                if (nanos < 0) {
+                    --julian;
+                    nanos += nanos_per_day;
+                }
                 Timestamp timestamp =
-                        (static_cast<uint64_t>(src_data[i].hi) << TIMESTAMP_BITS) | (src_data[i].lo / 1000);
+                        timestamp::from_julian_and_time(static_cast<JulianDate>(julian), nanos / NANOSECS_PER_USEC);
                 int offset = _offset;
                 if constexpr (!FAST_TZ) {
                     offset = timestamp::get_timezone_offset_by_timestamp(timestamp, _ctz);

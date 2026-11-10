@@ -57,6 +57,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     private Set<Long> dirtyPhysicalPartitionSet;
     private Set<ColumnId> invalidDictCacheColumns;
     private Map<ColumnId, Long> validDictCacheColumns;
+    private Map<ColumnId, Long> dictContentIdentities;
 
     public OlapTableTxnStateListener(DatabaseTransactionMgr dbTxnMgr, OlapTable table) {
         this.dbTxnMgr = dbTxnMgr;
@@ -81,6 +82,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         dirtyPhysicalPartitionSet = Sets.newHashSet();
         invalidDictCacheColumns = Sets.newHashSet();
         validDictCacheColumns = Maps.newHashMap();
+        dictContentIdentities = Maps.newHashMap();
 
         TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
         Map<Long, Set<Long>> tabletToBackends = new HashMap<>();
@@ -124,6 +126,8 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
             // Invalid column set should union
             invalidDictCacheColumns.addAll(tabletCommitInfos.get(i).getInvalidDictCacheColumns());
+            tabletCommitInfos.get(i).mergeDictContentIdentities(
+                    dictContentIdentities, invalidDictCacheColumns);
 
             // Valid column set should intersect and remove all invalid columns
             // Only need to add valid column set once
@@ -141,11 +145,9 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                     this.validDictCacheColumns.put(validDictCacheColumns.get(j), version);
                 }
             }
-
-            if (i == tabletMetaList.size() - 1) {
-                validDictCacheColumns.entrySet().removeIf(entry -> invalidDictCacheColumns.contains(entry.getKey()));
-            }
         }
+
+        validDictCacheColumns.keySet().removeAll(invalidDictCacheColumns);
 
         // update write failed backend/replica
         // use for selection of primary replica for replicated storage
@@ -260,10 +262,14 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
                 List<ColumnId> validDictCacheColumnNames = Lists.newArrayList();
                 List<Long> validDictCacheColumnVersions = Lists.newArrayList();
+                List<Long> validDictContentIdentities = Lists.newArrayList();
 
                 validDictCacheColumns.forEach((name, dictVersion) -> {
                     validDictCacheColumnNames.add(name);
                     validDictCacheColumnVersions.add(dictVersion);
+                    if (!dictContentIdentities.isEmpty()) {
+                        validDictContentIdentities.add(dictContentIdentities.get(name));
+                    }
                 });
                 partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId,
                         -1,
@@ -271,6 +277,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                         Lists.newArrayList(invalidDictCacheColumns),
                         validDictCacheColumnNames,
                         validDictCacheColumnVersions);
+                partitionCommitInfo.setDictContentIdentities(validDictContentIdentities);
             } else {
                 partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId,
                         -1,

@@ -248,6 +248,7 @@ import java.util.stream.Stream;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
+import static com.starrocks.sql.common.ErrorType.UNSUPPORTED;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperator.isColumnEqualConstant;
 
@@ -2564,10 +2565,12 @@ public class PlanFragmentBuilder {
                     replaceExpr.setType(functionCallExpr.getType());
                 } else if (functionName.equals(FunctionSet.ARRAY_AGG)) {
                     replaceExpr = new FunctionCallExpr(FunctionSet.ARRAY_AGG_DISTINCT, functionCallExpr.getParams());
-                    AggregateFunction fn =
-                            (AggregateFunction) Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT,
-                                    functionCallExpr.getFn().getArgs(),
-                                    IS_NONSTRICT_SUPERTYPE_OF);
+                    AggregateFunction fn = (AggregateFunction) Expr.getArrayAggDistinctFunction(
+                            functionCallExpr.getFn().getArgs());
+                    if (fn == null) {
+                        throw new StarRocksPlannerException(UNSUPPORTED,
+                                "array_agg(distinct) does not support type %s", functionCallExpr.getChild(0).getType());
+                    }
                     fn = DecimalV3FunctionAnalyzer.rectifyAggregationFunction(
                             fn, functionCallExpr.getFn().getArgs()[0], functionCallExpr.getFn().getReturnType());
 

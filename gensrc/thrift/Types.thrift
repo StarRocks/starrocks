@@ -478,6 +478,7 @@ struct TTabletCommitInfo {
     3: optional list<string> invalid_dict_cache_columns
     4: optional list<string> valid_dict_cache_columns
     5: optional list<i64> valid_dict_collected_versions
+    6: optional list<i64> valid_dict_content_identities
 }
 
 struct TTabletFailInfo {
