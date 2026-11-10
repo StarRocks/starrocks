@@ -26,8 +26,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -73,6 +75,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MergePartitionJobTest extends DDLTestBase {
@@ -166,6 +169,147 @@ public class MergePartitionJobTest extends DDLTestBase {
         Mockito.verify(table).dropTempPartition(tempPartitionName, true);
         Assertions.assertEquals(Constants.TaskRunState.FAILED, task.getOptimizeTaskState());
         Assertions.assertTrue(nameMapping.isEmpty());
+    }
+
+    // ---- merging a table some of whose partitions are merged already ------------------------------
+
+    /**
+     * A merge leaves the partition expression of the table alone, so loads keep creating hourly partitions after a
+     * merge into days, and merging into days again without a range takes the day partition of the first merge as a
+     * source partition too. That partition already is the day partition the merge would build from it, so the merge
+     * leaves it alone and merges only the new hourly partitions.
+     */
+    @Test
+    public void testMergeAgainLeavesMergedPartitionAlone() throws Exception {
+        OlapTable table = createHourlyPartitionedTable("t_merge_again");
+        addHourlyPartitions(table, "2020-01-01 00:00:00", "2020-01-01 01:00:00", "2020-01-01 02:00:00");
+        mergeToFinished(table, "date_trunc('day', k)");
+        Partition mergedDay = table.getPartition("p20200101");
+        Assertions.assertNotNull(mergedDay, partitionNames(table).toString());
+
+        addHourlyPartitions(table, "2020-01-03 02:00:00", "2020-01-03 03:00:00");
+        MergePartitionJob job = submitMerge(table, "date_trunc('day', k)");
+        runToRunning(job);
+        Assertions.assertEquals(List.of("p20200103"), tempPartitionNames(table));
+        runToFinished(job);
+
+        Assertions.assertEquals(Set.of("p20200101", "p20200103"), partitionNames(table));
+        Assertions.assertSame(mergedDay, table.getPartition("p20200101"));
+        Assertions.assertTrue(table.getTempPartitions().isEmpty());
+    }
+
+    /**
+     * Merging a table whose partitions are all merged into the target granularity already has nothing to merge, so the
+     * merge finishes without touching them.
+     */
+    @Test
+    public void testMergeOfMergedPartitionsChangesNothing() throws Exception {
+        OlapTable table = createHourlyPartitionedTable("t_merge_merged");
+        addHourlyPartitions(table, "2020-01-01 00:00:00", "2020-01-01 01:00:00");
+        mergeToFinished(table, "date_trunc('day', k)");
+        Partition mergedDay = table.getPartition("p20200101");
+        Assertions.assertNotNull(mergedDay, partitionNames(table).toString());
+
+        MergePartitionJob job = submitMerge(table, "date_trunc('day', k)");
+        runToRunning(job);
+        Assertions.assertTrue(table.getTempPartitions().isEmpty());
+        Assertions.assertTrue(job.getOptimizeTasks().isEmpty());
+        runToFinished(job);
+
+        Assertions.assertEquals(Set.of("p20200101"), partitionNames(table));
+        Assertions.assertSame(mergedDay, table.getPartition("p20200101"));
+        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+    }
+
+    /**
+     * A partition coarser than the target granularity, such as the month partition of an earlier merge into months,
+     * has nothing to merge into a day either. The merge leaves it alone rather than rewriting it into its first day.
+     */
+    @Test
+    public void testMergeLeavesCoarserPartitionAlone() throws Exception {
+        OlapTable table = createHourlyPartitionedTable("t_merge_coarser");
+        addHourlyPartitions(table, "2020-01-01 00:00:00", "2020-01-02 05:00:00");
+        mergeToFinished(table, "date_trunc('month', k)");
+        Partition mergedMonth = table.getPartition("p202001");
+        Assertions.assertNotNull(mergedMonth, partitionNames(table).toString());
+
+        addHourlyPartitions(table, "2020-02-03 02:00:00", "2020-02-03 03:00:00");
+        MergePartitionJob job = submitMerge(table, "date_trunc('day', k)");
+        runToRunning(job);
+        Assertions.assertEquals(List.of("p20200203"), tempPartitionNames(table));
+        runToFinished(job);
+
+        Assertions.assertEquals(Set.of("p202001", "p20200203"), partitionNames(table));
+        Assertions.assertSame(mergedMonth, table.getPartition("p202001"));
+    }
+
+    /**
+     * A merged partition takes the name of its range. When a partition the merge does not leave alone already has that
+     * name, the job is cancelled with an error that names the conflict, instead of reporting that the merged partition
+     * does not exist. DDL keeps every partition of an automatic partitioned table under the name of its range, so the
+     * test renames an hourly partition to the name of its day in the catalog.
+     */
+    @Test
+    public void testMergeIntoTakenPartitionNameReportsConflict() throws Exception {
+        OlapTable table = createHourlyPartitionedTable("t_merge_name_taken");
+        addHourlyPartitions(table, "2020-01-03 02:00:00", "2020-01-03 03:00:00");
+        table.renamePartition("p2020010302", "p20200103");
+        Assertions.assertEquals(Set.of("p20200103", "p2020010303"), partitionNames(table));
+
+        MergePartitionJob job = submitMerge(table, "date_trunc('day', k)");
+        job.run();
+
+        Assertions.assertEquals(JobState.CANCELLED, job.getJobState());
+        Assertions.assertTrue(job.errMsg.contains("already has a partition named p20200103"), job.errMsg);
+        Assertions.assertEquals(Set.of("p20200103", "p2020010303"), partitionNames(table));
+        Assertions.assertTrue(table.getTempPartitions().isEmpty());
+        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+    }
+
+    /**
+     * Loads may write into a partition the merge leaves alone while the job runs. That does not concern the merge,
+     * which still swaps its own partition in and keeps the new data of the other one.
+     */
+    @Test
+    public void testLoadIntoPartitionLeftAloneDuringMerge() throws Exception {
+        OlapTable table = createHourlyPartitionedTable("t_merge_load_left_alone");
+        addHourlyPartitions(table, "2020-01-01 00:00:00", "2020-01-01 01:00:00");
+        mergeToFinished(table, "date_trunc('day', k)");
+        addHourlyPartitions(table, "2020-01-03 02:00:00", "2020-01-03 03:00:00");
+
+        MergePartitionJob job = submitMerge(table, "date_trunc('day', k)");
+        runToRunning(job);
+        // A load publishes a new version of the day partition of the first merge.
+        PhysicalPartition mergedDay = table.getPartition("p20200101").getDefaultPhysicalPartition();
+        long loadedVersion = mergedDay.getVisibleVersion() + 1;
+        mergedDay.setVisibleVersion(loadedVersion, System.currentTimeMillis());
+        runToFinished(job);
+
+        Assertions.assertEquals(Set.of("p20200101", "p20200103"), partitionNames(table));
+        Assertions.assertEquals(loadedVersion,
+                table.getPartition("p20200101").getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertTrue(table.getTempPartitions().isEmpty());
+    }
+
+    /**
+     * A table partitioned on a DATE column builds its partition keys from DATE values: merging its days into months again
+     * leaves the month partition of the first merge alone as well.
+     */
+    @Test
+    public void testMergeAgainOnDateColumnLeavesMergedPartitionAlone() throws Exception {
+        OlapTable table = createDailyPartitionedTable("t_merge_again_date");
+        mergeToFinished(table, "date_trunc('month', k)");
+        Partition mergedMonth = table.getPartition("p202002");
+        Assertions.assertNotNull(mergedMonth, partitionNames(table).toString());
+
+        MergePartitionJob job = submitMerge(table, "date_trunc('month', k)");
+        runToRunning(job);
+        Assertions.assertTrue(table.getTempPartitions().isEmpty());
+        Assertions.assertTrue(job.getOptimizeTasks().isEmpty());
+        runToFinished(job);
+
+        Assertions.assertEquals(Set.of("p202002"), partitionNames(table));
+        Assertions.assertSame(mergedMonth, table.getPartition("p202002"));
     }
 
     // ---- expiry of the rewrite tasks registered in TaskManager ------------------------------------
@@ -269,12 +413,55 @@ public class MergePartitionJobTest extends DDLTestBase {
     }
 
     /**
+     * Creates a table partitioned by hour that has no partition yet; addHourlyPartitions adds them.
+     */
+    private static OlapTable createHourlyPartitionedTable(String tableName) throws Exception {
+        starRocksAssert.withTable("CREATE TABLE " + tableName + " (k DATETIME NOT NULL, v INT) DUPLICATE KEY(k) " +
+                "PARTITION BY date_trunc('hour', k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+        return (OlapTable) starRocksAssert.getTable(GlobalStateMgrTestUtil.testDb1, tableName);
+    }
+
+    /**
+     * Creates the partitions of the given times the way a load creates the partitions of the rows it writes.
+     */
+    private static void addHourlyPartitions(OlapTable table, String... times) throws Exception {
+        List<List<String>> partitionValues = Arrays.stream(times).map(List::of).collect(Collectors.toList());
+        AddPartitionClause clause =
+                AnalyzerUtils.getAddPartitionClauseFromPartitionValues(table, partitionValues, false, null);
+        new AlterTableClauseAnalyzer(table).analyze(starRocksAssert.getCtx(), clause);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .addPartitions(starRocksAssert.getCtx(), db, table.getName(), clause);
+    }
+
+    private static void mergeToFinished(OlapTable table, String partitionBy) throws Exception {
+        MergePartitionJob job = submitMerge(table, partitionBy);
+        runToRunning(job);
+        runToFinished(job);
+    }
+
+    /**
+     * The names of the partitions of the table, without the shadow partition of an automatic partitioned table.
+     */
+    private static Set<String> partitionNames(OlapTable table) {
+        return table.getVisiblePartitions().stream().map(Partition::getName).collect(Collectors.toSet());
+    }
+
+    private static List<String> tempPartitionNames(OlapTable table) {
+        return table.getTempPartitions().stream().map(Partition::getName).sorted().collect(Collectors.toList());
+    }
+
+    private static MergePartitionJob submitMerge(OlapTable table) throws Exception {
+        return submitMerge(table, "date_trunc('month', k)");
+    }
+
+    /**
      * Submits the merge through a handler whose daemon is never started, so only the test runs the job. The returned
      * job sees every earlier load as finished and every load into its temp partition as visible.
      */
-    private static MergePartitionJob submitMerge(OlapTable table) throws Exception {
+    private static MergePartitionJob submitMerge(OlapTable table, String partitionBy) throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
-                "ALTER TABLE " + table.getName() + " PARTITION BY date_trunc('month', k)", starRocksAssert.getCtx());
+                "ALTER TABLE " + table.getName() + " PARTITION BY " + partitionBy, starRocksAssert.getCtx());
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         SchemaChangeHandler handler = new SchemaChangeHandler();
         handler.process(stmt.getAlterClauseList(), db, table);
