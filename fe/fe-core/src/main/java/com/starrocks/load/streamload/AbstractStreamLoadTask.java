@@ -12,6 +12,7 @@ import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.load.loadv2.LoadJobsTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.thrift.TLoadInfo;
@@ -63,6 +64,15 @@ public abstract class AbstractStreamLoadTask extends AbstractTxnStateChangeCallb
      * @return List of TLoadInfo objects containing load task information
      */
     public abstract List<TLoadInfo> toThrift();
+
+    /**
+     * Hand the row of this newly registered task to the load_jobs writer. A task whose state
+     * can change concurrently takes its row under the lock its state changes under, so that
+     * this row cannot be queued after the row of a later state.
+     */
+    public void recordCreated() {
+        LoadJobsTable.offerAll(this::toThrift);
+    }
     public abstract void init();
 
     // Common getters used by StreamLoadMgr

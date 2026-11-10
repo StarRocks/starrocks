@@ -20,9 +20,7 @@ import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.load.loadv2.LoadsHistoryWriter.FlushResult;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
@@ -53,7 +51,7 @@ import java.util.stream.Collectors;
  * back {@code loads_history_backstop_lookback_minutes}; loads that finished earlier and were
  * never written are not recovered.
  */
-public class LoadsHistorySyncer extends LeaderDaemon {
+public class LoadsHistorySyncer extends LoadTableWriterDaemon {
     private static final Logger LOG = LogManager.getLogger(LoadsHistorySyncer.class);
 
     public static final String LOADS_HISTORY_DB_NAME = "_statistics_";
@@ -154,13 +152,11 @@ public class LoadsHistorySyncer extends LeaderDaemon {
             new TableKeeper(LOADS_HISTORY_DB_NAME, LOADS_HISTORY_TABLE_NAME, LOADS_HISTORY_TABLE_CREATE,
                     () -> Math.max(1, Config.loads_history_retained_days), HISTORY_COLUMNS);
 
-    private final LoadsHistoryWriter writer;
     private final Backstop backstop;
-    private final BooleanSupplier schemaReady;
 
     private LongSupplier clock = System::currentTimeMillis;
 
-    // Leader-session state, reset in onStopped().
+    // Leader-session state, reset in resetSession().
     // When this FE started to drain the writer as leader. Loads that finished before that may
     // sit in no queue: the previous leader's queue is gone, and nothing is queued before the
     // writer is active.
@@ -170,7 +166,6 @@ public class LoadsHistorySyncer extends LeaderDaemon {
     // A successful backstop saw every load that finished up to this time.
     private long coveredUntilMs = 0L;
     private long lastBackstopAttemptMs = 0L;
-    private boolean schemaNotReadyLogged = false;
 
     public static TableKeeper createKeeper() {
         return KEEPER;
@@ -201,16 +196,8 @@ public class LoadsHistorySyncer extends LeaderDaemon {
 
     @VisibleForTesting
     LoadsHistorySyncer(LoadsHistoryWriter writer, Backstop backstop, BooleanSupplier schemaReady) {
-        // No inter-cycle delay: each cycle paces itself on the writer's bounded wait for a batch.
-        super("load-history-syncer", 0L);
-        this.writer = writer;
+        super("load-history-syncer", writer, schemaReady);
         this.backstop = backstop;
-        this.schemaReady = schemaReady;
-    }
-
-    @VisibleForTesting
-    LoadsHistoryWriter getWriter() {
-        return writer;
     }
 
     private static void writeBatch(String sql, int rows) {
@@ -231,37 +218,16 @@ public class LoadsHistorySyncer extends LeaderDaemon {
     }
 
     @Override
-    protected void runAfterLeaseValid() throws InterruptedException {
-        long flushIntervalMs = Math.max(1, Config.loads_history_flush_interval_second) * 1000L;
-        if (FeConstants.runningUnitTest) {
-            // Unit tests have no executor to write to.
-            Thread.sleep(flushIntervalMs);
-            return;
-        }
-        // Rows are accepted as soon as this FE leads; they wait in the writer until the table
-        // keeper has created the table and appended the columns a newer version added, since
-        // the explicit column lists would not resolve before that.
+    protected void activateWriter() {
         LoadsHistoryWriter.activate(writer);
-        if (!schemaReady.getAsBoolean()) {
-            if (!schemaNotReadyLogged) {
-                LOG.info("loads history table is missing or lacks columns, waiting for the table keeper");
-                schemaNotReadyLogged = true;
-            }
-            Thread.sleep(flushIntervalMs);
-            return;
-        }
-        schemaNotReadyLogged = false;
-        try {
-            runCycle(flushIntervalMs);
-        } catch (InterruptedException e) {
-            throw e;
-        } catch (Throwable e) {
-            LOG.warn("Failed to process one round of LoadsHistorySyncer with error message {}", e.getMessage(), e);
-        }
     }
 
-    /** One cycle: flush pending rows, then run the backstop if it is wanted and safe. */
-    @VisibleForTesting
+    @Override
+    protected void deactivateWriter() {
+        LoadsHistoryWriter.deactivate(writer);
+    }
+
+    @Override
     void runCycle(long flushIntervalMs) throws InterruptedException {
         if (sessionStartMs == 0L) {
             sessionStartMs = clock.getAsLong();
@@ -269,7 +235,15 @@ public class LoadsHistorySyncer extends LeaderDaemon {
         // Rows held until their load is visible are queued here, by the thread that runs the
         // backstop, so that none of them arrives while a backstop statement is running.
         writer.releaseHolds();
-        FlushResult result = writer.runOnce(Config.loads_history_flush_batch_rows, flushIntervalMs);
+        super.runCycle(flushIntervalMs);
+    }
+
+    /** Run the backstop if it is wanted and safe. */
+    @Override
+    protected void afterFlush(FlushResult result) {
+        if (sessionStartMs == 0L) {
+            sessionStartMs = clock.getAsLong();
+        }
         // A failed flush means the table cannot be written right now. Rows still in the queue do
         // not keep the backstop off, or a queue that never drains would starve it: the backstop
         // stays clear of them, see settleMs() and LoadsHistoryWriter.beginBackstop().
@@ -344,17 +318,13 @@ public class LoadsHistorySyncer extends LeaderDaemon {
         writer.backstopCovered(coveredUntilMs);
     }
 
+    /** Pending rows are discarded by the base class; the next leader's startup backstop re-reads them. */
     @Override
-    protected void onStopped() {
-        // Drop leader-session state: pending rows are discarded (the next leader's startup
-        // backstop re-reads them from information_schema.loads) and the backstop re-arms.
-        LoadsHistoryWriter.deactivate(writer);
-        writer.clear();
+    protected void resetSession() {
         sessionStartMs = 0L;
         startupBackstopDone = false;
         coveredUntilMs = 0L;
         lastBackstopAttemptMs = 0L;
-        schemaNotReadyLogged = false;
     }
 
     /**

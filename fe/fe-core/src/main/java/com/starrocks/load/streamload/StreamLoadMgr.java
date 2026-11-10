@@ -302,7 +302,7 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     public void replayCreateLoadTask(AbstractStreamLoadTask loadJob) {
-        addLoadTask(loadJob);
+        putLoadTask(loadJob, true);
         LOG.info(new LogBuilder(LogKey.STREAM_LOAD_TASK, loadJob.getId())
                 .add("msg", "replay create load job")
                 .build());
@@ -342,6 +342,11 @@ public class StreamLoadMgr implements MemoryTrackable {
      * @param addTxnCallback whether to register the task as a transaction state change callback
      */
     public void addLoadTask(AbstractStreamLoadTask task, boolean addTxnCallback) {
+        putLoadTask(task, addTxnCallback);
+        task.recordCreated();
+    }
+
+    private void putLoadTask(AbstractStreamLoadTask task, boolean addTxnCallback) {
         if (task instanceof StreamLoadTask && ((StreamLoadTask) task).isSyncStreamLoad()) {
             txnIdToSyncStreamLoadTasks.put(task.getTxnId(), (StreamLoadTask) task);
         }
@@ -833,7 +838,8 @@ public class StreamLoadMgr implements MemoryTrackable {
                     return;
                 }
 
-                addLoadTask(loadTask);
+                // Loading an image is not a state change: no row is recorded for it.
+                putLoadTask(loadTask, true);
             });
         }
     }

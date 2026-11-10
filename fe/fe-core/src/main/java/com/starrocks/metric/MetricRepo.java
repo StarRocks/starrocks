@@ -73,6 +73,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.batchwrite.MergeCommitMetricRegistry;
 import com.starrocks.load.loadv2.JobState;
+import com.starrocks.load.loadv2.LoadJobsTable;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.LoadsHistoryWriter;
 import com.starrocks.load.routineload.KafkaProgress;
@@ -374,6 +375,8 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_LOAD_FINISHED;
     public static LongCounterMetric COUNTER_LOADS_HISTORY_DROPPED;
     public static GaugeMetricImpl<Long> GAUGE_LOADS_HISTORY_FLUSH_LATENCY_MS;
+    public static LongCounterMetric COUNTER_LOAD_JOBS_DROPPED;
+    public static GaugeMetricImpl<Long> GAUGE_LOAD_JOBS_FLUSH_LATENCY_MS;
     public static LongCounterMetric COUNTER_EDIT_LOG_WRITE;
     public static LongCounterMetric COUNTER_EDIT_LOG_READ;
     public static LongCounterMetric COUNTER_EDIT_LOG_SIZE_BYTES;
@@ -1085,6 +1088,21 @@ public final class MetricRepo {
                 MetricUnit.MILLISECONDS, "duration of the last successful write to loads_history");
         GAUGE_LOADS_HISTORY_FLUSH_LATENCY_MS.setValue(0L);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LOADS_HISTORY_FLUSH_LATENCY_MS);
+        GaugeMetric<Long> loadJobsQueueRows = new GaugeMetric<Long>("load_jobs_queue_rows", MetricUnit.ROWS,
+                "load state changes waiting to be written to load_jobs") {
+            @Override
+            public Long getValue() {
+                return LoadJobsTable.queuedRows();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(loadJobsQueueRows);
+        COUNTER_LOAD_JOBS_DROPPED = new LongCounterMetric("load_jobs_dropped_total", MetricUnit.ROWS,
+                "load state changes dropped from the load_jobs queue because it was full");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LOAD_JOBS_DROPPED);
+        GAUGE_LOAD_JOBS_FLUSH_LATENCY_MS = new GaugeMetricImpl<>("load_jobs_flush_latency_ms",
+                MetricUnit.MILLISECONDS, "duration of the last successful write to load_jobs");
+        GAUGE_LOAD_JOBS_FLUSH_LATENCY_MS.setValue(0L);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LOAD_JOBS_FLUSH_LATENCY_MS);
         COUNTER_EDIT_LOG_WRITE =
                 new LongCounterMetric("edit_log_write", MetricUnit.OPERATIONS, "counter of edit log write into bdbje");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EDIT_LOG_WRITE);

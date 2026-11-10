@@ -472,6 +472,24 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: カウント
 - 説明: ロードチャネルの総数。
 
+## `load_jobs_dropped_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: `_statistics_.load_jobs` に書き込まれる前に Leader FE が破棄したロード状態変更の合計数。メモリ内キューが満杯の場合 (`loads_history_queue_max_rows`、デフォルト 100000、または `loads_history_queue_max_bytes`)、または書き込みが 3 回連続で失敗した場合に破棄されます。Leader がそのロードをまだ追跡している場合は、以降の照合でそのロードの現在の状態が再度書き込まれます。テーブルにそのロードの行が残っていない場合も同様です。
+
+## `load_jobs_flush_latency_ms`
+
+- 単位: ミリ秒
+- タイプ: 瞬時値
+- 説明: ロード状態変更を `_statistics_.load_jobs` に最後に正常にバッチ書き込みしたときの所要時間。
+
+## `load_jobs_queue_rows`
+
+- 単位: カウント
+- タイプ: 瞬時値
+- 説明: Leader FE のメモリ内で `_statistics_.load_jobs` への書き込みを待っているロード状態変更の数。
+
 ## `load_mem_bytes`
 
 - 単位: バイト

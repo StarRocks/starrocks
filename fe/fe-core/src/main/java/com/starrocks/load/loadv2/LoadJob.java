@@ -35,6 +35,7 @@
 package com.starrocks.load.loadv2;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -102,6 +103,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public abstract class LoadJob extends AbstractTxnStateChangeCallback
@@ -213,7 +215,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
 
     protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
     // Whether the history row is to be recorded when the write lock is released. Guarded by the write lock.
-    private boolean historyPending = false;
+    private boolean statePending = false;
+    // The creation time before the first retry replaced it, -1 if the job was never retried. A retry
+    // is not journaled, so after a restart the job is back at the time it was first created.
+    private volatile long firstCreateTimestamp = -1;
+    private final Object rowOfferLock = new Object();
 
     // this request id is only used for checking if a load begin request is a duplicate request.
     protected TUniqueId requestId;
@@ -254,25 +260,67 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
     }
 
     protected void writeUnlock() {
-        // The history row is taken once the lock is released: toThrift() looks the transaction
-        // up, and the transaction manager must not be entered with the job lock held.
-        boolean record = historyPending && lock.getWriteHoldCount() == 1;
+        // The row is taken once the lock is released: toThrift() looks the transaction up, and
+        // the transaction manager must not be entered with the job lock held.
+        boolean record = statePending && lock.getWriteHoldCount() == 1;
         if (record) {
-            historyPending = false;
+            statePending = false;
         }
         lock.writeLock().unlock();
         if (record) {
-            LoadsHistoryWriter.offer(this::toThrift);
+            offerCurrentRow();
         }
     }
 
-    // Record the final state of this job in loads_history, after the write lock is released
-    // when the caller holds it.
-    private void recordHistoryAfterUnlock() {
+    /**
+     * Hand the job's current row to the load_jobs writer and, once the job is in a final
+     * state, to the loads_history writer as well. With the job's write lock held the row is
+     * taken when the lock is released; the conversion runs at most once, and only when a writer
+     * is active on this node.
+     */
+    protected void recordStateChange() {
         if (lock.isWriteLockedByCurrentThread()) {
-            historyPending = true;
+            statePending = true;
         } else {
-            LoadsHistoryWriter.offer(this::toThrift);
+            offerCurrentRow();
+        }
+    }
+
+    // Rows of one job are taken and queued one at a time, so that a row taken earlier cannot be
+    // queued after a later one and replace it.
+    private void offerCurrentRow() {
+        synchronized (rowOfferLock) {
+            Supplier<TLoadInfo> row = Suppliers.memoize(this::toThrift);
+            LoadJobsTable.offer(() -> keyedByFirstCreateTime(row.get()));
+            if (isCompleted()) {
+                LoadsHistoryWriter.offer(row);
+            }
+        }
+    }
+
+    /**
+     * The row of this job in load_jobs. It differs from {@link #toThrift()} in the creation
+     * time of a job that was retried: load_jobs is keyed by the creation time, so the row keeps
+     * the time the job was first created, where the loads view shows the start of the attempt.
+     */
+    public TLoadInfo toLoadJobsRow() {
+        return keyedByFirstCreateTime(toThrift());
+    }
+
+    private TLoadInfo keyedByFirstCreateTime(TLoadInfo row) {
+        long first = firstCreateTimestamp;
+        if (first <= 0 || !row.isSetCreate_time_ms() || row.getCreate_time_ms() == first) {
+            return row;
+        }
+        TLoadInfo keyed = new TLoadInfo(row);
+        keyed.setCreate_time_ms(first);
+        return keyed;
+    }
+
+    /** Run {@code offer} as the only row offer of this job at a time, see {@link #offerCurrentRow()}. */
+    protected void offerRows(Runnable offer) {
+        synchronized (rowOfferLock) {
+            offer.run();
         }
     }
 
@@ -355,6 +403,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
     }
 
     protected void reset() {
+        if (firstCreateTimestamp <= 0) {
+            firstCreateTimestamp = createTimestamp;
+        }
         createTimestamp = System.currentTimeMillis();
         idToTasks.clear();
         finishedTaskIds.clear();
@@ -438,8 +489,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
 
     public void initLoadProgress(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedBackendIds) {
         loadingStatus.getLoadStatistic().initLoad(loadId, fragmentIds, relatedBackendIds);
+        boolean started = !startLoad;
         startLoad = true;
         loadStartTimestamp = System.currentTimeMillis();
+        if (started) {
+            // The shown state turns from QUEUEING to LOADING here.
+            recordStateChange();
+        }
     }
 
     public void updateProgress(TReportExecStatusParams params) {
@@ -754,6 +810,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
             default:
                 break;
         }
+        recordStateChange();
     }
 
     private void executeUnknown() {
@@ -761,7 +818,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
         // can be remove due to label expiration so soon as possible
         finishTimestamp = createTimestamp;
         state = JobState.UNKNOWN;
-        recordHistoryAfterUnlock();
     }
 
     private void executeLoad() {
@@ -886,7 +942,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
         } else {
             state = JobState.CANCELLED;
         }
-        recordHistoryAfterUnlock();
+        recordStateChange();
     }
 
     private void executeFinish() {
@@ -901,7 +957,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
         }
         // when load job finished, there is no need to hold the tasks which are the biggest memory consumers.
         idToTasks.clear();
-        recordHistoryAfterUnlock();
     }
 
     public boolean checkDataQuality() {
@@ -1334,6 +1389,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
             isCommitting = false;
             state = JobState.COMMITTED;
             loadCommittedTimestamp = System.currentTimeMillis();
+            recordStateChange();
         } finally {
             writeUnlock();
         }

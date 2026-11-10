@@ -151,6 +151,8 @@ public class LoadMgr implements MemoryTrackable {
             writeUnlock();
         }
 
+        loadJob.recordStateChange();
+
         // The job must be submitted after edit log.
         // It guarantee that load job has not been changed before edit log.
         loadJobScheduler.submitJob(loadJob);
@@ -277,6 +279,7 @@ public class LoadMgr implements MemoryTrackable {
         }
         // persistent
         GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob, wal -> createLoadJob((LoadJob) wal));
+        loadJob.recordStateChange();
         return loadJob;
     }
 
@@ -653,6 +656,11 @@ public class LoadMgr implements MemoryTrackable {
             }
         }
         return loadJobInfos;
+    }
+
+    /** Every load job this manager holds, finished or not. */
+    public List<LoadJob> getAllLoadJobs() {
+        return new ArrayList<>(idToLoadJob.values());
     }
 
     public List<LoadJob> getLoadJobs(String labelValue) {

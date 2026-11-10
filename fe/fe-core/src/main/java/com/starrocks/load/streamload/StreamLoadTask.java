@@ -15,6 +15,7 @@
 package com.starrocks.load.streamload;
 
 import com.google.common.base.Strings;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
@@ -45,6 +46,7 @@ import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.LoadConstants;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.load.loadv2.LoadJobsTable;
 import com.starrocks.load.loadv2.LoadsHistoryWriter;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -94,6 +96,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Supplier;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
 
@@ -356,6 +359,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     this.state = State.BEFORE_LOAD;
                     this.channels.set(channelId, State.BEFORE_LOAD);
                     this.beforeLoadTimeMs = System.currentTimeMillis();
+                    recordState();
                     resp.addResultEntry("Label", this.label);
                     resp.addResultEntry("TxnId", this.txnId);
                     resp.addResultEntry("BeginChannel", channelNum);
@@ -439,6 +443,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     this.state = State.BEFORE_LOAD;
                     this.channels.set(channelId, State.BEFORE_LOAD);
                     this.beforeLoadTimeMs = System.currentTimeMillis();
+                    recordState();
                     LOG.info("stream load {} channel_id {} begin. db: {}, tbl: {}, txn_id: {}",
                             label, channelId, dbName, tableName, txnId);
                     break;
@@ -578,6 +583,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     this.state = State.LOADING;
                     this.startLoadingTimeMs = System.currentTimeMillis();
                     this.channels.set(channelId, State.LOADING);
+                    recordState();
                     LOG.info("stream load {} channel_id {} start loading. db: {}, tbl: {}, txn_id: {}",
                             label, channelId, dbName, tableName, txnId);
                     return channelIdToBEHTTPAddress.get(channelId);
@@ -672,6 +678,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     this.channels.set(channelId, State.PREPARING);
                     this.startPreparingTimeMs = System.currentTimeMillis();
                     this.preparedChannelNum += 1;
+                    recordState();
                     LOG.info("stream load {} channel_id {} start preparing. db: {}, tbl: {}, txn_id: {}",
                             label, channelId, dbName, tableName, txnId);
 
@@ -696,6 +703,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                     this.state = State.PREPARING;
                     this.startPreparingTimeMs = System.currentTimeMillis();
                     this.preparedChannelNum += 1;
+                    recordState();
 
                     LOG.info("stream load {} channel_id {} start preparing. db: {}, tbl: {}, txn_id: {}",
                             label, channelId, dbName, tableName, txnId);
@@ -1089,8 +1097,8 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 }
                 this.state = State.CANCELLED;
                 this.endTimeMs = System.currentTimeMillis();
-                writeUnlock();
                 recordFinalState();
+                writeUnlock();
             }
         } catch (Exception e) {
             LOG.warn("stream load " + label + " abort txn fail, errmsg: " + e.getMessage());
@@ -1181,6 +1189,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 this.channels.set(i, State.PREPARED);
             }
             this.state = State.PREPARED;
+            recordState();
         } finally {
             writeUnlock();
         }
@@ -1234,6 +1243,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             commitTimeMs = System.currentTimeMillis();
             captureCommitThrottle(txnState);
             isCommitting = false;
+            recordState();
         } finally {
             writeUnlock();
             // sync stream load related query info should unregister here
@@ -1357,12 +1367,12 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             errorMsg = txnState.getReason();
             gcObject();
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            recordFinalState();
         } finally {
             writeUnlock();
             // sync stream load related query info should unregister here
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
-        recordFinalState();
         WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "StreamLoad: label[" + label + "]");
     }
 
@@ -1398,10 +1408,10 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             captureCommitThrottle(txnState);
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
             gcObject();
+            recordFinalState();
         } finally {
             writeUnlock();
         }
-        recordFinalState();
         WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "StreamLoad: label[" + label + "]");
     }
 
@@ -1457,11 +1467,34 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     /**
-     * Hand the row of this task to the loads_history writer once it reached FINISHED or
-     * CANCELLED. Called without the task lock held; the conversion takes the read lock itself.
+     * Hand the row of this task to the loads_history and load_jobs writers once it reached
+     * FINISHED or CANCELLED. Called with the write lock held, like {@link #recordState()}.
      */
     private void recordFinalState() {
-        LoadsHistoryWriter.offerAll(this::toThrift);
+        Supplier<List<TLoadInfo>> rows = Suppliers.memoize(this::toThrift);
+        LoadsHistoryWriter.offerAll(rows);
+        LoadJobsTable.offerAll(rows);
+    }
+
+    /**
+     * Hand the current row of this task to the load_jobs writer after a state change. Called
+     * with the write lock held (the conversion takes the read lock, which the lock holder may
+     * re-enter), so that the row is taken and queued before another thread can change the
+     * state again: otherwise that thread's newer row could be queued first and this older one
+     * would be written over it.
+     */
+    private void recordState() {
+        LoadJobsTable.offerAll(this::toThrift);
+    }
+
+    @Override
+    public void recordCreated() {
+        writeLock();
+        try {
+            recordState();
+        } finally {
+            writeUnlock();
+        }
     }
 
     /**
@@ -1508,13 +1541,15 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 this.visibleTimeMs = txnVisibleTimeMs > 0 ? txnVisibleTimeMs : finishTimeMs;
                 gcObject();
                 becameVisible = true;
+                recordFinalState();
+            } else {
+                recordState();
             }
         } finally {
             writeUnlock();
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
         if (becameVisible) {
-            recordFinalState();
             WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "StreamLoad: label[" + label + "]");
         }
     }
@@ -1541,10 +1576,10 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             state = State.CANCELLED;
             errorMsg = reason;
             gcObject();
+            recordFinalState();
         } finally {
             writeUnlock();
         }
-        recordFinalState();
     }
 
     private void replayTxnAttachment(TransactionState txnState) {

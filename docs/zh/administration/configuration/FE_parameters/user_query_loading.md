@@ -1321,7 +1321,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 触发立即写入内部 `_statistics_.loads_history` 表的已完成导入作业数量，同时也是每条 `INSERT` 语句的最大行数。已完成的导入作业（Broker Load、Spark Load、INSERT、Stream Load、Routine Load 任务和 Merge Commit 任务）在完成时进入 FE 内存队列并分批写入；当待写入行数达到该值或等待时间达到 `loads_history_flush_interval_second` 秒（以先到者为准）时写入一批。队列最多保存 `loads_history_queue_max_rows` 行；队列满时丢弃最旧的行，并计入 `loads_history_dropped_total` 指标。
+- 描述: 触发立即写入内部 `_statistics_.loads_history` 表的已完成导入作业数量，同时也是每条 `INSERT` 语句的最大行数。已完成的导入作业（Broker Load、Spark Load、INSERT、Stream Load、Routine Load 任务和 Merge Commit 任务）在完成时进入 FE 内存队列并分批写入；当待写入行数达到该值或等待时间达到 `loads_history_flush_interval_second` 秒（以先到者为准）时写入一批。队列最多保存 `loads_history_queue_max_rows` 行；队列满时丢弃最旧的行，并计入 `loads_history_dropped_total` 指标。该设置同样适用于内部 `_statistics_.load_jobs` 表的写入器。
 - 引入版本: v4.2.0
 
 ### `loads_history_flush_interval_second`
@@ -1330,7 +1330,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 秒
 - 是否可变: Yes
-- 描述: 当待写入行数少于 `loads_history_flush_batch_rows` 时，已完成的导入作业在 FE 内存中等待写入内部 `_statistics_.loads_history` 表的最长时间。较小的值可以更快地看到历史记录，但会产生更频繁的小 `INSERT` 语句。
+- 描述: 当待写入行数少于 `loads_history_flush_batch_rows` 时，已完成的导入作业在 FE 内存中等待写入内部 `_statistics_.loads_history` 表的最长时间。较小的值可以更快地看到历史记录，但会产生更频繁的小 `INSERT` 语句。该设置同样适用于内部 `_statistics_.load_jobs` 表的写入器。
 - 引入版本: v4.2.0
 
 ### `loads_history_queue_max_bytes`
@@ -1339,7 +1339,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 字节
 - 是否可变: Yes
-- 描述: Leader FE 中等待写入内部 `_statistics_.loads_history` 表的已完成导入作业可占用的最大内存。行以渲染后的 SQL 值保存，因此该上限是近似值。达到上限时丢弃最旧的行，并计入 `loads_history_dropped_total` 指标，与 `loads_history_queue_max_rows` 相同。
+- 描述: Leader FE 中等待写入内部 `_statistics_.loads_history` 表的已完成导入作业可占用的最大内存。行以渲染后的 SQL 值保存，因此该上限是近似值。达到上限时丢弃最旧的行，并计入 `loads_history_dropped_total` 指标，与 `loads_history_queue_max_rows` 相同。该设置同样适用于内部 `_statistics_.load_jobs` 表的写入器。
 - 引入版本: v4.2.0
 
 ### `loads_history_queue_max_rows`
@@ -1348,7 +1348,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: Leader FE 内存中等待写入内部 `_statistics_.loads_history` 表的已完成导入作业的最大数量。队列满时丢弃最旧的行，并计入 `loads_history_dropped_total` 指标。运行时调低该值后，下一次入队时会立即丢弃超出新上限的最旧行。
+- 描述: Leader FE 内存中等待写入内部 `_statistics_.loads_history` 表的已完成导入作业的最大数量。队列满时丢弃最旧的行，并计入 `loads_history_dropped_total` 指标。运行时调低该值后，下一次入队时会立即丢弃超出新上限的最旧行。该设置同样适用于内部 `_statistics_.load_jobs` 表的写入器。
 - 引入版本: v4.2.0
 
 ### `loads_history_retained_days`
@@ -1357,7 +1357,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 天
 - 是否可变: Yes
-- 描述: 内部 `_statistics_.loads_history` 表中加载历史记录的保留天数。此值用于表创建以设置表属性 `partition_live_number`，并传递给 `TableKeeper`（最小值为 1）以确定要保留多少个每日分区。增加或减少此值可调整完成的加载作业在每日分区中保留的时间；它会影响新表创建和 keeper 的清理行为，但不会自动重新创建过去的分区。`LoadsHistorySyncer` 在管理加载历史生命周期时依赖此保留；其同步节奏由 `loads_history_sync_interval_second` 控制。
+- 描述: 内部 `_statistics_.loads_history` 表中加载历史记录的保留天数。此值用于表创建以设置表属性 `partition_live_number`，并传递给 `TableKeeper`（最小值为 1）以确定要保留多少个每日分区。增加或减少此值可调整完成的加载作业在每日分区中保留的时间；它会影响新表创建和 keeper 的清理行为，但不会自动重新创建过去的分区。`LoadsHistorySyncer` 在管理加载历史生命周期时依赖此保留；其同步节奏由 `loads_history_sync_interval_second` 控制。内部 `_statistics_.load_jobs` 表对已结束的导入使用相同的保留天数，从导入结束的时间起算；仍在运行的导入的行不受此限制。
 - 引入版本: v3.3.6, v3.4.0, v3.5.0
 
 ### `loads_history_sync_interval_second`
@@ -1366,7 +1366,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 秒
 - 是否可变: Yes
-- 描述: 兜底同步的最小间隔（以秒为单位），该同步将已完成的导入作业从 `information_schema.loads` 复制到内部 `_statistics_.loads_history` 表。已完成的导入作业通常在完成时直接写入该表（参见 `loads_history_flush_interval_second` 和 `loads_history_flush_batch_rows`）；兜底同步仅在 FE 成为 Leader 时以及有行被从队列中丢弃之后（队列已满，或某一行连续三次写入失败）运行。小于 1 的值按 1 处理。它只复制一分钟前、且在最近 `loads_history_backstop_lookback_minutes` 分钟内完成的导入，跳过表中已存在的行，并且仅在内存队列排空后运行，以免同一行被写入两次。FE 不再是 Leader 时仍留在内存队列中的行会被丢弃，由新 Leader 上的兜底同步补齐。FE 指标 `loads_history_queue_rows`、`loads_history_dropped_total` 和 `loads_history_flush_latency_ms` 反映写入器的状态。有关目标表的保留/分区行为，请参阅 `loads_history_retained_days`。
+- 描述: 兜底同步的最小间隔（以秒为单位），该同步将已完成的导入作业从 `information_schema.loads` 复制到内部 `_statistics_.loads_history` 表。已完成的导入作业通常在完成时直接写入该表（参见 `loads_history_flush_interval_second` 和 `loads_history_flush_batch_rows`）；兜底同步仅在 FE 成为 Leader 时以及有行被从队列中丢弃之后（队列已满，或某一行连续三次写入失败）运行。小于 1 的值按 1 处理。它只复制一分钟前、且在最近 `loads_history_backstop_lookback_minutes` 分钟内完成的导入，跳过表中已存在的行，并且仅在内存队列排空后运行，以免同一行被写入两次。FE 不再是 Leader 时仍留在内存队列中的行会被丢弃，由新 Leader 上的兜底同步补齐。FE 指标 `loads_history_queue_rows`、`loads_history_dropped_total` 和 `loads_history_flush_latency_ms` 反映写入器的状态。它同时也是 Leader FE 将内部 `_statistics_.load_jobs` 表与其跟踪的导入进行对账的间隔。有关目标表的保留/分区行为，请参阅 `loads_history_retained_days`。
 - 引入版本: v3.3.6, v3.4.0, v3.5.0
 
 ### `max_broker_load_job_concurrency`

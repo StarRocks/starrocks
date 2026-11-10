@@ -343,6 +343,7 @@ public class SparkLoadJob extends BulkLoadJob {
         this.etlStartTimestamp = etlStartTimestamp;
         state = JobState.ETL;
         LOG.info("update to {} state success. job id: {}", state, id);
+        recordStateChange();
     }
 
     private boolean checkState(JobState expectState) {

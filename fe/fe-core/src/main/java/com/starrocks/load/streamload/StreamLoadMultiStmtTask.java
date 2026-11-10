@@ -834,6 +834,15 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         return id;
     }
 
+    /** Ids of the per-table sub-tasks; each has its own row in the loads view under that id. */
+    public List<Long> getSubTaskIds() {
+        List<Long> ids = Lists.newArrayList();
+        for (StreamLoadTask task : taskMaps.values()) {
+            ids.add(task.getId());
+        }
+        return ids;
+    }
+
     @Override
     public String getLabel() {
         return label;

@@ -36,6 +36,7 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
@@ -76,6 +77,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 /**
  * The class is performed to record the finished info of insert load job.
@@ -205,10 +207,16 @@ public class InsertLoadJob extends LoadJob {
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(this.id);
             }
         }
-        // The history row of such a job is written once the visible time is known: the writer
-        // holds it until then, and gives up after a while. A row it cannot hold is recorded as it is.
-        if (publishPending && LoadsHistoryWriter.holdUntilVisible(this.id, this::toHistoryRow)) {
-            historyRecorded.set(true);
+        if (publishPending) {
+            // load_jobs shows the final state at once. The history row is written once the visible
+            // time is known: the writer holds it until then, and gives up after a while. A row it
+            // cannot hold is recorded as it is.
+            offerRows(() -> LoadJobsTable.offer(this::toHistoryRow));
+            if (LoadsHistoryWriter.holdUntilVisible(this.id, this::toHistoryRow)) {
+                historyRecorded.set(true);
+            } else {
+                recordHistory();
+            }
         } else {
             recordHistory();
         }
@@ -243,9 +251,14 @@ public class InsertLoadJob extends LoadJob {
         }
     }
 
+    /** Hand the final row to the loads_history writer, once, and to the load_jobs writer. */
     private void recordHistory() {
         if (historyRecorded.compareAndSet(false, true)) {
-            LoadsHistoryWriter.offer(this::toHistoryRow);
+            offerRows(() -> {
+                Supplier<TLoadInfo> row = Suppliers.memoize(this::toHistoryRow);
+                LoadsHistoryWriter.offer(row);
+                LoadJobsTable.offer(row);
+            });
         }
     }
 
@@ -417,6 +430,8 @@ public class InsertLoadJob extends LoadJob {
             // The statement finished the job before the publish did and left the history row
             // with the writer, which sees the visible time from now on.
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(this.id);
+            // load_jobs already has the final row; write it again with the visible time.
+            offerRows(() -> LoadJobsTable.offer(this::toHistoryRow));
         }
     }
 

@@ -51,6 +51,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.load.loadv2.LoadJobsTable;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
@@ -373,6 +374,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             GlobalStateMgr.getCurrentState().getEditLog().logCreateRoutineLoadJob(routineLoadJob,
                     wal -> unprotectedAddJob((RoutineLoadJob) wal));
             LOG.info("create routine load job: id: {}, name: {}", routineLoadJob.getId(), routineLoadJob.getName());
+            LoadJobsTable.offer(routineLoadJob::toLoadJobRow);
         } catch (MetaNotFoundException e) {
             throw new DdlException(e.getMessage());
         } finally {
@@ -493,6 +495,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         } finally {
             slotLock.unlock();
         }
+    }
+
+    /** Every routine load job this manager holds, in any state. */
+    public List<RoutineLoadJob> getAllJobs() {
+        return new ArrayList<>(idToRoutineLoadJob.values());
     }
 
     public RoutineLoadJob getJob(long jobId) {

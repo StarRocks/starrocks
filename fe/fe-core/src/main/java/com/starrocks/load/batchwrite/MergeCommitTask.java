@@ -15,6 +15,7 @@
 package com.starrocks.load.batchwrite;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -49,6 +50,7 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.load.LoadConstants;
 import com.starrocks.load.loadv2.LoadErrorUtils;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.load.loadv2.LoadJobsTable;
 import com.starrocks.load.loadv2.LoadsHistoryWriter;
 import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadInfo;
@@ -90,6 +92,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
+import java.util.function.Supplier;
 
 /**
  * Executes a single merge-commit load.
@@ -250,6 +253,7 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
     // collected the profile, so that the row carries the profile id.
     private final AtomicBoolean runStarted = new AtomicBoolean(false);
     private final AtomicBoolean historyRecorded = new AtomicBoolean(false);
+    private final AtomicBoolean visibleRowOffered = new AtomicBoolean(false);
     // Id of the table-level MergeCommitJob that created this task; -1 when created standalone.
     private volatile long mergeCommitJobId = -1;
     // Load statistics; set when entering COMMITTING in {@link #run()}.
@@ -757,12 +761,20 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             LOG.debug("Transition state from {} to {}. db={}, table={}, taskId={}, label={}, loadId={}, txnId={}, stateMsg={}",
                     prevTaskState, targetState, tableRef.getDbName(), tableRef.getTableName(),
                     taskId, label, DebugUtil.printId(loadId), txnId, targetStateMsg);
-        }
-        if (targetState.isFinalState()) {
-            loadTimeTrace.endTimeMs.set(System.currentTimeMillis());
-            if (!runStarted.get()) {
-                // Cancelled before it ran: no profile will follow, record the row now.
-                recordHistory();
+            // The rows are taken and queued under the lock, so that the row of a later transition
+            // cannot be queued before this one and then be overwritten by it.
+            if (targetState.isFinalState()) {
+                loadTimeTrace.endTimeMs.set(System.currentTimeMillis());
+                if (!runStarted.get()) {
+                    // Cancelled before it ran: no profile will follow, record the row now.
+                    recordHistory();
+                } else {
+                    // The history row waits for the profile; load_jobs shows the final state at once.
+                    LoadJobsTable.offerAll(this::toThrift);
+                }
+            } else if (prevTaskState == null || !toLoadState(prevTaskState).equals(toLoadState(targetState))) {
+                // Several task states show as one loads state; only a change of the shown state is a row.
+                LoadJobsTable.offerAll(this::toThrift);
             }
         }
         if (observer != null && prevTaskState != null) {
@@ -773,17 +785,41 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
         }
     }
 
-    /** Hand the row of this task to the loads_history writer, once. */
+    @Override
+    public void recordCreated() {
+        this.lock.lock();
+        try {
+            LoadJobsTable.offerAll(this::toThrift);
+        } finally {
+            this.lock.unlock();
+        }
+    }
+
+    /** Hand the final row of this task to the loads_history writer, once, and to the load_jobs writer. */
     private void recordHistory() {
         if (!historyRecorded.compareAndSet(false, true)) {
             return;
         }
         // A task whose publish wait timed out is FINISHED while its transaction is only
-        // committed: the writer holds the row until the visible time is known.
-        if (isPublishPending() && LoadsHistoryWriter.holdUntilVisible(taskId, this::toHistoryRow)) {
+        // committed: the writer holds the history row until the visible time is known, and
+        // load_jobs gets the row again then.
+        if (isPublishPending() && LoadsHistoryWriter.holdUntilVisible(taskId, this::toVisibleHistoryRow)) {
+            LoadJobsTable.offerAll(this::toThrift);
             return;
         }
-        LoadsHistoryWriter.offerAll(this::toThrift);
+        Supplier<List<TLoadInfo>> rows = Suppliers.memoize(this::toThrift);
+        LoadsHistoryWriter.offerAll(rows);
+        LoadJobsTable.offerAll(rows);
+    }
+
+    // The held history row, read by the writer until the load is visible; load_jobs is given the
+    // row with the visible time as soon as it shows.
+    private TLoadInfo toVisibleHistoryRow() {
+        TLoadInfo row = toHistoryRow();
+        if (row != null && row.isSetVisible_time_ms() && visibleRowOffered.compareAndSet(false, true)) {
+            LoadJobsTable.offer(() -> row);
+        }
+        return row;
     }
 
     @VisibleForTesting
@@ -1218,7 +1254,11 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
     }
 
     private String convertTaskStateToLoadState() {
-        TaskState state = taskState;
+        return toLoadState(taskState);
+    }
+
+    /** The {@code information_schema.loads} state a task state shows as. */
+    static String toLoadState(TaskState state) {
         return switch (state) {
             case PENDING, COMMITTED, FINISHED -> state.name();
             case CANCELLED, ABORTED -> "CANCELLED";

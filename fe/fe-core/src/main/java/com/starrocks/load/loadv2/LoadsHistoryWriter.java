@@ -19,6 +19,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.metric.GaugeMetricImpl;
+import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TLoadInfo;
@@ -31,6 +33,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,17 +50,18 @@ import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 /**
- * Buffers the {@code information_schema.loads} row of every load that reached a final
- * state and appends the buffered rows to {@code _statistics_.loads_history} in batches.
+ * Buffers {@code information_schema.loads} rows and writes them to a table in batches.
  *
- * <p>Producers call {@link #offer(Supplier)} from the thread that finishes or cancels a
- * load; that converts the job to its {@link TLoadInfo}, renders the VALUES tuple and appends
- * it to an in-memory queue. One daemon thread drains the queue through
- * {@link #runOnce(int, long)}, turning a batch into a single multi-row
- * {@code INSERT ... VALUES} whose column list comes from
- * {@link LoadsHistorySyncer#HISTORY_COLUMNS}, so the table keeps lining up with the view.
+ * <p>Producers call {@link #offer(Supplier)} from the thread that changes a load's state;
+ * that converts the job to its {@link TLoadInfo}, renders the VALUES tuple and appends it to
+ * an in-memory queue. One daemon thread drains the queue through {@link #runOnce(int, long)},
+ * turning a batch into a single multi-row {@code INSERT ... VALUES}. The {@link Target}
+ * decides which table the batch goes to, which rows belong there and how a row renders; the
+ * static entry points of this class feed the {@code _statistics_.loads_history} target, which
+ * takes the row of every load that reached a final state and renders it with the column list
+ * of {@link LoadsHistorySyncer#HISTORY_COLUMNS}, so the table keeps lining up with the view.
  *
- * <p>The table has no key, so a load must not be written here and copied by the backstop of
+ * <p>loads_history has no key, so a load must not be written here and copied by the backstop of
  * {@link LoadsHistorySyncer} as well. A row that arrives shortly after its load finished is
  * written before the backstop considers the load. For a row that arrives later, and for a row
  * held back until its load is visible ({@link #holdUntilVisible(long, Supplier)}), the backstop
@@ -96,8 +100,86 @@ public class LoadsHistoryWriter {
     // epoch-millisecond fields; the backstop copies those values.
     private static final DateTimeFormatter DATETIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
-    private static final String TARGET_TABLE = CatalogUtils.normalizeTableName(
+    private static final String HISTORY_TABLE = CatalogUtils.normalizeTableName(
             LoadsHistorySyncer.LOADS_HISTORY_DB_NAME, LoadsHistorySyncer.LOADS_HISTORY_TABLE_NAME);
+
+    /** The table a writer fills and the rules for the rows it takes. */
+    public interface Target {
+        /** Normalized {@code db.table} name, for log messages. */
+        String tableName();
+
+        /** Whether the row belongs in the table; rows that do not are silently skipped. */
+        boolean accepts(TLoadInfo info);
+
+        /** The VALUES tuple of one row, in the order of {@link #insertPrefix()}'s column list. */
+        String renderRow(TLoadInfo info);
+
+        /** {@code INSERT INTO table (columns) VALUES }, which the rendered tuples follow. */
+        String insertPrefix();
+
+        /** Counter of rows dropped from a full queue; null while metrics are not initialized. */
+        LongCounterMetric droppedCounter();
+
+        /** Gauge of the last successful flush duration; null while metrics are not initialized. */
+        GaugeMetricImpl<Long> flushLatencyGauge();
+
+        /**
+         * Whether a backstop statement copies loads into the table as well. Only for a table
+         * without a key, where the backstop and the queue would otherwise write the same load
+         * twice: the backstop is then kept away from the loads of late rows by id.
+         */
+        default boolean hasBackstop() {
+            return false;
+        }
+
+        /**
+         * The key under which the table keeps one row, or null if the table has no key. A
+         * row offered for a key that is still queued replaces the queued one, as the write
+         * of the newer row would replace the older one in the table anyway.
+         */
+        default String keyOf(TLoadInfo info) {
+            return null;
+        }
+    }
+
+    /** Finished loads, rendered in {@code loads} view column order, for loads_history. */
+    static final Target HISTORY_TARGET = new Target() {
+        @Override
+        public String tableName() {
+            return HISTORY_TABLE;
+        }
+
+        @Override
+        public boolean accepts(TLoadInfo info) {
+            // Not a final row: the table requires load_finish_time.
+            return info.isSetLoad_finish_time_ms() && info.getLoad_finish_time_ms() > 0;
+        }
+
+        @Override
+        public String renderRow(TLoadInfo info) {
+            return LoadsHistoryWriter.renderRow(info);
+        }
+
+        @Override
+        public String insertPrefix() {
+            return INSERT_PREFIX;
+        }
+
+        @Override
+        public LongCounterMetric droppedCounter() {
+            return MetricRepo.hasInit ? MetricRepo.COUNTER_LOADS_HISTORY_DROPPED : null;
+        }
+
+        @Override
+        public GaugeMetricImpl<Long> flushLatencyGauge() {
+            return MetricRepo.hasInit ? MetricRepo.GAUGE_LOADS_HISTORY_FLUSH_LATENCY_MS : null;
+        }
+
+        @Override
+        public boolean hasBackstop() {
+            return true;
+        }
+    };
 
     /** Writes one INSERT; {@code rows} is only for logging. */
     @FunctionalInterface
@@ -127,9 +209,12 @@ public class LoadsHistoryWriter {
     static final class Row {
         final long id;
         final String label;
-        final String values;
+        // Null for a table without a key.
+        final String key;
+        // Replaced under the queue lock when a newer row of the same key arrives.
+        String values;
         // Approximate heap footprint used for the byte bound of the queue.
-        final int bytes;
+        int bytes;
         // When the load finished.
         final long finishMs;
         // Whether the backstop is kept away from this load by id while the row is queued.
@@ -140,8 +225,17 @@ public class LoadsHistoryWriter {
         }
 
         Row(long id, String label, String values, long finishMs, boolean late) {
+            this(id, label, null, values, finishMs, late);
+        }
+
+        Row(String label, String key, String values) {
+            this(-1L, label, key, values, 0L, false);
+        }
+
+        Row(long id, String label, String key, String values, long finishMs, boolean late) {
             this.id = id;
             this.label = label;
+            this.key = key;
             this.values = values;
             this.bytes = values.length();
             this.finishMs = finishMs;
@@ -179,11 +273,13 @@ public class LoadsHistoryWriter {
     }
 
     /**
-     * The writer that accepts rows on this node. Set while the leader daemon that drains it
-     * runs, null on followers, so a job finishing on a node that is not the leader is ignored.
+     * The history writer that accepts rows on this node. Set while the leader daemon that
+     * drains it runs, null on followers, so a job finishing on a node that is not the leader
+     * is ignored.
      */
     private static volatile LoadsHistoryWriter active;
 
+    private final Target target;
     // Read on every enqueue so that a smaller limit set at runtime takes effect at once.
     private final IntSupplier maxRows;
     private final LongSupplier maxBytes;
@@ -198,7 +294,12 @@ public class LoadsHistoryWriter {
     // still here when this FE stops being leader is thrown away by clear(), and the backstop
     // sync on the next leader re-reads those loads from information_schema.loads instead.
     private final ArrayDeque<Row> queue = new ArrayDeque<>();
+    // The queued row of each key, for targets with a key: at most one row per key is queued,
+    // so a batch never carries two rows of one key and a newer row is never written before
+    // an older one of the same load.
+    private final Map<String, Row> queuedByKey = new HashMap<>();
     private long queuedBytes = 0L;
+    private final AtomicLong coalescedTotal = new AtomicLong();
     private final AtomicLong droppedTotal = new AtomicLong();
     // Rows left to the backstop (dropped from the queue, or not queued), guarded by the lock:
     // when that last happened, and when it first happened among those no backstop run has
@@ -225,11 +326,13 @@ public class LoadsHistoryWriter {
     private int headAttempts = 0;
     private int headLimit = Integer.MAX_VALUE;
 
-    public LoadsHistoryWriter(IntSupplier maxRows, LongSupplier maxBytes, Sink sink) {
-        this(maxRows, maxBytes, sink, () -> true);
+    public LoadsHistoryWriter(Target target, IntSupplier maxRows, LongSupplier maxBytes, Sink sink) {
+        this(target, maxRows, maxBytes, sink, () -> true);
     }
 
-    public LoadsHistoryWriter(IntSupplier maxRows, LongSupplier maxBytes, Sink sink, BooleanSupplier tableReachable) {
+    public LoadsHistoryWriter(Target target, IntSupplier maxRows, LongSupplier maxBytes, Sink sink,
+                              BooleanSupplier tableReachable) {
+        this.target = target;
         this.maxRows = maxRows;
         this.maxBytes = maxBytes;
         this.sink = sink;
@@ -242,9 +345,26 @@ public class LoadsHistoryWriter {
         this.sleeper = sleeper;
     }
 
+    public LoadsHistoryWriter(IntSupplier maxRows, LongSupplier maxBytes, Sink sink) {
+        this(HISTORY_TARGET, maxRows, maxBytes, sink);
+    }
+
+    public LoadsHistoryWriter(IntSupplier maxRows, LongSupplier maxBytes, Sink sink, BooleanSupplier tableReachable) {
+        this(HISTORY_TARGET, maxRows, maxBytes, sink, tableReachable);
+    }
+
     @VisibleForTesting
     LoadsHistoryWriter(int maxRows, Sink sink) {
         this(() -> maxRows, () -> Long.MAX_VALUE, sink);
+    }
+
+    @VisibleForTesting
+    LoadsHistoryWriter(Target target, int maxRows, Sink sink) {
+        this(target, () -> maxRows, () -> Long.MAX_VALUE, sink);
+    }
+
+    public Target getTarget() {
+        return target;
     }
 
     static void activate(LoadsHistoryWriter writer) {
@@ -262,21 +382,29 @@ public class LoadsHistoryWriter {
      * invoked when this node accepts rows, so followers do not pay for the conversion.
      */
     public static void offer(Supplier<TLoadInfo> row) {
-        LoadsHistoryWriter writer = active;
-        if (writer == null) {
+        offerTo(active, row);
+    }
+
+    /** Same as {@link #offer(Supplier)} for jobs whose conversion yields a list of rows. */
+    public static void offerAll(Supplier<List<TLoadInfo>> rows) {
+        offerAllTo(active, rows);
+    }
+
+    /** Enqueue one row in {@code writer} unless it is null, swallowing conversion failures. */
+    static void offerTo(LoadsHistoryWriter writer, Supplier<TLoadInfo> row) {
+        if (writer == null || isCheckpointThread()) {
             return;
         }
         try {
             writer.enqueue(row.get());
         } catch (Throwable e) {
-            LOG.warn("failed to record finished load for loads_history", e);
+            LOG.warn("failed to record load for {}", writer.target.tableName(), e);
         }
     }
 
-    /** Same as {@link #offer(Supplier)} for jobs whose conversion yields a list of rows. */
-    public static void offerAll(Supplier<List<TLoadInfo>> rows) {
-        LoadsHistoryWriter writer = active;
-        if (writer == null) {
+    /** Same as {@link #offerTo} for jobs whose conversion yields a list of rows. */
+    static void offerAllTo(LoadsHistoryWriter writer, Supplier<List<TLoadInfo>> rows) {
+        if (writer == null || isCheckpointThread()) {
             return;
         }
         try {
@@ -284,7 +412,7 @@ public class LoadsHistoryWriter {
                 writer.enqueue(row);
             }
         } catch (Throwable e) {
-            LOG.warn("failed to record finished load for loads_history", e);
+            LOG.warn("failed to record load for {}", writer.target.tableName(), e);
         }
     }
 
@@ -297,7 +425,7 @@ public class LoadsHistoryWriter {
      */
     public static boolean holdUntilVisible(long id, Supplier<TLoadInfo> row) {
         LoadsHistoryWriter writer = active;
-        if (writer == null) {
+        if (writer == null || isCheckpointThread()) {
             return false;
         }
         try {
@@ -364,7 +492,21 @@ public class LoadsHistoryWriter {
 
     /** Rows waiting on this node, for the queue gauge. */
     public static long queuedRows() {
-        LoadsHistoryWriter writer = active;
+        return queuedRows(active);
+    }
+
+    // The checkpoint thread works on a copy of the metadata built from the image and the
+    // journal. The writers are per JVM, so on a leader that checkpoints itself a state change
+    // replayed into that copy would otherwise be recorded as if the load had just changed.
+    private static boolean isCheckpointThread() {
+        try {
+            return GlobalStateMgr.isCheckpointThread();
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    static long queuedRows(LoadsHistoryWriter writer) {
         return writer == null ? 0L : writer.queueSize();
     }
 
@@ -374,10 +516,9 @@ public class LoadsHistoryWriter {
 
     // heldId: the hold this row is released from, null for a row that was just offered.
     private void enqueue(TLoadInfo info, Long heldId) {
-        // Not a final row (the table requires load_finish_time), or a flush of the writers
-        // themselves: each flush is an INSERT job, and archiving those would make them feed themselves.
-        boolean skipped = info == null || !info.isSetLoad_finish_time_ms() || info.getLoad_finish_time_ms() <= 0
-                || isInternalLoadTable(info);
+        // Not a row of this table, or a flush of the writers themselves: each flush is an INSERT
+        // job, and recording those would make the writers feed themselves.
+        boolean skipped = info == null || !target.accepts(info) || isInternalLoadTable(info);
         if (skipped && heldId == null) {
             return;
         }
@@ -385,9 +526,11 @@ public class LoadsHistoryWriter {
         // The load finished a while before its row got here (a job that ends at its creation
         // time, a row held until its load was visible), so the backstop may copy the load while
         // the row waits in the queue.
-        boolean late = !skipped && (heldId != null || now - info.getLoad_finish_time_ms() >= FRESH_ROW_MS);
-        Row row = skipped ? null
-                : new Row(info.getJob_id(), info.getLabel(), renderRow(info), info.getLoad_finish_time_ms(), late);
+        // Only a table that a backstop copies into as well has late rows.
+        boolean late = !skipped && target.hasBackstop()
+                && (heldId != null || now - info.getLoad_finish_time_ms() >= FRESH_ROW_MS);
+        Row row = skipped ? null : new Row(info.getJob_id(), info.getLabel(), target.keyOf(info),
+                target.renderRow(info), info.isSetLoad_finish_time_ms() ? info.getLoad_finish_time_ms() : 0L, late);
         lock.lock();
         try {
             if (heldId != null) {
@@ -408,14 +551,34 @@ public class LoadsHistoryWriter {
             }
             int rowLimit = Math.max(1, maxRows.getAsInt());
             long byteLimit = maxBytes.getAsLong();
+            Row queued = row.key == null ? null : queuedByKey.get(row.key);
+            if (queued != null) {
+                // The same load changed again before its row was written: keep its place in the
+                // queue and write only the newer state. The newer row may be larger and the
+                // limits may have been lowered, so the bounds are enforced here as well.
+                queuedBytes += row.bytes - queued.bytes;
+                queued.values = row.values;
+                queued.bytes = row.bytes;
+                coalescedTotal.incrementAndGet();
+                int dropped = 0;
+                while (queue.size() > 1 && (queue.size() > rowLimit || queuedBytes > byteLimit)) {
+                    unqueue(leaveToBackstop(queue.pollFirst()));
+                    dropped++;
+                }
+                countDropped(dropped);
+                return;
+            }
             int dropped = 0;
             while (!queue.isEmpty() && (queue.size() >= rowLimit || queuedBytes + row.bytes > byteLimit)) {
-                queuedBytes -= leaveToBackstop(queue.pollFirst()).bytes;
+                unqueue(leaveToBackstop(queue.pollFirst()));
                 dropped++;
             }
             countDropped(dropped);
             queue.addLast(row);
             queuedBytes += row.bytes;
+            if (row.key != null) {
+                queuedByKey.put(row.key, row);
+            }
             batchReady.signal();
         } finally {
             lock.unlock();
@@ -443,6 +606,14 @@ public class LoadsHistoryWriter {
     // How long a row is held for its load to become visible: half of the backstop's look-back.
     private static long maxHoldMs() {
         return LoadsHistorySyncer.backstopLookbackMinutes() * 60_000L / 2;
+    }
+
+    /** Caller holds the lock. Accounts for a row that just left the queue. */
+    private void unqueue(Row row) {
+        queuedBytes -= row.bytes;
+        if (row.key != null) {
+            queuedByKey.remove(row.key, row);
+        }
     }
 
     /** Caller holds the lock. The row leaves the queue: the backstop may copy its load again. */
@@ -476,8 +647,9 @@ public class LoadsHistoryWriter {
             return;
         }
         droppedTotal.addAndGet(dropped);
-        if (MetricRepo.hasInit) {
-            MetricRepo.COUNTER_LOADS_HISTORY_DROPPED.increase((long) dropped);
+        LongCounterMetric counter = target.droppedCounter();
+        if (counter != null) {
+            counter.increase((long) dropped);
         }
     }
 
@@ -531,7 +703,7 @@ public class LoadsHistoryWriter {
             List<Row> batch = new ArrayList<>(n);
             for (int i = 0; i < n; i++) {
                 Row row = queue.pollFirst();
-                queuedBytes -= row.bytes;
+                unqueue(row);
                 batch.add(row);
             }
             lastTakeMs = clock.getAsLong();
@@ -543,7 +715,7 @@ public class LoadsHistoryWriter {
 
     @VisibleForTesting
     boolean flush(List<Row> batch) {
-        String sql = buildInsertSql(batch);
+        String sql = buildInsertSql(target.insertPrefix(), batch);
         long start = System.currentTimeMillis();
         try {
             sink.write(sql, batch.size());
@@ -554,11 +726,12 @@ public class LoadsHistoryWriter {
         }
         retryNotBeforeMs = 0L;
         lastFlushLatencyMs = System.currentTimeMillis() - start;
-        if (MetricRepo.hasInit) {
-            MetricRepo.GAUGE_LOADS_HISTORY_FLUSH_LATENCY_MS.setValue(lastFlushLatencyMs);
+        GaugeMetricImpl<Long> latency = target.flushLatencyGauge();
+        if (latency != null) {
+            latency.setValue(lastFlushLatencyMs);
         }
         if (consecutiveFailures > 0) {
-            LOG.info("writing to {} recovered after {} failed flushes", TARGET_TABLE, consecutiveFailures);
+            LOG.info("writing to {} recovered after {} failed flushes", target.tableName(), consecutiveFailures);
             consecutiveFailures = 0;
         }
         lock.lock();
@@ -591,7 +764,8 @@ public class LoadsHistoryWriter {
             if (!reachable) {
                 if (verbose) {
                     LOG.warn("failed to write {} rows to {}, the table cannot be written right now ({} failed flushes"
-                            + " in a row), rows are kept for retry", batch.size(), TARGET_TABLE, consecutiveFailures, cause);
+                            + " in a row), rows are kept for retry", batch.size(), target.tableName(),
+                            consecutiveFailures, cause);
                 }
                 requeue(batch);
                 return;
@@ -600,7 +774,7 @@ public class LoadsHistoryWriter {
             if (headAttempts < MAX_BATCH_ATTEMPTS) {
                 if (verbose) {
                     LOG.warn("failed to write {} rows to {} (attempt {}, {} failed flushes in a row), rows are kept"
-                            + " for retry", batch.size(), TARGET_TABLE, headAttempts, consecutiveFailures, cause);
+                            + " for retry", batch.size(), target.tableName(), headAttempts, consecutiveFailures, cause);
                 }
                 requeue(batch);
                 return;
@@ -608,9 +782,9 @@ public class LoadsHistoryWriter {
             headAttempts = 0;
             if (batch.size() == 1) {
                 Row row = batch.get(0);
-                LOG.warn("dropping loads_history row of load {} after {} failed attempts, the backstop sync"
-                        + " copies it if information_schema.loads still has the load then: {}",
-                        row.label, MAX_BATCH_ATTEMPTS, cause.getMessage());
+                LOG.warn("dropping {} row of load {} after {} failed attempts, it is left to the next backstop"
+                        + " or reconciliation of the table, which recovers it while the load is still tracked: {}",
+                        target.tableName(), row.label, MAX_BATCH_ATTEMPTS, cause.getMessage());
                 headLimit = Integer.MAX_VALUE;
                 leaveToBackstop(row);
                 countDropped(1);
@@ -618,7 +792,7 @@ public class LoadsHistoryWriter {
             }
             headLimit = Math.max(1, batch.size() / 2);
             LOG.warn("failed to write {} rows to {} {} times, retrying in batches of {}: {}",
-                    batch.size(), TARGET_TABLE, MAX_BATCH_ATTEMPTS, headLimit, cause.getMessage());
+                    batch.size(), target.tableName(), MAX_BATCH_ATTEMPTS, headLimit, cause.getMessage());
             requeue(batch);
         } finally {
             lock.unlock();
@@ -658,10 +832,22 @@ public class LoadsHistoryWriter {
         }
     }
 
-    /** Caller holds the lock. Re-inserts the batch at the head, dropping the oldest rows over the bounds. */
+    /**
+     * Caller holds the lock. Re-inserts the batch at the head, dropping the oldest rows over the
+     * bounds. A row whose key was queued again while the batch was being written is not put
+     * back: the queued row is newer, and writing the old one after it would undo it.
+     */
     private void requeue(List<Row> batch) {
         for (int i = batch.size() - 1; i >= 0; i--) {
             Row row = batch.get(i);
+            if (row.key != null) {
+                if (queuedByKey.containsKey(row.key)) {
+                    coalescedTotal.incrementAndGet();
+                    forget(row);
+                    continue;
+                }
+                queuedByKey.put(row.key, row);
+            }
             queue.addFirst(row);
             queuedBytes += row.bytes;
         }
@@ -669,7 +855,7 @@ public class LoadsHistoryWriter {
         long byteLimit = maxBytes.getAsLong();
         int dropped = 0;
         while (queue.size() > 1 && (queue.size() > rowLimit || queuedBytes > byteLimit)) {
-            queuedBytes -= leaveToBackstop(queue.pollFirst()).bytes;
+            unqueue(leaveToBackstop(queue.pollFirst()));
             dropped++;
         }
         countDropped(dropped);
@@ -680,6 +866,7 @@ public class LoadsHistoryWriter {
         lock.lock();
         try {
             queue.clear();
+            queuedByKey.clear();
             queuedBytes = 0L;
             headAttempts = 0;
             headLimit = Integer.MAX_VALUE;
@@ -717,6 +904,11 @@ public class LoadsHistoryWriter {
 
     public long droppedTotal() {
         return droppedTotal.get();
+    }
+
+    /** Rows that were replaced by a newer row of the same key before they were written. */
+    public long coalescedTotal() {
+        return coalescedTotal.get();
     }
 
     public int consecutiveFailures() {
@@ -845,7 +1037,7 @@ public class LoadsHistoryWriter {
      * and order come from {@link LoadsHistorySyncer#HISTORY_COLUMNS}; this only maps names
      * to values, mirroring what the BE fills into the view for the same thrift field.
      */
-    private static final Map<String, Function<TLoadInfo, String>> RENDERERS =
+    static final Map<String, Function<TLoadInfo, String>> RENDERERS =
             ImmutableMap.<String, Function<TLoadInfo, String>>builder()
             .put("id", info -> Long.toString(info.getJob_id()))
             .put("label", info -> text(info.getLabel()))
@@ -902,15 +1094,19 @@ public class LoadsHistoryWriter {
             .collect(ImmutableList.toImmutableList());
 
     private static final String INSERT_PREFIX =
-            "INSERT INTO " + TARGET_TABLE + " (" + LoadsHistorySyncer.columnList() + ") VALUES ";
+            "INSERT INTO " + HISTORY_TABLE + " (" + LoadsHistorySyncer.columnList() + ") VALUES ";
 
     static String buildInsertSql(List<Row> rows) {
-        int size = INSERT_PREFIX.length();
+        return buildInsertSql(INSERT_PREFIX, rows);
+    }
+
+    static String buildInsertSql(String insertPrefix, List<Row> rows) {
+        int size = insertPrefix.length();
         for (Row row : rows) {
             size += row.values.length() + 2;
         }
         StringBuilder sb = new StringBuilder(size);
-        sb.append(INSERT_PREFIX);
+        sb.append(insertPrefix);
         for (int i = 0; i < rows.size(); i++) {
             if (i > 0) {
                 sb.append(", ");
@@ -927,10 +1123,15 @@ public class LoadsHistoryWriter {
 
     @VisibleForTesting
     static String renderRow(TLoadInfo info) {
+        return renderRow(COLUMN_RENDERERS, info);
+    }
+
+    /** Render one VALUES tuple with one value per renderer, in renderer order. */
+    static String renderRow(List<Function<TLoadInfo, String>> renderers, TLoadInfo info) {
         StringBuilder sb = new StringBuilder(512);
         sb.append('(');
         boolean first = true;
-        for (Function<TLoadInfo, String> renderer : COLUMN_RENDERERS) {
+        for (Function<TLoadInfo, String> renderer : renderers) {
             if (!first) {
                 sb.append(", ");
             }
@@ -941,19 +1142,19 @@ public class LoadsHistoryWriter {
         return sb.toString();
     }
 
-    private static String text(String value) {
+    static String text(String value) {
         // The loads view renders an unset string in these columns as an empty string.
         return quote(value == null ? "" : value);
     }
 
-    private static String nullableText(boolean isSet, String value) {
+    static String nullableText(boolean isSet, String value) {
         if (!isSet || value == null) {
             return "NULL";
         }
         return quote(value);
     }
 
-    private static String nullableLong(boolean isSet, long value) {
+    static String nullableLong(boolean isSet, long value) {
         return isSet ? Long.toString(value) : "NULL";
     }
 
@@ -964,7 +1165,7 @@ public class LoadsHistoryWriter {
         return "parse_json(" + quoteRaw(value) + ")";
     }
 
-    private static String datetime(boolean isSet, long epochMs) {
+    static String datetime(boolean isSet, long epochMs) {
         if (!isSet || epochMs <= 0) {
             return "NULL";
         }

@@ -643,6 +643,7 @@ public class BrokerLoadJob extends BulkLoadJob {
         unprotectedClearTasksBeforeRetry(failMsg);
         try {
             state = JobState.PENDING;
+            recordStateChange();
             unprotectedExecute();
         } catch (Exception e) {
             cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true);

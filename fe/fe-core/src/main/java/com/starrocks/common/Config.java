@@ -630,6 +630,8 @@ public class Config extends ConfigBase {
      * as loads finish; the backstop only runs when the FE becomes leader and after the
      * writer left a load to it (a row dropped from the queue, or one that could not be
      * queued). Values below 1 are treated as 1.
+     * Also the interval at which _statistics_.load_jobs is reconciled with the loads the
+     * leader tracks.
      */
     @ConfField(mutable = true)
     public static int loads_history_sync_interval_second = 60;
@@ -637,6 +639,7 @@ public class Config extends ConfigBase {
     /**
      * How long finished loads may wait in memory before they are written to
      * _statistics_.loads_history when fewer than loads_history_flush_batch_rows are pending.
+     * Applies in the same way to the load state changes written to _statistics_.load_jobs.
      */
     @ConfField(mutable = true)
     public static int loads_history_flush_interval_second = 10;
@@ -644,6 +647,7 @@ public class Config extends ConfigBase {
     /**
      * Number of pending finished loads that triggers an immediate write to
      * _statistics_.loads_history, and the maximum rows per INSERT.
+     * Applies in the same way to the load state changes written to _statistics_.load_jobs.
      */
     @ConfField(mutable = true)
     public static int loads_history_flush_batch_rows = 500;
@@ -653,6 +657,8 @@ public class Config extends ConfigBase {
      * _statistics_.loads_history. When the queue is full the oldest rows are dropped and
      * counted in the loads_history_dropped_total metric; after the value is lowered at
      * runtime, the next load that finishes drops the oldest rows beyond the new limit.
+     * The queue of _statistics_.load_jobs has the same limit, separately, and counts its
+     * drops in load_jobs_dropped_total.
      */
     @ConfField(mutable = true)
     public static int loads_history_queue_max_rows = 100000;
@@ -660,7 +666,8 @@ public class Config extends ConfigBase {
     /**
      * Maximum memory, in bytes, that the finished loads waiting to be written to
      * _statistics_.loads_history may take. The oldest rows are dropped beyond it, like
-     * for loads_history_queue_max_rows.
+     * for loads_history_queue_max_rows. The queue of _statistics_.load_jobs has the same
+     * limit, separately.
      */
     @ConfField(mutable = true)
     public static long loads_history_queue_max_bytes = 256L * 1024 * 1024;
@@ -677,7 +684,9 @@ public class Config extends ConfigBase {
     public static int loads_history_backstop_lookback_minutes = 60;
 
     /**
-     * The default retention days of load history.
+     * The default retention days of load history: the daily partitions _statistics_.loads_history
+     * keeps, and the age after which the finished loads of _statistics_.load_jobs are removed
+     * (rows of loads that are still running stay).
      */
     @ConfField(mutable = true)
     public static int loads_history_retained_days = 30;

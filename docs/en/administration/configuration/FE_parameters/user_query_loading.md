@@ -1322,7 +1322,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Number of finished load jobs that triggers an immediate write to the internal `_statistics_.loads_history` table, and the maximum number of rows per `INSERT`. Finished load jobs (Broker Load, Spark Load, INSERT, Stream Load, Routine Load tasks, and merge commit tasks) are queued in FE memory on completion and written in batches; a batch is written as soon as this many rows are pending or after `loads_history_flush_interval_second` seconds, whichever comes first. The queue holds at most `loads_history_queue_max_rows` rows; when it is full the oldest rows are dropped and counted in the `loads_history_dropped_total` metric.
+- Description: Number of finished load jobs that triggers an immediate write to the internal `_statistics_.loads_history` table, and the maximum number of rows per `INSERT`. Finished load jobs (Broker Load, Spark Load, INSERT, Stream Load, Routine Load tasks, and merge commit tasks) are queued in FE memory on completion and written in batches; a batch is written as soon as this many rows are pending or after `loads_history_flush_interval_second` seconds, whichever comes first. The queue holds at most `loads_history_queue_max_rows` rows; when it is full the oldest rows are dropped and counted in the `loads_history_dropped_total` metric. The same setting also applies to the writer of the internal `_statistics_.load_jobs` table.
 - Introduced in: v4.2.0
 
 ### `loads_history_flush_interval_second`
@@ -1331,7 +1331,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Maximum time a finished load job waits in FE memory before it is written to the internal `_statistics_.loads_history` table when fewer than `loads_history_flush_batch_rows` rows are pending. Smaller values make history records available sooner at the cost of more frequent small `INSERT` statements.
+- Description: Maximum time a finished load job waits in FE memory before it is written to the internal `_statistics_.loads_history` table when fewer than `loads_history_flush_batch_rows` rows are pending. Smaller values make history records available sooner at the cost of more frequent small `INSERT` statements. The same setting also applies to the writer of the internal `_statistics_.load_jobs` table.
 - Introduced in: v4.2.0
 
 ### `loads_history_queue_max_bytes`
@@ -1340,7 +1340,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Long
 - Unit: Bytes
 - Is mutable: Yes
-- Description: Maximum memory that the finished load jobs waiting in the Leader FE to be written to the internal `_statistics_.loads_history` table may take. Rows are kept as rendered SQL values, so the bound is approximate. When it is reached, the oldest rows are dropped and counted in the `loads_history_dropped_total` metric, as with `loads_history_queue_max_rows`.
+- Description: Maximum memory that the finished load jobs waiting in the Leader FE to be written to the internal `_statistics_.loads_history` table may take. Rows are kept as rendered SQL values, so the bound is approximate. When it is reached, the oldest rows are dropped and counted in the `loads_history_dropped_total` metric, as with `loads_history_queue_max_rows`. The same setting also applies to the writer of the internal `_statistics_.load_jobs` table.
 - Introduced in: v4.2.0
 
 ### `loads_history_queue_max_rows`
@@ -1349,7 +1349,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Maximum number of finished load jobs kept in the memory of the Leader FE while they wait to be written to the internal `_statistics_.loads_history` table. When the queue is full, the oldest rows are dropped and counted in the `loads_history_dropped_total` metric. Lowering the value at runtime drops the oldest rows beyond the new limit on the next enqueue.
+- Description: Maximum number of finished load jobs kept in the memory of the Leader FE while they wait to be written to the internal `_statistics_.loads_history` table. When the queue is full, the oldest rows are dropped and counted in the `loads_history_dropped_total` metric. Lowering the value at runtime drops the oldest rows beyond the new limit on the next enqueue. The same setting also applies to the writer of the internal `_statistics_.load_jobs` table.
 - Introduced in: v4.2.0
 
 ### `loads_history_retained_days`
@@ -1358,7 +1358,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: Days
 - Is mutable: Yes
-- Description: Number of days to retain load history in the internal `_statistics_.loads_history` table. This value is used for table creation to set the table property `partition_live_number` and is passed to `TableKeeper` (clamped to a minimum of 1) to determine how many daily partitions to keep. Increasing or decreasing this value adjusts how long completed load jobs are retained in daily partitions; it affects new table creation and the keeper's pruning behavior but does not automatically recreate past partitions. The `LoadsHistorySyncer` relies on this retention when managing the loads history lifecycle; its sync cadence is controlled by `loads_history_sync_interval_second`.
+- Description: Number of days to retain load history in the internal `_statistics_.loads_history` table. This value is used for table creation to set the table property `partition_live_number` and is passed to `TableKeeper` (clamped to a minimum of 1) to determine how many daily partitions to keep. Increasing or decreasing this value adjusts how long completed load jobs are retained in daily partitions; it affects new table creation and the keeper's pruning behavior but does not automatically recreate past partitions. The `LoadsHistorySyncer` relies on this retention when managing the loads history lifecycle; its sync cadence is controlled by `loads_history_sync_interval_second`. The internal `_statistics_.load_jobs` table uses the same number of days for its finished loads, counted from the time a load finished; rows of loads that are still running are kept regardless.
 - Introduced in: v3.3.6, v3.4.0, v3.5.0
 
 ### `loads_history_sync_interval_second`
@@ -1367,7 +1367,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Minimum interval (in seconds) between runs of the backstop sync that copies finished load jobs from `information_schema.loads` into the internal `_statistics_.loads_history` table. Finished load jobs are normally written to the table on completion (see `loads_history_flush_interval_second` and `loads_history_flush_batch_rows`); the backstop sync runs only when the FE becomes the Leader and after rows were dropped from the queue (a full queue, or a row whose write failed three times in a row). Values below 1 are treated as 1. It only copies loads that finished more than one minute ago and within the last `loads_history_backstop_lookback_minutes` minutes, skips rows that are already in the table, and runs only once the in-memory queue has been drained so that no row is written twice. Rows still queued in memory when an FE stops being the Leader are discarded and picked up by the backstop sync on the new Leader. The FE metrics `loads_history_queue_rows`, `loads_history_dropped_total`, and `loads_history_flush_latency_ms` report the state of the writer. See `loads_history_retained_days` for retention/partitioning behavior of the target table.
+- Description: Minimum interval (in seconds) between runs of the backstop sync that copies finished load jobs from `information_schema.loads` into the internal `_statistics_.loads_history` table. Finished load jobs are normally written to the table on completion (see `loads_history_flush_interval_second` and `loads_history_flush_batch_rows`); the backstop sync runs only when the FE becomes the Leader and after rows were dropped from the queue (a full queue, or a row whose write failed three times in a row). Values below 1 are treated as 1. It only copies loads that finished more than one minute ago and within the last `loads_history_backstop_lookback_minutes` minutes, skips rows that are already in the table, and runs only once the in-memory queue has been drained so that no row is written twice. Rows still queued in memory when an FE stops being the Leader are discarded and picked up by the backstop sync on the new Leader. The FE metrics `loads_history_queue_rows`, `loads_history_dropped_total`, and `loads_history_flush_latency_ms` report the state of the writer. It is also the interval at which the Leader FE reconciles the internal `_statistics_.load_jobs` table with the loads it tracks. See `loads_history_retained_days` for retention/partitioning behavior of the target table.
 - Introduced in: v3.3.6, v3.4.0, v3.5.0
 
 ### `max_broker_load_job_concurrency`

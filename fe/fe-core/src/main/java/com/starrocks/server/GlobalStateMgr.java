@@ -163,6 +163,7 @@ import com.starrocks.load.Load;
 import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
+import com.starrocks.load.loadv2.LoadJobsSyncer;
 import com.starrocks.load.loadv2.LoadLoadingChecker;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.LoadTimeoutChecker;
@@ -450,6 +451,7 @@ public class GlobalStateMgr {
 
     private final LoadTimeoutChecker loadTimeoutChecker;
     private final LoadsHistorySyncer loadsHistorySyncer;
+    private final LoadJobsSyncer loadJobsSyncer;
     private final TabletWriteLogHistorySyncer tabletWriteLogHistorySyncer;
     private final LoadEtlChecker loadEtlChecker;
     private final LoadLoadingChecker loadLoadingChecker;
@@ -811,6 +813,7 @@ public class GlobalStateMgr {
         this.loadMgr = new LoadMgr(loadJobScheduler);
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadMgr);
         this.loadsHistorySyncer = new LoadsHistorySyncer();
+        this.loadJobsSyncer = new LoadJobsSyncer();
         this.tabletWriteLogHistorySyncer = new TabletWriteLogHistorySyncer();
         this.loadEtlChecker = new LoadEtlChecker(loadMgr);
         this.loadLoadingChecker = new LoadLoadingChecker(loadMgr);
@@ -1739,6 +1742,7 @@ public class GlobalStateMgr {
         loadJobScheduler.start();
         loadTimeoutChecker.start();
         loadsHistorySyncer.start();
+        loadJobsSyncer.start();
         tabletWriteLogHistorySyncer.start();
         loadEtlChecker.start();
         loadLoadingChecker.start();
@@ -1894,6 +1898,7 @@ public class GlobalStateMgr {
         stopOne("loadLoadingChecker", () -> loadLoadingChecker.stopBestEffort());
         stopOne("loadEtlChecker", () -> loadEtlChecker.stopBestEffort());
         stopOne("tabletWriteLogHistorySyncer", () -> tabletWriteLogHistorySyncer.stopBestEffort());
+        stopOne("loadJobsSyncer", () -> loadJobsSyncer.stopBestEffort());
         stopOne("loadsHistorySyncer", () -> loadsHistorySyncer.stopBestEffort());
         stopOne("loadTimeoutChecker", () -> loadTimeoutChecker.stopBestEffort());
         stopOne("loadJobScheduler", () -> loadJobScheduler.stopBestEffort());

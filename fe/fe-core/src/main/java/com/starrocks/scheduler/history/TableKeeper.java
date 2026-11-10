@@ -24,6 +24,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.load.loadv2.LoadJobsTable;
 import com.starrocks.load.loadv2.LoadsHistorySyncer;
 import com.starrocks.load.rejected.RejectedRecordsTable;
 import com.starrocks.qe.SimpleExecutor;
@@ -329,6 +330,7 @@ public class TableKeeper {
 
             keeperList.add(TaskRunHistoryTable.createKeeper());
             keeperList.add(LoadsHistorySyncer.createKeeper());
+            keeperList.add(LoadJobsTable.createKeeper());
             keeperList.add(com.starrocks.lake.TabletWriteLogHistorySyncer.createKeeper());
             keeperList.add(PredicateColumnsStorage.createKeeper());
             keeperList.add(ExternalPredicateColumnsStorage.createKeeper());
