@@ -198,18 +198,19 @@ public class NestedGeoTypeRefusalTest {
             visitor.visitMultiInPredicate(in, null);
         }
         FunctionCallExpr single = new FunctionCallExpr("_spm_const_enum", List.of(new IntLiteral(1), NullLiteral.create(type)));
-        if (type.hasNestedGeoType()) {
-            assertThrows(SemanticException.class, () -> SPMFunctions.getSPMFunction(single, List.of(IntegerType.INT, type)));
+        boolean geo = type.isGeoType() || type.hasNestedGeoType();
+        if (geo) {
+            assertEquals("spm function _spm_const_enum does not support type " + type.toSql(),
+                    assertThrows(SemanticException.class,
+                            () -> SPMFunctions.getSPMFunction(single, List.of(IntegerType.INT, type))).getDetailMsg());
         } else {
             assertTrue(SPMFunctions.getSPMFunction(single, List.of(IntegerType.INT, type)) != null);
         }
         for (String name : List.of("_spm_const_range", "_spm_const_enum")) {
             FunctionCallExpr call = new FunctionCallExpr(name, List.of(new IntLiteral(1),
                     NullLiteral.create(type), NullLiteral.create(type)));
-            if (type.hasNestedGeoType() || type.getPrimitiveType() == PrimitiveType.GEOMETRY) {
-                String error = type.hasNestedGeoType() ? "spm function " + name + " does not support type " + type.toSql() :
-                        "spm function " + name +
-                                (name.endsWith("range") ? " min/max type must be same" : " enum type must be same");
+            if (geo) {
+                String error = "spm function " + name + " does not support type " + type.toSql();
                 assertEquals(error, assertThrows(SemanticException.class, () -> SPMFunctions.getSPMFunction(call,
                         List.of(IntegerType.BIGINT, type, type))).getDetailMsg());
             } else {
