@@ -10,6 +10,7 @@ import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
 import Curl from '../_assets/quick-start/_curl.mdx'
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 
 In systems that separate storage from compute data is stored in low-cost reliable remote storage systems such as Amazon S3, Google Cloud Storage, Azure Blob Storage, and other S3-compatible storage like MinIO. Hot data is cached locally and When the cache is hit, the query performance is comparable to that of storage-compute coupled architecture. Compute nodes (CN) can be added or removed on demand within seconds. This architecture reduces storage cost, ensures better resource isolation, and provides elasticity and scalability.
 
@@ -49,6 +50,10 @@ You can use the SQL client provided in the Docker environment, or use one on you
 ### curl
 
 `curl` is used to issue the data load job to StarRocks, and to download the datasets. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/).
+
+### MinIO AIStor license
+
+This guide uses MinIO AIStor for object storage, which requires a license. A free tier license is sufficient. The instructions for acquiring a license are provided later in this guide.
 
 ### `/etc/hosts`
 
@@ -96,7 +101,7 @@ There are three files to download:
 - New York City crash data
 - Weather data
 
-This guide uses MinIO, which is S3 compatible Object Storage provided under the GNU Affero General Public License.
+This guide uses MinIO AIStor, which is S3 compatible Object Storage. MinIO AIStor requires a license.
 
 ### Create a directory to store the lab files
 
@@ -126,6 +131,10 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
 ```
+
+### Acquire a MinIO AIStor license
+
+<AIStorLicense />
 
 ---
 

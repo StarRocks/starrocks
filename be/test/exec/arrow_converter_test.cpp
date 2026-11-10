@@ -48,6 +48,141 @@ public:
     void SetUp() override { date::init_date_cache(); }
 };
 
+TEST_F(ArrowConverterTest, NullStructDoesNotFilterHiddenDecimalOverflow) {
+    arrow::Decimal128Builder amounts_builder(arrow::decimal128(38, 0));
+    for (const char* value : std::vector<const char*>{"42", "99999999999999999999999999999999999999", "7", nullptr,
+                                                      "99999999999999999999999999999999999999"}) {
+        if (value == nullptr) {
+            ASSERT_OK(amounts_builder.AppendNull());
+        } else {
+            ASSERT_OK(amounts_builder.Append(arrow::Decimal128(value)));
+        }
+    }
+    std::shared_ptr<arrow::Array> amounts;
+    ASSERT_OK(amounts_builder.Finish(&amounts));
+    arrow::BooleanBuilder validity_builder;
+    for (bool valid : {true, false, true, true, true}) {
+        if (valid) {
+            ASSERT_OK(validity_builder.Append(true));
+        } else {
+            ASSERT_OK(validity_builder.AppendNull());
+        }
+    }
+    std::shared_ptr<arrow::Array> validity;
+    ASSERT_OK(validity_builder.Finish(&validity));
+    auto array_result = arrow::StructArray::Make({amounts}, {arrow::field("amount", amounts->type())},
+                                                 validity->null_bitmap(), validity->null_count());
+    ASSERT_OK(array_result.status());
+    auto array = array_result.ValueOrDie();
+    ASSERT_OK(array->ValidateFull());
+    TypeDescriptor type(TYPE_STRUCT);
+    type.field_names = {"amount"};
+    type.children = {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 0)};
+
+    for (bool strict : {false, true}) {
+        SCOPED_TRACE(strict);
+        TypeDescriptor raw_type;
+        ConvertFuncTree plan;
+        bool need_cast = false;
+        ASSERT_STATUS_OK(
+                ParquetScanner::build_dest(array->type().get(), &type, true, &raw_type, &plan, need_cast, strict));
+        ASSERT_FALSE(need_cast);
+        MutableColumnPtr column = ColumnHelper::create_column(raw_type, true);
+        Filter filter(5, 1);
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, nullptr));
+        auto sliced = array->Slice(1);
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 2, sliced.get(), column.get(), 0, 1, &filter, nullptr));
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 2, sliced.get(), column.get(), 2, 3, &filter, nullptr));
+        column->check_or_die();
+        EXPECT_EQ(5, column->size());
+        EXPECT_EQ("{amount:42}", column->debug_item(0));
+        EXPECT_TRUE(column->is_null(1));
+        EXPECT_EQ("{amount:7}", column->debug_item(2));
+        EXPECT_EQ("{amount:NULL}", column->debug_item(3));
+        // Hidden overflow must not discard the row; visible overflow still follows strict mode.
+        EXPECT_EQ(Filter({1, 1, 1, 1, static_cast<uint8_t>(strict ? 0 : 1)}), filter);
+    }
+}
+
+TEST_F(ArrowConverterTest, NestedStructNullMasksDecimalOverflowAcrossSlices) {
+    arrow::Decimal128Builder amounts_builder(arrow::decimal128(38, 0));
+    for (const char* value : std::vector<const char*>{"42", "99999999999999999999999999999999999999",
+                                                      "99999999999999999999999999999999999999", nullptr, "7"}) {
+        if (value == nullptr) {
+            ASSERT_OK(amounts_builder.AppendNull());
+        } else {
+            ASSERT_OK(amounts_builder.Append(arrow::Decimal128(value)));
+        }
+    }
+    std::shared_ptr<arrow::Array> amounts;
+    ASSERT_OK(amounts_builder.Finish(&amounts));
+    arrow::BooleanBuilder inner_validity_builder;
+    for (bool valid : {true, true, false, true, true}) {
+        if (valid) {
+            ASSERT_OK(inner_validity_builder.Append(true));
+        } else {
+            ASSERT_OK(inner_validity_builder.AppendNull());
+        }
+    }
+    std::shared_ptr<arrow::Array> inner_validity;
+    ASSERT_OK(inner_validity_builder.Finish(&inner_validity));
+    auto inner_result = arrow::StructArray::Make({amounts}, {arrow::field("amount", amounts->type())},
+                                                 inner_validity->null_bitmap(), inner_validity->null_count());
+    ASSERT_OK(inner_result.status());
+    auto inner = inner_result.ValueOrDie();
+    arrow::BooleanBuilder outer_validity_builder;
+    for (bool valid : {true, false, true, true, true}) {
+        if (valid) {
+            ASSERT_OK(outer_validity_builder.Append(true));
+        } else {
+            ASSERT_OK(outer_validity_builder.AppendNull());
+        }
+    }
+    std::shared_ptr<arrow::Array> outer_validity;
+    ASSERT_OK(outer_validity_builder.Finish(&outer_validity));
+    auto array_result = arrow::StructArray::Make({inner}, {arrow::field("inner", inner->type())},
+                                                 outer_validity->null_bitmap(), outer_validity->null_count());
+    ASSERT_OK(array_result.status());
+    auto array = array_result.ValueOrDie();
+    ASSERT_OK(array->ValidateFull());
+
+    TypeDescriptor inner_type(TYPE_STRUCT);
+    inner_type.field_names = {"amount"};
+    inner_type.children = {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 0)};
+    TypeDescriptor type(TYPE_STRUCT);
+    type.field_names = {"inner"};
+    type.children = {inner_type};
+    for (bool strict : {false, true}) {
+        SCOPED_TRACE(strict);
+        TypeDescriptor raw_type;
+        ConvertFuncTree plan;
+        bool need_cast = false;
+        ASSERT_STATUS_OK(
+                ParquetScanner::build_dest(array->type().get(), &type, true, &raw_type, &plan, need_cast, strict));
+        ASSERT_FALSE(need_cast);
+        MutableColumnPtr column = ColumnHelper::create_column(raw_type, true);
+        Filter filter(5, 1);
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, nullptr));
+        auto sliced = array->Slice(1);
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 2, sliced.get(), column.get(), 0, 1, &filter, nullptr));
+        ASSERT_STATUS_OK(
+                ParquetScanner::convert_array_to_column(&plan, 2, sliced.get(), column.get(), 2, 3, &filter, nullptr));
+        column->check_or_die();
+        ASSERT_EQ(5, column->size());
+        EXPECT_EQ(Filter(5, 1), filter);
+        EXPECT_EQ("{inner:{amount:42}}", column->debug_item(0));
+        EXPECT_TRUE(column->is_null(1));
+        EXPECT_EQ("{inner:NULL}", column->debug_item(2));
+        EXPECT_EQ("{inner:{amount:NULL}}", column->debug_item(3));
+        EXPECT_EQ("{inner:{amount:7}}", column->debug_item(4));
+    }
+}
+
 std::tuple<bool, Status> get_conv_func(const TypeDescriptor& type, const TypeDescriptor& to_arrow_type,
                                        ConvertFuncTree& cf, bool is_nullable = false) {
     std::shared_ptr<arrow::DataType> arrow_type;

@@ -862,6 +862,132 @@ INSTANTIATE_TEST_SUITE_P(SchemaChangeModifyColumnTypeTest, SchemaChangeModifyCol
                          to_string_param_name);
 // clang-format on
 
+// BEGIN; INSERT INTO t1 ...; INSERT INTO t2 ...; COMMIT on a shared-data cluster while t1 is being altered. Each
+// statement writes its txn logs under its own load id, and FE publishes every tablet of the transaction with the
+// load ids of all statements: the base tablets of t1 through publish_version, its shadow tablets through
+// publish_log_version, whose .vlog the schema change replays when it finishes. The second statement loads t2
+// only, so neither tablet of t1 has a log under its load id.
+class SchemaChangeMultiStatementTxnTest : public SchemaChangeModifyColumnTypeTest {
+protected:
+    void write_statement(int64_t tablet_id, int64_t schema_id, const std::shared_ptr<VSchema>& schema, int64_t txn_id,
+                         const PUniqueId& load_id, int32_t key, int64_t value) {
+        auto c0 = Int32Column::create();
+        c0->append_datum(Datum(key));
+        MutableColumnPtr c1;
+        if (schema_id == _base_tablet_schema->id()) {
+            c1 = Int32Column::create();
+            c1->append_datum(Datum(static_cast<int32_t>(value)));
+        } else {
+            c1 = Int64Column::create();
+            c1->append_datum(Datum(value));
+        }
+        VChunk chunk({std::move(c0), std::move(c1)}, schema);
+        uint32_t indexes[1] = {0};
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_manager.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(schema_id)
+                                                   .set_load_id(load_id)
+                                                   .set_is_multi_statements_txn(true)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes, 1));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+};
+
+TEST_P(SchemaChangeMultiStatementTxnTest, test_statement_loading_another_table) {
+    int64_t version = 1;
+    int64_t txn_id = 1000;
+    auto base_tablet_id = _base_tablet_metadata->id();
+    auto new_tablet_id = _new_tablet_metadata->id();
+    for (int i = 0; i < GetParam().writes_before; i++) {
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_datum(Datum(i));
+        c1->append_datum(Datum(i * 2));
+        VChunk chunk({std::move(c0), std::move(c1)}, _base_schema);
+        uint32_t indexes[1] = {0};
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_manager.get())
+                                                   .set_tablet_id(base_tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_base_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes, 1));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, txn_id).status());
+        version++;
+        txn_id++;
+    }
+
+    int64_t alter_txn_id = txn_id++;
+    {
+        TAlterTabletReqV2 request;
+        request.base_tablet_id = base_tablet_id;
+        request.new_tablet_id = new_tablet_id;
+        request.alter_version = version;
+        request.txn_id = alter_txn_id;
+        SchemaChangeHandler handler(_tablet_manager.get());
+        ASSERT_OK(handler.process_alter_tablet(request));
+    }
+
+    // Statement 1 loads (100, 200) into t1, i.e. into its base tablet and its shadow tablet. Statement 2 loads t2.
+    int64_t explicit_txn_id = txn_id++;
+    PUniqueId load_id_1;
+    load_id_1.set_hi(explicit_txn_id);
+    load_id_1.set_lo(1);
+    PUniqueId load_id_2;
+    load_id_2.set_hi(explicit_txn_id);
+    load_id_2.set_lo(2);
+    write_statement(base_tablet_id, _base_tablet_schema->id(), _base_schema, explicit_txn_id, load_id_1, 100, 200);
+    write_statement(new_tablet_id, _new_tablet_schema->id(), _new_schema, explicit_txn_id, load_id_1, 100, 200);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(explicit_txn_id);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_combined_txn_log(false);
+    txn_info.set_commit_time(time(nullptr));
+    txn_info.add_load_ids()->CopyFrom(load_id_1);
+    txn_info.add_load_ids()->CopyFrom(load_id_2);
+    auto txns = std::span<const TxnInfoPB>(&txn_info, 1);
+
+    ASSERT_OK(
+            publish_version(_tablet_manager.get(), PublishTabletInfo(base_tablet_id), version, version + 1, txns, false)
+                    .status());
+    int64_t log_version = version + 1;
+    ASSERT_OK(publish_log_version(_tablet_manager.get(), new_tablet_id, txns, &log_version));
+    // FE retries when it lost the response.
+    ASSERT_OK(publish_log_version(_tablet_manager.get(), new_tablet_id, txns, &log_version));
+    version++;
+
+    ASSERT_OK(publish_version_for_schema_change(new_tablet_id, version + 1, alter_txn_id));
+    version++;
+
+    ASSIGN_OR_ABORT(auto new_tablet, _tablet_manager->get_tablet(new_tablet_id, version));
+    auto chunk = read(new_tablet, /*sorted=*/true);
+    ASSERT_EQ(GetParam().writes_before + 1, chunk->num_rows());
+    for (int i = 0; i < GetParam().writes_before; i++) {
+        EXPECT_EQ(i, chunk->get(i)[0].get_int32());
+        EXPECT_EQ(i * 2, chunk->get(i)[1].get_int64());
+    }
+    EXPECT_EQ(100, chunk->get(GetParam().writes_before)[0].get_int32());
+    EXPECT_EQ(200, chunk->get(GetParam().writes_before)[1].get_int64());
+}
+
+INSTANTIATE_TEST_SUITE_P(SchemaChangeMultiStatementTxnTest, SchemaChangeMultiStatementTxnTest,
+                         ::testing::Values(SchemaChangeParam{DUP_KEYS, 2, 0}, SchemaChangeParam{AGG_KEYS, 2, 0},
+                                           SchemaChangeParam{UNIQUE_KEYS, 2, 0}, SchemaChangeParam{PRIMARY_KEYS, 2, 0}),
+                         to_string_param_name);
+
 class SchemaChangeModifyColumnOrderTest : public SchemaChangeTest {
 public:
     SchemaChangeModifyColumnOrderTest() : SchemaChangeTest(kTestGroupPath) {

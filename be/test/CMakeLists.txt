@@ -190,6 +190,7 @@ set(EXEC_FILES
         ./exprs/decimal_cast_expr_float_test.cpp
         ./exprs/decimal_cast_expr_time_test.cpp
         ./exprs/decimal_cast_expr_decimalv2_test.cpp
+        ./exprs/decimal_null_row_report_error_test.cpp
         ./exprs/coalesce_expr_test.cpp
         ./exprs/compound_predicate_test.cpp
         ./exprs/condition_expr_test.cpp
@@ -602,6 +603,7 @@ SET(DW_TEST_FILES
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
     ./storage/lake/lake_merged_del_op_offset_test.cpp
+    ./storage/lake/lake_merged_bundled_segments_test.cpp
     ./storage/lake/lake_multi_statement_bundle_mix_test.cpp
     ./storage/lake/lake_multi_statement_publish_test.cpp
     ./storage/lake/tablet_reshard_helper_test.cpp
