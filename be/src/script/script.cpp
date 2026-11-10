@@ -404,7 +404,7 @@ public:
         return strings::Substitute("recover tablet:$0 status:$1", std::to_string(tablet_id), st.message());
     }
 
-    // Skip the apply of |txn_id| on a primary key tablet when that apply cannot make progress.
+    // Skip the apply of |txn_id| on a primary key tablet that the failed apply put in error state.
     // See TabletUpdates::skip_apply for what is dropped.
     static std::string skip_apply(int64_t tablet_id, int64_t txn_id) {
         auto tablet = get_tablet(tablet_id);

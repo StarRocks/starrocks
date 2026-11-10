@@ -865,7 +865,7 @@ public:
     void test_schema_change_optimiazation_adding_generated_column(bool enable_persistent_index);
     void test_pk_dump(size_t rowset_cnt);
     void update_and_recover(bool enable_persistent_index);
-    void test_skip_apply(bool enable_persistent_index, bool retryable);
+    void test_skip_apply(bool enable_persistent_index);
     void test_recover_rowset_sorter();
     void test_get_column_values_with_invalid_rssid(bool enable_persistent_index);
 

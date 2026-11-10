@@ -5874,27 +5874,23 @@ Status TabletUpdates::recover() {
 
 Status TabletUpdates::skip_apply(int64_t txn_id) {
     const auto tablet_id = _tablet.tablet_id();
-    LOG(INFO) << "Tablet " << tablet_id << " begin skip apply of txn " << txn_id;
-    // Stop the apply thread, so the version cannot be applied while it is being skipped.
+    if (!_error) {
+        return Status::NotSupported(
+                strings::Substitute("tablet $0 is not in error state, only a failed apply can be skipped", tablet_id));
+    }
+    LOG(INFO) << "Tablet " << tablet_id << " begin skip apply of txn " << txn_id << ", error: " << _error_msg;
+    // The failed apply has stopped already. Keep apply stopped until the rowset is emptied.
     stop_and_wait_apply_done();
-    bool skipped = false;
     DeferOp resume_apply([&]() {
         _apply_stopped.store(false);
-        if (_error.load()) {
-            return;
-        }
-        std::lock_guard l(_lock);
-        if (skipped) {
-            // The failed apply of the skipped version may have scheduled a delayed retry.
-            // Apply the next version now instead of waiting for that retry.
+        if (!_error.load()) {
+            std::lock_guard l(_lock);
             _apply_schedule.store(false);
+            _check_for_apply();
         }
-        _check_for_apply();
     });
 
-    // The next version waiting to apply, copied so it stays valid after |_lock| is released.
     std::unique_ptr<EditVersionInfo> skipped_info;
-    RowsetSharedPtr rowset;
     {
         std::lock_guard l(_lock);
         if (_edit_version_infos.empty()) {
@@ -5903,91 +5899,91 @@ Status TabletUpdates::skip_apply(int64_t txn_id) {
         if (_apply_version_idx + 1 >= _edit_version_infos.size()) {
             return Status::NotFound(strings::Substitute("no version is waiting to apply, tablet:$0", tablet_id));
         }
+        // Apply runs in version order, so the failed apply is the next version.
         const auto& next = _edit_version_infos[_apply_version_idx + 1];
-        // Apply runs in version order, so only the next version can be skipped.
         if (next->deltas.empty()) {
             return Status::NotSupported(
                     strings::Substitute("the next version to apply is not a rowset commit, tablet:$0 version:$1",
                                         tablet_id, next->version.to_string()));
         }
-        rowset = get_rowset(next->deltas[0]);
+        const uint32_t rowset_id = next->deltas[0];
+        auto rowset = get_rowset(rowset_id);
         if (rowset == nullptr) {
-            return Status::InternalError(strings::Substitute("rowset $0 of version $1 not found, tablet:$2",
-                                                             next->deltas[0], next->version.to_string(), tablet_id));
+            return Status::InternalError(strings::Substitute("rowset $0 of version $1 not found, tablet:$2", rowset_id,
+                                                             next->version.to_string(), tablet_id));
         }
         if (rowset->txn_id() != txn_id) {
             return Status::InvalidArgument(
                     strings::Substitute("txn $0 is not the next to apply, tablet:$1 next version:$2 next txn:$3",
                                         txn_id, tablet_id, next->version.to_string(), rowset->txn_id()));
         }
+        // An apply that failed after writing its meta has already deleted rows of older rowsets on
+        // disk, and emptying its rowset would not undo that.
+        bool applied = false;
+        RETURN_IF_ERROR(TabletMetaManager::traverse_meta_logs(
+                _tablet.data_dir(), tablet_id, [&](uint64_t, const TabletMetaLogPB& log) {
+                    for (const auto& op : log.ops()) {
+                        if (op.type() == OP_APPLY &&
+                            EditVersion(op.apply().major_number(), op.apply().minor_number()) == next->version) {
+                            applied = true;
+                        }
+                    }
+                    return !applied;
+                }));
+        if (applied) {
+            return Status::AlreadyExist(strings::Substitute(
+                    "apply of version $0 is already persisted, restart the BE to load it, tablet:$1",
+                    next->version.to_string(), tablet_id));
+        }
+
+        // Empty the rowset, so the version applies as a load that wrote nothing.
+        RowsetMetaPB meta_pb;
+        rowset->rowset_meta()->get_full_meta_pb(&meta_pb);
+        meta_pb.set_empty(true);
+        meta_pb.set_num_rows(0);
+        meta_pb.set_total_row_size(0);
+        meta_pb.set_total_disk_size(0);
+        meta_pb.set_data_disk_size(0);
+        meta_pb.set_index_disk_size(0);
+        meta_pb.set_standalone_index_size(0);
+        meta_pb.set_num_segments(0);
+        meta_pb.set_num_delete_files(0);
+        meta_pb.set_num_update_files(0);
+        meta_pb.set_num_rows_upt(0);
+        meta_pb.set_total_update_row_size(0);
+        meta_pb.set_segments_overlap_pb(NONOVERLAPPING);
+        meta_pb.clear_delfile_idxes();
+        meta_pb.clear_segment_encryption_metas();
+        meta_pb.clear_delfile_encryption_metas();
+        meta_pb.clear_updatefile_encryption_metas();
+        // Also drops the partial update info, so the empty rowset takes the normal apply path.
+        meta_pb.clear_txn_meta();
+        RowsetSharedPtr empty_rowset;
+        RETURN_IF_ERROR(RowsetFactory::create_rowset(rowset->schema(), _tablet.schema_hash_path(),
+                                                     std::make_shared<RowsetMeta>(meta_pb), &empty_rowset,
+                                                     _tablet.data_dir()->get_meta()));
+        WriteBatch wb;
+        RETURN_IF_ERROR(TabletMetaManager::put_rowset_meta(_tablet.data_dir(), &wb, tablet_id, meta_pb));
+        RETURN_IF_ERROR(_tablet.data_dir()->get_meta()->write_batch(&wb));
+        {
+            std::lock_guard lg(_rowsets_lock);
+            _rowsets[rowset_id] = std::move(empty_rowset);
+        }
+        {
+            auto stats = std::make_unique<RowsetStats>();
+            _calc_compaction_score(stats.get());
+            std::lock_guard lg(_rowset_stats_lock);
+            _rowset_stats[rowset_id] = std::move(stats);
+        }
         skipped_info = std::make_unique<EditVersionInfo>(*next);
     }
-    const EditVersion& version = skipped_info->version;
-    const uint32_t rowset_id = skipped_info->deltas[0];
-
-    // Delete every row of the rowset at this version. A column-mode partial update rowset has no
-    // segment before apply, so it gets no delete vector and stays empty.
-    RowsetReleaseGuard guard(rowset);
-    RETURN_IF_ERROR(rowset->load());
-    vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs;
-    std::vector<TabletSegmentId> tsids;
-    size_t num_dels = 0;
-    const auto& segments = rowset->segments();
-    for (uint32_t i = 0; i < segments.size(); i++) {
-        Roaring all_rows;
-        all_rows.addRange(0, segments[i]->num_rows());
-        auto delvec = std::make_shared<DelVector>();
-        delvec->union_with(version.major_number(), all_rows);
-        num_dels += delvec->cardinality();
-        new_del_vecs.emplace_back(rowset_id + i, std::move(delvec));
-        tsids.emplace_back(tablet_id, rowset_id + i);
-    }
-
-    {
-        std::lock_guard l(_lock);
-        // Check again: another skip_apply or load_snapshot may have run while |_lock| was released.
-        if (_edit_version_infos.empty() || _apply_version_idx + 1 >= _edit_version_infos.size() ||
-            !(_edit_version_infos[_apply_version_idx + 1]->version == version) ||
-            _edit_version_infos[_apply_version_idx + 1]->deltas != skipped_info->deltas) {
-            return Status::Aborted(strings::Substitute("version $0 is no longer the next to apply, tablet:$1",
-                                                       version.to_string(), tablet_id));
-        }
-        // Leave the persistent index meta unchanged. Its version now lags the apply version, so the
-        // next load rebuilds the index from the applied rowsets and their delete vectors.
-        PersistentIndexMetaPB index_meta;
-        RETURN_IF_ERROR(TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
-                                                               new_del_vecs, index_meta,
-                                                               /*enable_persistent_index=*/false, nullptr));
-        _next_log_id++;
-        _apply_version_idx++;
-        _apply_version_changed.notify_all();
-    }
-    skipped = true;
-
-    auto manager = StorageEngine::instance()->update_manager();
-    manager->clear_cached_del_vec(tsids);
-    {
-        std::lock_guard lg(_rowset_stats_lock);
-        auto iter = _rowset_stats.find(rowset_id);
-        if (iter != _rowset_stats.end()) {
-            iter->second->num_dels = num_dels;
-            _calc_compaction_score(iter->second.get());
-        }
-    }
-    _update_total_stats(skipped_info->rowsets, nullptr, nullptr);
-    // Drop the update state of the skipped rowset and unload the primary index, which a failed
-    // apply may have left half updated.
+    // Drop the update state and the primary index that the failed apply may have left half updated.
     _reset_apply_status(*skipped_info);
     _apply_failed_time = 0;
-
-    std::string cleared_error;
-    if (_error) {
-        cleared_error = _error_msg;
-        reset_error();
-    }
-    LOG(WARNING) << "Tablet " << tablet_id << " skipped apply of txn " << txn_id << " version:" << version.to_string()
-                 << " rowset:" << rowset_id << " #segment:" << segments.size() << " #deleted_row:" << num_dels
-                 << " cleared_error:" << cleared_error;
+    LOG(WARNING) << "Tablet " << tablet_id << " emptied rowset " << skipped_info->deltas[0] << " of txn " << txn_id
+                 << " version:" << skipped_info->version.to_string()
+                 << " to skip its apply, cleared error: " << _error_msg;
+    reset_error();
     return Status::OK();
 }
 
