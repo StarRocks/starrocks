@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -1385,4 +1386,25 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                         + "PRUNE_COLUMNS_RULES in pushDownAggregation:\n" + plan);
     }
 
+    @Test
+    public void testJsonSubfieldPushdownWithCachedJoinStatistics() throws Exception {
+        // GIVEN
+        String dumpString = getDumpInfoFromFile("query_dump/json_subfield_pushdown");
+        QueryDumpInfo dumpInfo = getDumpInfoFromJson(dumpString);
+        String sql = UtFrameUtils.setUpTestDump(connectContext, dumpInfo);
+        try {
+            // Make the deferred MV available without executing a refresh.
+            MaterializedView mv = (MaterializedView) starRocksAssert.getTable("json_projection", "mv0");
+            mv.getPartitions().forEach(partition -> UtFrameUtils.setPartitionVersion(partition, 2));
+
+            // WHEN
+            String plan = UtFrameUtils.replaySql(connectContext, sql).second.getExplainString(TExplainLevel.NORMAL);
+
+            // THEN
+            // Reordering used to reuse cached statistics that lacked the generated json_query column.
+            PlanTestBase.assertContains(plan, "json_query", "count", "OlapScanNode");
+        } finally {
+            UtFrameUtils.tearDownTestDump();
+        }
+    }
 }

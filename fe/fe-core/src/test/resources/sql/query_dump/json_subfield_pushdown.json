@@ -1,0 +1,15 @@
+{
+  "statement": "SELECT s.doc -> '$.x' AS x, a.n + b.n AS n\nFROM (SELECT PARSE_JSON(MAX(v)) AS doc FROM json_projection.t0) s\nCROSS JOIN (SELECT COUNT(*) AS n FROM json_projection.t0) a\nCROSS JOIN (SELECT COUNT(*) AS n FROM json_projection.t0) b",
+  "table_meta": {
+    "json_projection.t0": "CREATE TABLE t0 (v VARCHAR(512)) ENGINE=OLAP DUPLICATE KEY(v) DISTRIBUTED BY HASH(v) BUCKETS 1 PROPERTIES ('replication_num'='1')",
+    "json_projection.mv0": "CREATE MATERIALIZED VIEW mv0 DISTRIBUTED BY RANDOM REFRESH DEFERRED MANUAL PROPERTIES ('replication_num'='1', 'query_rewrite_consistency'='LOOSE') AS SELECT v FROM json_projection.t0"
+  },
+  "table_row_count": {
+    "json_projection.t0": {
+      "t0": 1000000
+    }
+  },
+  "column_statistics": {},
+  "session_variables": "{\"enable_stats_to_optimize_skew_join\": true}",
+  "be_number": 1
+}

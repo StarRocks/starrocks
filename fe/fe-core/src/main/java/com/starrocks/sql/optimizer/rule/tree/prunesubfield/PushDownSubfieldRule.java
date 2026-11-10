@@ -61,7 +61,13 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         factory = taskContext.getOptimizerContext().getColumnRefFactory();
-        return root.getOp().accept(new PushDowner(), root, new Context());
+        OptExpression result = root.getOp().accept(new PushDowner(), root, new Context());
+        if (hasRewrite) {
+            // Pushdown adds column references and changes children of existing expressions. Statistics computed
+            // before this rewrite no longer describe their outputs and must not be reused by join reordering.
+            result.clearStatsAndInitOutputInfo();
+        }
+        return result;
     }
 
     public boolean hasRewrite() {
