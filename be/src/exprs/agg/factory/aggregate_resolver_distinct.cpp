@@ -25,10 +25,10 @@ struct DistinctDispatcher {
         if constexpr (lt_is_aggregate<lt> || lt_is_binary<lt>) {
             using DistinctState2 = DistinctAggregateStateV2<lt, SumResultLT<lt>>;
             resolver->add_aggregate_mapping<lt, TYPE_BIGINT, DistinctState2>(
-                    "multi_distinct_count2", false, AggregateFactory::MakeCountDistinctAggregateFunctionV2<lt>());
+                    "multi_distinct_count", false, AggregateFactory::MakeCountDistinctAggregateFunctionV2<lt>());
 
             resolver->add_aggregate_mapping<lt, SumResultLT<lt>, DistinctState2>(
-                    "multi_distinct_sum2", false, AggregateFactory::MakeSumDistinctAggregateFunctionV2<lt>());
+                    "multi_distinct_sum", false, AggregateFactory::MakeSumDistinctAggregateFunctionV2<lt>());
 
             static constexpr auto count = compute_bits(false, false);
             resolver->add_window_mapping<lt, TYPE_STRUCT, typename FusedMultiDistinctFunction<lt, count>::State>(
