@@ -884,14 +884,9 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
         DCHECK_EQ(conv_func->field_names.size(), conv_func->children.size());
         for (size_t i = 0; i < conv_func->field_names.size(); i++) {
             const auto& child_name = conv_func->field_names[i];
-<<<<<<< HEAD:be/src/exec/arrow_to_starrocks_converter.cpp
 
             auto child_col = struct_col->field_column(child_name);
-            auto child_array = struct_array->GetFieldByName(child_name);
-=======
-            ASSIGN_OR_RETURN(auto* child_col, struct_col->field_column_raw_ptr(child_name));
             const auto child_index = struct_array->struct_type()->GetFieldIndex(child_name);
->>>>>>> 4cd3f4d ([BugFix] Propagate parent NULLs in Arrow STRUCT conversion (#82579)):be/src/column/arrow/arrow_to_starrocks_converter.cpp
 
             if (child_index < 0) {
                 // default null
@@ -900,21 +895,15 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
                 continue;
             }
 
-<<<<<<< HEAD:be/src/exec/arrow_to_starrocks_converter.cpp
-            RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(conv_func->children[i].get(), num_elements,
-                                                                    child_array.get(), child_col, array_start_idx,
-                                                                    chunk_start_idx, chunk_filter, ctx));
-=======
-            // A child's own validity does not include its parent's. Merge both so converters
-            // skip values hidden by a NULL struct, including nested VARIANT payloads.
+            // Combine the parent validity bitmap with the child's before conversion.
             auto child_array = struct_array->GetFlattenedField(child_index);
             if (!child_array.ok()) {
                 return Status::InternalError(child_array.status().ToString());
             }
-            RETURN_IF_ERROR(convert_arrow_array_to_column(conv_func->children[i].get(), num_elements,
-                                                          child_array->get(), child_col, array_start_idx,
-                                                          chunk_start_idx, chunk_filter, ctx));
->>>>>>> 4cd3f4d ([BugFix] Propagate parent NULLs in Arrow STRUCT conversion (#82579)):be/src/column/arrow/arrow_to_starrocks_converter.cpp
+
+            RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(conv_func->children[i].get(), num_elements,
+                                                                    child_array->get(), child_col, array_start_idx,
+                                                                    chunk_start_idx, chunk_filter, ctx));
         }
 
         return Status::OK();
