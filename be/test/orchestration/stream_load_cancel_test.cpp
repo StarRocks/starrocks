@@ -109,7 +109,7 @@ protected:
 
         if (is_pipeline()) {
             auto wg = std::make_shared<workgroup::WorkGroup>("stream_load_cancel_test", 1, 0, 1, 1.0, 0, 1.0,
-                                                            TWorkGroupType::WG_NORMAL, "");
+                                                             TWorkGroupType::WG_NORMAL, "");
             // No drivers need to run: these tests exercise prepare's input binding
             // and FragmentContext's real cancellation/cleanup entrypoints.
             wg->set_shared_executors(&_executors);
@@ -375,19 +375,19 @@ TEST_P(StreamLoadCancelTest, CloseWakesReaderBeforeWaitingForScanner) {
 }
 
 INSTANTIATE_TEST_SUITE_P(ExecutionModes, StreamLoadCancelTest,
-                        testing::Values(ExecutionMode::NON_PIPELINE, ExecutionMode::PIPELINE_NODE_RANGES,
-                                        ExecutionMode::PIPELINE_DRIVER_RANGES),
-                        [](const testing::TestParamInfo<ExecutionMode>& info) {
-                            switch (info.param) {
-                            case ExecutionMode::NON_PIPELINE:
-                                return "NonPipeline";
-                            case ExecutionMode::PIPELINE_NODE_RANGES:
-                                return "PipelineNodeRanges";
-                            case ExecutionMode::PIPELINE_DRIVER_RANGES:
-                                return "PipelineDriverRanges";
-                            }
-                            return "Unknown";
-                        });
+                         testing::Values(ExecutionMode::NON_PIPELINE, ExecutionMode::PIPELINE_NODE_RANGES,
+                                         ExecutionMode::PIPELINE_DRIVER_RANGES),
+                         [](const testing::TestParamInfo<ExecutionMode>& info) {
+                             switch (info.param) {
+                             case ExecutionMode::NON_PIPELINE:
+                                 return "NonPipeline";
+                             case ExecutionMode::PIPELINE_NODE_RANGES:
+                                 return "PipelineNodeRanges";
+                             case ExecutionMode::PIPELINE_DRIVER_RANGES:
+                                 return "PipelineDriverRanges";
+                             }
+                             return "Unknown";
+                         });
 
 } // namespace
 } // namespace starrocks::orchestration
