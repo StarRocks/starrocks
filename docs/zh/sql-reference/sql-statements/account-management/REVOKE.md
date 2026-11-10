@@ -115,7 +115,7 @@ REVOKE <priv> ON TABLE db.tbl FROM {ROLE <role_name> | USER <user_identity>}
 
 ```SQL
 REVOKE
-    { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
+    { ALTER | DROP | SELECT | EXPORT | ALL [PRIVILEGES]}
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
            { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
@@ -123,6 +123,7 @@ REVOKE
 ```
 
 注意：需要执行 SET CATALOG 之后才能使用。view 还可以用 `db.view` 的方式来表示。
+注意：对于 EXPORT 权限，目前仅支持授予和撤销，不支持通过 EXPORT TABLE 导出该视图。
 
 ```SQL
 REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
@@ -132,7 +133,7 @@ REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
 
 ```SQL
 REVOKE
-    { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
+    { SELECT | ALTER | REFRESH | DROP | EXPORT | ALL [PRIVILEGES]}
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
            { { DATABASE <database_name> [,<database_name>,...] } | ALL [DATABASES] }
@@ -140,6 +141,7 @@ REVOKE
 ```
 
 注意：需要执行 SET CATALOG 之后才能使用。mv 还可以用 `db.mv` 的方式来表示。
+注意：对于 EXPORT 权限，目前仅支持授予和撤销，不支持通过 EXPORT TABLE 导出该物化视图。
 
 ```SQL
 REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_identity>};
