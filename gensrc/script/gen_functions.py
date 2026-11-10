@@ -537,6 +537,7 @@ def generate_cpp(path):
         "HashFunctions",
         "GroupingSetsFunctions",
         "StructFunctions",
+        "FileFunctions",
         "UtilityFunctions",
         "JsonFunctions",
         "VariantFunctions",
