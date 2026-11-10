@@ -44,9 +44,6 @@ enum AggDistinctType { COUNT = 0, SUM = 1 };
 
 static const size_t MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA = 24;
 
-template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
-struct DistinctAggregateState {};
-
 struct AdaptiveSliceHashSet {
     using KeyType = typename SliceHashSet::key_type;
 
@@ -194,9 +191,12 @@ struct AdaptiveSliceHashSet {
     HashOnSliceWithHash hash_function() const { return HashOnSliceWithHash(); }
 };
 
+template <LogicalType LT, LogicalType SumLT, bool compute_sum = false, typename = guard::Guard>
+struct DistinctAggregateStateV2Base {};
+
 template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateState<LT, SumLT, StringOrBinaryGuard<LT>> {
-    DistinctAggregateState() = default;
+struct DistinctAggregateStateV2Base<LT, SumLT, false, StringOrBinaryGuard<LT>> {
+    DistinctAggregateStateV2Base() = default;
     using KeyType = typename SliceHashSet::key_type;
 
     void reset() { set.clear(); }
@@ -231,10 +231,7 @@ struct DistinctAggregateState<LT, SumLT, StringOrBinaryGuard<LT>> {
     AdaptiveSliceHashSet set;
 };
 
-// use a different way to do serialization to gain performance.
-template <LogicalType LT, LogicalType SumLT, bool compute_sum = false, typename = guard::Guard>
-struct DistinctAggregateStateV2Base {};
-
+// Fixed-length keys: serialize by copying the keys one after another to gain performance.
 template <LogicalType LT, LogicalType SumLT, bool compute_sum>
 struct DistinctAggregateStateV2Base<LT, SumLT, compute_sum, FixedLengthLTGuard<LT>> {
     using T = RunTimeCppType<LT>;
@@ -324,10 +321,6 @@ struct DistinctAggregateStateV2Base<LT, SumLT, compute_sum, FixedLengthLTGuard<L
     MyHashSet set;
     SumType sum{};
 };
-
-template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateStateV2Base<LT, SumLT, false, StringOrBinaryGuard<LT>>
-        : public DistinctAggregateState<LT, SumLT> {};
 
 template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
 struct DistinctAggregateStateV2 : public DistinctAggregateStateV2Base<LT, SumLT, false> {};
