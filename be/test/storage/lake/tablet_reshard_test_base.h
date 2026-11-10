@@ -65,6 +65,7 @@
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
@@ -2022,6 +2023,50 @@ protected:
                                      base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
     }
 
+    // Compacts the primary-key index SSTs |candidates| of |tablet_id| at |base_version| (each inner vector one fileset,
+    // in index order) as an index compaction does, and publishes the result as |base_version| + 1; the outputs take the
+    // watermark of the last input. pk_index_parallel_compaction_task_split_threshold_bytes picks the path: with a tiny
+    // threshold, disjoint key ranges become separate tasks and a range one candidate holds alone is moved (its file
+    // name kept, its watermark restamped); with a huge one, a single task rewrites two or more candidates into new
+    // files.
+    StatusOr<TabletMetadataPtr> compact_index_with_candidates(
+            int64_t tablet_id, int64_t base_version,
+            const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, bool merge_base_level) {
+        if (candidates.empty()) return Status::InvalidArgument("no index compaction candidate");
+        for (const auto& candidate : candidates) {
+            if (candidate.empty()) return Status::InvalidArgument("an index compaction candidate is empty");
+        }
+        ASSIGN_OR_RETURN(auto metadata, _tablet_manager->get_tablet_metadata(tablet_id, base_version));
+        std::vector<PersistentIndexSstablePB> outputs;
+        {
+            lake::LakePersistentIndexParallelCompactMgr compact_mgr(_tablet_manager.get());
+            RETURN_IF_ERROR(compact_mgr.init());
+            DeferOp shutdown([&] { compact_mgr.shutdown(); });
+            RETURN_IF_ERROR(compact_mgr.compact(candidates, metadata, merge_base_level, &outputs));
+        }
+        auto log = std::make_shared<TxnLogPB>();
+        log->set_tablet_id(tablet_id);
+        log->set_txn_id(next_id());
+        auto* op_compaction = log->mutable_op_compaction();
+        for (const auto& candidate : candidates) {
+            for (const auto& sstable : candidate) op_compaction->add_input_sstables()->CopyFrom(sstable);
+        }
+        const uint64_t max_rss_rowid =
+                op_compaction->input_sstables(op_compaction->input_sstables_size() - 1).max_rss_rowid();
+        for (const auto& sstable : outputs) {
+            auto* output = op_compaction->add_output_sstables();
+            output->CopyFrom(sstable);
+            output->set_max_rss_rowid(max_rss_rowid);
+        }
+        RETURN_IF_ERROR(_tablet_manager->put_txn_log(log));
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(log->txn_id());
+        txn_info.set_txn_type(TXN_NORMAL);
+        txn_info.set_commit_time(1);
+        return lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), base_version,
+                                     base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
+    }
+
     // Runs an UNSHARE compaction on `tablet` and publishes it. The input metadata is persisted first because split
     // children exist only in memory.
     StatusOr<TabletMetadataPtr> unshare_tablet(const TabletMetadataPtr& tablet) {
@@ -2315,37 +2360,70 @@ protected:
         return static_cast<uint32_t>(cursor);
     }
 
+    // The watermark a merge gives a carried SST of a primary-key source whose run ends at |end| and moves by |delta|:
+    // one inside the run moves with it, one at or past its end is lowered to the moved end - 1 with every row of it
+    // covered.
+    static uint64_t merge_projected_watermark(uint64_t watermark, uint64_t end, int64_t delta) {
+        const uint64_t high = watermark >> 32;
+        if (high >= end) return (static_cast<uint64_t>(static_cast<int64_t>(end - 1) + delta) << 32) | 0xFFFFFFFFULL;
+        return (static_cast<uint64_t>(static_cast<int64_t>(high) + delta) << 32) | (watermark & 0xFFFFFFFFULL);
+    }
+
     // Whether a merge of the primary-key |sources| has to drop their SSTs and rebuild the index: a source references
-    // RSSIDs its flush could not record as a signed watermark, or one of its SSTs has a watermark or a modern owner
-    // outside its run, or a legacy offset that leaves int32 once translated. Embedded delete-vector pages are not
-    // modeled; the lifecycle sources' SSTs carry none.
+    // RSSIDs its flush could not record as a signed watermark, one of its SSTs is modern with an owner above its
+    // watermark, or one of its SSTs not below its run has a legacy offset that leaves int32 once translated, or a
+    // watermark that lowering makes equal to the different one of an earlier carried SST of the source. SSTs below the
+    // run are left out, watermarks past the run's end are lowered, and modern owners outside the run become 0; none of
+    // these is a reason to rebuild by itself. Embedded delete-vector pages are not modeled; the lifecycle sources' SSTs
+    // carry none.
     static bool merge_drops_source_sstables(const std::vector<TabletMetadataPtr>& sources) {
         std::vector<TabletMetadataPtr> ordered(sources);
         std::sort(ordered.begin(), ordered.end(), [](const auto& a, const auto& b) { return a->id() < b->id(); });
         int64_t cursor = 1;
         for (const auto& source : ordered) {
+            for (const auto& sst : source->sstable_meta().sstables()) {
+                if (sst.has_shared_rssid() && int64_t{sst.shared_rssid()} + sst.rssid_offset() >
+                                                      static_cast<int64_t>(sst.max_rss_rowid() >> 32)) {
+                    return true;
+                }
+            }
             const auto runs = merge_source_runs(*source);
             if (runs.empty()) continue;
             const auto [begin, end] = runs.front();
             if (end > (uint64_t{1} << 31)) return true;
             const int64_t delta = cursor - static_cast<int64_t>(begin);
             cursor += static_cast<int64_t>(end - begin);
-            auto inside = [&](int64_t rssid) {
-                return rssid >= static_cast<int64_t>(begin) && rssid < static_cast<int64_t>(end);
-            };
+            std::optional<std::pair<uint64_t, uint64_t>> previous; // original and projected watermark
             for (const auto& sst : source->sstable_meta().sstables()) {
-                if (!inside(static_cast<int64_t>(sst.max_rss_rowid() >> 32))) return true;
-                if (sst.has_shared_rssid()) {
-                    if (!inside(int64_t{sst.shared_rssid()} + sst.rssid_offset())) return true;
-                } else {
+                const int64_t high = static_cast<int64_t>(sst.max_rss_rowid() >> 32);
+                if (high < static_cast<int64_t>(begin)) continue;
+                if (!sst.has_shared_rssid()) {
                     const int64_t offset = int64_t{sst.rssid_offset()} + delta;
                     if (offset < std::numeric_limits<int32_t>::min() || offset > std::numeric_limits<int32_t>::max()) {
                         return true;
                     }
                 }
+                const uint64_t projected = merge_projected_watermark(sst.max_rss_rowid(), end, delta);
+                if (previous.has_value() && previous->first < sst.max_rss_rowid() && previous->second == projected) {
+                    return true;
+                }
+                previous = std::pair{sst.max_rss_rowid(), projected};
             }
         }
         return false;
+    }
+
+    // The source SSTs a merge of the primary-key |sources| leaves out instead of carrying: those whose watermark lies
+    // below their source's run, and every SST of a source that references no RSSID.
+    static std::set<std::string> merge_left_out_source_sstables(const std::vector<TabletMetadataPtr>& sources) {
+        std::set<std::string> left_out;
+        for (const auto& source : sources) {
+            const auto runs = merge_source_runs(*source);
+            for (const auto& sst : source->sstable_meta().sstables()) {
+                if (runs.empty() || (sst.max_rss_rowid() >> 32) < runs.front().first) left_out.insert(sst.filename());
+            }
+        }
+        return left_out;
     }
 
     void add_repeated_sparse_sidecars(TabletMetadataPB* metadata, int cycle, int child_index, int32_t value,
@@ -2403,10 +2481,12 @@ protected:
 
     // A merge of |sources| into |metadata|: the cursor the packing rule predicts, every target RSSID used once, the
     // del files and the delete vector, DCG and IDG entries of every source carried (each readable, encrypted as the
-    // TDE setting says), and the source SSTs either carried with their source's translation or, when |falls_back|,
-    // all dropped and recorded once as shared orphans.
+    // TDE setting says), and the source SSTs either carried with their source's translation, except the |left_out|
+    // ones, which are recorded once as shared orphans, or, when |falls_back|, all dropped and recorded once as shared
+    // orphans.
     void expect_repeated_merge_pb(const TabletMetadataPtr& metadata, const std::vector<TabletMetadataPtr>& sources,
-                                  uint32_t expected_cursor, bool falls_back, bool enable_tde) {
+                                  uint32_t expected_cursor, bool falls_back, const std::set<std::string>& left_out,
+                                  bool enable_tde) {
         EXPECT_EQ(expected_cursor, metadata->next_rowset_id()) << "independent packing cursor";
         std::set<uint32_t> live_rssids;
         int del_file_count = 0;
@@ -2484,32 +2564,48 @@ protected:
             EXPECT_EQ(source_sstables, sst_orphans);
             return;
         }
-        EXPECT_TRUE(sst_orphans.empty());
+        EXPECT_EQ(left_out, sst_orphans);
         EXPECT_GT(metadata->sstable_meta().sstables_size(), 0);
-        // A source SST keeps its file name; its RSSIDs move by its source's delta. The sources are packed from RSSID 1
-        // in tablet id order, each primary-key source as one run.
+        std::set<std::string> carried;
+        for (const auto& sst : metadata->sstable_meta().sstables()) {
+            EXPECT_FALSE(left_out.contains(sst.filename())) << sst.filename();
+            carried.insert(sst.filename());
+        }
+        for (const auto& filename : source_sstables) {
+            if (!left_out.contains(filename)) EXPECT_TRUE(carried.contains(filename)) << filename;
+        }
+        // A source SST keeps its file name; its RSSIDs move by its source's delta, a watermark past the source's run
+        // is lowered to the run's moved end - 1, and a modern owner outside the run becomes 0. The sources are packed
+        // from RSSID 1 in tablet id order, each primary-key source as one run.
         std::vector<TabletMetadataPtr> ordered(sources);
         std::sort(ordered.begin(), ordered.end(), [](const auto& a, const auto& b) { return a->id() < b->id(); });
-        std::map<std::string, std::pair<const PersistentIndexSstablePB*, int64_t>> projected_from;
+        struct ProjectedFrom {
+            const PersistentIndexSstablePB* sst;
+            int64_t delta;
+            uint64_t begin;
+            uint64_t end;
+        };
+        std::map<std::string, ProjectedFrom> projected_from;
         int64_t cursor = 1;
         for (const auto& source : ordered) {
             const auto runs = merge_source_runs(*source);
             if (runs.empty()) continue;
             const int64_t delta = cursor - static_cast<int64_t>(runs.front().first);
-            for (const auto& sst : source->sstable_meta().sstables()) projected_from[sst.filename()] = {&sst, delta};
+            for (const auto& sst : source->sstable_meta().sstables()) {
+                projected_from[sst.filename()] = {&sst, delta, runs.front().first, runs.front().second};
+            }
             cursor += static_cast<int64_t>(runs.front().second - runs.front().first);
         }
         for (const auto& sst : metadata->sstable_meta().sstables()) {
             auto found = projected_from.find(sst.filename());
             if (found == projected_from.end()) continue; // written by the merge's own source flush
-            const auto& [source_sst, delta] = found->second;
-            EXPECT_EQ(static_cast<int64_t>(source_sst->max_rss_rowid() >> 32) + delta,
-                      static_cast<int64_t>(sst.max_rss_rowid() >> 32))
+            const auto& [source_sst, delta, begin, end] = found->second;
+            EXPECT_EQ(merge_projected_watermark(source_sst->max_rss_rowid(), end, delta), sst.max_rss_rowid())
                     << sst.filename();
             if (source_sst->has_shared_rssid()) {
-                EXPECT_EQ(int64_t{source_sst->shared_rssid()} + source_sst->rssid_offset() + delta,
-                          int64_t{sst.shared_rssid()})
-                        << sst.filename();
+                const int64_t owner = int64_t{source_sst->shared_rssid()} + source_sst->rssid_offset();
+                const bool inside = owner >= static_cast<int64_t>(begin) && owner < static_cast<int64_t>(end);
+                EXPECT_EQ(inside ? owner + delta : 0, int64_t{sst.shared_rssid()}) << sst.filename();
             } else {
                 EXPECT_EQ(int64_t{source_sst->rssid_offset()} + delta, int64_t{sst.rssid_offset()}) << sst.filename();
             }
