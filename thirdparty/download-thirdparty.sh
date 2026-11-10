@@ -770,11 +770,23 @@ if [[ -d $TP_SOURCE_DIR/$AVRO_SOURCE ]] ; then
     echo "Finished patching $AVRO_SOURCE-c"
 fi
 
+# patch krb5
+if [[ -d $TP_SOURCE_DIR/$KRB5_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$KRB5_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $KRB5_SOURCE = "krb5-1.21.3" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/krb5-1.21.3-c23-strchr.patch
+        touch $PATCHED_MARK
+    fi
+    echo "Finished patching $KRB5_SOURCE"
+    cd -
+fi
+
 # patch serdes
 if [[ -d $TP_SOURCE_DIR/$SERDES_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$SERDES_SOURCE
     if [ ! -f $PATCHED_MARK ] && [ $SERDES_SOURCE = "libserdes-7.3.1" ]; then
         apply_patch -p0 $TP_PATCH_DIR/libserdes-7.3.1.patch
+        apply_patch -p1 $TP_PATCH_DIR/libserdes-7.3.1-call-once.patch
         touch $PATCHED_MARK
     fi
     echo "Finished patching $SERDES_SOURCE"
