@@ -78,7 +78,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
         typeToActionList.put(ObjectType.VIEW, Lists.newArrayList(
                 PrivilegeType.SELECT,
                 PrivilegeType.ALTER,
-                PrivilegeType.DROP));
+                PrivilegeType.DROP,
+                PrivilegeType.EXPORT));
 
         typeToActionList.put(ObjectType.CATALOG, Lists.newArrayList(
                 PrivilegeType.USAGE,
@@ -90,7 +91,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 PrivilegeType.ALTER,
                 PrivilegeType.REFRESH,
                 PrivilegeType.DROP,
-                PrivilegeType.SELECT));
+                PrivilegeType.SELECT,
+                PrivilegeType.EXPORT));
 
         typeToActionList.put(ObjectType.FUNCTION, Lists.newArrayList(
                 PrivilegeType.USAGE,
