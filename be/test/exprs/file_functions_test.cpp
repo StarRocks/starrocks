@@ -60,8 +60,8 @@ TEST(FileFunctionsTest, ReorderedFieldsAndBinaryPayload) {
                              TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARCHAR)});
     auto input = ColumnHelper::create_column(type, false);
     std::string bytes("a\0b", 3);
-    input->append_datum(Datum(DatumStruct{Datum(Slice(bytes)), Datum(), Datum(), Datum(Slice("opaque")),
-                                          Datum(), Datum(Slice("arbitrary"))}));
+    input->append_datum(Datum(DatumStruct{Datum(Slice(bytes)), Datum(), Datum(), Datum(Slice("opaque")), Datum(),
+                                          Datum(Slice("arbitrary"))}));
     input->append_datum(Datum(DatumStruct{Datum(), Datum(std::numeric_limits<int64_t>::max()),
                                           Datum(Slice("not a URI")), Datum(), Datum(), Datum()}));
     auto context = make_context(type);
@@ -245,10 +245,10 @@ TEST_P(FileConstructorIsolationTest, FilterSourceAndResultTogether) {
                 EXPECT_NE(down_cast<const NullableColumn*>(input.get())->null_column().get(),
                           down_cast<const NullableColumn*>(output.get())->null_column().get());
             }
-            const std::array<std::string, 3> expected_input = {
-                    input->debug_item(1), input->debug_item(2), input->debug_item(3)};
-            const std::array<std::string, 3> expected_output = {
-                    output->debug_item(1), output->debug_item(2), output->debug_item(3)};
+            const std::array<std::string, 3> expected_input = {input->debug_item(1), input->debug_item(2),
+                                                               input->debug_item(3)};
+            const std::array<std::string, 3> expected_output = {output->debug_item(1), output->debug_item(2),
+                                                                output->debug_item(3)};
             Chunk chunk;
             chunk.append_column(output_first ? output : input, 0);
             chunk.append_column(output_first ? input : output, 1);
