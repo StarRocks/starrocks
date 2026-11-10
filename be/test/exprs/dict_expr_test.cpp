@@ -269,4 +269,75 @@ TEST_F(DictMappingTest, test_expression_returns_null_for_some_values) {
     EXPECT_EQ(nullable_result->get(3).get_slice(), "ok");
 }
 
+TEST_F(DictMappingTest, test_low_card_dict_output_reserves_overflow_padding) {
+    auto origin = pool.add(new ProvideExpr([](const ColumnPtr& column) {
+        ColumnViewer<TYPE_VARCHAR> viewer(column);
+        ColumnBuilder<TYPE_VARCHAR> builder(column->size());
+        size_t num_rows = column->size();
+        for (size_t i = 0; i < num_rows; ++i) {
+            if (viewer.is_null(i)) {
+                builder.append_null();
+            } else {
+                builder.append("mapped_" + viewer.value(i).to_string());
+            }
+        }
+        return builder.build(false);
+    }));
+    auto pl = pool.add(new PlaceHolderRef(node));
+    origin->add_child(pl);
+
+    TExprNode dict_node = node;
+    dict_node.type.types[0].scalar_type.__set_type(TPrimitiveType::INT);
+
+    auto slot = pool.add(new ColumnRef(TYPE_INT_DESC, 1));
+    auto* mapping_expr = pool.add(new DictMappingExpr(dict_node));
+    mapping_expr->set_output_id(2);
+    dict_expr = mapping_expr;
+    context = pool.add(new ExprContext(dict_expr));
+    dict_expr->add_child(slot);
+    dict_expr->add_child(origin);
+
+    size_t allocated_before = state.instance_mem_pool()->total_allocated_bytes();
+    ASSERT_OK(context->prepare(&state));
+    ASSERT_OK(context->open(&state));
+    size_t allocated_after = state.instance_mem_pool()->total_allocated_bytes();
+    EXPECT_GT(allocated_after, allocated_before);
+
+    const auto& dict_maps = _fragment_dict_state->query_global_dicts();
+    auto map_it = dict_maps.find(2);
+    ASSERT_NE(map_it, dict_maps.end());
+    const auto& forward_map = map_it->second.first;
+    const auto& reverse_map = map_it->second.second;
+    // Dictionary values "1".."4" are mapped to "mapped_1".."mapped_4"; the NULL entry is not inserted.
+    ASSERT_GE(forward_map.size(), 4);
+    ASSERT_EQ(forward_map.size(), reverse_map.size());
+
+    // Look up each key with an independently allocated buffer whose trailing padding differs from the pooled
+    // key's tail, so lookups must only depend on the first `size` bytes.
+    for (const auto& [dict_id, dict_slice] : reverse_map) {
+        std::string padded_key = dict_slice.to_string() + std::string(SLICE_MEMEQUAL_OVERFLOW_PADDING, '\x5A');
+        auto found = forward_map.find(Slice(padded_key.data(), dict_slice.size));
+        ASSERT_NE(found, forward_map.end());
+        EXPECT_EQ(found->second, dict_id);
+    }
+
+    std::string mapped_1 = "mapped_1" + std::string(SLICE_MEMEQUAL_OVERFLOW_PADDING, '\x5A');
+    std::string mapped_3 = "mapped_3" + std::string(SLICE_MEMEQUAL_OVERFLOW_PADDING, '\x5A');
+    auto it_1 = forward_map.find(Slice(mapped_1.data(), 8));
+    auto it_3 = forward_map.find(Slice(mapped_3.data(), 8));
+    ASSERT_NE(it_1, forward_map.end());
+    ASSERT_NE(it_3, forward_map.end());
+
+    auto chunk = std::make_unique<Chunk>();
+    auto dict_column = Int32Column::create();
+    dict_column->get_data().emplace_back(1);
+    dict_column->get_data().emplace_back(3);
+    chunk->append_column(dict_column, 1);
+
+    auto result = context->evaluate(chunk.get());
+    ASSERT_OK(result.status());
+    EXPECT_EQ(result.value()->get(0).get_int32(), it_1->second);
+    EXPECT_EQ(result.value()->get(1).get_int32(), it_3->second);
+}
+
 } // namespace starrocks
