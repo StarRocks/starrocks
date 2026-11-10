@@ -166,6 +166,7 @@ public class FunctionAnalyzer {
             Preconditions.checkState(functionCallExpr.getChild(0).getChild(0) != null,
                     "map_apply's lambda function can not be null");
             functionCallExpr.setType(functionCallExpr.getChild(0).getChild(0).getType());
+            PolymorphicFunctionAnalyzer.checkMapKeyType(functionCallExpr.getType());
         }
 
         if (FunctionSet.INDEX_ONLY_FUNCTIONS.contains(fnName)) {
