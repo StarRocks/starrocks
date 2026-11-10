@@ -959,10 +959,13 @@ public class ColumnTypeConverter {
                                     GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326));
                 }
                 return UnknownType.UNKNOWN_TYPE;
-            case FIXED:
             case GEOMETRY:
-                // External geo metadata is transported separately by IcebergApiConverter.
-                // Recognition must not expose WKB as ordinary SQL binary values.
+                String crs = ((Types.GeometryType) icebergType).crs();
+                GeoTypeDescriptor descriptor = GeoTypeDescriptor.geometry(crs == null ? "OGC:CRS84" : crs);
+                Integer srid = descriptor.srid();
+                return srid != null && srid > 0 ? ScalarType.createGeoType(PrimitiveType.GEOMETRY, descriptor)
+                        : UnknownType.UNKNOWN_TYPE;
+            case FIXED:
                 return UnknownType.UNKNOWN_TYPE;
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
