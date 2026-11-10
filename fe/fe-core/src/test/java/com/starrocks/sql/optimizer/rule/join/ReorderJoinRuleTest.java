@@ -14,9 +14,10 @@
 
 package com.starrocks.sql.optimizer.rule.join;
 
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.JoinOperator;
+import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.JoinOperator;
-import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -32,7 +33,6 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -62,11 +62,11 @@ public class ReorderJoinRuleTest {
         // GIVEN
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         OptimizerContext context = OptimizerFactory.mockContext(ConnectContext.get(), columnRefFactory);
-        ColumnRefOperator leftKey = columnRefFactory.create("left_key", IntegerType.INT, false);
-        ColumnRefOperator rightKey = columnRefFactory.create("right_key", IntegerType.INT, false);
-        ColumnRefOperator unionKey = columnRefFactory.create("union_key", IntegerType.INT, false);
-        ColumnRefOperator unused = columnRefFactory.create("unused", IntegerType.INT, false);
-        ColumnRefOperator joinKey = columnRefFactory.create("join_key", IntegerType.INT, false);
+        ColumnRefOperator leftKey = columnRefFactory.create("left_key", Type.INT, false);
+        ColumnRefOperator rightKey = columnRefFactory.create("right_key", Type.INT, false);
+        ColumnRefOperator unionKey = columnRefFactory.create("union_key", Type.INT, false);
+        ColumnRefOperator unused = columnRefFactory.create("unused", Type.INT, false);
+        ColumnRefOperator joinKey = columnRefFactory.create("join_key", Type.INT, false);
 
         // Projects make the missing statistics extend beyond the union's immediate children.
         OptExpression left = OptExpression.create(new LogicalProjectOperator(Map.of(leftKey, leftKey)),
