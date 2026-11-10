@@ -175,7 +175,7 @@ TEST_F(TableFunctionOperatorTest, key_partition_exchanger) {
     auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(4096, 134217728);
 
     ChunkPtr chunk = std::make_shared<Chunk>();
-    auto c = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true);
+    auto c = ColumnHelper::create_column(TYPE_INT_DESC, true);
     c->append_datum(Datum(1));
     c->append_datum(Datum(2));
     c->append_datum(Datum(1));

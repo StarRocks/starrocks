@@ -92,8 +92,11 @@ jobs:
           cd ci-tool
           ./scripts/check-testcase.sh
 
-      - name: Check Feature Issue
+      - name: Check Linked Issue
         id: check_issue
+        env:
+          # off / warn / enforce; unset = off. Logic lives in ci-tool (scripts/get_pr_issue.py).
+          ISSUE_CHECK_MODE: ${{ vars.ISSUE_CHECK_MODE }}
         run: |
           cd ci-tool
           python3 scripts/get_pr_issue.py check_issue ${GITHUB_REPOSITORY} ${PR_NUMBER}
@@ -952,7 +955,7 @@ jobs:
           if [[ -e be-path-filter ]]; then
             cd be-path-filter/; ls;
             echo "src_filter=`cat src_filter.txt`" >> $GITHUB_OUTPUT
-            echo "test_filter.txt=`cat test_filter.txt`" >> $GITHUB_OUTPUT
+            echo "test_filter=`cat test_filter.txt`" >> $GITHUB_OUTPUT
             echo "thirdparty_filter=`cat thirdparty_filter.txt`" >> $GITHUB_OUTPUT
           fi
 
@@ -963,17 +966,12 @@ jobs:
           if [[ -e fe-path-filter ]]; then
             cd fe-path-filter/; ls;
             echo "src_filter=`cat src_filter.txt`" >> $GITHUB_OUTPUT
-            echo "test_filter.txt=`cat test_filter.txt`" >> $GITHUB_OUTPUT
+            echo "test_filter=`cat test_filter.txt`" >> $GITHUB_OUTPUT
             echo "java_filter=`cat java_filter.txt`" >> $GITHUB_OUTPUT
             echo "extension_filter=`cat extension_filter.txt`" >> $GITHUB_OUTPUT
             echo "pom_filter=`cat pom_filter.txt`" >> $GITHUB_OUTPUT
           fi
 
-      - name: Checkout Code
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.base_ref }}
-          
       - name: UPDATE ECI & RUN BUILD
         id: run_build
         shell: bash
@@ -986,6 +984,20 @@ jobs:
           pr_fe_change: ${{ steps.parsing-fe-path-filter.outputs.src_filter }}
           pr_test_change: ${{ needs.test-checker.outputs.test_change }}
         run: |
+          if [[ "${sys_test_need}" == "" ]]; then
+            if [[ "${{ env.pr_pom_change}}" == 'true' || "${{ env.pr_be_change}}" == 'true' || "${{ env.pr_fe_change}}" == 'true' || "${{ env.pr_test_change }}" == 'true' ]]; then
+              sys_test_need=true
+            fi
+          fi
+          echo "sys_test_need=${sys_test_need}" >> $GITHUB_OUTPUT
+
+          # The package only feeds DEPLOY SR and the system tests behind it, which run
+          # only when sys_test_need is true; a PR that touches UT sources alone needs none.
+          if [[ "${sys_test_need}" != 'true' ]]; then
+            echo "No FE/BE source, pom or test/ change in this PR; skip the build."
+            exit 0
+          fi
+
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ steps.parsing-be-path-filter.outputs.thirdparty_filter }}" == 'true' ]]; then
             export image_cache_id=${IMAGE_CACHE_ID}
@@ -994,17 +1006,9 @@ jobs:
 
           ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO} --with-gcov --with-trivy
 
-          if [[ "${sys_test_need}" == "" ]]; then
-            if [[ "${{ env.pr_pom_change}}" == 'true' || "${{ env.pr_be_change}}" == 'true' || "${{ env.pr_fe_change}}" == 'true' || "${{ env.pr_test_change }}" == 'true' ]]; then
-              echo "sys_test_need=true" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "sys_test_need=${sys_test_need}" >> $GITHUB_OUTPUT
-          fi
-
       - name: build result
         id: build_result
-        if: steps.run_build.outcome == 'success'
+        if: steps.run_build.outcome == 'success' && steps.run_build.outputs.sys_test_need == 'true'
         run: |
           echo ${{ steps.run_build.outputs.BE_OUTPUT_TAR }}
           echo ${{ steps.run_build.outputs.FE_OUTPUT_TAR }}
@@ -1211,7 +1215,17 @@ jobs:
           git config --global user.name "wanpengfei-git";
           git config --global user.email "wanpengfei91@163.com";
           git checkout $BRANCH;
-          git reset ${BASE_VERSION} --hard || true;
+          # BASE_VERSION comes from the build job. When it is empty this used to
+          # be `git reset --hard || true` -- a no-op reset to the branch tip,
+          # silently swallowed -- so the suite ran against "latest main + PR"
+          # while the run still reported a base-version build. A transient
+          # GitHub API error in the build was enough to trigger it, and the
+          # resulting failures looked like they belonged to the PR.
+          if [[ -z "${BASE_VERSION}" ]]; then
+            echo "::error::BASE_VERSION is empty; the build job did not resolve a base version. Refusing to test against the branch tip.";
+            exit 1;
+          fi
+          git reset "${BASE_VERSION}" --hard;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
           git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
           git checkout $BRANCH_NAME;

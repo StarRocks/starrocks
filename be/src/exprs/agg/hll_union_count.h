@@ -32,6 +32,9 @@ namespace starrocks {
 class HllUnionCountAggregateFunction final
         : public AggregateFunctionBatchHelper<HyperLogLog, HllUnionCountAggregateFunction> {
 public:
+    // hll_union_agg returns a cardinality (0, never NULL), even over a nullable input or an empty window frame.
+    bool is_result_non_nullable() const override { return true; }
+
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         ctx->add_mem_usage(-this->data(state).mem_usage());
         this->data(state).clear();

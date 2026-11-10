@@ -14,10 +14,36 @@
 
 #pragma once
 
+#include <initializer_list>
+#include <optional>
+#include <vector>
+
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
+#include "types/datum.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
+
+// A NULL row for ColumnTestHelper::build_array_column.
+struct NullArrayRow {};
+
+// One row for ColumnTestHelper::build_array_column: {1, std::nullopt, 3} is an array with a NULL element, {} is an
+// empty array and NullArrayRow{} is a NULL array.
+template <class T>
+class ArrayRow {
+public:
+    ArrayRow(std::initializer_list<std::optional<T>> elements) : _elements(elements) {}
+    ArrayRow(NullArrayRow) : _is_null(true) {}
+
+    bool is_null() const { return _is_null; }
+    const std::vector<std::optional<T>>& elements() const { return _elements; }
+
+private:
+    std::vector<std::optional<T>> _elements;
+    bool _is_null = false;
+};
 
 class ColumnTestHelper {
 public:
@@ -52,9 +78,45 @@ public:
         return NullableColumn::create(std::move(data), std::move(null));
     }
 
+    // Builds a column of |type|, an ARRAY of T, from |rows|. It replaces appending one DatumArray per row, which
+    // instantiates the Datum variant for every element at every call site.
+    template <class T>
+    static MutableColumnPtr build_array_column(const TypeDescriptor& type, bool nullable,
+                                               const std::vector<ArrayRow<T>>& rows) {
+        auto column = ColumnHelper::create_column(type, nullable);
+        for (const auto& row : rows) {
+            if (row.is_null()) {
+                column->append_nulls(1);
+                continue;
+            }
+            DatumArray array;
+            array.reserve(row.elements().size());
+            for (const auto& element : row.elements()) {
+                array.emplace_back(element.has_value() ? Datum(*element) : Datum());
+            }
+            column->append_datum(Datum(std::move(array)));
+        }
+        return column;
+    }
+
     template <LogicalType TYPE>
     static MutableColumnPtr create_nullable_column() {
         return NullableColumn::create(RunTimeColumnType<TYPE>::create(), RunTimeColumnType<TYPE_NULL>::create());
+    }
+
+    // Re-store the offsets of the BinaryColumn under |column|, which may be nullable, in 64-bit storage without
+    // changing their values. This is how a BinaryColumn looks after its payload has crossed 4GB, but it only holds a
+    // few bytes, so tests can cover the 64-bit offset paths without allocating gigabytes.
+    static void force_large_offsets(Column* column) {
+        auto* binary = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(column));
+        const auto& offsets = binary->get_offset();
+        AdaptiveOffsets::Large large_offsets;
+        large_offsets.resize(offsets.size());
+        for (size_t i = 0; i < offsets.size(); ++i) {
+            large_offsets[i] = offsets[i];
+        }
+        binary->get_offset().set_large_buffer(std::move(large_offsets));
+        binary->invalidate_slice_cache();
     }
 };
 

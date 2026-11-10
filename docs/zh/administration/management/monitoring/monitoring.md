@@ -371,7 +371,7 @@ wget https://dl.grafana.com/enterprise/release/grafana-enterprise-10.0.3-1.x86_6
 
 ## 二、核心监控项
 
-为了同时满足开发、运维和 DBA 等需求，StarRocks 提供了大量监控指标。本章节仅介绍部分业务常用的重要报警指标，以及它们的报警规则。其他指标内容，请参考 [监控指标](./metrics.md)。
+为了同时满足开发、运维和 DBA 等需求，StarRocks 提供了大量监控指标。本章节仅介绍部分业务常用的重要报警指标，以及它们的报警规则。其他指标内容，请参考 [监控指标](./metric_details/metric_details.mdx)。
 
 ### 2.1 FE/BE状态监控
 

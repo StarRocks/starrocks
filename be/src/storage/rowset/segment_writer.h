@@ -161,6 +161,13 @@ public:
     // finalize() already reported them.
     uint64_t unreported_index_size() const { return _unreported_small_index_region_size; }
 
+    // Bytes of standalone index files (the vector index .vi) produced by finalize_columns().
+    // They are included in the index_size reported by finalize()/finalize_columns() but do
+    // NOT live in the segment file, so a caller that derives the column-data bytes as
+    // "segment file size - index_size" must add them back, or the result goes negative for
+    // segments whose .vi is larger than their data.
+    uint64_t standalone_index_size() const { return _standalone_index_size; }
+
     const DictColumnsValidMap& global_dict_columns_valid_info() { return _global_dict_columns_valid_info; }
 
     const std::string& segment_path() const;
@@ -186,15 +193,10 @@ public:
     const VariantTuple& get_sort_key_min() { return _sort_key_min; }
     const VariantTuple& get_sort_key_max() { return _sort_key_max; }
 
-    // Transfer sort-key min, max, samples, and interval into a SegmentFileInfo.
-    // Moves _sort_key_samples out; preserves the carrier invariant
-    // (samples.empty() <=> interval == 0). Callers serialize the resulting
-    // SegmentFileInfo to a SegmentMetadataPB via SegmentFileInfo::to_proto().
+    // Transfer the sort-key min and max into a SegmentFileInfo. Callers serialize
+    // the resulting SegmentFileInfo to a SegmentMetadataPB via
+    // SegmentFileInfo::to_proto().
     void write_sort_key_fields_to(SegmentFileInfo& file_info);
-
-    // Accessors for sort-key samples (used in unit tests).
-    int64_t get_sort_key_sample_row_interval() const { return _sort_key_sample_row_interval; }
-    const std::vector<VariantTuple>& get_sort_key_samples() const { return _sort_key_samples; }
 
 private:
     Status _write_small_index_region(uint64_t* index_size);
@@ -218,11 +220,6 @@ private:
 
     SegmentFooterPB _footer;
     std::unique_ptr<ShortKeyIndexBuilder> _index_builder;
-    // Built in addition to _index_builder when _full_sort_key_index is on. Stores the full,
-    // untruncated, all-sort-column order-preserving sort key index in a separate page (footer
-    // field 11). Shares the legacy builder's block geometry (same SeekTuple, same block-boundary
-    // test), so both indexes have one entry per block with matching num_items / rows-per-block.
-    std::unique_ptr<ShortKeyIndexBuilder> _full_sort_key_index_builder;
     std::vector<std::unique_ptr<ColumnWriter>> _column_writers;
     // Ordinal-index builders taken from column writers that have otherwise finished, accumulated
     // across every finalize_columns() call and flushed as one contiguous region by
@@ -250,28 +247,15 @@ private:
     // The horizontal path reports them through finalize()'s index_size and leaves this at zero,
     // so a caller adding both can never double count.
     uint64_t _unreported_small_index_region_size = 0;
+    // Accumulated size of standalone index files written by finalize_columns(); see
+    // standalone_index_size().
+    uint64_t _standalone_index_size = 0;
     std::vector<uint32_t> _column_indexes;
     bool _has_key = true;
     std::vector<uint32_t> _sort_column_indexes;
     VariantTuple _sort_key_min;
     VariantTuple _sort_key_max;
 
-    // Snapshot of config::enable_full_sort_key_index && is_full_sort_key_encodable(...) (see
-    // storage/full_sort_key_codec.h) for the tablet schema's sort key columns, captured once at
-    // construction (in the constructor init list). Read exactly once so a mid-write mutable-config
-    // toggle cannot mix encodings within a single segment. The codec-support check keeps this false
-    // whenever a sort key column has no registered KeyCoder (e.g. FLOAT/DOUBLE/JSON/complex),
-    // forcing the legacy short-key index + metadata sort-key samples for such sort keys even when
-    // the config is on. When true, the short key index stores the full untruncated sort key (all
-    // sort columns) and metadata sort-key samples are not collected.
-    bool _full_sort_key_index = false;
-
-    // Sort-key sampler state. Armed at most once, on the first init() call
-    // with has_key=true and non-empty _sort_column_indexes. Preserved across
-    // vertical-writer non-key column-group re-init calls.
-    std::vector<VariantTuple> _sort_key_samples;
-    int64_t _next_sort_key_sample_row_index = 0;
-    int64_t _sort_key_sample_row_interval = 0; // 0 = disabled / not yet armed
     std::unique_ptr<Schema> _schema_without_full_row_column;
 
     // num rows written when appending [partial] columns

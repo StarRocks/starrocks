@@ -102,6 +102,75 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
         addRangePartition(tableName, "p4", "2024-02-01", "2024-02-02");
     }
 
+    /**
+     * str2date(dt, '%Y-%m-%d') over a DATE column is cast(dt as varchar) underneath. That cast keeps
+     * the order, and under an equality the order does not matter anyway, so neither condition may be
+     * refused as non-monotonic.
+     */
+    @Test
+    public void testDropPartitionsWithDateRenderedAsText() {
+        starRocksAssert.withTable(R1, (obj) -> {
+            String tableName = (String) obj;
+            OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
+            Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
+
+            // outside every partition: accepted, drops nothing
+            starRocksAssert.alterTable(String.format("alter table %s DROP PARTITIONS " +
+                    "WHERE str2date(dt, '%%Y-%%m-%%d') = '2020-07-07';", tableName));
+            Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
+
+            starRocksAssert.alterTable(String.format("alter table %s DROP PARTITIONS " +
+                    "WHERE str2date(dt, '%%Y-%%m-%%d') >= '2022-03-01';", tableName));
+            Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
+
+            // a number rendered as text does not keep its order, so a range over it is still refused
+            Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                    String.format("alter table %s DROP PARTITIONS " +
+                            "WHERE cast(cast(dt as bigint) as varchar) >= '20220201';", tableName)));
+            Assertions.assertTrue(e.getMessage().contains("monotonic"), e.getMessage());
+            Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
+        });
+    }
+
+    /**
+     * The widened deduction broke RANGE tables as well, in the other direction: c1 >= '2024-01-15'
+     * became c2 >= '2024-01-01', whose negation c2 < '2024-01-01' misses pjan, so pjan was dropped
+     * with the 1st to the 14th of January in it. Only the partition expression itself is accepted.
+     */
+    @Test
+    public void testDropPartitionsBySourceColumnOfGeneratedRangeColumn() {
+        String sql = "CREATE TABLE r_gen (\n" +
+                "    c1 date NOT NULL,\n" +
+                "    c2 date NULL AS date_trunc('month', c1)\n" +
+                ")\n" +
+                "DUPLICATE KEY(c1)\n" +
+                "PARTITION BY RANGE(c2)\n" +
+                "(\n" +
+                "    PARTITION pdec VALUES [('2023-12-01'), ('2023-12-02')),\n" +
+                "    PARTITION pjan VALUES [('2024-01-01'), ('2024-01-02')),\n" +
+                "    PARTITION pfeb VALUES [('2024-02-01'), ('2024-02-02'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(c1) BUCKETS 1\n" +
+                "PROPERTIES('replication_num' = '1');";
+        starRocksAssert.withTable(sql, (obj) -> {
+            String tableName = (String) obj;
+            OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
+            Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
+
+            for (String where : List.of("c1 >= '2024-01-15'", "c1 < '2024-01-15'")) {
+                Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                        String.format("alter table %s DROP PARTITIONS WHERE %s;", tableName, where)));
+                Assertions.assertTrue(e.getMessage().contains("Column `c1` in the partition condition is not " +
+                        "a table's partition expression"), e.getMessage());
+                Assertions.assertEquals(3, olapTable.getVisiblePartitions().size(), where);
+            }
+
+            starRocksAssert.alterTable(String.format("alter table %s DROP PARTITIONS WHERE " +
+                    "date_trunc('month', c1) >= '2024-02-01';", tableName));
+            Assertions.assertEquals(2, olapTable.getVisiblePartitions().size());
+        });
+    }
+
     @Test
     public void testDropPartitionsWithRangeTable1() {
         starRocksAssert.withTable(R1, (obj) -> {

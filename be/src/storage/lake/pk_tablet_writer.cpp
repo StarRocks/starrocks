@@ -240,7 +240,7 @@ Status HorizontalPkTabletWriter::build_del_tombstone_sstable(const Column& delet
         std::sort(sorted.begin(), sorted.end(), less);
         sst_keys = sorted.data();
     }
-    auto sst_name = gen_sst_filename();
+    auto sst_name = gen_sst_filename(_txn_id);
     WritableFileOptions sst_wopts;
     std::string sst_encryption_meta;
     if (config::enable_transparent_data_encryption) {
@@ -273,9 +273,10 @@ Status HorizontalPkTabletWriter::reset_segment_writer(bool eos) {
             if (tablet_schema()->has_separate_sort_key()) {
                 // Separate sort key: primary keys arrive in sort-key (not PK) order, so buffer+sort
                 // them in the unsort writer instead of streaming into a sorted SST.
-                _pk_sst_writer = std::make_unique<PkTabletUnsortSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+                _pk_sst_writer =
+                        std::make_unique<PkTabletUnsortSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id, _txn_id);
             } else {
-                _pk_sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+                _pk_sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id, _txn_id);
             }
         } else {
             _pk_sst_writer = std::make_unique<DefaultSSTWriter>();
@@ -392,9 +393,10 @@ Status VerticalPkTabletWriter::write_columns(const Chunk& data, const std::vecto
                 // column group (appended after the sort-key columns), so this writer sees them here
                 // but not at chunk positions [0, num_key). The unsort writer buffers+sorts the PKs
                 // (they arrive in sort-key order) and projects them via `column_indexes`.
-                sst_writer = std::make_unique<PkTabletUnsortSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+                sst_writer =
+                        std::make_unique<PkTabletUnsortSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id, _txn_id);
             } else {
-                sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id);
+                sst_writer = std::make_unique<PkTabletSSTWriter>(tablet_schema(), _tablet_mgr, _tablet_id, _txn_id);
             }
         } else {
             sst_writer = std::make_unique<DefaultSSTWriter>();

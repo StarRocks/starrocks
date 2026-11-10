@@ -125,6 +125,8 @@ private:
         bool filter_by_eval = false;
     };
     PartitionFilter _partition_filter;
+    // Scan ranges skipped at open because a conjunct or a runtime filter rejects their partition values.
+    RuntimeProfile::Counter* _scan_ranges_pruned_by_partition_value_counter = nullptr;
 
     bool _no_more_chunks = false;
 };

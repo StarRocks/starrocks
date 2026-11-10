@@ -74,6 +74,12 @@ public:
     // or no longer maps to `segment`.
     bool update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment);
 
+    // Replace only the entry that still points to expected. A failed comparison
+    // neither inserts replacement nor changes the existing entry or its charge.
+    // Readers holding the old Segment remain valid after a successful replacement.
+    bool replace_segment_if_matches(std::string_view key, const Segment* expected,
+                                    const std::shared_ptr<Segment>& replacement);
+
     // cache the segment if the given key not exists in the cache, returns the segment shared_ptr stored in the cache.
     std::shared_ptr<Segment> cache_segment_if_absent(std::string_view key, const std::shared_ptr<Segment>& segment);
 
@@ -96,7 +102,7 @@ private:
 
     void insert(std::string_view key, CacheValue* ptr, size_t size);
 
-    // No metacache-level lock: the compare-and-insert needed by cache_segment_if_absent()
+    // No metacache-level lock: conditional replacement, the compare-and-insert needed by cache_segment_if_absent()
     // and the in-place charge update needed by update_segment_cache_size() are provided
     // atomically by the underlying sharded cache. Keeping the cache lock as the only lock
     // also keeps cached value destructors (notably ~Segment) off every lock, because

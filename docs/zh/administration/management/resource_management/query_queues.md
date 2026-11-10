@@ -75,7 +75,7 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 :::note
 
-- 启用 Query Queue v2 后，不再支持通过 `query_queue_concurrency_limit`、`query_queue_mem_used_pct_limit` 和 `query_queue_cpu_used_permille_limit` 触发排队。
+- 启用 Query Queue v2 后，不再支持通过 `query_queue_cpu_used_permille_limit` 触发排队，`query_queue_mem_used_pct_limit` 仍然生效。详细信息，参见 [内存准入](#内存准入)。
 - 默认设置下，BE 每隔一秒向 FE 报告资源使用情况。您可以通过设置 BE 配置项 `report_resource_usage_interval_ms` 来更改此间隔时间。
 
 :::
@@ -143,11 +143,12 @@ Query Queue v2 通过 FE 配置项启用和调整。其中，修改 `enable_quer
 | `query_queue_v2_schedule_strategy` | `SWRR` | Query Queue V2 对等待中的查询进行排序时使用的调度策略。支持的取值（不区分大小写）包括：`SWRR`（Smooth Weighted Round Robin，默认值），适用于需要公平加权调度的混合工作负载；以及 `SJF`（Short Job First + Aging），优先调度短任务，同时通过 Aging 机制避免任务饥饿。该配置项通过大小写不敏感的枚举解析；如果指定了无法识别的值，系统会记录错误日志并回退到默认调度策略。该配置仅在启用 Query Queue V2 时生效，并与 `query_queue_v2_concurrency_level` 等 V2 容量配置共同影响调度行为。 |
 | `query_queue_v2_mem_bytes_per_slot` | `0` | 基于内存成本估算策略（MBE）使用的每 Slot 内存目标值。当 `query_queue_slots_estimator_strategy` 设置为 `MBE` 时，总 Slot 数由 Warehouse 的内存预算计算得到，而单个查询所需的 Slot 数由其总内存成本除以该值计算，并限制在 `number_of_workers * max(1, pipeline_dop / 2)` 以内。如果该值小于等于 0，则 Query Queue V2 会使用每个 Worker 每个 CPU Core 的平均可用内存作为默认值。 |
 | `query_queue_v2_cpu_costs_per_slot` | `1000000000` | 基于 CPU 成本估算策略（CBE）使用的每 Slot CPU 成本阈值，用于根据查询执行计划的 CPU 成本估算所需的 Slot 数。调度器按照 `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)` 计算 Slot 数，并将结果限制在 `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]` 范围内。如果该值小于等于 0，则会自动规范化为 `1`。增大该值会减少每个查询分配的 Slot 数，从而提高整体并发能力；减小该值则会增加每个查询分配的 Slot 数，从而降低并发能力。 |
+| `query_queue_mem_used_pct_limit` | `0` | 全局会话变量。节点的内存使用率阈值，以节点内存上限的比例表示。当任一存活节点的进程内存使用率达到该值时，新查询在队列中等待。取值范围：[0, 1]。`0` 表示不做内存准入。详细信息，参见 [内存准入](#内存准入)。 |
 | `query_queue_concurrency_limit` | `0` | 单个 BE 上允许同时运行的查询数上限。仅当该值大于 `0` 时才生效。设置为 `0` 表示不限制并发查询数量。 |
 
 :::note
 
-`query_queue_mem_used_pct_limit` 和 `query_queue_cpu_used_permille_limit` 仅适用于 Query Queue v1。启用 Query Queue v2 后，上述参数不再生效。
+`query_queue_cpu_used_permille_limit` 仅适用于 Query Queue v1。Query Queue v2 如何应用 `query_queue_mem_used_pct_limit`，参见 [内存准入](#内存准入)。
 
 :::
 
@@ -162,7 +163,7 @@ Query Queue v2 将 BE 资源表示为逻辑 Slot：
 
 当一个 Query 需要的 Slot 数量超过当前剩余的 Slot 数量时，该 Query 会进入队列等待。Query Queue v2 会优先满足 Slot 需求量较小的 Query，使小查询可以先获得资源，避免大查询长期占用队首导致后续小查询被阻塞，即队头阻塞（Head-of-line blocking）问题。
 
-整个排队逻辑都在 FE 上完成，包括设置集群总 Slot 数量、估算 Query 需要的 Slot 数量，以及决定优先满足哪个 Query 的 Slot 需求。Query Queue v2 不会根据 BE 的实际资源使用情况进行调度。
+整个排队逻辑都在 FE 上完成，包括设置集群总 Slot 数量、估算 Query 需要的 Slot 数量，以及决定优先满足哪个 Query 的 Slot 需求。Slot 调度不依赖 BE 的实际资源使用情况。唯一取自实际用量的输入是可选的内存使用率阈值 `query_queue_mem_used_pct_limit`：当有节点的内存使用过高时，新查询会等待。详细信息，参见 [内存准入](#内存准入)。
 
 ### 选择估算策略
 
@@ -267,6 +268,71 @@ ALTER WAREHOUSE default_warehouse SET ("query_queue_concurrency_limit" = "8");
 ```
 
 建议优先使用 `query_queue_v2_concurrency_level` 调整资源容量。只有在需要显式限制同时运行的查询数量时，才使用 `query_queue_concurrency_limit`。
+
+### 内存准入
+
+Slot 并不衡量查询实际使用的内存。内存准入通过以下两项设置控制内存：
+
+- `query_queue_mem_used_pct_limit`：节点的内存使用率阈值。当任一存活节点的进程内存使用量达到该节点内存上限的这一比例时，新查询会在队列中等待。它与 Query Queue v1 使用的是同一个全局会话变量。
+- `query_mem_limit`：已有的会话变量，用于设置每个 BE 节点上单个查询的内存限制。
+
+`query_queue_mem_used_pct_limit` 默认为 `0`，表示不会有查询因内存而等待。请使用 `SET GLOBAL` 设置。
+
+#### 内存使用率阈值
+
+`query_queue_mem_used_pct_limit` 是 [0, 1] 范围内的小数，例如 `0.8` 表示 80%。它与每个节点的内存使用率比较：节点的进程内存使用量除以节点的内存上限。进程内存不仅包括查询，还包括导入、Compaction、元数据以及内存数据缓存。查询所在的查询池或 BE 进程任一方内存耗尽，查询都会失败，因此按进程内存比较能同时为这两道上限留出缓冲，在节点内存耗尽之前就让新查询等待。
+
+内存使用率阈值的工作方式如下：
+
+- 每个 BE 和 CN 节点每秒上报一次内存使用情况，间隔由 BE 配置项 `report_resource_usage_interval_ms` 设置。只有 Leader FE 接收这些上报，并由 Leader FE 做出准入决策。
+- 当任一存活节点的内存使用率达到或超过阈值时，新查询在队列中等待。正在运行的查询不受影响。所有节点都回落到阈值以下后，排队的查询会重新被放行。该判断是二值的：两种状态之间没有渐进式限流。
+- 内存使用率阈值与 Slot 池和 `query_queue_concurrency_limit` 一起检查。只有三者都允许时，查询才会被放行。
+- 当没有经队列放行、正在运行的查询时，即使有节点超过阈值，仍会放行一个查询。这部分内存可能被导入、缓存或绕过队列的查询占用，让排队的查询继续等待无法释放它。
+- 最近一次上报早于全局变量 `query_queue_fresh_resource_usage_interval_ms`（默认为 `5000` 毫秒）的节点不参与判断，以免停止上报的节点让新查询一直等待。不存活的节点同样不参与判断。
+- 内存使用率阈值不读取、也不依赖资源组。
+
+内存准入是 Query Queue v2 准入决策的一部分，因此只作用于经过查询队列的查询。在存算一体集群中，这些节点为集群中的所有 BE 和 CN 节点；在存算分离集群中，为集群中的所有 CN 节点。
+
+#### 选择阈值
+
+进程内存中通常有很大一部分是内存数据缓存，其中保存查询从 Segment 文件中读取并解压后的页。它的大小受 BE 配置项 `datacache_mem_size` 限制（默认为进程内存上限的 `20%`），会随查询读取数据而增长。进程内存较高时，BE 会让出这部分内存：超过 BE 配置项 `memory_high_level`（默认为进程内存上限的 `75`%）时，BE 逐步淘汰缓存；超过 `memory_urgent_level`（默认为 `85`）时，BE 立即收缩缓存。
+
+建议阈值设置在 `0.75` 到 `0.85` 之间：
+
+- 在这个范围内，当查询需要更多内存时，进程内存使用率一超过 75%，缓存就开始让出内存，新查询只需等到缓存收缩完成。
+- 低于 `0.75` 时，BE 不会释放缓存，缓存较多的节点可能让新查询一直等待。此时集群只能在没有查询运行时一次放行一个查询。
+- 阈值越低，已在运行的查询能继续增长的空间越大。在除查询之外占用内存很少的节点上，距离查询池上限（默认为进程内存上限的 90%，由 BE 配置项 `query_max_memory_limit_percent` 设置）只剩 0.9 减去阈值的空间。
+
+#### 每个节点上的单查询内存限制
+
+会话变量 `query_mem_limit` 用于设置每个 BE 节点上单个查询的内存限制，单位为字节。默认值 `0` 表示没有限制。如需仅在当前会话生效，请执行 `SET query_mem_limit = <bytes>;`；如需在后续所有新的会话中生效，请执行 `SET GLOBAL query_mem_limit = <bytes>;`。详细信息，参见 [query_mem_limit](../../../sql-reference/System_variable.md#query_mem_limit)。
+
+在每个节点上，BE 取 `query_mem_limit`、资源组属性 `big_query_mem_limit` 以及父级内存追踪器上限中的最小值。当查询超出 `query_mem_limit` 时，报错信息中包含 `Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.`。
+
+#### 配置内存准入
+
+以下示例设置内存使用率阈值：
+
+```SQL
+SET GLOBAL query_queue_mem_used_pct_limit = 0.8;
+```
+
+以下示例在后续所有新的会话中，将每个查询在每个 BE 节点上的内存限制为 8 GB：
+
+```SQL
+SET GLOBAL query_mem_limit = 8589934592;
+```
+
+设置 `query_queue_mem_used_pct_limit` 时，请同时设置 `query_mem_limit`。原因参见 [使用限制](#使用限制)。
+
+#### 监控内存准入
+
+如需查看与阈值比较的内存使用率，请在存算一体集群中执行 [SHOW BACKENDS](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_BACKENDS.md)，在存算分离集群中执行 [SHOW COMPUTE NODES](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_COMPUTE_NODES.md)。`MemUsedPct` 列为各节点的内存使用量占其内存上限的百分比。只有 Leader FE 接收节点上报的内存使用情况，因此请在 Leader FE 上执行该语句。
+
+#### 使用限制
+
+- 准入不预留内存。新放行的查询只有在分配内存、且下一次上报到达后才会计入用量，因此同一批次放行的多个查询可能共同超过阈值。Slot 池和 `query_queue_concurrency_limit` 限制一个批次放行的查询数量，但只有 `query_mem_limit` 能限制每个查询在单个节点上使用的内存。因此，设置了内存使用率阈值但 `query_mem_limit` 的全局默认值为 `0` 时，FE 日志会针对每个阈值记录一次告警。
+- 只要有一个节点达到或超过阈值，所有新查询都会等待，即使其他节点仍有空闲内存，因为查询通常会在所有节点上运行。
 
 ## 观测查询队列
 

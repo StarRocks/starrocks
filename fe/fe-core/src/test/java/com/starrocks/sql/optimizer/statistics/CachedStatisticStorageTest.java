@@ -25,6 +25,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.statistics.ConnectorColumnStatsCacheLoader;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
@@ -39,6 +40,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
@@ -55,6 +57,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -62,6 +65,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import static com.starrocks.metric.MetricRepo.SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL;
@@ -286,6 +291,67 @@ public class CachedStatisticStorageTest {
                 "c1")).get().getColumnStatistic().getMaxValue(), 0.0001);
         Assertions.assertEquals(0, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
                 "c1")).get().getColumnStatistic().getMinValue(), 0.0001);
+    }
+
+    @Test
+    public void testConnectorTableStatisticsResolveAnalyzeMetaOnce() {
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "hive0", "partitioned_db", "t1");
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public static boolean checkStatisticTableStateNormal() {
+                return true;
+            }
+        };
+        new MockUp<ConnectorColumnStatsCacheLoader>() {
+            @Mock
+            public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID,
+                                                            List<String> columns) {
+                List<TStatisticData> rows = new ArrayList<>();
+                for (String column : columns) {
+                    TStatisticData data = new TStatisticData();
+                    data.setColumnName(column);
+                    data.setRowCount(5);
+                    data.setDataSize(100);
+                    data.setCountDistinct(5);
+                    data.setNullCount(0);
+                    data.setMin("0");
+                    data.setMax("10");
+                    rows.add(data);
+                }
+                return rows;
+            }
+        };
+        // Resolving the analyze metadata rebuilds the table; it must happen once per call, not once per column.
+        AtomicInteger lookups = new AtomicInteger();
+        new MockUp<StatisticsUtils>() {
+            @Mock
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
+                return table;
+            }
+
+            @Mock
+            public ExternalBasicStatsMeta getExternalBasicStatsMeta(Table t) {
+                lookups.incrementAndGet();
+                return null;
+            }
+        };
+
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        // Load inline so the first lookup already finds the statistics.
+        Deencapsulation.setField(storage, "connectorTableCachedStatistics",
+                Caffeine.newBuilder().executor(Runnable::run).buildAsync(new ConnectorColumnStatsCacheLoader()));
+        try {
+            List<ConnectorTableColumnStats> stats =
+                    storage.getConnectorTableStatistics(table, ImmutableList.of("c1", "c2", "c3"));
+            Assertions.assertEquals(3, stats.size());
+            Assertions.assertEquals(1, lookups.get());
+            // No analyze metadata still means unknown for every column, as before.
+            Assertions.assertTrue(stats.stream().allMatch(ConnectorTableColumnStats::isUnknown));
+        } finally {
+            // The inline load clears the thread's context when it finishes.
+            connectContext.setThreadLocalInfo();
+        }
     }
 
     @Test
@@ -1054,6 +1120,152 @@ public class CachedStatisticStorageTest {
             gaugeMetrics.forEach(registry::removeMetrics);
             globalStateMgr.setStatisticStorage(originalStorage);
             Config.enable_statistic_cache_metrics = originalEnabled;
+        }
+    }
+
+    @Test
+    public void testRefreshConnectorTableColumnStatisticsBeforeReady() {
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "hive0", "tpch", "region");
+        AtomicInteger queries = new AtomicInteger();
+        new MockUp<ConnectorColumnStatsCacheLoader>() {
+            @Mock
+            public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID,
+                                                            List<String> columns) {
+                queries.incrementAndGet();
+                TStatisticData data = new TStatisticData();
+                data.setColumnName("r_regionkey");
+                data.setRowCount(5);
+                data.setCountDistinct(5);
+                data.setMin("0");
+                data.setMax("4");
+                return ImmutableList.of(data);
+            }
+        };
+        new MockUp<StatisticsUtils>() {
+            @Mock
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
+                return table;
+            }
+        };
+        AtomicBoolean ready = new AtomicBoolean(false);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isReady() {
+                return ready.get();
+            }
+        };
+
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        ConnectorTableColumnKey key = new ConnectorTableColumnKey(table.getUUID(), "r_regionkey");
+        ConnectorTableColumnStats oldStats = new ConnectorTableColumnStats(
+                ColumnStatistic.builder().setDistinctValuesCount(1).build(), 1, "2024-01-01 01:00:00");
+        cachedStatisticStorage.connectorTableCachedStatistics.synchronous().put(key, Optional.of(oldStats));
+
+        // Replay before ready (startup, or a lagging follower): drop the old value instead of caching an empty one.
+        cachedStatisticStorage.refreshConnectorTableColumnStatistics(table, ImmutableList.of("r_regionkey"), true);
+        Assertions.assertNull(cachedStatisticStorage.connectorTableCachedStatistics.synchronous().getIfPresent(key));
+        Assertions.assertEquals(0, queries.get());
+
+        ready.set(true);
+        cachedStatisticStorage.refreshConnectorTableColumnStatistics(table, ImmutableList.of("r_regionkey"), true);
+        Assertions.assertEquals(1, queries.get());
+        Assertions.assertEquals(5, cachedStatisticStorage.connectorTableCachedStatistics.synchronous()
+                .getIfPresent(key).get().getRowCount());
+    }
+
+    @Test
+    public void testFailedNativeColumnLoadIsNotCached() throws Exception {
+        AtomicInteger queries = new AtomicInteger();
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> queryStatisticSync(ConnectContext context, Long dbId, Long tableId,
+                                                           List<String> columnNames) {
+                if (queries.incrementAndGet() == 1) {
+                    throw new RuntimeException("transient statistics query failure");
+                }
+                return ImmutableList.of();
+            }
+        };
+        boolean enableUnitStatistics = FeConstants.enableUnitStatistics;
+        FeConstants.enableUnitStatistics = false;
+        try {
+            AsyncLoadingCache<ColumnStatsCacheKey, Optional<ColumnStatistic>> cache =
+                    Caffeine.newBuilder().executor(Runnable::run).buildAsync(new ColumnBasicStatsCacheLoader());
+            ColumnStatsCacheKey key = new ColumnStatsCacheKey(1L, "c1");
+
+            // A failed load completes exceptionally and is not cached as "no statistics".
+            Assertions.assertThrows(ExecutionException.class, () -> cache.get(key).get());
+            Assertions.assertNull(cache.synchronous().getIfPresent(key));
+
+            // The next access loads again; a column that really has no statistics is cached as empty.
+            Assertions.assertFalse(cache.get(key).get().isPresent());
+            Assertions.assertEquals(2, queries.get());
+            Assertions.assertNotNull(cache.synchronous().getIfPresent(key));
+        } finally {
+            FeConstants.enableUnitStatistics = enableUnitStatistics;
+        }
+    }
+
+    @Test
+    public void testRefreshConnectorTableColumnStatisticsDropsOldValueWhenNotLoaded() {
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "hive0", "tpch", "region");
+        ConnectorTableColumnKey key = new ConnectorTableColumnKey(table.getUUID(), "r_regionkey");
+        ConnectorTableColumnStats oldStats = new ConnectorTableColumnStats(
+                ColumnStatistic.builder().setDistinctValuesCount(1).build(), 1, "2024-01-01 01:00:00");
+        AtomicBoolean fail = new AtomicBoolean(false);
+        new MockUp<ConnectorColumnStatsCacheLoader>() {
+            // The FE turns not-ready between the ready check in refresh and the load (follower lag): the loader
+            // returns no entries. Or the statistics query fails.
+            @Mock
+            public CompletableFuture<Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>> asyncLoadAll(
+                    Iterable<? extends ConnectorTableColumnKey> keys, java.util.concurrent.Executor executor) {
+                if (fail.get()) {
+                    return CompletableFuture.failedFuture(new RuntimeException("statistics query failure"));
+                }
+                return CompletableFuture.completedFuture(Maps.newHashMap());
+            }
+        };
+
+        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+        for (boolean isSync : new boolean[] {true, false}) {
+            for (boolean failed : new boolean[] {false, true}) {
+                fail.set(failed);
+                cachedStatisticStorage.connectorTableCachedStatistics.synchronous().put(key, Optional.of(oldStats));
+                cachedStatisticStorage.refreshConnectorTableColumnStatistics(table, ImmutableList.of("r_regionkey"),
+                        isSync);
+                Assertions.assertNull(
+                        cachedStatisticStorage.connectorTableCachedStatistics.synchronous().getIfPresent(key),
+                        "isSync=" + isSync + ", failed=" + failed);
+            }
+        }
+    }
+
+    @Test
+    public void testRefreshNativeColumnStatisticsDropsOldValueOnFailure() {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> queryStatisticSync(ConnectContext context, Long dbId, Long tableId,
+                                                           List<String> columnNames) {
+                throw new RuntimeException("statistics query failure");
+            }
+        };
+        boolean enableUnitStatistics = FeConstants.enableUnitStatistics;
+        FeConstants.enableUnitStatistics = false;
+        try {
+            CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
+            ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), "v1");
+            cachedStatisticStorage.columnStatistics.synchronous()
+                    .put(key, Optional.of(ColumnStatistic.builder().setDistinctValuesCount(1).build()));
+
+            // Before, the failed refresh hit putAll(null) and left the old value in place as if it were current.
+            cachedStatisticStorage.refreshColumnStatistics(table, ImmutableList.of("v1"), true);
+            Assertions.assertNull(cachedStatisticStorage.columnStatistics.synchronous().getIfPresent(key));
+        } finally {
+            FeConstants.enableUnitStatistics = enableUnitStatistics;
         }
     }
 }

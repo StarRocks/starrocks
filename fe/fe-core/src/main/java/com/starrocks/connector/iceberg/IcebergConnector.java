@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -52,6 +53,7 @@ public class IcebergConnector implements Connector {
     private final String catalogName;
     private IcebergCatalog icebergNativeCatalog;
     private ExecutorService icebergJobPlanningExecutor;
+    private ExecutorService backgroundJobPlanningExecutor;
     private final IcebergCatalogProperties icebergCatalogProperties;
     private final ConnectorProperties connectorProperties;
     private final IcebergProcedureRegistry procedureRegistry;
@@ -126,6 +128,11 @@ public class IcebergConnector implements Connector {
     // icebergNativeCatalog is lazy, mainly to prevent fe restart failure.
     public IcebergCatalog getNativeCatalog() {
         if (icebergNativeCatalog == null) {
+            // Inside the null check, not at the entry: this method is called on every getMetadata,
+            // and once the catalog exists it returns a field. Only the build contacts anything --
+            // REST does GET /v1/config, hive connects to HMS, glue builds an AWS client -- and it
+            // is deliberately lazy so an unreachable metastore cannot stop the FE from starting.
+            BlockingCallValidator.validateNotUnderLock("iceberg-catalog", catalogName);
             IcebergCatalog nativeCatalog = buildIcebergNativeCatalog();
 
             if (icebergCatalogProperties.isEnableIcebergMetadataCache() && !isResourceMappingCatalog(catalogName)) {
@@ -149,8 +156,9 @@ public class IcebergConnector implements Connector {
     }
 
     private ExecutorService buildBackgroundJobPlanningExecutor() {
-        return newWorkerPool(catalogName + "-background-iceberg-worker-pool",
+        backgroundJobPlanningExecutor = newWorkerPool(catalogName + "-background-iceberg-worker-pool",
                 icebergCatalogProperties.getBackgroundIcebergJobPlanningThreadNum());
+        return backgroundJobPlanningExecutor;
     }
 
     private void registerProcedures() {
@@ -164,9 +172,15 @@ public class IcebergConnector implements Connector {
         if (icebergJobPlanningExecutor != null) {
             icebergJobPlanningExecutor.shutdown();
         }
+        if (backgroundJobPlanningExecutor != null) {
+            backgroundJobPlanningExecutor.shutdown();
+        }
         if (commitQueueManager != null) {
             commitQueueManager.shutdownAll();
             LOG.info("IcebergCommitQueueManager shutdown for catalog {}", catalogName);
+        }
+        if (icebergNativeCatalog != null) {
+            icebergNativeCatalog.shutdown();
         }
     }
 

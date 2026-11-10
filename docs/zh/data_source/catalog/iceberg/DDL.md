@@ -272,6 +272,37 @@ REPLACE PARTITION COLUMN day(sale_date) WITH month(sale_date);
 
 ---
 
+## ALTER TABLE（添加或删除嵌套字段）
+
+在 STRUCT 列或其中嵌套的 STRUCT 中添加或删除字段。
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name MODIFY COLUMN column_name
+ADD FIELD field_path field_type [FIRST | AFTER field_name];
+
+ALTER TABLE [catalog.][database.]table_name MODIFY COLUMN column_name
+DROP FIELD field_path;
+```
+
+`field_path` 是字段在列中的路径，例如 `c2.v3`。ARRAY 的元素用 `[*]` 表示，例如 `c2.[*].v3`。
+
+:::note
+对于使用 Hive metastore 的 Catalog，如果 metastore 配置为不允许不兼容的列类型变更（`hive.metastore.disallow.incompatible.col.type.changes`），该变更会被 metastore 拒绝。
+:::
+
+**示例：**
+
+假设列 `fx` 的类型为 `STRUCT<c1 INT, c2 ARRAY<STRUCT<v1 INT>>>`。
+
+```SQL
+-- 在 ARRAY c2 内的 STRUCT 中添加字段 v2
+ALTER TABLE t MODIFY COLUMN fx ADD FIELD c2.[*].v2 STRING AFTER v1;
+-- 删除字段 c1
+ALTER TABLE t MODIFY COLUMN fx DROP FIELD c1;
+```
+
+---
+
 ## DROP TABLE
 
 删除 Iceberg 表。此功能从 v3.1 开始支持。

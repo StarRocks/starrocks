@@ -16,6 +16,7 @@ package com.starrocks.load;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
@@ -37,6 +38,7 @@ import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.persist.SinglePartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -61,9 +63,13 @@ public class PartitionUtils {
                                                           List<Long> tmpPartitionIds,
                                                           DistributionDesc distributionDesc,
                                                           ComputeResource computeResource) throws DdlException {
-        List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .createTempPartitionsFromPartitions(db, targetTable, postfix, sourcePartitionIds,
-                        tmpPartitionIds, distributionDesc, computeResource);
+        LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        // Snapshot the colocation meta group that the lock-free tablet creation below pins the new
+        // shards to; re-validated under the WRITE lock before commit.
+        ColocateTableIndex.GroupId metaGroupColocateGroupId = GlobalStateMgr.getCurrentState()
+                .getColocateTableIndex().getMetaGroupColocateGroupId(targetTable.getId());
+        List<Partition> newTempPartitions = localMetastore.createTempPartitionsFromPartitions(db, targetTable,
+                postfix, sourcePartitionIds, tmpPartitionIds, distributionDesc, computeResource);
         Locker locker = new Locker();
         if (!locker.lockTableAndCheckDbExist(db, targetTable.getId(), LockType.WRITE)) {
             throw new DdlException("create and add partition failed. database:{}" + db.getFullName() + " not exist");
@@ -78,6 +84,7 @@ public class PartitionUtils {
             if (sourcePartitionIds.stream().anyMatch(id -> targetTable.getPartition(id) == null)) {
                 throw new DdlException("create partition failed because src partitions changed");
             }
+            localMetastore.checkIfColocateMetaGroupChange(targetTable, metaGroupColocateGroupId, targetTable.getName());
             List<Partition> sourcePartitions = sourcePartitionIds.stream()
                     .map(targetTable::getPartition).toList();
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();

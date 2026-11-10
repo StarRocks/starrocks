@@ -62,8 +62,13 @@ FlatJsonColumnWriter::FlatJsonColumnWriter(const ColumnWriterOptions& opts, Type
           _wfile(wfile),
           _json_writer(std::move(json_writer)),
           _flat_json_config(opts.flat_json_config),
+          _json_columns_in_segment(opts.json_columns_in_segment),
           _global_dict(opts.flat_json_dicts),
-          _column_name(opts.field_name) {}
+          _column_name(opts.field_name),
+          _use_zstd_compression(opts.use_zstd_compression),
+          _data_page_size(opts.data_page_size),
+          _zstd_compression_dict_sample_bytes(opts.zstd_compression_dict_sample_bytes),
+          _zstd_compression_dict_min_gain(opts.zstd_compression_dict_min_gain) {}
 
 Status FlatJsonColumnWriter::init() {
     _json_meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
@@ -204,8 +209,13 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
         } else {
             opts.meta->set_encoding(EncodingTypePB::DEFAULT_ENCODING);
         }
-        // Inherit both the codec and its level from the parent JSON column: the level must be carried
-        // along, otherwise the sub-column meta reads back level 0 and ZSTD falls back to its default.
+        // Inherit both the codec and its level from the parent JSON column.
+        // ColumnMetaPB.compression_level has no proto default, so a fresh child meta
+        // reads back 0; get_block_compression_codec treats that as out of range and
+        // falls back to the default-level ZSTD instance. The sub-columns would then
+        // silently ignore a table that asked for a specific zstd level, and the
+        // compression dictionary built for the `remain` blob would bake the default
+        // level into its CDict rather than the requested one.
         opts.meta->set_compression(_json_meta->compression());
         opts.meta->set_compression_level(_json_meta->compression_level());
 
@@ -233,13 +243,57 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
             }
         }
 
+        // propagate the compression-dict flag to string/JSON flat sub-columns. The
+        // `remain` blob (TYPE_JSON, DEFAULT/PLAIN encoding) is the primary target.
+        // The write-path sampling gate only fires on PLAIN columns whose first
+        // page reaches the minimum sample size, so setting this on DICT-encoded or
+        // tiny scalar leaves is a harmless no-op.
+        if (_use_zstd_compression && (is_string_type(_flat_types[i]) || _flat_types[i] == LogicalType::TYPE_JSON)) {
+            opts.use_zstd_compression = true;
+            opts.zstd_compression_dict_sample_bytes = _zstd_compression_dict_sample_bytes;
+            // A child gets a fresh ColumnWriterOptions, so without this the "is it worth keeping"
+            // threshold silently reverts to the config value while every other dictionary knob is
+            // inherited from the parent.
+            opts.zstd_compression_dict_min_gain = _zstd_compression_dict_min_gain;
+        }
+        if (_data_page_size > 0) {
+            opts.data_page_size = _data_page_size;
+        }
+
         TabletColumn col(StorageAggregateType::STORAGE_AGGREGATE_NONE, _flat_types[i], true);
         ASSIGN_OR_RETURN(auto fw, ColumnWriter::create(opts, &col, _wfile));
         _flat_writers.emplace_back(std::move(fw));
 
         RETURN_IF_ERROR(_flat_writers[i]->init());
     }
+    _value_stats.assign(_flat_paths.size(), std::nullopt);
+    for (size_t i = 0; i < _flat_paths.size(); i++) {
+        if (_flat_types[i] == LogicalType::TYPE_JSON && !(_has_remain && i == _flat_paths.size() - 1)) {
+            _value_stats[i].emplace();
+        }
+    }
     return Status::OK();
+}
+
+void FlatJsonColumnWriter::_update_value_stats(size_t index, const Column& column) {
+    if (_value_stats[index].has_value()) {
+        _value_stats[index]->update(column);
+    }
+}
+
+void FlatJsonColumnWriter::_save_value_stats() {
+    for (size_t i = 0; i < _value_stats.size() && i < static_cast<size_t>(_json_meta->children_columns_size()); i++) {
+        if (!_value_stats[i].has_value()) {
+            continue;
+        }
+        const auto& stats = *_value_stats[i];
+        auto* pb = _json_meta->mutable_children_columns(i)->mutable_json_meta()->mutable_value_stats();
+        pb->set_json_type(stats.json_type);
+        pb->set_values(stats.values);
+        pb->set_base_type_count(stats.base_type_count);
+        pb->set_max_uint(stats.max_uint);
+        pb->set_min_int(stats.min_int);
+    }
 }
 
 Status FlatJsonColumnWriter::_write_flat_column() {
@@ -258,6 +312,7 @@ Status FlatJsonColumnWriter::_write_flat_column() {
 
     // flat datas
     for (size_t i = 0; i < _flat_columns.size(); i++) {
+        _update_value_stats(i, *_flat_columns[i]);
         RETURN_IF_ERROR(_flat_writers[i]->append(*_flat_columns[i]));
     }
 
@@ -301,6 +356,7 @@ Status FlatJsonColumnWriter::finish() {
         _flat_paths.clear();
         _flat_types.clear();
         _flat_columns.clear();
+        _value_stats.clear();
         _subcolumn_dict_valid.clear();
         _has_remain = false;
         _remain_filter.reset();
@@ -323,6 +379,7 @@ Status FlatJsonColumnWriter::finish() {
             _subcolumn_dict_valid[sub_column_key] = sub_dict_valid;
         }
     }
+    _save_value_stats();
 
     _json_meta->set_total_mem_footprint(total_mem_footprint());
     return Status::OK();

@@ -129,6 +129,15 @@ protected:
         return seg_name;
     }
 
+    std::string generate_sst_file(int64_t txn_id) {
+        auto sst_name = lake::gen_sst_filename(txn_id);
+        auto sst_path = _tablet_mgr->sst_location(_tablet_id, sst_name);
+        ASSIGN_OR_ABORT(auto f, fs::new_writable_file(sst_path));
+        CHECK_OK(f->append(sst_path));
+        CHECK_OK(f->close());
+        return sst_name;
+    }
+
     std::string generate_segment_file_for_tablet(int64_t tablet_id, int64_t txn_id) {
         auto seg_name = lake::gen_segment_filename(txn_id);
         auto seg_path = _tablet_mgr->segment_location(tablet_id, seg_name);
@@ -176,6 +185,42 @@ protected:
         range->set_upper_bound_included(false);
 
         ASSERT_OK(_tablet_mgr->put_tablet_metadata(metadata));
+    }
+
+    // Publishes one op_write onto a range tablet created by create_tablet_metadata_with_range.
+    // |shared| controls whether the written segment carries the shared flag. Mirrors the
+    // range-tablet branch of test_publish_returns_tablet_stats.
+    void publish_range_tablet_segment(int64_t range_tablet_id, bool shared, PublishVersionResponse* response) {
+        auto seg_name = lake::gen_segment_filename(next_id());
+        auto seg_path = _tablet_mgr->segment_location(range_tablet_id, seg_name);
+        {
+            ASSIGN_OR_ABORT(auto f, fs::new_writable_file(seg_path));
+            CHECK_OK(f->append("dummy"));
+            CHECK_OK(f->close());
+        }
+
+        auto txn_id = next_id();
+        TxnLog log;
+        log.set_tablet_id(range_tablet_id);
+        log.set_partition_id(_partition_id);
+        log.set_txn_id(txn_id);
+        auto* rowset = log.mutable_op_write()->mutable_rowset();
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(seg_name);
+        segment_meta->set_size(512);
+        segment_meta->set_num_rows(10);
+        segment_meta->set_shared(shared);
+        rowset->set_data_size(512);
+        rowset->set_num_rows(10);
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(range_tablet_id);
+        request.add_txn_ids(txn_id);
+
+        _lake_service.publish_version(nullptr, &request, response, nullptr);
     }
 
     void create_pk_tablet_with_delvec_range(int64_t tablet_id, int64_t version, int lower_key, int upper_key) {
@@ -437,6 +482,75 @@ TEST_F(LakeServiceTest, test_publish_version_rejects_reshard_split_count_one) {
 
 TEST_F(LakeServiceTest, test_publish_version_rejects_normal_split_count_one) {
     expect_invalid_split_count(false, 1);
+}
+
+TEST_F(LakeServiceTest, test_publish_reshard_unchanged_tablet) {
+    ASSIGN_OR_ABORT(auto original, _tablet_mgr->get_tablet_metadata(_tablet_id, 1));
+    auto base = std::make_shared<TabletMetadataPB>(*original);
+    auto* rowset = base->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(17);
+    rowset->set_data_size(29);
+    rowset->add_segment_metas()->set_filename("unchanged.dat");
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(base));
+
+    // A CN can hold only the indexes left unchanged by a split or merge on another CN.
+    // No txnlog exists for these tablets; they must retain their data at the new version.
+    for (bool aggregate : {false, true}) {
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.set_enable_aggregate_publish(aggregate);
+        request.add_tablet_ids(_tablet_id);
+        auto* txn = request.add_txn_infos();
+        txn->set_txn_id(next_id());
+        txn->set_txn_type(TXN_TABLET_RESHARD);
+        txn->set_gtid(12345);
+
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            brpc::Controller cntl;
+            PublishVersionResponse response;
+            _lake_service.publish_version(&cntl, &request, &response, nullptr);
+            ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+            ASSERT_EQ(0, response.status().status_code());
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.tablet_ranges_size());
+            EXPECT_EQ(aggregate ? 1 : 0, response.tablet_metas_size());
+            TabletMetadataPB metadata;
+            if (aggregate) {
+                metadata.CopyFrom(response.tablet_metas().at(_tablet_id));
+            } else {
+                ASSIGN_OR_ABORT(auto persisted, _tablet_mgr->get_tablet_metadata(_tablet_id, 2));
+                metadata.CopyFrom(*persisted);
+            }
+            EXPECT_EQ(_tablet_id, metadata.id());
+            EXPECT_EQ(2, metadata.version());
+            EXPECT_EQ(12345, metadata.gtid());
+            EXPECT_EQ(base->schema().SerializeAsString(), metadata.schema().SerializeAsString());
+            ASSERT_EQ(1, metadata.rowsets_size());
+            EXPECT_EQ(1, metadata.rowsets(0).id());
+            EXPECT_EQ(17, metadata.rowsets(0).num_rows());
+            EXPECT_EQ(29, metadata.rowsets(0).data_size());
+            ASSERT_EQ(1, metadata.rowsets(0).segment_metas_size());
+            EXPECT_EQ("unchanged.dat", metadata.rowsets(0).segment_metas(0).filename());
+        }
+    }
+    ASSIGN_OR_ABORT(auto unchanged, _tablet_mgr->get_tablet_metadata(_tablet_id, 1));
+    EXPECT_EQ(base->SerializeAsString(), unchanged->SerializeAsString());
+}
+
+TEST_F(LakeServiceTest, test_publish_reshard_rejects_empty_tablets) {
+    brpc::Controller cntl;
+    PublishVersionRequest request;
+    PublishVersionResponse response;
+    request.set_base_version(1);
+    request.set_new_version(2);
+    auto* txn = request.add_txn_infos();
+    txn->set_txn_id(next_id());
+    txn->set_txn_type(TXN_TABLET_RESHARD);
+    _lake_service.publish_version(&cntl, &request, &response, nullptr);
+    EXPECT_TRUE(cntl.Failed());
+    EXPECT_FALSE(_tablet_mgr->get_tablet_metadata(_tablet_id, 2).ok());
 }
 
 TEST_F(LakeServiceTest, test_publish_version_missing_tablet_ids) {
@@ -2150,6 +2264,8 @@ TEST_F(LakeServiceTest, test_abort) {
         log.mutable_op_write()->mutable_rowset()->set_data_size(4096);
         log.mutable_op_write()->mutable_rowset()->set_num_rows(101);
         log.mutable_op_write()->mutable_rowset()->set_overlapped(true);
+        log.mutable_op_write()->add_ssts()->set_name(generate_sst_file(txn_id));
+        log.mutable_op_write()->add_ssts(); // a segment without a pre-built sstable
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
 
         logs.emplace_back(log);
@@ -2169,6 +2285,8 @@ TEST_F(LakeServiceTest, test_abort) {
                 generate_segment_file(txn_id));
         log.mutable_op_compaction()->set_new_segment_offset(0);
         log.mutable_op_compaction()->set_new_segment_count(2);
+        log.mutable_op_compaction()->add_ssts()->set_name(generate_sst_file(txn_id));
+        log.mutable_op_compaction()->add_ssts()->set_name(generate_sst_file(txn_id));
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
 
         logs.emplace_back(log);
@@ -2219,6 +2337,14 @@ TEST_F(LakeServiceTest, test_abort) {
         }
         for (auto&& s : log.op_compaction().output_rowset().segment_metas()) {
             EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s.filename())));
+        }
+        for (auto&& f : log.op_write().ssts()) {
+            if (!f.name().empty()) {
+                EXPECT_FALSE(fs::path_exist(_tablet_mgr->sst_location(_tablet_id, f.name())));
+            }
+        }
+        for (auto&& f : log.op_compaction().ssts()) {
+            EXPECT_FALSE(fs::path_exist(_tablet_mgr->sst_location(_tablet_id, f.name())));
         }
         for (auto&& r : log.op_schema_change().rowsets()) {
             for (auto&& s : r.segment_metas()) {
@@ -4113,6 +4239,65 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
     ASSERT_EQ(0, response.tablet_stats_size());
 }
 
+TEST_F(LakeServiceTest, test_get_tablet_stats_reports_shared_files) {
+    // Publish a version whose single rowset carries one shared segment.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata([&] {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(_tablet_id);
+        metadata->set_version(3);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename("shared_seg.dat");
+        segment->set_shared(true);
+        return metadata;
+    }()));
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(_tablet_id);
+    info->set_version(3);
+
+    _tablet_mgr->metacache()->prune();
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+
+    ASSERT_EQ(1, response.tablet_stats_size());
+    ASSERT_TRUE(response.tablet_stats(0).has_has_shared_files());
+    EXPECT_TRUE(response.tablet_stats(0).has_shared_files());
+}
+
+TEST_F(LakeServiceTest, test_get_tablet_stats_reports_no_shared_files) {
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata([&] {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(_tablet_id);
+        metadata->set_version(4);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename("private_seg.dat");
+        segment->set_shared(false);
+        return metadata;
+    }()));
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(_tablet_id);
+    info->set_version(4);
+
+    _tablet_mgr->metacache()->prune();
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+
+    ASSERT_EQ(1, response.tablet_stats_size());
+    ASSERT_TRUE(response.tablet_stats(0).has_has_shared_files());
+    EXPECT_FALSE(response.tablet_stats(0).has_shared_files());
+}
+
 TEST_F(LakeServiceTest, test_get_tablet_stats_null_thread_pool) {
     SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::get_tablet_stats:thread_pool",
                                           [](void* arg) { *static_cast<ThreadPool**>(arg) = nullptr; });
@@ -4642,7 +4827,7 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
 
         MockClosure closure;
         load_mgr->open(nullptr, request, &response, &closure);
-        ASSERT_TRUE(Awaitility().timeout(60000).until([&] { return closure.has_run(); }));
+        ASSERT_TRUE(Awaitility().timeout(60 * 1000 * 1000).until([&] { return closure.has_run(); }));
         ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
     }
 
@@ -6689,6 +6874,81 @@ TEST_F(LakeServiceTest, test_publish_returns_tablet_stats) {
         ASSERT_NE(it, response.tablet_stats().end()) << "range tablet must have a tablet_stats entry";
         EXPECT_GT(it->second.data_size(), 0) << "data_size must be positive for range tablet";
     }
+}
+
+TEST_F(LakeServiceTest, test_publish_version_reports_shared_files) {
+    int64_t range_tablet_id = next_id();
+    create_tablet_metadata_with_range(range_tablet_id, /*version=*/1, /*lower=*/0, /*upper=*/100);
+
+    PublishVersionResponse response;
+    publish_range_tablet_segment(range_tablet_id, /*shared=*/true, &response);
+
+    ASSERT_EQ(0, response.failed_tablets_size()) << response.status().error_msgs(0);
+    auto it = response.tablet_stats().find(range_tablet_id);
+    ASSERT_NE(it, response.tablet_stats().end());
+    ASSERT_TRUE(it->second.has_has_shared_files());
+    EXPECT_TRUE(it->second.has_shared_files());
+}
+
+TEST_F(LakeServiceTest, test_publish_version_reports_no_shared_files) {
+    int64_t range_tablet_id = next_id();
+    create_tablet_metadata_with_range(range_tablet_id, /*version=*/1, /*lower=*/0, /*upper=*/100);
+
+    PublishVersionResponse response;
+    publish_range_tablet_segment(range_tablet_id, /*shared=*/false, &response);
+
+    ASSERT_EQ(0, response.failed_tablets_size()) << response.status().error_msgs(0);
+    auto it = response.tablet_stats().find(range_tablet_id);
+    ASSERT_NE(it, response.tablet_stats().end());
+    ASSERT_TRUE(it->second.has_has_shared_files());
+    EXPECT_FALSE(it->second.has_shared_files());
+}
+
+// Compaction is what clears the shared flags, so its publish must carry the new answer back in the
+// same round trip -- otherwise a tablet stays un-mergeable until the next periodic stats collection.
+TEST_F(LakeServiceTest, test_publish_version_compaction_clears_shared_files) {
+    int64_t range_tablet_id = next_id();
+    create_tablet_metadata_with_range(range_tablet_id, /*version=*/1, /*lower=*/0, /*upper=*/100);
+
+    PublishVersionResponse first;
+    publish_range_tablet_segment(range_tablet_id, /*shared=*/true, &first);
+    ASSERT_TRUE(first.tablet_stats().at(range_tablet_id).has_shared_files());
+
+    // Publish a compaction whose output rowset replaces the shared input with a private segment.
+    auto compact_txn_id = next_id();
+    {
+        TxnLog log;
+        log.set_tablet_id(range_tablet_id);
+        log.set_partition_id(_partition_id);
+        log.set_txn_id(compact_txn_id);
+        auto* op = log.mutable_op_compaction();
+        op->add_input_rowsets(2); // the rowset written by publish_range_tablet_segment
+        auto* out = op->mutable_output_rowset();
+        out->set_overlapped(false);
+        out->set_num_rows(10);
+        out->set_data_size(512);
+        auto* out_seg = out->add_segment_metas();
+        out_seg->set_filename(generate_segment_file(compact_txn_id));
+        out_seg->set_shared(false);
+        op->set_new_segment_offset(0);
+        op->set_new_segment_count(1);
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+    }
+
+    PublishVersionRequest compact_request;
+    compact_request.set_base_version(2);
+    compact_request.set_new_version(3);
+    compact_request.add_tablet_ids(range_tablet_id);
+    compact_request.add_txn_ids(compact_txn_id);
+
+    PublishVersionResponse second;
+    _lake_service.publish_version(nullptr, &compact_request, &second, nullptr);
+    ASSERT_EQ(0, second.failed_tablets_size()) << second.status().error_msgs(0);
+
+    auto it = second.tablet_stats().find(range_tablet_id);
+    ASSERT_NE(it, second.tablet_stats().end());
+    ASSERT_TRUE(it->second.has_has_shared_files());
+    EXPECT_FALSE(it->second.has_shared_files());
 }
 
 // FE's prefer_shared_initial_metadata hint, end to end through the RPC handler and the production

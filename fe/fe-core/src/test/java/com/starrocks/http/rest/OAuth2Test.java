@@ -15,12 +15,15 @@
 package com.starrocks.http.rest;
 
 import com.starrocks.authentication.AccessControlContext;
+import com.starrocks.authentication.AuthCredentials;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.OAuth2AuthenticationProvider;
 import com.starrocks.authentication.OAuth2Context;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.mysql.MysqlProto;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -217,38 +220,49 @@ public class OAuth2Test {
         authContext.setAuthPlugin("mysql_native_password");
 
         // Should return immediately without exception
-        oAuth2Provider.authenticate(authContext, userIdentity, new byte[0]);
+        oAuth2Provider.authenticate(authContext, userIdentity,
+                AuthCredentials.ofNativeScramble(userIdentity.getUser(), new byte[0], "127.0.0.1"));
         assertTrue(true);
     }
 
+
+    /**
+     * The credential a client that declared the OAuth2 plugin produces. Which branch the provider
+     * takes is decided by the credential kind, not by the plugin name on the context: the MySQL
+     * entry point reads the negotiated plugin once and records it as the kind (INV-16), so a test
+     * that only sets authPlugin is describing a client that sent a native scramble - the stock
+     * client - and gets the pass-through branch.
+     */
+    private AuthCredentials oauth2ClientCredential() throws Exception {
+        return MysqlProto.handshakeCredentials(userIdentity.getUser(), new byte[0],
+                AuthPlugin.Client.AUTHENTICATION_OAUTH2_CLIENT.toString(), "127.0.0.1");
+    }
+
     @Test
-    public void testAuthenticateWithOAuth2PluginAndToken() throws AuthenticationException {
-        // Test authentication when auth plugin is AUTHENTICATION_OAUTH2_CLIENT and token is available
-        authContext.setAuthPlugin("authentication_oauth2_client");
+    public void testAuthenticateWithOAuth2PluginAndToken() throws Exception {
+        // The callback already deposited a token on this connection, so the waiting branch returns
+        // at once with the declared identity.
         authContext.setAuthToken("test_token");
 
-        // Should complete successfully
-        oAuth2Provider.authenticate(authContext, userIdentity, new byte[0]);
-        assertTrue(true);
+        assertEquals(userIdentity,
+                oAuth2Provider.authenticate(authContext, userIdentity, oauth2ClientCredential()));
     }
 
     @Test
     public void testAuthenticateWithOAuth2PluginTimeout() {
         // Test authentication timeout when no token is provided
-        authContext.setAuthPlugin("authentication_oauth2_client");
         authContext.setAuthToken(null);
 
-        // Should throw timeout exception after 5 seconds
+        // Should throw timeout exception after the configured wait
         AuthenticationException exception = assertThrows(AuthenticationException.class, () ->
-                oAuth2Provider.authenticate(authContext, userIdentity, new byte[0]));
+                oAuth2Provider.authenticate(authContext, userIdentity, oauth2ClientCredential()));
 
         assertEquals("OAuth2 authentication wait callback timeout", exception.getMessage());
     }
 
     @Test
     public void testAuthenticateInterruptedException() throws InterruptedException {
-        // Test authentication when thread is interrupted
-        authContext.setAuthPlugin("authentication_oauth2_client");
+        // Test authentication when thread is interrupted while waiting for the callback
         authContext.setAuthToken(null);
 
         // Create a thread to interrupt the current thread after a short delay
@@ -266,7 +280,7 @@ public class OAuth2Test {
 
         // Should throw RuntimeException due to InterruptedException
         assertThrows(RuntimeException.class, () ->
-                oAuth2Provider.authenticate(authContext, userIdentity, new byte[0]));
+                oAuth2Provider.authenticate(authContext, userIdentity, oauth2ClientCredential()));
 
         // Clear interrupted status
         Thread.interrupted();
@@ -421,18 +435,20 @@ public class OAuth2Test {
         authContext.setAuthPlugin("mysql_native_password");
 
         try {
-            oAuth2Provider.authenticate(authContext, userIdentity, new byte[0]);
+            oAuth2Provider.authenticate(authContext, userIdentity,
+                    AuthCredentials.ofNativeScramble(userIdentity.getUser(), new byte[0], "127.0.0.1"));
             assertTrue(true); // Should not throw exception
         } catch (AuthenticationException e) {
             assertTrue(false, "Non-OAuth2 plugin should not throw exception");
         }
 
-        // Test with OAuth2 plugin and no token - should timeout
-        authContext.setAuthPlugin("authentication_oauth2_client");
+        // Test with the OAuth2 client plugin and no token - should timeout. The plugin is carried
+        // by the credential kind now, so the credential has to be built the way the MySQL entry
+        // point builds it rather than by setting authPlugin on the context.
         authContext.setAuthToken(null);
 
         assertThrows(AuthenticationException.class, () ->
-                oAuth2Provider.authenticate(authContext, userIdentity, new byte[0]));
+                oAuth2Provider.authenticate(authContext, userIdentity, oauth2ClientCredential()));
     }
 
     @Test

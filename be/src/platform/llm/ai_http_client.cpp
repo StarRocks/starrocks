@@ -157,11 +157,6 @@ enum class AIHttpValidationResult : uint8_t {
     URL_MEMORY_LIMIT,
 };
 
-enum class AIHttpSchemePolicy : uint8_t {
-    HTTP_OR_HTTPS,
-    HTTPS_ONLY,
-};
-
 Status validation_status(AIHttpValidationResult result) {
     switch (result) {
     case AIHttpValidationResult::OK:
@@ -178,8 +173,7 @@ Status validation_status(AIHttpValidationResult result) {
     return Status::InvalidArgument(kInvalidRequestStatus);
 }
 
-AIHttpValidationResult validate_url_impl(const std::string& value,
-                                         AIHttpSchemePolicy scheme_policy = AIHttpSchemePolicy::HTTP_OR_HTTPS) {
+AIHttpValidationResult validate_url_impl(const std::string& value) {
     if (value.empty() || value.size() > kMaxUrlBytes || has_control_character(value)) {
         return AIHttpValidationResult::INVALID_URL;
     }
@@ -213,9 +207,7 @@ AIHttpValidationResult validate_url_impl(const std::string& value,
     if (get_part(CURLUPART_SCHEME, &scheme) != CURLUE_OK || get_part(CURLUPART_HOST, &host) != CURLUE_OK) {
         return AIHttpValidationResult::INVALID_URL;
     }
-    const bool scheme_is_allowed =
-            ascii_case_equal(scheme, "https") ||
-            (scheme_policy == AIHttpSchemePolicy::HTTP_OR_HTTPS && ascii_case_equal(scheme, "http"));
+    const bool scheme_is_allowed = ascii_case_equal(scheme, "https") || ascii_case_equal(scheme, "http");
     if (host.empty() || !scheme_is_allowed) {
         return AIHttpValidationResult::INVALID_URL;
     }
@@ -280,7 +272,8 @@ AIHttpValidationResult validate_request(const AIHttpRequest& request, const AIHt
     if (result != AIHttpValidationResult::OK) {
         return result;
     }
-    if (request.request_deadline_ns < 0 || request.connect_timeout_ms < 0 ||
+    if (request.request_deadline_ns < 0 || request.attempt_timeout_ms < 0 ||
+        request.attempt_timeout_ms > std::numeric_limits<long>::max() || request.connect_timeout_ms < 0 ||
         request.connect_timeout_ms > std::numeric_limits<long>::max() || request.max_response_bytes == 0) {
         return AIHttpValidationResult::INVALID_REQUEST;
     }
@@ -420,10 +413,6 @@ bool is_valid_retry_after(std::string_view value) {
 
 Status validate_ai_http_url(const std::string& url) {
     return validation_status(validate_url_impl(url));
-}
-
-Status validate_ai_https_url(const std::string& url) {
-    return validation_status(validate_url_impl(url, AIHttpSchemePolicy::HTTPS_ONLY));
 }
 
 AIHttpResponseBody::AIHttpResponseBody(std::string data, AIMemoryContext memory, size_t reserved_bytes) noexcept
@@ -882,12 +871,17 @@ private:
             ok = set_option(attempt->easy, CURLOPT_CONNECTTIMEOUT_MS,
                             static_cast<long>(attempt->request.connect_timeout_ms));
         }
+        long timeout_ms = static_cast<long>(attempt->request.attempt_timeout_ms);
         if (ok && attempt->request.request_deadline_ns > 0) {
-            const long timeout_ms = deadline_timeout_ms(attempt->request.request_deadline_ns);
-            if (timeout_ms <= 0) {
+            const long remaining_ms = deadline_timeout_ms(attempt->request.request_deadline_ns);
+            if (remaining_ms <= 0) {
                 attempt->local_failure = AIHttpNoResponseCode::DEADLINE;
                 return false;
             }
+            timeout_ms = timeout_ms == 0 ? remaining_ms : std::min(timeout_ms, remaining_ms);
+        }
+        // Keep the live Query deadline in lifecycle polling so extensions remain visible.
+        if (ok && timeout_ms > 0) {
             ok = set_option(attempt->easy, CURLOPT_TIMEOUT_MS, timeout_ms);
         }
         if (ok && !_options.ca_bundle_path.empty()) {

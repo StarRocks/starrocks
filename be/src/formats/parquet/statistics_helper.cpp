@@ -29,6 +29,7 @@
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/schema.h"
+#include "formats/parquet/utils.h"
 #include "gutil/casts.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "types/date_value.h"
@@ -36,6 +37,40 @@
 #include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
+
+Status StatisticsHelper::decode_min_max_into_columns(const MutableColumnPtr& min_column,
+                                                     const MutableColumnPtr& max_column,
+                                                     const std::vector<std::string>& min_values,
+                                                     const std::vector<std::string>& max_values,
+                                                     const std::vector<bool>& null_pages, const TypeDescriptor& type,
+                                                     const ParquetField* field, const std::string& timezone) {
+    // Only an INT64 timestamp shown in a zone converts out of order.
+    std::unique_ptr<ColumnConverter> converter;
+    if (field->physical_type == tparquet::Type::type::INT64 && type.type == TYPE_DATETIME) {
+        RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, type, timezone, &converter));
+    }
+    if (converter == nullptr || !converter->need_convert) {
+        RETURN_IF_ERROR(decode_value_into_column(min_column, min_values, null_pages, type, field, timezone));
+        return decode_value_into_column(max_column, max_values, null_pages, type, field, timezone);
+    }
+    auto decode = [&](const std::vector<std::string>& values, Column* src_column) -> Status {
+        int64_t decode_value = 0;
+        for (size_t i = 0; i < values.size(); i++) {
+            if (null_pages[i]) {
+                src_column->append_nulls(1);
+            } else {
+                RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(values[i], &decode_value));
+                src_column->append_numbers(&decode_value, sizeof(int64_t));
+            }
+        }
+        return Status::OK();
+    };
+    MutableColumnPtr min_src = converter->create_src_column();
+    MutableColumnPtr max_src = converter->create_src_column();
+    RETURN_IF_ERROR(decode(min_values, min_src.get()));
+    RETURN_IF_ERROR(decode(max_values, max_src.get()));
+    return converter->convert_min_max(min_src.get(), max_src.get(), min_column.get(), max_column.get());
+}
 
 Status StatisticsHelper::decode_value_into_column(const MutableColumnPtr& column,
                                                   const std::vector<std::string>& values,
@@ -183,6 +218,11 @@ void translate_to_string_value(const ColumnPtr& col, size_t i, std::string& valu
 Status StatisticsHelper::get_min_max_value(const FileMetaData* file_metadata, const TypeDescriptor& type,
                                            const tparquet::ColumnMetaData* column_meta, const ParquetField* field,
                                            std::vector<std::string>& min_values, std::vector<std::string>& max_values) {
+    // Parquet requires readers to ignore min/max for GEO annotations, including stats
+    // emitted by non-compliant writers. The destination SQL type does not change this.
+    if (has_geo_annotation(field->schema_element)) {
+        return Status::Aborted("Parquet GEO min/max statistics have undefined sort order");
+    }
     // When statistics is empty, column_meta->__isset.statistics is still true,
     // but statistics.__isset.xxx may be false, so judgment is required here.
     bool is_set_min_max = (column_meta->statistics.__isset.max && column_meta->statistics.__isset.min) ||

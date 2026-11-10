@@ -19,6 +19,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/fixed_length_column.h"
+#include "testutil/column_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -26,10 +27,7 @@ namespace starrocks {
 // ExportedArrowBatch exports StarRocks columns to the Arrow C Data Interface without needing a JVM,
 // so the export side of the vectorized UDF path is unit-testable directly.
 TEST(ExportedArrowBatchTest, ExportColumnsPopulatesCStructs) {
-    auto column = Int32Column::create();
-    column->append(1);
-    column->append(2);
-    column->append(3);
+    auto column = ColumnTestHelper::build_column<int32_t>({1, 2, 3});
     Columns columns;
     columns.emplace_back(std::move(column));
     TypeDescriptor type_descs[] = {TypeDescriptor(TYPE_INT)};

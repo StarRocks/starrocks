@@ -904,6 +904,7 @@ PROPERTIES (
 | --- | --- |
 | 不包含 `ORDER BY` 子句的 `ALTER TABLE ... ADD ROLLUP ...` | 普通同步 Rollup 依赖基表与 Rollup 表 Tablet 一一对应且行顺序一致，基于范围的分布无法满足这一前提。请改用 `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)`：在存算分离集群中的范围分布表上，该语句会构建带独立排序键的 Rollup，且支持添加多个此类 Rollup（每条 `ALTER TABLE` 语句添加一个）。 |
 | `CREATE MATERIALIZED VIEW ... AS ...`（同步物化视图，未指定 `REFRESH` 和 `DISTRIBUTED BY` 子句） | 同步物化视图本质上是一个普通同步 Rollup，受相同限制。 |
+| `ALTER TABLE ... MERGE TABLETS`（排序键与主键不同的主键表；基于大小的自动合并也会跳过该形态） | 这类表按主键空间的 range 路由数据，而 Segment 按排序键排列，因此合并时无法判定源 Tablet 之间共享的 Segment 中某一行仍归属于哪个源。SPLIT 不受影响；排序键即主键的主键表仍可正常 MERGE。 |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE 会对分区重新分布数据/重新分桶，与基于范围的 tablet 边界不兼容。 |
 
 对于类似 Rollup 的聚合场景，请使用**异步物化视图**，并显式指定 `REFRESH` 子句或 `DISTRIBUTED BY` 子句，例如：
@@ -991,7 +992,7 @@ AS SELECT ... FROM range_table;
 
 - 手动设置
 
-  自 2.4 版本起，StarRocks 提供了自适应的 Tablet 并行扫描能力，即一个查询中涉及到的任意一个 Tablet 可能是由多个线程并行地分段扫描，减少了 Tablet 数量对查询能力的限制，从而可以简化对分区中分桶数量的设置。简化后，确定分区中分桶数量方式可以是：首先预估每个分区的数据量，然后按照每 10 GB 原始数据一个 Tablet 计算，从而确定分区中分桶数量。
+  自 2.4 版本起，StarRocks 提供了自适应的 Tablet 并行扫描能力，即一个查询中涉及到的任意一个 Tablet 可能是由多个线程并行地分段扫描，减少了 Tablet 数量对查询能力的限制，从而可以简化对分区中分桶数量的设置。简化后，确定分区中分桶数量方式可以是：首先预估每个分区的数据量，然后按照每 10 GB 原始数据一个 Tablet 计算，从而确定分区中分桶数量。v4.1 及以后版本的存算分离集群已支持大容量 Tablet，可以改为按照每个 Tablet 10 GB ~ 50 GB 数据计算，单个 Tablet 不超过 100 GB。
 
   如果需要开启并行扫描 Tablet，则您需要确保系统变量 `enable_tablet_internal_parallel` 全局生效 `SET GLOBAL enable_tablet_internal_parallel = true;`。
 

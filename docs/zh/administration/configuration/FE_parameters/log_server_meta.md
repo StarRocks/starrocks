@@ -62,8 +62,29 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 字节
 - 是否可变: Yes
-- 描述: 每个 FE 上内置审计导入缓冲区的字节上限，同时也是单次导入批次的最大字节数。缓冲达到上限的一半即触发落表，剩余一半用于吸收下一个守护周期到来前的流入。若下游消化速度持续低于审计流入速度、缓冲保持占满，超出的审计事件将被丢弃并计数（FE 日志按频率限制输出告警）——该功能定位为运营与安全分析，不保证极端过载下审计零丢失。FE 停止时尚未落表的缓冲事件同样会丢失，此行为与外部 auditloader 插件一致。导入语义为 at-least-once：若 BE 已提交而响应丢失，该批次会被重发，表中会留下重复行。导入瞬时还会额外持有一份批次数据的拷贝（用于拼装与发送），请为 FE 堆预留缓冲之外的这一份。单条 SQL 语句文本入表前最长保留 1 MB，超长部分截断。设置值超出 1.2 MB（单行最坏情况）至 512 MB 范围时会被钳制到该区间（FE 日志按频率限制输出告警）。仅在 `enable_audit_loader` 开启时生效。
+- 描述: 每个 FE 上已缓存审计行 JSON 的字节预算，同时限制每批完整 UTF-8 JSON 请求体的大小，包括方括号和逗号。触发水位为该值的一半：默认预算为 50 MiB，水位为 25 MiB。水位是触发条件，并非每批固定大小；时间条件也可触发更小的批次。该预算不是 FE 总堆上限，行对象、批次拼装和 HTTP 编码仍需额外内存。下游处理速度持续不足、缓冲占满时，超出的事件会被丢弃并计数，FE 日志按频率限制输出告警。该功能不保证过载或持续导入失败时零丢失，FE 停止时未落表的缓冲事件也会丢失。重试复用同一批次和 label，在 FE 事务 label 保留期内避免提交响应丢失造成重复写入。SQL 文本入表前按 UTF-8 最多保留 1 MiB。设置值低于 1183738 字节或高于 536870912 字节（512 MiB）时，导入器按对应边界值运行，并输出限频告警；该钳制不会回写配置值。仅在 `enable_audit_loader` 开启时生效。
 - 引入版本: v4.2
+
+FE 参数与 BE 的 JSON 限制 [`streaming_load_max_batch_size_mb`](../BE_parameters/query_loading.md#streaming_load_max_batch_size_mb) 相互独立。内置审计导入不会读取或自动跟随 BE 设置，FE 也不会按 BE 实际限制校验本参数。BE 参数取 `100` 时，允许的 JSON 请求体上限为 100 MiB（`104857600` 字节）。
+
+管理员需要人工联动配置所有可能接收审计导入的 BE/CN。包含方括号和逗号在内的完整 JSON 请求体必须小于或等于接收节点的限制。应将 FE 的实际生效预算设为不超过这些节点中最小的 JSON 限制。导入器组批时已计入方括号和逗号，无需再为 JSON 封装额外预留字节。可根据内存条件选择降低 FE 预算或提高 BE 限制；FE 接受了配置值，不代表 BE 一定接受导入请求。
+
+队列按已序列化的行字节记账，组批时才额外计入请求体的 JSON 分隔符。单行加上方括号后超过实际生效预算时，会被丢弃、计数并按频率限制告警。每个已选定批次在所有尝试中保持同一容量快照。新事件准入使用最新预算，但配置调整不会改变已选定、发送中或重试中的批次。当前批次结束后，后续组批才使用新预算，将仍能容纳的行分成更小的批次提交。联动下调 BE JSON 限制前，应等待使用原预算的批次结束。若队头单行已无法容纳，每轮只丢弃这一行，不发送请求，也不消耗尝试次数。下一队头重新获得尝试次数，但已有失败请求的退避时间仍保留。
+
+可查询已上报的 BE 配置值：
+
+```sql
+SELECT BE_ID, NAME, VALUE
+FROM information_schema.be_configs
+WHERE NAME = 'streaming_load_max_batch_size_mb';
+```
+
+| FE 设置值（字节） | FE 触发水位 | BE JSON 限制 | 配置关系 |
+| --- | --- | --- | --- |
+| `52428800`（50 MiB） | 25 MiB | `100`（100 MiB） | 默认请求体预算低于 BE JSON 限制。 |
+| `209715200`（200 MiB） | 100 MiB | `1024`（1024 MiB） | 人工联动调大的示例，FE 堆容量也需相应评估。 |
+
+将 BE 限制提高到 1024 MiB，不会自动改变 FE 预算、水位或 FE 的 512 MiB 最大值。调低 BE 限制时，也需要检查 FE 设置及存量缓存数据。提高 BE 限制不会改变审计导入的请求超时或重试策略。
 
 ### `audit_loader_load_interval_seconds`
 
@@ -71,8 +92,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 秒
 - 是否可变: Yes
-- 描述: 内置审计导入两次落表之间的最大间隔。审计事件在 FE 内存中批量攒积，按该间隔写入审计表；缓冲达到 `audit_loader_batch_max_bytes` 的一半时会提前落表。因此审计数据的可见延迟约为该间隔加上导入耗时。调小可降低可见延迟，代价是导入事务更频繁。设为 0 表示每个守护周期都尝试落表；负值按 0 处理，超过一天的值会被钳制为一天（FE 日志按频率限制输出告警）。若某批次持续导入失败（例如目标 BE/CN 不可用），FE 会重试有限次数后将其丢弃（记录日志并计数），以免阻塞其后所有事件。默认参数下：尝试立即失败时约 30 秒，每次尝试都耗尽请求超时时最长约 90 秒。仅在 `enable_audit_loader` 开启时生效。
+- 描述: 内置审计导入按时间触发落表的间隔。缓冲达到 `audit_loader_batch_max_bytes` 的一半时可提前落表；成功导入后若仍达到该水位，可继续处理下一批，无需额外固定等待 5 秒。低于水位时，设为 0 保持 5 秒轮询；负值按 0 处理，超过一天的值钳制为一天，并在 FE 日志中按频率限制输出告警。调小可降低可见延迟，代价是导入事务更频繁。固定批次最多尝试 3 次，包括首次尝试和 2 次重试，每次失败后的下一次提交至少退避 5 秒；3 次均失败时立即丢弃该批次，并记录日志、计入丢弃数量。从首次尝试开始计时，3 次立即失败约需 10 秒；若每次请求都耗尽 10 秒 HTTP 超时，则约需 40 秒。上述时间不含首次尝试前的等待、序列化、调度及其他处理开销。审计表未就绪时跳过导入，不消耗尝试次数。仅在 `enable_audit_loader` 开启时生效。
 - 引入版本: v4.2
+
+Stream Load 返回 `Publish Timeout` 表示该批次已提交，但尚未确认可见。审计加载器会将该批次移出缓冲区，不重试，也不会将整批计为丢弃，并在 FE 日志中记录此状态。行数统计缺失、格式非法或相互矛盾，不会导致已提交批次被重试。对于已提交批次，只有可信的已报告过滤行数才会计入过滤和丢弃计数，其余统计按未知记录。
+
+同一批次的所有尝试使用完全相同的行和唯一 label，新到事件等待下一批。只有返回 label 匹配且 `ExistingJobStatus` 为 `FINISHED` 时，`Label Already Exists` 才确认之前已提交；`RUNNING`、状态缺失或 label 不匹配均不能确认成功。重复响应中的行数属于本次被拒绝的请求，原批次的统计仍按未知处理。尝试耗尽仍未确认时，只移除原批次，并计为本地缓冲丢弃；丢弃日志中的 `commit_result_unknown=true` 表示 BE 仍可能已经提交，不能据此断言这些行未落表。
 
 ### `audit_log_delete_age`
 
@@ -465,6 +490,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 为内部 appender (`fe.internal.log`) 保留的轮转 FE 内部日志文件的最大数量。此值用作 Log4j DefaultRolloverStrategy `max` 属性；当发生轮转时，StarRocks 最多保留 `internal_log_roll_num` 个归档文件并删除旧文件（也受 `internal_log_delete_age` 控制）。较低的值会减少磁盘使用，但会缩短日志历史记录；较高的值会保留更多的历史内部日志。此项与 `internal_log_dir`、`internal_log_roll_interval` 和 `internal_roll_maxsize` 协同工作。
 - 引入版本: v3.2.4
 
+### `lock_blocking_call_validation_mode`
+
+- 默认值: warn
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 当 FE 在持有元数据锁期间访问外部系统（例如 Hive Metastore、JDBC 数据源、Iceberg REST Catalog 或 Thrift 对端）时的处理方式。此时锁的持有时长等于该外部系统的往返时延，所有等待同一把锁的操作都要为此付出代价。该检查位于 FE 自身代码中发起网络请求之前的最后一层，因此缓存命中不会触发它，报出的每一条违规都是真实发出的请求。有效值：`off`（不检查）、`warn`（打印带违规调用方堆栈的日志，调用继续执行）、`error`（拒绝该调用）。无法识别的取值按 `warn` 处理。与 `lock_target_validation_mode` 不同，该检查在运行正常的集群上也会报出违规，因为它覆盖的调用点仍在迁移过程中；因此 `warn` 的作用是把这些调用点变成可按传输类型聚合的日志，只有在这些日志干净之后才适合收紧为 `error`。`warn` 模式下每条违规以单行输出，带 `LOCK_INVARIANT_VIOLATION` 标记及 `kind=blocking_call_under_lock` 字段；日志量由 `lock_invariant_violation_log_interval_ms` 控制。
+- 引入版本: v26.2
+
+### `lock_invariant_violation_log_interval_ms`
+
+- 默认值: 10000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 同一调用点输出锁不变量违规日志的最小间隔。限流按调用点进行而非全局限流，因此高频违规的调用点不会把其他调用点挤出日志。排查问题时可设置为 `0`，输出全部违规记录。仅在 `lock_target_validation_mode`、`lock_blocking_call_validation_mode` 或 `lock_snapshot_copy_validation_mode` 为 `warn` 时生效。
+- 引入版本: v26.2
+
+### `lock_snapshot_copy_validation_mode`
+
+- 默认值: warn
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 当某个线程在既未持有表的读锁或写锁、也未持有其所在数据库的读锁或写锁的情况下，为查询规划复制内表或物化视图时，FE 的处理方式。复制会读取该表当前的分区和索引元数据，而 DDL、INSERT OVERWRITE 和元数据回放都会在写锁下原地修改这些元数据，因此不持锁的复制可能导致语句因 `ConcurrentModificationException` 失败，或基于从未完整发布过的元数据生成计划。有效值：`off`（不检查）、`warn`（打印带复制调用方堆栈的违规日志，复制继续执行）、`error`（拒绝该复制）。无法识别的取值按 `warn` 处理。`warn` 模式下每条违规以单行输出，带 `LOCK_INVARIANT_VIOLATION` 标记及 `kind=snapshot_copy_without_lock` 字段；日志量由 `lock_invariant_violation_log_interval_ms` 控制。
+- 引入版本: v26.2
+
+### `lock_target_validation_mode`
+
+- 默认值: warn
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 当 FE 对非 Internal Catalog 所有的对象（例如来自 External Catalog 的数据库，或占位的表 ID）请求元数据锁时的处理方式。这类标识符并不指向锁管理器能够保护的任何对象：它要么永远不会与其他锁冲突，要么与同类的所有锁冲突。有效值：`off`（不检查）、`warn`（打印带堆栈的违规日志，操作继续执行）、`error`（拒绝该操作）。无法识别的取值按 `warn` 处理。由于该参数可动态修改，集群可以先以 `warn` 运行，确认日志干净后再收紧为 `error`，无需重启。`warn` 模式下每条违规以单行输出，带 `LOCK_INVARIANT_VIOLATION` 标记并附带违规调用方的堆栈；日志量由 `lock_invariant_violation_log_interval_ms` 控制。
+- 引入版本: v26.2
+
 ### `log_cleaner_audit_log_min_retention_days`
 
 - 默认值: 3
@@ -841,6 +902,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <EditionSpecificFEItem />
 
+### `arrow_flight_max_header_size`
+
+- 默认值: 32768
+- 类型: Int
+- 单位: Bytes
+- 是否可变: No
+- 描述: Arrow Flight SQL 服务端接受的请求头总大小上限（字节），按一个 gRPC 请求的所有请求头合计。Arrow Flight SQL 会话的第一个请求在请求头里携带客户端凭据，而列出用户所属组的 JWT 会随组数变大：Microsoft Entra ID 在一个 token 里最多放 200 个组 ID，约 10 KB。gRPC 默认的 8 KB 会在认证开始之前就拒绝这样的请求，因此默认值与 `http_max_header_size` 保持一致。客户端发送的 token 更大时请调大该值。修改后需要重启 FE。
+- 引入版本: v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - 默认值: 10000
@@ -994,9 +1064,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本: v4.2.0
 - 描述: 是否对大部分外部 FE HTTP 接口启用 Basic Auth。凭证通过 `AuthenticationHandler.authenticate()` 校验，因此 LDAP / security integration 在 HTTP 路径上的工作方式与 MySQL 协议一致。以下接口始终豁免:
   - 公开探针 / 可观测性: `/api/bootstrap`、`/api/oauth2`。
-  - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
+  - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/static`、`/api/get_small_file`。
 
-  特权接口还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
+  `/dump`、`/dump_starmgr`、`/service_id` 不在豁免范围内：无论该参数如何设置，都只允许已认证的管理员访问。认证方式可以是 HTTP Basic 认证，也可以是登录 FE Web 控制台后获得的会话 cookie。满足以下任一条件即视为管理员：通过登录时处于激活状态的角色拥有 SYSTEM 级 `NODE` 权限，例如将内置角色 `cluster_admin` 设为用户的默认角色（当 `activate_all_roles_on_login` 为 `true` 时，用户被授予的任意角色均可）；是 `root` 用户或拥有 `root` 角色；同时拥有 `db_admin` 和 `user_admin` 角色。
+
+  `/api/_meta_replay_state` 同样不在豁免范围内：无论该参数如何设置，都要求使用以下用户进行 HTTP Basic 认证：`root` 用户、拥有 `root` 角色的用户，或同时拥有 `db_admin` 和 `user_admin` 角色的用户。仅拥有 `NODE` 权限不足以访问该接口。
+
+  受该参数控制的其他特权接口（不包括 `/dump`、`/dump_starmgr`、`/service_id`、`/api/_meta_replay_state`）还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
+
+### `enable_rest_bearer_authentication`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 非 MySQL 通道（HTTP、Arrow Flight、直连 BE 的 Stream Load）上 Bearer token 认证的总开关。设为 `false` 后，这些通道收到 `Authorization: Bearer ...` 一律返回 HTTP 401，回退到"只有 MySQL 协议支持 token 认证"的行为；Basic 认证与既有的 Arrow Flight UUID session token 不受影响。MySQL 协议的认证任何情况下都不受此开关控制。
+- 引入版本: v4.2
 
 ### `http_web_page_display_hardware`
 
@@ -1024,6 +1107,69 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: FE 节点中 HTTPS 服务器监听的端口。
 - 引入版本: v4.0
+
+### `ssl_keystore_type`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: FE SSL 和 HTTPS 使用的 keystore 类型。如果该值为空，StarRocks 会自动尝试 JVM 默认 keystore 类型、JKS 和 PKCS12。如需使用 BCFKS 等其他 keystore 格式，需要显式设置该参数。
+- 引入版本: -
+
+### `ssl_keystore_provider`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 加载 SSL keystore 时使用的安全 provider。留空表示使用 JVM 选择的 provider。当配置的 keystore 类型必须由特定 provider 加载时，例如 `BCFIPS`，需要设置该参数。
+- 引入版本: -
+
+### `ssl_truststore_type`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: MySQL SSL 使用的 truststore 类型。如果该值为空，StarRocks 会自动尝试 JVM 默认 keystore 类型、JKS 和 PKCS12。如需使用 BCFKS 等其他 truststore 格式，需要显式设置该参数。
+- 引入版本: -
+
+### `ssl_truststore_provider`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 加载 MySQL SSL truststore 时使用的安全 provider。留空表示使用 JVM 选择的 provider。当配置的 truststore 类型必须由特定 provider 加载时，例如 `BCFIPS`，需要设置该参数。
+- 引入版本: -
+
+### `ssl_security_provider_class`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: StarRocks 加载 SSL keystore 或 truststore 前注册的安全 provider 类。如果所需 provider 已由 JVM 注册，可以留空。
+- 引入版本: -
+
+### `ssl_security_provider_name`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 期望使用的安全 provider 名称。如果设置该值且同名 provider 已存在，StarRocks 会复用该 provider。如果 StarRocks 注册 `ssl_security_provider_class`，注册后的 provider 名称必须与该值匹配。
+- 引入版本: -
+
+### `ssl_security_provider_path`
+
+- 默认值: `""`
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 安全 provider JAR 的路径。多个路径可以使用系统路径分隔符分隔。如果 provider 类已在 FE classpath 中，可以留空。
+- 引入版本: -
 
 ### `max_mysql_service_task_threads_num`
 
@@ -1089,6 +1235,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   1. `select version();`
   2. 握手包版本
   3. 全局变量 `version` 的值 (`show variables like 'version';`)
+- 引入版本: -
+
+### `mysql_service_compression_enabled`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 是否在连接握手中提供 MySQL 压缩协议（zlib 和 zstd）。只有请求压缩的客户端才会使用压缩传输，例如 `mysql --compression-algorithms=zstd` 或 JDBC `useCompression=true`；其他客户端不受影响。设置为 `false` 时，FE 不再提供压缩。修改仅对新建连接生效。
 - 引入版本: -
 
 ### `mysql_service_io_threads_num`
@@ -1232,7 +1387,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 毫秒
 - 是否可变: No
-- 描述: 空闲客户端连接超时的时间长度。
+- 描述: 空闲客户端连接超时的时间长度。FE Thrift 服务器会关闭空闲达到该时长的客户端连接。因此，FE 连接池中通往其他 FE 的连接空闲达到该值的 80% 后，会在下次使用前被替换为新连接，避免在对端可能已经关闭的连接上发送请求。建议所有 FE 使用相同的取值。
 - 引入版本: -
 
 ### `thrift_rpc_max_body_size`
@@ -1259,8 +1414,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: No
-- 描述: 请求待处理队列的长度。如果 Thrift 服务器中正在处理的线程数超过 `thrift_server_max_worker_threads` 中指定的值，则新请求将添加到待处理队列。
+- 描述: 当 `thrift_server_max_worker_threads` 个工作线程全部繁忙时，可排队等待工作线程的连接数量。该值限定的是待处理队列能容纳多少连接，而非最终会处理多少连接：队列已满时到达的连接会被立即关闭，不再重试；已入队但等待时间超过 `thrift_server_queue_timeout_ms` 的连接，会在工作线程取到它时被直接关闭、不予处理。这两种情况分别由 `starrocks_fe_thrift_server_rejected_connections_total` 和 `starrocks_fe_thrift_server_expired_connections_total` 统计。
 - 引入版本: -
+
+### `thrift_server_queue_timeout_ms`
+
+- 默认值: 0
+- 类型: Long
+- 单位: ms
+- 是否可变: Yes
+- 描述: 连接在被工作线程取走之前，可在 Thrift 服务器待处理队列中滞留的最长时间。超过该时间的连接将被直接关闭且不予处理，其前提是此时调用方已经放弃，继续处理只会占住工作线程，使其无法处理仍有人等待的请求。启用后，该值同时限定了突发流量过后队列排空所需的时间，无论此前堆积多深。
+
+  默认值 `0` 表示关闭该检查：无论滞留多久，所有排队连接都会被处理。默认关闭是因为上述前提并不适用于所有调用方，而排队中的连接并未携带服务端可读取的截止时间。各类调用方实际使用的超时相差四个数量级：FE 内部普通 RPC 在 `thrift_rpc_timeout_ms`（10 秒）后放弃；而从 Follower 转发到 Leader 的语句会等待会话执行超时加 `thrift_rpc_timeout_ms`——按 `query_timeout` 默认值约为 310 秒，按 `insert_timeout` 默认值约为 4 小时；BE 的 Stream Load 与事务提交 RPC 则等待 `stream_load_thrift_rpc_timeout_ms`（60 秒）与该导入任务 `timeout_second` 四分之一中的较大值。由于 `query_timeout`、`insert_timeout` 和 `timeout_second` 均可由用户设置且没有上限，不存在对所有集群都安全的固定值：任何短到足以加快恢复的超时，都可能在它本应缓解的饱和期间，切断客户端仍在等待的转发语句。
+
+  请按集群启用，取值应高于该集群客户端实际依赖的最大截止时间——依据该集群的 `query_timeout` 与 `insert_timeout` 推导。每次丢弃都会计入 `starrocks_fe_thrift_server_expired_connections_total`，并输出一条标明对端地址、经过限流的 WARN 日志。无论是否启用该检查，`starrocks_fe_thrift_server_queue_wait_ms` 都会报告队列等待时间，可据此在启用前确定取值。
+- 引入版本: v4.2.0
 
 ## 元数据和集群管理
 
@@ -1690,6 +1858,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: LockChecker 前端守护程序（名为 "deadlock-checker"）执行的间隔（秒）。守护程序执行死锁检测和慢锁扫描；配置值乘以 1000 以设置计时器（毫秒）。减小此值可减少检测延迟但增加调度和 CPU 开销；增加此值可减少开销但延迟检测和慢锁报告。更改在运行时生效，因为守护程序每次运行都会重置其间隔。此设置与 `lock_checker_enable_deadlock_check`（启用死锁检查）和 `slow_lock_threshold_ms`（定义慢锁的构成）交互。
 - 引入版本: v3.2.0
 
+### `lock_manager_lock_table_num`
+
+- 默认值: 256
+- 类型: Int
+- 单位: -
+- 是否可变: No
+- 描述: Lock Manager 用于分片元数据锁的哈希桶（即锁表）数量。每个资源按其资源 ID 映射到一个桶，每个桶由各自的互斥量保护，因此该值越大，操作不相关资源的加锁者之间的竞争越小，代价是略微增加内存占用。该值仅在创建 Lock Manager 时读取一次，因此修改后需重启 FE 才能生效。自 v4.1.0、v4.0.1 和 v3.5.8 起，默认值从 `32` 变更为 `256`。
+- 引入版本: v3.3.0
+
 ### `master_sync_policy`
 
 - 默认值: SYNC
@@ -1723,6 +1900,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: Follower 和 Observer FE 上的元数据可以比 Leader FE 上的元数据落后最长时间。单位：秒。如果超过此持续时间，非 Leader FE 将停止提供服务。
 - 引入版本: -
 
+### `meta_freshness_check_interval_ms`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: Follower 和 Observer FE 重新判断自身元数据是否仍足够新、能否继续提供读服务的时间间隔，判断标准见 `meta_delay_toleration_second`。取值会被限制在 [10, 5000] 范围内。该检查运行在独立线程上，而不是元数据回放线程上，因此当某条日志回放耗时很久时（例如回放操作正在等待数据库锁），节点仍能及时停止用陈旧的元数据提供服务。
+- 引入版本: v4.2
+
+### `metadata_replay_stuck_warn_threshold_second`
+
+- 默认值: 30
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 单条元数据日志的回放耗时超过该值时，会在 **fe.log** 中记录一条回放卡住的日志，并附带回放线程的堆栈，便于定位阻塞元数据回放的原因。设置为 `0` 表示关闭该日志。
+- 引入版本: v4.2
+
 ### `meta_dir`
 
 - 默认值: `StarRocksFE.STARROCKS_HOME_DIR` + "/meta"
@@ -1739,6 +1934,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 是否忽略未知日志 ID。当 FE 回滚时，早期版本的 FE 可能无法识别某些日志 ID。如果值为 `TRUE`，FE 将忽略未知日志 ID。如果值为 `FALSE`，FE 将退出。
+- 引入版本: -
+
+### `offheap_deflate_buffer_pool_max_bytes`
+
+- 默认值: 128L * 1024 * 1024 (134217728)
+- 类型: Long
+- 单位: 字节
+- 是否可变: Yes
+- 描述: FE 用于 gzip 和 zlib 压缩的堆外缓冲区的总大小上限，例如查询 profile 存入 `ProfileManager` 之前的压缩。使用堆外缓冲区进行压缩，可以避免 JVM 在压缩期间阻塞垃圾回收；否则在堆中仍有可回收空间时，内存分配也可能因 `OutOfMemoryError` 而失败。无论数据大小，每个进行中的压缩都使用两个 256 KB 的缓冲区，因此默认值允许同时进行 256 个压缩。当在此上限内没有可用的缓冲区时，数据会像之前一样在堆上压缩。运行时调小该值，会在缓冲区归还时生效。设置为 `0` 即关闭堆外压缩：所有数据改为在堆上分小块压缩，已分配的堆外缓冲区会被释放。
 - 引入版本: -
 
 ### `profile_info_format`
@@ -1813,7 +2017,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 控制 Thrift RPC 调用将尝试的总次数。此值由 `ThriftRPCRequestExecutor`（以及 `NodeMgr` 和 `VariableMgr` 等调用者）用作重试的循环计数 — 即，值为 3 允许最多三次尝试，包括初始尝试。在 `TTransportException` 上，执行器将尝试重新打开连接并重试此计数；当原因是 `SocketTimeoutException` 或重新打开失败时，它不会重试。每次尝试都受 `thrift_rpc_timeout_ms` 配置的每次尝试超时限制。增加此值可提高对瞬时连接失败的弹性，但会增加整体 RPC 延迟和资源使用。
+- 描述: 控制 Thrift RPC 调用将尝试的总次数。此值由 `ThriftRPCRequestExecutor`（以及 `NodeMgr` 和 `VariableMgr` 等调用者）用作重试的循环计数 — 即，值为 3 允许最多三次尝试，包括初始尝试。在 `TTransportException` 上，执行器将尝试重新打开连接并重试此计数；当原因是 `SocketTimeoutException` 或重新打开失败时，它不会重试。每次重试前，执行器会先随机等待一段时间再重新打开连接：第一次重试前等待 100 到 200 毫秒，之后每次重试的等待区间上下限都翻倍，直到 500 到 1000 毫秒为止。这样，同时断开连接的多个调用方不会在同一时刻集中重连。每次尝试都受 `thrift_rpc_timeout_ms` 配置的每次尝试超时限制。增加此值可提高对瞬时连接失败的弹性，但会增加整体 RPC 延迟和资源使用。
 - 引入版本: v3.2.0
 
 ### `thrift_rpc_strict_mode`

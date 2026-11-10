@@ -108,25 +108,6 @@ public:
 };
 
 // NOLINTNEXTLINE
-GROUP_SLOW_TEST_F(ChunkTest, test_chunk_upgrade_if_overflow) {
-    size_t row_count = 1 << 30;
-    auto c1 = BinaryColumn::create();
-    c1->resize(row_count);
-    auto c2 = BinaryColumn::create();
-    for (size_t i = 0; i < row_count; i++) {
-        c2->append(std::to_string(i));
-    }
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(c1, 1);
-    chunk->append_column(c2, 2);
-
-    Status st = chunk->upgrade_if_overflow();
-    ASSERT_TRUE(st.ok());
-    ASSERT_TRUE(chunk->get_column_by_slot_id(1)->is_binary());
-    ASSERT_TRUE(chunk->get_column_by_slot_id(2)->is_large_binary());
-}
-
-// NOLINTNEXTLINE
 TEST_F(ChunkTest, test_remove_column_by_slot_id) {
     ColumnPtr c1 = ColumnTestHelper::build_column<int32_t>({1});
     ColumnPtr c2 = ColumnTestHelper::build_column<int32_t>({2});
@@ -147,40 +128,10 @@ TEST_F(ChunkTest, test_remove_column_by_slot_id) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(ChunkTest, test_chunk_downgrade) {
-    auto c1 = BinaryColumn::create();
-    c1->append_string("1");
-    auto c2 = BinaryColumn::create();
-    c2->append_string("11");
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(std::move(c1), 1);
-    chunk->append_column(std::move(c2), 2);
-    ASSERT_FALSE(chunk->has_large_column());
-
-    auto ret = chunk->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_FALSE(chunk->has_large_column());
-
-    auto c3 = LargeBinaryColumn::create();
-    c3->append_string("1");
-    auto c4 = LargeBinaryColumn::create();
-    c4->append_string("2");
-    chunk = std::make_shared<Chunk>();
-    chunk->append_column(std::move(c3), 1);
-    chunk->append_column(std::move(c4), 2);
-    ASSERT_TRUE(chunk->has_large_column());
-
-    ret = chunk->downgrade();
-    ASSERT_FALSE(chunk->has_large_column());
-    ASSERT_TRUE(ret.ok());
-    ASSERT_FALSE(chunk->has_large_column());
-}
-
-// NOLINTNEXTLINE
 TEST_F(ChunkTest, test_is_column_nullable) {
     Chunk chunk;
-    ColumnPtr c1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), false);
-    ColumnPtr c2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    ColumnPtr c1 = ColumnHelper::create_column(TYPE_INT_DESC, false);
+    ColumnPtr c2 = ColumnHelper::create_column(TYPE_INT_DESC, true);
     chunk.append_column(std::move(c1), 1);
     chunk.append_column(std::move(c2), 2);
 
@@ -564,9 +515,9 @@ TEST_F(ChunkTest, test_check_or_die_after_clone) {
 TEST_F(ChunkTest, test_check_or_die_nullable_columns) {
     // Test chunk with nullable columns
     auto chunk = std::make_unique<Chunk>();
-    auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    auto col1 = ColumnHelper::create_column(TYPE_INT_DESC, true);
     col1->append_default(100);
-    auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    auto col2 = ColumnHelper::create_column(TYPE_INT_DESC, true);
     col2->append_default(100);
 
     chunk->append_column(std::move(col1), 0);
@@ -1166,9 +1117,9 @@ TEST_F(ChunkTest, test_mutable_chunk_has_const_column) {
 
 // NOLINTNEXTLINE
 TEST_F(ChunkTest, test_mutable_chunk_materialized_nullable) {
-    auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    auto col1 = ColumnHelper::create_column(TYPE_INT_DESC, true);
     col1->append_default();
-    auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    auto col2 = ColumnHelper::create_column(TYPE_INT_DESC, true);
     col2->append_default();
 
     MutableColumns mutable_columns;
@@ -1183,75 +1134,9 @@ TEST_F(ChunkTest, test_mutable_chunk_materialized_nullable) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(ChunkTest, test_mutable_chunk_upgrade_if_overflow) {
-    size_t row_count = 1 << 20;
-    auto c1 = BinaryColumn::create();
-    c1->resize(row_count);
-    auto c2 = BinaryColumn::create();
-    for (size_t i = 0; i < row_count; i++) {
-        c2->append(std::to_string(i));
-    }
-
-    MutableColumns mutable_columns;
-    mutable_columns.push_back(Column::mutate(std::move(c1)));
-    mutable_columns.push_back(Column::mutate(std::move(c2)));
-
-    MutableChunk::SlotHashMap slot_map;
-    slot_map[1] = 0;
-    slot_map[2] = 1;
-    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), std::move(slot_map));
-
-    Status st = mutable_chunk->upgrade_if_overflow();
-    ASSERT_TRUE(st.ok());
-    ASSERT_TRUE(mutable_chunk->get_column_by_slot_id(1)->is_binary());
-    ASSERT_FALSE(mutable_chunk->get_column_by_slot_id(2)->is_large_binary());
-}
-
-// NOLINTNEXTLINE
-TEST_F(ChunkTest, test_mutable_chunk_downgrade) {
-    auto c1 = LargeBinaryColumn::create();
-    c1->append_string("1");
-    auto c2 = LargeBinaryColumn::create();
-    c2->append_string("2");
-
-    MutableColumns mutable_columns;
-    mutable_columns.push_back(Column::mutate(std::move(c1)));
-    mutable_columns.push_back(Column::mutate(std::move(c2)));
-
-    MutableChunk::SlotHashMap slot_map;
-    slot_map[1] = 0;
-    slot_map[2] = 1;
-    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), std::move(slot_map));
-
-    ASSERT_TRUE(mutable_chunk->has_large_column());
-    auto ret = mutable_chunk->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_FALSE(mutable_chunk->has_large_column());
-}
-
-// NOLINTNEXTLINE
-TEST_F(ChunkTest, test_mutable_chunk_has_large_column) {
-    auto c1 = BinaryColumn::create();
-    c1->append_string("1");
-    auto c2 = LargeBinaryColumn::create();
-    c2->append_string("2");
-
-    MutableColumns mutable_columns;
-    mutable_columns.push_back(Column::mutate(std::move(c1)));
-    mutable_columns.push_back(Column::mutate(std::move(c2)));
-
-    MutableChunk::SlotHashMap slot_map;
-    slot_map[1] = 0;
-    slot_map[2] = 1;
-    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), std::move(slot_map));
-
-    ASSERT_TRUE(mutable_chunk->has_large_column());
-}
-
-// NOLINTNEXTLINE
 TEST_F(ChunkTest, test_mutable_chunk_is_column_nullable) {
-    auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), false);
-    auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    auto col1 = ColumnHelper::create_column(TYPE_INT_DESC, false);
+    auto col2 = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     MutableColumns mutable_columns;
     mutable_columns.push_back(Column::mutate(std::move(col1)));

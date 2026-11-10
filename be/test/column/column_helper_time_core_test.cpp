@@ -18,13 +18,12 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "gtest/gtest.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
 TEST(ColumnHelperTimeCoreTest, convertPlainDoubleTimeToString) {
-    auto input = DoubleColumn::create();
-    input->append(3661.0);
-    input->append(-62.0);
+    auto input = ColumnTestHelper::build_column<double>({3661.0, -62.0});
 
     auto result = ColumnHelper::convert_time_column_from_double_to_str(input);
     ASSERT_TRUE(result->is_binary());
@@ -49,8 +48,7 @@ TEST(ColumnHelperTimeCoreTest, convertNullableDoubleTimeToString) {
 }
 
 TEST(ColumnHelperTimeCoreTest, convertConstDoubleTimeToString) {
-    auto data = DoubleColumn::create();
-    data->append(7322.0);
+    auto data = ColumnTestHelper::build_column<double>({7322.0});
     auto input = ConstColumn::create(std::move(data), 3);
 
     auto result = ColumnHelper::convert_time_column_from_double_to_str(input);

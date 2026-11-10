@@ -214,3 +214,21 @@ check_and_update_max_processes() {
     fi
 }
 
+# Kill the python UDF worker processes this instance spawned, then remove their sockets.
+# Workers live under $UDF_RUNTIME_DIR/pyworker, which is derived from this instance's
+# STARROCKS_HOME, so several instances on one host reap only their own. Their socket name
+# does not encode the worker pid, so they are matched by that directory in their command
+# line rather than by a pid parsed out of the file name -- which also keeps working when a
+# launcher sits between the instance and its workers. The directory is escaped before it
+# goes into the pattern: a deployment path may contain regex metacharacters.
+reap_python_udf_workers() {
+    local worker_dir="${UDF_RUNTIME_DIR}/pyworker"
+    if [[ -z "${UDF_RUNTIME_DIR}" || ! -d "$worker_dir" ]]; then
+        return 0
+    fi
+    local escaped_dir
+    escaped_dir=$(printf '%s' "${worker_dir}/" | sed 's/[][\\.*+?(){}|^$]/\\&/g')
+    pkill -9 -f "flight_server\.py .*${escaped_dir}" > /dev/null 2>&1
+    rm -rf "$worker_dir" > /dev/null 2>&1
+}
+

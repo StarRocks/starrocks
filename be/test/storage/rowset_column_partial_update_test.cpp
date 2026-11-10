@@ -1626,8 +1626,23 @@ TEST_P(RowsetColumnPartialUpdateTest, test_dcg_file_size) {
 }
 
 TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_size_tier_compaction) {
+    const int64_t old_batch_size = config::max_update_compaction_num_level_minus_one_rowsets;
+    const bool old_size_tiered = config::enable_pk_size_tiered_compaction_strategy;
+    const bool old_lazy = config::enable_lazy_delta_column_compaction;
+    const int32_t old_min_interval = config::update_compaction_per_tablet_min_interval_seconds;
+    config::max_update_compaction_num_level_minus_one_rowsets = 4;
+    config::enable_pk_size_tiered_compaction_strategy = true;
+    config::enable_lazy_delta_column_compaction = true;
+    config::update_compaction_per_tablet_min_interval_seconds = 86400;
+    DeferOp restore([&]() {
+        config::max_update_compaction_num_level_minus_one_rowsets = old_batch_size;
+        config::enable_pk_size_tiered_compaction_strategy = old_size_tiered;
+        config::enable_lazy_delta_column_compaction = old_lazy;
+        config::update_compaction_per_tablet_min_interval_seconds = old_min_interval;
+    });
     const int N = 100;
     auto tablet = create_tablet(rand(), rand());
+    tablet->updates()->stop_compaction(true);
     ASSERT_EQ(1, tablet->updates()->version_history_count());
 
     // create full rowsets first
@@ -1660,15 +1675,17 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_size_tier_compaction) 
     ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
         return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
     }));
-    // trigger size tiered compaction
-    config::enable_pk_size_tiered_compaction_strategy = true;
-    ASSERT_TRUE(tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
-    // check data
-    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
-        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
-    }));
-    // there will be two rowsets
-    ASSERT_TRUE(tablet->updates()->num_rowsets() == 2);
+    ASSERT_EQ(11, tablet->updates()->num_rowsets());
+    for (size_t expected_count : {size_t{8}, size_t{5}, size_t{2}}) {
+        tablet->updates()->stop_compaction(false);
+        auto st = tablet->updates()->compaction_for_size_tiered(_compaction_mem_tracker.get());
+        ASSERT_TRUE(st.ok()) << st;
+        ASSERT_EQ(expected_count, tablet->updates()->num_rowsets());
+        ASSERT_EQ(version, tablet->updates()->max_version());
+        ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+            return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+        }));
+    }
 }
 
 // Test SegmentMetaCollecter with DCG (Delta Column Group) to improve code coverage
@@ -2246,7 +2263,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_json_meta_dict_reads_overla
 
     // The extended column for get_json_string(j, '$.y').
     std::vector<ColumnAccessPathPtr> paths;
-    paths.emplace_back(make_extended_json_path("j", "y", TypeDescriptor::create_varchar_type(255)));
+    paths.emplace_back(make_extended_json_path("j", "y", TYPE_VARCHAR_DESC));
     ASSIGN_OR_ABORT(auto extended_schema,
                     extend_schema_by_access_paths(tablet->tablet_schema(),
                                                   std::numeric_limits<int32_t>::max() - 1000000, paths));
@@ -2313,8 +2330,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_json_meta_dict_reads_overla
 
     // Non-nullable, matching what MetaReader builds for META_DICT_MERGE: _collect_dict_for_column only
     // appends to the array's offsets/elements, never to a null column.
-    auto dict_column = ColumnHelper::create_column(
-            TypeDescriptor::create_array_type(TypeDescriptor::create_varchar_type(255)), false);
+    auto dict_column = ColumnHelper::create_column(TypeDescriptor::create_array_type(TYPE_VARCHAR_DESC), false);
     std::vector<Column*> dsts = {dict_column.get()};
     ASSERT_OK(collecter.collect(&dsts));
 

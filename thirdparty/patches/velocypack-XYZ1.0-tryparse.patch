@@ -1,0 +1,765 @@
+diff -rupN velocypack-XYZ1.0.orig/include/velocypack/Parser.h velocypack-XYZ1.0/include/velocypack/Parser.h
+--- velocypack-XYZ1.0.orig/include/velocypack/Parser.h	2026-09-08 11:08:55.915341585 +0800
++++ velocypack-XYZ1.0/include/velocypack/Parser.h	2026-09-08 16:05:14.887477778 +0800
+@@ -43,14 +43,15 @@ class Parser {
+   struct ParsedNumber {
+     ParsedNumber() : intValue(0), doubleValue(0.0), isInteger(true) {}
+ 
+-    void addDigit(int i) {
++    // returns false if the number overflows
++    bool addDigit(int i) {
+       if (isInteger) {
+         // check if adding another digit to the int will make it overflow
+         if (intValue < 1844674407370955161ULL ||
+             (intValue == 1844674407370955161ULL && (i - '0') <= 5)) {
+           // int won't overflow
+           intValue = intValue * 10 + (i - '0');
+-          return;
++          return true;
+         }
+         // int would overflow
+         doubleValue = static_cast<double>(intValue);
+@@ -58,9 +59,7 @@ class Parser {
+       }
+ 
+       doubleValue = doubleValue * 10.0 + (i - '0');
+-      if (std::isnan(doubleValue) || !std::isfinite(doubleValue)) {
+-        throw Exception(Exception::NumberOutOfRange);
+-      }
++      return !(std::isnan(doubleValue) || !std::isfinite(doubleValue));
+     }
+ 
+     double asDouble() const {
+@@ -81,6 +80,9 @@ class Parser {
+   std::size_t _size;
+   std::size_t _pos;
+   int _nesting;
++  // error reported by the last failed tryParse()
++  Exception::ExceptionType _errorType;
++  char const* _errorMsg;
+ 
+  public:
+   Options const* options;
+@@ -96,6 +98,8 @@ class Parser {
+         _size(0), 
+         _pos(0), 
+         _nesting(0), 
++        _errorType(Exception::InternalError),
++        _errorMsg(nullptr),
+         options(&Options::Defaults) {
+     _builder.reset(new Builder());
+     _builderPtr = _builder.get();
+@@ -107,6 +111,8 @@ class Parser {
+         _size(0), 
+         _pos(0), 
+         _nesting(0), 
++        _errorType(Exception::InternalError),
++        _errorMsg(nullptr),
+         options(options) {
+     if (VELOCYPACK_UNLIKELY(options == nullptr)) {
+       throw Exception(Exception::InternalError, "Options cannot be a nullptr");
+@@ -124,6 +130,8 @@ class Parser {
+         _size(0), 
+         _pos(0), 
+         _nesting(0),
++        _errorType(Exception::InternalError),
++        _errorMsg(nullptr),
+          options(options) {
+     if (VELOCYPACK_UNLIKELY(options == nullptr)) {
+       throw Exception(Exception::InternalError, "Options cannot be a nullptr");
+@@ -137,6 +145,8 @@ class Parser {
+         _size(0), 
+         _pos(0), 
+         _nesting(0),
++        _errorType(Exception::InternalError),
++        _errorMsg(nullptr),
+          options(options) {
+     if (VELOCYPACK_UNLIKELY(options == nullptr)) {
+       throw Exception(Exception::InternalError, "Options cannot be a nullptr");
+@@ -171,6 +181,55 @@ class Parser {
+     return parser.steal();
+   }
+ 
++  // Non-throwing variant of fromJson(): returns nullptr if the input is not
++  // valid JSON and stores the reason in *error (if given). Errors that are
++  // not caused by the input (e.g. allocation failures) are still thrown.
++  static std::shared_ptr<Builder> tryFromJson(
++      char const* start, std::size_t size, Exception* error,
++      Options const* options = &Options::Defaults) {
++    Parser parser(options);
++    if (!parser.tryParse(start, size)) {
++      if (error != nullptr) {
++        *error = parser.error();
++      }
++      return nullptr;
++    }
++    return parser.steal();
++  }
++
++  static std::shared_ptr<Builder> tryFromJson(
++      uint8_t const* start, std::size_t size, Exception* error,
++      Options const* options = &Options::Defaults) {
++    return tryFromJson(reinterpret_cast<char const*>(start), size, error,
++                       options);
++  }
++
++  // Non-throwing variant of parse(): returns false if the input is not valid
++  // JSON; error() then describes the problem and errorPos() its position,
++  // and the contents of the builder are unspecified. Errors that are not
++  // caused by the input (e.g. allocation failures) are still thrown.
++  bool tryParse(char const* start, std::size_t size, bool multi = false) {
++    return tryParse(reinterpret_cast<uint8_t const*>(start), size, multi);
++  }
++
++  bool tryParse(uint8_t const* start, std::size_t size, bool multi = false) {
++    _start = start;
++    _size = size;
++    _pos = 0;
++    _nesting = 0;
++    _errorMsg = nullptr;
++    if (options->clearBuilderBeforeParse) {
++      _builder->clear();
++    }
++    ValueLength nr = 0;
++    return parseInternal(multi, nr);
++  }
++
++  // the error reported by the last failed tryParse()
++  Exception error() const {
++    return Exception(_errorType, _errorMsg != nullptr ? _errorMsg : "");
++  }
++
+   ValueLength parse(std::string const& json, bool multi = false) {
+     return parse(reinterpret_cast<uint8_t const*>(json.data()), json.size(),
+                  multi);
+@@ -187,7 +246,12 @@ class Parser {
+     if (options->clearBuilderBeforeParse) {
+       _builder->clear();
+     }
+-    return parseInternal(multi);
++    _errorMsg = nullptr;
++    ValueLength nr = 0;
++    if (!parseInternal(multi, nr)) {
++      throw error();
++    }
++    return nr;
+   }
+ 
+   // We probably want a parse from stream at some stage...
+@@ -230,52 +294,69 @@ class Parser {
+ 
+   inline void reset() { _pos = 0; }
+ 
+-  ValueLength parseInternal(bool multi);
++  bool parseInternal(bool multi, ValueLength& nr);
++
++  // records the error for tryParse() and returns false
++  bool fail(Exception::ExceptionType type, char const* msg) {
++    _errorType = type;
++    _errorMsg = msg;
++    return false;
++  }
++
++  bool fail(Exception::ExceptionType type) {
++    return fail(type, Exception::message(type));
++  }
+ 
+   inline bool isWhiteSpace(uint8_t i) const noexcept {
+     return (i == ' ' || i == '\t' || i == '\n' || i == '\r');
+   }
+ 
+   // skips over all following whitespace tokens but does not consume the
+-  // byte following the whitespace
++  // byte following the whitespace. returns the byte, or -1 after recording
++  // a parse error (unexpected end of input)
+   int skipWhiteSpace(char const*);
+ 
+-  void parseTrue() {
++  bool parseTrue() {
+     // Called, when main mode has just seen a 't', need to see "rue" next
+     if (consume() != 'r' || consume() != 'u' || consume() != 'e') {
+-      throw Exception(Exception::ParseError, "Expecting 'true'");
++      return fail(Exception::ParseError, "Expecting 'true'");
+     }
+     _builderPtr->addTrue();
++    return true;
+   }
+ 
+-  void parseFalse() {
++  bool parseFalse() {
+     // Called, when main mode has just seen a 'f', need to see "alse" next
+     if (consume() != 'a' || consume() != 'l' || consume() != 's' ||
+         consume() != 'e') {
+-      throw Exception(Exception::ParseError, "Expecting 'false'");
++      return fail(Exception::ParseError, "Expecting 'false'");
+     }
+     _builderPtr->addFalse();
++    return true;
+   }
+ 
+-  void parseNull() {
++  bool parseNull() {
+     // Called, when main mode has just seen a 'n', need to see "ull" next
+     if (consume() != 'u' || consume() != 'l' || consume() != 'l') {
+-      throw Exception(Exception::ParseError, "Expecting 'null'");
++      return fail(Exception::ParseError, "Expecting 'null'");
+     }
+     _builderPtr->addNull();
++    return true;
+   }
+ 
+-  void scanDigits(ParsedNumber& value) {
++  bool scanDigits(ParsedNumber& value) {
+     while (true) {
+       int i = consume();
+       if (i < 0) {
+-        return;
++        return true;
+       }
+       if (i < '0' || i > '9') {
+         unconsume();
+-        return;
++        return true;
++      }
++      if (!value.addDigit(i)) {
++        return fail(Exception::NumberOutOfRange);
+       }
+-      value.addDigit(i);
+     }
+   }
+ 
+@@ -296,10 +377,12 @@ class Parser {
+     }
+   }
+ 
+-  inline int getOneOrThrow(char const* msg) {
++  // returns the next byte, or -1 after recording a parse error
++  inline int getOneOrFail(char const* msg) {
+     int i = consume();
+     if (i < 0) {
+-      throw Exception(Exception::ParseError, msg);
++      fail(Exception::ParseError, msg);
++      return -1;
+     }
+     return i;
+   }
+@@ -308,15 +391,16 @@ class Parser {
+ 
+   inline void decreaseNesting() { --_nesting; }
+ 
+-  void parseNumber();
++  // the parse* functions return false after recording a parse error
++  bool parseNumber();
+ 
+-  void parseString();
++  bool parseString();
+ 
+-  void parseArray();
++  bool parseArray();
+ 
+-  void parseObject();
++  bool parseObject();
+ 
+-  void parseJson();
++  bool parseJson();
+ };
+ 
+ }  // namespace arangodb::velocypack
+diff -rupN velocypack-XYZ1.0.orig/src/Parser.cpp velocypack-XYZ1.0/src/Parser.cpp
+--- velocypack-XYZ1.0.orig/src/Parser.cpp	2026-09-08 11:08:55.919737589 +0800
++++ velocypack-XYZ1.0/src/Parser.cpp	2026-09-08 11:13:25.646994716 +0800
+@@ -34,12 +34,13 @@ using namespace arangodb::velocypack;
+ 
+ // The following function does the actual parse. It gets bytes
+ // via peek, consume and reset appends the result to the Builder
+-// in *_builderPtr. Errors are reported via an exception.
++// in *_builderPtr. Parse errors are recorded via fail() and reported
++// by returning false; parse() turns them into an exception.
+ // Behind the scenes it runs two parses, one to collect sizes and
+ // check for parse errors (scan phase) and then one to actually
+ // build the result (build phase).
+ 
+-ValueLength Parser::parseInternal(bool multi) {
++bool Parser::parseInternal(bool multi, ValueLength& nr) {
+   // skip over optional BOM
+   if (_size >= 3 && _start[0] == 0xef && _start[1] == 0xbb &&
+       _start[2] == 0xbf) {
+@@ -47,7 +48,7 @@ ValueLength Parser::parseInternal(bool m
+     _pos += 3;
+   }
+ 
+-  ValueLength nr = 0;
++  nr = 0;
+   do {
+     bool haveReported = false;
+     if (!_builderPtr->_stack.empty()) {
+@@ -63,31 +64,39 @@ ValueLength Parser::parseInternal(bool m
+         haveReported = true;
+       }
+     }
++    bool ok;
+     try {
+-      parseJson();
++      ok = parseJson();
+     } catch (...) {
+       if (haveReported) {
+         _builderPtr->cleanupAdd();
+       }
+       throw;
+     }
++    if (!ok) {
++      if (haveReported) {
++        _builderPtr->cleanupAdd();
++      }
++      return false;
++    }
+     nr++;
+     while (_pos < _size && isWhiteSpace(_start[_pos])) {
+       ++_pos;
+     }
+     if (!multi && _pos != _size) {
+       consume();  // to get error reporting right. return value intentionally not checked
+-      throw Exception(Exception::ParseError, "Expecting EOF");
++      return fail(Exception::ParseError, "Expecting EOF");
+     }
+   } while (multi && _pos < _size);
+-  return nr;
++  return true;
+ }
+ 
+ // skips over all following whitespace tokens but does not consume the
+ // byte following the whitespace
+ int Parser::skipWhiteSpace(char const* err) {
+   if (VELOCYPACK_UNLIKELY(_pos >= _size)) {
+-    throw Exception(Exception::ParseError, err);
++    fail(Exception::ParseError, err);
++    return -1;
+   }
+   uint8_t c = _start[_pos];
+   if (!isWhiteSpace(c)) {
+@@ -96,7 +105,8 @@ int Parser::skipWhiteSpace(char const* e
+   if (c == ' ') {
+     if (_pos + 1 >= _size) {
+       _pos++;
+-      throw Exception(Exception::ParseError, err);
++      fail(Exception::ParseError, err);
++      return -1;
+     }
+     c = _start[_pos + 1];
+     if (!isWhiteSpace(c)) {
+@@ -115,11 +125,12 @@ int Parser::skipWhiteSpace(char const* e
+     }
+     _pos++;
+   } while (_pos < _size);
+-  throw Exception(Exception::ParseError, err);
++  fail(Exception::ParseError, err);
++  return -1;
+ }
+ 
+ // parses a number value
+-void Parser::parseNumber() {
++bool Parser::parseNumber() {
+   std::size_t startPos = _pos;
+   ParsedNumber numberValue;
+   bool negative = false;
+@@ -127,16 +138,21 @@ void Parser::parseNumber() {
+   // We know that a character is coming, and it's a number if it
+   // starts with '-' or a digit. otherwise it's invalid
+   if (i == '-') {
+-    i = getOneOrThrow("Incomplete number");
++    i = getOneOrFail("Incomplete number");
++    if (i < 0) {
++      return false;
++    }
+     negative = true;
+   }
+   if (i < '0' || i > '9') {
+-    throw Exception(Exception::ParseError, "Expecting digit");
++    return fail(Exception::ParseError, "Expecting digit");
+   }
+ 
+   if (i != '0') {
+     unconsume();
+-    scanDigits(numberValue);
++    if (!scanDigits(numberValue)) {
++      return false;
++    }
+   }
+   i = consume();
+   if (i < 0 || (i != '.' && i != 'e' && i != 'E')) {
+@@ -160,15 +176,18 @@ void Parser::parseNumber() {
+     } else {
+       _builderPtr->addUInt(numberValue.intValue);
+     }
+-    return;
++    return true;
+   }
+ 
+   double fractionalPart;
+   if (i == '.') {
+     // fraction. skip over '.'
+-    i = getOneOrThrow("Incomplete number");
++    i = getOneOrFail("Incomplete number");
++    if (i < 0) {
++      return false;
++    }
+     if (i < '0' || i > '9') {
+-      throw Exception(Exception::ParseError, "Incomplete number");
++      return fail(Exception::ParseError, "Incomplete number");
+     }
+     unconsume();
+     fractionalPart = scanDigitsFractional();
+@@ -180,7 +199,7 @@ void Parser::parseNumber() {
+     i = consume();
+     if (i < 0) {
+       _builderPtr->addDouble(fractionalPart);
+-      return;
++      return true;
+     }
+   } else {
+     if (negative) {
+@@ -195,35 +214,44 @@ void Parser::parseNumber() {
+     // when interpreting and multiplying the single digits of the input stream
+     // _builderPtr->addDouble(fractionalPart);
+     _builderPtr->addDouble(atof(reinterpret_cast<char const*>(_start) + startPos));
+-    return;
++    return true;
++  }
++  i = getOneOrFail("Incomplete number");
++  if (i < 0) {
++    return false;
+   }
+-  i = getOneOrThrow("Incomplete number");
+   negative = false;
+   if (i == '+' || i == '-') {
+     negative = (i == '-');
+-    i = getOneOrThrow("Incomplete number");
++    i = getOneOrFail("Incomplete number");
++    if (i < 0) {
++      return false;
++    }
+   }
+   if (i < '0' || i > '9') {
+-    throw Exception(Exception::ParseError, "Incomplete number");
++    return fail(Exception::ParseError, "Incomplete number");
+   }
+   unconsume();
+   ParsedNumber exponent;
+-  scanDigits(exponent);
++  if (!scanDigits(exponent)) {
++    return false;
++  }
+   if (negative) {
+     fractionalPart *= pow(10, -exponent.asDouble());
+   } else {
+     fractionalPart *= pow(10, exponent.asDouble());
+   }
+   if (std::isnan(fractionalPart) || !std::isfinite(fractionalPart)) {
+-    throw Exception(Exception::NumberOutOfRange);
++    return fail(Exception::NumberOutOfRange);
+   }
+   // use conventional atof() conversion here, to avoid precision loss
+   // when interpreting and multiplying the single digits of the input stream
+   // _builderPtr->addDouble(fractionalPart);
+   _builderPtr->addDouble(atof(reinterpret_cast<char const*>(_start) + startPos));
++  return true;
+ }
+ 
+-void Parser::parseString() {
++bool Parser::parseString() {
+   // When we get here, we have seen a " character and now want to
+   // find the end of the string and parse the string value to its
+   // VPack representation. We assume that the string is short and
+@@ -254,7 +282,10 @@ void Parser::parseString() {
+       _pos += count;
+       _builderPtr->advance(count);
+     }
+-    int i = getOneOrThrow("Unfinished string");
++    int i = getOneOrFail("Unfinished string");
++    if (i < 0) {
++      return false;
++    }
+     if (!large && _builderPtr->_pos - (base + 1) > 126) {
+       large = true;
+       _builderPtr->reserve(8);
+@@ -277,12 +308,12 @@ void Parser::parseString() {
+             len >>= 8;
+           }
+         }
+-        return;
++        return true;
+       case '\\':
+-        // Handle cases or throw error
++        // Handle cases or fail
+         i = consume();
+         if (VELOCYPACK_UNLIKELY(i < 0)) {
+-          throw Exception(Exception::ParseError, "Invalid escape sequence");
++          return fail(Exception::ParseError, "Invalid escape sequence");
+         }
+         switch (i) {
+           case '"':
+@@ -316,8 +347,8 @@ void Parser::parseString() {
+             for (int j = 0; j < 4; j++) {
+               i = consume();
+               if (i < 0) {
+-                throw Exception(Exception::ParseError,
+-                                "Unfinished \\uXXXX escape sequence");
++                return fail(Exception::ParseError,
++                            "Unfinished \\uXXXX escape sequence");
+               }
+               if (i >= '0' && i <= '9') {
+                 v = (v << 4) + i - '0';
+@@ -326,8 +357,8 @@ void Parser::parseString() {
+               } else if (i >= 'A' && i <= 'F') {
+                 v = (v << 4) + i - 'A' + 10;
+               } else {
+-                throw Exception(Exception::ParseError,
+-                                "Illegal \\uXXXX escape sequence");
++                return fail(Exception::ParseError,
++                            "Illegal \\uXXXX escape sequence");
+               }
+             }
+             if (v < 0x80) {
+@@ -363,7 +394,7 @@ void Parser::parseString() {
+             break;
+           }
+           default:
+-            throw Exception(Exception::ParseError, "Invalid escape sequence");
++            return fail(Exception::ParseError, "Invalid escape sequence");
+         }
+         break;
+       default:
+@@ -371,7 +402,7 @@ void Parser::parseString() {
+           // non-UTF-8 sequence
+           if (VELOCYPACK_UNLIKELY(i < 0x20)) {
+             // control character
+-            throw Exception(Exception::UnexpectedControlCharacter);
++            return fail(Exception::UnexpectedControlCharacter);
+           }
+           highSurrogate = 0;
+           _builderPtr->appendByte(static_cast<uint8_t>(i));
+@@ -383,7 +414,7 @@ void Parser::parseString() {
+             // multi-byte UTF-8 sequence!
+             int follow = 0;
+             if ((i & 0xe0) == 0x80) {
+-              throw Exception(Exception::InvalidUtf8Sequence);
++              return fail(Exception::InvalidUtf8Sequence);
+             } else if ((i & 0xe0) == 0xc0) {
+               // two-byte sequence
+               follow = 1;
+@@ -394,16 +425,19 @@ void Parser::parseString() {
+               // four-byte sequence
+               follow = 3;
+             } else {
+-              throw Exception(Exception::InvalidUtf8Sequence);
++              return fail(Exception::InvalidUtf8Sequence);
+             }
+ 
+             // validate follow up characters
+             _builderPtr->reserve(1 + follow);
+             _builderPtr->appendByteUnchecked(static_cast<uint8_t>(i));
+             for (int j = 0; j < follow; ++j) {
+-              i = getOneOrThrow("scanString: truncated UTF-8 sequence");
++              i = getOneOrFail("scanString: truncated UTF-8 sequence");
++              if (i < 0) {
++                return false;
++              }
+               if ((i & 0xc0) != 0x80) {
+-                throw Exception(Exception::InvalidUtf8Sequence);
++                return fail(Exception::InvalidUtf8Sequence);
+               }
+               _builderPtr->appendByteUnchecked(static_cast<uint8_t>(i));
+             }
+@@ -415,15 +449,18 @@ void Parser::parseString() {
+   }
+ }
+ 
+-void Parser::parseArray() {
++bool Parser::parseArray() {
+   _builderPtr->addArray();
+ 
+   int i = skipWhiteSpace("Expecting item or ']'");
++  if (i < 0) {
++    return false;
++  }
+   if (i == ']') {
+     // empty array
+     ++_pos;  // the closing ']'
+     _builderPtr->close();
+-    return;
++    return true;
+   }
+ 
+   increaseNesting();
+@@ -431,30 +468,39 @@ void Parser::parseArray() {
+   while (true) {
+     // parse array element itself
+     _builderPtr->reportAdd();
+-    parseJson();
++    if (!parseJson()) {
++      return false;
++    }
+     i = skipWhiteSpace("Expecting ',' or ']'");
++    if (i < 0) {
++      return false;
++    }
+     if (i == ']') {
+       // end of array
+       ++_pos;  // the closing ']'
+       _builderPtr->close();
+       decreaseNesting();
+-      return;
++      return true;
+     }
+     // skip over ','
+     if (VELOCYPACK_UNLIKELY(i != ',')) {
+-      throw Exception(Exception::ParseError, "Expecting ',' or ']'");
++      return fail(Exception::ParseError, "Expecting ',' or ']'");
+     }
+     ++_pos;  // the ','
+   }
+ 
+   // should never get here
+   VELOCYPACK_ASSERT(false);
++  return false;
+ }
+ 
+-void Parser::parseObject() {
++bool Parser::parseObject() {
+   _builderPtr->addObject();
+ 
+   int i = skipWhiteSpace("Expecting item or '}'");
++  if (i < 0) {
++    return false;
++  }
+   if (i == '}') {
+     // empty object
+     consume();  // the closing '}'. return value intentionally not checked
+@@ -463,7 +509,7 @@ void Parser::parseObject() {
+       // only close if we've not been asked to keep top level open
+       _builderPtr->close();
+     }
+-    return;
++    return true;
+   }
+ 
+   increaseNesting();
+@@ -471,14 +517,16 @@ void Parser::parseObject() {
+   while (true) {
+     // always expecting a string attribute name here
+     if (VELOCYPACK_UNLIKELY(i != '"')) {
+-      throw Exception(Exception::ParseError, "Expecting '\"' or '}'");
++      return fail(Exception::ParseError, "Expecting '\"' or '}'");
+     }
+     // get past the initial '"'
+     ++_pos;
+ 
+     _builderPtr->reportAdd();
+     auto const lastPos = _builderPtr->_pos;
+-    parseString();
++    if (!parseString()) {
++      return false;
++    }
+ 
+     if (options->attributeTranslator != nullptr) {
+       // check if a translation for the attribute name exists
+@@ -501,15 +549,23 @@ void Parser::parseObject() {
+     }
+ 
+     i = skipWhiteSpace("Expecting ':'");
++    if (i < 0) {
++      return false;
++    }
+     // always expecting the ':' here
+     if (VELOCYPACK_UNLIKELY(i != ':')) {
+-      throw Exception(Exception::ParseError, "Expecting ':'");
++      return fail(Exception::ParseError, "Expecting ':'");
+     }
+     ++_pos;  // skip over the colon
+ 
+-    parseJson();
++    if (!parseJson()) {
++      return false;
++    }
+ 
+     i = skipWhiteSpace("Expecting ',' or '}'");
++    if (i < 0) {
++      return false;
++    }
+     if (i == '}') {
+       // end of object
+       ++_pos;  // the closing '}'
+@@ -518,53 +574,52 @@ void Parser::parseObject() {
+         _builderPtr->close();
+       }
+       decreaseNesting();
+-      return;
++      return true;
+     }
+     if (VELOCYPACK_UNLIKELY(i != ',')) {
+-      throw Exception(Exception::ParseError, "Expecting ',' or '}'");
++      return fail(Exception::ParseError, "Expecting ',' or '}'");
+     }
+     // skip over ','
+     ++_pos;  // the ','
+     i = skipWhiteSpace("Expecting '\"' or '}'");
++    if (i < 0) {
++      return false;
++    }
+   }
+ 
+   // should never get here
+   VELOCYPACK_ASSERT(false);
++  return false;
+ }
+ 
+-void Parser::parseJson() {
+-  skipWhiteSpace("Expecting item"); // return value intentionally not checked
++bool Parser::parseJson() {
++  if (skipWhiteSpace("Expecting item") < 0) {
++    return false;
++  }
+ 
+   int i = consume();
+   if (i < 0) {
+-    return;
++    return true;
+   }
+   switch (i) {
+     case '{':
+-      parseObject();  // this consumes the closing '}' or throws
+-      break;
++      return parseObject();  // this consumes the closing '}' or fails
+     case '[':
+-      parseArray();  // this consumes the closing ']' or throws
+-      break;
++      return parseArray();  // this consumes the closing ']' or fails
+     case 't':
+-      parseTrue();  // this consumes "rue" or throws
+-      break;
++      return parseTrue();  // this consumes "rue" or fails
+     case 'f':
+-      parseFalse();  // this consumes "alse" or throws
+-      break;
++      return parseFalse();  // this consumes "alse" or fails
+     case 'n':
+-      parseNull();  // this consumes "ull" or throws
+-      break;
++      return parseNull();  // this consumes "ull" or fails
+     case '"':
+-      parseString();
+-      break;
++      return parseString();
+     default: {
+       // everything else must be a number or is invalid...
+-      // this includes '-' and '0' to '9'. scanNumber() will
+-      // throw if the input is non-numeric
++      // this includes '-' and '0' to '9'. parseNumber() will
++      // fail if the input is non-numeric
+       unconsume();
+-      parseNumber();  // this consumes the number or throws
+-      break;
++      return parseNumber();  // this consumes the number or fails
+     }
+   }
+ }

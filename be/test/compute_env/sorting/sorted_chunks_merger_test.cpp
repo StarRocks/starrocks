@@ -34,16 +34,15 @@ public:
         config::vector_chunk_size = 1024;
 
         const auto& int_type_desc = TypeDescriptor(TYPE_INT);
-        const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         MutableColumnPtr col_cust_key_1 = ColumnHelper::create_column(int_type_desc, false);
         MutableColumnPtr col_cust_key_2 = ColumnHelper::create_column(int_type_desc, false);
         MutableColumnPtr col_cust_key_3 = ColumnHelper::create_column(int_type_desc, false);
-        MutableColumnPtr col_nation_1 = ColumnHelper::create_column(varchar_type_desc, true);
-        MutableColumnPtr col_nation_2 = ColumnHelper::create_column(varchar_type_desc, true);
-        MutableColumnPtr col_nation_3 = ColumnHelper::create_column(varchar_type_desc, true);
-        MutableColumnPtr col_region_1 = ColumnHelper::create_column(varchar_type_desc, true);
-        MutableColumnPtr col_region_2 = ColumnHelper::create_column(varchar_type_desc, true);
-        MutableColumnPtr col_region_3 = ColumnHelper::create_column(varchar_type_desc, true);
+        MutableColumnPtr col_nation_1 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+        MutableColumnPtr col_nation_2 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+        MutableColumnPtr col_nation_3 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+        MutableColumnPtr col_region_1 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+        MutableColumnPtr col_region_2 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+        MutableColumnPtr col_region_3 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
 
         col_cust_key_1->append_datum(int32_t(71));
         col_cust_key_1->append_datum(int32_t(70));

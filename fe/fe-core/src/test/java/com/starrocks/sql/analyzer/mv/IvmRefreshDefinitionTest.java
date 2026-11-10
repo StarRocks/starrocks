@@ -14,18 +14,22 @@
 
 package com.starrocks.sql.analyzer.mv;
 
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -132,6 +136,44 @@ public class IvmRefreshDefinitionTest extends MVIVMIcebergTestBase {
             mv.setIvmDefineSql("SELECT 1 AS broken");
             assertEquals(derived, IvmRefreshDefinition.derive(connectContext, mv),
                     "derive must re-derive from the user query, not consult the frozen ivmDefineSql");
+        });
+    }
+
+    private static final String STRING_KEYED_QUERY =
+            "SELECT data, id, count(*) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY data, id";
+
+    @Test
+    public void testStringKeyedMvUsesFingerprintV2() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_fp_v2 REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") AS " + STRING_KEYED_QUERY;
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_fp_v2");
+            assertEquals(IvmOpUtils.ENCODE_ROW_ID_VERSION_FINGERPRINT_V2, mv.getEncodeRowIdVersion());
+            String derived = IvmRefreshDefinition.derive(connectContext, mv);
+            assertTrue(derived.contains("encode_fingerprint_sha256_v2("), derived);
+        });
+        // A NULL argument is a real key value, so a call with one must not be folded to NULL.
+        assertTrue(GlobalStateMgr.getCurrentState()
+                .isNotAlwaysNullResultWithNullParamFunction(FunctionSet.ENCODE_FINGERPRINT_SHA256_V2));
+    }
+
+    /** An mv created before v2 keeps the encoding its stored row ids were computed with. */
+    @Test
+    public void testV1MvKeepsV1ThroughRefreshAndActive() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_fp_v1 REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") AS " + STRING_KEYED_QUERY;
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_fp_v1");
+            mv.setEncodeRowIdVersion(IvmOpUtils.ENCODE_ROW_ID_VERSION_FINGERPRINT);
+
+            String derived = IvmRefreshDefinition.derive(connectContext, mv);
+            assertTrue(derived.contains("encode_fingerprint_sha256("), derived);
+            assertFalse(derived.contains("encode_fingerprint_sha256_v2"), derived);
+
+            starRocksAssert.ddl("ALTER MATERIALIZED VIEW mv_fp_v1 INACTIVE");
+            starRocksAssert.ddl("ALTER MATERIALIZED VIEW mv_fp_v1 ACTIVE");
+            assertTrue(mv.isActive(), "inactive reason: " + mv.getInactiveReason());
+            assertEquals(IvmOpUtils.ENCODE_ROW_ID_VERSION_FINGERPRINT, mv.getEncodeRowIdVersion());
         });
     }
 }

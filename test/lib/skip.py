@@ -38,7 +38,6 @@ skip_res_cmd = [
     "SHOW ALTER TABLE COLUMN ORDER BY CreateTime DESC LIMIT 1.*",
     "show load.*",
     "SELECT `v2` FROM `test_except_with_only_one_tablet`.*",
-    "SHOW PARTITIONS.*",
     "SHOW REPLICA",
     "show routine load",
     "SELECT DISTINCT k1 FROM aggregate_tbl LIMIT 1",

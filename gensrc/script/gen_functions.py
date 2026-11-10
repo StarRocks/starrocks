@@ -44,8 +44,8 @@ license_string = """
 
 // This is a generated file, DO NOT EDIT.
 // To add new functions, see the generator at
-// common/function-registry/gen_builtins_catalog.py or the function list at
-// common/function-registry/starrocks_builtins_functions.py.
+// gensrc/script/gen_functions.py or the function list at
+// gensrc/script/functions.py.
 """
 
 java_template = Template(
@@ -60,19 +60,25 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.common.Pair;
-import com.starrocks.thrift.TAIModelSource;
+import com.starrocks.type.MapType;
 import com.starrocks.type.Type;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.Vector;
 
 import static com.starrocks.type.AnyArrayType.ANY_ARRAY;
 import static com.starrocks.type.AnyElementType.ANY_ELEMENT;
+import static com.starrocks.type.AnyGeographyType.GEOGRAPHY;
+import static com.starrocks.type.AnyGeometryType.GEOMETRY;
 import static com.starrocks.type.AnyMapType.ANY_MAP;
 import static com.starrocks.type.AnyStructType.ANY_STRUCT;
 import static com.starrocks.type.ArrayType.ARRAY_BIGINT;
@@ -101,6 +107,7 @@ import static com.starrocks.type.DecimalType.DECIMAL256;
 import static com.starrocks.type.DecimalType.DECIMAL32;
 import static com.starrocks.type.DecimalType.DECIMAL64;
 import static com.starrocks.type.DecimalType.DECIMALV2;
+import static com.starrocks.type.FileType.FILE;
 import static com.starrocks.type.FloatType.DOUBLE;
 import static com.starrocks.type.FloatType.FLOAT;
 import static com.starrocks.type.FunctionType.FUNCTION;
@@ -119,6 +126,22 @@ import static com.starrocks.type.VariantType.VARIANT;
 
 public class VectorizedBuiltinFunctions {
     public static final Set<String> AI_FUNCTION_NAMES = ImmutableSet.of(${ai_function_names});
+
+    public enum AICapability {
+        CHAT, EMBEDDING
+    }
+
+    public record AIFunctionDescriptor(AICapability capability, int modelArgument, int providerArgument) {
+    }
+
+    private static final Map<Long, AIFunctionDescriptor> AI_FUNCTION_DESCRIPTORS =
+            ImmutableMap.<Long, AIFunctionDescriptor>builder()
+${ai_descriptors}
+                    .build();
+
+    public static AIFunctionDescriptor getAIFunctionDescriptor(long functionId) {
+        return AI_FUNCTION_DESCRIPTORS.get(functionId);
+    }
 
     public static void initBuiltins(FunctionSet functionSet) {
         ${functions}
@@ -143,6 +166,8 @@ function_signature_set = set()
 FE_HIDDEN_FUNCTIONS = {'dict_encode'}
 
 def add_function(fn_data):
+    metadata = fn_data[-1] if isinstance(fn_data[-1], dict) else {}
+    fn_data = fn_data[:-1] if isinstance(fn_data[-1], dict) else fn_data
     entry = dict()
     if fn_data[0] in function_set:
         print("=================================================================")
@@ -189,25 +214,136 @@ def add_function(fn_data):
         entry["prepare"] = "&" + fn_data[7] if fn_data[7] != "nullptr" else "nullptr"
         entry["close"] = "&" + fn_data[8] if fn_data[8] != "nullptr" else "nullptr"
 
-    # Named Arguments metadata: check if last element is a dict with 'named_args' key
-    entry["named_args"] = []
-    if fn_data and isinstance(fn_data[-1], dict) and 'named_args' in fn_data[-1]:
-        entry["named_args"] = fn_data[-1]['named_args']
+    entry["named_args"] = metadata.get('named_args', [])
+    if 'ai' in metadata:
+        entry["binary_type"] = "AI"
+        entry["ai"] = validate_ai_metadata(fn_data, metadata['ai'], entry["named_args"])
 
     function_list.append(entry)
     return entry
 
 
-def add_ai_function(fn_data):
-    if len(fn_data) != 8:
-        raise ValueError("AI function entries must declare a model source: " + repr(fn_data))
+# These are the input/output contracts of the BE prompt builders and result decoders,
+# not lists of SQL function names or FIDs. Overloads bind argument names in functions.py.
+AI_PROMPT_INPUT_TYPES = {
+    'NONE': [],
+    'PASSTHROUGH': ['VARCHAR'],
+    'SENTIMENT': ['VARCHAR'],
+    'CLASSIFY': ['VARCHAR', 'ARRAY_VARCHAR'],
+    'EXTRACT': ['VARCHAR', 'ARRAY_VARCHAR'],
+    'FIX_GRAMMAR': ['VARCHAR'],
+    'REDACT': ['VARCHAR', 'ARRAY_VARCHAR'],
+    'TRANSLATE': ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+    'SIMILARITY': ['VARCHAR', 'VARCHAR'],
+    'SUMMARIZE': ['VARCHAR'],
+    'FILTER': ['VARCHAR', 'VARCHAR'],
+}
+AI_RESULT_TYPES = {
+    'STRING': 'VARCHAR', 'SENTIMENT': 'VARCHAR', 'JSON': 'JSON',
+    'SIMILARITY': 'FLOAT', 'BOOLEAN': 'BOOLEAN', 'EMBEDDING': 'ARRAY_FLOAT',
+}
+AI_ARGUMENT_TYPES = {'VARCHAR': 'VARCHAR', 'JSON': 'OPTIONS', 'ARRAY_VARCHAR': 'STRING_ARRAY', 'FILE': 'FILE'}
 
-    entry = add_function(fn_data[:7])
-    entry["binary_type"] = "AI"
-    entry["model_source"] = fn_data[7]
+
+def validate_ai_metadata(fn_data, ai, named_args):
+    def invalid(message):
+        raise ValueError(f"Invalid AI function {fn_data[0]}: {message}")
+
+    if not isinstance(ai, dict):
+        invalid('semantic metadata is required')
+    required = {'capability', 'prompt_kind', 'result_kind', 'inputs'}
+    optional = {'null_as_empty', 'blank_as_null'}
+    if not required <= ai.keys() or ai.keys() - required - optional:
+        invalid('missing or unknown semantic metadata fields')
+    if not named_args:
+        invalid('AI functions must declare named_args')
+    names = [param['name'] for param in named_args]
+
+    def argument(name, role):
+        try:
+            return names.index(name)
+        except ValueError:
+            invalid(f"{role} refers to unknown parameter {name!r}")
+
+    file_arguments = [i for i, arg in enumerate(fn_data[5]) if arg == 'FILE']
+    if len(file_arguments) > 1:
+        invalid('only one FILE input is supported')
+
+    # Keep runtime descriptors positional; only declarations use names.
+    metadata = {
+        'capability': ai['capability'],
+        'prompt_kind': ai['prompt_kind'],
+        'result_kind': ai['result_kind'],
+        'input_arguments': [argument(name, 'inputs') for name in ai['inputs']],
+        'file_argument': file_arguments[0] if file_arguments else -1,
+        'model_argument': names.index('model') if 'model' in names else -1,
+        'provider_argument': names.index('provider') if 'provider' in names else -1,
+        'null_as_empty_arguments': [argument(name, 'null_as_empty') for name in ai.get('null_as_empty', ())],
+        'blank_as_null_arguments': [argument(name, 'blank_as_null') for name in ai.get('blank_as_null', ())],
+    }
+    if metadata['capability'] not in ('CHAT', 'EMBEDDING'):
+        invalid('unsupported capability')
+    if metadata['prompt_kind'] not in AI_PROMPT_INPUT_TYPES:
+        invalid('unsupported prompt kind')
+    if AI_RESULT_TYPES.get(metadata['result_kind']) != fn_data[4]:
+        invalid('result decoder must match SQL return type')
+    if (metadata['capability'] == 'EMBEDDING') != (metadata['result_kind'] == 'EMBEDDING'):
+        invalid('embedding capability and result decoder must agree')
+    if metadata['capability'] == 'EMBEDDING' and metadata['prompt_kind'] not in ('PASSTHROUGH', 'NONE'):
+        invalid('embedding input must not use a chat prompt builder')
+
+    args = fn_data[5]
+    if any(arg not in AI_ARGUMENT_TYPES for arg in args):
+        invalid('unsupported AI argument type')
+    options = [names.index('options')] if 'options' in names else []
+    if args.count('JSON') > 1:
+        invalid('only one options JSON is supported')
+    if options and args[options[0]] != 'JSON':
+        invalid('options must refer to JSON')
+    # Match the SQL analyzer's optional trailing-options contract.
+    if options and options[0] != len(args) - 1:
+        invalid('options must be the last SQL argument')
+    inputs = metadata['input_arguments']
+    if not isinstance(inputs, list) or any(type(i) is not int or i < 0 or i >= len(args) for i in inputs):
+        invalid('invalid input argument positions')
+    if [args[i] for i in inputs] != AI_PROMPT_INPUT_TYPES[metadata['prompt_kind']]:
+        invalid('input arguments must match the prompt builder contract')
+
+    file_argument = metadata.setdefault('file_argument', -1)
+    if type(file_argument) is not int or file_argument < -1 or file_argument >= len(args):
+        invalid('file_argument is out of range')
+    if file_argument >= 0 and args[file_argument] != 'FILE':
+        invalid('file_argument must refer to a FILE')
+    if metadata['prompt_kind'] == 'NONE' and (metadata['capability'] != 'EMBEDDING' or file_argument < 0):
+        invalid('NONE prompt requires a FILE embedding input')
+    if metadata['capability'] == 'EMBEDDING' and file_argument >= 0 and metadata['prompt_kind'] != 'NONE':
+        invalid('FILE embedding input must not use a text prompt builder')
+
+    selectors = []
+    for field in ('model_argument', 'provider_argument'):
+        index = metadata.setdefault(field, -1)
+        if type(index) is not int or index < -1 or index >= len(args):
+            invalid(f'{field} is out of range')
+        if index >= 0:
+            if args[index] != 'VARCHAR':
+                invalid(f'{field} must refer to a VARCHAR')
+            selectors.append(index)
+    roles = inputs + ([file_argument] if file_argument >= 0 else []) + selectors + options
+    if len(roles) != len(args) or sorted(roles) != list(range(len(args))):
+        invalid('every SQL argument must have exactly one semantic role')
+    for field in ('null_as_empty_arguments', 'blank_as_null_arguments'):
+        indices = metadata.setdefault(field, [])
+        if not isinstance(indices, list) or any(type(i) is not int or i not in inputs or args[i] != 'VARCHAR'
+                                                for i in indices):
+            invalid(f'{field} must refer to VARCHAR input arguments')
+        if len(set(indices)) != len(indices):
+            invalid(f'duplicate positions in {field}')
+    if set(metadata['null_as_empty_arguments']) & set(metadata['blank_as_null_arguments']):
+        invalid('conflicting NULL and blank policies')
+    return metadata
 
 
-def generate_default_value(param, fn_id):
+def generate_default_value(param, fn_id, arg_type):
     """Convert Python value to Java Expr code for Named Arguments default values"""
     default = param.get('default')
     name = param['name']
@@ -227,6 +363,12 @@ def generate_default_value(param, fn_id):
             .replace('\r', '\\r')   # carriage return
             .replace('\t', '\\t'))  # tab
         return f'            defaults{fn_id}.add(new Pair<>("{name}", new StringLiteral("{escaped}")));'
+    elif type(default) is dict and not default and arg_type == 'JSON':
+        return (f'            defaults{fn_id}.add(new Pair<>("{name}", '
+                'new FunctionCallExpr("json_object", Lists.newArrayList())));')
+    elif type(default) is dict and not default:
+        return (f'            defaults{fn_id}.add(new Pair<>("{name}", '
+                'new MapExpr(new MapType(VARCHAR, VARCHAR), Lists.newArrayList())));')
     else:
         print(f"WARNING: Unsupported default value type '{type(default).__name__}' "
               f"for parameter '{name}' in function {fn_id}. "
@@ -238,11 +380,6 @@ def generate_fe(path):
     fn_template = Template(
         'functionSet.addVectorizedScalarBuiltin(${id}, "${name}", ${has_vargs}, ${ret}${args_types});'
     )
-    ai_fn_template = Template(
-        'functionSet.addVectorizedAIScalarBuiltin(${id}, "${name}", ${has_vargs}, '
-        'TAIModelSource.${model_source}, ${ret}${args_types});'
-    )
-
     fn_named_template = Template('''{
             List<Type> argTypes${id} = Lists.newArrayList(${args_types_list});
             Function fn${id} = ScalarFunction.createVectorizedBuiltin(${id}L, "${name}", argTypes${id}, ${has_vargs}, ${ret});
@@ -250,7 +387,7 @@ def generate_fe(path):
             Vector<Pair<String, Expr>> defaults${id} = new Vector<>();
 ${default_values}
             fn${id}.setDefaultNamedArgs(defaults${id});
-            functionSet.addBuiltin(fn${id});
+            functionSet.${register}(fn${id});
         }''')
 
     def gen_fe_fn(fnm):
@@ -259,15 +396,11 @@ ${default_values}
             [i for i in fnm["args"] if i != "..."]
         )
         fnm["has_vargs"] = "true" if "..." in fnm["args"] else "false"
-
-        if fnm.get("binary_type") == "AI":
-            return ai_fn_template.substitute(fnm)
-
         # Check if function has named arguments
         if fnm.get("named_args"):
             named_args = fnm["named_args"]
             arg_names = ', '.join([f'"{p["name"]}"' for p in named_args])
-            default_lines = [generate_default_value(p, fnm["id"]) for p in named_args]
+            default_lines = [generate_default_value(p, fnm["id"], t) for p, t in zip(named_args, fnm["args"])]
             default_values = '\n'.join([d for d in default_lines if d])
             # List of argument types for List<Type> constructor
             args_types_list = ", ".join([i for i in fnm["args"] if i != "..."])
@@ -279,8 +412,11 @@ ${default_values}
                 ret=fnm["ret"],
                 args_types_list=args_types_list,
                 arg_names=arg_names,
-                default_values=default_values
+                default_values=default_values,
+                register="addVectorizedAIBuiltin" if fnm.get("binary_type") == "AI" else "addBuiltin"
             )
+        elif fnm.get("binary_type") == "AI":
+            raise ValueError("AI functions must declare named_args")
         else:
             return fn_template.substitute(fnm)
 
@@ -289,11 +425,67 @@ ${default_values}
     value["functions"] = "\n        ".join([gen_fe_fn(i) for i in function_list if i['name'] not in FE_HIDDEN_FUNCTIONS])
     ai_function_names = sorted({fn["name"] for fn in function_list if fn.get("binary_type") == "AI"})
     value["ai_function_names"] = ", ".join('"%s"' % name for name in ai_function_names)
+    value['ai_descriptors'] = '\n'.join(
+        '                    .put(%dL, new AIFunctionDescriptor(AICapability.%s, %d, %d))' % (
+            fn['id'], fn['ai']['capability'], fn['ai']['model_argument'], fn['ai']['provider_argument'])
+        for fn in function_list if fn.get('binary_type') == 'AI')
 
     content = java_template.substitute(value)
 
     with open(path, mode="w+") as f:
         f.write(content)
+
+
+def generate_ai_cpp(path):
+    ai_functions = [fn for fn in function_list if fn.get('binary_type') == 'AI']
+    max_arguments = max((len(fn['args']) for fn in ai_functions), default=0)
+    max_inputs = max((len(fn['ai']['input_arguments']) for fn in ai_functions), default=0)
+    content = license_string + '''
+// Included inside namespace starrocks, after the prompt/argument kind declarations.
+struct AIFunctionDescriptor {
+    int64_t fid;
+    const char* name;
+    AICapability capability;
+    AIFunctionResultKind result_kind;
+    AIPromptKind prompt_kind;
+    size_t argument_count;
+    std::array<AIArgumentType, %d> argument_types;
+    size_t input_count;
+    std::array<int, %d> input_arguments;
+    int file_argument;
+    int model_argument;
+    int provider_argument;
+    std::array<bool, %d> null_as_empty_arguments;
+    std::array<bool, %d> blank_as_null_arguments;
+};
+
+static constexpr std::array<AIFunctionDescriptor, %d> kAIFunctionDescriptors = {{
+''' % (max_arguments, max_inputs, max_arguments, max_arguments, len(ai_functions))
+    for fn in ai_functions:
+        metadata = fn['ai']
+        arg_types = ['AIArgumentType::' + AI_ARGUMENT_TYPES[arg] for arg in fn['args']]
+        arg_types += ['AIArgumentType::VARCHAR'] * (max_arguments - len(arg_types))
+        inputs = metadata['input_arguments'] + [-1] * (max_inputs - len(metadata['input_arguments']))
+        fields = [
+            ('fid', str(fn['id'])), ('name', '"' + fn['name'] + '"'),
+            ('capability', 'AICapability::' + metadata['capability']),
+            ('result_kind', 'AIFunctionResultKind::' + metadata['result_kind']),
+            ('prompt_kind', 'AIPromptKind::' + metadata['prompt_kind']),
+            ('argument_count', str(len(fn['args']))),
+            ('argument_types', '{' + ', '.join(arg_types) + '}'),
+            ('input_count', str(len(metadata['input_arguments']))),
+            ('input_arguments', '{' + ', '.join(str(i) for i in inputs) + '}'),
+            ('file_argument', str(metadata['file_argument'])),
+            ('model_argument', str(metadata['model_argument'])),
+            ('provider_argument', str(metadata['provider_argument'])),
+        ]
+        for policy in ('null_as_empty_arguments', 'blank_as_null_arguments'):
+            flags = (str(i in metadata[policy]).lower() for i in range(max_arguments))
+            fields.append((policy, '{' + ', '.join(flags) + '}'))
+        content += '    {\n' + ''.join('        .%s = %s,\n' % field for field in fields) + '    },\n'
+    content += '}};\n'
+    with open(path, mode='w+') as output:
+        output.write(content)
 
 
 def generate_cpp(path):
@@ -355,7 +547,6 @@ def generate_cpp(path):
         "ArrayFunctions",
         "MapFunctions",
         "GinFunctions",
-        "AiFunctions",
         "HttpRequestFunctions",
         "DictFunctions",
     ]
@@ -411,6 +602,8 @@ def generate_cpp(path):
             )
             f.write(content)
 
+    generate_ai_cpp(path + 'AIFunctionDescriptors.inc')
+
 
 if __name__ == "__main__":
     FE_PATH = "../../fe/fe-core/target/generated-sources/build"
@@ -442,9 +635,6 @@ if __name__ == "__main__":
     # Read the function metadata inputs
     for function in functions.vectorized_functions:
         add_function(function)
-
-    for function in functions.ai_vectorized_functions:
-        add_ai_function(function)
 
     generate_fe(fe_functions_dir + "/VectorizedBuiltinFunctions.java")
     generate_cpp(be_functions_dir + "/")

@@ -78,11 +78,43 @@ jobs:
           echo "skip_cd=${skip_cd}" >> $GITHUB_OUTPUT
           echo "skip_ms=${skip_ms}" >> $GITHUB_OUTPUT
 
+      # The CelerData dispatch first waits for a free sync queue, with no bound, while the
+      # App token below lives one hour. So wait here, then mint. Skipped (and the sync step
+      # waits in line as before) while ci-tool lacks the mode.
+      - name: wait for the CelerData sync queue
+        id: cd-queue
+        if: steps.commit_sha.outputs.skip_cd != 'true'
+        env:
+          BRANCH: ${{ github.base_ref }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && timeout 60 git pull >/dev/null || echo "git pull timeout, using cached ci-tool"
+          if grep -q -- '--wait-cd-queue-only' ./scripts/run-repo-sync.sh; then
+            ./scripts/run-repo-sync.sh --wait-cd-queue-only
+            echo "waited=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # CelerData enforces SAML SSO, so the CelerData repo-sync dispatch uses a CelerData
+      # GitHub App token, scoped to that one repo and to Actions: write. Unset or a failed
+      # mint: run-repo-sync.sh falls back to GH_TOKEN.
+      - name: phx-sync-dispatch-bot token
+        id: cd-token
+        if: steps.commit_sha.outputs.skip_cd != 'true' && vars.PHX_SYNC_DISPATCH_BOT_APP_ID != ''
+        continue-on-error: true
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.PHX_SYNC_DISPATCH_BOT_APP_ID }}
+          private-key: ${{ secrets.PHX_SYNC_DISPATCH_BOT_PRIVATE_KEY }}
+          owner: CelerData
+          repositories: celerdata-enterprise
+          permission-actions: write
+
       - name: sync
         # Run unless BOTH downstreams are anti-looped; run-repo-sync.sh gates each
         # dispatch on its own flag.
         if: steps.commit_sha.outputs.skip_cd != 'true' || steps.commit_sha.outputs.skip_ms != 'true'
         env:
+          GH_ORG_TOKEN_CELERDATA: ${{ steps.cd-token.outputs.token }}
+          CD_QUEUE_WAIT_DONE: ${{ steps.cd-queue.outputs.waited }}
           PR_ID: ${{ github.event.number }}
           COMMIT_ID: ${{ steps.commit_sha.outputs.commit_sha }}
           BRANCH: ${{ github.base_ref }}

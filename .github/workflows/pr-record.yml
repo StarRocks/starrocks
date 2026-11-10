@@ -1,0 +1,73 @@
+name: PR RECORD
+
+# Records each PR's state into CI Metrics (pull_requests / pr_links) for the backport
+# blacklist, release seal checks and sync dashboards. Design: StarRocks/ci-tool
+# ci-api/DESIGN-pr-data.md. Logic: ci-tool lib/pr_record.py, which reads the PR live from
+# GitHub (the event only says WHICH PR changed) and never fails anyone's CI.
+#
+# Every PR event in `on:` is recorded, on every PR. A comment is recorded only when a human
+# writes a seal-check skip command (the `if:` below); any other comment leaves a skipped
+# run that takes no runner. Runs on the dedicated `pr-record` pool, which mounts its own
+# read-only ci-tool; it never checks out or executes PR code, so pull_request_target is
+# safe here.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, closed, edited, labeled, unlabeled, ready_for_review, converted_to_draft, assigned, unassigned]
+  issue_comment:
+    types: [created, edited, deleted]
+  # These workflows set labels with GITHUB_TOKEN, which emits no labeled event, so the PR is
+  # recorded again once they finish: ERROR / conflict / automerge (sync pipeline), version and
+  # behavior labels (PR CHECKER), the doc label (CI DOC Checker), version labels removed
+  # after the backport comment (MERGE PIPELINE), PAI-contributed on a backport (Contributed
+  # Backport Label).
+  workflow_run:
+    workflows: ["CD SYNC CI PIPELINE", "PR CHECKER", "CI DOC Checker", "MERGE PIPELINE", "Contributed Backport Label"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+jobs:
+  record:
+    # Job-level, not workflow-level: a workflow-level group would let a filtered bot
+    # comment cancel a real recording run and then skip itself. `opened` has a group of its
+    # own: that run also records the sync PRs the new one replaced (pr_record.superseded),
+    # and the labels a new sync PR gets right away would otherwise cancel it.
+    # A workflow_run of a fork PR carries no PR number; its head commit keeps it apart.
+    concurrency:
+      group: pr-record-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_sha }}${{ github.event.action == 'opened' && '-opened' || '' }}
+      cancel-in-progress: true  # every run reads the live state, so the newest run suffices
+    # CI Metrics is the complete PR data source: every pull_request_target event in `on:` is
+    # recorded on every PR, main PRs included.
+    # A workflow_run is recorded for every listed workflow; pr_record.py finds the PR by the
+    # run's head when GitHub leaves workflow_run.pull_requests empty (fork heads).
+    # A human comment is recorded when it carries a seal-check skip command read on this
+    # repo's PRs: ignore backport check / merge / sync (ignore reverse sync is read on CD PRs).
+    # No comments inside the expression below: in a folded scalar a '#' line is part of it.
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      github.event_name == 'workflow_run' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+        github.event.comment.user.type == 'User' &&
+        !contains(fromJSON('["CelerData-Reviewer","wanpengfei-git","CLAassistant","starrocks-robot","robot-sync"]'),
+                  github.event.comment.user.login) &&
+        (contains(github.event.comment.body, 'ignore backport check') ||
+         contains(github.event.comment.body, 'ignore merge') ||
+         contains(github.event.comment.body, 'ignore sync') ||
+         contains(github.event.changes.body.from, 'ignore backport check') ||
+         contains(github.event.changes.body.from, 'ignore merge') ||
+         contains(github.event.changes.body.from, 'ignore sync')))
+    runs-on: [self-hosted, pr-record]
+    continue-on-error: true
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CI_METRICS_TOKEN: ${{ secrets.CI_METRICS_TOKEN }}
+      CI_METRICS_CA: ${{ secrets.CI_METRICS_CA }}
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+    steps:
+      - name: record the PR
+        run: python3 /var/lib/ci-tool/lib/pr_record.py --event "${GITHUB_EVENT_NAME}"

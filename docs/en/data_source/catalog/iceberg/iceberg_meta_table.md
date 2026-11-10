@@ -22,6 +22,11 @@ Currently, StarRocks supports the following Iceberg metadata tables:
 | `manifests`            | Shows an overview of the manifests associated with the snapshots in the table’s log. |
 | `partitions`           | Shows details about the partitions in the table.             |
 | `files`                | Shows details about the data files and delete files in the current snapshot of the table. |
+| `entries`              | Shows the manifest entries of the current snapshot, including the entries of removed files. |
+| `all_data_files`       | Shows the data files of all snapshots of the table.          |
+| `all_delete_files`     | Shows the delete files of all snapshots of the table.        |
+| `all_manifests`        | Shows the manifests of all snapshots of the table.           |
+| `all_entries`          | Shows the manifest entries of all snapshots of the table.    |
 | `refs`                 | Shows details about the Iceberg references, including branches and tags. |
 | `properties`           | Shows the table properties as key-value pairs.               |
 
@@ -125,7 +130,8 @@ Output:
 | existing_rows_count       | The total number of rows in all data files with status `EXISTING` in the manifest file. |
 | deleted_data_files_count  | The number of data files with status `DELETED` in the manifest file. |
 | deleted_rows_count        | The total number of rows in all data files with status `DELETED` in the manifest file. |
-| partition_summaries       | Partition range metadata.                                    |
+| partitions                | Partition range metadata.                                    |
+| content                   | The content type of the manifest file. Valid values: `DATA(0)`, `DELETES(1)`. For a delete manifest, the `*_data_files_count` and `*_rows_count` fields count its delete files and deleted rows. |
 
 ## `partitions` table
 
@@ -166,6 +172,7 @@ Output:
 | file_path          | The location of the data file.                               |
 | file_format        | The format of the data file.                                 |
 | spec_id            | The Spec ID that is used to track the file containing a row. |
+| partition          | The partition values of the file, as a struct over the partition fields of all partition specs of the table. A field that the file's partition spec does not have is `NULL`. This field is absent if the table has never been partitioned. `partition` is a reserved word, so enclose it in backticks in queries. |
 | record_count       | The number of entries contained in the data file.            |
 | file_size_in_bytes | The size of the data file.                                   |
 | column_sizes       | The mapping between the Iceberg column ID and its corresponding size in the file. |
@@ -178,6 +185,63 @@ Output:
 | sort_id            | The ID representing sort order for this file.                |
 | equality_ids       | The set of field IDs used for equality comparison in equality delete files. |
 | key_metadata       | The metadata about the encryption key that is used to encrypt this file, if applicable. |
+| first_row_id       | The ID of the first row in a data file of a format version 3 table. `NULL` for delete files. |
+| referenced_data_file | The location of the data file that a deletion vector or a file-scoped position delete file applies to. `NULL` for data files. |
+| content_offset     | The offset of a deletion vector in its Puffin file. `NULL` for other files. |
+| content_size_in_bytes | The size of a deletion vector in its Puffin file. `NULL` for other files. |
+
+## `entries` table
+
+Usage:
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$entries;
+```
+
+Output:
+
+| Field                | Description                                                  |
+| :------------------- | :----------------------------------------------------------- |
+| status               | The status of the entry. Valid values: `EXISTING(0)`, `ADDED(1)`, and `DELETED(2)`. |
+| snapshot_id          | The ID of the snapshot in which the file was added or removed. |
+| sequence_number      | The data sequence number of the file.                        |
+| file_sequence_number | The sequence number of the snapshot in which the file was added. |
+| data_file            | The file, as a struct with the fields of the `files` table. Its sort order ID field is named `sort_order_id`. |
+
+## `all_data_files` and `all_delete_files` tables
+
+Usage:
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$all_data_files;
+SELECT * FROM [<catalog>.][<database>.]table$all_delete_files;
+```
+
+These tables have the same fields as the `files` table. They list the data files or the delete files of the manifests of all snapshots of the table, so a file can appear more than once.
+
+## `all_manifests` table
+
+Usage:
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$all_manifests;
+```
+
+This table has the fields of the `manifests` table and the following field. A manifest appears once for each snapshot that contains it.
+
+| Field                 | Description                                   |
+| :-------------------- | :-------------------------------------------- |
+| reference_snapshot_id | The ID of the snapshot that contains the manifest. |
+
+## `all_entries` table
+
+Usage:
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$all_entries;
+```
+
+This table has the same fields as the `entries` table. It lists the entries of the manifests of all snapshots of the table.
 
 ## `refs` table
 

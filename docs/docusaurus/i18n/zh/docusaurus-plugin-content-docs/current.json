@@ -527,6 +527,10 @@
     "message": "百分位函数",
     "description": "The label for category Percentile in sidebar docs"
   },
+  "sidebar.docs.category.AI functions": {
+    "message": "AI 函数",
+    "description": "The label for category AI functions in sidebar docs"
+  },
   "sidebar.docs.category.Scalar": {
     "message": "标量函数",
     "description": "The label for category Scalar in sidebar docs"

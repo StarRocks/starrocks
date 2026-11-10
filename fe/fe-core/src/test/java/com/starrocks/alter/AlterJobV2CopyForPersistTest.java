@@ -267,6 +267,23 @@ public class AlterJobV2CopyForPersistTest {
                 "commitVersionMap");
     }
 
+    /**
+     * The index / bloom-filter fast-path jobs build their persisted copy with copyBaseFields() rather
+     * than a chained copy constructor, so a field added on LakeTableIndexFastPathJobBase is easy to
+     * miss. A null historySchema in the FINISHED journal entry would make replay() install null and
+     * leave a recovered FE unable to resolve the schema the flip retired.
+     */
+    @Test
+    public void testLakeTableIndexFastPathJobsCopyHistorySchema() throws Exception {
+        LakeTableAddIndexJob addJob = new LakeTableAddIndexJob();
+        setField(addJob, "historySchema", buildHistorySchema());
+        assertFieldsEqual(addJob, addJob.copyForPersist(), "historySchema");
+
+        LakeTableDropIndexJob dropJob = new LakeTableDropIndexJob();
+        setField(dropJob, "historySchema", buildHistorySchema());
+        assertFieldsEqual(dropJob, dropJob.copyForPersist(), "historySchema");
+    }
+
     @Test
     public void testLakeTableAlterMetaJobCopyForPersist() throws Exception {
         LakeTableAlterMetaJob job = newLakeTableAlterMetaJob();

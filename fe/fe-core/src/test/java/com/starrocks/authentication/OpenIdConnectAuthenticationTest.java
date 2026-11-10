@@ -16,7 +16,6 @@ package com.starrocks.authentication;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.UserAuthOptionAnalyzer;
@@ -42,12 +41,12 @@ public class OpenIdConnectAuthenticationTest {
                 new UserAuthOption(null, "", true, NodePosition.ZERO));
         String openIdConnectJson = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
 
-        MysqlSerializer serializer = MysqlSerializer.newInstance();
-        serializer.writeInt1(0);
-        serializer.writeLenEncodedString(openIdConnectJson);
+        // The MySQL [1B][lenenc] wrapper is peeled off at the entry point now
+        // (AuthenticationHandler#fromMysqlHandshake), so what reaches this provider is the bare
+        // token, whichever channel it came in on.
         try {
             provider.authenticate(new ConnectContext().getAccessControlContext(), new UserIdentity("harbor", "%"),
-                    serializer.toArray());
+                    AuthCredentials.ofBearer(openIdConnectJson, AuthChannel.MYSQL, "%"));
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }

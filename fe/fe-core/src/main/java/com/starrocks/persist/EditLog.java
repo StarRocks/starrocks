@@ -58,6 +58,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.common.util.Util;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
@@ -300,6 +301,11 @@ public class EditLog {
                     LOG.info("Begin to unprotect modify partition. db = " + info.getDbId()
                             + " table = " + info.getTableId() + " partitionId = " + info.getPartitionId());
                     globalStateMgr.getAlterJobMgr().replayModifyPartition(info);
+                    break;
+                }
+                case OperationType.OP_MODIFY_PARTITION_VACUUM_STATE: {
+                    PartitionVacuumStateInfo info = (PartitionVacuumStateInfo) journal.data();
+                    globalStateMgr.getLocalMetastore().replayModifyPartitionVacuumState(info);
                     break;
                 }
                 case OperationType.OP_BATCH_MODIFY_PARTITION: {
@@ -856,6 +862,11 @@ public class EditLog {
                     }
                     break;
                 }
+                case OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA: {
+                    ReleaseAlterJobHistorySchemaLog log = (ReleaseAlterJobHistorySchemaLog) journal.data();
+                    globalStateMgr.getSchemaChangeHandler().replayReleaseHistorySchema(log);
+                    break;
+                }
                 case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
                     AlterRoutineLoadJobOperationLog log = (AlterRoutineLoadJobOperationLog) journal.data();
                     globalStateMgr.getRoutineLoadMgr().replayAlterRoutineLoadJob(log);
@@ -1194,6 +1205,26 @@ public class EditLog {
                     globalStateMgr.getStorageVolumeMgr().replayUpdateTableStorageInfos(tableStorageInfos);
                     break;
                 }
+                case OperationType.OP_CREATE_AI_PROVIDER: {
+                    AIProvider provider = (AIProvider) journal.data();
+                    globalStateMgr.getAIProviderMgr().replayCreateProvider(provider);
+                    break;
+                }
+                case OperationType.OP_ALTER_AI_PROVIDER: {
+                    AIProvider provider = (AIProvider) journal.data();
+                    globalStateMgr.getAIProviderMgr().replayAlterProvider(provider);
+                    break;
+                }
+                case OperationType.OP_DROP_AI_PROVIDER: {
+                    DropAIProviderLog log = (DropAIProviderLog) journal.data();
+                    globalStateMgr.getAIProviderMgr().replayDropProvider(log);
+                    break;
+                }
+                case OperationType.OP_SET_DEFAULT_AI_PROVIDER: {
+                    SetDefaultAIProviderLog log = (SetDefaultAIProviderLog) journal.data();
+                    globalStateMgr.getAIProviderMgr().replaySetDefaultProvider(log);
+                    break;
+                }
                 case OperationType.OP_PIPE: {
                     PipeOpEntry opEntry = (PipeOpEntry) journal.data();
                     globalStateMgr.getPipeManager().getRepo().replay(opEntry);
@@ -1340,6 +1371,12 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropGroupProvider(groupProviderLog.getName());
                     break;
                 }
+                case OperationType.OP_ALTER_GROUP_PROVIDER: {
+                    GroupProviderLog groupProviderLog = (GroupProviderLog) journal.data();
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayAlterGroupProvider(
+                            groupProviderLog.getName(), groupProviderLog.getPropertyMap());
+                    break;
+                }
                 case OperationType.OP_CREATE_SPM_BASELINE_LOG: {
                     BaselinePlan.Info bp = (BaselinePlan.Info) journal.data();
                     globalStateMgr.getSqlPlanStorage().replayBaselinePlan(bp, true);
@@ -1419,6 +1456,27 @@ public class EditLog {
             }
             inFlight++;
         }
+    }
+
+    /** Keeps provisional metadata changes and their commit/rollback inside the existing WAL fence. */
+    public final class WalScope implements AutoCloseable {
+        private boolean closed;
+
+        private WalScope() {
+            enterGate();
+        }
+
+        @Override
+        public void close() {
+            if (!closed) {
+                closed = true;
+                exitGate();
+            }
+        }
+    }
+
+    public WalScope openWalScope() {
+        return new WalScope();
     }
 
     private void exitGate() {
@@ -1735,6 +1793,10 @@ public class EditLog {
 
     public void logModifyPartition(ModifyPartitionInfo info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info, walApplier);
+    }
+
+    public void logModifyPartitionVacuumState(PartitionVacuumStateInfo info) {
+        logJsonObject(OperationType.OP_MODIFY_PARTITION_VACUUM_STATE, info);
     }
 
     public void logBatchModifyPartition(BatchModifyPartitionsInfo info, WALApplier walApplier) {
@@ -2107,6 +2169,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_REMOVE_ALTER_JOB_V2, log, walApplier);
     }
 
+    public void logReleaseAlterJobHistorySchema(ReleaseAlterJobHistorySchemaLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA, log, walApplier);
+    }
+
     public void logAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, log, walApplier);
     }
@@ -2375,6 +2441,22 @@ public class EditLog {
         logJsonObject(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS, tableStorageInfos, walApplier);
     }
 
+    public void logCreateAIProvider(AIProvider provider, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_AI_PROVIDER, provider, walApplier);
+    }
+
+    public void logAlterAIProvider(AIProvider provider, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_AI_PROVIDER, provider, walApplier);
+    }
+
+    public void logDropAIProvider(DropAIProviderLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_AI_PROVIDER, log, walApplier);
+    }
+
+    public void logSetDefaultAIProvider(SetDefaultAIProviderLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_SET_DEFAULT_AI_PROVIDER, log, walApplier);
+    }
+
     public void logReplicationJob(ReplicationJob replicationJob, WALApplier walApplier) {
         ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
         logJsonObject(OperationType.OP_REPLICATION_JOB, replicationJobLog, walApplier);
@@ -2441,6 +2523,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, job);
     }
 
+    public void logUpdateTabletReshardJob(TabletReshardJob snapshot, WALApplier applier) {
+        logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, snapshot, applier);
+    }
+
     public void logRemoveTabletReshardJob(long jobId, WALApplier walApplier) {
         logJsonObject(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, new RemoveTabletReshardJobLog(jobId), walApplier);
     }
@@ -2451,5 +2537,9 @@ public class EditLog {
 
     public void logDropGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
         logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER, groupProviderLog, walApplier);
+    }
+
+    public void logAlterGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_GROUP_PROVIDER, groupProviderLog, walApplier);
     }
 }

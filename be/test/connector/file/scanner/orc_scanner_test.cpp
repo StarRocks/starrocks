@@ -183,8 +183,8 @@ TEST_F(ORCScannerTest, get_schema) {
 
 TEST_F(ORCScannerTest, implicit_cast) {
     std::vector<TypeDescriptor> types;
-    types.emplace_back(TypeDescriptor::create_varchar_type(32));
-    types.emplace_back(TypeDescriptor::create_varchar_type(32));
+    types.emplace_back(TYPE_VARCHAR_DESC);
+    types.emplace_back(TYPE_VARCHAR_DESC);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -259,7 +259,7 @@ Status ORCScannerTest::_scan_multi_stripes(const std::vector<TBrokerRangeDesc>& 
 
     std::vector<TypeDescriptor> types;
     types.emplace_back(TypeDescriptor(TYPE_INT));
-    types.emplace_back(TypeDescriptor::create_varchar_type(1048576));
+    types.emplace_back(TYPE_VARCHAR_DESC);
     std::vector<std::string> col_names = {"c0", "c1"};
 
     ScannerCounter local_counter{};

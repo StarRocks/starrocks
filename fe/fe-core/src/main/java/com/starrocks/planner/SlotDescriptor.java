@@ -170,6 +170,8 @@ public class SlotDescriptor {
                         scalarType.getScalarScale());
             } else if (this.originType.isVarchar() && FeConstants.setLengthForVarchar) {
                 this.type = TypeFactory.createVarcharType(scalarType.getLength());
+            } else if (scalarType.isGeoType()) {
+                this.type = scalarType.clone();
             } else {
                 this.type = TypeFactory.createType(this.originType.getPrimitiveType());
             }

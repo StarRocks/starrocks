@@ -34,7 +34,7 @@ class DelVector;
 
 namespace lake {
 
-class UpdateManager;
+class PrimaryKeyManager;
 
 enum RecoverFlag { OK = 0, RECOVER_WITHOUT_PUBLISH, RECOVER_WITH_PUBLISH };
 
@@ -109,7 +109,14 @@ public:
     // reconciled into schema.table_indices in an idempotent way (FE has
     // usually already published the new schema, so this is a belt-and-braces
     // step to cover edge cases like FE publish races).
-    void apply_add_index(const TxnLogPB_OpAddIndex& op);
+    //
+    // Fails when op.new_schema() would move the tablet schema BACKWARDS: the log
+    // carries a snapshot FE took at dispatch time, and installing it over content
+    // that has since advanced would drop the columns added in between. Errors
+    // here must propagate rather than be logged and ignored - see the schema
+    // installation comment in the implementation for why a wrong schema at this
+    // point is both silent and permanent.
+    Status apply_add_index(const TxnLogPB_OpAddIndex& op);
 
     // Apply an OpDropIndex (produced by the DROP INDEX fast path): merge
     // tombstones into the dropped_keys list of each matching IDG entry; any
@@ -132,10 +139,21 @@ public:
     // deleted.
     Status finalize(int64_t txn_id, bool skip_write_tablet_metadata = false);
     // find delvec in builder's buffer, used for batch txn log precess.
+    // After reset_delvecs_for_recover(), a segment without a delvec in the builder has no deletes: it
+    // returns true with an empty delvec instead of letting the caller fall back to the base version.
     StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec) const;
+
+    // Primary key recover rebuilds every delvec from the segments and appends them here. Drop the
+    // delvecs still pending in the builder (e.g. appended by a failed publish attempt) and make the
+    // builder the only source of delvecs for the rest of this publish.
+    void reset_delvecs_for_recover();
 
     // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
     Status update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels);
+
+    // Drop the pending batch rowset: a batch apply replayed after recover must not keep the segments of its
+    // failed attempt. Recover itself drops the pending delvecs, see reset_delvecs_for_recover().
+    void reset_pending_rowset_for_recover() { _pending_rowset_data = PendingRowsetData{}; }
 
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
@@ -191,7 +209,7 @@ private:
 
     Tablet _tablet;
     std::shared_ptr<TabletMetadata> _tablet_meta;
-    UpdateManager* _update_mgr;
+    PrimaryKeyManager* _primary_key_mgr;
     Buffer<uint8_t> _buf;
     std::unordered_map<uint32_t, DelvecPagePB> _delvecs;
     // from segment id to delvec, used for fill cache in finalize stage.
@@ -200,6 +218,8 @@ private:
     std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
     // When recover flag isn't ok, need recover later
     RecoverFlag _recover_flag = RecoverFlag::OK;
+    // Set by reset_delvecs_for_recover(): delvecs of the base version are discarded, see find_delvec().
+    bool _delvecs_reset_by_recover = false;
     // Pending rowset data for batch processing
     PendingRowsetData _pending_rowset_data;
 };

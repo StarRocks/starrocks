@@ -154,6 +154,7 @@ import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
@@ -684,6 +685,15 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
                 authenticationMgr.dropGroupProviderStatement(statement, context);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterGroupProviderStatement(AlterGroupProviderStmt statement, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                authenticationMgr.alterGroupProvider(statement.getName(), statement.getProperties());
             });
             return null;
         }
@@ -1252,6 +1262,70 @@ public class DDLStmtExecutor {
                                                                    ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() ->
                     context.getGlobalStateMgr().getStorageVolumeMgr().setDefaultStorageVolume(stmt)
+            );
+            return null;
+        }
+
+        //=========================================== AI Provider ====================================================
+        @Override
+        public ShowResultSet visitCreateAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.CreateAIProviderStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                try {
+                    context.getGlobalStateMgr().getAIProviderMgr().createProvider(
+                            stmt.getName(),
+                            com.starrocks.context.ai.AIProviderType.fromString(stmt.getType()),
+                            stmt.getProperties(), stmt.getComment());
+                } catch (AlreadyExistsException e) {
+                    if (stmt.isIfNotExists()) {
+                        LOG.info("create ai provider[{}] which already exists", stmt.getName());
+                    } else {
+                        throw e;
+                    }
+                }
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                try {
+                    context.getGlobalStateMgr().getAIProviderMgr().alterProvider(
+                            stmt.getName(), stmt.getProperties(), stmt.isIfExists());
+                } catch (MetaNotFoundException e) {
+                    if (!stmt.isIfExists()) {
+                        throw e;
+                    }
+                }
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.DropAIProviderStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                try {
+                    context.getGlobalStateMgr().getAIProviderMgr().dropProvider(
+                            stmt.getName(), stmt.isIfExists());
+                } catch (MetaNotFoundException e) {
+                    if (stmt.isIfExists()) {
+                        LOG.info("drop ai provider[{}] which does not exist", stmt.getName());
+                    } else {
+                        throw e;
+                    }
+                }
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitSetDefaultAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.SetDefaultAIProviderStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getAIProviderMgr().setDefaultProvider(stmt.getName())
             );
             return null;
         }

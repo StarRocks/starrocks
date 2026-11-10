@@ -46,7 +46,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -70,12 +72,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
 public class AlterMVJobExecutorEditLogTest {
     private static ConnectContext connectContext;
@@ -363,15 +366,19 @@ public class AlterMVJobExecutorEditLogTest {
         // Set ref base table partition columns for retention condition analysis
         // This is needed for analyzeMVRetentionCondition to work
         try {
-            java.lang.reflect.Field refBaseTablePartitionColumnsOptField = 
-                    MaterializedView.class.getDeclaredField("refBaseTablePartitionColumnsOpt");
-            refBaseTablePartitionColumnsOptField.setAccessible(true);
+            java.lang.reflect.Field refBaseTablePartitionInfoField =
+                    MaterializedView.class.getDeclaredField("refBaseTablePartitionInfo");
+            refBaseTablePartitionInfoField.setAccessible(true);
+            java.lang.reflect.Constructor<?> refBaseTablePartitionInfoCtor =
+                    refBaseTablePartitionInfoField.getType().getDeclaredConstructors()[0];
+            refBaseTablePartitionInfoCtor.setAccessible(true);
             Map<Table, List<Column>> refBaseTablePartitionColumns = new HashMap<>();
             // Get the partition column from base table (dt column)
             Column basePartitionCol = baseTable.getColumn("dt");
             if (basePartitionCol != null) {
                 refBaseTablePartitionColumns.put(baseTable, List.of(basePartitionCol));
-                refBaseTablePartitionColumnsOptField.set(mv, Optional.of(refBaseTablePartitionColumns));
+                refBaseTablePartitionInfoField.set(mv, refBaseTablePartitionInfoCtor.newInstance(
+                        Map.of(), Map.of(), refBaseTablePartitionColumns, Map.of()));
             }
         } catch (Exception e) {
             // If reflection fails, the test may still work if retention condition can be set without analyzeMVRetentionCondition
@@ -1399,5 +1406,78 @@ public class AlterMVJobExecutorEditLogTest {
         MaterializedView unchangedMv = (MaterializedView) db.getTable(MV_NAME);
         Assertions.assertNotNull(unchangedMv);
         Assertions.assertEquals(oldMvName, unchangedMv.getName());
+    }
+
+    /**
+     * Drops the MV in the window between the unlocked lookup (plus resolveBeforeLock) and the lock, the way a
+     * concurrent DROP MATERIALIZED VIEW would, and expects the alter to fail without writing an editlog entry.
+     */
+    private static EditLog alterAfterConcurrentDrop(AlterTableClause clause) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = (MaterializedView) db.getTable(MV_NAME);
+        EditLog spyEditLog = spy(new EditLog(null));
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        AlterMVJobExecutor executor = new AlterMVJobExecutor() {
+            @Override
+            protected void resolveBeforeLock(AlterClause alterClause, ConnectContext context) {
+                super.resolveBeforeLock(alterClause, context);
+                db.unRegisterTableUnlocked(mv);
+            }
+        };
+        AlterMaterializedViewStmt stmt = new AlterMaterializedViewStmt(
+                createTableRef(DB_NAME, MV_NAME), clause, NodePosition.ZERO);
+        AlterJobException e = Assertions.assertThrows(AlterJobException.class,
+                () -> executor.process(stmt, connectContext));
+        Assertions.assertTrue(e.getMessage().contains("dropped concurrently"), e.getMessage());
+        Assertions.assertNull(db.getTable(MV_ID));
+        return spyEditLog;
+    }
+
+    @Test
+    public void testAlterPropertiesOfAnMvDroppedBeforeTheLockFails() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, "5");
+        EditLog editLog = alterAfterConcurrentDrop(new ModifyTablePropertiesClause(properties));
+        verify(editLog, never()).logAlterMaterializedViewProperties(any(), any());
+    }
+
+    @Test
+    public void testRenameOfAnMvDroppedBeforeTheLockFails() {
+        // RENAME takes the DB WRITE lock instead of the intensive table lock; the check covers both.
+        EditLog editLog = alterAfterConcurrentDrop(
+                new com.starrocks.sql.ast.TableRenameClause(MV_NAME + "_renamed", NodePosition.ZERO));
+        verify(editLog, never()).logMvRename(any(), any());
+    }
+
+    /**
+     * A constraint is analyzed before the lock and names the MV as it was then. A RENAME that gets in between
+     * would have the analysis persist a name that no longer resolves; the statement fails instead, unapplied.
+     */
+    @Test
+    public void testConstraintAnalyzedBeforeAConcurrentRenameIsNotApplied() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = (MaterializedView) db.getTable(MV_NAME);
+        EditLog spyEditLog = spy(new EditLog(null));
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+        AlterMVJobExecutor executor = new AlterMVJobExecutor() {
+            @Override
+            protected void resolveBeforeLock(AlterClause alterClause, ConnectContext context) {
+                super.resolveBeforeLock(alterClause, context);
+                // What RENAME changes under the MV's write lock.
+                mv.setName(MV_NAME + "_renamed");
+            }
+        };
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, "v1");
+        AlterMaterializedViewStmt stmt = new AlterMaterializedViewStmt(
+                createTableRef(DB_NAME, MV_NAME), new ModifyTablePropertiesClause(properties), NodePosition.ZERO);
+
+        AlterJobException e = Assertions.assertThrows(AlterJobException.class,
+                () -> executor.process(stmt, connectContext));
+        Assertions.assertTrue(e.getMessage().contains("altered concurrently"), e.getMessage());
+        Assertions.assertTrue(mv.getUniqueConstraints() == null || mv.getUniqueConstraints().isEmpty(),
+                String.valueOf(mv.getUniqueConstraints()));
+        verify(spyEditLog, never()).logAlterMaterializedViewProperties(any(), any());
     }
 }

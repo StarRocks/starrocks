@@ -1,0 +1,43 @@
+-- name: test_range_partition_prune_nonmonotonic
+CREATE TABLE bill_detail (
+        bill_code varchar(200) NOT NULL DEFAULT ""
+)
+PRIMARY KEY(bill_code)
+PARTITION BY RANGE(cast(substr(bill_code, 3, 11) as bigint))
+(PARTITION p1 VALUES [('0'), ('5000000')),
+PARTITION p2 VALUES [('20000000'), ('3021712368984')))
+DISTRIBUTED BY HASH(bill_code) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into bill_detail values('JT2921712368984'),('9984517'),('9992868'),('9995472'),('998425506019'),('1234567'),('99845');
+-- result:
+-- !result
+select count(*) from bill_detail;
+-- result:
+7
+-- !result
+select bill_code from bill_detail where bill_code > '998425506019' order by bill_code;
+-- result:
+99845
+9984517
+9992868
+9995472
+JT2921712368984
+-- !result
+select bill_code from bill_detail where not (bill_code > '998425506019') order by bill_code;
+-- result:
+1234567
+998425506019
+-- !result
+select bill_code from bill_detail where bill_code = '9984517';
+-- result:
+9984517
+-- !result
+select count(*) from (
+        (select * from bill_detail where bill_code > '998425506019')
+        union all (select * from bill_detail where not (bill_code > '998425506019'))
+        union all (select * from bill_detail where (bill_code > '998425506019') is null)) t;
+-- result:
+7
+-- !result

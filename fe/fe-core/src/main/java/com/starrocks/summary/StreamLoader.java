@@ -14,7 +14,9 @@
 
 package com.starrocks.summary;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
@@ -32,6 +34,7 @@ import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -40,6 +43,10 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 class StreamLoader {
@@ -47,13 +54,9 @@ class StreamLoader {
 
     private static final int CONNECT_TIMEOUT_SECOND = 5;
 
-    // This class is shared by two very different callers (AuditLoaderMgr: small batches, capped by
-    // audit_loader_batch_max_bytes, default 50MB; QueryHistoryMgr: up to 200MB of plan-heavy rows),
-    // so the request timeout and max_filter_ratio below are per-instance, not one-size-fits-all
-    // class constants. Getting this wrong for QueryHistoryMgr is not academic: it discards its
-    // whole in-memory batch on any failure with no retry (unlike AuditLoaderMgr's copy-then-remove
-    // and bounded retry), so a timeout too short for its legitimately larger, slower batches would
-    // turn "still loading" into permanent data loss.
+    // The timeout and max_filter_ratio are per-instance: QueryHistoryMgr can send up to 200MB of
+    // plan-heavy rows, whereas AuditLoaderMgr defaults to 50MB batches. Applying the short audit
+    // deadline to query history could cancel legitimately slow loads.
 
     // Tuned for the builtin audit loader only (see AuditLoaderMgr's 2-arg constructor call and its
     // MAX_BATCH_FLUSH_RETRY): a short fixed bound so a BE that accepts the connection but never
@@ -132,7 +135,15 @@ class StreamLoader {
         return configured > 0 ? configured : 600;
     }
 
-    public record Response(int status, String msg) {}
+    // Null counts mean missing or invalid statistics, never zero. They must not change an already
+    // successful transaction into a failed request, which would make the caller retry committed rows.
+    public record LoadStats(Long totalRows, Long loadedRows, Long filteredRows, String errorUrl) {}
+
+    public record Response(int status, String msg, LoadStats stats) {
+        public Response(int status, String msg) {
+            this(status, msg, null);
+        }
+    }
 
     public Response loadBatch(String label, String sb) throws URISyntaxException, IOException,
             InterruptedException {
@@ -164,20 +175,76 @@ class StreamLoader {
         builder.timeout(Duration.ofSeconds(requestTimeoutSecond));
         HttpRequest request = builder.PUT(HttpRequest.BodyPublishers.ofString(sb)).build();
 
-        HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = sendRequest(HTTP_CLIENT, request);
 
-        if (response.statusCode() == HttpStatus.SC_OK) {
-            JsonElement obj = JsonParser.parseString(response.body());
-            String status = obj.getAsJsonObject().get("Status").getAsString();
-            String message = obj.getAsJsonObject().get("Message").getAsString();
+        return parseResponse(response.statusCode(), response.body());
+    }
 
-            if (!status.equalsIgnoreCase("success")) {
-                return new Response(HttpStatus.SC_INTERNAL_SERVER_ERROR, message);
-            } else {
-                return new Response(HttpStatus.SC_OK, message);
-            }
+    @VisibleForTesting
+    static Response parseResponse(int httpStatus, String body) {
+        if (httpStatus != HttpStatus.SC_OK) {
+            return new Response(httpStatus, body);
         }
-        return new Response(response.statusCode(), response.body());
+        JsonObject obj = JsonParser.parseString(body).getAsJsonObject();
+        String status = obj.get("Status").getAsString();
+        String message = obj.get("Message").getAsString();
+        if (!status.equalsIgnoreCase("success")) {
+            return new Response(HttpStatus.SC_INTERNAL_SERVER_ERROR, message);
+        }
+        JsonElement errorUrl = obj.get("ErrorURL");
+        return new Response(HttpStatus.SC_OK, message, new LoadStats(
+                readRowCount(obj, "NumberTotalRows"), readRowCount(obj, "NumberLoadedRows"),
+                readRowCount(obj, "NumberFilteredRows"),
+                errorUrl != null && errorUrl.isJsonPrimitive() && errorUrl.getAsJsonPrimitive().isString()
+                        ? errorUrl.getAsString() : null));
+    }
+
+    private static Long readRowCount(JsonObject obj, String name) {
+        JsonElement value = obj.get(name);
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
+            return null;
+        }
+        try {
+            long count = value.getAsBigDecimal().longValueExact();
+            return count >= 0 ? count : null;
+        } catch (NumberFormatException | ArithmeticException e) {
+            return null;
+        }
+    }
+
+    // On JDK 17/21 the request timeout does not cover consuming the response body. Wait for the
+    // ofString subscriber to finish under the same deadline, and cancel the original HTTP future
+    // on timeout or interruption. orTimeout() alone completes the future without cancelling I/O.
+    @VisibleForTesting
+    static HttpResponse<String> sendRequest(HttpClient client, HttpRequest request)
+            throws IOException, InterruptedException {
+        Duration timeout = request.timeout().orElseThrow();
+        long started = System.nanoTime();
+        CompletableFuture<HttpResponse<String>> future = client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
+        try {
+            return future.get(timeout.toNanos() - (System.nanoTime() - started), TimeUnit.NANOSECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            HttpTimeoutException failure = new HttpTimeoutException("Stream load request timed out after " + timeout);
+            failure.initCause(e);
+            throw failure;
+        } catch (InterruptedException e) {
+            future.cancel(true);
+            // The caller that consumes this exception must restore the interrupt flag.
+            throw e;
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException ioException) {
+                throw ioException;
+            }
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new IOException("Failed to send stream load request", cause);
+        }
     }
 
     private static Optional<ComputeNode> chooseBENode() {

@@ -21,14 +21,28 @@ public class ConnectorTableColumnStats {
     private final ColumnStatistic columnStatistic;
     private final long rowCount;
     private final String updateTime;
+    // How many partitions the rows behind this aggregate came from, and the per-partition distinct
+    // counts added up. Both describe the aggregate itself, and both come out of the same query over the
+    // same rows as everything else here, which is what makes them safe to divide by and reason with -
+    // see StatisticsUtils#estimateColumnStatistics. 0 when the backend did not report them, which is how
+    // a backend older than the query version that added them behaves.
+    private final long collectedPartitionCount;
+    private final long perPartitionNdvSum;
 
     private static final ConnectorTableColumnStats UNKNOWN =
             new ConnectorTableColumnStats(ColumnStatistic.unknown(), -1, "");
 
     public ConnectorTableColumnStats(ColumnStatistic columnStatistic, long rowCount, String updateTime) {
+        this(columnStatistic, rowCount, updateTime, 0, 0);
+    }
+
+    public ConnectorTableColumnStats(ColumnStatistic columnStatistic, long rowCount, String updateTime,
+                                     long collectedPartitionCount, long perPartitionNdvSum) {
         this.columnStatistic = columnStatistic;
         this.rowCount = rowCount;
         this.updateTime = updateTime;
+        this.collectedPartitionCount = collectedPartitionCount;
+        this.perPartitionNdvSum = perPartitionNdvSum;
     }
 
     public static ConnectorTableColumnStats unknown() {
@@ -49,5 +63,13 @@ public class ConnectorTableColumnStats {
 
     public String getUpdateTime() {
         return updateTime;
+    }
+
+    public long getCollectedPartitionCount() {
+        return collectedPartitionCount;
+    }
+
+    public long getPerPartitionNdvSum() {
+        return perPartitionNdvSum;
     }
 }

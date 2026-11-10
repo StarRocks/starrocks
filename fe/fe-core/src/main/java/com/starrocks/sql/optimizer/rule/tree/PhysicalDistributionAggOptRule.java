@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -139,6 +140,12 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
 
             // the same key in multi partition are not in the same tablet
             if (scan.getSelectedPartitionId().size() > 1) {
+                return null;
+            }
+
+            // A range partition is split by key range, so one key can span two of its tablets.
+            if (((OlapTable) scan.getTable()).getDefaultDistributionInfo().getType() == DistributionInfoType.RANGE
+                    && scan.getSelectedTabletId().size() > 1) {
                 return null;
             }
 

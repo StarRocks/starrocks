@@ -22,23 +22,32 @@ import com.staros.proto.StarStatus;
 import com.staros.proto.StatusCode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
+import com.starrocks.mv.MVRepairHandler;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -63,6 +72,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -83,10 +93,13 @@ public class LakeTableAlterMetaJobTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
+        UtFrameUtils.setUpForPersistTest();
     }
 
     @BeforeEach
     public void setUp() throws Exception {
+        // Only the tests that read the journal drain the follower queue, so start every test from an empty one.
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         String createDbStmtStr = "create database " + DB_NAME;
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
@@ -493,13 +506,17 @@ public class LakeTableAlterMetaJobTest {
             Thread.sleep(100);
         }
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        // The done job no longer keeps its partition indexes, so replay the FINISHED entry it journaled.
+        LakeTableAlterMetaJob finishedEntry = lastJournaledEntry(job.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, finishedEntry.getJobState());
 
         LakeTableAlterMetaJob replayAlterMetaJob = new LakeTableAlterMetaJob(job.jobId,
                     job.dbId, job.tableId, job.tableName,
                     job.timeoutMs, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
 
-        Table<Long, Long, MaterializedIndex> partitionIndexMap = job.getPartitionIndexMap();
-        Map<Long, Long> commitVersionMap = job.getCommitVersionMap();
+        Table<Long, Long, MaterializedIndex> partitionIndexMap = finishedEntry.getPartitionIndexMap();
+        Map<Long, Long> commitVersionMap = finishedEntry.getCommitVersionMap();
+        Assertions.assertFalse(partitionIndexMap.isEmpty());
 
         // for replay will check partition.getVisibleVersion()
         // here we reduce the visibleVersion for test
@@ -510,7 +527,7 @@ public class LakeTableAlterMetaJobTest {
             physicalPartition.updateVisibleVersion(commitVersion - 1);
         }
 
-        replayAlterMetaJob.replay(job);
+        replayAlterMetaJob.replay(finishedEntry);
 
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, replayAlterMetaJob.getJobState());
         Assertions.assertEquals(job.getFinishedTimeMs(), replayAlterMetaJob.getFinishedTimeMs());
@@ -519,7 +536,7 @@ public class LakeTableAlterMetaJobTest {
         Assertions.assertEquals(job.getTableId(), replayAlterMetaJob.getTableId());
         Assertions.assertEquals(job.getDbId(), replayAlterMetaJob.getDbId());
         Assertions.assertEquals(job.getCommitVersionMap(), replayAlterMetaJob.getCommitVersionMap());
-        Assertions.assertEquals(job.getPartitionIndexMap(), replayAlterMetaJob.getPartitionIndexMap());
+        Assertions.assertEquals(partitionIndexMap, replayAlterMetaJob.getPartitionIndexMap());
 
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
@@ -845,5 +862,338 @@ public class LakeTableAlterMetaJobTest {
         combined.add(row);
         combined.sort(new ListComparator<>(0, 1, 2, 3, 4, 5));
         Assertions.assertEquals(2, combined.size());
+    }
+
+    /**
+     * Regression: the MV version-map repair at the tail of this job family must actually run.
+     *
+     * Every LakeTableAlterMetaJobBase job advances the visible version and visible version time of every
+     * physical partition without rewriting a single row. MV staleness detection
+     * (OlapPartitionTraits#isBaseTableChanged) keys off exactly those two fields, so a dependent
+     * materialized view would re-materialize its entire history after a metadata-only ALTER. The
+     * compensation is handleMVRepair -> MVMetaVersionRepairer, which advances the MV watermark in place.
+     *
+     * commitVersionMap is keyed by PHYSICAL partition id, while MaterializedView.BasePartitionInfo is keyed
+     * on the LOGICAL partition (name + id). Feeding the physical id straight to OlapTable#getPartition(),
+     * which only resolves logical ids, returned null for every entry, so the repair list came out empty and
+     * the compensation silently never ran.
+     */
+    @Test
+    public void testMVVersionMapRepairUsesLogicalPartitionId() throws Exception {
+        // Without a dependent MV, handleMVRepair returns before building the repair list.
+        table.addRelatedMaterializedView(new MvId(db.getId(), GlobalStateMgr.getCurrentState().getNextId()));
+
+        Partition partition = table.getPartitions().iterator().next();
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        // Premise: the logical partition and its physical partition carry DIFFERENT ids. If that ever stops
+        // holding, the assertions below would pass for the wrong reason.
+        Assertions.assertNotEquals(partition.getId(), physicalPartition.getId());
+        long versionBefore = physicalPartition.getVisibleVersion();
+        long versionTimeBefore = physicalPartition.getVisibleVersionTime();
+
+        List<MVRepairHandler.PartitionRepairInfo> captured = new ArrayList<>();
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public void handleMVRepair(Database database, com.starrocks.catalog.Table changedTable,
+                                       List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
+                captured.addAll(partitionRepairInfos);
+            }
+        };
+
+        job.runPendingJob();
+        job.runRunningJob();
+        while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+
+        // The metadata-only job advanced the partition version ...
+        Assertions.assertEquals(versionBefore + 1, physicalPartition.getVisibleVersion());
+        // ... so the MV watermark repair must have been handed exactly one entry, carrying the LOGICAL
+        // partition id and name, and the version the MV will read back.
+        Assertions.assertEquals(1, captured.size());
+        MVRepairHandler.PartitionRepairInfo repairInfo = captured.get(0);
+        Assertions.assertEquals(partition.getId(), repairInfo.getPartitionId());
+        Assertions.assertEquals(partition.getName(), repairInfo.getPartitionName());
+        Assertions.assertEquals(versionBefore, repairInfo.getLastVersion());
+        // The pre-alter visible version time has to be reported, otherwise MVMetaVersionRepairer cannot
+        // tell an up-to-date MV from one that is already stale through isBaseTableChanged's time disjunct.
+        Assertions.assertEquals(versionTimeBefore, repairInfo.getLastVersionTime());
+        Assertions.assertEquals(versionBefore + 1, repairInfo.getNewVersion());
+        Assertions.assertEquals(partition.getLatestPhysicalPartition().getVisibleVersion(),
+                repairInfo.getNewVersion());
+    }
+
+    /**
+     * A logical partition with several physical sub-partitions (the shape automatic bucketing produces)
+     * involves TWO different physical partitions, and the repair owes each of them something different:
+     *
+     *   * the new watermark must be the version the MV reads back, i.e. the version of whichever
+     *     sub-partition getLatestPhysicalPartition() resolves to AFTER updateVisibleVersion() gave every
+     *     sub-partition the same version time and thereby turned that call into a tie;
+     *   * the validation values handed to MVMetaVersionRepairer must describe the sub-partition that
+     *     decided staleness BEFORE the alter, because that is the one the MV's recorded watermark was
+     *     compared against. Validating against the post-alter winner accepts an MV that was already stale
+     *     on the pre-alter latest sub-partition and silently erases that change.
+     *
+     * With a single physical partition the two coincide, so only this shape can tell them apart.
+     */
+    @Test
+    public void testMVRepairValidatesPreAlterLatestAndRecordsPostAlterWinner() throws Exception {
+        // Sub-partitions can only be added to a randomly distributed table
+        // (LocalMetastore#addSubPartitions), which is exactly the shape the review finding named.
+        LakeTable multiSubTable = createTable(connectContext,
+                "CREATE TABLE t_multi_sub(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY RANDOM BUCKETS 1");
+        multiSubTable.addRelatedMaterializedView(
+                new MvId(db.getId(), GlobalStateMgr.getCurrentState().getNextId()));
+
+        Partition partition = multiSubTable.getPartitions().iterator().next();
+        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .addSubPartitions(db, multiSubTable, partition, 1, WarehouseManager.DEFAULT_RESOURCE);
+        Assertions.assertEquals(2, partition.getSubPartitions().size());
+
+        // Distinct versions AND distinct version times, so reading either value off the wrong
+        // sub-partition is observable.
+        List<PhysicalPartition> subPartitions = new ArrayList<>(partition.getSubPartitions());
+        subPartitions.sort(Comparator.comparingLong(PhysicalPartition::getId));
+        subPartitions.get(0).updateVisibleVersion(5L, 100L);
+        subPartitions.get(1).updateVisibleVersion(7L, 200L);
+
+        // Pre-alter, staleness is decided by the sub-partition with the newest version time.
+        PhysicalPartition preAlterLatest = partition.getLatestPhysicalPartition();
+        Assertions.assertEquals(subPartitions.get(1).getId(), preAlterLatest.getId());
+        long preAlterLatestVersion = preAlterLatest.getVisibleVersion();
+        long preAlterLatestVersionTime = preAlterLatest.getVisibleVersionTime();
+
+        LakeTableAlterMetaJob multiJob = new LakeTableAlterMetaJob(
+                GlobalStateMgr.getCurrentState().getNextId(), db.getId(), multiSubTable.getId(),
+                multiSubTable.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true,
+                "CLOUD_NATIVE");
+        Map<Long, Long> commitVersions = new HashMap<>();
+        for (PhysicalPartition subPartition : subPartitions) {
+            commitVersions.put(subPartition.getId(), subPartition.getVisibleVersion() + 1);
+            MaterializedIndex baseIndex = subPartition.getLatestBaseIndex();
+            multiJob.addDirtyPartitionIndex(subPartition.getId(), baseIndex.getId(), baseIndex);
+        }
+        Deencapsulation.setField(multiJob, "commitVersionMap", commitVersions);
+        Deencapsulation.setField(multiJob, "finishedTimeMs", 900L);
+
+        List<MVRepairHandler.PartitionRepairInfo> captured = new ArrayList<>();
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public void handleMVRepair(Database database, com.starrocks.catalog.Table changedTable,
+                                       List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
+                captured.addAll(partitionRepairInfos);
+            }
+        };
+
+        multiJob.capturePreAlterLatestPartitions(multiSubTable);
+        multiJob.updateVisibleVersion(multiSubTable);
+        // Every sub-partition now carries finishedTimeMs, so this resolves a tie.
+        PhysicalPartition postAlterLatest = partition.getLatestPhysicalPartition();
+        Assertions.assertEquals(900L, postAlterLatest.getVisibleVersionTime());
+        multiJob.handleMVRepair(db, multiSubTable);
+
+        // One slot per logical partition.
+        Assertions.assertEquals(1, captured.size());
+        MVRepairHandler.PartitionRepairInfo repairInfo = captured.get(0);
+        Assertions.assertEquals(partition.getId(), repairInfo.getPartitionId());
+        Assertions.assertEquals(partition.getName(), repairInfo.getPartitionName());
+        // Validation describes the PRE-alter latest sub-partition ...
+        Assertions.assertEquals(preAlterLatestVersion, repairInfo.getLastVersion());
+        Assertions.assertEquals(preAlterLatestVersionTime, repairInfo.getLastVersionTime());
+        // ... while the watermark carries the version the reader compares against afterwards.
+        Assertions.assertEquals(commitVersions.get(postAlterLatest.getId()).longValue(),
+                repairInfo.getNewVersion());
+        Assertions.assertEquals(900L, repairInfo.getNewVersionTime());
+    }
+
+    @Test
+    public void testLeaderPrunesFinishedJob() throws Exception {
+        runToFinished(job);
+
+        assertPruned(job);
+        Assertions.assertFalse(job.getCommitVersionMap().isEmpty());
+        List<LakeTableAlterMetaJob> entries = readJournaledEntries(job.getJobId());
+        // The first entry is journaled before the job collects the partition indexes.
+        for (LakeTableAlterMetaJob entry : entries.subList(1, entries.size())) {
+            assertHasTabletData(entry);
+        }
+        LakeTableAlterMetaJob finishedEntry = entries.get(entries.size() - 1);
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, finishedEntry.getJobState());
+        assertShowAlterUnchangedByPrune(finishedEntry);
+    }
+
+    @Test
+    public void testLeaderPrunesCancelledJob() throws Exception {
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        assertHasTabletData(job);
+        Assertions.assertNotNull(job.batchTask);
+
+        Assertions.assertTrue(job.cancel("cancel"));
+
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        assertPruned(job);
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        LakeTableAlterMetaJob cancelledEntry = lastJournaledEntry(job.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, cancelledEntry.getJobState());
+        assertHasTabletData(cancelledEntry);
+        assertShowAlterUnchangedByPrune(cancelledEntry);
+    }
+
+    @Test
+    public void testFollowerReplayPrunesFinishedJob() throws Exception {
+        LakeTableAlterMetaJob disableIndexJob = new LakeTableAlterMetaJob(
+                GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(), table.getName(),
+                60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, false, "CLOUD_NATIVE");
+        // The follower starts from the catalog as it was before the alter.
+        UtFrameUtils.PseudoImage initialImage = saveMetastore();
+        runToFinished(disableIndexJob);
+        Assertions.assertFalse(table.enablePersistentIndex());
+        List<LakeTableAlterMetaJob> entries = readJournaledEntries(disableIndexJob.getJobId());
+
+        LocalMetastore followerMetastore = loadMetastore(initialImage);
+        OlapTable followerTable = (OlapTable) followerMetastore.getTable(DB_NAME, table.getName());
+        // The alter bumps the visible version of every partition, which only the replay brings to the follower.
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            Assertions.assertNotEquals(physicalPartition.getVisibleVersion(),
+                    followerTable.getPhysicalPartition(physicalPartition.getId()).getVisibleVersion());
+        }
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        for (LakeTableAlterMetaJob entry : entries) {
+            replayOn(followerMetastore, followerHandler, entry);
+        }
+
+        // The handler keeps the first replayed entry and copies the data of each later one into it.
+        LakeTableAlterMetaJob retained = entries.get(0);
+        Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(disableIndexJob.getJobId()));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, retained.getJobState());
+        assertPruned(retained);
+        for (LakeTableAlterMetaJob entry : entries.subList(1, entries.size())) {
+            assertHasTabletData(entry);
+        }
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, followerTable.getState());
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            Assertions.assertEquals(physicalPartition.getVisibleVersion(),
+                    followerTable.getPhysicalPartition(physicalPartition.getId()).getVisibleVersion());
+        }
+    }
+
+    @Test
+    public void testLoadPrunesDoneJobFromImage() throws Exception {
+        runToFinished(job);
+        // Images written by older versions hold the done job with its per-tablet data, as the journal entry does.
+        LakeTableAlterMetaJob doneJob = lastJournaledEntry(job.getJobId());
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, doneJob.getJobState());
+        assertHasTabletData(doneJob);
+        AlterJobMgr alterJobMgr = new AlterJobMgr(new SchemaChangeHandler(), new MaterializedViewHandler(),
+                new SystemHandler());
+        alterJobMgr.getSchemaChangeHandler().addAlterJobV2(doneJob);
+        // SHOW ALTER of the loaded job must match that of a job that went through the same serialization.
+        List<List<Comparable>> expectedRows = new ArrayList<>();
+        gsonCopy(doneJob).getInfo(expectedRows);
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        alterJobMgr.save(image.getImageWriter());
+        AlterJobMgr restoredMgr = new AlterJobMgr(new SchemaChangeHandler(), new MaterializedViewHandler(),
+                new SystemHandler());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        restoredMgr.load(reader);
+        reader.close();
+
+        LakeTableAlterMetaJob restored =
+                (LakeTableAlterMetaJob) restoredMgr.getSchemaChangeHandler().getAlterJobsV2().get(job.getJobId());
+        assertPruned(restored);
+        List<List<Comparable>> restoredRows = new ArrayList<>();
+        restored.getInfo(restoredRows);
+        Assertions.assertFalse(expectedRows.isEmpty());
+        Assertions.assertEquals(expectedRows, restoredRows);
+    }
+
+    private static void runToFinished(LakeTableAlterMetaJob alterMetaJob) throws Exception {
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (!alterMetaJob.isDone()) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + alterMetaJob.getJobState());
+            alterMetaJob.run();
+            Thread.sleep(10);
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterMetaJob.getJobState(), alterMetaJob.errMsg);
+    }
+
+    /**
+     * Reads the journal entries of the job, from its first one to the one of its final state. Entries of other jobs
+     * are skipped: the schema change daemon keeps running in this class.
+     */
+    private static List<LakeTableAlterMetaJob> readJournaledEntries(long jobId) throws Exception {
+        List<LakeTableAlterMetaJob> entries = new ArrayList<>();
+        while (entries.isEmpty() || !entries.get(entries.size() - 1).isDone()) {
+            AlterJobV2 entry =
+                    (AlterJobV2) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+            if (entry.getJobId() == jobId) {
+                entries.add((LakeTableAlterMetaJob) entry);
+            }
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, entries.get(0).getJobState());
+        return entries;
+    }
+
+    private static LakeTableAlterMetaJob lastJournaledEntry(long jobId) throws Exception {
+        List<LakeTableAlterMetaJob> entries = readJournaledEntries(jobId);
+        return entries.get(entries.size() - 1);
+    }
+
+    private static AlterJobV2 gsonCopy(AlterJobV2 alterJob) {
+        return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(alterJob, AlterJobV2.class), AlterJobV2.class);
+    }
+
+    private static UtFrameUtils.PseudoImage saveMetastore() throws Exception {
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(image.getImageWriter());
+        return image;
+    }
+
+    private static LocalMetastore loadMetastore(UtFrameUtils.PseudoImage image) throws Exception {
+        LocalMetastore metastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        metastore.load(reader);
+        reader.close();
+        return metastore;
+    }
+
+    /**
+     * Replays the journal entry into the handler against the given catalog, as a follower does.
+     */
+    private static void replayOn(LocalMetastore metastore, SchemaChangeHandler handler, AlterJobV2 entry) {
+        LocalMetastore leaderMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        GlobalStateMgr.getCurrentState().setLocalMetastore(metastore);
+        try {
+            handler.replayAlterJobV2(entry);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(leaderMetastore);
+        }
+    }
+
+    /**
+     * SHOW ALTER of a done job reads none of the data the prune drops.
+     */
+    private static void assertShowAlterUnchangedByPrune(LakeTableAlterMetaJob doneJob) {
+        List<List<Comparable>> rowsBefore = new ArrayList<>();
+        doneJob.getInfo(rowsBefore);
+        doneJob.pruneMeta();
+        assertPruned(doneJob);
+        List<List<Comparable>> rowsAfter = new ArrayList<>();
+        doneJob.getInfo(rowsAfter);
+        Assertions.assertFalse(rowsBefore.isEmpty());
+        Assertions.assertEquals(rowsBefore, rowsAfter);
+    }
+
+    private static void assertHasTabletData(LakeTableAlterMetaJob alterMetaJob) {
+        Assertions.assertFalse(alterMetaJob.getPartitionIndexMap().isEmpty());
+    }
+
+    private static void assertPruned(LakeTableAlterMetaJob alterMetaJob) {
+        Assertions.assertTrue(alterMetaJob.getPartitionIndexMap().isEmpty());
+        Assertions.assertNull(alterMetaJob.batchTask);
     }
 }

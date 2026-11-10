@@ -94,7 +94,7 @@ MFV_AVX2(void expand_load_selection_i32(int32_t* dst_data, const int32_t* src_da
     }
     // Scalar tail
     for (; i < count; ++i) {
-        dst_data[i] = src_data[cnt];
+        dst_data[i] = starrocks::unaligned_load<int32_t>(src_data + cnt);
         cnt += !nulls[i];
     }
 });
@@ -112,7 +112,7 @@ MFV_AVX512VLBW(void expand_load_selection_i32(int32_t* dst_data, const int32_t* 
         _mm512_storeu_epi32(&dst_data[i], loaded);
     }
     for (; i < count; ++i) {
-        dst_data[i] = src_data[cnt];
+        dst_data[i] = starrocks::unaligned_load<int32_t>(src_data + cnt);
         cnt += !nulls[i];
     }
 });
@@ -167,7 +167,7 @@ MFV_AVX2(void expand_load_selection_i64(int64_t* dst_data, const int64_t* src_da
         cnt += kExpandCountLUT64[mask4];
     }
     for (; i < count; ++i) {
-        dst_data[i] = src_data[cnt];
+        dst_data[i] = starrocks::unaligned_load<int64_t>(src_data + cnt);
         cnt += !nulls[i];
     }
 });
@@ -194,7 +194,7 @@ MFV_AVX512VLBW(void expand_load_selection_i64(int64_t* dst_data, const int64_t* 
         cnt += _mm_popcnt_u32(mask_hi);
     }
     for (; i < count; ++i) {
-        dst_data[i] = src_data[cnt];
+        dst_data[i] = starrocks::unaligned_load<int64_t>(src_data + cnt);
         cnt += !nulls[i];
     }
 })
@@ -250,7 +250,7 @@ void expand_load_simd(int32_t* dst_data, const int32_t* src_data, const uint8_t*
         cnt += kNeonCountLUT[mask4];
     }
     for (; i < count; ++i) {
-        dst_data[i] = src_data[cnt];
+        dst_data[i] = starrocks::unaligned_load<int32_t>(src_data + cnt);
         cnt += !nulls[i];
     }
 #else
@@ -282,7 +282,7 @@ void expand_load_simd(int64_t* dst_data, const int64_t* src_data, const uint8_t*
         cnt += kNeonCountLUT[mask2];
     }
     for (; i < count; ++i) {
-        dst_data[i] = src_data[cnt];
+        dst_data[i] = starrocks::unaligned_load<int64_t>(src_data + cnt);
         cnt += !nulls[i];
     }
 #else

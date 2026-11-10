@@ -30,6 +30,7 @@
 #include "exprs/agg/bitmap_union_int.h"
 #include "exprs/agg/count.h"
 #include "exprs/agg/covariance.h"
+#include "exprs/agg/coverage_window.h"
 #include "exprs/agg/distinct.h"
 #include "exprs/agg/ds_hll_count_distinct.h"
 #include "exprs/agg/ds_theta_combine.h"
@@ -234,6 +235,7 @@ public:
 
     // Windows functions:
     static AggregateFunctionPtr MakeDenseRankWindowFunction();
+    static AggregateFunctionPtr MakeCoverageWindowFunction();
 
     static AggregateFunctionPtr MakeRankWindowFunction();
 

@@ -26,8 +26,13 @@ import Experimental from '../_assets/commonMarkdown/_experimental.mdx'
 |        ✅        |        ✅         |    Incremental materialization    |
 |        ✅        |        ✅         |         Primary Key Model         |
 |        ✅        |        ✅         |              Sources              |
-|        ✅        |        ✅         |         Custom data tests         |
+|        ✅        |        ✅         | Data tests (generic and singular) |
+|        ✅        |        ✅         |            Unit tests             |
+|        ✅        |        ✅         |      Storing test failures        |
+|        ✅        |        ✅         |  Source freshness (`loaded_at_field`) |
+|        ❌        |        ❌         |  Metadata-based source freshness  |
 |        ✅        |        ✅         |           Docs generate           |
+|        ❌        |        ❌         |          `persist_docs`           |
 |        ✅        |        ✅         |       Expression Partition        |
 |        ❌        |        ❌         |               Kafka               |
 |        ❌        |        ✅         |         Dynamic Overwrite         |
@@ -298,6 +303,120 @@ FROM {{ source('raw', 'events') }}
 
 :::note
 現在、インクリメンタルマージはサポートされていません。
+:::
+
+## Testing
+
+`dbt-starrocks` は dbt のすべてのテストタイプをサポートしています。アダプタ固有の設定は必要ありません。テストは標準的な SQL にコンパイルされ、StarRocks が直接実行します。
+
+### Data tests
+
+4 つの組み込み汎用テスト (`not_null`、`unique`、`accepted_values`、`relationships`) がサポートされています。`macros/` で定義したカスタム汎用テストや、`test-paths` 配下に `.sql` ファイルとして定義した単一テストもサポートされています。
+
+```yml
+models:
+  - name: stg_customers
+    columns:
+      - name: id
+        data_tests: [not_null, unique]
+      - name: region
+        data_tests:
+          - accepted_values:
+              values: ['us', 'eu']
+          - relationships:
+              to: ref('dim_customers')
+              field: region
+```
+
+テストの重大度に関する設定 (`severity`、`error_if`、`warn_if`、`fail_calc`、`limit`) は、SQL が StarRocks に送信される前に dbt 側で処理されるため、他のアダプタと同じように動作します。
+
+### Unit tests
+
+ユニットテストがサポートされています。dbt はフィクスチャの行をコンパイル後のクエリに直接埋め込むため、StarRocks にデータは書き込まれません。
+
+```yml
+unit_tests:
+  - name: test_dim_customers_counts
+    model: dim_customers
+    given:
+      - input: ref('stg_customers')
+        rows:
+          - {id: 1, name: 'a', region: 'us'}
+          - {id: 2, name: 'b', region: 'us'}
+    expect:
+      rows:
+        - {region: 'us', n: 2}
+```
+
+次のコマンドで実行します。
+
+```sh
+dbt test --select test_type:unit
+```
+
+### Storing test failures
+
+`dbt test --store-failures`、`store_failures` 設定、`store_failures_as` (`table` または `view`) がすべてサポートされています。失敗した行は `<schema>_dbt_test__audit` という名前の別スキーマに書き込まれ、存在しない場合はアダプタが作成します。
+
+```sql
+SELECT * FROM `analytics_dbt_test__audit`.`not_null_stg_customers_name`;
+```
+
+失敗レコードのテーブルは `CREATE TABLE AS` で作成されるため、テーブルモデルと同じ設定オプションを利用できます。これを使って失敗レコードテーブルの格納方法を制御できます。
+
+```yml
+      - name: name
+        data_tests:
+          - not_null:
+              config:
+                store_failures: true
+                alias: nn_name_failures
+                distributed_by: ['id']
+                buckets: 3
+```
+
+`distributed_by` を指定しない場合、失敗レコードのテーブルはランダム分散で作成されます。
+
+:::tip
+`store_failures_as: view` を指定すると、失敗した行がテーブルではなくビューとして格納されるため、テスト実行のたびにテーブルを作成し直す必要がなくなります。
+:::
+
+### Source freshness
+
+`dbt source freshness` を使用するには、各ソーステーブルで `loaded_at_field` を宣言する必要があります。
+
+```yml
+sources:
+  - name: raw
+    tables:
+      - name: events
+        loaded_at_field: updated_at
+        freshness:
+          warn_after: {count: 1, period: hour}
+          error_after: {count: 24, period: hour}
+```
+
+:::warning
+メタデータベースの鮮度チェックはサポートされていません。`loaded_at_field` を省略すると、`no 'loaded_at_field' provided and starrocks adapter does not support metadata-based freshness checks` というエラーで失敗します。鮮度チェックが必要なソースには、必ずタイムスタンプ列を用意してください。
+:::
+
+## Generating documentation
+
+`dbt docs generate` は、`information_schema.tables` と `information_schema.columns` にクエリを実行してプロジェクトのカタログを構築します。モデル、シード、ビュー、マテリアライズドビュー、ソースがすべて含まれ、それぞれの列、列の順序、データ型も収集されます。`dbt docs generate --static` と `dbt docs serve` も利用できます。
+
+`.yml` ファイルに記述した説明は dbt の manifest から読み込まれるため、これまでどおりドキュメントサイトに表示されます。ただし、次のメタデータは StarRocks からは収集されません。
+
+- データベースに格納されたテーブルコメントおよびカラムコメント。
+- テーブルのオーナー。
+- 行数やサイズなどのテーブル統計情報。
+
+さらに、リレーションの記述に関して次の 2 点に注意してください。
+
+- カラム型は精度を含まない形で報告されます。`VARCHAR(64)` 列は `varchar`、`DECIMAL(18,4)` 列は `decimal` と表示されます。正確な型を確認するには [SHOW CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md) を使用してください。
+- マテリアライズドビューはビューとして記録されます。これはドキュメントサイトにのみ影響し、`dbt run` には影響しません。
+
+:::warning
+`persist_docs` はサポートされていません。ビュー、増分、スナップショットの各モデルでは `alter_relation_comment macro not implemented for adapter starrocks` というエラーで失敗し、テーブルモデルでは暗黙的に無視されてコメントは書き込まれません。`dbt_project.yml` ではプロジェクト内のすべてのモデルに適用されてしまうため、そこに `persist_docs` を設定しないでください。
 :::
 
 ## Troubleshooting

@@ -385,17 +385,10 @@ TEST(FixedLengthColumnTest, test_append_numeric) {
     EXPECT_EQ(0, c1->get(0).get_int64());
 
     c1->append(*c2, 0, 2);
-    EXPECT_EQ(3u, c1->size());
-    EXPECT_EQ(0, c1->get(0).get_int64());
-    EXPECT_EQ(1, c1->get(1).get_int64());
-    EXPECT_EQ(2, c1->get(2).get_int64());
+    EXPECT_EQ("[0, 1, 2]", c1->debug_string());
 
     c1->append(*c2, 1, 1);
-    EXPECT_EQ(4u, c1->size());
-    EXPECT_EQ(0, c1->get(0).get_int64());
-    EXPECT_EQ(1, c1->get(1).get_int64());
-    EXPECT_EQ(2, c1->get(2).get_int64());
-    EXPECT_EQ(2, c1->get(3).get_int64());
+    EXPECT_EQ("[0, 1, 2, 2]", c1->debug_string());
 }
 
 // NOLINTNEXTLINE
@@ -413,22 +406,10 @@ TEST(FixedLengthColumnTest, test_append_nullable_numeric) {
     EXPECT_EQ(0, c1->get(0).get_int64());
 
     c1->append(*c2, 0, 2);
-    EXPECT_EQ(3u, c1->size());
-    EXPECT_FALSE(c1->is_null(0));
-    EXPECT_EQ(0, c1->get(0).get_int64());
-    EXPECT_TRUE(c1->is_null(1));
-    EXPECT_FALSE(c1->is_null(2));
-    EXPECT_EQ(100, c1->get(2).get_int64());
+    EXPECT_EQ("[0, NULL, 100]", c1->debug_string());
 
     c1->append(*c2, 1, 1);
-    EXPECT_EQ(4u, c1->size());
-    EXPECT_FALSE(c1->is_null(0));
-    EXPECT_EQ(0, c1->get(0).get_int64());
-    EXPECT_TRUE(c1->is_null(1));
-    EXPECT_FALSE(c1->is_null(2));
-    EXPECT_EQ(100, c1->get(2).get_int64());
-    EXPECT_FALSE(c1->is_null(3));
-    EXPECT_EQ(100, c1->get(3).get_int64());
+    EXPECT_EQ("[0, NULL, 100, 100]", c1->debug_string());
 }
 
 // NOLINTNEXTLINE
@@ -611,40 +592,6 @@ TEST(FixedLengthColumnTest, test_compare_row) {
 }
 
 // NOLINTNEXTLINE
-TEST(FixedLengthColumnTest, test_upgrade_if_overflow) {
-    auto column = FixedLengthColumn<uint32_t>::create();
-    for (int i = 0; i < 10; i++) {
-        column->append(i);
-    }
-
-    auto ret = column->upgrade_if_overflow();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-    ASSERT_EQ(column->size(), 10);
-    for (int i = 0; i < 10; i++) {
-        ASSERT_EQ(column->get(i).get_uint32(), i);
-    }
-
-#ifdef NDEBUG
-    // This case will alloc a lot of memory and run slowly
-    auto large_column = FixedLengthColumn<uint8_t>::create();
-    large_column->resize(Column::MAX_CAPACITY_LIMIT + 5);
-    ret = large_column->upgrade_if_overflow();
-    ASSERT_FALSE(ret.ok());
-#endif
-}
-
-// NOLINTNEXTLINE
-TEST(FixedLengthColumnTest, test_fixed_length_column_downgrade) {
-    auto column = FixedLengthColumn<uint32_t>::create();
-    column->append(1);
-    auto ret = column->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-    ASSERT_FALSE(column->has_large_column());
-}
-
-// NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_replicate) {
     auto column = FixedLengthColumn<int32_t>::create();
     column->append(7);
@@ -656,12 +603,7 @@ TEST(FixedLengthColumnTest, test_replicate) {
     offsets.emplace_back(5);
 
     auto c2 = column->replicate(offsets).value();
-    ASSERT_EQ(5, c2->size());
-    ASSERT_EQ(c2->get(0).get_int32(), 7);
-    ASSERT_EQ(c2->get(1).get_int32(), 7);
-    ASSERT_EQ(c2->get(2).get_int32(), 7);
-    ASSERT_EQ(c2->get(3).get_int32(), 3);
-    ASSERT_EQ(c2->get(4).get_int32(), 3);
+    ASSERT_EQ("[7, 7, 7, 3, 3]", c2->debug_string());
 }
 
 // NOLINTNEXTLINE

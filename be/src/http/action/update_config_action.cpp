@@ -40,7 +40,9 @@
 
 #include <string>
 
+#include "base/auth/credential_mask.h"
 #include "common/config_update_registry.h"
+#include "common/configbase.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
 #include "platform/http/http_channel.h"
@@ -53,7 +55,8 @@ namespace starrocks {
 const static std::string HEADER_JSON = "application/json";
 
 void UpdateConfigAction::handle(HttpRequest* req) {
-    LOG(INFO) << req->debug_string();
+    // A credential config's new value must not reach the log or the response, so it is masked everywhere below.
+    LOG(INFO) << req->debug_string(config::is_sensitive_config);
 
     Status s;
     std::string msg;
@@ -66,8 +69,10 @@ void UpdateConfigAction::handle(HttpRequest* req) {
         const std::string& new_value = req->params()->begin()->second;
         s = ConfigUpdateRegistry::instance()->update_config(config, new_value);
         if (!s.ok()) {
-            LOG(WARNING) << "set_config " << config << "=" << new_value << " failed";
-            msg = strings::Substitute("set $0=$1 failed, reason: $2", config, new_value, s.to_string());
+            const std::string shown_value =
+                    config::is_sensitive_config(config) ? std::string(kCredentialMask) : new_value;
+            LOG(WARNING) << "set_config " << config << "=" << shown_value << " failed";
+            msg = strings::Substitute("set $0=$1 failed, reason: $2", config, shown_value, s.to_string());
         }
     }
 

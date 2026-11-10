@@ -60,13 +60,7 @@ TEST_F(NumericConverterTest, test_read_float_string) {
     EXPECT_TRUE(conv->read_string(col.get(), "32767.0", Converter::Options()));
     EXPECT_TRUE(conv->read_string(col.get(), "-32768.0", Converter::Options()));
 
-    EXPECT_EQ(6, col->size());
-    EXPECT_EQ(1, col->get(0).get_int16());
-    EXPECT_EQ(1, col->get(1).get_int16());
-    EXPECT_EQ(-1, col->get(2).get_int16());
-    EXPECT_EQ(-1, col->get(3).get_int16());
-    EXPECT_EQ(32767, col->get(4).get_int16());
-    EXPECT_EQ(-32768, col->get(5).get_int16());
+    EXPECT_EQ("[1, 1, -1, -1, 32767, -32768]", col->debug_string());
 }
 
 // NOLINTNEXTLINE
@@ -149,13 +143,7 @@ TEST_F(NumericConverterTest, test_read_quoted_string) {
     EXPECT_TRUE(conv->read_string(col.get(), "32767.99999", Converter::Options()));
     EXPECT_TRUE(conv->read_string(col.get(), "-32768.99999", Converter::Options()));
 
-    EXPECT_EQ(6, col->size());
-    EXPECT_EQ(1, col->get(0).get_int16());
-    EXPECT_EQ(-1, col->get(1).get_int16());
-    EXPECT_EQ(32767, col->get(2).get_int16());
-    EXPECT_EQ(-32768, col->get(3).get_int16());
-    EXPECT_EQ(32767, col->get(4).get_int16());
-    EXPECT_EQ(-32768, col->get(5).get_int16());
+    EXPECT_EQ("[1, -1, 32767, -32768, 32767, -32768]", col->debug_string());
 }
 
 // NOLINTNEXTLINE

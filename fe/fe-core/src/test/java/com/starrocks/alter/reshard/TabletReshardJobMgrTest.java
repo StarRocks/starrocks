@@ -92,7 +92,7 @@ public class TabletReshardJobMgrTest {
 
     public static class TestNormalTabletReshardJob extends TabletReshardJob {
 
-        private long tableId = 0;
+        private long tableId = reshardTable.getId();
 
         public TestNormalTabletReshardJob(long jobId, TabletReshardJob.JobType jobType) {
             super(jobId, jobType);
@@ -110,6 +110,21 @@ public class TabletReshardJobMgrTest {
         @Override
         public long getTableId() {
             return tableId;
+        }
+
+        @Override
+        public long getDbId() {
+            return reshardDb.getId();
+        }
+
+        @Override
+        public Map<Long, ReshardingPhysicalPartition> getReshardingPhysicalPartitions() {
+            return Map.of();
+        }
+
+        @Override
+        protected void initLocked(OlapTable table) throws StarRocksException {
+            reserveTableForReshard(getDbId(), table, getReshardingPhysicalPartitions());
         }
 
         @Override
@@ -336,7 +351,7 @@ public class TabletReshardJobMgrTest {
         // A job whose init() (admission-time table reservation) fails must not be queued.
         TabletReshardJob job = new TestNormalTabletReshardJob(1, null) {
             @Override
-            public void init() throws StarRocksException {
+            protected void initLocked(OlapTable table) throws StarRocksException {
                 throw new StarRocksException("table not reservable");
             }
         };
@@ -472,6 +487,7 @@ public class TabletReshardJobMgrTest {
         job.setTableId(100L);
         job.jobState = TabletReshardJob.JobState.FINISHED;
         job.finishedTimeMs = 1000L; // deep in the past -> isExpired() is true
+        job.initializeAfterRecovery();
         jobMgr.tabletReshardJobs.put(job.getJobId(), job);
         Assertions.assertTrue(job.isExpired());
 
@@ -624,6 +640,71 @@ public class TabletReshardJobMgrTest {
         }
         Assertions.assertTrue(mergeCalled[0],
                 "drain must route a sub-threshold merge candidate to a merge job");
+    }
+
+    /**
+     * Both the MERGE TABLET statement and the auto-merge scheduler go through createTabletReshardJob,
+     * so the shape whose merge cannot be made correct -- a range-distributed primary-key table whose
+     * ORDER BY differs from the primary key -- has to be refused there, not only in the analyzer that
+     * the statement alone passes through.
+     */
+    @Test
+    public void testMergeRefusedForASeparateSortKeyPrimaryKeyRangeTable() {
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public boolean tabletMergeUnsupported(OlapTable table) {
+                return true;
+            }
+        };
+
+        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        boolean savedFlag = Config.tablet_reshard_enable_tablet_merge;
+        try {
+            Config.tablet_reshard_enable_tablet_merge = true;
+            StarRocksException e = Assertions.assertThrows(StarRocksException.class,
+                    () -> mgr.createTabletReshardJob(reshardDb, reshardTable, new MergeTabletClause()));
+            Assertions.assertTrue(e.getMessage().contains("Tablet merge is not supported"), e.getMessage());
+        } finally {
+            Config.tablet_reshard_enable_tablet_merge = savedFlag;
+        }
+    }
+
+    /**
+     * And the auto-merge scheduler must skip that shape BEFORE the latch signature, for the same reason
+     * the feature gate does: the signature takes the table READ lock and hashes every tablet of every
+     * visible index, and this refusal is permanent -- there is nothing to latch or re-arm, so paying
+     * that walk on every statistics pass would be forever.
+     */
+    @Test
+    public void testUnsupportedMergeShapeSkipsTheLatchSignatureWalk() {
+        int[] signatureWalks = {0};
+        new MockUp<ColocateChecker>() {
+            @Mock
+            public long tableConvergenceSignature(Database db, OlapTable table, long expectedRangesSig) {
+                signatureWalks[0]++;
+                return 1L;
+            }
+        };
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public boolean tabletMergeUnsupported(OlapTable table) {
+                return true;
+            }
+        };
+
+        mockLeaderAdmissionOpen();
+        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        long pairSize = TabletReshardUtils.mergePairThreshold(Config.tablet_reshard_target_size) - 1;
+        boolean savedFlag = Config.tablet_reshard_enable_tablet_merge;
+        try {
+            Config.tablet_reshard_enable_tablet_merge = true;
+            Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                    0L, pairSize, 0L, 0);
+            Assertions.assertEquals(0, signatureWalks[0],
+                    "an unsupported merge shape must skip the read-locked signature walk entirely");
+        } finally {
+            Config.tablet_reshard_enable_tablet_merge = savedFlag;
+        }
     }
 
     /**

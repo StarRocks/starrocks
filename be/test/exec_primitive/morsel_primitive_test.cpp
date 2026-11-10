@@ -89,4 +89,60 @@ TEST(MorselPrimitiveTest, ScanMorselHandlesEmptyScanRangeMarker) {
     ASSERT_TRUE(has_more);
 }
 
+// Passing the ranges by std::move must build the same morsels as passing a copy, skip empty
+// markers and carry has_more.
+TEST(MorselPrimitiveTest, BuildScanMorselsMovesScanRanges) {
+    auto make_ranges = [] {
+        std::vector<TScanRangeParams> ranges(3);
+        ranges[0].scan_range.__set_hdfs_scan_range(THdfsScanRange());
+        ranges[0].scan_range.hdfs_scan_range.__set_full_path("a.parquet");
+        ranges[1].__set_empty(true);
+        ranges[1].__set_has_more(true);
+        TInternalScanRange internal;
+        internal.__set_tablet_id(42);
+        internal.__set_version("7");
+        ranges[2].scan_range.__set_internal_scan_range(internal);
+        return ranges;
+    };
+
+    const std::vector<TScanRangeParams> copied_ranges = make_ranges();
+    Morsels copied;
+    bool copied_has_more = false;
+    ScanMorsel::build_scan_morsels(1, copied_ranges, false, &copied, &copied_has_more);
+
+    std::vector<TScanRangeParams> moved_ranges = make_ranges();
+    Morsels moved;
+    bool moved_has_more = false;
+    ScanMorsel::build_scan_morsels(1, std::move(moved_ranges), false, &moved, &moved_has_more);
+
+    ASSERT_EQ(2, moved.size());
+    ASSERT_EQ(copied.size(), moved.size());
+    ASSERT_TRUE(moved_has_more);
+    ASSERT_EQ(copied_has_more, moved_has_more);
+    for (size_t i = 0; i < moved.size(); i++) {
+        EXPECT_EQ(*copied[i]->get_scan_range(), *moved[i]->get_scan_range());
+        EXPECT_EQ(copied[i]->has_owner_id(), moved[i]->has_owner_id());
+        EXPECT_EQ(copied[i]->owner_id(), moved[i]->owner_id());
+        EXPECT_EQ(copied[i]->get_lane_owner_and_version(), moved[i]->get_lane_owner_and_version());
+    }
+    EXPECT_EQ("a.parquet", moved[0]->get_scan_range()->hdfs_scan_range.full_path);
+    EXPECT_TRUE(moved[1]->has_owner_id());
+    EXPECT_EQ(42, moved[1]->owner_id());
+    // The const& overload leaves its input alone; the && one takes each scan range.
+    EXPECT_EQ("a.parquet", copied_ranges[0].scan_range.hdfs_scan_range.full_path);
+    EXPECT_FALSE(moved_ranges[0].scan_range.__isset.hdfs_scan_range);
+}
+
+// Thrift structs have no move constructor, so std::move alone would deep-copy: the morsel must
+// take the scan range's members.
+TEST(MorselPrimitiveTest, ScanMorselTakesScanRange) {
+    TScanRange scan_range;
+    scan_range.__set_hdfs_scan_range(THdfsScanRange());
+    scan_range.hdfs_scan_range.__set_full_path("a.parquet");
+    ScanMorsel morsel(1, std::move(scan_range));
+    EXPECT_EQ("a.parquet", morsel.get_scan_range()->hdfs_scan_range.full_path);
+    EXPECT_FALSE(scan_range.__isset.hdfs_scan_range);
+    EXPECT_TRUE(scan_range.hdfs_scan_range.full_path.empty());
+}
+
 } // namespace starrocks::pipeline

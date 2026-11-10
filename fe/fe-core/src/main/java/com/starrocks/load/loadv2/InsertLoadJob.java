@@ -128,6 +128,24 @@ public class InsertLoadJob extends LoadJob {
         this.coordinator = coordinator;
     }
 
+    // Holds on every FE and after a restart: the commit timestamp is set on replay as well, and it is persisted.
+    boolean isTxnCommitted() {
+        return loadCommittedTimestamp != -1;
+    }
+
+    // Whether a statement on this FE runs this job. That statement clears the coordinator when it records the final
+    // state, and a job restored from the journal or an image has no coordinator.
+    boolean hasRunningStatement() {
+        // The statement clears the coordinator before it logs the final state, so a reader without the lock could
+        // see a job in between as one that no statement runs.
+        readLock();
+        try {
+            return coordinator != null;
+        } finally {
+            readUnlock();
+        }
+    }
+
     public void setLoadFinishOrCancel(String failMsg, String trackingUrl) {
         writeLock();
         try {
@@ -271,7 +289,7 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public void afterCommitted(TransactionState txnState) throws StarRocksException {
-        loadCommittedTimestamp = System.currentTimeMillis();
+        loadCommittedTimestamp = txnState.getCommitTime();
         if (txnCallback != null) {
             txnCallback.afterCommitted(txnState);
         }
@@ -279,6 +297,12 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public void replayOnCommitted(TransactionState txnState) {
+        loadCommittedTimestamp = txnState.getCommitTime();
+        // The live txnCallback is not persisted, so the replaying node asks the factory instead.
+        InsertLoadTxnCallback replayCallback = InsertLoadTxnCallbackFactory.ofReplay(dbId, tableId, txnState);
+        if (replayCallback != null) {
+            replayCallback.replayOnCommitted(txnState);
+        }
     }
 
     @Override

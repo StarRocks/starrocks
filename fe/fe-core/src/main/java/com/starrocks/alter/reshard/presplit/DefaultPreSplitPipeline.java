@@ -247,7 +247,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
                 DEFAULT_POLL_INTERVAL, Clock.systemUTC(), loadComputeResource, derivedBoundarySource);
     }
 
-    private static RowGroupStatisticsProvider rowGroupStatisticsProviderFor(LoadKind loadKind) {
+    static RowGroupStatisticsProvider rowGroupStatisticsProviderFor(LoadKind loadKind) {
         return switch (loadKind) {
             case INSERT_FROM_FILES -> new InsertFromFilesRowGroupStatisticsProvider();
             case BROKER_LOAD -> new BrokerLoadRowGroupStatisticsProvider();
@@ -504,6 +504,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         try {
             return runMetaTier(request, requestedTabletCount, deadline);
         } catch (MetaTierUnavailableException metaTierUnavailable) {
+            PreSplitProfile.recordMetaTierFallbackReason(metaTierUnavailable);
             LOG.info("Sample-Based Tablet Pre-Split: meta tier unavailable for table {} — falling back to data tier: {}",
                     table.getName(), metaTierUnavailable.getMessage());
             return runDataTier(request, requestedTabletCount, activeComputeNodeCount, deadline);

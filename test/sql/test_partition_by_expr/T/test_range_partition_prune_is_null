@@ -1,0 +1,54 @@
+-- name: test_range_partition_prune_is_null
+
+-- A NULL sorts strictly below every value of its own column, and the row is then placed by ordinary
+-- tuple order. SHOW PARTITIONS on these tables puts (NULL, 100) and (5, NULL) in the partition that
+-- ENDS on the boundary `prefix + MIN`, while the pruner used to look the key up AS `prefix + MIN`
+-- and so picked the partition that STARTS there. Both shapes returned no rows.
+
+CREATE TABLE t_null_lead (
+    id1 TINYINT NULL,
+    id2 TINYINT NOT NULL,
+    v INT
+)
+DUPLICATE KEY(id1)
+PARTITION BY RANGE(id1, id2) (
+    PARTITION p0 VALUES LESS THAN ('-128', '10'),
+    PARTITION p1 VALUES LESS THAN ('50', '0')
+)
+DISTRIBUTED BY HASH(v) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_null_lead VALUES (NULL, 100, 1), (-100, 5, 2), (20, 3, 3);
+
+-- The NULL row is in p0, whose upper bound is (-128, 10); the old lookup key (-128, 100) sits above
+-- that boundary and selected p1 instead.
+select v from t_null_lead where id1 is null and id2 = 100;
+select v from t_null_lead where id1 is null and id2 > 50;
+-- Nothing narrows the second column here, so the old code happened to be right. It must stay right.
+select v from t_null_lead where id1 is null order by v;
+-- `<=> NULL` never reached the pruner and was always correct -- a control, not a regression guard.
+select v from t_null_lead where id1 <=> null and id2 = 100;
+-- Non-NULL predicates must keep pruning exactly as before.
+select v from t_null_lead where id1 = 20 order by v;
+
+CREATE TABLE t_null_trail (
+    a TINYINT NOT NULL,
+    b TINYINT NULL,
+    v INT
+)
+DUPLICATE KEY(a)
+PARTITION BY RANGE(a, b) (
+    PARTITION p0 VALUES LESS THAN ('5', '-128'),
+    PARTITION p1 VALUES LESS THAN ('5', '10'),
+    PARTITION p2 VALUES LESS THAN ('50', '0')
+)
+DISTRIBUTED BY HASH(v) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_null_trail VALUES (5, NULL, 1), (5, 3, 2), (1, 7, 3), (40, NULL, 4);
+
+-- (5, NULL) is in p0, which ends on (5, -128); the old lookup key (5, -128) selected p1.
+select v from t_null_trail where a = 5 and b is null;
+-- (40, NULL) is not on a partition boundary, so this one was already correct.
+select v from t_null_trail where a = 40 and b is null;
+select v from t_null_trail where b is null order by v;

@@ -4,7 +4,10 @@
 -- =====================================================================
 -- HNSW + quantizer DDL: SQ4 / SQ8 / PQ acceptance and rejection.
 -- Covers the FE analyzer path (quantizer / m_pq / nbits_pq properties).
--- SQ4 / SQ8 cases also INSERT + SELECT to verify the build/query path.
+-- SQ4 / SQ8 cases also INSERT + SELECT to verify the build/query path. They set
+-- index_build_threshold=1 so the .vi is actually built: the default is 10000, which a
+-- handful of rows never reaches, and without it both queries would run the missing-.vi
+-- fallback and no quantized index would be exercised at all.
 -- PQ is DDL-only: PQ training needs many samples per sub-quantizer (e.g.
 -- 256 at nbits_pq=8) which is impractical inside a SQL-tester case.
 -- =====================================================================
@@ -20,7 +23,8 @@ CREATE TABLE t_hnsw_sq8 (
     "is_vector_normed" = "false",
     "M" = "16",
     "efconstruction" = "40",
-    "quantizer" = "sq8"
+    "quantizer" = "sq8",
+    "index_build_threshold" = "1"
   )
 ) ENGINE=OLAP
 DUPLICATE KEY(id)
@@ -48,7 +52,8 @@ CREATE TABLE t_hnsw_sq4 (
     "is_vector_normed" = "false",
     "M" = "16",
     "efconstruction" = "40",
-    "quantizer" = "sq4"
+    "quantizer" = "sq4",
+    "index_build_threshold" = "1"
   )
 ) ENGINE=OLAP
 DUPLICATE KEY(id)

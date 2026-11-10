@@ -85,9 +85,7 @@ TEST_F(SubfieldExprTest, subfield_test) {
         EXPECT_TRUE(result->is_nullable());
         auto subfield_column = ColumnHelper::get_data_column(result.get());
         EXPECT_TRUE(subfield_column->is_numeric());
-        EXPECT_EQ(2, subfield_column->size());
-        EXPECT_EQ("1", subfield_column->debug_item(0));
-        EXPECT_EQ("2", subfield_column->debug_item(1));
+        EXPECT_EQ("[1, 2]", subfield_column->debug_string());
     }
 
     {
@@ -97,9 +95,7 @@ TEST_F(SubfieldExprTest, subfield_test) {
         EXPECT_TRUE(result->is_nullable());
         auto subfield_column = ColumnHelper::get_data_column(result.get());
         EXPECT_TRUE(subfield_column->is_binary());
-        EXPECT_EQ(2, subfield_column->size());
-        EXPECT_EQ("'smith'", subfield_column->debug_item(0));
-        EXPECT_EQ("'cruise'", subfield_column->debug_item(1));
+        EXPECT_EQ("['smith', 'cruise']", subfield_column->debug_string());
     }
 }
 
@@ -158,10 +154,7 @@ TEST_F(SubfieldExprTest, subfield_null_test) {
         EXPECT_TRUE(result->is_nullable());
         auto subfield_column = ColumnHelper::get_data_column(result.get());
         EXPECT_TRUE(subfield_column->is_numeric());
-        EXPECT_EQ(3, subfield_column->size());
-        EXPECT_EQ("1", subfield_column->debug_item(0));
-        EXPECT_EQ("0", subfield_column->debug_item(1));
-        EXPECT_EQ("3", subfield_column->debug_item(2));
+        EXPECT_EQ("[1, 0, 3]", subfield_column->debug_string());
     }
 }
 
@@ -234,9 +227,6 @@ TEST_F(SubfieldExprTest, subfield_multi_level_test) {
     expr->add_child(new_fake_const_expr(std::move(column), struct_type));
     auto result = expr->evaluate(nullptr, nullptr);
     EXPECT_TRUE(result->is_nullable());
-    EXPECT_EQ(3, result->size());
-    EXPECT_EQ("'smith'", result->debug_item(0));
-    EXPECT_EQ("NULL", result->debug_item(1));
-    EXPECT_EQ("'cruise'", result->debug_item(2));
+    EXPECT_EQ("['smith', NULL, 'cruise']", result->debug_string());
 }
 } // namespace starrocks

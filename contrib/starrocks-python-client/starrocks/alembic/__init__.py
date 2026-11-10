@@ -14,6 +14,7 @@
 
 from . import compare, ops, render, toimpl  # noqa: F401
 from .compare import combine_include_object, include_object_for_view_mv
+from .ops import combine_column_alters
 from .render import render_column_type
 from .starrocks import StarRocksImpl
 
@@ -24,4 +25,5 @@ __all__ = [
     "render_column_type",
     "include_object_for_view_mv",
     "combine_include_object",
+    "combine_column_alters",
 ]

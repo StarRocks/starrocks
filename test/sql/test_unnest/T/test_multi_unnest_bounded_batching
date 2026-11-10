@@ -1,0 +1,52 @@
+-- name: test_multi_unnest_bounded_batching
+-- Multi-array UNNEST(a, b) has to build its zip, so the only thing that bounds its memory is how
+-- much of that zip one process() call builds. That is invisible in the result set - the answers below
+-- were already correct when a single call materialized the whole input chunk's expansion - so this
+-- case asserts it on TableFunctionExecCount instead, which is the counter that changes: it goes from
+-- one call per input chunk to roughly one call per output chunk.
+--
+-- enable_async_profile = false makes the profile readable by get_query_profile() as soon as the query
+-- returns, which is what the framework's own profile helpers do.
+CREATE TABLE mub_${uuid0} (
+    `id` int(11) NOT NULL COMMENT "",
+    `a` ARRAY<int> NULL COMMENT "",
+    `b` ARRAY<int> NULL COMMENT ""
+)
+DUPLICATE KEY (id)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- 4 rows, each expanding to max(10, 4) = 10 rows, so 40 output rows in total.
+INSERT INTO mub_${uuid0}
+SELECT g, array_repeat(g, 10), array_repeat(g, 4) FROM TABLE(generate_series(1, 4)) t(g);
+
+SET pipeline_dop = 1;
+SET enable_profile = true;
+SET enable_async_profile = false;
+SET chunk_size = 2;
+
+SELECT count(1), sum(v1), sum(v2) FROM mub_${uuid0}, UNNEST(a, b) AS u(v1, v2);
+-- 40 output rows at chunk_size 2, so at least 20 calls: no single call built more than chunk_size
+-- rows. Unbatched this was 1 (one call per input chunk), which is the whole defect.
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 20;
+
+-- Control: single-array UNNEST hands its elements downstream by reference, so it allocates nothing
+-- and has nothing to batch - it legitimately stays at one call per input chunk. Without this, the
+-- assertion above reads as "more calls is always better", which is not what is being tested.
+SELECT count(1), sum(v) FROM mub_${uuid0}, UNNEST(a) AS u(v);
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) <= 4;
+
+-- One input row whose own expansion (10 rows) is larger than a chunk, so the split falls inside the
+-- row. That is the case where a mishandled cursor pairs elements with the wrong outer row instead of
+-- failing, so it needs its own assertion: ceil(10/3) = 4 calls minimum.
+SET chunk_size = 3;
+SELECT count(1), sum(v1), sum(v2) FROM mub_${uuid0}, UNNEST(a, b) AS u(v1, v2) WHERE id = 1;
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 4;
+
+-- LEFT JOIN takes the same path (the extra NULL row is part of the expansion here), so it must batch
+-- too rather than falling back to a single call.
+SET chunk_size = 2;
+SELECT count(1), count(v1), count(v2) FROM mub_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE;
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 20;
+
+DROP TABLE mub_${uuid0};

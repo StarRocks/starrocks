@@ -302,4 +302,53 @@ public class MVMetaVersionRepairerTest extends MVTestBase {
                     });
         });
     }
+
+    @Test
+    public void testRepairSkippedWhenMvWatermarkIsBehindVersionTime() {
+        starRocksAssert.withTable(m1, () -> {
+            cluster.runSql("test", "insert into m1 values (1,1,1,1,1), (4,2,1,1,1);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                            " PARTITION BY (k1) " +
+                            " DISTRIBUTED BY HASH(k1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " PROPERTIES (\n" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
+                            " ) " +
+                            " AS SELECT k1, k2, v1, v2 from m1;",
+                    (obj) -> {
+                        String mvName = (String) obj;
+                        starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
+                                "PARTITION START ('%s') END ('%s')", "1", "3"));
+                        Table baseTable = getTable("test", "m1");
+                        Partition curPartition = baseTable.getPartition("p1");
+
+                        MaterializedView mv1 = getMv("test", mvName);
+                        MaterializedView.AsyncRefreshContext asyncRefreshContext =
+                                mv1.getRefreshScheme().getAsyncRefreshContext();
+                        Map<String, MaterializedView.BasePartitionInfo> value =
+                                asyncRefreshContext.getBaseTableVisibleVersionMap().values().iterator().next();
+                        String baseTablePartitionName = value.keySet().iterator().next();
+                        MaterializedView.BasePartitionInfo before = value.get(baseTablePartitionName);
+
+                        // The MV is already stale through isBaseTableChanged's *time* disjunct: the base
+                        // partition's pre-commit visible version time is newer than the MV's recorded
+                        // lastRefreshTime, so there is an unconsumed change. Repairing here would advance
+                        // both fields and erase it, therefore the repair must be skipped even though the
+                        // recorded version still matches lastVersion.
+                        MVRepairHandler.PartitionRepairInfo staleByTime = new MVRepairHandler.PartitionRepairInfo(
+                                curPartition.getId(), curPartition.getName(),
+                                curPartition.getDefaultPhysicalPartition().getVisibleVersion(),
+                                100L, System.currentTimeMillis(), before.getLastRefreshTime() + 1);
+
+                        MVMetaVersionRepairer.repairBaseTableVersionChanges(baseTable,
+                                ImmutableList.of(staleByTime));
+
+                        MaterializedView.BasePartitionInfo after = mv1.getRefreshScheme()
+                                .getAsyncRefreshContext().getBaseTableVisibleVersionMap()
+                                .values().iterator().next().get(baseTablePartitionName);
+                        Assertions.assertEquals(before.getVersion(), after.getVersion());
+                        Assertions.assertEquals(before.getLastRefreshTime(), after.getLastRefreshTime());
+                    });
+        });
+    }
 }

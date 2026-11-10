@@ -24,6 +24,29 @@ create table t1 (
 insert into t1 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  4096)) union all select null,null;
 select c0, sum(c1) from t1 group by c0 order by 2 desc limit 10;
 
+-- StarRocksTest#12188: a streaming DISTINCT aggregation that gets pushed into LIMITED_MEM mode
+-- force-streams every chunk and keeps re-arming streaming_all_states, so the source operator
+-- drains a hash set that reset_state() has just emptied. convert_hash_set_to_chunk() must not
+-- hand a row count of 0 down to insert_keys_to_columns(): the key buffer is still default
+-- constructed there, and the nullable string key column read past the "" literal Slice() uses.
+-- spill_mode=random with ratio 1.0 latches LIMITED_MEM on the first chunk, deterministically.
+create table t2 (
+    c0 INT,
+    c1 VARCHAR(64) NULL,
+    c2 VARCHAR(64) NULL,
+    c3 VARCHAR(64) NULL
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+-- 97, 89 and 83 are pairwise coprime, so every generate_series value yields a distinct triple
+insert into t2 SELECT generate_series, concat('aaaaaaaaaaaaaaaa_', generate_series % 97), concat('bbbbbbbbbbbbbbbb_', generate_series % 89), concat('cccccccccccccccc_', generate_series % 83) FROM TABLE(generate_series(1, 40960));
+insert into t2 values (40961, null, null, null);
+set enable_spill = true;
+set spill_mode = "random";
+set spill_rand_ratio = 1.0;
+select count(*) from (select distinct c1, c2, c3 from t2) t;
+set spill_rand_ratio = 0.1;
+set spill_mode = "auto";
+set enable_spill = false;
+
 CLEANUP {
     admin disable failpoint 'force_reset_aggregator_after_agg_streaming_sink_finish';
 } END CLEANUP

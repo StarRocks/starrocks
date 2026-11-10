@@ -328,9 +328,8 @@ TEST_F(DataSketchsThetaTest, TestCombineAcceptsValidInput) {
 }
 
 TEST_F(DataSketchsThetaTest, TestIntersectCondAggRejectsMalformedInput) {
-    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY),
-                                             TypeDescriptor::from_logical_type(TYPE_INT)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY), TYPE_INT_DESC};
+    auto return_type = TYPE_DOUBLE_DESC;
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func =
@@ -542,9 +541,8 @@ TEST_F(DataSketchsThetaTest, TestScalarANotBOverlapping) {
 
 // Helper: build a FunctionContext and aggregate function for ds_theta_intersect_cond_agg.
 static std::unique_ptr<FunctionContext> make_cond_agg_ctx() {
-    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY),
-                                             TypeDescriptor::from_logical_type(TYPE_INT)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY), TYPE_INT_DESC};
+    auto return_type = TYPE_DOUBLE_DESC;
     return std::unique_ptr<FunctionContext>(FunctionContext::create_test_context(std::move(arg_types), return_type));
 }
 

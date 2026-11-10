@@ -34,6 +34,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
@@ -64,10 +65,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 
 /**
@@ -114,12 +111,7 @@ public class MergeTabletJobColocateTest {
         starRocksAssert.withDatabase("merge_colocate_test").useDatabase("merge_colocate_test");
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("merge_colocate_test");
 
-        new MockUp<ThreadPoolExecutor>() {
-            @Mock
-            public <T> Future<T> submit(Callable<T> task) throws Exception {
-                return CompletableFuture.completedFuture(task.call());
-            }
-        };
+        LockTestUtils.fakeSynchronousExecutorOffTheCallersThread();
 
         // The reshard daemon ticks ColocateChecker, which would re-stabilize the group underneath
         // the unstable assertions below.
@@ -214,13 +206,17 @@ public class MergeTabletJobColocateTest {
         return addTablet(table, physicalPartition, baseIndex, range);
     }
 
-    /** A merge-candidate tablet: small enough on size, and fresh enough against its partition. */
+    /**
+     * A merge-candidate tablet: small enough on size, fresh enough against its partition, and
+     * observed free of merge-blocking shared data files.
+     */
     private static LakeTablet addTablet(OlapTable owner, PhysicalPartition partition,
             MaterializedIndex index, Range<Tuple> range) {
         LakeTablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId(),
                 new TabletRange(range));
         tablet.setDataSize(SMALL_TABLET_SIZE);
         tablet.setDataSizeUpdateTime(partition.getVisibleVersionTime());
+        tablet.setHasSharedFiles(false);
         index.addTablet(tablet, new TabletMeta(db.getId(), owner.getId(), partition.getId(),
                 index.getId(), TStorageMedium.HDD, true));
         return tablet;

@@ -26,6 +26,7 @@
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
 #include "base/decimal_types.h"
+#include "base/time/tz_offset_cache.h"
 #include "base/utility/pred_guard.h"
 #include "column/array_column.h"
 #include "column/arrow/arrow_to_json_converter.h"
@@ -698,13 +699,12 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
         }
     }
 
-    static bool convert_one_datetime(CppType& datum, int64_t second, int64_t microsecond, const cctz::time_zone& ctz) {
+    // offset_cache is bound to the zone the value is shown in.
+    static bool convert_one_datetime(CppType& datum, int64_t second, int64_t microsecond, TzOffsetCache* offset_cache) {
         static_assert(at_is_datetime<AT>, "Invalid arrow type");
 
         DateTimeValue dtv;
-        if (UNLIKELY(!dtv.from_unixtime(second, microsecond, ctz))) {
-            return true;
-        }
+        dtv.from_unixtime_with_offset(second, microsecond, offset_cache->offset_in_bound_zone(second));
         if constexpr (lt_is_date<LT>) {
             datum.from_date(dtv.year(), dtv.month(), dtv.day());
         } else if constexpr (lt_is_datetime<LT>) {
@@ -735,6 +735,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
 
     static Status convert_datetime_from_second(CppType* data, const ArrowCppType* arrow_data, int num_elements,
                                                const cctz::time_zone& ctz, [[maybe_unused]] const uint8_t* null_data) {
+        TzOffsetCache offset_cache;
+        offset_cache.bind(ctz);
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {
@@ -742,7 +744,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i], 0, ctz)) {
+            if (convert_one_datetime(data[i], arrow_data[i], 0, &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -752,6 +754,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     static Status convert_datetime_from_milisecond(CppType* data, const ArrowCppType* arrow_data, int num_elements,
                                                    const cctz::time_zone& ctz,
                                                    [[maybe_unused]] const uint8_t* null_data) {
+        TzOffsetCache offset_cache;
+        offset_cache.bind(ctz);
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {
@@ -759,7 +763,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000, arrow_data[i] % 1000 * 1000, ctz)) {
+            if (convert_one_datetime(data[i], arrow_data[i] / 1000, arrow_data[i] % 1000 * 1000, &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -769,6 +773,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     static Status convert_datetime_from_microsecond(CppType* data, const ArrowCppType* arrow_data, int num_elements,
                                                     const cctz::time_zone& ctz,
                                                     [[maybe_unused]] const uint8_t* null_data) {
+        TzOffsetCache offset_cache;
+        offset_cache.bind(ctz);
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {
@@ -776,7 +782,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000000, arrow_data[i] % 1000000, ctz)) {
+            if (convert_one_datetime(data[i], arrow_data[i] / 1000000, arrow_data[i] % 1000000, &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -786,6 +792,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
     static Status convert_datetime_from_nanosecond(CppType* data, const ArrowCppType* arrow_data, int num_elements,
                                                    const cctz::time_zone& ctz,
                                                    [[maybe_unused]] const uint8_t* null_data) {
+        TzOffsetCache offset_cache;
+        offset_cache.bind(ctz);
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
                 if (null_data[i] == DATUM_NULL) {
@@ -793,7 +801,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                 }
             }
 
-            if (convert_one_datetime(data[i], arrow_data[i] / 1000000000, arrow_data[i] % 1000000000 / 1000, ctz)) {
+            if (convert_one_datetime(data[i], arrow_data[i] / 1000000000, arrow_data[i] % 1000000000 / 1000,
+                                     &offset_cache)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
@@ -1030,6 +1039,11 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
         Column* kv_columns[] = {keys_column, values_column};
         size_t kv_size[] = {keys_column->size(), values_column->size()};
         for (auto i = 0; i < 2; ++i) {
+            if (conv_func->children[i] == nullptr) {
+                // A pruned MAP child still needs one placeholder per entry.
+                kv_columns[i]->append_default(col_offsets->get_data().back() - kv_size[i]);
+                continue;
+            }
             size_t child_array_start_idx;
             size_t child_array_num_elements;
             const auto* child_array = get_list_map_array_child<arrow::MapType>(
@@ -1294,6 +1308,13 @@ Status build_arrow_column_convert_plan(const arrow::DataType* arrow_type, const 
 
         raw_type_desc->type = TYPE_MAP;
         for (auto i = 0; i < 2; i++) {
+            // Complex-type pruning marks an unused MAP key/value as UNKNOWN. Preserve its slot,
+            // but skip Arrow conversion; materialization fills defaults for that child.
+            if (type_desc->children[i].is_unknown_type()) {
+                raw_type_desc->children.emplace_back(TYPE_UNKNOWN);
+                conv_func->children.emplace_back(nullptr);
+                continue;
+            }
             TypeDescriptor type;
             auto cf = std::make_unique<ConvertFuncTree>();
             auto sub_at = i == 0 ? down_cast<const arrow::MapType*>(arrow_type)->key_type()
@@ -1312,7 +1333,7 @@ Status build_arrow_column_convert_plan(const arrow::DataType* arrow_type, const 
                                 arrow_type->name(), type_to_string(lt)));
         }
         auto field_size = type_desc->children.size();
-        auto arrow_field_size = arrow_type->num_fields();
+        const auto* struct_type = down_cast<const arrow::StructType*>(arrow_type);
 
         raw_type_desc->type = TYPE_STRUCT;
         raw_type_desc->field_names = type_desc->field_names;
@@ -1320,9 +1341,16 @@ Status build_arrow_column_convert_plan(const arrow::DataType* arrow_type, const 
         for (auto i = 0; i < field_size; i++) {
             TypeDescriptor type;
             auto cf = std::make_unique<ConvertFuncTree>();
-            auto sub_at = i >= arrow_field_size ? arrow::null() : arrow_type->field(i)->type();
-            RETURN_IF_ERROR(build_arrow_column_convert_plan(sub_at.get(), &type_desc->children[i], true, &type,
-                                                            cf.get(), need_cast, strict_mode));
+            // Match the name used by the converter, not the position in a pruned slot.
+            auto field = struct_type->GetFieldByName(type_desc->field_names[i]);
+            if (field == nullptr) {
+                // Materialization appends NULLs for absent fields, including complex children.
+                type = type_desc->children[i];
+                cf->func = null_converter;
+            } else {
+                RETURN_IF_ERROR(build_arrow_column_convert_plan(field->type().get(), &type_desc->children[i], true,
+                                                                &type, cf.get(), need_cast, strict_mode));
+            }
             raw_type_desc->children.emplace_back(std::move(type));
             conv_func->children.emplace_back(std::move(cf));
         }

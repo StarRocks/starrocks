@@ -128,6 +128,10 @@ AggregateFunctionPtr AggregateFactory::MakeDenseRankWindowFunction() {
     return new DenseRankWindowFunction();
 }
 
+AggregateFunctionPtr AggregateFactory::MakeCoverageWindowFunction() {
+    return new CoverageWindowFunction();
+}
+
 AggregateFunctionPtr AggregateFactory::MakeRankWindowFunction() {
     return new RankWindowFunction();
 }

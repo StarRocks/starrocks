@@ -17,7 +17,7 @@
 // A multi-statement transaction (SQL BEGIN ... COMMIT, i.e. a TxnInfoPB carrying more than one
 // load_id) is published by folding every statement's op_write into ONE merged rowset. A del file
 // carries `op_offset`: the index of the last segment of its rowset that the delete may erase. Apply
-// (UpdateManager::publish_primary_key_tablet) computes it from the statement that produced the del;
+// (PrimaryKeyManager::publish_primary_key_tablet) computes it from the statement that produced the del;
 // persist (MetaFileBuilder) used to leave an unrecorded offset to be resolved against the MERGED
 // rowset, i.e. after every LATER statement's segments too. On rebuild the delete then erased keys a
 // later statement had re-inserted, whose rows are live and not delete-vector-masked -- the next
@@ -42,9 +42,9 @@
 #include "gen_cpp/Types_types.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/test_util.h"
-#include "storage/lake/update_manager.h"
 #include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 

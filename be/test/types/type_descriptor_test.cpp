@@ -17,6 +17,7 @@
 #include <tuple>
 
 #include "gtest/gtest.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks {
 
@@ -218,6 +219,62 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         ASSERT_EQ(LogicalType::TYPE_ARRAY, t.children[1].type);
         ASSERT_EQ(1, t.children[1].children.size());
         ASSERT_EQ(LogicalType::TYPE_INT, t.children[1].children[0].type);
+    }
+}
+
+// field_ids / field_physical_names are indexed by child position: one entry per child, with -1 / "" for a
+// field that has none, and empty when no field has one.
+// NOLINTNEXTLINE
+TEST_F(TypeDescriptorTest, test_from_thrift_struct_field_ids) {
+    auto make_struct = [](const std::vector<TStructField>& fields) {
+        TTypeDesc ttype_desc;
+        ttype_desc.__isset.types = true;
+        ttype_desc.types.resize(fields.size() + 1);
+        ttype_desc.types[0].__set_type(TTypeNodeType::STRUCT);
+        ttype_desc.types[0].__set_struct_fields(fields);
+        for (size_t i = 1; i <= fields.size(); ++i) {
+            ttype_desc.types[i].__set_type(TTypeNodeType::SCALAR);
+            ttype_desc.types[i].__set_scalar_type(TScalarType());
+            ttype_desc.types[i].scalar_type.__set_type(TPrimitiveType::INT);
+        }
+        return TypeDescriptor::from_thrift(ttype_desc);
+    };
+
+    TStructField a;
+    a.__set_name("a");
+    a.__set_id(1);
+    a.__set_physical_name("a_phys");
+    TStructField b;
+    b.__set_name("b");
+    TStructField c;
+    c.__set_name("c");
+    c.__set_id(-1);
+    c.__set_physical_name("c_phys");
+    TStructField d;
+    d.__set_name("d");
+    d.__set_id(4);
+    d.__set_physical_name("");
+
+    // struct{a INT, b INT, c INT, d INT}: some fields carry an id and/or a physical name.
+    {
+        auto t = make_struct({a, b, c, d});
+        ASSERT_EQ(LogicalType::TYPE_STRUCT, t.type);
+        ASSERT_EQ(4, t.children.size());
+        ASSERT_EQ((std::vector<int32_t>{1, -1, -1, 4}), t.field_ids);
+        ASSERT_EQ((std::vector<std::string>{"a_phys", "", "c_phys", ""}), t.field_physical_names);
+    }
+    // struct{b INT}: no field has an id or a physical name.
+    {
+        auto t = make_struct({b});
+        ASSERT_EQ(1, t.children.size());
+        ASSERT_TRUE(t.field_ids.empty());
+        ASSERT_TRUE(t.field_physical_names.empty());
+    }
+    // struct{b INT, d INT}: ids only.
+    {
+        auto t = make_struct({b, d});
+        ASSERT_EQ((std::vector<int32_t>{-1, 4}), t.field_ids);
+        ASSERT_TRUE(t.field_physical_names.empty());
     }
 }
 
@@ -703,14 +760,11 @@ TEST_F(TypeDescriptorTest, test_debug_string) {
 TEST_F(TypeDescriptorTest, test_promote_types) {
     std::vector<std::tuple<TypeDescriptor, TypeDescriptor, TypeDescriptor>> cases = {
             // input1, input2, output
-            {TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_BIGINT),
-             TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+            {TYPE_INT_DESC, TYPE_BIGINT_DESC, TYPE_BIGINT_DESC},
 
-            {TypeDescriptor::from_logical_type(TYPE_FLOAT), TypeDescriptor::from_logical_type(TYPE_DOUBLE),
-             TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+            {TYPE_FLOAT_DESC, TYPE_DOUBLE_DESC, TYPE_DOUBLE_DESC},
 
-            {TypeDescriptor::from_logical_type(TYPE_FLOAT), TypeDescriptor::from_logical_type(TYPE_BIGINT),
-             TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+            {TYPE_FLOAT_DESC, TYPE_BIGINT_DESC, TYPE_DOUBLE_DESC},
 
             {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
              TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 4, 3),
@@ -729,8 +783,7 @@ TEST_F(TypeDescriptorTest, test_promote_types) {
              TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 19, 2)},
 
             {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 38),
-             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 0),
-             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 0), TYPE_VARCHAR_DESC},
 
             {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(20),
              TypeDescriptor::create_varchar_type(20)},
@@ -741,8 +794,7 @@ TEST_F(TypeDescriptorTest, test_promote_types) {
             {TypeDescriptor::create_varbinary_type(10), TypeDescriptor::create_varbinary_type(20),
              TypeDescriptor::create_varbinary_type(20)},
 
-            {TypeDescriptor::from_logical_type(TYPE_JSON), TypeDescriptor::from_logical_type(TYPE_BIGINT),
-             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)}};
+            {TYPE_JSON_DESC, TYPE_BIGINT_DESC, TYPE_VARCHAR_DESC}};
     for (const auto& tuple : cases) {
         EXPECT_TRUE(TypeDescriptor::promote_types(std::get<0>(tuple), std::get<1>(tuple)) == std::get<2>(tuple));
     }
@@ -840,6 +892,38 @@ TEST_F(TypeDescriptorTest, test_create_variant_type) {
     TypeDescriptor variant_desc2 = TypeDescriptor::create_variant_type();
     ASSERT_EQ(variant_desc.type, variant_desc2.type);
     ASSERT_EQ(variant_desc.len, variant_desc2.len);
+}
+
+// The ObjectColumn-backed types are exactly the ones whose single row can hold an arbitrarily large
+// blob, and exactly the ones that cannot take part in a join, an order by or a group by. Asserting
+// the whole set keeps these four predicates from drifting apart the way they had before.
+TEST_F(TypeDescriptorTest, ObjectTypesAreHugeAndUnusableAsKeys) {
+    for (auto type : {TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE, TYPE_JSON, TYPE_VARIANT}) {
+        auto desc = TypeDescriptor::from_logical_type(type);
+        EXPECT_TRUE(desc.is_huge_type()) << type;
+        EXPECT_FALSE(desc.support_join()) << type;
+        EXPECT_FALSE(desc.support_orderby()) << type;
+        EXPECT_FALSE(desc.support_groupby()) << type;
+    }
+
+    for (auto type : {TYPE_INT, TYPE_VARCHAR, TYPE_DATETIME}) {
+        auto desc = TypeDescriptor::from_logical_type(type);
+        EXPECT_FALSE(desc.is_huge_type()) << type;
+        EXPECT_TRUE(desc.support_join()) << type;
+        EXPECT_TRUE(desc.support_orderby()) << type;
+        EXPECT_TRUE(desc.support_groupby()) << type;
+    }
+
+    // MAP is joinable and groupable but has no ordering; the nested types otherwise delegate to
+    // their children, so an ARRAY<JSON> is no more usable as a key than a bare JSON.
+    auto map_of_int = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT));
+    EXPECT_TRUE(map_of_int.support_groupby());
+    EXPECT_FALSE(map_of_int.support_orderby());
+
+    auto array_of_json = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_JSON));
+    EXPECT_FALSE(array_of_json.support_join());
+    EXPECT_FALSE(array_of_json.support_orderby());
+    EXPECT_FALSE(array_of_json.support_groupby());
 }
 
 } // namespace starrocks

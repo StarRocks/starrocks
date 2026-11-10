@@ -185,7 +185,7 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
                 if (col == null) {
                     continue;
                 }
-                remaining.remove(ColumnId.create(col.getName()));
+                remaining.remove(col.getColumnId());
             }
             if (remaining.isEmpty()) {
                 // Dropping the last BF column clears the table-level fpp too
@@ -206,6 +206,9 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
         copy.partitionToTablets = this.partitionToTablets;
         copy.tabletToIndexMetaId = this.tabletToIndexMetaId;
         copy.commitVersionMap = this.commitVersionMap;
+        // Must be journaled: replay() installs whatever the FINISHED entry carries, so a null here
+        // would leave a recovered FE unable to resolve the schema this flip retired.
+        copy.historySchema = this.historySchema;
         copySubclassFields(copy);
         return copy;
     }

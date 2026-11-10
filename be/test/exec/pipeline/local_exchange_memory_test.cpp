@@ -18,6 +18,8 @@
 #include <numeric>
 
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -26,6 +28,7 @@
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/query_context.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "gutil/casts.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
@@ -392,6 +395,174 @@ TEST_F(LocalExchangeMemoryTest, send_after_all_sources_finished_refunds_immediat
     ASSERT_OK(partitioner->send_chunk(chunk, partition_row_indexes));
 
     EXPECT_EQ(0, _memory_manager->get_memory_usage());
+}
+
+// Records sink notifications that are issued while the local-exchange buffer is not full,
+// i.e. the ones that can actually wake an OUTPUT_FULL sink driver.
+class SinkWakeupObserver final : public PipelineObserver {
+public:
+    explicit SinkWakeupObserver(ChunkBufferMemoryManager* manager) : _manager(manager) {}
+    void source_trigger() override {}
+    void sink_trigger() override {
+        if (!_manager->is_full()) {
+            not_full_sink_count++;
+        }
+    }
+    void cancel_trigger() override {}
+    void all_trigger() override { sink_trigger(); }
+    void runtime_filter_timeout_trigger() override {}
+    std::string debug_string() const override { return "SinkWakeupObserver"; }
+
+    std::atomic_int32_t not_full_sink_count{0};
+
+private:
+    ChunkBufferMemoryManager* _manager;
+};
+
+// A consumer reads prev_full=false, then a producer fills the buffer and another pull consumes the
+// full-changed flag while the buffer is still full. When the consumer finally refunds its chunk the
+// buffer drops below the limit, but its stale prev_full hides the transition. Sinks must still be woken.
+TEST_F(LocalExchangeMemoryTest, sink_woken_when_full_transition_is_missed) {
+    _runtime_state->set_enable_event_scheduler(true);
+    SinkWakeupObserver observer(_memory_manager.get());
+    _exchanger->attach_sink_observer(_runtime_state.get(), &observer);
+
+    auto chunk = _make_int_chunk(100);
+    const int64_t mem = chunk->memory_usage();
+    _memory_manager->update_max_memory_usage(2 * mem);
+    // consume the event recorded by changing the limit, so only the scenario below can set it
+    _memory_manager->full_events_changed();
+
+    _source(0)->add_chunk(_make_int_chunk(100));
+    ASSERT_FALSE(_memory_manager->is_full());
+
+    bool injected = false;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ChunkBufferMemoryManager::update_memory_usage::begin");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("ChunkBufferMemoryManager::update_memory_usage::begin", [&](void* arg) {
+        if (injected || *static_cast<int64_t*>(arg) >= 0) {
+            return;
+        }
+        injected = true;
+        // producer pushes the buffer over the limit
+        _source(1)->add_chunk(_make_int_chunk(100));
+        ASSERT_TRUE(_memory_manager->is_full());
+        // another pull that releases no memory (e.g. a fanned-out shard whose entry is still shared)
+        // consumes the full-changed flag while the buffer is still full
+        { auto notify = _exchanger->defer_notify_sink(); }
+        observer.not_full_sink_count = 0;
+    });
+
+    ASSERT_OK(_source(0)->pull_chunk(_runtime_state.get()));
+    ASSERT_TRUE(injected);
+    ASSERT_FALSE(_memory_manager->is_full());
+    EXPECT_GT(observer.not_full_sink_count, 0);
+}
+
+// All partition shards are consumed before Partitioner::send_chunk() returns, so the last reference to the
+// shared memory entry is dropped on the sink thread. That refund unblocks the buffer and must wake sinks.
+TEST_F(LocalExchangeMemoryTest, sink_woken_when_last_refund_happens_in_send_chunk) {
+    _runtime_state->set_enable_event_scheduler(true);
+    SinkWakeupObserver observer(_memory_manager.get());
+    _exchanger->attach_sink_observer(_runtime_state.get(), &observer);
+
+    auto chunk = _make_int_chunk(_dop * 4);
+    _memory_manager->update_max_memory_usage(chunk->memory_usage());
+    // consume the event recorded by changing the limit, so only the refund in send_chunk() can set it
+    _memory_manager->full_events_changed();
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("Partitioner::send_chunk::after_add_chunks");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("Partitioner::send_chunk::after_add_chunks", [&](void*) {
+        ASSERT_TRUE(_memory_manager->is_full());
+        for (size_t i = 0; i < _dop; ++i) {
+            auto pulled = _source(i)->pull_chunk(_runtime_state.get());
+            ASSERT_OK(pulled);
+            ASSERT_TRUE(pulled.value() != nullptr);
+        }
+        // sink still holds the entry, so the buffer stays full
+        ASSERT_TRUE(_memory_manager->is_full());
+        observer.not_full_sink_count = 0;
+    });
+
+    auto partitioner = std::make_unique<RandomPartitioner>(_source_op_factory.get());
+    auto partition_row_indexes = std::make_shared<std::vector<uint32_t>>(chunk->num_rows());
+    ASSERT_OK(partitioner->partition_chunk(chunk, _dop, *partition_row_indexes));
+    ASSERT_OK(partitioner->send_chunk(chunk, partition_row_indexes));
+
+    EXPECT_EQ(0, _memory_manager->get_memory_usage());
+    EXPECT_GT(observer.not_full_sink_count, 0);
+}
+
+// Memory and rows are updated by separate fetch_add()s, so is_full() over both counters has no consistent snapshot.
+// A full -> not-full transition completed by interleaved updates must still be recorded.
+TEST_F(LocalExchangeMemoryTest, full_transition_recorded_across_two_counters) {
+    // memory limit 10, rows limit 10
+    ChunkBufferMemoryManager manager(1, 10, 10);
+    manager.update_memory_usage(11, 12);
+    ASSERT_TRUE(manager.is_full());
+    (void)manager.full_events_changed();
+
+    bool injected = false;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ChunkBufferMemoryManager::update_memory_usage::between_counters");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("ChunkBufferMemoryManager::update_memory_usage::between_counters",
+                                          [&](void* arg) {
+                                              if (injected || *static_cast<int64_t*>(arg) >= 0) {
+                                                  return;
+                                              }
+                                              injected = true;
+                                              // runs between the outer update's memory and rows fetch_add()
+                                              manager.update_memory_usage(-1, -1);
+                                          });
+
+    manager.update_memory_usage(-1, -1);
+    ASSERT_TRUE(injected);
+    // memory 9 < 10 and rows 10 <= 10
+    ASSERT_FALSE(manager.is_full());
+    EXPECT_TRUE(manager.full_events_changed());
+}
+
+// Without backpressure no full -> not-full event happens, so pulls must not broadcast to sink observers.
+TEST_F(LocalExchangeMemoryTest, no_sink_notification_without_backpressure) {
+    _runtime_state->set_enable_event_scheduler(true);
+    SinkWakeupObserver observer(_memory_manager.get());
+    _exchanger->attach_sink_observer(_runtime_state.get(), &observer);
+
+    _source(0)->add_chunk(_make_int_chunk(100));
+    _source(0)->add_chunk(_make_int_chunk(100));
+    ASSERT_FALSE(_memory_manager->is_full());
+    for (int i = 0; i < 2; ++i) {
+        auto pulled = _source(0)->pull_chunk(_runtime_state.get());
+        ASSERT_OK(pulled);
+        ASSERT_TRUE(pulled.value() != nullptr);
+    }
+    EXPECT_EQ(0, observer.not_full_sink_count);
+}
+
+// Lowering the limit races with refunds: a sink may combine a stale counter with the new limit and park on a
+// "full" state that never existed, while the refund compared against the old limit and saw no falling edge.
+// Entering release-memory mode must therefore wake sinks by itself, without waiting for a later pull.
+TEST_F(LocalExchangeMemoryTest, sink_woken_when_limit_is_lowered) {
+    _runtime_state->set_enable_event_scheduler(true);
+    SinkWakeupObserver observer(_memory_manager.get());
+    _exchanger->attach_sink_observer(_runtime_state.get(), &observer);
+
+    _source(0)->add_chunk(_make_int_chunk(100));
+    ASSERT_FALSE(_memory_manager->is_full());
+
+    _source(0)->enter_release_memory_mode();
+    ASSERT_FALSE(_memory_manager->is_full());
+    EXPECT_GT(observer.not_full_sink_count, 0);
 }
 
 } // namespace starrocks::pipeline

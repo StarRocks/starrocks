@@ -187,6 +187,16 @@ size_t PersistentIndexSstableFileset::memory_usage() const {
     return total_memory;
 }
 
+void PersistentIndexSstableFileset::for_each_sstable(
+        const std::function<void(const PersistentIndexSstable&)>& fn) const {
+    for (const auto& [key_pair, sstable] : _sstable_map) {
+        fn(*sstable);
+    }
+    if (_standalone_sstable != nullptr) {
+        fn(*_standalone_sstable);
+    }
+}
+
 void PersistentIndexSstableFileset::print_debug_info(std::stringstream& ss) {
     ss << " Fileset ID: " << _fileset_id.to_string();
     ss << " Number of sstables: " << _sstable_map.size();

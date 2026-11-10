@@ -117,8 +117,14 @@ public:
     void set_data_disk_size(size_t data_size) { _rowset_meta_pb->set_data_disk_size(data_size); }
 
     size_t index_disk_size() const { return _rowset_meta_pb->index_disk_size(); }
+    // Bytes of standalone index files (vector index .vi) counted inside index_disk_size but
+    // stored outside the segment files. 0 for rowsets written before this field existed.
+    int64_t standalone_index_size() const { return _rowset_meta_pb->standalone_index_size(); }
 
     void set_index_disk_size(int64_t index_disk_size) { _rowset_meta_pb->set_index_disk_size(index_disk_size); }
+    void set_standalone_index_size(int64_t standalone_index_size) {
+        _rowset_meta_pb->set_standalone_index_size(standalone_index_size);
+    }
 
     bool has_delete_predicate() const { return _rowset_meta_pb->has_delete_predicate(); }
 

@@ -15,7 +15,7 @@
 package com.starrocks.summary;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.gson.JsonParser;
+import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -31,11 +31,11 @@ import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginInfo.PluginType;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.http.HttpStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -45,8 +45,11 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
+import java.util.function.LongSupplier;
 
 /**
  * Builtin audit loader manager. Runs on every FE (leader/follower/observer): each FE buffers its own
@@ -55,17 +58,16 @@ import java.util.function.Function;
  * stream load.
  * The actual load transaction always commits on the leader; followers only originate the stream load.
  *
- * <p>Reliability rules (to avoid the known QueryHistoryMgr defects):
+ * <p>Reliability rules:
  * <ul>
  *   <li>Never send an empty batch: the JSON array is built fresh per flush, and an empty batch returns
- *       early without calling the loader (QueryHistoryMgr sent a bare "]" for empty batches).</li>
- *   <li>Copy-then-remove: rows are removed from the queue only after the stream load succeeds; on failure
- *       they stay queued for the next cycle (no clear-before-confirm data loss).</li>
+ *       early without calling the loader.</li>
+ *   <li>Copy-then-remove: rows are removed once committed, including Publish Timeout (committed but
+ *       visibility not confirmed); failed loads stay queued for the next cycle.</li>
  *   <li>Table not ready: skip the flush without touching the queue.</li>
  *   <li>Overload: the queue is byte-bounded; events beyond the cap are dropped and counted.</li>
  *   <li>Bounded request: the stream load request carries a fixed, short timeout so a BE that accepts
- *       the connection but never answers cannot wedge this daemon thread forever (QueryHistoryMgr's
- *       HTTP client has no such bound).</li>
+ *       the connection but never answers cannot wedge this daemon thread forever.</li>
  * </ul>
  */
 public class AuditLoaderMgr extends FrontendDaemon {
@@ -78,7 +80,7 @@ public class AuditLoaderMgr extends FrontendDaemon {
 
     private static final long DAEMON_INTERVAL_MS = 5000;
 
-    // Warn about dropped events at most once per this interval, to avoid log flooding.
+    // Each drop reason warns at most once per interval, independently of counting every drop.
     private static final long DROP_WARN_INTERVAL_MS = 60000;
 
     // Cadence of the periodic buffer status line (see reportStatus). Long enough that a busy FE
@@ -86,19 +88,17 @@ public class AuditLoaderMgr extends FrontendDaemon {
     // it reaches the cap and starts dropping.
     private static final long STATUS_REPORT_INTERVAL_MS = 60000;
 
-    // Table maintenance (replication self-heal) only needs to run occasionally, not on every cycle.
-    private static final long MAINTAIN_EVERY_N_CYCLES = 12;
+    // Busy periods can run many cycles per second. Maintenance must follow elapsed time, not batches.
+    private static final long MAINTAIN_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
 
     // Flush as soon as the buffer holds this fraction of the byte cap, instead of waiting for the
     // interval. The threshold has to stay below the cap: offerEvent only admits a row while the
     // buffer would stay within the cap, so a "buffer >= cap" trigger could never fire and every
     // event arriving after the buffer filled up would be dropped until the interval elapsed.
-    // The remaining headroom is what absorbs the inflow of one daemon cycle, so with the defaults
-    // (50MB cap, 5s cycle) half the cap keeps 25MB of headroom, i.e. about 5MB/s lossless.
+    // The remaining headroom absorbs arrivals while the previous batch is still in flight.
     private static final long FLUSH_WATERMARK_DIVISOR = 2;
 
-    // A negative flush interval has no meaning. Zero does: it asks for a flush on every daemon
-    // cycle, which the cycle length already bounds, so only negatives are corrected here.
+    // Zero keeps the 5s polling cadence below the watermark; a large buffer can flush sooner.
     private static final long MIN_FLUSH_INTERVAL_SECONDS = 0;
 
     // Give up on a batch that keeps failing, so one permanently rejected batch cannot block the
@@ -106,18 +106,17 @@ public class AuditLoaderMgr extends FrontendDaemon {
     // BE/CN unavailable, a network partition) rather than schema mismatches: the load sends no
     // explicit column list, so a column the audit table lacks is silently ignored by automapping
     // instead of rejecting the batch (see the ColumnSpec javadoc below).
-    // How long a stuck batch survives depends on how the attempts fail. When the BE is simply
-    // unavailable, chooseBENode returns immediately and an attempt costs only the daemon interval,
-    // so a batch is discarded after MAX_BATCH_FLUSH_RETRY * 5s = 30s (measured). When instead every
-    // request hangs until StreamLoader's timeout, an attempt costs the timeout plus the interval,
-    // stretching it to 6 * (10s + 5s) = 90s. Either way, during a sustained outage this does not
+    // The budget includes the initial attempt and two retries. With 5s gaps between attempts,
+    // three immediate failures discard the batch about 10s after its first attempt. If every
+    // request consumes StreamLoader's 10s timeout, that becomes about 40s, excluding scheduling
+    // and other processing overhead. Either way, during a sustained outage this does not
     // mean "keep the oldest N seconds of data, then one gap": every failed batch frees its slot in
     // the byte-bounded buffer once discarded, so the buffer keeps rolling (one batch discarded from
     // the head per cycle of attempts while new events are admitted at the tail) for as long as the
     // outage lasts, rather than holding a single contiguous slice. Only when the table itself is
     // missing (see ensureAuditTable) does the buffer stay static and produce one clean contiguous
     // gap, because flush() is never even attempted then.
-    private static final int MAX_BATCH_FLUSH_RETRY = 6;
+    private static final int MAX_BATCH_FLUSH_RETRY = 3;
 
     // Byte width of the stmt VARCHAR column. The stmt value is truncated to this many UTF-8 bytes so
     // an oversized statement is stored truncated instead of being silently dropped by the stream load
@@ -130,11 +129,9 @@ public class AuditLoaderMgr extends FrontendDaemon {
     private static final int WIDE_TEXT_MAX_BYTES = 65533;
 
     // Floor for the batch-byte cap actually enforced by offerEvent()/flush() (see
-    // effectiveBatchMaxBytes()). Both callers always admit at least one row regardless of size, so
-    // if audit_loader_batch_max_bytes were honored verbatim, lowering it at runtime below a single
-    // row's size (e.g. one already sitting at the head of the queue) would let that one row alone
-    // build a batch larger than the configured cap. Sized for one worst-case row dominated by
-    // STMT_MAX_BYTES and two WIDE_TEXT_MAX_BYTES columns (candidateMVs, hitMvs), plus headroom for
+    // effectiveBatchMaxBytes()). This keeps tiny configured values from rejecting typical large
+    // statements. Sized for a row dominated by STMT_MAX_BYTES and two WIDE_TEXT_MAX_BYTES columns
+    // (candidateMVs, hitMvs), plus headroom for
     // the remaining small fixed-width columns and JSON syntax overhead. Deliberately does not
     // account for QueriedRelations: its size scales with the number of relations one statement
     // touches and is not otherwise capped, so a row with an extreme number of relations can still
@@ -195,17 +192,15 @@ public class AuditLoaderMgr extends FrontendDaemon {
 
     private static ColumnSpec varchar(String name, int maxBytes, String comment,
                                       Function<AuditEvent, String> getter) {
-        // The truncation width is the declared column width by construction, so a value this
-        // feature itself writes should never exceed it. This only matters if the live table's
-        // column has since drifted narrower than declared here (e.g. an operator manually altered
-        // it): with StreamLoader's max_filter_ratio that row is filtered out instead of failing
-        // the whole batch.
+        // Truncate to the width declared here, which may differ from an existing table's schema.
+        // Stream load uses non-strict mode by default: a value too wide for a nullable target column
+        // can become NULL while its row still loads successfully. Such conversions do not count as
+        // filtered rows; max_filter_ratio applies to rejected rows, not these field-level changes.
         return new ColumnSpec(name, "VARCHAR(" + maxBytes + ")", comment, (event, out) -> {
             String value = getter.apply(event);
             if (value == null) {
-                // NULL rather than "": the table these columns come from declares them nullable, and
-                // the external audit loader plugin writes NULL there, so writing an empty string
-                // would make IS NULL miss exactly the rows this feature produced.
+                // Preserve a missing value as SQL NULL for these nullable text columns; replacing
+                // it with an empty string would change the result of IS NULL queries.
                 out.nullValue();
             } else {
                 out.value(truncateToBytes(value, maxBytes));
@@ -263,14 +258,16 @@ public class AuditLoaderMgr extends FrontendDaemon {
             varchar("feIp", 128, "FE IP that executed the statement", event -> event.feIp),
             varchar("stmt", STMT_MAX_BYTES, "Original SQL statement", event -> event.stmt),
             varchar("digest", 32, "Slow SQL fingerprint", event -> event.digest),
-            number("planCpuCosts", "DOUBLE", "Planning CPU cost in nanoseconds", event -> event.planCpuCosts),
-            number("planMemCosts", "DOUBLE", "Planning memory cost in bytes", event -> event.planMemCosts),
+            // Keep the optimizer's estimates unchanged for plugin compatibility. CPU cost is a
+            // cost-model score, not elapsed planning time; memory cost estimates execution memory.
+            number("planCpuCosts", "DOUBLE", "Estimated CPU cost from the optimizer cost model", event -> event.planCpuCosts),
+            number("planMemCosts", "DOUBLE", "Estimated execution memory cost in bytes", event -> event.planMemCosts),
             number("pendingTimeMs", "BIGINT", "Time pending in queue in milliseconds", event -> event.pendingTimeMs),
             varchar("candidateMVs", WIDE_TEXT_MAX_BYTES, "Candidate materialized views", event -> event.candidateMvs),
             varchar("hitMvs", WIDE_TEXT_MAX_BYTES, "Hit materialized views", event -> event.hitMVs),
             new ColumnSpec("QueriedRelations", "ARRAY<VARCHAR(" + WIDE_TEXT_MAX_BYTES + ")>",
                     "Tables and views referenced", AuditLoaderMgr::writeRelations),
-            varchar("warehouse", 32, "Warehouse name", event -> event.warehouse));
+            varchar("warehouse", 256, "Warehouse name", event -> event.warehouse));
 
     /**
      * Fires (returns true) at most once per intervalMs; false otherwise. Safe for concurrent callers
@@ -301,38 +298,134 @@ public class AuditLoaderMgr extends FrontendDaemon {
     private record BufferedRow(String json, long byteLen) {
     }
 
+    // Keep references to the immutable, still-charged rows, not another cached payload string.
+    // A retry must reuse both the complete row set and the label, even after a capacity update.
+    private record PendingBatch(List<BufferedRow> rows, long rowBytes, long chars, long capacity, String label) { }
+
     // Buffered rows already serialized to JSON. Producer: the audit event worker thread (offerEvent).
     // Consumer: this daemon thread (flush). A concurrent queue plus an atomic byte counter keeps the
     // cross-thread access safe.
     private final ConcurrentLinkedQueue<BufferedRow> rowQueue = new ConcurrentLinkedQueue<>();
     private final AtomicLong bufferBytes = new AtomicLong(0);
     private final AtomicLong droppedCount = new AtomicLong(0);
+    // Filtered rows are a subset of droppedCount. Their own total keeps throttled batch warnings
+    // from hiding filtering behind losses from a full buffer or exhausted retries in the status line.
+    private final AtomicLong filteredCount = new AtomicLong(0);
+    private final AtomicLong unknownStatsBatches = new AtomicLong(0);
+    // Cumulative committed batches whose response did not confirm visibility, not a pending gauge.
+    private final AtomicLong publishTimeoutBatches = new AtomicLong(0);
+    private final AtomicLong alreadyCommittedBatches = new AtomicLong(0);
 
     private volatile boolean disabledByConflict = false;
 
-    private final LogThrottle dropWarnThrottle = new LogThrottle(DROP_WARN_INTERVAL_MS);
+    // Oversized rows are reported by both admission and selection; full-buffer drops are a
+    // different cause and must not consume their warning slot (or vice versa).
+    private final LogThrottle bufferFullWarnThrottle = new LogThrottle(DROP_WARN_INTERVAL_MS);
+    private final LogThrottle oversizedRowWarnThrottle = new LogThrottle(DROP_WARN_INTERVAL_MS);
     private final LogThrottle flushIntervalFloorWarnThrottle = new LogThrottle(DROP_WARN_INTERVAL_MS);
     private final LogThrottle batchMaxBytesCeilingWarnThrottle = new LogThrottle(DROP_WARN_INTERVAL_MS);
     private final LogThrottle flushWarnThrottle = new LogThrottle(DROP_WARN_INTERVAL_MS);
+    private final LogThrottle loadStatsWarnThrottle = new LogThrottle(DROP_WARN_INTERVAL_MS);
     private final LogThrottle createTableWarnThrottle = new LogThrottle(DROP_WARN_INTERVAL_MS);
     private final LogThrottle tableMissingWarnThrottle = new LogThrottle(DROP_WARN_INTERVAL_MS);
     private final LogThrottle batchMaxBytesFloorWarnThrottle = new LogThrottle(DROP_WARN_INTERVAL_MS);
     private final LogThrottle replicationWarnThrottle = new LogThrottle(DROP_WARN_INTERVAL_MS);
     private final LogThrottle statusReportThrottle = new LogThrottle(STATUS_REPORT_INTERVAL_MS);
 
-    private long lastFlushMs = System.currentTimeMillis();
-    private long cycleCount = 0;
+    private final LongSupplier nanoTime;
+    private final Semaphore wakeup = new Semaphore(0);
+    private volatile boolean stopping;
+    private boolean flushAllowed;
+    private boolean hasFlushed;
+    private boolean hasFailedAttempt;
+    private long lastFlushNanos;
+    private long lastFailureNanos;
+    private long lastMaintenanceNanos;
     private int consecutiveFlushFailures = 0;
-    // Dropped total as of the last status line, so each line can report the delta over its own
-    // interval instead of only an ever-growing total that says nothing about the current rate.
+    private PendingBatch pendingBatch;
+    private boolean pendingResultUnknown;
+    // Totals as of the last status line. Advance only when a line is emitted, so throttling never
+    // hides the increments since the last report.
     private long lastReportedDropped = 0;
+    private long lastReportedFiltered = 0;
+    private long lastReportedUnknownStatsBatches = 0;
+    private long lastReportedPublishTimeoutBatches = 0;
+    private long lastReportedAlreadyCommittedBatches = 0;
     // Set the first time ensureAuditTable() finds the table missing on a follower, cleared once it
     // shows up. Lets us only warn once the absence has actually persisted, instead of on every
     // normal ~5s gap between the leader creating the database and the table becoming visible here.
     private long tableMissingSinceMs = 0;
 
     public AuditLoaderMgr() {
-        super("AuditLoader", DAEMON_INTERVAL_MS);
+        this(System::nanoTime);
+    }
+
+    @VisibleForTesting
+    AuditLoaderMgr(LongSupplier nanoTime) {
+        // Waiting is local and wakeable; the shared Daemon must not add another fixed 5s sleep.
+        super("AuditLoader", 0);
+        this.nanoTime = nanoTime;
+        lastFlushNanos = nanoTime.getAsLong();
+        lastMaintenanceNanos = lastFlushNanos;
+    }
+
+    @Override
+    public synchronized void start() {
+        if (getState() == State.NEW) {
+            // Daemon.start() resets its stop flag on the first start; reset the local one with it.
+            stopping = false;
+        }
+        super.start();
+    }
+
+    @Override
+    public synchronized void setStop() {
+        stopping = true;
+        super.setStop();
+        wakeup.release();
+    }
+
+    @Override
+    protected void runOneCycle() {
+        long waitMs = DAEMON_INTERVAL_MS;
+        flushAllowed = false;
+        try {
+            // Check readiness once per cycle, so shutdown also works while the catalog is not ready.
+            if (!stopping && GlobalStateMgr.getServingState().isReady()) {
+                runAfterCatalogReady();
+            } else {
+                waitMs = 100;
+            }
+        } finally {
+            awaitNextCycle(waitMs);
+        }
+    }
+
+    @VisibleForTesting
+    void awaitNextCycle(long maxWaitMs) {
+        long started = nanoTime.getAsLong();
+        try {
+            if (Thread.interrupted()) {
+                setStop();
+                return;
+            }
+            while (!stopping) {
+                // Drain before checking predicates: an arrival before this point is visible in
+                // bufferBytes; one after the check leaves a permit for tryAcquire. No lost wakeup.
+                wakeup.drainPermits();
+                long remaining = TimeUnit.MILLISECONDS.toNanos(maxWaitMs) - (nanoTime.getAsLong() - started);
+                if (flushAllowed) {
+                    remaining = Math.min(remaining, nextFlushDelayNanos());
+                }
+                if (remaining <= 0) {
+                    return;
+                }
+                wakeup.tryAcquire(remaining, TimeUnit.NANOSECONDS);
+            }
+        } catch (InterruptedException e) {
+            // An interrupt is a stop signal, not a normal watermark notification.
+            setStop();
+        }
     }
 
     public boolean isDisabledByConflict() {
@@ -369,12 +462,31 @@ public class AuditLoaderMgr extends FrontendDaemon {
         return droppedCount.get();
     }
 
+    @VisibleForTesting
+    long filteredEvents() {
+        return filteredCount.get();
+    }
+
+    @VisibleForTesting
+    long batchesWithUnknownStatistics() {
+        return unknownStatsBatches.get();
+    }
+
+    @VisibleForTesting
+    long batchesWithPublishTimeout() {
+        return publishTimeoutBatches.get();
+    }
+
+    @VisibleForTesting
+    long batchesAlreadyCommitted() {
+        return alreadyCommittedBatches.get();
+    }
+
     /**
-     * The batch-byte cap actually enforced by {@link #offerEvent} and {@link #flush}: the configured
-     * {@link Config#audit_loader_batch_max_bytes}, clamped up to {@link #MIN_SAFE_BATCH_MAX_BYTES}.
-     * Both callers always admit at least one row into an otherwise-empty batch regardless of its
-     * size, so the enforced cap must never sit below what one worst-case row needs, or a value
-     * lowered at runtime (it is mutable) could make a single already-buffered row alone exceed it.
+     * Budget for event admission and new batch selection: {@link Config#audit_loader_batch_max_bytes},
+     * clamped to the supported range. A pending batch retains its selected budget across retries.
+     * The queue counts row bytes; a batch also counts its JSON brackets and commas. An unselected
+     * head that no longer fits alone after a runtime reduction is dropped.
      * Rate-limited warning when the configured value is actually being clamped, so a lowered config
      * that appears to have no effect is not silent.
      */
@@ -384,7 +496,7 @@ public class AuditLoaderMgr extends FrontendDaemon {
         if (configured < MIN_SAFE_BATCH_MAX_BYTES) {
             if (batchMaxBytesFloorWarnThrottle.tryAcquire()) {
                 LOG.warn("audit_loader_batch_max_bytes is set to {} bytes, below the minimum safe batch " +
-                                "size of {} bytes (sized for one worst-case row); clamping to the minimum",
+                                "size of {} bytes; clamping to the minimum",
                         configured, MIN_SAFE_BATCH_MAX_BYTES);
             }
             return MIN_SAFE_BATCH_MAX_BYTES;
@@ -413,24 +525,31 @@ public class AuditLoaderMgr extends FrontendDaemon {
         }
         long rowBytes = utf8Length(row);
         long cap = effectiveBatchMaxBytes();
-        // Byte-bounded, never blocking. A single row larger than the cap can never fit a
-        // cap-bounded batch, so drop it outright; otherwise drop only when adding it would exceed
-        // the cap and the buffer is not already empty (always admit at least one row so the loader
-        // can make progress). This keeps the buffer bounded by the cap.
-        if (rowBytes > cap || (bufferBytes.get() + rowBytes > cap && !rowQueue.isEmpty())) {
+        // A single-row request still needs its array brackets. The queue itself counts only rows.
+        if (rowBytes + 2 > cap) {
+            warnOversizedRow(rowBytes, cap, droppedCount.incrementAndGet());
+            return;
+        }
+        long buffered = bufferBytes.get();
+        if (buffered + rowBytes > cap) {
             long dropped = droppedCount.incrementAndGet();
-            if (dropWarnThrottle.tryAcquire()) {
-                LOG.warn("audit loader buffer is full or event too large ({} bytes cap), "
-                        + "dropped {} events so far", cap, dropped);
+            if (bufferFullWarnThrottle.tryAcquire()) {
+                LOG.warn("audit loader buffer is full: buffered_bytes={}, row_bytes={}, "
+                        + "batch_limit_bytes={}, dropped_total={}", buffered, rowBytes, cap, dropped);
             }
             return;
         }
         rowQueue.offer(new BufferedRow(row, rowBytes));
-        bufferBytes.addAndGet(rowBytes);
+        long bytes = bufferBytes.addAndGet(rowBytes);
+        long watermark = cap / FLUSH_WATERMARK_DIVISOR;
+        if (bytes >= watermark && bytes - rowBytes < watermark) {
+            wakeup.release();
+        }
     }
 
     @Override
     protected void runAfterCatalogReady() {
+        flushAllowed = false;
         try {
             disabledByConflict = detectConflict();
             if (!Config.enable_audit_loader || disabledByConflict) {
@@ -447,11 +566,17 @@ public class AuditLoaderMgr extends FrontendDaemon {
                 // queue so buffered rows survive until the table exists.
                 return;
             }
-            if (++cycleCount % MAINTAIN_EVERY_N_CYCLES == 0 && GlobalStateMgr.getCurrentState().isLeader()) {
-                correctReplicationNum();
+            long now = nanoTime.getAsLong();
+            if (now - lastMaintenanceNanos >= MAINTAIN_INTERVAL_NANOS) {
+                lastMaintenanceNanos = now;
+                if (GlobalStateMgr.getCurrentState().isLeader()) {
+                    correctReplicationNum();
+                }
             }
+            flushAllowed = true;
             maybeFlush();
         } catch (Throwable t) {
+            flushAllowed = false;
             LOG.warn("audit loader cycle failed", t);
         }
     }
@@ -462,10 +587,9 @@ public class AuditLoaderMgr extends FrontendDaemon {
      * happened (the throttled warnings in offerEvent and discardBatch already say that, after the
      * fact) but how close the buffer is to the cap before it starts dropping.
      *
-     * <p>Silent when there is nothing to say - an empty buffer, no new drops, no failing flush - so
-     * an idle or healthy FE does not pay a line per interval. WARN when events were dropped since
-     * the previous line, INFO otherwise, so a log search can separate "filling up" from "losing
-     * data" by level alone.
+     * <p>Silent when there is nothing to say - an empty buffer, no new drops, unknown statistics or
+     * publish timeouts, no failing flush. WARN for new drops, incomplete statistics or committed
+     * batches whose visibility was not confirmed since the previous line, INFO otherwise.
      *
      * @return whether a line was actually emitted (for the tests; nothing else reads it)
      */
@@ -473,22 +597,42 @@ public class AuditLoaderMgr extends FrontendDaemon {
     boolean reportStatus() {
         long dropped = droppedCount.get();
         long droppedDelta = dropped - lastReportedDropped;
+        long filtered = filteredCount.get();
+        long filteredDelta = filtered - lastReportedFiltered;
+        long unknownStats = unknownStatsBatches.get();
+        long unknownStatsDelta = unknownStats - lastReportedUnknownStatsBatches;
+        long publishTimeouts = publishTimeoutBatches.get();
+        long publishTimeoutDelta = publishTimeouts - lastReportedPublishTimeoutBatches;
+        long alreadyCommitted = alreadyCommittedBatches.get();
+        long alreadyCommittedDelta = alreadyCommitted - lastReportedAlreadyCommittedBatches;
         // isEmpty() rather than size(): ConcurrentLinkedQueue.size() walks the whole queue, so it is
         // only paid once a line is actually going to be emitted.
-        if (rowQueue.isEmpty() && droppedDelta == 0 && consecutiveFlushFailures == 0) {
+        if (rowQueue.isEmpty() && droppedDelta == 0 && unknownStatsDelta == 0 && publishTimeoutDelta == 0
+                && alreadyCommittedDelta == 0
+                && consecutiveFlushFailures == 0) {
             return false;
         }
         if (!statusReportThrottle.tryAcquire()) {
             return false;
         }
         lastReportedDropped = dropped;
+        lastReportedFiltered = filtered;
+        lastReportedUnknownStatsBatches = unknownStats;
+        lastReportedPublishTimeoutBatches = publishTimeouts;
+        lastReportedAlreadyCommittedBatches = alreadyCommitted;
         long bytes = bufferBytes.get();
         long cap = effectiveBatchMaxBytes();
         String msg = String.format(
                 "audit loader status: buffered %d rows / %d bytes (%d%% of the %d byte cap), "
-                        + "dropped %d events since the last status line (%d total), %d consecutive flush failures",
-                rowQueue.size(), bytes, bytes * 100 / cap, cap, droppedDelta, dropped, consecutiveFlushFailures);
-        if (droppedDelta > 0) {
+                        + "dropped %d events since the last status line (%d total), %d consecutive flush failures, "
+                        + "filtered %d events since the last status line (%d total; included in dropped), "
+                        + "%d loads with unknown row statistics since the last status line (%d total), "
+                        + "%d loads committed with publish timeout since the last status line (%d total), "
+                        + "%d loads confirmed previously committed since the last status line (%d total)",
+                rowQueue.size(), bytes, bytes * 100 / cap, cap, droppedDelta, dropped, consecutiveFlushFailures,
+                filteredDelta, filtered, unknownStatsDelta, unknownStats, publishTimeoutDelta, publishTimeouts,
+                alreadyCommittedDelta, alreadyCommitted);
+        if (droppedDelta > 0 || unknownStatsDelta > 0 || publishTimeoutDelta > 0 || alreadyCommittedDelta > 0) {
             LOG.warn(msg);
         } else {
             LOG.info(msg);
@@ -539,6 +683,9 @@ public class AuditLoaderMgr extends FrontendDaemon {
         // Otherwise a future, unrelated batch would inherit whatever retry count this one left
         // behind, cutting its own retry budget short.
         consecutiveFlushFailures = 0;
+        hasFailedAttempt = false;
+        pendingBatch = null;
+        pendingResultUnknown = false;
     }
 
     /**
@@ -558,7 +705,8 @@ public class AuditLoaderMgr extends FrontendDaemon {
      * that an object was recreated, so an operator looking into an audit table that reappeared
      * after a DROP has to read its create time from information_schema rather than the FE log.
      */
-    private boolean ensureAuditTable() {
+    @VisibleForTesting
+    boolean ensureAuditTable() {
         if (auditTableExists()) {
             tableMissingSinceMs = 0;
             return true;
@@ -611,6 +759,9 @@ public class AuditLoaderMgr extends FrontendDaemon {
      *       alone leaves that null, so the shadow partition is updated along with the rest and does
      *       not hold {@code getMinReplicationNum()} back at the old value forever.</li>
      * </ul>
+     *
+     * <p>The partition and default values are checked independently: the two ALTER statements are not
+     * atomic, so a later cycle must finish a default change even if the partition change succeeded.
      */
     @VisibleForTesting
     void correctReplicationNum() {
@@ -621,26 +772,34 @@ public class AuditLoaderMgr extends FrontendDaemon {
         int expected = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                 .getSystemTableExpectedReplicationNum();
         int current = olapTable.getPartitionInfo().getMinReplicationNum();
-        if (current == expected) {
+        int currentDefault = olapTable.getDefaultReplicationNum();
+        if (current == expected && currentDefault == expected) {
             return;
         }
+        String stage = "partitions";
         try {
             // With the automatic (expression) partitioning this table uses, a plain SET would leave
             // the existing partitions untouched: change both those and the default for new ones.
-            SimpleExecutor.getRepoExecutor().executeDDL(String.format(
-                    "ALTER TABLE `%s`.`%s` MODIFY PARTITION(*) SET ('replication_num'='%d')",
-                    AUDIT_DB_NAME, AUDIT_TABLE_NAME, expected));
-            SimpleExecutor.getRepoExecutor().executeDDL(String.format(
-                    "ALTER TABLE `%s`.`%s` SET ('default.replication_num'='%d')",
-                    AUDIT_DB_NAME, AUDIT_TABLE_NAME, expected));
-            LOG.info("changed replication_num of audit table {}.{} from {} to {}",
-                    AUDIT_DB_NAME, AUDIT_TABLE_NAME, current, expected);
+            if (current != expected) {
+                SimpleExecutor.getRepoExecutor().executeDDL(String.format(
+                        "ALTER TABLE `%s`.`%s` MODIFY PARTITION(*) SET ('replication_num'='%d')",
+                        AUDIT_DB_NAME, AUDIT_TABLE_NAME, expected));
+            }
+            if (currentDefault != expected) {
+                stage = "default";
+                SimpleExecutor.getRepoExecutor().executeDDL(String.format(
+                        "ALTER TABLE `%s`.`%s` SET ('default.replication_num'='%d')",
+                        AUDIT_DB_NAME, AUDIT_TABLE_NAME, expected));
+            }
+            LOG.info("changed replication_num of audit table {}.{}: partitions {} -> {}, default {} -> {}",
+                    AUDIT_DB_NAME, AUDIT_TABLE_NAME, current, expected, currentDefault, expected);
         } catch (Throwable t) {
             // Throttled like every other recurring failure here: a cluster that keeps rejecting the
             // ALTER would otherwise log once per maintenance cycle indefinitely.
             if (replicationWarnThrottle.tryAcquire()) {
-                LOG.warn("failed to change replication_num of audit table {}.{} from {} to {}",
-                        AUDIT_DB_NAME, AUDIT_TABLE_NAME, current, expected, t);
+                LOG.warn("failed to change replication_num of audit table {}.{}: stage={}, expected={}, "
+                                + "partition_replication_num_before={}, default_replication_num_before={}",
+                        AUDIT_DB_NAME, AUDIT_TABLE_NAME, stage, expected, current, currentDefault, t);
             }
         }
     }
@@ -700,141 +859,231 @@ public class AuditLoaderMgr extends FrontendDaemon {
         return configured * 1000;
     }
 
-    /**
-     * Whether a flush is due: either the interval elapsed, or the buffer already holds enough bytes
-     * that waiting for the interval would risk dropping events once it fills up.
-     */
+    @VisibleForTesting
+    long nextFlushDelayNanos() {
+        if (rowQueue.isEmpty()) {
+            return Long.MAX_VALUE;
+        }
+        long now = nanoTime.getAsLong();
+        if (hasFailedAttempt) {
+            long remaining = TimeUnit.MILLISECONDS.toNanos(DAEMON_INTERVAL_MS) - (now - lastFailureNanos);
+            if (remaining > 0) {
+                return remaining;
+            }
+        }
+        if (consecutiveFlushFailures > 0
+                || bufferBytes.get() >= effectiveBatchMaxBytes() / FLUSH_WATERMARK_DIVISOR) {
+            return 0;
+        }
+        long intervalMs = effectiveFlushIntervalMs();
+        // Preserve the zero-interval polling cadence for small batches, without delaying a full one.
+        if (intervalMs == 0) {
+            if (!hasFlushed) {
+                return 0;
+            }
+            intervalMs = DAEMON_INTERVAL_MS;
+        }
+        return Math.max(0, TimeUnit.MILLISECONDS.toNanos(intervalMs) - (now - lastFlushNanos));
+    }
+
     @VisibleForTesting
     boolean shouldFlushNow() {
-        if (rowQueue.isEmpty()) {
-            return false;
-        }
-        boolean intervalReached = System.currentTimeMillis() - lastFlushMs >= effectiveFlushIntervalMs();
-        boolean bufferLarge =
-                bufferBytes.get() >= effectiveBatchMaxBytes() / FLUSH_WATERMARK_DIVISOR;
-        return intervalReached || bufferLarge;
+        return nextFlushDelayNanos() == 0;
     }
 
     @VisibleForTesting
     void maybeFlush() {
-        if (!shouldFlushNow()) {
-            return;
-        }
-        // Advance the clock only on a clean run. flush() reports failure when it leaves a batch
-        // behind, so a partial success does not reset the interval: the batch still at the head is
-        // retried on the next daemon cycle rather than an interval later.
-        if (flush()) {
-            lastFlushMs = System.currentTimeMillis();
+        if (shouldFlushNow()) {
+            flush();
         }
     }
 
+    enum FlushResult {
+        EMPTY, SUCCESS, RETRY, DISCARDED, OVERSIZED
+    }
+
     /**
-     * Flush buffered rows in byte-bounded batches. For each batch: build the JSON array from a copy of
-     * the queue head, stream load it, and only on success remove those rows from the queue. On failure
-     * stop and retry on the next cycle (the rows stay queued), and discard the batch once it has
-     * failed {@link #MAX_BATCH_FLUSH_RETRY} times so it cannot block everything queued behind it.
-     *
-     * <p>Delivery is at-least-once. A retry builds a new label, so a batch the BE already committed
-     * but whose response was lost is written again and leaves duplicate rows in the table. Making
-     * retries idempotent would mean deriving the label from the batch content and treating the
-     * "label already exists" rejection as success, which risks masking real failures and is
-     * deliberately left out here.
-     *
-     * <p>Returns true only when the call ended without leaving a failed batch behind, so the caller
-     * can tell a clean run from one that has to be retried promptly rather than an interval later.
-     *
-     * <p>The request sets a small {@code max_filter_ratio} (see StreamLoader) so that a handful of
-     * rows the table cannot take ends the retry loop on the first attempt instead of holding the
-     * batch at the head of the queue while the buffer backs up behind it. Note this does not cover
-     * schema drift: with strict mode off, a value a nullable column cannot hold is stored as NULL
-     * and the row still loads, so nothing is filtered and the ratio never comes into play there.
-     *
-     * <p>Known limitation: {@code audit_loader_batch_max_bytes} is mutable at runtime, and
-     * consecutiveFlushFailures is not tied to a specific batch's identity. If the config changes
-     * while the head of the queue is failing repeatedly, a later retry can rebuild a
-     * differently-sized batch from the same queue head, yet the failure count keeps accumulating
-     * across that change. The discard-after-N-failures behavior itself is still correct (it bounds
-     * how long a stuck head can block the queue); only the "failed N times" figure in the resulting
-     * discardBatch log line may not describe one unchanged batch. Not worth tracking batch identity
-     * for this rare combination of a live config edit during an ongoing outage.
+     * Submit at most one batch. Retain its immutable rows, capacity snapshot and label until a
+     * committed response or the third failed attempt. New arrivals stay behind that batch.
+     * Capacity updates affect admission and subsequent batches, not a previously selected retry.
+     * Same-label retries rely on the FE transaction label retention window for deduplication.
      */
     @VisibleForTesting
-    boolean flush() {
-        long batchMaxBytes = effectiveBatchMaxBytes();
-        boolean flushedAny = false;
-        while (!rowQueue.isEmpty()) {
-            // Collect one batch by copying references from the head, without removing yet.
-            List<BufferedRow> batch = new ArrayList<>();
-            long batchBytes = 0;
-            Iterator<BufferedRow> it = rowQueue.iterator();
-            while (it.hasNext()) {
-                BufferedRow row = it.next();
-                if (!batch.isEmpty() && batchBytes + row.byteLen() > batchMaxBytes) {
-                    break;
-                }
-                batch.add(row);
-                batchBytes += row.byteLen();
+    FlushResult flush() {
+        if (pendingBatch == null) {
+            boolean hadRows = !rowQueue.isEmpty();
+            pendingBatch = selectBatch();
+            if (pendingBatch == null) {
+                return hadRows ? FlushResult.OVERSIZED : FlushResult.EMPTY;
             }
-            // Empty-batch guard: never send an empty payload to the stream load.
-            if (batch.isEmpty()) {
-                return flushedAny;
-            }
-
-            // batchBytes is the exact UTF-8 size of the rows, and the separators add one char per
-            // row, so this is the final length. Guessing low here is not free: a 50MB batch would
-            // otherwise double its backing array a dozen times, copying the whole buffer each time.
-            StringBuilder sb = new StringBuilder((int) Math.min(batchBytes + batch.size() + 2, Integer.MAX_VALUE));
-            sb.append('[');
-            for (int i = 0; i < batch.size(); i++) {
-                if (i > 0) {
-                    sb.append(',');
-                }
-                sb.append(batch.get(i).json());
-            }
-            sb.append(']');
-
-            boolean ok;
-            try {
-                StreamLoader loader = new StreamLoader(AUDIT_DB_NAME, AUDIT_TABLE_NAME);
-                StreamLoader.Response response = loader.loadBatch("audit_loader", sb.toString());
-                ok = response != null && response.status() == HttpStatus.SC_OK;
-                if (!ok) {
-                    warnFlushFailed(batch.size(), String.valueOf(response), null);
-                }
-            } catch (Throwable t) {
-                if (t instanceof InterruptedException) {
-                    // Restore the interrupt flag so the daemon can still react to shutdown.
-                    Thread.currentThread().interrupt();
-                }
-                warnFlushFailed(batch.size(), null, t);
-                ok = false;
-            }
-
-            if (!ok) {
-                if (++consecutiveFlushFailures < MAX_BATCH_FLUSH_RETRY) {
-                    // Keep the batch queued and retry next cycle. Report failure even when an
-                    // earlier batch in this same call landed: the caller only advances the flush
-                    // clock on a clean run, and reporting the partial success here would make the
-                    // batch still sitting at the head wait a whole interval before its next
-                    // attempt, stretching the time to give up on it by that interval each round.
-                    return false;
-                }
-                // The head batch is rejected every time, which would block every later event as
-                // well, so discard it and count the loss instead of stalling the pipeline.
-                discardBatch(batch, batchBytes);
-                consecutiveFlushFailures = 0;
-                continue;
-            }
-            consecutiveFlushFailures = 0;
-            // Success: remove exactly the flushed rows from the head (single consumer, FIFO).
-            for (int i = 0; i < batch.size(); i++) {
-                rowQueue.poll();
-            }
-            bufferBytes.addAndGet(-batchBytes);
-            flushedAny = true;
-            LOG.debug("audit loader flushed {} rows", batch.size());
+            pendingResultUnknown = false;
         }
-        return flushedAny;
+        PendingBatch selected = pendingBatch;
+        List<BufferedRow> batch = selected.rows();
+        // Rebuild from immutable strings; retain no extra batch-sized string during backoff.
+        StringBuilder sb = new StringBuilder((int) Math.min(selected.chars(), Integer.MAX_VALUE));
+        sb.append('[');
+        for (int i = 0; i < batch.size(); i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            sb.append(batch.get(i).json());
+        }
+        sb.append(']');
+
+        AuditStreamLoader.Response response = null;
+        boolean ok;
+        try {
+            AuditStreamLoader loader = new AuditStreamLoader(AUDIT_DB_NAME, AUDIT_TABLE_NAME);
+            response = loader.loadBatch(selected.label(), sb.toString());
+            ok = response != null && response.committed();
+            if (!ok) {
+                pendingResultUnknown |= response == null
+                        || response.outcome() == AuditStreamLoader.Outcome.IN_PROGRESS
+                        || response.outcome() == AuditStreamLoader.Outcome.UNKNOWN;
+                warnFlushFailed(batch.size(), String.valueOf(response), null);
+            }
+        } catch (Throwable t) {
+            pendingResultUnknown = true;
+            if (t instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            warnFlushFailed(batch.size(), null, t);
+            ok = false;
+        }
+        if (!ok) {
+            hasFailedAttempt = true;
+            lastFailureNanos = nanoTime.getAsLong();
+            if (++consecutiveFlushFailures < MAX_BATCH_FLUSH_RETRY) {
+                return FlushResult.RETRY;
+            }
+            discardBatch(batch, selected.rowBytes());
+            pendingBatch = null;
+            pendingResultUnknown = false;
+            consecutiveFlushFailures = 0;
+            // Later batches retain the cooldown and get a new label and full attempt budget.
+            return FlushResult.DISCARDED;
+        }
+        consecutiveFlushFailures = 0;
+        hasFailedAttempt = false;
+        for (int i = 0; i < batch.size(); i++) {
+            rowQueue.poll();
+        }
+        bufferBytes.addAndGet(-selected.rowBytes());
+        pendingBatch = null;
+        pendingResultUnknown = false;
+        hasFlushed = true;
+        lastFlushNanos = nanoTime.getAsLong();
+        recordCommittedLoad(batch.size(), response);
+        return FlushResult.SUCCESS;
+    }
+
+    private PendingBatch selectBatch() {
+        long batchMaxBytes = effectiveBatchMaxBytes();
+        List<BufferedRow> batch = new ArrayList<>();
+        long rowsBytes = 0;
+        long payloadBytes = 2; // Array brackets are part of the request, not the buffered rows.
+        long batchChars = 2; // Array brackets; commas are added between rows below.
+        Iterator<BufferedRow> it = rowQueue.iterator();
+        while (it.hasNext()) {
+            BufferedRow row = it.next();
+            long addedBytes = row.byteLen() + (batch.isEmpty() ? 0L : 1L);
+            if (payloadBytes + addedBytes > batchMaxBytes) {
+                if (batch.isEmpty()) {
+                    rowQueue.poll();
+                    bufferBytes.addAndGet(-row.byteLen());
+                    consecutiveFlushFailures = 0;
+                    // A different head gets a fresh attempt budget, but retains any failure cooldown.
+                    warnOversizedRow(row.byteLen(), batchMaxBytes, droppedCount.incrementAndGet());
+                    return null;
+                }
+                break;
+            }
+            batchChars += row.json().length() + (batch.isEmpty() ? 0L : 1L);
+            batch.add(row);
+            rowsBytes += row.byteLen();
+            payloadBytes += addedBytes;
+        }
+        if (batch.isEmpty()) {
+            return null;
+        }
+
+        return new PendingBatch(List.copyOf(batch), rowsBytes, batchChars, batchMaxBytes, AuditStreamLoader.newLabel());
+    }
+
+    private void recordCommittedLoad(int submitted, AuditStreamLoader.Response response) {
+        AuditStreamLoader.LoadStats stats = response.stats();
+        Long total = stats == null ? null : stats.totalRows();
+        Long loaded = stats == null ? null : stats.loadedRows();
+        Long filtered = stats == null ? null : stats.filteredRows();
+        String statisticsIssue = invalidStatisticsReason(submitted, stats);
+        if (statisticsIssue != null) {
+            // Check even partial statistics before counting any filtering. The commit is terminal.
+            total = null;
+            loaded = null;
+            filtered = null;
+        }
+        boolean incomplete = total == null || loaded == null || filtered == null || total != submitted;
+        if (filtered != null) {
+            // Account each committed batch exactly once, independently of log throttling. Do not
+            // infer filtering from total-loaded: the response can also contain unselected rows.
+            droppedCount.addAndGet(filtered);
+            filteredCount.addAndGet(filtered);
+        }
+        if (incomplete) {
+            unknownStatsBatches.incrementAndGet();
+        }
+        boolean publishTimeout = response.outcome() == AuditStreamLoader.Outcome.COMMITTED_PENDING_VISIBILITY;
+        if (publishTimeout) {
+            publishTimeoutBatches.incrementAndGet();
+        }
+        boolean alreadyCommitted = response.outcome() == AuditStreamLoader.Outcome.ALREADY_COMMITTED;
+        if (alreadyCommitted) {
+            alreadyCommittedBatches.incrementAndGet();
+        }
+        String errorUrl = stats == null ? null : stats.errorUrl();
+        String prefix = alreadyCommitted ? "audit loader load previously committed: "
+                : publishTimeout ? "audit loader load committed, awaiting visibility: " : "audit loader load succeeded: ";
+        String message = prefix
+                + "submitted={}, total={}, loaded={}, filtered={}, error_url={}, row_statistics_incomplete={}, "
+                + "statistics_issue={}, raw_statistics={}";
+        LOG.debug(message, submitted, countForLog(total), countForLog(loaded), countForLog(filtered), errorUrl, incomplete,
+                statisticsIssue, stats);
+        if ((alreadyCommitted || publishTimeout || incomplete || (filtered != null && filtered > 0))
+                && loadStatsWarnThrottle.tryAcquire()) {
+            LOG.warn(message, submitted, countForLog(total), countForLog(loaded), countForLog(filtered), errorUrl, incomplete,
+                    statisticsIssue, stats);
+        }
+    }
+
+    private static String invalidStatisticsReason(int submitted, AuditStreamLoader.LoadStats stats) {
+        if (stats == null) {
+            return "missing_statistics";
+        }
+        if (stats.invalidCounts()) {
+            return "malformed_row_count";
+        }
+        Long total = stats.totalRows();
+        Long loaded = stats.loadedRows();
+        Long filtered = stats.filteredRows();
+        for (Long count : new Long[] {total, loaded, filtered}) {
+            if (count != null && (count < 0 || count > submitted)) {
+                return "row_count_out_of_range";
+            }
+        }
+        if (total != null && ((loaded != null && loaded > total) || (filtered != null && filtered > total))) {
+            return "row_count_exceeds_total";
+        }
+        long limit = total == null ? submitted : total;
+        // Counts have been bounded above; subtraction also keeps this safe if their type grows later.
+        if (loaded != null && filtered != null && loaded > limit - filtered) {
+            return "loaded_plus_filtered_exceeds_limit";
+        }
+        return null;
+    }
+
+    private static Object countForLog(Long count) {
+        return count == null ? "unknown" : count;
     }
 
     /**
@@ -910,19 +1159,25 @@ public class AuditLoaderMgr extends FrontendDaemon {
         return Instant.ofEpochMilli(ms).atZone(zone).format(DateUtils.DATE_TIME_FORMATTER);
     }
 
-    /**
-     * Rate-limited failure log. A batch that keeps being rejected is retried every cycle, so an
-     * unthrottled warning here would flood the FE log until the batch is finally discarded.
-     */
+    // Size rejection is local: do not describe it as a failed network attempt or log row contents.
+    private void warnOversizedRow(long rowBytes, long cap, long dropped) {
+        if (oversizedRowWarnThrottle.tryAcquire()) {
+            LOG.warn("audit loader dropped oversized event: row_bytes={}, request_bytes={}, "
+                            + "batch_limit_bytes={}, dropped_total={}", rowBytes, rowBytes + 2, cap, dropped);
+        }
+    }
+
+    /** Rate-limited failure log for actual load attempts. */
     private void warnFlushFailed(int rows, String response, Throwable t) {
         if (!flushWarnThrottle.tryAcquire()) {
             return;
         }
         if (t != null) {
-            LOG.warn("audit loader flush failed, batch rows[{}], attempt[{}]", rows, consecutiveFlushFailures + 1, t);
+            LOG.warn("audit loader flush failed, batch rows[{}], attempt[{}], label={}, batch_limit_bytes={}",
+                    rows, consecutiveFlushFailures + 1, pendingBatch.label(), pendingBatch.capacity(), t);
         } else {
-            LOG.warn("audit loader flush failed, batch rows[{}], attempt[{}], response[{}]",
-                    rows, consecutiveFlushFailures + 1, response);
+            LOG.warn("audit loader flush failed, batch rows[{}], attempt[{}], label={}, batch_limit_bytes={}, response[{}]",
+                    rows, consecutiveFlushFailures + 1, pendingBatch.label(), pendingBatch.capacity(), response);
         }
     }
 
@@ -943,18 +1198,26 @@ public class AuditLoaderMgr extends FrontendDaemon {
         // range actually lost. This reuses the one log line discardBatch already emits (paced by
         // the retry cycle above, so at most one line roughly every MAX_BATCH_FLUSH_RETRY attempts)
         // instead of adding another log call, to avoid flooding the log during a sustained outage.
-        LOG.error("audit loader discarded {} rows spanning [{}, {}] after {} failed attempts",
-                rows, eventTimestamp(batch.get(0).json()), eventTimestamp(batch.get(rows - 1).json()),
-                MAX_BATCH_FLUSH_RETRY);
+        String first = eventTimestamp(batch.get(0).json());
+        String last = rows == 1 ? first : eventTimestamp(batch.get(rows - 1).json());
+        LOG.error("audit loader discarded {} rows spanning [{}, {}], label={}, commit_result_unknown={} after {} failed attempts",
+                rows, first, last, pendingBatch.label(), pendingResultUnknown, MAX_BATCH_FLUSH_RETRY);
     }
 
-    /** Best-effort extraction of the "timestamp" field from one already-serialized JSON row. */
+    /** Read only through timestamp, without decoding the SQL or building a JSON object tree. */
     private static String eventTimestamp(String row) {
-        try {
-            return JsonParser.parseString(row).getAsJsonObject().get("timestamp").getAsString();
+        try (JsonReader reader = new JsonReader(new StringReader(row))) {
+            reader.beginObject();
+            while (reader.hasNext()) {
+                if ("timestamp".equals(reader.nextName())) {
+                    return reader.nextString();
+                }
+                reader.skipValue();
+            }
         } catch (Throwable t) {
             return "unknown";
         }
+        return "unknown";
     }
 
     /**
@@ -963,13 +1226,12 @@ public class AuditLoaderMgr extends FrontendDaemon {
      * an unpaired surrogate by a single-byte {@code '?'}, so the byte accounting stays in step with
      * what the stream load request body actually carries.
      *
-     * <p>Worth avoiding the allocation: this is on the audit-event worker thread, once per row in
-     * {@link #offerEvent} and once per VARCHAR column in {@link #truncateToBytes}, i.e. tens of
-     * throwaway arrays per audit event, one of which can be the megabyte-scale statement text.
+     * <p>This runs on the audit-event worker thread in {@link #offerEvent}; measuring the final JSON
+     * must not allocate another megabyte-scale buffer just to determine its size.
      */
     @VisibleForTesting
-    static int utf8Length(String s) {
-        int len = 0;
+    static long utf8Length(String s) {
+        long len = 0;
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             if (c < 0x80) {
@@ -996,19 +1258,37 @@ public class AuditLoaderMgr extends FrontendDaemon {
         if (s == null) {
             return "";
         }
-        // Measure first: only a value that actually has to be truncated pays for the byte[] copy,
-        // instead of every VARCHAR column of every audit event allocating one just to find out it
-        // already fits.
-        if (utf8Length(s) <= maxBytes) {
-            return s;
+        int end = 0;
+        int bytes = 0;
+        boolean malformed = false;
+        while (end < s.length()) {
+            char c = s.charAt(end);
+            int chars = 1;
+            int width;
+            if (c < 0x80) {
+                width = 1;
+            } else if (c < 0x800) {
+                width = 2;
+            } else if (Character.isHighSurrogate(c) && end + 1 < s.length()
+                    && Character.isLowSurrogate(s.charAt(end + 1))) {
+                width = 4;
+                chars = 2;
+            } else if (Character.isSurrogate(c)) {
+                width = 1;
+            } else {
+                width = 3;
+            }
+            if (bytes > maxBytes - width) {
+                String prefix = s.substring(0, end);
+                // Preserve the old encoder's '?' replacement when a truncated prefix contains
+                // an unpaired surrogate. Encode only this bounded prefix, never the discarded tail.
+                return malformed ? new String(prefix.getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8) : prefix;
+            }
+            bytes += width;
+            malformed |= chars == 1 && Character.isSurrogate(c);
+            end += chars;
         }
-        byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
-        int end = maxBytes;
-        // Back off if we landed in the middle of a multi-byte character (continuation byte 10xxxxxx).
-        while (end > 0 && (bytes[end] & 0xC0) == 0x80) {
-            end--;
-        }
-        return new String(bytes, 0, end, StandardCharsets.UTF_8);
+        return s;
     }
 
     /**

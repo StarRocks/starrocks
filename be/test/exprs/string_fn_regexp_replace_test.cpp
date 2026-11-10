@@ -26,6 +26,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exprs/string_functions.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -117,9 +118,7 @@ TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
     Columns columns;
 
     // Create input column with two rows
-    auto str_column = BinaryColumn::create();
-    str_column->append("activity_60_package_2");
-    str_column->append("activity_50_package_7");
+    auto str_column = ColumnTestHelper::build_column<Slice>({"activity_60_package_2", "activity_50_package_7"});
     columns.push_back(std::move(str_column));
 
     // Create pattern column (constant)

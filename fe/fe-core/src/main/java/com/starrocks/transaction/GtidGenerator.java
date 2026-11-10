@@ -14,7 +14,9 @@
 
 package com.starrocks.transaction;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.server.GlobalStateMgr;
 
 public class GtidGenerator {
     // |-- 1bit --|-- 42bit --|-- 8bit --|-- 13bit --|
@@ -36,11 +38,13 @@ public class GtidGenerator {
     @SerializedName("sequence")
     private long sequence = 0L;
 
-    public GtidGenerator() {
-        nextGtid();
-    }
-
     public synchronized long nextGtid() {
+        // A gtid identifies one operation cluster-wide, and only the leader persists the operations that
+        // carry one. A value handed out on any other node shares the format but nothing keeps it distinct
+        // from what the leader hands out at the same moment.
+        Preconditions.checkState(GlobalStateMgr.getCurrentState().isLeader(),
+                "a gtid can only be generated on the leader");
+
         long timestamp = timeGen();
 
         if (timestamp < lastTimestamp) {

@@ -58,6 +58,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -154,6 +155,20 @@ public class ExternalOlapTable extends OlapTable {
 
         public void setTableType(TableType tableType) {
             this.tableType = tableType;
+        }
+
+        public ExternalTableInfo copy() {
+            ExternalTableInfo info = new ExternalTableInfo();
+            info.host = host;
+            info.port = port;
+            info.user = user;
+            info.password = password;
+            info.dbName = dbName;
+            info.tableName = tableName;
+            info.dbId = dbId;
+            info.tableId = tableId;
+            info.tableType = tableType;
+            return info;
         }
 
         public void parseFromProperties(Map<String, String> properties) throws DdlException {
@@ -294,11 +309,31 @@ public class ExternalOlapTable extends OlapTable {
         return externalSystemInfoService;
     }
 
+    /**
+     * The copy is what an INSERT syncs from the remote cluster ({@link MetaUtils#syncOLAPExternalTableMeta}), and
+     * {@link #updateMeta} writes the remote ids into its ExternalTableInfo and its new physical partitions into
+     * physicalPartitionIdToPartitionId. Both are shared with the copy by the shallow copy above, so the copy
+     * gets its own: otherwise every sync rewrote the published table's persisted source ids and grew its
+     * partition map, from concurrent INSERTs and without any lock.
+     */
     @Override
     public void copyOnlyForQuery(OlapTable olapTable) {
         super.copyOnlyForQuery(olapTable);
         ExternalOlapTable externalOlapTable = (ExternalOlapTable) olapTable;
-        externalOlapTable.externalTableInfo = this.externalTableInfo;
+        externalOlapTable.externalTableInfo = this.externalTableInfo.copy();
+        externalOlapTable.physicalPartitionIdToPartitionId = new HashMap<>(this.physicalPartitionIdToPartitionId);
+    }
+
+    /**
+     * Not a lock target, although it lives in an internal database. The data is on another cluster, and the
+     * published table is never written once created: ALTER and TRUNCATE reject it, and no INSERT ever syncs it
+     * -- every INSERT, and the EXPLAIN of one, syncs a private copy before the lock is taken and plans on that
+     * ({@link #copyOnlyForQuery}). So there is nothing for the lock to protect, and no reason for it to keep
+     * the other tables of the statement under the lock for the whole planning phase.
+     */
+    @Override
+    public boolean isMetaLockTarget() {
+        return false;
     }
 
     public void updateMeta(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas)

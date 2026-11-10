@@ -48,6 +48,27 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Queued task count in the tablet delta writer thread pool.
 
+## `authentication_failure_reason_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of failed authentications, labeled by failure reason (`reason` = `malformed`, `no_matching_si`, `signature_fail`, `expired`, `claim_mismatch`, `bad_credential`, `disabled`, or `internal`). The HTTP response deliberately reports every failure as a flat `invalid_token`, so this metric is where the actual reason is visible.
+- Introduced in: v4.2
+
+## `authentication_failure_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of failed authentications, labeled by two independent dimensions: `channel` (`mysql`, `http`, `arrow_flight`, `thrift_load`, or `thrift_gateway`) is which way the credential arrived, and `kind` (`mysql_native_scramble`, `mysql_oauth2_client`, `gssapi_token`, `plain_password`, or `bearer_token`) is how it had to be read. Sum by `channel` to tell apart which channel is failing - HTTP, Arrow Flight, or the BE-to-FE load RPCs; sum by `kind` to see whether Bearer authentication as a whole is healthy.
+- Introduced in: v4.2
+
+## `authentication_success_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of successful authentications, labeled by `channel` and `kind` (same label values as `authentication_failure_total`).
+- Introduced in: v4.2
+
 ## `base_compaction_task_byte_per_second`
 
 - Unit: Bytes/s
@@ -464,6 +485,21 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Bytes
 - Description: Memory used by compactions.
+
+## `zstd_compression_dict_build_fallback`
+
+- Unit: Count
+- Description: Cumulative number of times a column that was eligible for the compression dictionary ended up without one and was written as plain ZSTD, either because the trial pages did not come out enough smaller with the dictionary (see `zstd_compression_dict_min_gain`) or because building it failed. Counted once per column writer per segment; as with `zstd_compression_dict_pages_written`, a flat JSON column has one writer per flattened sub-column. Only writers that attempted a dictionary are counted: a page too small to be sampled is not counted here (the next page is tried instead), and neither is a column that never reaches the trial -- because it is dictionary-encoded, or ends before the trial finishes -- so this counter plus `zstd_compression_dict_pages_written` does not add up to the number of nominated columns. A high value relative to `zstd_compression_dict_pages_written` means that the compression dictionary rarely takes effect for the columns designated by the table property `zstd_compression_columns`.
+
+## `zstd_compression_dict_bytes`
+
+- Unit: Bytes
+- Description: Cumulative on-disk size of the compression dictionary pages written to segment files. Divide it by `zstd_compression_dict_pages_written` to get the average dictionary size, which is bounded by `zstd_compression_dict_sample_bytes`.
+
+## `zstd_compression_dict_pages_written`
+
+- Unit: Count
+- Description: Cumulative number of compression dictionary pages written to segment files. One dictionary page is written per column writer per segment, and a flat JSON column has one writer per flattened sub-column, each of which can produce its own dictionary page. So this metric counts writers that actually used a compression dictionary -- not schema columns, and not dictionary-compressed data pages.
 
 ## `consistency_mem_bytes`
 

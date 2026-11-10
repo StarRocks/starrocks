@@ -35,9 +35,9 @@
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
 
 #ifdef USE_STAROS
 #include "common/config_starlet_fwd.h"
@@ -108,20 +108,20 @@ Status StorageEnv::init(const StorageEnvOptions& options) {
         return Status::OK();
     }
 
-    auto lake_update_manager =
-            std::make_unique<lake::UpdateManager>(lake_location_provider, options.update_mem_tracker);
+    auto lake_primary_key_manager =
+            std::make_unique<lake::PrimaryKeyManager>(lake_location_provider, options.update_mem_tracker);
     auto lake_tablet_manager =
-            std::make_unique<lake::TabletManager>(lake_location_provider, lake_update_manager.get(),
+            std::make_unique<lake::TabletManager>(lake_location_provider, lake_primary_key_manager.get(),
                                                   options.lake_metadata_cache_limit, options.store_path_registry);
     auto lake_replication_txn_manager = std::make_unique<lake::ReplicationTxnManager>(lake_tablet_manager.get());
 
     auto parallel_compact_mgr =
             std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(lake_tablet_manager.get());
     RETURN_IF_ERROR(parallel_compact_mgr->init());
-    lake_update_manager->set_parallel_compact_mgr(parallel_compact_mgr.get());
+    lake_primary_key_manager->set_parallel_compact_mgr(parallel_compact_mgr.get());
 
     _lake_location_provider = std::move(lake_location_provider);
-    _lake_update_manager = std::move(lake_update_manager);
+    _lake_primary_key_manager = std::move(lake_primary_key_manager);
     _lake_tablet_manager = std::move(lake_tablet_manager);
     _lake_replication_txn_manager = std::move(lake_replication_txn_manager);
     _parallel_compact_mgr = std::move(parallel_compact_mgr);
@@ -194,7 +194,7 @@ void StorageEnv::destroy() {
     _parallel_compact_mgr.reset();
     _lake_replication_txn_manager.reset();
     _lake_tablet_manager.reset();
-    _lake_update_manager.reset();
+    _lake_primary_key_manager.reset();
     _lake_location_provider.reset();
 }
 

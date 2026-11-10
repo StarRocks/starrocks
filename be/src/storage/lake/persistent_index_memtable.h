@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <condition_variable>
+#include <mutex>
+
 #include "base/phmap/btree.h"
 #include "common/thread/threadpool.h"
 #include "storage/lake/types_fwd.h"
@@ -95,6 +98,11 @@ public:
 
     Status flush_status() const;
 
+    // Block until async flush (`run()`) or `cancel()` has published a result, or |timeout_us|
+    // elapses. OK means `release_sstable()` can take the SST. A memtable that was flushed
+    // synchronously before being queued as inactive returns immediately.
+    Status wait_for_flush(int64_t timeout_us);
+
 private:
     Status flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb);
     static void update_index_value(IndexValueWithVer* index_value_info, int64_t version, const IndexValue& value);
@@ -112,6 +120,7 @@ private:
     Status _flush_status = Status::OK();
     // flush state mutex
     mutable std::mutex _flush_mutex;
+    std::condition_variable _flush_cv;
 };
 
 } // namespace starrocks::lake

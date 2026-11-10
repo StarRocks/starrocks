@@ -112,8 +112,12 @@ struct AdaptiveSliceHashSet {
         distinct_size = 0;
     }
 
+    // Safe to call after every emplace: a duplicate key leaves distinct_size alone, and once the
+    // switch has happened `set` is null. Must NOT be called from inside a lazy_emplace() callback
+    // though -- it releases `set`, destroying the hash set while its own member function still runs.
     void try_convert_to_two_level(MemPool* mem_pool) {
-        if (distinct_size % 65536 == 0 && mem_pool->total_allocated_bytes() >= agg::two_level_memory_threshold()) {
+        if (set != nullptr && distinct_size % 65536 == 0 &&
+            mem_pool->total_allocated_bytes() >= agg::two_level_memory_threshold()) {
             two_level_set = std::make_shared<SliceTwoLevelHashSetWithAggStateAllocator>();
             two_level_set->reserve(set->capacity());
             two_level_set->insert(set->begin(), set->end());
@@ -134,8 +138,8 @@ struct AdaptiveSliceHashSet {
                 memcpy(pos, key.data, key.size);
                 ctor(pos, key.size, key.hash);
                 distinct_size++;
-                try_convert_to_two_level(mem_pool);
             });
+            try_convert_to_two_level(mem_pool);
         } else {
 #if defined(__clang__) && (__clang_major__ >= 16)
             two_level_set->lazy_emplace(key, [&](const auto& ctor) {
@@ -164,8 +168,8 @@ struct AdaptiveSliceHashSet {
                 memcpy(pos, key.data, key.size);
                 ctor(pos, key.size, key.hash);
                 distinct_size++;
-                try_convert_to_two_level(mem_pool);
             });
+            try_convert_to_two_level(mem_pool);
         } else {
 #if defined(__clang__) && (__clang_major__ >= 16)
             two_level_set->lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
@@ -407,6 +411,9 @@ class TDistinctAggregateFunction final
                   TDistinctAggregateFunction<LT, SumLT, TDistinctAggState, DistinctType, T>> {
 public:
     using ColumnType = RunTimeColumnType<LT>;
+
+    // multi_distinct_count returns 0 (never NULL); multi_distinct_sum can be NULL, so restrict this to COUNT.
+    bool is_result_non_nullable() const override { return DistinctType == AggDistinctType::COUNT; }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         auto value = GetContainer<LT>::get_data(columns[0], row_num);

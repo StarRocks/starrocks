@@ -1,0 +1,335 @@
+-- name: test_lake_add_bloom_filter_on_added_column @cloud
+create database lake_bf_added_col_${uuid0};
+-- result:
+-- !result
+use lake_bf_added_col_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_v2_bundled (
+    k bigint NOT NULL,
+    v bigint,
+    pad varchar(64)
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "file_bundling" = "true",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+-- result:
+-- !result
+insert into t_v2_bundled select x, x * 13 + 1, repeat('x', 32) from table(generate_series(1, 2000)) t(x);
+-- result:
+-- !result
+ALTER TABLE t_v2_bundled ADD COLUMN bfc INT DEFAULT '0';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE t_v2_bundled SET ("bloom_filter_columns" = "bfc");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select assert_true(count(*) = 2000) from t_v2_bundled;
+-- result:
+1
+-- !result
+select assert_true(count(*) = 2000) from t_v2_bundled where bfc = 0;
+-- result:
+1
+-- !result
+select assert_true(count(*) = 0) from t_v2_bundled where bfc = 7;
+-- result:
+1
+-- !result
+insert into t_v2_bundled (k, v, pad, bfc) select x, x, 'a', 7 from table(generate_series(2001, 2100)) t(x);
+-- result:
+-- !result
+select assert_true(count(*) = 2100) from t_v2_bundled;
+-- result:
+1
+-- !result
+select assert_true(count(*) = 100) from t_v2_bundled where bfc = 7;
+-- result:
+1
+-- !result
+select assert_true(count(*) = 2000) from t_v2_bundled where bfc = 0;
+-- result:
+1
+-- !result
+CREATE TABLE t_v2_empty (
+    k bigint NOT NULL,
+    v bigint
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+-- result:
+-- !result
+ALTER TABLE t_v2_empty ADD COLUMN bfc INT DEFAULT '0';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE t_v2_empty SET ("bloom_filter_columns" = "bfc");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select assert_true(count(*) = 0) from t_v2_empty;
+-- result:
+1
+-- !result
+insert into t_v2_empty (k, v, bfc) select x, x, x % 5 from table(generate_series(1, 100)) t(x);
+-- result:
+-- !result
+select assert_true(count(*) = 100) from t_v2_empty;
+-- result:
+1
+-- !result
+select assert_true(count(*) = 20) from t_v2_empty where bfc = 3;
+-- result:
+1
+-- !result
+CREATE TABLE t_v1 (
+    k bigint NOT NULL,
+    v bigint,
+    pad varchar(64)
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "false"
+);
+-- result:
+-- !result
+insert into t_v1 select x, x * 7, repeat('y', 32) from table(generate_series(1, 1000)) t(x);
+-- result:
+-- !result
+ALTER TABLE t_v1 ADD COLUMN bfc INT DEFAULT '0';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE t_v1 SET ("bloom_filter_columns" = "bfc");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select assert_true(count(*) = 1000) from t_v1 where bfc = 0;
+-- result:
+1
+-- !result
+insert into t_v1 (k, v, pad, bfc) select x, x, 'z', 4 from table(generate_series(1001, 1100)) t(x);
+-- result:
+-- !result
+select assert_true(count(*) = 100) from t_v1 where bfc = 4;
+-- result:
+1
+-- !result
+select assert_true(count(*) = 1100) from t_v1;
+-- result:
+1
+-- !result
+CREATE TABLE t_unbundled (
+    k bigint NOT NULL,
+    v bigint,
+    pad varchar(64)
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "file_bundling" = "false",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+-- result:
+-- !result
+insert into t_unbundled select x, x * 3, repeat('z', 32) from table(generate_series(1, 1000)) t(x);
+-- result:
+-- !result
+insert into t_unbundled select x, x * 3, repeat('z', 32) from table(generate_series(1001, 2000)) t(x);
+-- result:
+-- !result
+ALTER TABLE t_unbundled ADD COLUMN bfc INT DEFAULT '0';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE t_unbundled SET ("bloom_filter_columns" = "bfc");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select assert_true(count(*) = 2000) from t_unbundled where bfc = 0;
+-- result:
+1
+-- !result
+select assert_true(count(*) = 2000) from t_unbundled;
+-- result:
+1
+-- !result
+CREATE TABLE t_nullable (
+    k bigint NOT NULL,
+    v bigint
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_nullable select x, x from table(generate_series(1, 500)) t(x);
+-- result:
+-- !result
+ALTER TABLE t_nullable ADD COLUMN bfc INT NULL;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE t_nullable SET ("bloom_filter_columns" = "bfc");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select assert_true(count(*) = 500) from t_nullable where bfc is null;
+-- result:
+1
+-- !result
+select assert_true(count(*) = 0) from t_nullable where bfc = 1;
+-- result:
+1
+-- !result
+ALTER TABLE t_v2_bundled ADD COLUMN bfc2 INT DEFAULT '0';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE t_v2_bundled SET ("bloom_filter_columns" = "bfc,bfc2");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select assert_true(count(*) = 2100) from t_v2_bundled where bfc2 = 0;
+-- result:
+1
+-- !result
+select assert_true(count(*) = 100) from t_v2_bundled where bfc = 7;
+-- result:
+1
+-- !result
+CREATE TABLE t_pk (
+    k bigint NOT NULL,
+    v bigint
+) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_pk select x, x from table(generate_series(1, 1000)) t(x);
+-- result:
+-- !result
+ALTER TABLE t_pk ADD COLUMN bfc INT DEFAULT '0';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE t_pk SET ("bloom_filter_columns" = "bfc");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select assert_true(count(*) = 1000) from t_pk where bfc = 0;
+-- result:
+1
+-- !result
+insert into t_pk (k, v, bfc) select x, x, 5 from table(generate_series(1001, 1100)) t(x);
+-- result:
+-- !result
+select assert_true(count(*) = 100) from t_pk where bfc = 5;
+-- result:
+1
+-- !result
+select assert_true(count(*) = 1100) from t_pk;
+-- result:
+1
+-- !result
+CREATE TABLE t_bitmap (
+    k bigint NOT NULL,
+    v bigint
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_bitmap select x, x from table(generate_series(1, 1000)) t(x);
+-- result:
+-- !result
+ALTER TABLE t_bitmap ADD COLUMN bmc INT DEFAULT '0';
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE t_bitmap ADD INDEX idx_bmc(bmc) USING BITMAP;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select assert_true(count(*) = 1000) from t_bitmap where bmc = 0;
+-- result:
+1
+-- !result
+select assert_true(count(*) = 0) from t_bitmap where bmc = 9;
+-- result:
+1
+-- !result
+insert into t_bitmap (k, v, bmc) select x, x, 9 from table(generate_series(1001, 1100)) t(x);
+-- result:
+-- !result
+select assert_true(count(*) = 100) from t_bitmap where bmc = 9;
+-- result:
+1
+-- !result
+select assert_true(count(*) = 1000) from t_bitmap where bmc = 0;
+-- result:
+1
+-- !result
+select assert_true(count(*) = 1100) from t_bitmap;
+-- result:
+1
+-- !result
+drop database lake_bf_added_col_${uuid0};
+-- result:
+-- !result

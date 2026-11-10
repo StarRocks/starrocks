@@ -36,6 +36,7 @@ package com.starrocks.system;
 
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.rpc.ThriftConnectionPool;
@@ -66,6 +67,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 
 public class HeartbeatMgrTest {
@@ -249,41 +251,65 @@ public class HeartbeatMgrTest {
         };
     }
 
+    // With the mocked GlobalStateMgr (isReady() true, no valid leader lease) a real worker self-stops
+    // right after start() and runs onStopped() on its own thread, shutting down and nulling the executor
+    // while the test thread is still reading it. Park the worker until stopped so that only the test
+    // thread drives start()/onStopped().
+    private static HeartbeatMgr newParkedHeartbeatMgr() {
+        return new HeartbeatMgr(false) {
+            @Override
+            protected void runOneCycle() throws InterruptedException {
+                while (!isStopRequested()) {
+                    Thread.sleep(10);
+                }
+            }
+        };
+    }
+
+    private static void stopAndAwaitQuiesced(HeartbeatMgr mgr) {
+        mgr.setStop();
+        LeaderDaemon.awaitQuiesced(List.of(mgr), 10_000L);
+    }
+
     @Test
     public void testOnStoppedShutsDownAndAwaitsExecutorTermination() {
-        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        HeartbeatMgr mgr = newParkedHeartbeatMgr();
         // start() lazy-inits the executor.
         mgr.start();
-        ExecutorService before = mgr.executor;
-        Assertions.assertNotNull(before, "executor must be initialized after start()");
+        try {
+            ExecutorService before = mgr.executor;
+            Assertions.assertNotNull(before, "executor must be initialized after start()");
 
-        // protected onStopped() is visible from the same package.
-        mgr.onStopped();
+            // protected onStopped() is visible from the same package.
+            mgr.onStopped();
 
-        Assertions.assertTrue(before.isShutdown(), "previous executor must be shut down");
-        Assertions.assertTrue(before.isTerminated(),
-                "previous executor must be terminated after onStopped() awaits drain");
-        // Nulled after the drain for consistency with the other pool-owning daemons
-        // (PublishVersionDaemon, AutovacuumDaemon); start() lazily rebuilds either way.
-        Assertions.assertNull(mgr.executor, "executor reference is dropped after successful drain");
+            Assertions.assertTrue(before.isShutdown(), "previous executor must be shut down");
+            Assertions.assertTrue(before.isTerminated(),
+                    "previous executor must be terminated after onStopped() awaits drain");
+            // Nulled after the drain for consistency with the other pool-owning daemons
+            // (PublishVersionDaemon, AutovacuumDaemon); start() lazily rebuilds either way.
+            Assertions.assertNull(mgr.executor, "executor reference is dropped after successful drain");
+        } finally {
+            stopAndAwaitQuiesced(mgr);
+        }
     }
 
     @Test
     public void testStartRebuildsExecutorAfterOnStopped() {
-        HeartbeatMgr mgr = new HeartbeatMgr(false);
-        mgr.start();
-        ExecutorService originalExecutor = mgr.executor;
-        mgr.onStopped();
-        Assertions.assertTrue(originalExecutor.isTerminated());
-
+        HeartbeatMgr mgr = newParkedHeartbeatMgr();
         mgr.start();
         try {
+            ExecutorService originalExecutor = mgr.executor;
+            mgr.onStopped();
+            Assertions.assertTrue(originalExecutor.isTerminated());
+
+            mgr.start();
             Assertions.assertNotSame(originalExecutor, mgr.executor,
                     "executor must be rebuilt on re-election");
             Assertions.assertFalse(mgr.executor.isShutdown(),
                     "rebuilt executor must accept new heartbeats");
         } finally {
-            mgr.setStop();
+            stopAndAwaitQuiesced(mgr);
         }
     }
 

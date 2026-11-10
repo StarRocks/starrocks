@@ -22,8 +22,10 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
+import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
@@ -94,6 +96,9 @@ public class QueryDetailActionV2 extends RestBaseAction {
             }
         }
 
+        // The records carry profile text, which follows the query-profile access rule; applied after the merge
+        // so records relayed from other frontends are covered here as well.
+        queryDetails = Authorizer.redactUnreadableProfiles(ConnectContext.get(), queryDetails);
         sendResult(request, response, new RestBaseResultV2<>(queryDetails));
     }
 }

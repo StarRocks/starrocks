@@ -29,6 +29,9 @@ CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
 // Maximum retry count for non-segment file copy during lake-to-lake replication
 CONF_mInt32(lake_replication_max_file_copy_retry, "3");
 
+// Maximum number of files copied concurrently for one tablet during lake-to-lake replication.
+CONF_mInt32(lake_replication_max_parallel_files_per_tablet, "4");
+
 // Minimum number of files required to enable parallel copy in lake-to-lake replication.
 // Set to 0 to force disable parallel copy.
 CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
@@ -88,6 +91,20 @@ CONF_mBool(lake_print_delete_log, "false");
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
+
+// Whether a Primary Key publish reads the base segments it needs through the segment metacache
+// (TabletManager::load_segment) instead of a static Segment::open. This covers every base-segment
+// read in UpdateManager::get_column_values -- row-mode partial update and condition update alike,
+// since both re-read old values from the same segments and pay the same cost. The static open
+// neither looks up nor fills the cache, so every publish re-parses the footer and rebuilds a column
+// reader for every column of the tablet schema, a cost paid again on each publish for base segments
+// that a high frequency update stream keeps touching. The cache is used only while the tablet's base
+// segments fit in lake_metadata_cache_limit and each segment's estimate fits in a cache shard;
+// otherwise, publish falls back to the static open rather than thrash. The auto-increment branch
+// always uses the static open: it reads this transaction's own segment through a schema restricted
+// to the partial-update columns, which must never be published into the cache. Set to false to
+// restore the static open everywhere.
+CONF_mBool(lake_pk_partial_update_use_segment_cache, "true");
 
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 

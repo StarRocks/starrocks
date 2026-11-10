@@ -20,11 +20,14 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TResultBatch;
@@ -138,6 +141,7 @@ public class TaskRunHistoryTable {
                 // To be compatible with old task runs, filter out unnecessary properties to avoid json content too large
                 // and deserialize error.
                 removeUnnecessaryProperties(status);
+                redactCredentials(status);
 
                 // Since the content is stored in JSON format and insert into the starrocks olap table, we need to escape the
                 // content to make it safer in deserializing the json.
@@ -158,7 +162,8 @@ public class TaskRunHistoryTable {
     }
 
     /**
-     * Normalize the task run status, remove unnecessary properties
+     * Normalize the task run status, remove unnecessary properties and shrink the list partition values that a
+     * batched refresh carries in every task run.
      * @param status
      */
     private void removeUnnecessaryProperties(TaskRunStatus status) {
@@ -167,11 +172,27 @@ public class TaskRunHistoryTable {
             removeUnnecessaryProperties(status.getProperties());
         }
         // remove unnecessary properties in mvTaskRunExtraMessage
-        if (status.getMvTaskRunExtraMessage() != null) {
-            ExecuteOption executeOption = status.getMvTaskRunExtraMessage().getExecuteOption();
+        MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
+        if (extraMessage != null) {
+            ExecuteOption executeOption = extraMessage.getExecuteOption();
             if (executeOption != null) {
                 removeUnnecessaryProperties(executeOption.getTaskRunProperties());
             }
+            extraMessage.setNextPartitionValues(shrinkPartitionValues(extraMessage.getNextPartitionValues()));
+        }
+    }
+
+    private static String shrinkPartitionValues(String partitionValues) {
+        return PListCell.shrinkBatchForDisplay(partitionValues, Config.max_mv_task_run_meta_message_values_length);
+    }
+
+    /**
+     * Mask credentials in the definition before it is archived, the same way information_schema.task_runs masks
+     * it on read. This must run on the field: once serialized, Gson escapes the quotes the redactor matches on.
+     */
+    private void redactCredentials(TaskRunStatus status) {
+        if (Config.enable_task_info_mask_credential) {
+            status.setDefinition(SqlCredentialRedactor.redact(status.getDefinition()));
         }
     }
 
@@ -189,6 +210,7 @@ public class TaskRunHistoryTable {
                 iterator.remove();
             }
         }
+        properties.computeIfPresent(TaskRun.PARTITION_VALUES, (key, values) -> shrinkPartitionValues(values));
     }
 
     /**
@@ -202,6 +224,15 @@ public class TaskRunHistoryTable {
         return "'" + SqlUtils.escapeSqlString(value) + "'";
     }
 
+    /**
+     * The database name inside history_content_json. Rows written by older versions carry the default_cluster
+     * prefix and stay until their partition expires, so both forms are matched.
+     */
+    private static String dbNamePredicate(String dbName) {
+        return " get_json_string(" + CONTENT_COLUMN + ", 'dbName') IN (" + quoteLiteral(dbName) + ", "
+                + quoteLiteral(ClusterNamespace.getFullName(dbName)) + ")";
+    }
+
     public List<TaskRunStatus> lookup(TGetTasksParams params) {
         if (params == null) {
             return Lists.newArrayList();
@@ -209,8 +240,7 @@ public class TaskRunHistoryTable {
         String sql = LOOKUP;
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(params.getDb())) {
-            predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
-                    + quoteLiteral(ClusterNamespace.getFullName(params.getDb())));
+            predicates.add(dbNamePredicate(params.getDb()));
         }
         if (StringUtils.isNotEmpty(params.getTask_name())) {
             predicates.add(" task_name = " + quoteLiteral(params.getTask_name()));
@@ -239,8 +269,7 @@ public class TaskRunHistoryTable {
     public List<TaskRunStatus> lookupByTaskNames(String dbName, Set<String> taskNames) {
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(dbName)) {
-            predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
-                    + quoteLiteral(ClusterNamespace.getFullName(dbName)));
+            predicates.add(dbNamePredicate(dbName));
         }
         if (CollectionUtils.isNotEmpty(taskNames)) {
             String values = taskNames.stream().sorted().map(TaskRunHistoryTable::quoteLiteral).collect(Collectors.joining(","));
@@ -278,8 +307,7 @@ public class TaskRunHistoryTable {
 
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(dbName)) {
-            predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
-                    + quoteLiteral(ClusterNamespace.getFullName(dbName)));
+            predicates.add(dbNamePredicate(dbName));
         }
         if (CollectionUtils.isNotEmpty(taskNames)) {
             String values = taskNames.stream().sorted().map(TaskRunHistoryTable::quoteLiteral).collect(Collectors.joining(","));

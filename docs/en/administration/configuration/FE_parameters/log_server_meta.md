@@ -62,8 +62,29 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Bytes
 - Is mutable: Yes
-- Description: The byte cap of the builtin audit loader buffer on each FE, which is also the maximum size of a single load batch. A flush is triggered as soon as the buffer holds half the cap, leaving the other half to absorb the inflow until the next daemon cycle. If the downstream keeps absorbing slower than the audit inflow and the buffer stays full, excess events are dropped and counted, with a rate-limited warning in the FE log: this feature targets operational and security analysis and does not guarantee zero audit loss under extreme overload. Events still buffered when the FE stops are lost as well, the same as with the external audit loader plugin. Loading is at-least-once, so if a load response is lost after the BE committed it, the batch is resent and the table keeps duplicate rows for it. A flush also holds a copy of the batch while it is assembled and sent, so leave the FE heap room for that on top of the buffer. A single SQL statement text is kept up to 1 MB in the table and truncated beyond that. Values outside 1.2 MB (one worst-case row) to 512 MB are clamped into that range, with a rate-limited warning. Effective only when `enable_audit_loader` is enabled.
+- Description: The per-FE byte budget for buffered audit row JSON and the complete UTF-8 JSON request body of each load, including array brackets and commas. The flush watermark is half this value: with the default 50 MiB budget, it is 25 MiB. The watermark triggers a load; it is not a fixed batch size. The time interval can also trigger a smaller load. This budget is not a cap on total FE heap usage: row objects, batch construction, and HTTP encoding require additional memory. If the downstream cannot keep up and the buffer stays full, excess events are dropped and counted, with a rate-limited warning in the FE log. This feature does not guarantee lossless delivery under overload or sustained load failures, and buffered events are lost when the FE stops. Retries reuse the same batch and label to deduplicate a lost commit response within the FE transaction label retention window. SQL statement text is truncated to at most 1 MiB of UTF-8 data before loading. The loader clamps values below 1183738 bytes or above 536870912 bytes (512 MiB) to these bounds, with a rate-limited warning. This clamp does not rewrite the configured value. Effective only when `enable_audit_loader` is enabled.
 - Introduced in: v4.2
+
+The FE setting and the BE JSON limit [`streaming_load_max_batch_size_mb`](../BE_parameters/query_loading.md#streaming_load_max_batch_size_mb) are configured independently. The audit loader does not read or automatically follow the BE setting, and the FE does not validate this parameter against the actual BE limit. A BE value of `100` permits a JSON request body of up to 100 MiB (`104857600` bytes).
+
+Administrators must coordinate the settings on every BE/CN that can receive audit loads. The complete JSON request body, including array brackets and commas, must fit the receiving node's limit. Set the effective FE budget at or below the smallest JSON limit among these nodes. The loader includes brackets and commas in its batch budget, so no additional JSON envelope allowance is needed. You can lower the FE budget or raise the BE limit according to the available memory. Acceptance of an FE configuration value alone does not mean that the BE will accept the load.
+
+The queue counts serialized row bytes; request syntax is counted only when selecting a batch. A row whose single-row request exceeds the effective budget is dropped and counted, with a rate-limited warning. Each selected batch keeps its budget snapshot across all attempts. Admission of new events uses the latest budget, but a capacity update does not resize a selected, in-flight, or retrying batch. After that batch ends, subsequent selections use the new budget and load rows that fit in smaller batches. Before lowering the BE JSON limit, wait for any batch using the previous budget to finish. If the queue head no longer fits alone, one such row is dropped per cycle without making a request or consuming an attempt. The next head gets a fresh attempt budget, while any backoff from an earlier failed request remains in effect.
+
+Inspect the reported BE values with:
+
+```sql
+SELECT BE_ID, NAME, VALUE
+FROM information_schema.be_configs
+WHERE NAME = 'streaming_load_max_batch_size_mb';
+```
+
+| FE value in bytes | FE flush watermark | BE JSON limit | Configuration relationship |
+| --- | --- | --- | --- |
+| `52428800` (50 MiB) | 25 MiB | `100` (100 MiB) | The default request budget is below the BE JSON limit. |
+| `209715200` (200 MiB) | 100 MiB | `1024` (1024 MiB) | Example of manually coordinated larger limits; FE memory must also be sized accordingly. |
+
+Raising the BE limit to 1024 MiB does not change the FE budget, watermark, or its 512 MiB maximum. Lowering the BE limit requires reviewing the FE setting and buffered data as well. A larger BE limit does not change the audit loader's request timeout or retry policy.
 
 ### `audit_loader_load_interval_seconds`
 
@@ -71,8 +92,12 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The maximum interval between two flushes of the builtin audit loader. Audit events are batched in FE memory and written to the audit table at this interval, or earlier once the buffer reaches half of `audit_loader_batch_max_bytes`, so the visibility latency of audit data is roughly this interval plus the load time. A smaller value lowers visibility latency at the cost of more frequent load transactions. 0 means flushing on every daemon cycle; negative values are treated as 0, and values above one day are clamped down to one day, with a rate-limited warning in the FE log. If a batch keeps failing to load (for example the target BE/CN is unavailable), the FE retries it for a bounded number of attempts and then discards it, logged and counted, instead of blocking every later event indefinitely. With default settings that takes about 30 seconds when the attempts fail immediately, and up to about 90 seconds when each attempt runs into the request timeout. Effective only when `enable_audit_loader` is enabled.
+- Description: The time-based interval for submitting buffered audit events to the audit table. Reaching half of `audit_loader_batch_max_bytes` can trigger an earlier load. After a successful load, another batch can run without an additional fixed 5-second wait if the buffer still reaches that watermark. For smaller buffers, 0 retains a 5-second polling cadence; negative values are treated as 0, and values above one day are clamped down to one day, with a rate-limited warning in the FE log. A lower value can reduce visibility latency at the cost of more load transactions. A fixed batch gets at most three attempts in total: the initial attempt and two retries, with a 5-second backoff before another submission following a failure. If all three attempts fail, the batch is immediately discarded, logged, and counted. Measured from the start of the first attempt, three immediate failures take about 10 seconds; if all three requests reach the 10-second HTTP timeout, they take about 40 seconds. These estimates exclude the wait before the first attempt, serialization, scheduling, and other processing overhead. When the audit table is not ready, loads are skipped without consuming the attempt budget. Effective only when `enable_audit_loader` is enabled.
 - Introduced in: v4.2
+
+A Stream Load `Publish Timeout` response means that the batch is committed but visibility has not been confirmed. The audit loader removes that batch from its buffer without retrying it or counting the batch as discarded, and reports the outcome in the FE log. Missing, malformed, or contradictory row statistics do not cause a committed batch to be retried. For a committed batch, only trustworthy reported filtered-row counts contribute to the filtered/discarded counters; other statistics are reported as unknown.
+
+All attempts for a batch use identical rows and the same unique label; events arriving meanwhile wait for the next batch. A `Label Already Exists` response confirms the previous commit only when the returned label matches and `ExistingJobStatus` is `FINISHED`. `RUNNING`, missing status, or a mismatched label do not confirm success. Counters in a duplicate response describe the rejected request, so the original batch statistics remain unknown. If all attempts end without confirmation, the original batch alone is removed and counted as discarded from the local buffer; `commit_result_unknown=true` in the discard log means the BE may still have committed it. This is not a guarantee that the rows were absent from the table.
 
 ### `audit_log_delete_age`
 
@@ -465,6 +490,42 @@ This topic introduces the following types of FE configurations:
 - Description: Maximum number of rolled internal FE log files to retain for the internal appender (`fe.internal.log`). This value is used as the Log4j DefaultRolloverStrategy `max` attribute; when rollovers occur, StarRocks keeps up to `internal_log_roll_num` archived files and removes older ones (also governed by `internal_log_delete_age`). A lower value reduces disk usage but shortens log history; a higher value preserves more historical internal logs. This item works together with `internal_log_dir`, `internal_log_roll_interval`, and `internal_roll_maxsize`.
 - Introduced in: v3.2.4
 
+### `lock_blocking_call_validation_mode`
+
+- Default: warn
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: How the FE reacts when it contacts an external system, such as a Hive Metastore, a JDBC source, an Iceberg REST catalog, or a thrift peer, while holding an FE metadata lock. The lock's hold time then becomes that external system's round-trip time, and every operation waiting on the same lock pays it. The check is placed at the last layer the FE owns before a network request is issued, so a cache hit never reaches it and every reported violation is a request that really went out. Valid values: `off` (do not check), `warn` (log the violation with the offending caller's stack trace and let the call proceed), and `error` (refuse the call). Any unrecognized value behaves as `warn`. Unlike `lock_target_validation_mode`, this check is expected to report violations on a cluster that is behaving normally, because the call sites it covers are still being migrated; `warn` therefore turns them into a log you can aggregate by transport, and `error` is only appropriate once those logs are clean. In `warn` mode each violation is logged on a single line tagged `LOCK_INVARIANT_VIOLATION` with `kind=blocking_call_under_lock`; log volume is governed by `lock_invariant_violation_log_interval_ms`.
+- Introduced in: v26.2
+
+### `lock_invariant_violation_log_interval_ms`
+
+- Default: 10000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Minimum interval between lock-invariant violation log lines emitted from the same call site. Throttling is per call site rather than global, so a frequently violating site does not crowd the others out of the log. Set this to `0` to log every violation while investigating. Only has an effect when `lock_target_validation_mode`, `lock_blocking_call_validation_mode` or `lock_snapshot_copy_validation_mode` is `warn`.
+- Introduced in: v26.2
+
+### `lock_snapshot_copy_validation_mode`
+
+- Default: warn
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: How the FE reacts when a thread takes a planning copy of a native table or materialized view while holding neither that table's read or write lock nor its database's read or write lock. The copy reads the table's live partition and index metadata, which DDL, INSERT OVERWRITE and metadata replay modify in place under the write lock, so an unlocked copy can fail the statement with a `ConcurrentModificationException` or plan off metadata that was never published as a whole. Valid values: `off` (do not check), `warn` (log the violation with the copying caller's stack trace and let the copy proceed), and `error` (refuse the copy). Any unrecognized value behaves as `warn`. In `warn` mode each violation is logged on a single line tagged `LOCK_INVARIANT_VIOLATION` with `kind=snapshot_copy_without_lock`; log volume is governed by `lock_invariant_violation_log_interval_ms`.
+- Introduced in: v26.2
+
+### `lock_target_validation_mode`
+
+- Default: warn
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: How the FE reacts when a metadata lock is requested on an object the internal catalog does not own, such as a database from an external catalog or a placeholder table ID. Such an identifier names nothing the lock manager can protect: it either never collides with another lock, or collides with every other lock of its kind. Valid values: `off` (do not check), `warn` (log the violation with a stack trace and let the operation proceed), and `error` (refuse the operation). Any unrecognized value behaves as `warn`. Because this item is mutable, a cluster can run at `warn`, confirm that its logs stay clean, and then tighten to `error` without a restart. In `warn` mode each violation is logged on a single line tagged `LOCK_INVARIANT_VIOLATION`, carrying the offending caller's stack trace; log volume is governed by `lock_invariant_violation_log_interval_ms`.
+- Introduced in: v26.2
+
 ### `log_cleaner_audit_log_min_retention_days`
 
 - Default: 3
@@ -842,6 +903,15 @@ This topic introduces the following types of FE configurations:
 
 <EditionSpecificFEItem />
 
+### `arrow_flight_max_header_size`
+
+- Default: 32768
+- Type: Int
+- Unit: Bytes
+- Is mutable: No
+- Description: Maximum size in bytes of the request header block the Arrow Flight SQL server accepts, counting all headers of one gRPC request together. The first request of an Arrow Flight SQL session carries the client's credential in a header, and a JWT that lists the user's groups grows with them: 200 group IDs, the most Microsoft Entra ID puts into a token, come to about 10 KB. The gRPC default of 8 KB would refuse such a request before authentication starts, so the default matches `http_max_header_size`. Raise it when clients send larger tokens. Changes require FE restart.
+- Introduced in: v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - Default: 10000
@@ -995,9 +1065,22 @@ This topic introduces the following types of FE configurations:
 - Introduced in: v4.2.0
 - Description: When true, most external FE HTTP endpoints require HTTP Basic Auth. Credentials are validated against the user store via `AuthenticationHandler.authenticate()`, so LDAP / security-integration login works on the HTTP path the same way it does for the MySQL protocol. The following are exempt:
   - Public probes / observability: `/api/bootstrap`, `/api/oauth2`.
-  - Peer-FE / control-plane paths that are IP-whitelisted or token-gated inside the handler: `/image`, `/check`, `/journal_id`, `/info`, `/role`, `/dump`, `/dump_starmgr`, `/service_id`, `/static`, `/api/_meta_replay_state`, `/api/get_small_file`.
+  - Peer-FE / control-plane paths that are IP-whitelisted or token-gated inside the handler: `/image`, `/check`, `/journal_id`, `/info`, `/role`, `/static`, `/api/get_small_file`.
 
-  Privileged endpoints additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.
+  `/dump`, `/dump_starmgr`, and `/service_id` are not exempt: regardless of this setting, they accept only an authenticated admin. The caller can authenticate with HTTP Basic Auth or with the session cookie obtained by logging in to the FE web console. A user is treated as an admin if any of the following holds: the user has the SYSTEM-level `NODE` privilege through a role that is active at login, for example the built-in `cluster_admin` role set as a default role of the user (when `activate_all_roles_on_login` is `true`, any granted role counts); the user is `root` or has the `root` role; the user has both the `db_admin` and `user_admin` roles.
+
+  `/api/_meta_replay_state` is not exempt either: regardless of this setting, it requires HTTP Basic Auth of a user who is `root`, has the `root` role, or has both the `db_admin` and `user_admin` roles. The `NODE` privilege alone is not enough.
+
+  Other privileged endpoints that this setting governs (this does not apply to `/dump`, `/dump_starmgr`, `/service_id`, and `/api/_meta_replay_state`) additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.
+
+### `enable_rest_bearer_authentication`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Master switch for Bearer-token authentication on the non-MySQL channels (HTTP, Arrow Flight, and BE-direct Stream Load). When set to `false`, these channels reject any `Authorization: Bearer ...` request with HTTP 401 and fall back to the behavior where only the MySQL protocol supports token authentication; Basic authentication and existing Arrow Flight UUID session tokens are unaffected. MySQL protocol authentication is never gated by this switch.
+- Introduced in: v4.2
 
 ### `http_web_page_display_hardware`
 
@@ -1025,6 +1108,69 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: The port on which the HTTPS server in the FE node listens.
 - Introduced in: v4.0
+
+### `ssl_keystore_type`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The keystore type used by FE SSL and HTTPS. If this value is empty, StarRocks automatically tries the JVM default keystore type, JKS, and PKCS12. Set this value explicitly for other keystore formats, such as BCFKS.
+- Introduced in: -
+
+### `ssl_keystore_provider`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The security provider used to load the SSL keystore. Leave it empty to use the provider selected by the JVM. Set this value when the configured keystore type must be loaded by a specific provider, such as `BCFIPS`.
+- Introduced in: -
+
+### `ssl_truststore_type`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The truststore type used by MySQL SSL. If this value is empty, StarRocks automatically tries the JVM default keystore type, JKS, and PKCS12. Set this value explicitly for other truststore formats, such as BCFKS.
+- Introduced in: -
+
+### `ssl_truststore_provider`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The security provider used to load the SSL truststore for MySQL SSL. Leave it empty to use the provider selected by the JVM. Set this value when the configured truststore type must be loaded by a specific provider, such as `BCFIPS`.
+- Introduced in: -
+
+### `ssl_security_provider_class`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The security provider class registered before StarRocks loads the SSL keystore or truststore. Leave it empty if the required provider is already registered by the JVM.
+- Introduced in: -
+
+### `ssl_security_provider_name`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The expected security provider name. If this value is set and a provider with the same name already exists, StarRocks reuses it. If StarRocks registers `ssl_security_provider_class`, the registered provider name must match this value.
+- Introduced in: -
+
+### `ssl_security_provider_path`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The path of the security provider JAR. Multiple paths can be separated by the system path separator. Leave it empty if the provider class is already available in the FE classpath.
+- Introduced in: -
 
 ### `max_mysql_service_task_threads_num`
 
@@ -1090,6 +1236,15 @@ This topic introduces the following types of FE configurations:
   1. `select version();`
   2. Handshake packet version
   3. Value of the global variable `version` (`show variables like 'version';`)
+- Introduced in: -
+
+### `mysql_service_compression_enabled`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the FE offers the MySQL compressed protocol (zlib and zstd) in the connection handshake. Only clients that request compression get compressed traffic, for example `mysql --compression-algorithms=zstd` or JDBC `useCompression=true`; other clients are unaffected. When set to `false`, the FE stops offering compression. A change applies to new connections only.
 - Introduced in: -
 
 ### `mysql_service_io_threads_num`
@@ -1233,7 +1388,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: No
-- Description: The length of time after which idle client connections time out.
+- Description: The length of time after which idle client connections time out. The FE Thrift server closes a client connection once it has been idle for this long. An FE therefore replaces its own pooled connections to other FEs once they have been idle for 80% of this value, instead of sending a request on a connection that the other FE may already have closed. Set the same value on all FEs.
 - Introduced in: -
 
 ### `thrift_rpc_max_body_size`
@@ -1260,8 +1415,21 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue.
+- Description: How many connections can wait for a worker thread while all `thrift_server_max_worker_threads` workers are busy. This bounds what the pending queue can hold, not what it will serve: a connection arriving once the queue is full is closed immediately instead of being retried, and a queued connection that waits longer than `thrift_server_queue_timeout_ms` is closed without being served once a worker reaches it. The two cases are counted separately, by `starrocks_fe_thrift_server_rejected_connections_total` and `starrocks_fe_thrift_server_expired_connections_total`.
 - Introduced in: -
+
+### `thrift_server_queue_timeout_ms`
+
+- Default: 0
+- Type: Long
+- Unit: ms
+- Is mutable: Yes
+- Description: The maximum time a connection may wait in the Thrift server pending queue before a worker thread picks it up. A connection that has waited longer is closed without being served, on the assumption that its caller has abandoned it and serving it only holds a worker away from work someone is still waiting for. When armed, this also bounds how long the queue takes to drain after a burst, however deep it grew.
+
+  `0`, the default, disables the check: every queued connection is served no matter how long it waited. The check is off by default because that assumption does not hold for every caller, and a queued connection carries no deadline the server can read. The deadlines callers actually use span four orders of magnitude. Plain FE-internal RPCs give up after `thrift_rpc_timeout_ms` (10 seconds), but a statement forwarded from a follower to the leader waits the session's execution timeout plus `thrift_rpc_timeout_ms` -- about 310 seconds at the default `query_timeout`, and about four hours at the default `insert_timeout` -- and BE stream-load and transaction-commit RPCs wait `stream_load_thrift_rpc_timeout_ms` (60 seconds) or a quarter of the load's own `timeout_second`, whichever is larger. Because `query_timeout`, `insert_timeout` and `timeout_second` are all user-settable and unbounded, no fixed value is safe for every cluster: a timeout short enough to speed up recovery can also cut off a forwarded statement whose client is still waiting, during exactly the saturation it was meant to shorten.
+
+  Arm it per cluster, at a value above the largest deadline that cluster's clients rely on -- derive it from that cluster's `query_timeout` and `insert_timeout`. Each drop is counted in `starrocks_fe_thrift_server_expired_connections_total` and reported by a rate-limited WARN naming the peer. `starrocks_fe_thrift_server_queue_wait_ms` reports queue waits whether or not the check is armed, so use it to size the value before arming it.
+- Introduced in: v4.2.0
 
 ## Metadata and cluster management
 
@@ -1691,6 +1859,15 @@ This topic introduces the following types of FE configurations:
 - Description: Interval, in seconds, between executions of the LockChecker frontend daemon (named "deadlock-checker"). The daemon performs deadlock detection and slow-lock scanning; the configured value is multiplied by 1000 to set the timer in milliseconds. Decreasing this value reduces detection latency but increases scheduling and CPU overhead; increasing it reduces overhead but delays detection and slow-lock reporting. Changes take effect at runtime because the daemon resets its interval each run. This setting interacts with `lock_checker_enable_deadlock_check` (enables deadlock checks) and `slow_lock_threshold_ms` (defines what constitutes a slow lock).
 - Introduced in: v3.2.0
 
+### `lock_manager_lock_table_num`
+
+- Default: 256
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of hash buckets, that is, lock tables, across which Lock Manager shards metadata locks. Each resource is mapped to one bucket by its resource ID, and each bucket is guarded by its own mutex, so a larger value reduces contention between lockers that work on unrelated resources, at the cost of slightly more memory. The value is read once when Lock Manager is created, so a change takes effect only after the FE restarts. The default value is changed from `32` to `256` from v4.1.0, v4.0.1, and v3.5.8 onwards.
+- Introduced in: v3.3.0
+
 ### `master_sync_policy`
 
 - Default: SYNC
@@ -1724,6 +1901,24 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum duration by which the metadata on the follower and observer FEs can lag behind that on the leader FE. Unit: seconds. If this duration is exceeded, the non-leader FEs stops providing services.
 - Introduced in: -
 
+### `meta_freshness_check_interval_ms`
+
+- Default: 1000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The interval at which a Follower or Observer FE re-evaluates whether its metadata is still fresh enough to serve reads, as defined by `meta_delay_toleration_second`. Values outside the range [10, 5000] are clamped. This check runs on a dedicated thread rather than on the metadata replay thread, so that the node still stops serving stale metadata while a single journal entry is taking a long time to apply, for example when a replay operation is waiting for a database lock.
+- Introduced in: v4.2
+
+### `metadata_replay_stuck_warn_threshold_second`
+
+- Default: 30
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: A metadata journal entry that has been applying for longer than this duration is reported in **fe.log** as a stuck replay, together with the stack of the replay thread, so that you can identify what is blocking metadata replay. Set this item to `0` to disable the report.
+- Introduced in: v4.2
+
 ### `meta_dir`
 
 - Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/meta"
@@ -1740,6 +1935,15 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to ignore an unknown log ID. When an FE is rolled back, the FEs of the earlier version may be unable to recognize some log IDs. If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits.
+- Introduced in: -
+
+### `offheap_deflate_buffer_pool_max_bytes`
+
+- Default: 128L * 1024 * 1024 (134217728)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum total size of the off-heap buffers that the FE keeps for gzip and zlib compression, such as compressing query profiles before they are stored in `ProfileManager`. Compressing between off-heap buffers keeps the JVM from blocking garbage collection during compression, which can otherwise make memory allocations fail with an `OutOfMemoryError` while the heap still has room to reclaim. Each compression in progress uses two 256 KB buffers regardless of the data size, so the default value allows 256 compressions at the same time. When no buffer is available within this limit, the data is compressed on the heap as before. Lowering the value at runtime takes effect as buffers are returned. Set it to `0` to disable off-heap compression: all data is then compressed on the heap in small chunks, and the off-heap buffers already allocated are released.
 - Introduced in: -
 
 ### `profile_info_format`
@@ -1814,7 +2018,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Controls the total number of attempts a Thrift RPC call will make. This value is used by `ThriftRPCRequestExecutor` (and callers such as `NodeMgr` and `VariableMgr`) as the loop count for retries — i.e., a value of 3 allows up to three attempts including the initial try. On `TTransportException` the executor will try to reopen the connection and retry up to this count; it will not retry when the cause is a `SocketTimeoutException` or when reopen fails. Each attempt is subject to the per-attempt timeout configured by `thrift_rpc_timeout_ms`. Increasing this value improves resilience to transient connection failures but can increase overall RPC latency and resource usage.
+- Description: Controls the total number of attempts a Thrift RPC call will make. This value is used by `ThriftRPCRequestExecutor` (and callers such as `NodeMgr` and `VariableMgr`) as the loop count for retries — i.e., a value of 3 allows up to three attempts including the initial try. On `TTransportException` the executor will try to reopen the connection and retry up to this count; it will not retry when the cause is a `SocketTimeoutException` or when reopen fails. Before each retry, the executor waits a random interval with exponential backoff (100 to 200 ms before the first retry, with both bounds doubling for each further retry until the wait reaches 500 to 1000 ms) and only then reopens the connection, so that callers that lost their connections at the same moment do not all reconnect at the same moment. Each attempt is subject to the per-attempt timeout configured by `thrift_rpc_timeout_ms`. Increasing this value improves resilience to transient connection failures but can increase overall RPC latency and resource usage.
 - Introduced in: v3.2.0
 
 ### `thrift_rpc_strict_mode`

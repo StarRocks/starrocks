@@ -143,13 +143,11 @@ struct StorageColumnTraits<TYPE_DATETIME> {
 template <>
 struct StorageColumnTraits<TYPE_CHAR> {
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
 };
 
 template <>
 struct StorageColumnTraits<TYPE_VARCHAR> {
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
 };
 
 template <>
@@ -175,19 +173,14 @@ struct StorageColumnTraits<TYPE_JSON> {
 template <>
 struct StorageColumnTraits<TYPE_VARIANT> {
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
 };
 
 template <>
 struct StorageColumnTraits<TYPE_VARBINARY> {
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
 };
 
 template <LogicalType Type>
 using StorageColumnType = typename StorageColumnTraits<Type>::ColumnType;
-
-template <LogicalType Type>
-using StorageLargeColumnType = typename StorageColumnTraits<Type>::LargeColumnType;
 
 } // namespace starrocks

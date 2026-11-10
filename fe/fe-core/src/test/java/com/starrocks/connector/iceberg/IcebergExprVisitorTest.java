@@ -579,4 +579,21 @@ public class IcebergExprVisitorTest {
                 context);
         Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
     }
+
+    // _pos is not a column of the table schema: predicates on it are left to the BE instead of failing planning
+    @Test
+    public void testMetadataColumnPredicateNotPushedDown() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+        ColumnRefOperator pos = new ColumnRefOperator(100, IntegerType.BIGINT, "_pos", true, false);
+        List<ScalarOperator> predicates = List.of(
+                new BinaryPredicateOperator(BinaryType.EQ, pos, ConstantOperator.createBigint(0)),
+                new InPredicateOperator(false, pos, ConstantOperator.createBigint(1), ConstantOperator.createBigint(2)),
+                new IsNullPredicateOperator(false, pos));
+        for (ScalarOperator predicate : predicates) {
+            Assertions.assertNull(converter.convertStrict(Lists.newArrayList(predicate), context));
+            Assertions.assertEquals(Expressions.alwaysTrue().toString(),
+                    converter.convert(Lists.newArrayList(predicate), context).toString());
+        }
+    }
 }
