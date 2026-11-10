@@ -15,12 +15,7 @@ Enables orchestration and scheduling of data workflows with StarRocks using DAGs
 ### Prerequisites
 - Apache Airflow 2.0+ or 3.0+
 - Python 3.8+
-:::product oss
 - Access to a StarRocks cluster (see the [quickstart guide](../quick_start/quick_start.mdx))
-:::
-:::product anywhere
-- Access to a StarRocks cluster
-:::
 ### Install 
 The MySQL provider package is required to use StarRocks as StarRocks uses MySQL protocol. 
 
