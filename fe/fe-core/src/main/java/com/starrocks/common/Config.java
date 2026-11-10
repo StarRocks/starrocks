@@ -5510,16 +5510,17 @@ public class Config extends ConfigBase {
      * so raising this to tune pre-split also delays that split. The bound is the warehouse's
      * compute-node count capped by tablet_reshard_max_split_count, so lowering that configuration
      * lowers both the width this rule aims for and the tablet count at which it stops. The adaptive walk
-     * floors its child count and will not act until a tablet is worth two whole targets, so unlike
-     * the size rule it does not produce children below the target it aimed at.
+     * floors its child count and will not act until a tablet is worth two whole targets; the slots that
+     * leaves unspent go afterwards to the largest tablets it left alone, and this value is also the
+     * smallest child that fill may cut.
      *
      * <p>That target never exceeds the table's own target size (the tablet_reshard_target_size table
      * property of a range-distributed table that has one, else the tablet_reshard_target_size
      * configuration), so a value at or above it turns the adaptive split off for that table.
      */
     @ConfField(mutable = true, comment = "Minimum size of a tablet produced by pre-split, and the lower "
-            + "bound on the target an under-provisioned index splits at. Should be no larger than "
-            + "tablet_reshard_target_size; setting it at or above a table's target size (its "
+            + "bound on the target an under-provisioned index splits at and on the tablets it splits into. "
+            + "Should be no larger than tablet_reshard_target_size; setting it at or above a table's target size (its "
             + "tablet_reshard_target_size table property if it has one, else the tablet_reshard_target_size "
             + "configuration) disables the adaptive split for that table.")
     public static long tablet_reshard_min_split_size = 2L * 1024L * 1024L * 1024L;

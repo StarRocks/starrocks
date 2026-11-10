@@ -114,11 +114,10 @@ public class TabletReshardUtils {
      * does, is the index reaching the bound -- the headroom test in
      * {@code SplitTabletJobFactory#planIndexSplits}, which owns that count.
      *
-     * <p>The floor is clamped to the target. That clamp is what makes
-     * {@code tablet_reshard_min_split_size >= tablet_reshard_target_size} switch the adaptive behaviour
-     * off: the floor becomes the target, and the whole expression collapses to the target. Without the
-     * clamp, a minimum above the target would raise the effective target above it and change the
-     * steady-state rule too.
+     * <p>{@code tablet_reshard_min_split_size >= tablet_reshard_target_size} switches the adaptive
+     * behaviour off: {@link #adaptiveSplitFloor} answers 0 and this returns the steady-state target
+     * unchanged, rather than letting a minimum above the target raise the effective target above it and
+     * change the steady-state rule too.
      *
      * <p>{@code bound} sits at or below the auto-merge parallelism floor -- it is that floor clamped
      * to the node count, so a single-node warehouse gets 1 where the floor is 2. Merge acts strictly
@@ -127,14 +126,30 @@ public class TabletReshardUtils {
      * untouched.
      */
     public static long adaptiveTargetSize(long indexDataSize, long steadyTargetSize, int bound) {
-        long configuredFloor = Config.tablet_reshard_min_split_size;
-        // A non-positive minimum has no validator on it, and without a floor this expression would let
-        // an index be carved to the split-count cap. Treat it as "no adaptive target", not "no floor".
-        if (bound <= 0 || steadyTargetSize <= 0 || configuredFloor <= 0) {
+        return adaptiveTargetSize(indexDataSize, steadyTargetSize, bound, adaptiveSplitFloor(steadyTargetSize));
+    }
+
+    /**
+     * As above, against a floor the caller has already read with {@link #adaptiveSplitFloor}. A caller that
+     * also cuts children down to that floor must take one reading and pass it to both: the minimum is mutable,
+     * and two readings could leave the target and the floor disagreeing about whether the rule is on.
+     */
+    public static long adaptiveTargetSize(long indexDataSize, long steadyTargetSize, int bound, long floor) {
+        if (bound <= 0 || floor <= 0) {
             return steadyTargetSize;
         }
-        long floor = Math.min(configuredFloor, steadyTargetSize);
         return Math.max(floor, Math.min(steadyTargetSize, indexDataSize / bound));
+    }
+
+    /**
+     * Smallest tablet the adaptive rule may produce, or 0 when the rule is off:
+     * {@code tablet_reshard_min_split_size} while it sits strictly between zero and the steady-state target.
+     * At or above the target is the documented off switch. A non-positive minimum has no validator on it, and
+     * treating it as "no floor" would let an index be carved to the split-count cap, so it is off too.
+     */
+    public static long adaptiveSplitFloor(long steadyTargetSize) {
+        long configuredFloor = Config.tablet_reshard_min_split_size;
+        return configuredFloor > 0 && configuredFloor < steadyTargetSize ? configuredFloor : 0;
     }
 
     /**
@@ -143,7 +158,8 @@ public class TabletReshardUtils {
      *
      * <p>Requiring two whole targets rather than the size rule's one and a half is what keeps every
      * child worth at least a target: a tablet of 1.6 targets would otherwise round to two children of
-     * 0.8 each, more tablets than its share and each still under size.
+     * 0.8 each, more tablets than its share and each still under size. The slots this leaves unspent are
+     * filled afterwards, down to {@link #adaptiveSplitFloor}: see {@code SplitTabletJobFactory#planIndexSplits}.
      *
      * <p>Flooring bounds the children this asks for, but NOT the width of the index. The tablets it
      * declines still occupy slots and are absent from that sum, so a skewed index would be widened
