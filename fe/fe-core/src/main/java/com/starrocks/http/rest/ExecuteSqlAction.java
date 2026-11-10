@@ -165,6 +165,7 @@ public class ExecuteSqlAction extends RestBaseAction {
             LOG.warn("fail to process url: {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()), e);
             RestBaseResult failResult = new RestBaseResult(e.getMessage());
             response.getContent().append(failResult.toJson());
+            response.updateHeader(BaseResponse.HEADER_QUERY_ID, context.getQueryId().toString());
             writeResponse(request, response, HttpResponseStatus.valueOf(e.getCode().code()));
         }
     }

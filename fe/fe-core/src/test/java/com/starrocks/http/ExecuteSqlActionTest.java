@@ -14,11 +14,14 @@
 package com.starrocks.http;
 
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
+import mockit.Mock;
+import mockit.MockUp;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -32,6 +35,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.IOException;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.mockito.Mockito.mock;
@@ -40,6 +44,7 @@ import static org.mockito.Mockito.when;
 @TestMethodOrder(MethodName.class)
 public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
     private static final String QUERY_EXECUTE_API = "/api/v1/catalogs/default_catalog/sql";
+    private static final UUID QUERY_ID = UUID.fromString("12345678-1234-5678-9abc-def012345678");
 
     @BeforeEach
     @Override
@@ -58,6 +63,7 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void test1ExecuteSqlSuccess() throws Exception {
+        mockQueryId();
         RequestBody body =
                 RequestBody.create(JSON, "{ \"query\" :  \"kill 1\" }");
 
@@ -83,6 +89,7 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
 
         response = networkClient.newCall(request).execute();
 
+        Assertions.assertEquals(QUERY_ID.toString(), response.header(BaseResponse.HEADER_QUERY_ID));
         respStr = Objects.requireNonNull(response.body()).string();
         expected =
                 "{\"meta\":[{\"name\":\"Catalog\",\"type\":\"varchar(256)\"},{\"name\":\"Type\",\"type\":\"varchar(20)\"}," +
@@ -112,6 +119,7 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void test2ExecuteSqlFail() throws IOException {
+        mockQueryId();
         RequestBody body =
                 RequestBody.create(JSON, "{ \"query\": \" \" }");
 
@@ -125,6 +133,7 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
 
         String respStr = Objects.requireNonNull(response.body()).string();
         Assertions.assertEquals(500, response.code());
+        Assertions.assertEquals(QUERY_ID.toString(), response.header(BaseResponse.HEADER_QUERY_ID));
         JSONObject jsonObject = new JSONObject(respStr);
         Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
         Assertions.assertEquals("\"query can not be empty\"", jsonObject.get("msg").toString());
@@ -212,6 +221,52 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         jsonObject = new JSONObject(respStr);
         Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
         Assertions.assertTrue(jsonObject.get("msg").toString().contains("Unknown system variable"));
+
+        body = RequestBody.create(JSON, "{ \"query\" : \"select missing_column from " + DB_NAME + "." + TABLE_NAME + "\" }");
+        request = new Request.Builder()
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + QUERY_EXECUTE_API)
+                .post(body)
+                .build();
+        response = networkClient.newCall(request).execute();
+        respStr = Objects.requireNonNull(response.body()).string();
+        Assertions.assertEquals(500, response.code());
+        Assertions.assertEquals(QUERY_ID.toString(), response.header(BaseResponse.HEADER_QUERY_ID));
+        Assertions.assertTrue(respStr.contains("missing_column"));
+    }
+
+    private void mockQueryId() {
+        new MockUp<UUIDUtil>() {
+            @Mock
+            public UUID genUUID() {
+                return QUERY_ID;
+            }
+        };
+    }
+
+    @Test
+    public void testQueryIdChangesBetweenErrorResponses() throws IOException {
+        RequestBody body = RequestBody.create(JSON, "{ \"query\": \" \" }");
+        Request request = new Request.Builder()
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + QUERY_EXECUTE_API)
+                .post(body)
+                .build();
+
+        Response first = networkClient.newCall(request).execute();
+        Assertions.assertEquals(500, first.code());
+        String firstQueryId = first.header(BaseResponse.HEADER_QUERY_ID);
+        Assertions.assertNotNull(firstQueryId);
+        Assertions.assertEquals(firstQueryId, UUID.fromString(firstQueryId).toString());
+        Objects.requireNonNull(first.body()).close();
+
+        Response second = networkClient.newCall(request).execute();
+        Assertions.assertEquals(500, second.code());
+        String secondQueryId = second.header(BaseResponse.HEADER_QUERY_ID);
+        Assertions.assertNotNull(secondQueryId);
+        Assertions.assertEquals(secondQueryId, UUID.fromString(secondQueryId).toString());
+        Assertions.assertNotEquals(firstQueryId, secondQueryId);
+        Objects.requireNonNull(second.body()).close();
     }
 
     @Test
@@ -235,6 +290,9 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
             String responseBody = Objects.requireNonNull(response.body()).string();
             Assertions.assertEquals(503, response.code());
             Assertions.assertTrue(responseBody.contains("No available connection ID"));
+            String queryId = response.header(BaseResponse.HEADER_QUERY_ID);
+            Assertions.assertNotNull(queryId);
+            Assertions.assertEquals(queryId, UUID.fromString(queryId).toString());
         } finally {
             Deencapsulation.setField(executeEnv, "scheduler", originalScheduler);
         }
