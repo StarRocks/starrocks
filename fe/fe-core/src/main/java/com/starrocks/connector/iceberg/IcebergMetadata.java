@@ -2511,6 +2511,26 @@ public class IcebergMetadata implements ConnectorMetadata {
     // Returns a negative value when any matching manifest has files but is missing both
     // addedRowsCount and existingRowsCount (e.g. v1 manifest list or upgraded metadata) —
     // callers must fall back to planFiles for exact cardinality.
+    // Read from the snapshot's manifest list only (memoized on the Snapshot, scan planning reads it anyway). An
+    // incremental (delta) version reads part of the table, so it gets no range.
+    @Override
+    public Map<String, Pair<Double, Double>> getPartitionSourceColumnRanges(Table table, TvrVersionRange version) {
+        if (!(table instanceof IcebergTable icebergTable) || icebergTable.isUnPartitioned()
+                || version == null || version.isEmpty() || !version.end().isPresent()
+                || (version instanceof TvrTableDelta && version.start() != null && version.start().isPresent())) {
+            return Map.of();
+        }
+        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+        Snapshot snapshot = nativeTable.snapshot(version.end().get());
+        if (snapshot == null) {
+            return Map.of();
+        }
+        // The schema the query is bound to (a time-travel read may use a historical one), so the ranges are keyed by
+        // the column names the query uses.
+        return IcebergPartitionSourceRanges.compute(icebergTable.getReadSchema(), nativeTable.specs(),
+                snapshot.dataManifests(nativeTable.io()));
+    }
+
     private long getManifestPrunedRowCount(IcebergTable icebergTable, ScalarOperator predicate, TvrVersionRange version) {
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         if (!version.end().isPresent()) {
