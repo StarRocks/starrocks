@@ -14,6 +14,7 @@
 
 package com.starrocks.sql;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
@@ -517,6 +518,8 @@ public class InsertPlanner {
 
         //6. Fill in the shadow column
         optExprBuilder = fillShadowColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
+
+        checkExternalWriteTypes(targetTable, outputFullSchema, outputColumns);
 
         //7. Cast output columns type to target type
         optExprBuilder =
@@ -1328,6 +1331,26 @@ public class InsertPlanner {
             }
         }
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
+    @VisibleForTesting
+    static void checkExternalWriteTypes(Table table, List<Column> columns, List<ColumnRefOperator> outputColumns) {
+        Preconditions.checkState(columns.size() == outputColumns.size(),
+                "columns size %s must equal outputColumns size %s", columns.size(), outputColumns.size());
+        if (!table.isIcebergTable() && !table.isHiveTable() && !table.isTableFunctionTable()) {
+            return;
+        }
+        for (int i = 0; i < columns.size(); i++) {
+            Type targetType = columns.get(i).getType();
+            Type outputType = outputColumns.get(i).getType();
+            if (targetType.isGeoType() || targetType.hasNestedGeoType()
+                    || outputType.isGeoType() || outputType.hasNestedGeoType()) {
+                throw new SemanticException("Cannot write native geo values to external table column '%s' " +
+                        "(target type %s, output type %s). " +
+                        "Use ST_AsText/ST_AsBinary to serialize geo values before writing",
+                        columns.get(i).getName(), targetType.toSql(), outputType.toSql());
+            }
+        }
     }
 
     private boolean needToSkip(InsertStmt stmt, int columnIdx) {
