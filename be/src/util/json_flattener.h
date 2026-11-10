@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <set>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -55,6 +56,25 @@ using FlatJsonHashMap = std::unordered_map<K, V>;
 template <typename K, typename V>
 using FlatJsonHashMap = phmap::flat_hash_map<K, V>;
 #endif
+
+namespace flat_json {
+// What JsonPathDeriver::_visit_json_paths collects for a path, gathered from the values of a JSON-typed
+// sub-column. Kept in the segment (JsonValueStatsPB) so a later derivation from metadata can type the path by
+// its values instead of leaving it JSON.
+struct JsonValueStats {
+    uint8_t json_type = 31; // JSON_NULL_TYPE_BITS
+    // non-NULL rows
+    uint64_t values = 0;
+    // values of a base JSON type (JSON_BASE_TYPE)
+    uint64_t base_type_count = 0;
+    uint64_t max_uint = 0;
+    int64_t min_int = 0;
+
+    // `column` is a JSON column, nullable or not.
+    void update(const Column& column);
+    void merge(const JsonValueStats& other);
+};
+} // namespace flat_json
 
 class JsonFlatPath {
 public:
@@ -174,6 +194,12 @@ private:
     // Keeps the trie within _max_nodes between rows. See _derived().
     void _shrink_path_tree(size_t current_row);
     size_t _drop_singleton_paths(JsonFlatPath* node, size_t current_row);
+
+    // After a derivation: drops the paths an input cannot be read into and, from metadata, types JSON the paths
+    // some input may hold in its remain. Each input is given as its sub-column paths and whether it has a remain.
+    // With `type_from_remain` false the types stay as derived (the remain values were visited).
+    void _keep_readable_paths(const std::vector<std::pair<std::set<std::string>, bool>>& input_layouts,
+                              bool type_from_remain);
     static size_t _count_nodes(const JsonFlatPath* node);
     // A key left out of the trie ends up in the remain column, so the remain filter must report it.
     void _add_remain_key(const std::string_view& key);
@@ -345,6 +371,8 @@ private:
 
         bool is_merge = false;
         bool need_cast = false;
+        // Extract the destination type from a JSON sub-column value by value (see _from_json).
+        bool from_json = false;
 
         int dst_index = -1;
         std::vector<int> src_index;
@@ -362,6 +390,7 @@ private:
 
     Status _equals(const MergeTask& task, const Columns& columns);
     Status _cast(const MergeTask& task, const ColumnPtr& columns);
+    Status _from_json(const MergeTask& task, const ColumnPtr& col);
     Status _merge(const MergeTask& task, const Columns& columns);
     void _flat(const FlatTask& task, const Columns& columns);
 
