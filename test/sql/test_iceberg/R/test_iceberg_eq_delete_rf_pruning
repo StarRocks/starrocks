@@ -243,8 +243,6 @@ select m.* from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed m join dim_p d on
 set enable_read_iceberg_equality_delete_with_partition_evolution = false;
 -- result:
 -- !result
-<<<<<<< HEAD
-=======
 create table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated_src(
     id int,
     v string,
@@ -302,7 +300,6 @@ select count(*) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated;
 set enable_iceberg_identity_column_optimize = true;
 -- result:
 -- !result
->>>>>>> a0c2fd4 ([BugFix][RB-225] Fix wrong results: Iceberg renamed columns without field ids, NaN ORC bounds, identity partition values, non-deterministic join predicates (#82800))
 function: assert_explain_not_contains("delete from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.fact where p in (select p from db_${uuid0}.dim_p) and v = 'a2'", 'Runtime filter pruning columns')
 -- result:
 None

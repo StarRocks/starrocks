@@ -341,66 +341,6 @@ public class IcebergEqualityDeleteRewriteRuleTest {
         }
     }
 
-<<<<<<< HEAD
-=======
-    // A query that does not read the identity partition column still matches partitions by it rather than by the
-    // VARCHAR $partition_key: the data-file scan reads it next to the key, and the delete scan takes it as a slot.
-    @Test
-    public void testPartitionColumnReplacesPartitionKeyWhenNotSelected() {
-        OptExpression antiJoin = rewriteEqDeleteScanSelectingV(new ConnectContext());
-        LogicalIcebergScanOperator withDeleteScan = antiJoin.inputAt(0).getOp().cast();
-        LogicalIcebergEqualityDeleteScanOperator eqDeleteScan = antiJoin.inputAt(1).getOp().cast();
-        Set<String> withDeleteColumns = Set.copyOf(withDeleteScan.getColumnNameToColRefMap().keySet());
-        Assertions.assertTrue(withDeleteColumns.containsAll(Set.of("id", "p", "v")), withDeleteColumns.toString());
-        Assertions.assertFalse(withDeleteColumns.contains(PARTITION_KEY), withDeleteColumns.toString());
-        Assertions.assertEquals(Set.of("p"), eqDeleteScan.getRuntimeFilterPruningColumns());
-
-        Map<String, BinaryType> onTypes = new HashMap<>();
-        collectBinaryTypes(((LogicalJoinOperator) antiJoin.getOp())
-                .getOnPredicate(), onTypes);
-        Assertions.assertEquals(Map.of("id", BinaryType.EQ_FOR_NULL, "p", BinaryType.EQ_FOR_NULL,
-                DATA_SEQUENCE_NUMBER, BinaryType.LT), onTypes);
-    }
-
-    // rewrites a scan of tb(id, p, v) partitioned by identity(p) with an equality delete on id, selecting v only, as
-    // `select sum(v) from tb` does after column pruning; returns the anti join
-    private static OptExpression rewriteEqDeleteScanSelectingV(ConnectContext connectContext) {
-        return rewriteEqDeleteScanSelectingV(connectContext, new Schema(
-                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
-                Types.NestedField.optional(2, "p", Types.IntegerType.get()),
-                Types.NestedField.optional(3, "v", Types.IntegerType.get())));
-    }
-
-    private static OptExpression rewriteEqDeleteScanSelectingV(ConnectContext connectContext, Schema schema) {
-        PartitionSpec byP = PartitionSpec.builderFor(schema).withSpecId(0).identity("p").build();
-        Table nativeTable = Mockito.mock(Table.class);
-        Mockito.when(nativeTable.schema()).thenReturn(schema);
-        Mockito.when(nativeTable.spec()).thenReturn(byP);
-        Mockito.when(nativeTable.specs()).thenReturn(Map.of(0, byP));
-        Mockito.when(nativeTable.properties()).thenReturn(Map.of());
-        IcebergTable table = new IcebergTable(1, "tb", "catalog", "resource", "db", "tb", "",
-                IcebergApiConverter.toFullSchemas(schema, nativeTable), nativeTable, Map.of());
-
-        ColumnRefFactory factory = new ColumnRefFactory();
-        Map<ColumnRefOperator, Column> colRefToColumn = new LinkedHashMap<>();
-        Map<Column, ColumnRefOperator> columnToColRef = new HashMap<>();
-        for (Column column : table.getFullSchema()) {
-            ColumnRefOperator ref = factory.create(column.getName(), column.getType(), true);
-            if (column.getName().equals("v")) {
-                colRefToColumn.put(ref, column);
-            }
-            columnToColRef.put(column, ref);
-        }
-        LogicalIcebergScanOperator scan = new LogicalIcebergScanOperator(table, colRefToColumn,
-                columnToColRef, -1, null, TvrTableSnapshot.of(Optional.of(1L)));
-        scan.setDeleteSchemas(Set.of(IcebergDeleteSchema.of(List.of(1), 0)));
-
-        List<OptExpression> result = new IcebergEqualityDeleteRewriteRule().transform(
-                OptExpression.create(scan), OptimizerFactory.mockContext(connectContext, factory));
-        return result.get(0).inputAt(1).inputAt(0);
-    }
-
->>>>>>> a0c2fd4 ([BugFix][RB-225] Fix wrong results: Iceberg renamed columns without field ids, NaN ORC bounds, identity partition values, non-deterministic join predicates (#82800))
     // Time travel to a snapshot from before the equality key was renamed: the tables the rewrite derives must
     // carry the snapshot read view, and the key must resolve by field id under that schema, so both the
     // data-file scan and the delete-file scan read the key with the snapshot's name.

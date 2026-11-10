@@ -36,12 +36,7 @@ import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.DateType;
-<<<<<<< HEAD
-=======
 import com.starrocks.type.VarbinaryType;
-import mockit.Mock;
-import mockit.MockUp;
->>>>>>> a0c2fd4 ([BugFix][RB-225] Fix wrong results: Iceberg renamed columns without field ids, NaN ORC bounds, identity partition values, non-deterministic join predicates (#82800))
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
@@ -60,6 +55,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
