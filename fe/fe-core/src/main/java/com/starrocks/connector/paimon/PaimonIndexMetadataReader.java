@@ -55,8 +55,17 @@ final class PaimonIndexMetadataReader {
     private PaimonIndexMetadataReader() {
     }
 
-    static ConnectorIndexMetadata load(FileStoreTable fileStoreTable, Snapshot snapshot) {
+    record SnapshotIndexMetadata(ConnectorIndexMetadata discovery, Set<Set<Integer>> indexedFieldGroups) {
+        SnapshotIndexMetadata {
+            Set<Set<Integer>> groups = new LinkedHashSet<>();
+            indexedFieldGroups.forEach(group -> groups.add(Set.copyOf(group)));
+            indexedFieldGroups = Set.copyOf(groups);
+        }
+    }
+
+    static SnapshotIndexMetadata load(FileStoreTable fileStoreTable, Snapshot snapshot) {
         Set<ConnectorIndexDescriptor> descriptors = new LinkedHashSet<>();
+        Set<Set<Integer>> indexedFieldGroups = new LinkedHashSet<>();
         TableSchema snapshotSchema = fileStoreTable.schemaManager().schema(snapshot.schemaId());
         if (snapshotSchema == null) {
             throw new StarRocksConnectorException(
@@ -69,14 +78,16 @@ final class PaimonIndexMetadataReader {
             entries = fileStoreTable.store().newIndexFileHandler().scan(snapshot, ignoredEntry -> true);
         }
         for (IndexManifestEntry entry : entries) {
-            IndexFileMeta indexFile = entry == null ? null : entry.indexFile();
-            if (indexFile == null) {
+            IndexFileMeta indexFile = entry.indexFile();
+            GlobalIndexMeta globalIndex = indexFile.globalIndexMeta();
+            if (globalIndex == null) {
                 continue;
             }
-            GlobalIndexMeta globalIndex = indexFile.globalIndexMeta();
+            // SDK selection also sees providers and extra indexed fields absent from our descriptors.
+            indexedFieldGroups.add(new LinkedHashSet<>(globalIndex.getIndexedFieldIds()));
             String provider = indexFile.indexType();
             IndexType indexType = toConnectorIndexType(provider);
-            if (globalIndex == null || indexType == null) {
+            if (indexType == null) {
                 continue;
             }
             DataField field = snapshotSchema.idToFieldMap().get(globalIndex.indexFieldId());
@@ -94,7 +105,8 @@ final class PaimonIndexMetadataReader {
 
             descriptors.add(newIndexDescriptor(indexType, field));
         }
-        return ConnectorIndexMetadata.of(snapshot.id(), tableType, new ArrayList<>(descriptors));
+        return new SnapshotIndexMetadata(ConnectorIndexMetadata.of(snapshot.id(), tableType,
+                new ArrayList<>(descriptors)), indexedFieldGroups);
     }
 
     private static ConnectorIndexDescriptor newIndexDescriptor(

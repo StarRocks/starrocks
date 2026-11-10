@@ -16,7 +16,7 @@ package com.starrocks.connector.paimon;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.starrocks.connector.index.ConnectorIndexMetadata;
+import com.starrocks.connector.paimon.PaimonIndexMetadataReader.SnapshotIndexMetadata;
 import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.types.DataType;
@@ -34,7 +34,7 @@ import java.util.function.Supplier;
 /** Connector-scoped cache for immutable, snapshot-bound index metadata. */
 final class PaimonIndexMetadataCache {
     private static final long FAILURE_LOG_INTERVAL_MS = Duration.ofMinutes(1).toMillis();
-    private final Cache<PaimonIndexMetadataCacheKey, ConnectorIndexMetadata> cache;
+    private final Cache<PaimonIndexMetadataCacheKey, SnapshotIndexMetadata> cache;
     private final Cache<SchemaKey, Set<Integer>> stableScalarFields;
     // Query metadata instances share this connector-scoped limiter, just like the cache.
     private final AtomicLong lastFailureLogTimeMs = new AtomicLong(Long.MIN_VALUE);
@@ -104,7 +104,7 @@ final class PaimonIndexMetadataCache {
         return type.copy(true);
     }
 
-    ConnectorIndexMetadata get(PaimonIndexMetadataCacheKey key, Supplier<ConnectorIndexMetadata> loader) {
+    SnapshotIndexMetadata get(PaimonIndexMetadataCacheKey key, Supplier<SnapshotIndexMetadata> loader) {
         return cache.get(key, ignored -> loader.get());
     }
 

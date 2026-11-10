@@ -94,6 +94,7 @@ import org.apache.paimon.metrics.Gauge;
 import org.apache.paimon.metrics.Metric;
 import org.apache.paimon.operation.metrics.ScanMetrics;
 import org.apache.paimon.predicate.Predicate;
+import org.apache.paimon.predicate.PredicateVisitor;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.schema.Schema;
@@ -107,6 +108,7 @@ import org.apache.paimon.table.source.InnerTableScan;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.ScanMode;
 import org.apache.paimon.table.source.Split;
+import org.apache.paimon.table.source.snapshot.TimeTravelUtil;
 import org.apache.paimon.table.system.SnapshotsTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
@@ -785,7 +787,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         org.apache.paimon.table.Table versionedPaimonTable = getNativeTable(resolvedTable,
                 tvrVersionRange, paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
         Map<String, String> options = new HashMap<>();
-        if (params.isDisableGlobalIndex()) {
+        boolean disableGlobalIndex = params.isDisableGlobalIndex();
+        if (disableGlobalIndex) {
             options.put("global-index.enabled", "false");
         }
         if (snapshotId >= 0) {
@@ -806,19 +809,32 @@ public class PaimonMetadata implements ConnectorMetadata {
         org.apache.paimon.table.Table paimonNativeTable = versionedPaimonTable instanceof FileStoreTable fileStoreTable
                 ? fileStoreTable.copyWithoutTimeTravel(options) : versionedPaimonTable.copy(options);
 
+        List<Predicate> predicates = extractPredicates(paimonNativeTable, params.getPredicate());
+        if (!disableGlobalIndex && paimonNativeTable instanceof FileStoreTable fileStoreTable) {
+            if (!fileStoreTable.coreOptions().globalIndexEnabled()) {
+                disableGlobalIndex = true;
+            } else if (hasUnsafeGlobalIndex(paimonTable, fileStoreTable, currentBranch, snapshotId, predicates)) {
+                disableGlobalIndex = true;
+                paimonNativeTable = fileStoreTable.copyWithoutTimeTravel(Map.of("global-index.enabled", "false"));
+            }
+        }
+        ConnectContext context = ConnectContext.get();
+        if (context != null && context.isStatementCancelled()) {
+            throw new StarRocksConnectorException("Paimon scan planning was cancelled");
+        }
+
         GetRemoteFilesParams copyParams = params.copy();
 
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
                 paimonTable.getCatalogTableName(), copyParams);
 
-        boolean cacheSplits = params.getConnectorIndexResult() == null && !params.isDisableGlobalIndex();
+        boolean cacheSplits = params.getConnectorIndexResult() == null && !disableGlobalIndex;
         PaimonSplitsInfo cachedSplits = cacheSplits ? paimonSplits.get(filter) : null;
         if (cachedSplits == null) {
             ReadBuilder readBuilder = paimonNativeTable.newReadBuilder();
             List<String> nativeFieldNames = paimonNativeTable.rowType().getFieldNames();
             int[] projected =
                     params.getFieldNames().stream().mapToInt(nativeFieldNames::indexOf).toArray();
-            List<Predicate> predicates = extractPredicates(paimonNativeTable, params.getPredicate());
             boolean pruneManifestsByLimit = params.getLimit() != -1 && params.getLimit() < Integer.MAX_VALUE
                     && onlyHasPartitionPredicate(table, params.getPredicate());
             readBuilder = readBuilder.withFilter(predicates).withProjection(projected);
@@ -828,7 +844,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
             InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
             boolean distributedIndexApplied = false;
-            if (!params.isDisableGlobalIndex()) {
+            if (!disableGlobalIndex) {
                 Optional<GlobalIndexResult> result = resolvePaimonGlobalIndexResult(params.getConnectorIndexResult(),
                         paimonNativeTable, currentBranch, tvrVersionRange);
                 if (result.isPresent()) {
@@ -855,6 +871,55 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
 
         return Lists.newArrayList(remoteFileInfo);
+    }
+
+    private boolean hasUnsafeGlobalIndex(PaimonTable table, FileStoreTable nativeTable, String branch,
+                                         long snapshotId, List<Predicate> predicates) {
+        if (predicates.isEmpty() || toConnectorIndexTableType(nativeTable.schema()) != TableType.DATA_EVOLUTION) {
+            return false;
+        }
+        if (snapshotId < 0) {
+            Tracers.record(EXTERNAL, "PaimonGlobalIndex.SdkFallback", "snapshot is not pinned");
+            return true;
+        }
+        try {
+            // Match the SDK's index snapshot and field binding.
+            Snapshot snapshot = TimeTravelUtil.tryTravelOrLatest(nativeTable);
+            if (snapshot == null || snapshot.id() != snapshotId) {
+                Tracers.record(EXTERNAL, "PaimonGlobalIndex.SdkFallback", "cannot verify index snapshot");
+                return true;
+            }
+            if (snapshot.indexManifest() == null) {
+                return false;
+            }
+            Set<Integer> predicateFields = new HashSet<>();
+            for (Predicate predicate : predicates) {
+                predicateFields.addAll(PredicateVisitor.collectFieldIds(nativeTable.rowType(), predicate));
+            }
+            Set<Integer> indexFields = new HashSet<>();
+            var indexMetadata = loadSnapshotIndexMetadata(table, nativeTable, branch, snapshot);
+            for (Set<Integer> group : indexMetadata.indexedFieldGroups()) {
+                if (!Collections.disjoint(group, predicateFields)) {
+                    indexFields.addAll(group);
+                }
+            }
+            if (indexFields.isEmpty() || indexMetadataCache.getStableScalarFields(catalogName,
+                    table.getCatalogDBName(), table.getCatalogTableName(), nativeTable).containsAll(indexFields)) {
+                return false;
+            }
+            Tracers.record(EXTERNAL, "PaimonGlobalIndex.SdkFallback", "incompatible historical index key encoding");
+        } catch (RuntimeException e) {
+            ConnectContext context = ConnectContext.get();
+            if (context != null && context.isStatementCancelled()) {
+                throw e;
+            }
+            Tracers.record(EXTERNAL, "PaimonGlobalIndex.SdkFallback", "cannot verify historical index key encoding");
+            if (indexMetadataCache.shouldLogFailure(System.currentTimeMillis())) {
+                LOG.warn("Cannot verify Paimon Global Index key encoding at snapshot {}; disabling index evaluation",
+                        snapshotId, e);
+            }
+        }
+        return true;
     }
 
     @Override
@@ -1087,7 +1152,6 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
 
         FileStoreTable fileStoreTable = (FileStoreTable) nativeTable;
-        currentBranch = resolveIndexBranch(fileStoreTable.options(), currentBranch);
         // A row-id result cannot describe an incremental-between scan. A delta whose start is
         // unbounded is still a snapshot read and is therefore safe to discover against its end.
         if (versionRange != null && versionRange.start().isPresent() && versionRange.end().isPresent()) {
@@ -1100,14 +1164,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
 
         Snapshot resolvedSnapshot = snapshot.get();
-        long snapshotId = resolvedSnapshot.id();
-        PaimonIndexMetadataCacheKey cacheKey = new PaimonIndexMetadataCacheKey(
-                catalogName, paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(),
-                String.valueOf(fileStoreTable.location()), currentBranch, snapshotId,
-                resolvedSnapshot.timeMillis(), resolvedSnapshot.indexManifest());
         try {
-            ConnectorIndexMetadata metadata = indexMetadataCache.get(cacheKey,
-                    () -> PaimonIndexMetadataReader.load(fileStoreTable, resolvedSnapshot));
+            ConnectorIndexMetadata metadata =
+                    loadSnapshotIndexMetadata(paimonTable, fileStoreTable, currentBranch, resolvedSnapshot).discovery();
             Set<Integer> stableBtreeFields = metadata.getDescriptors().stream()
                     .anyMatch(descriptor -> descriptor.getType() == IndexType.RANGE)
                     ? indexMetadataCache.getStableScalarFields(catalogName, paimonTable.getCatalogDBName(),
@@ -1118,10 +1177,19 @@ public class PaimonMetadata implements ConnectorMetadata {
             // failure can be retried by the next query instead of becoming an empty cached result.
             if (indexMetadataCache.shouldLogFailure(System.currentTimeMillis())) {
                 LOG.warn("Failed to load Paimon index metadata for {}.{}.{} at snapshot {}",
-                        catalogName, paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(), snapshotId, e);
+                        catalogName, paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(), resolvedSnapshot.id(), e);
             }
             return ConnectorIndexMetadata.empty();
         }
+    }
+
+    private PaimonIndexMetadataReader.SnapshotIndexMetadata loadSnapshotIndexMetadata(
+            PaimonTable table, FileStoreTable nativeTable, String branch, Snapshot snapshot) {
+        PaimonIndexMetadataCacheKey key = new PaimonIndexMetadataCacheKey(
+                catalogName, table.getCatalogDBName(), table.getCatalogTableName(),
+                String.valueOf(nativeTable.location()), resolveIndexBranch(nativeTable.options(), branch), snapshot.id(),
+                snapshot.timeMillis(), snapshot.indexManifest());
+        return indexMetadataCache.get(key, () -> PaimonIndexMetadataReader.load(nativeTable, snapshot));
     }
 
     static String resolveIndexBranch(Map<String, String> nativeOptions, String requestedBranch) {

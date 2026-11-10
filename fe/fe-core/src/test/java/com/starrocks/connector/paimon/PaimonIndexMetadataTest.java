@@ -21,6 +21,7 @@ import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
 import com.starrocks.connector.index.ConnectorIndexDescriptor.Operation;
 import com.starrocks.connector.index.ConnectorIndexMetadata;
 import com.starrocks.connector.index.ConnectorIndexMetadata.TableType;
+import com.starrocks.connector.paimon.PaimonIndexMetadataReader.SnapshotIndexMetadata;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Verifications;
@@ -57,6 +58,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.paimon.catalog.Identifier.DEFAULT_MAIN_BRANCH;
@@ -341,29 +343,31 @@ public class PaimonIndexMetadataTest {
                         DEFAULT_MAIN_BRANCH, 11L, 100L, "index-11");
         AtomicInteger loads = new AtomicInteger();
 
-        ConnectorIndexMetadata first = cache.get(firstSnapshot, () -> {
+        SnapshotIndexMetadata empty = new SnapshotIndexMetadata(ConnectorIndexMetadata.empty(), Set.of());
+        SnapshotIndexMetadata first = cache.get(firstSnapshot, () -> {
             loads.incrementAndGet();
-            return ConnectorIndexMetadata.of(11L, TableType.DATA_EVOLUTION, List.of());
+            return new SnapshotIndexMetadata(ConnectorIndexMetadata.of(11L, TableType.DATA_EVOLUTION, List.of()),
+                    Set.of(Set.of(7)));
         });
         Assertions.assertSame(first, cache.get(firstSnapshot, () -> {
             loads.incrementAndGet();
-            return ConnectorIndexMetadata.empty();
+            return empty;
         }));
-        ConnectorIndexMetadata second = cache.get(secondSnapshot, () -> {
+        SnapshotIndexMetadata second = cache.get(secondSnapshot, () -> {
             loads.incrementAndGet();
-            return ConnectorIndexMetadata.of(12L, TableType.DATA_EVOLUTION, List.of());
+            return new SnapshotIndexMetadata(ConnectorIndexMetadata.of(12L, TableType.DATA_EVOLUTION, List.of()), Set.of());
         });
-        ConnectorIndexMetadata branch = cache.get(branchSnapshot, () -> {
+        SnapshotIndexMetadata branch = cache.get(branchSnapshot, () -> {
             loads.incrementAndGet();
-            return ConnectorIndexMetadata.of(11L, TableType.PRIMARY_KEY, List.of());
+            return new SnapshotIndexMetadata(ConnectorIndexMetadata.of(11L, TableType.PRIMARY_KEY, List.of()), Set.of());
         });
-        ConnectorIndexMetadata recreated = cache.get(recreatedTable, () -> {
+        SnapshotIndexMetadata recreated = cache.get(recreatedTable, () -> {
             loads.incrementAndGet();
-            return ConnectorIndexMetadata.of(11L, TableType.APPEND_ONLY, List.of());
+            return new SnapshotIndexMetadata(ConnectorIndexMetadata.of(11L, TableType.APPEND_ONLY, List.of()), Set.of());
         });
-        ConnectorIndexMetadata other = cache.get(otherTable, () -> {
+        SnapshotIndexMetadata other = cache.get(otherTable, () -> {
             loads.incrementAndGet();
-            return ConnectorIndexMetadata.of(11L, TableType.APPEND_ONLY, List.of());
+            return new SnapshotIndexMetadata(ConnectorIndexMetadata.of(11L, TableType.APPEND_ONLY, List.of()), Set.of());
         });
         Assertions.assertNotSame(first, second);
         Assertions.assertNotSame(first, branch);
@@ -371,14 +375,14 @@ public class PaimonIndexMetadataTest {
         Assertions.assertEquals(5, loads.get());
 
         cache.invalidateTable("paimon", "db", "tbl");
-        ConnectorIndexMetadata reloaded = cache.get(firstSnapshot, () -> {
+        SnapshotIndexMetadata reloaded = cache.get(firstSnapshot, () -> {
             loads.incrementAndGet();
-            return ConnectorIndexMetadata.empty();
+            return empty;
         });
-        Assertions.assertSame(ConnectorIndexMetadata.empty(), reloaded);
+        Assertions.assertSame(empty, reloaded);
         Assertions.assertSame(other, cache.get(otherTable, () -> {
             loads.incrementAndGet();
-            return ConnectorIndexMetadata.empty();
+            return empty;
         }));
         Assertions.assertEquals(6, loads.get());
     }

@@ -964,6 +964,10 @@ public class QueryAnalyzer {
                 if (policyRewriteQuery == null) {
                     return r;
                 } else {
+                    if (table instanceof PaimonIndexTable) {
+                        // The parent scan requires every original shard result to preserve row coverage.
+                        throw new SemanticException("Paimon Global Index cannot consume policy-rewritten shard results");
+                    }
                     r.setNeedRewrittenByPolicy(false);
                     SubqueryRelation subqueryRelation = new SubqueryRelation(policyRewriteQuery);
 

@@ -81,6 +81,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -119,6 +120,7 @@ import org.apache.paimon.disk.IOManagerImpl;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.globalindex.IndexedSplit;
 import org.apache.paimon.globalindex.sorted.SortedGlobalIndexBuilder;
+import org.apache.paimon.index.GlobalIndexMeta;
 import org.apache.paimon.index.IndexFileMeta;
 import org.apache.paimon.io.CompactIncrement;
 import org.apache.paimon.io.DataFileMeta;
@@ -184,6 +186,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.starrocks.catalog.Table.TableType.PAIMON_VIEW;
 import static com.starrocks.type.IntegerType.INT;
@@ -1382,6 +1385,35 @@ public class PaimonMetadataTest {
                 }
             }
             assertEquals(8, requests.size());
+
+            GetRemoteFilesParams cachedParams = GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(List.of("id")).setPredicate(new IsNullPredicateOperator(true, id))
+                    .setTableVersionRange(TvrTableSnapshot.of(snapshotId)).build();
+            PaimonSplitsInfo cached = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, cachedParams)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+            assertFalse(cached.getPaimonSplits().isEmpty());
+            assertTrue(cached.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
+
+            catalog.alterTable(identifier, SchemaChange.updateColumnType("id", DataTypes.STRING()), false);
+            // The same scan key must bypass the old cached splits after resolving the new schema.
+            PaimonSplitsInfo afterAlter = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, cachedParams)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+            assertNotSame(cached, afterAlter);
+            assertTrue(afterAlter.getPaimonSplits().stream().noneMatch(IndexedSplit.class::isInstance));
+            assertEquals(List.of("1", "2"), readEvolvedIds(afterAlter, false));
+
+            ColumnRefOperator stringId = new ColumnRefOperator(1, VARCHAR, "id", true);
+            ScalarOperator stringPredicate = new BinaryPredicateOperator(
+                    BinaryType.EQ, stringId, ConstantOperator.createVarchar("1"));
+            context.getSessionVariable().setPaimonGlobalIndexScanStage(1);
+            context.getSessionVariable().setEnablePaimonColumnStatistics(false);
+            metadata.getTableStatistics(optimizer, table, Map.of(stringId, new Column("id", VARCHAR)),
+                    null, stringPredicate, -1, TvrTableSnapshot.of(snapshotId));
+            assertFalse(requests.get(requests.size() - 1).isDisableGlobalIndex());
+            PaimonSplitsInfo safeSplits = plannedSplits.get(plannedSplits.size() - 1);
+            assertFalse(safeSplits.getPaimonSplits().isEmpty());
+            assertTrue(safeSplits.getPaimonSplits().stream().noneMatch(IndexedSplit.class::isInstance));
+            assertEquals(List.of("1"), readEvolvedIds(safeSplits, false));
         } finally {
             ConnectContext.remove();
             FileUtils.deleteDirectory(tmpDir.toFile());
@@ -1754,6 +1786,14 @@ public class PaimonMetadataTest {
                 assertTrue(after.getIndexMetadata(table, TvrTableSnapshot.of(snapshot)).getDescriptors().isEmpty());
                 assertTrue(after.getIndexShards(table, snapshot, Map.of(0, IndexType.RANGE)).isEmpty());
 
+                boolean bigint = promoted.equals(DataTypes.BIGINT());
+                ColumnRefOperator id = new ColumnRefOperator(11, bigint ? IntegerType.BIGINT : VARCHAR, "id", true);
+                ScalarOperator predicate = bigint
+                        ? new BinaryPredicateOperator(BinaryType.LT, id, ConstantOperator.createBigint(2147483648L))
+                        : new BinaryPredicateOperator(BinaryType.EQ, id, ConstantOperator.createVarchar("1"));
+                List<String> expectedIds = bigint ? List.of("1", "2") : List.of("1");
+                assertSafeIndexFallback(after, table, predicate, snapshot, bigint, expectedIds);
+
                 // A new snapshot now names the new schema but retains the old INT index.
                 buildBtreeIndex(nativeTable, "payload", tmpDir);
                 snapshot = nativeTable.latestSnapshot().orElseThrow().id();
@@ -1763,25 +1803,30 @@ public class PaimonMetadataTest {
                 assertTrue(after.getIndexShards(table, snapshot, Map.of(0, IndexType.RANGE)).isEmpty());
                 assertFalse(after.getIndexShards(table, snapshot, Map.of(1, IndexType.RANGE)).isEmpty());
 
-                if (promoted.equals(DataTypes.BIGINT())) {
-                    ColumnRefOperator id = new ColumnRefOperator(11, IntegerType.BIGINT, "id", true);
-                    GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
-                            .setFieldNames(List.of("id", "payload"))
-                            .setPredicate(new BinaryPredicateOperator(BinaryType.LT, id,
-                                    ConstantOperator.createBigint(2147483648L)))
-                            .setTableVersionRange(TvrTableSnapshot.of(snapshot)).setDisableGlobalIndex(true).build();
-                    PaimonSplitsInfo splits = ((PaimonRemoteFileDesc) after.getRemoteFiles(table, params)
-                            .get(0).getFiles().get(0)).getPaimonSplitsInfo();
-                    List<Long> ids = new ArrayList<>();
-                    try (RecordReaderIterator<InternalRow> rows = new RecordReaderIterator<>(nativeTable.newReadBuilder()
-                            .withFilter(splits.getPredicate()).newRead().executeFilter()
-                            .createReader(splits.getPaimonSplits()))) {
-                        while (rows.hasNext()) {
-                            ids.add(rows.next().getLong(0));
-                        }
-                    }
-                    Collections.sort(ids);
-                    assertEquals(List.of(1L, 2L), ids);
+                assertSafeIndexFallback(after, table, predicate, snapshot, bigint, expectedIds);
+
+                // An unrelated historical index should not prevent the SDK from using the safe one.
+                GetRemoteFilesParams payloadParams = GetRemoteFilesParams.newBuilder()
+                        .setFieldNames(List.of("id", "payload"))
+                        .setPredicate(new BinaryPredicateOperator(BinaryType.EQ,
+                                new ColumnRefOperator(12, VARCHAR, "payload", true),
+                                ConstantOperator.createVarchar("one")))
+                        .setTableVersionRange(TvrTableSnapshot.of(snapshot)).build();
+                PaimonSplitsInfo payloadSplits = ((PaimonRemoteFileDesc) after.getRemoteFiles(table, payloadParams)
+                        .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+                assertFalse(payloadSplits.getPaimonSplits().isEmpty());
+                assertTrue(payloadSplits.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
+                assertEquals(List.of("1"), readEvolvedIds(payloadSplits, bigint));
+
+                if (bigint) {
+                    writeRows(nativeTable, GenericRow.of(2147483648L, BinaryString.fromString("above INT range")));
+                    long appendedSnapshot = nativeTable.latestSnapshot().orElseThrow().id();
+                    ScalarOperator appendedPredicate = new BinaryPredicateOperator(
+                            BinaryType.GE, id, ConstantOperator.createBigint(1L));
+                    assertSafeIndexFallback(after, table, appendedPredicate, appendedSnapshot,
+                            true, List.of("1", "2", "2147483648"));
+                } else {
+                    assertRawIndexMetadataFallback(catalog, context, snapshot, payloadParams.getPredicate());
                 }
                 catalog.dropTable(identifier, true);
             }
@@ -1789,6 +1834,66 @@ public class PaimonMetadataTest {
             ConnectContext.remove();
             FileUtils.deleteDirectory(tmpDir.toFile());
         }
+    }
+
+    private static void assertRawIndexMetadataFallback(
+            Catalog catalog, ConnectContext context, long snapshot, ScalarOperator predicate) throws Exception {
+        new MockUp<IndexFileMeta>() {
+            @Mock
+            public String indexType(Invocation invocation) {
+                String provider = invocation.proceed();
+                return "btree".equals(provider) ? "unrecognized-provider" : provider;
+            }
+
+            @Mock
+            public GlobalIndexMeta globalIndexMeta(Invocation invocation) {
+                GlobalIndexMeta meta = invocation.proceed();
+                if (meta == null || meta.indexFieldId() != 1) {
+                    return meta;
+                }
+                return new GlobalIndexMeta(meta.rowRangeStart(), meta.rowRangeEnd(), 1,
+                        new int[] {0}, meta.indexMeta());
+            }
+        };
+        PaimonMetadata metadata = new PaimonMetadata(
+                "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
+        PaimonTable table = (PaimonTable) metadata.getTable(context, "test_db", "indexed_table");
+        assertTrue(metadata.getIndexMetadata(table, TvrTableSnapshot.of(snapshot)).getDescriptors().isEmpty());
+        // SDK discovery can see the unadvertised group containing the unstable extra field.
+        assertSafeIndexFallback(metadata, table, predicate, snapshot, false, List.of("1"));
+
+        new MockUp<PaimonIndexMetadataCache>() {
+            @Mock
+            public Set<Integer> getStableScalarFields(
+                    String catalogName, String database, String tableName, FileStoreTable nativeTable) {
+                throw new IllegalStateException("Missing Paimon schema history");
+            }
+        };
+        assertSafeIndexFallback(metadata, table, predicate, snapshot, false, List.of("1"));
+    }
+
+    private static void assertSafeIndexFallback(PaimonMetadata metadata, PaimonTable table, ScalarOperator predicate,
+                                                long snapshot, boolean bigint, List<String> expectedIds) throws Exception {
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setFieldNames(List.of("id", "payload"))
+                .setPredicate(predicate).setTableVersionRange(TvrTableSnapshot.of(snapshot)).build();
+        PaimonSplitsInfo splits = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, params)
+                .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+        assertTrue(splits.getPaimonSplits().stream().noneMatch(IndexedSplit.class::isInstance));
+        assertEquals("false", splits.getNativeTable().options().get("global-index.enabled"));
+        assertEquals(expectedIds, readEvolvedIds(splits, bigint));
+    }
+
+    private static List<String> readEvolvedIds(PaimonSplitsInfo splits, boolean bigint) throws Exception {
+        List<String> ids = new ArrayList<>();
+        try (RecordReaderIterator<InternalRow> rows = new RecordReaderIterator<>(splits.getNativeTable().newReadBuilder()
+                .withFilter(splits.getPredicate()).newRead().executeFilter().createReader(splits.getPaimonSplits()))) {
+            while (rows.hasNext()) {
+                InternalRow row = rows.next();
+                ids.add(bigint ? Long.toString(row.getLong(0)) : row.getString(0).toString());
+            }
+        }
+        Collections.sort(ids);
+        return ids;
     }
 
     @Test

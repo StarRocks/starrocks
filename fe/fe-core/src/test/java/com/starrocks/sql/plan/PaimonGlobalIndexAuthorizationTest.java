@@ -14,8 +14,13 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.authorization.AccessControlProvider;
+import com.starrocks.authorization.AccessController;
+import com.starrocks.authorization.NativeAccessController;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.Pair;
@@ -40,8 +45,13 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -85,6 +95,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -228,6 +239,89 @@ public class PaimonGlobalIndexAuthorizationTest extends ConnectorPlanTestBase {
     }
 
     @Test
+    public void testVirtualTableRowFilterFallsBackBeforeIndexExecution() throws Exception {
+        assertVirtualPolicyFallsBack("length(hex(index_result)) > 16", null);
+    }
+
+    @Test
+    public void testVirtualTableBitmapMaskFallsBackBeforeIndexExecution() throws Exception {
+        String emptyBitmap = Base64.getEncoder().encodeToString(new GlobalIndexResultSerializer()
+                .serialize(GlobalIndexResult.create(new RoaringNavigableMap64())));
+        assertVirtualPolicyFallsBack(null, "base64_decode_binary('" + emptyBitmap + "')");
+    }
+
+    @Test
+    public void testBaseTablePolicyRemainsInPlanWithDistributedIndex() throws Exception {
+        ConnectContext caller = caller("index_both");
+        AtomicInteger executions = mockIndexExecution(caller);
+        AccessControlProvider provider = Authorizer.getInstance();
+        AccessController previous = provider.getAccessControlOrDefault(CATALOG);
+        provider.setAccessControl(CATALOG, policyController("indexed_table", "id = 1", Map.of("id", "99")));
+        try {
+            assertContains(plan("SELECT id FROM " + BASE_TABLE, caller),
+                    "PREDICATES:", "id = 1", "DISTRIBUTED INDEX: applied", "99");
+            assertEquals(1, executions.get());
+            assertNotNull(lastScanParams().getConnectorIndexResult());
+            assertSame(caller, ConnectContext.get());
+        } finally {
+            provider.setAccessControl(CATALOG, previous);
+        }
+    }
+
+    private void assertVirtualPolicyFallsBack(String rowFilter, String mask) throws Exception {
+        ConnectContext caller = caller("index_both");
+        AtomicInteger executions = mockIndexExecution(caller);
+        AccessControlProvider provider = Authorizer.getInstance();
+        AccessController previous = provider.getAccessControlOrDefault(CATALOG);
+        provider.setAccessControl(CATALOG, policyController("indexed_table$global_index", rowFilter,
+                mask == null ? Map.of() : Map.of("index_result", mask)));
+        try {
+            SemanticException failure = assertThrows(SemanticException.class,
+                    () -> new PaimonGlobalIndexService(table, request).evaluate());
+            assertNotNull(failure.getCause());
+            assertTrue(failure.getCause().getMessage().contains("cannot consume policy-rewritten shard results"));
+
+            assertContains(plan(QUERY, caller), "PREDICATES:", "DISTRIBUTED INDEX: SDK fallback");
+            verify(metadata).evaluateIndex(any(Table.class), any(IndexCondition.class), any(TvrVersionRange.class));
+            verify(metadata, never()).getIndexShards(any(Table.class), anyLong(), anyMap());
+            assertEquals(0, executions.get());
+            assertNull(lastScanParams().getConnectorIndexResult());
+            assertSame(caller, ConnectContext.get());
+        } finally {
+            provider.setAccessControl(CATALOG, previous);
+        }
+    }
+
+    private static AccessController policyController(String table, String rowFilter, Map<String, String> masks) {
+        return new NativeAccessController() {
+            @Override
+            public boolean mayHavePolicy(ConnectContext context, TableName tableName) {
+                return table.equals(tableName.getTbl());
+            }
+
+            @Override
+            public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
+                if (rowFilter != null && mayHavePolicy(context, tableName)) {
+                    return SqlParser.parseSqlToExpr(rowFilter, context.getSessionVariable().getSqlMode());
+                }
+                return super.getRowAccessPolicy(context, tableName);
+            }
+
+            @Override
+            public Map<String, Expr> getColumnMaskingPolicy(
+                    ConnectContext context, TableName tableName, List<Column> columns) {
+                if (!mayHavePolicy(context, tableName) || masks.isEmpty()) {
+                    return super.getColumnMaskingPolicy(context, tableName, columns);
+                }
+                Map<String, Expr> expressions = new HashMap<>();
+                masks.forEach((column, mask) -> expressions.put(column,
+                        SqlParser.parseSqlToExpr(mask, context.getSessionVariable().getSqlMode())));
+                return expressions;
+            }
+        };
+    }
+
+    @Test
     public void testVirtualTablePrivilegeDoesNotGrantBaseTableAccess() throws Exception {
         ConnectContext caller = caller("index_virtual_only");
         AtomicInteger executions = mockIndexExecution(caller);
@@ -309,8 +403,16 @@ public class PaimonGlobalIndexAuthorizationTest extends ConnectorPlanTestBase {
     }
 
     private static String plan(String sql, ConnectContext context) {
-        return StatementPlanner.plan(SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable()), context)
-                .getExplainString(TExplainLevel.NORMAL);
+        StatementBase statement = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+        // StatementPlanner is called directly in this fixture, so mirror the normal SQL entry point.
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitRelation(Relation relation, Void ignored) {
+                relation.setNeedRewrittenByPolicy(true);
+                return null;
+            }
+        }.visit(statement);
+        return StatementPlanner.plan(statement, context).getExplainString(TExplainLevel.NORMAL);
     }
 
     private static void executeGrant(String sql) throws Exception {
