@@ -357,6 +357,15 @@ public:
     // recover
     Status recover();
 
+    // Manual repair for an apply that cannot make progress: mark the next version waiting to
+    // apply as applied without applying it. The version must be the rowset commit of |txn_id|.
+    // All rows of that rowset are marked deleted and the primary index is left untouched, so the
+    // transaction's upserts and deletes are both dropped. Clears the error state on success.
+    // Only this replica skips the transaction, so its data can differ from the other replicas.
+    // Do not call recover() afterwards: it rebuilds the delete vectors from the rowset data and
+    // would make the skipped rows visible again.
+    Status skip_apply(int64_t txn_id);
+
     void set_error(const string& msg) { _set_error(msg); }
     void reset_error() {
         _error = false;
