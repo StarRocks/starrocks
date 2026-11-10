@@ -31,6 +31,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -148,7 +149,8 @@ class SavedSqlGeoValidatorTest {
 
     private static void checkQueryTraversal(String geo, String view) throws Exception {
         String card = "cardinality([" + geo + "])";
-        String constant = card.replace("wkt", "'POINT (1 2)'");
+        String leaf = geo.replace("wkt", "'POINT (1 2)'");
+        String constant = "cardinality([" + leaf + "])";
         for (String query : List.of("SELECT id" + BASE + " WHERE " + card + " > 0",
                 "SELECT a.id FROM geo_src a JOIN geo_src b ON a.id=b.id AND "
                         + card.replace("wkt", "a.wkt") + " > 0",
@@ -159,6 +161,16 @@ class SavedSqlGeoValidatorTest {
                 "SELECT 1 AS n UNION ALL SELECT " + card + BASE)) {
             reject("CREATE VIEW bad_tree AS " + query);
         }
+        String ordered = "(SELECT 1 AS id) ORDER BY " + constant;
+        String cte = "WITH c AS (SELECT [" + leaf + "] AS a) ";
+        assertAll(
+                () -> reject("CREATE VIEW " + view + "_wrapper_order AS " + ordered),
+                () -> reject("CREATE VIEW " + view + "_inner_cte AS (" + cte + "SELECT 1 AS id FROM c) ORDER BY 1"),
+                () -> reject("CREATE VIEW " + view + "_wrapper_cte AS " + cte + "(SELECT 1 AS id FROM c) ORDER BY 1"),
+                () -> reject("CREATE VIEW " + view + "_derived AS SELECT id FROM (" + ordered + " LIMIT 1) t"),
+                () -> reject("CREATE MATERIALIZED VIEW mv_" + view + "_wrapper" + MV_OPTIONS
+                        + "SELECT id FROM ((SELECT id FROM geo_src) ORDER BY " + constant + " LIMIT 1) t"));
+
         analyze("CREATE VIEW tree_control AS SELECT id FROM " + view + " UNION ALL SELECT id" + BASE + " ORDER BY id");
         analyze("CREATE VIEW tree_control AS WITH c AS (SELECT n FROM TABLE(UNNEST([1])) t(n)) SELECT n FROM c");
         analyze("CREATE VIEW tree_control AS SELECT a.id FROM geo_src a JOIN [skew|b.id(1)] geo_src b ON a.id=b.id");

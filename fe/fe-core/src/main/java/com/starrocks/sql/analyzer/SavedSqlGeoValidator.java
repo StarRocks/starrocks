@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -42,6 +43,12 @@ public final class SavedSqlGeoValidator extends AstTraverser<Void, Void> {
             throw new SemanticException(
                     "Nested GEOGRAPHY/GEOMETRY types are not supported in saved SQL definitions", expr.getPos());
         }
+        if (node instanceof QueryRelation relation && !(relation instanceof SelectRelation)) {
+            relation.getCteRelations().forEach(cte -> visit(cte, context));
+            if (relation.hasOrderByClause()) {
+                relation.getOrderBy().forEach(orderBy -> visit(orderBy.getExpr(), context));
+            }
+        }
         return super.visit(node, context);
     }
 
@@ -57,22 +64,14 @@ public final class SavedSqlGeoValidator extends AstTraverser<Void, Void> {
 
     @Override
     public Void visitSetOp(SetOperationRelation node, Void context) {
-        visitOrderBy(node, context);
-        return super.visitSetOp(node, context);
+        node.getRelations().forEach(relation -> visit(relation, context));
+        return null;
     }
 
     @Override
     public Void visitValues(ValuesRelation node, Void context) {
-        node.getCteRelations().forEach(cte -> visit(cte, context));
-        visitOrderBy(node, context);
         node.getRows().forEach(row -> row.forEach(expr -> visit(expr, context)));
         return null;
-    }
-
-    private void visitOrderBy(QueryRelation node, Void context) {
-        if (node.hasOrderByClause()) {
-            node.getOrderBy().forEach(orderBy -> visit(orderBy.getExpr(), context));
-        }
     }
 
     @Override
