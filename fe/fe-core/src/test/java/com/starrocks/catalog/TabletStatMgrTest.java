@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.ErrorCode;
@@ -28,7 +29,11 @@ import com.starrocks.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.StatsConstants;
+import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -45,10 +50,12 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +64,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TabletStatMgrTest {
     private static final long DB_ID = 1;
@@ -65,9 +73,30 @@ public class TabletStatMgrTest {
     private static final long INDEX_ID = 4;
     private static final long PH_PARTITION_ID = 5;
 
+    // The scan fixture is the only thing here that registers a database in the singleton metastore, so
+    // its id must be one no built-in owns: ids below GlobalStateMgr.NEXT_ID_INIT_VALUE (10000) are
+    // reserved, and LocalMetastore's constructor seeds idToDb with information_schema at
+    // SystemId.INFORMATION_SCHEMA_DB_ID (1) and sys at SystemId.SYS_DB_ID (100). Registering over either
+    // would evict the built-in from idToDb for the rest of the JVM.
+    private static final long SCAN_DB_ID = 10001L;
+    private static final String SCAN_DB_NAME = "tablet_stat_scan_test";
+
+    private Database registeredDb;
+
     @BeforeEach
     public void before() {
         UtFrameUtils.mockInitWarehouseEnv();
+    }
+
+    @AfterEach
+    public void after() {
+        if (registeredDb == null) {
+            return;
+        }
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        metastore.getIdToDb().remove(registeredDb.getId());
+        metastore.getFullNameToDb().remove(registeredDb.getFullName());
+        registeredDb = null;
     }
 
     @Test
@@ -609,5 +638,47 @@ public class TabletStatMgrTest {
         TabletStatMgr tabletStatMgr = new TabletStatMgr();
         Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
 
+    }
+
+    @Test
+    public void testTotalRowsCountsBaseIndexOnly() {
+        // BasicStatsMeta.totalRows is compared against base index row counts by the optimizer, so the rows of a
+        // rollups which should not be counted again.
+        LakeTable table = createLakeTableForTest();
+        PhysicalPartition physicalPartition = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition();
+        for (Tablet tablet : physicalPartition.getBaseIndex().getTablets()) {
+            ((LakeTablet) tablet).setRowCount(100);
+        }
+
+        MaterializedIndex rollupIndex = new MaterializedIndex(INDEX_ID + 100, MaterializedIndex.IndexState.NORMAL);
+        LakeTablet rollupTablet = new LakeTablet(30L);
+        rollupTablet.setRowCount(7);
+        rollupIndex.addTablet(rollupTablet, null, false);
+        physicalPartition.createRollupIndex(rollupIndex);
+
+        registeredDb = new Database(SCAN_DB_ID, SCAN_DB_NAME);
+        registeredDb.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(registeredDb);
+
+        BasicStatsMeta meta = new BasicStatsMeta(SCAN_DB_ID, TABLE_ID, Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddBasicStatsMeta(meta);
+        // The other cases mock SystemInfoService, so the cluster info of the shared GlobalStateMgr may have
+        // been built without its backend map; this case collects no stats from backends.
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ImmutableMap<Long, Backend> getIdToBackend() {
+                return ImmutableMap.of();
+            }
+        };
+        try {
+            new TabletStatMgr().runAfterCatalogReady();
+
+            assertEquals(200, physicalPartition.getBaseIndex().getRowCount());
+            assertEquals(7, rollupIndex.getRowCount());
+            assertEquals(200, meta.getTotalRows());
+        } finally {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().remove(TABLE_ID);
+        }
     }
 }
