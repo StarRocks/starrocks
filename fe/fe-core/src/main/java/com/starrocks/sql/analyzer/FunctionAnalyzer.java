@@ -108,6 +108,7 @@ public class FunctionAnalyzer {
         }
 
         String fnName = functionCallExpr.getFunctionName();
+        checkGeoFunctionArguments(functionCallExpr);
         if (fnName.equals(FunctionSet.DATE_TRUNC)) {
             if (!(functionCallExpr.getChild(0) instanceof StringLiteral)) {
                 throw new SemanticException("date_trunc requires first parameter must be a string constant",
@@ -291,6 +292,23 @@ public class FunctionAnalyzer {
 
         if (fn != null && fn.isAI()) {
             AIFunctionAnalyzer.analyze(functionCallExpr);
+        }
+    }
+
+    private static void checkGeoFunctionArguments(FunctionCallExpr call) {
+        String name = call.getFunctionName();
+        switch (name) {
+            case FunctionSet.ENCODE_SORT_KEY:
+            case FunctionSet.ENCODE_FINGERPRINT_SHA256:
+            case FunctionSet.ENCODE_FINGERPRINT_SHA256_V2:
+                break;
+            default:
+                return;
+        }
+        for (Type type : call.getFn().getArgs()) {
+            if (type.isGeoType() || type.hasNestedGeoType()) {
+                throw new SemanticException(name + " does not support geo arguments: " + type.toSql(), call.getPos());
+            }
         }
     }
 
