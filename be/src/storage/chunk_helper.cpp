@@ -369,9 +369,8 @@ Status ChunkHelper::reject_if_over_capacity(const Chunk& chunk, std::string_view
         return st;
     }
     return Status::CapacityLimitExceed(
-            strings::Substitute("$0 is too large for tablet:$1 txn:$2, $3. Reduce the amount of data in a single "
-                                "statement.",
-                                std::string(what), tablet_id, txn_id, std::string(st.message())));
+            strings::Substitute("Column capacity limit exceeded in $0 for tablet:$1 txn:$2 num_rows:$3: $4",
+                                std::string(what), tablet_id, txn_id, chunk.num_rows(), std::string(st.message())));
 }
 
 void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_indexes, const Schema& schema,
