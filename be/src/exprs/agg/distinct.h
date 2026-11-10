@@ -192,11 +192,11 @@ struct AdaptiveSliceHashSet {
 };
 
 template <LogicalType LT, LogicalType SumLT, bool compute_sum = false, typename = guard::Guard>
-struct DistinctAggregateStateV2Base {};
+struct DistinctAggregateStateBase {};
 
 template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateStateV2Base<LT, SumLT, false, StringOrBinaryGuard<LT>> {
-    DistinctAggregateStateV2Base() = default;
+struct DistinctAggregateStateBase<LT, SumLT, false, StringOrBinaryGuard<LT>> {
+    DistinctAggregateStateBase() = default;
     using KeyType = typename SliceHashSet::key_type;
 
     void reset() { set.clear(); }
@@ -233,7 +233,7 @@ struct DistinctAggregateStateV2Base<LT, SumLT, false, StringOrBinaryGuard<LT>> {
 
 // Fixed-length keys: serialize by copying the keys one after another to gain performance.
 template <LogicalType LT, LogicalType SumLT, bool compute_sum>
-struct DistinctAggregateStateV2Base<LT, SumLT, compute_sum, FixedLengthLTGuard<LT>> {
+struct DistinctAggregateStateBase<LT, SumLT, compute_sum, FixedLengthLTGuard<LT>> {
     using T = RunTimeCppType<LT>;
     using SumType = RunTimeCppType<SumLT>;
     using MyHashSet = HashSetWithAggStateAllocator<T>;
@@ -309,7 +309,7 @@ struct DistinctAggregateStateV2Base<LT, SumLT, compute_sum, FixedLengthLTGuard<L
     }
 
     // NOLINTBEGIN
-    ~DistinctAggregateStateV2Base() {
+    ~DistinctAggregateStateBase() {
 #ifdef PHMAP_USE_CUSTOM_INFO_HANDLE
         const auto& info = set.infoz();
         VLOG_FILE << "HashSet Info: # of insert = " << info.insert_number
@@ -323,12 +323,12 @@ struct DistinctAggregateStateV2Base<LT, SumLT, compute_sum, FixedLengthLTGuard<L
 };
 
 template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
-struct DistinctAggregateStateV2 : public DistinctAggregateStateV2Base<LT, SumLT, false> {};
+struct DistinctAggregateState : public DistinctAggregateStateBase<LT, SumLT, false> {};
 
 template <LogicalType LT, LogicalType SumLT, bool compute_sum, typename = guard::Guard>
-struct FusedMultiDistinctAggregateState : public DistinctAggregateStateV2Base<LT, SumLT, compute_sum> {
+struct FusedMultiDistinctAggregateState : public DistinctAggregateStateBase<LT, SumLT, compute_sum> {
     using CppType = RunTimeCppType<LT>;
-    using Base = DistinctAggregateStateV2Base<LT, SumLT, compute_sum>;
+    using Base = DistinctAggregateStateBase<LT, SumLT, compute_sum>;
     using Base::reset;
     using Base::update;
     MemPool mem_pool;
@@ -507,16 +507,16 @@ public:
 };
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-using DistinctAggregateFunctionV2 =
-        TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateStateV2, DistinctType, T>;
+using DistinctAggregateFunction =
+        TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateState, DistinctType, T>;
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
 using DecimalDistinctAggregateFunction =
-        TDistinctAggregateFunction<LT, lt_is_decimal256<LT> ? TYPE_DECIMAL256 : TYPE_DECIMAL128,
-                                   DistinctAggregateStateV2, DistinctType, T>;
+        TDistinctAggregateFunction<LT, lt_is_decimal256<LT> ? TYPE_DECIMAL256 : TYPE_DECIMAL128, DistinctAggregateState,
+                                   DistinctType, T>;
 
 // now we only support String
-struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR, SumResultLT<TYPE_VARCHAR>> {
+struct DictMergeState : DistinctAggregateState<TYPE_VARCHAR, SumResultLT<TYPE_VARCHAR>> {
     DictMergeState() = default;
 
     void update_over_limit() { over_limit = set.size() > dict_threshold; }
