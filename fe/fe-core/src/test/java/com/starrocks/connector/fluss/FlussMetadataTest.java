@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FlussTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -240,6 +241,31 @@ public class FlussMetadataTest {
         StarRocksConnectorException exception = Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> metadata.getRemoteFiles(table, GetRemoteFilesParams.newBuilder().build()));
         Assertions.assertTrue(exception.getMessage().contains("No readable Fluss lake snapshot exists"));
+    }
+
+    @Test
+    public void testGetRemoteFilesTracesSplitPlanning() {
+        mockLakeSourceAsNull();
+        new Expectations() {
+            {
+                admin.getReadableLakeSnapshot(TablePath.of(DB, TABLE));
+                result = CompletableFuture.failedFuture(new LakeTableSnapshotNotExistException("no snapshot"));
+            }
+        };
+        FlussTable table = flussTable(tableInfo(false), "");
+
+        Tracers.register();
+        Tracers.init(Tracers.Mode.TIMER, Tracers.Module.EXTERNAL, true, false);
+        try {
+            Assertions.assertThrows(StarRocksConnectorException.class,
+                    () -> metadata.getRemoteFiles(table, GetRemoteFilesParams.newBuilder().build()));
+            String timers = Tracers.printScopeTimer();
+            Assertions.assertTrue(timers.contains(TABLE + ".createLakeSource"), timers);
+            Assertions.assertTrue(timers.contains(TABLE + ".pushDownLakePredicates"), timers);
+            Assertions.assertTrue(timers.contains(TABLE + ".generateHybridLakeFlussSplits"), timers);
+        } finally {
+            Tracers.close();
+        }
     }
 
     @Test
