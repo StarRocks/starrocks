@@ -63,6 +63,7 @@ class IndexReadOptions;
 class Schema;
 class SegmentIterator;
 class SegmentReadOptions;
+struct OlapReaderStatistics;
 
 class BitmapIndexIterator;
 class ColumnReader;
@@ -103,14 +104,17 @@ public:
 
     ~Segment();
 
+    // If stats is set, account for the footer read and the successfully opened segment.
     Status open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                const LakeIOOptions& lake_io_opts);
+                const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats = nullptr);
 
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
     StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                       const TabletSchemaCSPtr& read_tablet_schema);
+                                                       const TabletSchemaCSPtr& read_tablet_schema,
+                                                       const LakeIOOptions& lake_io_opts = {},
+                                                       OlapReaderStatistics* stats = nullptr);
 
     uint64_t id() const { return _segment_id; }
 
@@ -295,7 +299,7 @@ private:
 
     // open segment file and read the minimum amount of necessary information (footer)
     Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                 const LakeIOOptions& lake_io_opts);
+                 const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats);
     Status _create_column_readers(SegmentFooterPB* footer);
 
     Status _check_column_unique_id_uniqueness(SegmentFooterPB* footer,
