@@ -46,6 +46,20 @@ class ScannerHelperClassLoaderTest {
     }
 
     @Test
+    void moduleJarsTakePrecedenceWithoutPreferredJar() throws Exception {
+        Path module = Files.createDirectories(home.resolve("lib/paimon-reader-lib"));
+        Path common = Files.createDirectories(home.resolve("lib/common-runtime-lib"));
+        Files.createDirectories(home.resolve("lib/hadoop/common"));
+        writeJar(module.resolve("module.jar"), "module");
+        writeJar(common.resolve("dependency.jar"), "dependency");
+
+        ClassLoader loader = ScannerHelper.createModuleClassLoader(home.toFile(), "paimon-reader-lib", null);
+        try (var stream = loader.getResourceAsStream("compatibility-test.txt")) {
+            assertEquals("module", new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+        }
+    }
+
+    @Test
     void missingPreferredJarFailsFast() throws IOException {
         Files.createDirectories(home.resolve("lib/paimon-reader-lib"));
         assertThrows(IllegalStateException.class, () -> ScannerHelper.createModuleClassLoader(
