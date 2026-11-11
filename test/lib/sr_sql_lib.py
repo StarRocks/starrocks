@@ -29,6 +29,7 @@ import copy
 import datetime
 import json
 import logging
+import socket
 import sys
 import threading
 import traceback
@@ -787,6 +788,79 @@ class StarrocksSQLApiLib(object):
         res = self.execute_sql(sql)
         tools.assert_true(res["status"], "create hadoop iceberg catalog failed: %s" % res.get("msg"))
 
+    def create_paimon_ddl_catalog(self, catalog_name, warehouse_id):
+        """Create an isolated filesystem catalog; catalogs in one case share the warehouse."""
+        # CLEANUP runs outside the normal statement UUID substitution.
+        self.paimon_ddl_warehouse_id = warehouse_id
+        properties = {"type": "paimon", "paimon.catalog.type": "filesystem"}
+        local_root = getattr(self, "paimon_ddl_local_warehouse_root", "")
+        if local_root:
+            warehouse = os.path.join(local_root, warehouse_id)
+            os.makedirs(warehouse, exist_ok=True)
+            properties["paimon.catalog.warehouse"] = "file://" + warehouse
+        else:
+            if not all(getattr(self, key, "") for key in ("oss_bucket", "oss_ak", "oss_sk", "oss_endpoint")):
+                raise SkipTest("Paimon DDL requires OSS settings or paimon_ddl_local_warehouse_root")
+            warehouse_root = getattr(self, "paimon_ddl_warehouse_root", "") or (
+                "oss://%s/tmp/paimon_catalog_ddl" % self.oss_bucket)
+            properties.update({
+                "paimon.catalog.warehouse": "%s/%s" % (warehouse_root.rstrip("/"), warehouse_id),
+                "aws.s3.access_key": self.oss_ak,
+                "aws.s3.secret_key": self.oss_sk,
+                "aws.s3.endpoint": self.oss_endpoint,
+            })
+        sql = "create external catalog `%s` properties (%s)" % (
+            catalog_name, ", ".join('"%s" = "%s"' % (key, value) for key, value in properties.items()))
+        result = self.execute_sql(sql)
+        tools.assert_true(result["status"], "create Paimon DDL catalog failed: %s" % result.get("msg"))
+
+    def assert_paimon_reader(self, query, table, expected):
+        """Assert one reader and reject empty scans or mixed routes."""
+        self.assert_paimon_readers(query, table, expected)
+
+    def assert_paimon_readers(self, query, table, expected, reasons=""):
+        """Assert the complete reader set and optional positive selection-reason counters."""
+        counters = {"native": "paimonNativeReaderReadNum", "jni": "jniReaderReadNum",
+                    "starrocks": "starRocksNativeReaderReadNum"}
+        readers = {reader.strip() for reader in expected.split(",")}
+        if not readers or not readers <= counters.keys():
+            raise ValueError("expected readers must be native, jni, or starrocks")
+        result = self.execute_sql("TRACE VALUES EXTERNAL " + query, True)
+        if not result["status"]:
+            raise AssertionError("Paimon reader trace failed: %s" % result.get("msg"))
+        trace = "\n".join(str(value) for row in result["result"] for value in row)
+        prefix = "Paimon.metadata.reader.%s." % table
+        for reader, counter in counters.items():
+            values = re.findall(re.escape(prefix + counter) + r"\s*:\s*(\d+)", trace)
+            if not values or any((int(value) > 0) != (reader in readers) for value in values):
+                raise AssertionError("expected %s readers for %s; trace:\n%s" % (expected, table, trace))
+        for reason in filter(None, (item.strip() for item in reasons.split(","))):
+            values = re.findall(re.escape(prefix + "selectionReason." + reason) + r"\s*:\s*(\d+)", trace)
+            if not values or any(int(value) <= 0 for value in values):
+                raise AssertionError("expected %s reason for %s; trace:\n%s" % (reason, table, trace))
+
+    def assert_paimon_native_profile(self, query):
+        """Verify an executed paimon-cpp scan, using the existing BE profile section."""
+        settings = self.execute_sql("SELECT @@enable_profile, @@enable_async_profile", True)
+        if not settings["status"]:
+            raise AssertionError("cannot read profile settings")
+        enabled, asynchronous = settings["result"][0]
+        try:
+            for sql in ("SET enable_profile = true", "SET enable_async_profile = false", query):
+                result = self.execute_sql(sql, True)
+                if not result["status"]:
+                    raise AssertionError("Paimon profile query failed: %s" % result.get("msg"))
+            query_id = self.execute_sql("SELECT last_query_id()", True)["result"][0][0]
+            result = self.execute_sql("SELECT get_query_profile('%s')" % query_id, True)
+            if not result["status"]:
+                raise AssertionError("cannot read Paimon query profile")
+            profile = "\n".join(str(value) for row in result["result"] for value in row)
+            if not re.search(r"^\s*-\s*PaimonNativeReader:", profile, re.MULTILINE):
+                raise AssertionError("executed query has no PaimonNativeReader profile section")
+        finally:
+            self.execute_sql("SET enable_profile = %s" % str(enabled).lower(), True)
+            self.execute_sql("SET enable_async_profile = %s" % str(asynchronous).lower(), True)
+
     def create_database_and_table(self, catalog_name, database_name, table_name, table_sql_path=None,
                                   tolerate_exist=False):
         """
@@ -944,7 +1018,13 @@ class StarrocksSQLApiLib(object):
                 if sql.endswith(";"):
                     sql = sql[:-1]
                 cursor.execute(sql)
-                result = cursor.fetchall()
+                try:
+                    result = cursor.fetchall()
+                except pyhive.exc.ProgrammingError as e:
+                    # Hive DDL succeeds without a result set; preserve other driver errors.
+                    if str(e) != "No result set" or cursor.description is not None:
+                        raise
+                    result = []
 
                 for i in range(len(result)):
                     row = [str(item) for item in result[i]]
@@ -4451,6 +4531,49 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         # print(f"Last query id: {query_id}")
         return query_id
 
+    def assert_pipelined_request_waits_for_stream(self, query):
+        """
+        Sends `query` to the HTTP SQL API and, while its response is still being streamed, pipelines GET /api/health
+        on the same connection: the SQL response has to end with its last chunk before the health response starts.
+        """
+        auth = base64.b64encode(f"{self.mysql_user}:{self.mysql_password}".encode()).decode()
+        body = json.dumps({"query": query}).encode()
+        sql = (f"POST /api/v1/catalogs/default_catalog/sql HTTP/1.1\r\nHost: {self.mysql_host}\r\n"
+               f"Authorization: Basic {auth}\r\nContent-Type: application/json\r\n"
+               f"Content-Length: {len(body)}\r\n\r\n").encode() + body
+        health = f"GET /api/health HTTP/1.1\r\nHost: {self.mysql_host}\r\n\r\n".encode()
+        last_chunk = b"\r\n0\r\n\r\n"
+
+        def health_after(data, start):
+            # The start of a whole response with a Content-Length at or after `start`, or -1.
+            at = data.find(b"HTTP/1.1", start)
+            head_end = data.find(b"\r\n\r\n", at) if at >= 0 else -1
+            if head_end < 0:
+                return -1
+            length = re.search(rb"(?i)content-length:\s*(\d+)", data[at:head_end])
+            return at if length and len(data) >= head_end + 4 + int(length.group(1)) else -1
+
+        received = bytearray()
+        with socket.create_connection((self.mysql_host, int(self.http_port)), timeout=60) as conn:
+            conn.sendall(sql)
+            # Well into the stream before the next request goes out.
+            while len(received) < 1024 * 1024:
+                data = conn.recv(65536)
+                tools.assert_true(data, f"the SQL response ended early: {bytes(received[:300])!r}")
+                received += data
+            conn.sendall(health)
+            while True:
+                end = received.find(last_chunk)
+                if end >= 0 and health_after(received, end + len(last_chunk)) >= 0:
+                    break
+                data = conn.recv(1 << 20)
+                tools.assert_true(data, "the connection closed before both responses were whole")
+                received += data
+        tools.assert_true(received.startswith(b"HTTP/1.1 200"), bytes(received[:300]))
+        tools.assert_equal(-1, received.find(b"HTTP/1.1", 1, end), "a response started inside the SQL response")
+        health_at = health_after(received, end + len(last_chunk))
+        tools.assert_true(received.startswith(b"HTTP/1.1 200", health_at), bytes(received[health_at:health_at + 300]))
+
     def get_query_details(self):
         url = f"http://{self.mysql_host}:{self.http_port}/api/query_detail?event_time=0"
         result = self.get_http_request(url)
@@ -4666,6 +4789,18 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             log.info(f"Set tablet_id = {self.tablet_id}")
         else:
             raise Exception(f"Failed to get tablet ID for table {table_name}")
+
+    def set_max_tablet_id(self, table_name, partition_name=None):
+        """Bind ${tablet_id} to the newest installed generation, using numeric tablet IDs."""
+        if partition_name:
+            sql = f"SHOW TABLETS FROM {table_name} PARTITION ({partition_name})"
+        else:
+            sql = f"SHOW TABLETS FROM {table_name}"
+        result = self.execute_sql(sql, True)
+        if not (result and result.get("result")):
+            raise Exception(f"Failed to get tablet IDs for table {table_name}")
+        self.tablet_id = str(max(int(row[0]) for row in result["result"]))
+        log.info(f"Set tablet_id = {self.tablet_id}")
 
     def wait_reshard_job_finish(self, table_name, job_type, expect_count, timeout_sec=60):
         """

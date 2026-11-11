@@ -530,29 +530,13 @@ bool BinaryColumn::append_strings_overflow(const Slice* data, size_t size, size_
     } else if (max_length <= 128) {
         append_fixed_length<128>(data, size, &bytes, &_offsets);
     } else {
-        // Values wider than the largest fixed-length specialization are copied at their
-        // exact length, so we cannot reuse append_fixed_length here. Size the destination
-        // up front anyway: appending one value at a time lets the byte buffer grow
-        // geometrically, which re-copies the whole buffer on every doubling and leaves the
-        // final capacity at up to twice the bytes actually held. That is what turns a chunk
-        // of large strings into a multi-hundred-MB allocation spike in the scan path.
-        uint64_t total_length = 0;
-        for (size_t i = 0; i < size; i++) {
-            total_length += data[i].size;
-        }
-
-        const uint64_t old_bytes_size = bytes.size();
-        const uint64_t new_bytes_size = old_bytes_size + total_length;
-        bytes.resize(new_bytes_size);
-
-        auto* __restrict dst_bytes = bytes.data();
-        uint64_t offset = old_bytes_size;
-        for (size_t i = 0; i < size; i++) {
-            memcpy(dst_bytes + offset, data[i].data, data[i].size);
-            offset += data[i].size;
-            _offsets.emplace_back(offset);
-        }
-        DCHECK_EQ(offset, new_bytes_size);
+        // Values wider than the largest fixed-length specialization are copied at their exact
+        // length, which is exactly what append_strings does: it sizes the byte buffer once from
+        // the batch total and writes the whole offset range through one pointer, instead of
+        // growing the buffer geometrically and pushing one offset at a time. The overflow
+        // contract only permits reading past the end of a value, so honouring the exact length
+        // here is always allowed.
+        return append_strings(data, size);
     }
     invalidate_slice_cache();
     return true;
@@ -1017,6 +1001,14 @@ uint32_t BinaryColumn::max_one_element_serialize_size() const {
     return max_size + sizeof(uint32_t);
 }
 
+uint32_t BinaryColumn::max_one_element_serialize_size_compact() const {
+    // Reuse the scan above and swap the length-prefix width. Note this can exceed the legacy
+    // bound by one byte when the longest element is 255+, which is why the hash-table staging
+    // buffer must be sized from this and not from max_one_element_serialize_size().
+    const uint32_t max_data_size = max_one_element_serialize_size() - sizeof(uint32_t);
+    return max_data_size + compact_len_size(max_data_size);
+}
+
 template <bool IsNullable, typename Offset>
 static inline __attribute__((always_inline)) void serialize_binary_batch_at_interval_impl(
         uint8_t* dst, size_t byte_interval, uint32_t max_row_size, size_t start, size_t count,
@@ -1096,8 +1088,32 @@ void BinaryColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, 
         const auto* __restrict offsets_data = offsets_buf.data();
         uint8_t* row = dst;
         for (size_t i = 0; i < chunk_size; ++i) {
-            sizes[i] += serialize_binary_element(offsets_data, i, base, row + sizes[i]);
+            sizes[i] += serialize_binary_element_compact(offsets_data, i, base, row + sizes[i]);
             row += max_one_row_size;
+        }
+    });
+}
+
+void BinaryColumn::serialize_size_compact_batch(Buffer<uint64_t>& sizes, size_t chunk_size) const {
+    uint64_t* __restrict s = sizes.data();
+    _offsets.visit_storage([&](const auto& offsets_buf) {
+        const auto* __restrict offsets = offsets_buf.data();
+        for (size_t i = 0; i < chunk_size; ++i) {
+            const auto len = static_cast<uint32_t>(offsets[i + 1] - offsets[i]);
+            s[i] += compact_len_size(len) + len;
+        }
+    });
+}
+
+void BinaryColumn::serialize_size_compact_batch_with_null_masks(Buffer<uint64_t>& sizes, size_t chunk_size,
+                                                                const uint8_t* null_masks) const {
+    uint64_t* __restrict s = sizes.data();
+    const uint8_t* __restrict nulls = null_masks;
+    _offsets.visit_storage([&](const auto& offsets_buf) {
+        const auto* __restrict offsets = offsets_buf.data();
+        for (size_t i = 0; i < chunk_size; ++i) {
+            const auto len = static_cast<uint32_t>(offsets[i + 1] - offsets[i]);
+            s[i] += sizeof(bool) + (nulls[i] ? 0 : compact_len_size(len) + len);
         }
     });
 }
@@ -1116,6 +1132,18 @@ const uint8_t* BinaryColumn::deserialize_and_append(const uint8_t* pos) {
     return pos + string_size;
 }
 
+const uint8_t* BinaryColumn::deserialize_compact_and_append(const uint8_t* pos) {
+    uint32_t string_size = 0;
+    pos = read_compact_len(pos, &string_size);
+
+    auto& bytes = get_bytes();
+    size_t old_size = bytes.size();
+    bytes.insert(bytes.end(), pos, pos + string_size);
+
+    _offsets.emplace_back(old_size + string_size);
+    return pos + string_size;
+}
+
 void BinaryColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     // Callers hand down a full-size slice buffer and a row count, and the entries past that count
     // may still be default constructed -- Slice() points its data at a 1-byte "" literal. Bail out
@@ -1123,11 +1151,12 @@ void BinaryColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chun
     if (chunk_size == 0) {
         return;
     }
-    // max size of one string is 2^32, so use uint32_t
-    uint32_t string_size = *((uint32_t*)srcs[0].data);
+    // These bytes come from serialize_batch(), i.e. the compact key encoding.
+    uint32_t string_size = 0;
+    read_compact_len(reinterpret_cast<const uint8_t*>(srcs[0].data), &string_size);
     get_bytes().reserve(chunk_size * string_size * 2);
     for (size_t i = 0; i < chunk_size; ++i) {
-        srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
+        srcs[i].data = (char*)deserialize_compact_and_append((uint8_t*)srcs[i].data);
     }
 }
 
@@ -1146,7 +1175,7 @@ __attribute__((noinline)) static void serialize_binary_batch_nullable_impl(uint8
         row += max_one_row_size;
 
         if (!null_flag) {
-            sizes[i] += serialize_binary_element(offsets_data, i, base, pos + sizeof(bool));
+            sizes[i] += serialize_binary_element_compact(offsets_data, i, base, pos + sizeof(bool));
         }
     }
 }
@@ -1168,7 +1197,7 @@ void BinaryColumn::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t
             for (size_t i = 0; i < chunk_size; ++i) {
                 uint8_t* pos = row + sizes[i];
                 *pos = 0; // null flag: not null
-                sizes[i] += sizeof(bool) + serialize_binary_element(offsets_data, i, base, pos + sizeof(bool));
+                sizes[i] += sizeof(bool) + serialize_binary_element_compact(offsets_data, i, base, pos + sizeof(bool));
                 row += max_one_row_size;
             }
         });
@@ -1190,9 +1219,10 @@ void BinaryColumn::deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, si
     if (chunk_size == 0) {
         return;
     }
-    const uint32_t string_size = *((bool*)srcs[0].data) // is null
-                                         ? 4
-                                         : *((uint32_t*)(srcs[0].data + sizeof(bool))); // first string size
+    uint32_t string_size = 4;
+    if (!*((bool*)srcs[0].data)) { // not null -> read the first string's compact length
+        read_compact_len(reinterpret_cast<const uint8_t*>(srcs[0].data) + sizeof(bool), &string_size);
+    }
     get_bytes().reserve(chunk_size * string_size * 2);
     ColumnFactory<Column, BinaryColumn>::deserialize_and_append_batch_nullable(srcs, chunk_size, is_nulls, has_null);
 }

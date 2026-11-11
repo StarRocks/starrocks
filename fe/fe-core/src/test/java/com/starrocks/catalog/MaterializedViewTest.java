@@ -25,6 +25,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.planner.MaterializedViewTestBase;
 import com.starrocks.qe.ConnectContext;
@@ -56,6 +57,7 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -69,6 +71,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -575,6 +582,49 @@ public class MaterializedViewTest extends StarRocksTestBase {
         mv.onReload();
 
         Assertions.assertFalse(mv.isActive());
+    }
+
+    @Test
+    public void testInferDistributionTwoArgUsesBaseTableEstimate() throws Exception {
+        // Without MaterializedView.inferDistribution(info, rf), the 2-arg call would dispatch to
+        // OlapTable and skip base-table estimation. Mock CatalogUtils so the two paths diverge.
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable base = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "base_t1");
+        Assertions.assertNotNull(base);
+
+        new MockUp<CatalogUtils>() {
+            @Mock
+            public static int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum,
+                                                                boolean enableAutoTabletDistribution) {
+                // MV specialization uses this 3-arg form on base tables.
+                return 42;
+            }
+
+            @Mock
+            public static int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum,
+                                                                boolean enableAutoTabletDistribution,
+                                                                short replicationNum) {
+                // OlapTable 2-arg path uses this on the (empty) MV itself.
+                return 1;
+            }
+
+            @Mock
+            public static int calBucketNumAccordingToBackends(OlapTable olapTable, short replicationNum) {
+                return 1;
+            }
+        };
+
+        SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
+        HashDistributionInfo defaultDist = new HashDistributionInfo(0, Lists.newArrayList(columns.get(0)));
+        MaterializedView mv = new MaterializedView(1000, testDb.getId(), "mv_infer_rf", columns, KeysType.AGG_KEYS,
+                partitionInfo, defaultDist, new MaterializedView.MvRefreshScheme());
+        mv.setBaseTableInfos(Lists.newArrayList(
+                new BaseTableInfo(testDb.getId(), testDb.getFullName(), base.getName(), base.getId())));
+
+        HashDistributionInfo toInfer = new HashDistributionInfo(0, Lists.newArrayList(columns.get(0)));
+        mv.inferDistribution(toInfer, (short) 1);
+        Assertions.assertEquals(42, toInfer.getBucketNum());
     }
 
     @Test
@@ -1248,6 +1298,134 @@ public class MaterializedViewTest extends StarRocksTestBase {
         Assertions.assertTrue(baseMv.getRelatedMaterializedViews().contains(mv2.getMvId()));
     }
 
+    /** Async startup uses layers; disabling post-image async reload keeps the synchronous path. */
+    @Test
+    public void testStartupActivationRespectsPostImageReloadConfig() throws Exception {
+        MaterializedView[] chain = createStartupActivationChain("startup_reload_config");
+        boolean oldPostImageReload = Config.enable_mv_post_image_reload_cache;
+        try {
+            Config.enable_mv_post_image_reload_cache = true;
+            for (MaterializedView mv : chain) {
+                mv.changeReloadState(-1);
+            }
+            GlobalStateMgr.getCurrentState().processMvRelatedMeta();
+            waitUntilReloaded(chain);
+            for (MaterializedView mv : chain) {
+                Assertions.assertTrue(mv.isActive());
+            }
+
+            Config.enable_mv_post_image_reload_cache = false;
+            for (MaterializedView mv : chain) {
+                mv.changeReloadState(-1);
+            }
+            GlobalStateMgr.getCurrentState().processMvRelatedMeta();
+            for (MaterializedView mv : chain) {
+                Assertions.assertTrue(mv.hasReloaded(), "post-image async reload is disabled but the reload is async");
+                Assertions.assertTrue(mv.isActive());
+            }
+        } finally {
+            Config.enable_mv_post_image_reload_cache = oldPostImageReload;
+        }
+    }
+
+    /**
+     * Poll instead of {@link MaterializedView#waitForReloaded()}, so that tests counting the waits only see the
+     * ones the activation itself makes.
+     */
+    private static void waitUntilReloaded(MaterializedView... mvs) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 60_000L;
+        for (MaterializedView mv : mvs) {
+            while (!mv.hasReloaded()) {
+                if (System.currentTimeMillis() > deadline) {
+                    Assertions.fail("mv " + mv.getName() + " was never reloaded");
+                }
+                Thread.sleep(20);
+            }
+        }
+    }
+
+    /**
+     * The startup activation over a hierarchy at least three mvs deep: every mv must be activated, and since an mv
+     * only starts once every mv it is built on has finished, no activation may ever wait for a base mv.
+     */
+    @Test
+    public void testStartupActivationNeverWaitsForABaseMv() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE startup_layers_base\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        String[][] hierarchy = {
+                {"startup_layers_l1", "startup_layers_base"},
+                {"startup_layers_l2a", "startup_layers_l1"},
+                {"startup_layers_l2b", "startup_layers_l1"},
+                {"startup_layers_l3", "startup_layers_l2a"},
+        };
+        for (String[] mvAndBase : hierarchy) {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvAndBase[0] + "\n" +
+                    "PARTITION BY k1\n" +
+                    "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                    "REFRESH manual\n" +
+                    "as select k1,k2,v1 from " + mvAndBase[1] + ";");
+        }
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView[] mvs = new MaterializedView[hierarchy.length];
+        for (int i = 0; i < hierarchy.length; i++) {
+            mvs[i] = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), hierarchy[i][0]);
+            mvs[i].waitForReloaded();
+            Assertions.assertTrue(mvs[i].isActive());
+        }
+
+        AtomicInteger waits = new AtomicInteger();
+        new MockUp<MaterializedView>() {
+            @Mock
+            public void waitForReloaded(Invocation invocation) {
+                waits.incrementAndGet();
+                invocation.proceed();
+            }
+        };
+        boolean oldPostImageReload = Config.enable_mv_post_image_reload_cache;
+        try {
+            Config.enable_mv_post_image_reload_cache = true;
+            for (MaterializedView mv : mvs) {
+                mv.changeReloadState(-1);
+            }
+            GlobalStateMgr.getCurrentState().processMvRelatedMeta();
+            waitUntilReloaded(mvs);
+        } finally {
+            Config.enable_mv_post_image_reload_cache = oldPostImageReload;
+        }
+        for (MaterializedView mv : mvs) {
+            Assertions.assertTrue(mv.isActive(), "mv " + mv.getName() + " was not activated");
+        }
+        Assertions.assertEquals(0, waits.get(), "a startup activation waited for a base mv still being reloaded");
+    }
+
+    /**
+     * An mv already reloaded when the startup activation is prepared is skipped by it, so the handover must not mark
+     * it inactive either.
+     */
+    @Test
+    public void testPrepareForStartupActivationLeavesAReloadedMvAlone() throws Exception {
+        MaterializedView mv = createStartupActivationChain("startup_prepared_reloaded")[0];
+
+        Assertions.assertTrue(mv.hasReloaded());
+        mv.prepareForStartupActivation();
+        Assertions.assertTrue(mv.isActive());
+        Assertions.assertTrue(mv.activateOnStartup().isDone());
+        Assertions.assertTrue(mv.isActive());
+    }
+
     @Test
     public void testGsonPrePostProcess() throws Exception {
         starRocksAssert.withDatabase("test").useDatabase("test")
@@ -1547,6 +1725,255 @@ public class MaterializedViewTest extends StarRocksTestBase {
         // Verify reload state hasn't changed (early return was taken)
         Assertions.assertEquals(initialReloadState, mv.getReloadState(),
                 "Async onReload should skip when already reloaded");
+    }
+
+    /**
+     * Create base table -> mv1 -> mv2 under the given prefix, wait until both are reloaded and return {mv1, mv2}.
+     */
+    private MaterializedView[] createStartupActivationChain(String prefix) throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE " + prefix + "_base\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView("CREATE MATERIALIZED VIEW " + prefix + "_mv1\n" +
+                        "PARTITION BY k1\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "REFRESH manual\n" +
+                        "as select k1,k2,v1 from " + prefix + "_base;")
+                .withMaterializedView("CREATE MATERIALIZED VIEW " + prefix + "_mv2\n" +
+                        "PARTITION BY k1\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "REFRESH manual\n" +
+                        "as select k1,k2,v1 from " + prefix + "_mv1;");
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv1 = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), prefix + "_mv1");
+        MaterializedView mv2 = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), prefix + "_mv2");
+        mv1.waitForReloaded();
+        mv2.waitForReloaded();
+        Assertions.assertTrue(mv1.isActive());
+        Assertions.assertTrue(mv2.isActive());
+        return new MaterializedView[] {mv1, mv2};
+    }
+
+    /**
+     * After the startup handover every mv is inactive with reload state NOT. A synchronous reload reaching one of
+     * them before its layer -- the replay of a CREATE MATERIALIZED VIEW on top of it -- must still activate it with
+     * the decision taken from the image, the coordinator must then skip it, and once reloaded the mv must follow
+     * its current status again.
+     */
+    @Test
+    public void testStartupHandoverKeepsDesiredActiveForInPlaceReload() throws Exception {
+        MaterializedView[] chain = createStartupActivationChain("startup_handover");
+        MaterializedView mv1 = chain[0];
+        MaterializedView mv2 = chain[1];
+
+        mv1.changeReloadState(-1);
+        mv2.changeReloadState(-1);
+        mv1.prepareForStartupActivation();
+        mv2.prepareForStartupActivation();
+        Assertions.assertFalse(mv1.isActive());
+        Assertions.assertFalse(mv2.isActive());
+        Assertions.assertEquals(-1, mv1.getReloadState());
+        Assertions.assertEquals(-1, mv2.getReloadState());
+
+        // reloading mv2 synchronously reaches mv1 before its layer and reloads it in place
+        mv2.onReload();
+        Assertions.assertTrue(mv1.hasReloaded());
+        Assertions.assertTrue(mv1.isActive(), "the in-place reload must use the decision taken at the handover");
+        Assertions.assertTrue(mv2.hasReloaded());
+        Assertions.assertTrue(mv2.isActive());
+
+        // the coordinator reaching mv1 afterwards must not reload it again
+        int reloadState = mv1.getReloadState();
+        Assertions.assertTrue(mv1.activateOnStartup().isDone());
+        Assertions.assertEquals(reloadState, mv1.getReloadState());
+        Assertions.assertTrue(mv1.isActive());
+
+        // the decision is dropped once the mv is reloaded: a later reload follows the current status again
+        mv1.setInactiveAndReason("inactive for test");
+        mv1.changeReloadState(-1);
+        mv1.onReload();
+        Assertions.assertFalse(mv1.isActive());
+    }
+
+    @Test
+    public void testActivateOnStartupRunsTheActivation() throws Exception {
+        MaterializedView[] chain = createStartupActivationChain("startup_activate");
+        MaterializedView mv1 = chain[0];
+        MaterializedView mv2 = chain[1];
+
+        mv1.changeReloadState(-1);
+        mv2.changeReloadState(-1);
+        mv1.prepareForStartupActivation();
+        mv2.prepareForStartupActivation();
+
+        // layer by layer: the base mv first, then the mv on top of it
+        mv1.activateOnStartup().get(60, TimeUnit.SECONDS);
+        Assertions.assertTrue(mv1.hasReloaded());
+        Assertions.assertTrue(mv1.isActive());
+        mv2.activateOnStartup().get(60, TimeUnit.SECONDS);
+        Assertions.assertTrue(mv2.hasReloaded());
+        Assertions.assertTrue(mv2.isActive());
+    }
+
+    @Test
+    public void testActivateOnStartupWaitsForAReloadInProgress() throws Exception {
+        MaterializedView mv = createStartupActivationChain("startup_reloading")[0];
+
+        // Another path -- the replay of a CREATE MATERIALIZED VIEW on top of it, say -- reloads it in place; park
+        // that reload half way.
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        new MockUp<MaterializedViewMetricsRegistry>() {
+            @Mock
+            public void registerMetricsEntity(Invocation invocation, MvId mvId) {
+                if (mvId.equals(mv.getMvId())) {
+                    entered.countDown();
+                    try {
+                        release.await(60, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+                invocation.proceed(mvId);
+            }
+        };
+        mv.changeReloadState(-1);
+        Thread inPlaceReload = new Thread(mv::onReload);
+        inPlaceReload.start();
+        Assertions.assertTrue(entered.await(60, TimeUnit.SECONDS), "the in-place reload never started");
+        Assertions.assertEquals(0, mv.getReloadState());
+
+        CompletableFuture<?> activation = mv.activateOnStartup();
+        Assertions.assertFalse(activation.isDone(), "the layer must not end while the mv is still being reloaded");
+        release.countDown();
+        activation.get(60, TimeUnit.SECONDS);
+        inPlaceReload.join(60_000);
+        Assertions.assertTrue(mv.hasReloaded());
+    }
+
+    @Test
+    public void testActivateOnStartupKeepsAnInactiveMvInactive() throws Exception {
+        MaterializedView mv = createStartupActivationChain("startup_inactive")[1];
+
+        mv.setInactiveAndReason("inactive for test");
+        mv.changeReloadState(-1);
+        mv.prepareForStartupActivation();
+        mv.activateOnStartup().get(60, TimeUnit.SECONDS);
+        Assertions.assertTrue(mv.hasReloaded());
+        Assertions.assertFalse(mv.isActive());
+    }
+
+    @Test
+    public void testActivateOnStartupSkipsADroppedMv() throws Exception {
+        MaterializedView mv = createStartupActivationChain("startup_dropped")[1];
+
+        mv.changeReloadState(-1);
+        mv.prepareForStartupActivation();
+        starRocksAssert.dropMaterializedView("startup_dropped_mv2");
+        Assertions.assertTrue(mv.activateOnStartup().isDone());
+        Assertions.assertEquals(-1, mv.getReloadState(), "a dropped mv must not be reloaded");
+    }
+
+    @Test
+    public void testActivateOnStartupKeepsAnActivationReplayedSinceTheHandover() throws Exception {
+        MaterializedView mv = createStartupActivationChain("startup_replayed_active")[1];
+
+        // Inactive in the image; the journal replayed after the handover activates it before its layer runs.
+        mv.setInactiveAndReason("inactive in the image");
+        mv.changeReloadState(-1);
+        mv.prepareForStartupActivation();
+        mv.activateOnReplay(mv.getBaseTableInfos()).get(60, TimeUnit.SECONDS);
+        Assertions.assertTrue(mv.isActive());
+
+        mv.activateOnStartup().get(60, TimeUnit.SECONDS);
+        Assertions.assertTrue(mv.hasReloaded());
+        Assertions.assertTrue(mv.isActive(), "the startup activation must not undo an activation replayed since");
+    }
+
+    @Test
+    public void testActivateOnStartupKeepsAnInactivationReplayedSinceTheHandover() throws Exception {
+        MaterializedView mv = createStartupActivationChain("startup_replayed_inactive")[1];
+
+        // Active in the image; the journal replayed after the handover inactivates it before its layer runs.
+        mv.changeReloadState(-1);
+        mv.prepareForStartupActivation();
+        mv.setInactiveAndReason("replayed inactivation");
+
+        mv.activateOnStartup().get(60, TimeUnit.SECONDS);
+        Assertions.assertTrue(mv.hasReloaded());
+        Assertions.assertFalse(mv.isActive(), "the startup activation must not undo an inactivation replayed since");
+    }
+
+    @Test
+    public void testActivateOnStartupLeavesNoMetricsOfAnMvDroppedMeanwhile() throws Exception {
+        MaterializedView mv = createStartupActivationChain("startup_dropped_midway")[1];
+
+        // The journal replayed meanwhile drops it after the coordinator has seen it in the catalog, right before its
+        // reload registers its metrics.
+        Set<MvId> registered = ConcurrentHashMap.newKeySet();
+        new MockUp<MaterializedViewMetricsRegistry>() {
+            @Mock
+            public void registerMetricsEntity(Invocation invocation, MvId mvId) {
+                if (mvId.equals(mv.getMvId()) && mv.isInCatalog()) {
+                    try {
+                        starRocksAssert.dropMaterializedView(mv.getName());
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                registered.add(mvId);
+                invocation.proceed(mvId);
+            }
+
+            @Mock
+            public void remove(Invocation invocation, MvId mvId) {
+                registered.remove(mvId);
+                invocation.proceed(mvId);
+            }
+        };
+
+        mv.changeReloadState(-1);
+        mv.prepareForStartupActivation();
+        mv.activateOnStartup().get(60, TimeUnit.SECONDS);
+        Assertions.assertFalse(mv.isInCatalog());
+        Assertions.assertFalse(registered.contains(mv.getMvId()), "the metrics of a dropped mv were left registered");
+    }
+
+    @Test
+    public void testActivateOnStartupKeepsAnInactivationReplayedWhileItReloads() throws Exception {
+        MaterializedView mv = createStartupActivationChain("startup_replayed_midway")[1];
+
+        // Active in the image; the journal replayed meanwhile inactivates it while its layer is reloading it, after
+        // the decision to activate it was taken and before the asynchronous check is submitted.
+        mv.changeReloadState(-1);
+        mv.prepareForStartupActivation();
+        new MockUp<MaterializedViewMetricsRegistry>() {
+            @Mock
+            public void registerMetricsEntity(Invocation invocation, MvId mvId) {
+                if (mvId.equals(mv.getMvId())) {
+                    mv.setInactiveAndReason("replayed while reloading");
+                }
+                invocation.proceed(mvId);
+            }
+        };
+
+        mv.activateOnStartup().get(60, TimeUnit.SECONDS);
+        Assertions.assertTrue(mv.hasReloaded());
+        Assertions.assertFalse(mv.isActive(), "the startup activation must not undo an inactivation replayed meanwhile");
+        Assertions.assertEquals("replayed while reloading", mv.getInactiveReason());
     }
 
     /**

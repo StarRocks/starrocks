@@ -443,7 +443,7 @@ public class QueryTransformer {
                 if (rewriteOperator.isForceMergeSort()) {
                     windowOperator.setForceMergeSort();
                 }
-                windowOperator.addFunction(analyticExpr);
+                windowOperator.addFunction(analyticExpr, rewriteOperator);
             } else {
                 windowOperators.add(rewriteOperator);
             }

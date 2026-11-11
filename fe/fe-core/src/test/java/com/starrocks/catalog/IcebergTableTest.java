@@ -29,6 +29,7 @@ import com.starrocks.planner.DescriptorTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.IcebergTableFactory;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.thrift.TBucketFunction;
 import com.starrocks.thrift.TIcebergPartitionInfo;
 import com.starrocks.thrift.TIcebergTable;
@@ -180,6 +181,28 @@ public class IcebergTableTest extends TableTestBase {
     }
 
     @Test
+    public void testUuidBucketProperty() {
+        // Iceberg buckets a uuid by its 16 bytes, StarRocks reads it as a string: the BE parses it back.
+        Schema uuidSchema = new Schema(Types.NestedField.required(1, "id", Types.IntegerType.get()),
+                Types.NestedField.required(2, "u", Types.UUIDType.get()));
+        PartitionSpec spec = PartitionSpec.builderFor(uuidSchema).bucket("u", 4).build();
+        TestTables.TestTable nativeTable = create(uuidSchema, spec, "uuid_bucket", 2);
+        List<Column> schema = new ArrayList<>();
+        schema.add(new Column("id", INT));
+        schema.add(new Column("u", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, nativeTable, Maps.newHashMap());
+        Assertions.assertTrue(icebergTable.hasBucketProperties());
+        List<BucketProperty> bucketProperties = icebergTable.getBucketProperties();
+        Assertions.assertEquals(1, bucketProperties.size());
+        Assertions.assertEquals(TBucketFunction.MURMUR3_X86_32_UUID, bucketProperties.get(0).getBucketFunction());
+        Assertions.assertEquals(4, bucketProperties.get(0).getBucketNum());
+        // uuid and string buckets hash differently, so they must not colocate.
+        Assertions.assertFalse(bucketProperties.get(0).satisfy(
+                new BucketProperty(TBucketFunction.MURMUR3_X86_32, 4, schema.get(1))));
+    }
+
+    @Test
     public void testHasBucketProperties() {
         // two specs
         new MockUp<TestTables.TestTable>() {
@@ -254,6 +277,106 @@ public class IcebergTableTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
                 "resource", "db", "table", "", columns, icebergNativeTable, Maps.newHashMap());
         Assertions.assertEquals(Lists.newArrayList(1, 0), icebergTable.getSortKeyIndexes());
+    }
+
+    @Test
+    public void testGetSortKeyIndexesStopsAtNestedSortField(@Mocked Table icebergNativeTable) {
+        List<Column> columns = Lists.newArrayList(
+                new Column("s", INT),
+                new Column("b", INT),
+                new Column("c", INT));
+
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "s", Types.StructType.of(
+                        Types.NestedField.optional(4, "x", Types.IntegerType.get()))),
+                Types.NestedField.optional(2, "b", Types.IntegerType.get()),
+                Types.NestedField.optional(3, "c", Types.IntegerType.get()));
+        // callers pair index i with sortOrder.fields().get(i): skipping s.x would put b's DESC on c
+        SortOrder nestedFirst = SortOrder.builderFor(schema)
+                .asc("s.x")
+                .desc("b")
+                .asc("c", NullOrder.NULLS_LAST)
+                .build();
+        SortOrder nestedMiddle = SortOrder.builderFor(schema)
+                .desc("b")
+                .asc("s.x")
+                .asc("c", NullOrder.NULLS_LAST)
+                .build();
+
+        new mockit.Expectations() {
+            {
+                icebergNativeTable.schema();
+                result = schema;
+                minTimes = 0;
+
+                icebergNativeTable.sortOrder();
+                returns(nestedFirst, nestedMiddle);
+            }
+        };
+
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", columns, icebergNativeTable, Maps.newHashMap());
+        Assertions.assertEquals(Lists.newArrayList(), icebergTable.getSortKeyIndexes());
+        Assertions.assertEquals(Lists.newArrayList(1), icebergTable.getSortKeyIndexes());
+    }
+
+    @Test
+    public void testShowCreateTableKeepsSortDirectionsOnTheirColumns() {
+        List<Column> columns = Lists.newArrayList(
+                new Column("s", INT),
+                new Column("b", INT),
+                new Column("c", INT));
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "s", Types.StructType.of(
+                        Types.NestedField.optional(4, "x", Types.IntegerType.get()))),
+                Types.NestedField.optional(2, "b", Types.IntegerType.get()),
+                Types.NestedField.optional(3, "c", Types.IntegerType.get()));
+
+        // a nested first field leaves no top-level prefix: no ORDER BY, not "b ASC, c DESC"
+        SortOrder nestedFirst = SortOrder.builderFor(schema)
+                .asc("s.x")
+                .desc("b")
+                .asc("c", NullOrder.NULLS_LAST)
+                .build();
+        TestTables.TestTable nestedFirstTable = TestTables.create(tableDir, "sort_nested_first", schema,
+                PartitionSpec.unpartitioned(), nestedFirst, 2);
+        String ddl = AstToStringBuilder.getExternalCatalogTableDdlStmt(new IcebergTable(1, "sort_nested_first",
+                "iceberg_catalog", "resource", "db", "sort_nested_first", "", columns, nestedFirstTable,
+                Maps.newHashMap()));
+        Assertions.assertFalse(ddl.contains("ORDER BY"), ddl);
+
+        // a nested middle field keeps only the prefix before it
+        SortOrder nestedMiddle = SortOrder.builderFor(schema)
+                .desc("b")
+                .asc("s.x")
+                .asc("c", NullOrder.NULLS_LAST)
+                .build();
+        TestTables.TestTable nestedMiddleTable = TestTables.create(tableDir, "sort_nested_middle", schema,
+                PartitionSpec.unpartitioned(), nestedMiddle, 2);
+        ddl = AstToStringBuilder.getExternalCatalogTableDdlStmt(new IcebergTable(2, "sort_nested_middle",
+                "iceberg_catalog", "resource", "db", "sort_nested_middle", "", columns, nestedMiddleTable,
+                Maps.newHashMap()));
+        Assertions.assertTrue(ddl.contains("\nORDER BY (b DESC NULLS LAST)\n"), ddl);
+    }
+
+    @Test
+    public void testShowCreateTableShowsDefaultOfRequiredColumn() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                Types.NestedField.required("age").withId(2).ofType(Types.IntegerType.get())
+                        .withInitialDefault(20).withWriteDefault(20).build(),
+                Types.NestedField.required(3, "k", Types.IntegerType.get()),
+                Types.NestedField.optional("score").withId(4).ofType(Types.IntegerType.get())
+                        .withInitialDefault(60).withWriteDefault(60).build());
+        TestTables.TestTable table = TestTables.create(tableDir, "required_default", schema,
+                PartitionSpec.unpartitioned(), 3);
+        String ddl = AstToStringBuilder.getExternalCatalogTableDdlStmt(new IcebergTable(1, "required_default",
+                "iceberg_catalog", "resource", "db", "required_default", "",
+                IcebergApiConverter.toFullSchemas(schema, table), table, Maps.newHashMap()));
+        Assertions.assertTrue(ddl.contains("`id` int(11) DEFAULT NULL,"), ddl);
+        Assertions.assertTrue(ddl.contains("`age` int(11) NOT NULL DEFAULT \"20\","), ddl);
+        Assertions.assertTrue(ddl.contains("`k` int(11) NOT NULL,"), ddl);
+        Assertions.assertTrue(ddl.contains("`score` int(11) DEFAULT \"60\""), ddl);
     }
 
     @Test

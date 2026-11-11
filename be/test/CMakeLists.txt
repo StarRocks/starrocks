@@ -13,6 +13,7 @@ set(EXEC_FILES
         ./compute_env/spill/spill_observable_test.cpp
         ./exec/pipeline/spill_process_channel_test.cpp
         ./exec/pipeline/hash_join_build_chunk_slicer_test.cpp
+        ./exec/pipeline/partial_runtime_filter_merger_test.cpp
         ./exec/pipeline/block_reason_test.cpp
         ./exec/pipeline/spillable_sort_source_lockstep_test.cpp
         ./exec/pipeline/spillable_sort_observer_wakeup_test.cpp
@@ -24,14 +25,19 @@ set(EXEC_FILES
         ./exec/pipeline/multi_cast_local_exchange_test.cpp
         ./exec/pipeline/fetch_task_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
+        ./exec/data_sinks/iceberg_encryption_signal_test.cpp
+        ./formats/parquet/decrypt_metadata_module_test.cpp
+        ./formats/parquet/encrypted_file_reader_test.cpp
         ./exec/data_sinks/pipeline_sink_builder_test.cpp
         ./exec/pipeline/exchange_sink_operator_test.cpp
+        ./exec/pipeline/exchange_compression_strategy_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
         ./exec/pipeline/sink/olap_table_sink_operator_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/nljoin_probe_operator_test.cpp
         ./exec/pipeline/enforce_unique_row_locator_operator_test.cpp
+        ./exec/pipeline/repeat_operator_test.cpp
         ./exec/pipeline/analytic_node_pipeline_test.cpp
         ./exec/pipeline/local_bucket_shuffle_test.cpp
         ./exec/pipeline/local_shuffle_alignment_test.cpp
@@ -53,6 +59,7 @@ set(EXEC_FILES
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/agg_hash_map_test.cpp
         ./exec/compress_serializer_test.cpp
+        ./exec/aggregator_hash_variant_test.cpp
         ./exec/hash_variant_test.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp
@@ -76,13 +83,13 @@ set(EXEC_FILES
         ./exprs/agg/aggregate_test.cpp
         ./exprs/agg/window_test.cpp
         ./exprs/agg/agg_compressed_key_test.cpp
+        ./exprs/agg/distinct_two_level_test.cpp
         ./exprs/agg/agg_state_functions_test.cpp
         ./exprs/decimal_cast_expr_float_test.cpp
         ./exprs/flat_json_functions_test.cpp
         ./exprs/time_functions_test.cpp
         ./exprs/utility_functions_test.cpp
         ./exprs/runtime_filter_test.cpp
-        ./exprs/variant_functions_test.cpp
         ./exprs/table_function/test_list_rowsets.cpp
         ./exprs/table_function/java_udtf_factory_test.cpp
         ./exprs/dict_expr_test.cpp
@@ -287,6 +294,7 @@ SET(DW_TEST_FILES
     ./storage/lake/shared_data_vector_index_test.cpp
     ./storage/lake/vector_index_build_task_test.cpp
     ./storage/lake/lake_delvec_loader_test.cpp
+    ./storage/lake/lake_grouped_range_reader_test.cpp
     ./storage/lake/lake_meta_reader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
     ./storage/lake/lake_persistent_index_selection_test.cpp
@@ -303,11 +311,14 @@ SET(DW_TEST_FILES
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
     ./storage/lake/lake_merged_del_op_offset_test.cpp
+    ./storage/lake/lake_merged_bundled_segments_test.cpp
     ./storage/lake/lake_multi_statement_bundle_mix_test.cpp
+    ./storage/lake/lake_multi_statement_publish_test.cpp
     ./storage/lake/tablet_merger_test.cpp
     ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/tablet_splitter_test.cpp
+    ./storage/lake/replication_schema_utils_test.cpp
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
     ./storage/lake/segment_metadata_filter_test.cpp
@@ -332,6 +343,7 @@ SET(DW_TEST_FILES
     ./storage/lake/multi_node_write_txn_log_test.cpp
     ./storage/lake/transactions_test.cpp
     ./storage/lake/pk_tablet_sst_writer_test.cpp
+    ./storage/lake/txn_log_applier_lake_replication_test.cpp
     ./storage/lake/txn_log_applier_test.cpp
     ./storage/lake/txn_log_applier_idg_test.cpp
     ./storage/lake/vacuum_test.cpp
@@ -396,6 +408,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/unique_rowset_id_generator_test.cpp
     ./storage/rowset_update_state_test.cpp
     ./storage/rowset/zone_map_index_test.cpp
+    ./storage/query/range_group_task_test.cpp
     ./storage/rows_mapper_test.cpp
     ./storage/row_store_encoder_test.cpp
     ./storage/schema_change_test.cpp
@@ -468,6 +481,7 @@ if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
     ADD_BE_TEST(connector/paimon/paimon_cpp_test)
     target_sources(paimon_cpp_test PRIVATE
         connector/paimon/paimon_scanner_mem_usage_test.cpp
+        connector/paimon/paimon_scanner_projection_test.cpp
         connector/paimon/paimon_predicate_converter_test.cpp
         connector/paimon/paimon_file_system_test.cpp
         connector/paimon/paimon_blob_converter_test.cpp

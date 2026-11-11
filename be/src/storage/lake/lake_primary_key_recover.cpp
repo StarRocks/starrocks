@@ -45,6 +45,33 @@ Status LakePrimaryKeyRecover::pre_cleanup() {
     }
     _metadata->clear_delvec_meta();
     _metadata->clear_sstable_meta();
+    // A del file a compaction output carried over from one of its inputs is dropped too. Recover does not replay
+    // it, and the index rebuild that follows must not either, or the index would erase rows the rebuilt delvecs
+    // keep live. Its deleted rows may come back, which recover allows.
+    for (auto& rowset : *_metadata->mutable_rowsets()) {
+        auto* dels = rowset.mutable_del_files();
+        auto inherited = std::stable_partition(dels->begin(), dels->end(), [&](const DelfileWithRowsetId& del) {
+            return del.origin_rowset_id() == rowset.id();
+        });
+        for (auto it = inherited; it != dels->end(); ++it) {
+            FileMetaPB file_meta;
+            file_meta.set_name(it->name());
+            file_meta.set_shared(it->shared());
+            file_meta.set_version(it->version());
+            _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+        }
+        dels->erase(inherited, dels->end());
+    }
+    // A compaction without output segments keeps an output rowset only to carry those del files; with them gone
+    // it holds nothing, and an empty ordinary rowset is not a valid shape, so drop it.
+    auto* rowsets = _metadata->mutable_rowsets();
+    auto emptied = std::stable_partition(rowsets->begin(), rowsets->end(), [](const RowsetMetadataPB& rowset) {
+        return rowset.has_delete_predicate() || rowset.segment_metas_size() > 0 || rowset.del_files_size() > 0;
+    });
+    for (auto it = emptied; it != rowsets->end(); ++it) {
+        _metadata->mutable_rowset_to_schema()->erase(it->id());
+    }
+    rowsets->erase(emptied, rowsets->end());
     // The builder may still hold delvecs appended before recover, and must not let a segment that the
     // rebuild finds no deletes for fall back to the base version's delvec.
     _builder->reset_delvecs_for_recover();

@@ -83,7 +83,7 @@ This topic introduces the following types of BE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether a compaction task in a shared-data cluster holds its input Segment objects on its own Rowset instances for the whole task, so that the per-column-group passes of vertical compaction reuse them instead of reloading them through the metadata cache. Without holding, whenever the metadata cache cannot hold all input segments (a small `lake_metadata_cache_limit`, or a node crowded with many tablets), every pass reloads and re-parses every input segment; that cost is CPU-bound and proportional to the column count, and can slow a wide-table compaction by an order of magnitude or make it fail with repeated memory-limit retries. While holding, the task does not fill the shared metadata cache with its input segments or delete vectors, because the inputs are deleted right after compaction and caching them only evicts other tablets' entries. The memory cost is one set of input segment metadata per running task, accounted on the compaction task's memory tracker and released with the task. Set this item to `false` to restore the previous behavior, in which compaction reuses segments through the shared metadata cache and fills that cache with its inputs.
+- Description: Whether a compaction task in a shared-data cluster holds its input Segment objects on its own Rowset instances for the whole task, so that the per-column-group passes of vertical compaction reuse them instead of reloading them through the metadata cache. Without holding, whenever the metadata cache cannot hold all input segments (a small `lake_segment_metadata_cache_limit_percent`, or a node crowded with many tablets), every pass reloads and re-parses every input segment; that cost is CPU-bound and proportional to the column count, and can slow a wide-table compaction by an order of magnitude or make it fail with repeated memory-limit retries. While holding, the task does not fill the shared metadata cache with its input segments or delete vectors, because the inputs are deleted right after compaction and caching them only evicts other tablets' entries. The memory cost is one set of input segment metadata per running task, accounted on the compaction task's memory tracker and released with the task. Set this item to `false` to restore the previous behavior, in which compaction reuses segments through the shared metadata cache and fills that cache with its inputs.
 - Introduced in: v4.2
 
 ### lake_compaction_stream_buffer_size_bytes
@@ -149,6 +149,26 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Set it to `false` only while the cluster may still be downgraded to a version that predates the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
 - Introduced in: v4.2
 
+### lake_replication_enable_light_schema_change
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Allows shared-data replication snapshots with live rowsets from compatible lightweight add/drop column changes. The source and target current schemas must match logically. Added columns must be ordinary scalar value columns with a default value or nullable semantics; key, sort, type, generated-column, nested-UID, external-index, bundled-file, and shared/range-tablet changes are not supported. When disabled, snapshots with live historical rowset schemas are rejected. Validated dropped columns are removed from segment footer metadata; their data pages are not rewritten. The setting is captured when each replication task starts.
+- Introduced in: -
+
+Enable this option only after **all target CNs** support it. A normalized replication transaction records its target schema and fails publish if that schema changes. Disabling this option prevents new admissions but does not change replay of already recorded transactions. Older CNs cannot safely replay these transaction logs; finish or abort pending normalized transactions before any downgrade and do not assume that disabling the option makes a downgrade safe.
+
+### lake_enable_publish_partial_meta
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a publish of a shared-data table with file bundling keeps the result of each tablet that the aggregator may not have received. A tablet whose publish finishes more than the publish RPC timeout plus 3 seconds after the request arrived, or whose publish is a retry, keeps its result in the local Data Cache of the node, never in object storage. A later retry on that node reads it back instead of applying the transactions again, so tablets that already finished are not redone on every retry of a slow partition. The entries are evicted like any other Data Cache entry. Takes effect only when Data Cache is enabled. Set the same value on all BE and CN nodes.
+- Introduced in: v4.2
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
@@ -157,6 +177,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
+
+### lake_pk_compaction_max_rowsets_per_level
+
+- Default: 20
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of rowsets that still need compaction at which a size level of a Primary Key table in a shared-data cluster is merged even if it does not have the highest score. The Size-tiered Compaction policy merges only the level with the highest score in each round. While loads keep arriving, the level of the newest and smallest rowsets has the highest score in every round, so a level of larger rowsets (outputs of earlier compactions and medium-sized loads) keeps growing. This increases the number of segments that queries read, and shows up as a spike in the compaction score right after a compaction finishes. When a level that is not picked holds this many rowsets that still need compaction, and these rowsets fit in the same compaction task as the picked ones, the level is merged in that compaction task. Set it to `0` to disable this behavior.
+- Introduced in: -
 
 ### lake_pk_compaction_base_enable_delete_trigger
 
@@ -239,6 +268,15 @@ This topic introduces the following types of BE configurations:
 - Description: An override of the Primary Key compaction score gate. When a below-threshold level's total bytes exceed `ratio * largest_rowset_bytes * size_tiered_level_multiple` (that is, `ratio` times the natural next-tier promotion target), compaction is forced to bound long-tail mid-tier accumulation. The default `2.0` tolerates twice the natural promotion threshold before forcing a merge. Set to `0` to disable this override, so that there is no size cap.
 - Introduced in: v4.2
 
+### lake_pk_partial_update_use_segment_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a Primary Key table publish in a shared-data cluster reads the base segments it needs through the segment metadata cache instead of opening each of them from scratch. This covers both row-mode partial updates and condition updates, which re-read old values from the same segments. Opening a segment parses its footer and builds one column reader per column of the tablet schema, so on a wide table a frequent partial-update stream repeats that cost on every publish for the same base segments. Reading through the cache lets a later publish reuse an already-opened segment. Tables containing JSON, ARRAY, MAP, or STRUCT columns, or columns enabled in `zstd_compression_columns`, use the original open path because their nested metadata or compression dictionaries are not covered by the column-count estimate. Such tables continue to bypass the cache when dictionary writing is disabled, because existing segments can still contain dictionaries. The cache is only used while the tablet's base segments fit in the segment metadata cache (see `lake_segment_metadata_cache_limit_percent`) and each segment's estimated size fits in one cache shard; otherwise, filling the cache would evict entries as fast as it adds them, so the original behavior is used instead. The tablet's whole set is the relevant one because successive publishes read different subsets of it. Set this item to `false` to always open the segments from scratch.
+- Introduced in: v4.2
+
 ### enable_lake_prepared_split_pre_refinement
 
 - Default: true
@@ -282,6 +320,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Sub-chunk granularity for `RowsMapperIterator` pipelined reads of `.lcrm` files during light Primary Key compaction publish in a shared-data cluster. Each output segment is split into `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` sub-chunks pipelined independently. Smaller values raise the achievable parallelism for few-but-large output segments at the cost of more range reads and an extra memcpy on consume. Defaults to 4 MiB to align with the starcache disk-tier block size.
 
+### lake_segment_metadata_cache_limit_percent
+
+- Default: 20
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The capacity of the segment metadata cache in a shared-data cluster, as a percentage of the BE process memory limit. This cache holds opened segments (their footers, indexes, and column readers), delete vectors, and tablet schemas. It is separate from the tablet metadata cache (see `lake_tablet_metadata_cache_limit_percent`), so loading many segments does not evict tablet metadata or transaction logs. Values outside the range 0–100 are treated as 0 or 100. Set this item to `0` to disable the cache. Together with `lake_tablet_metadata_cache_limit_percent`, this item replaces `lake_metadata_cache_limit`.
+- Introduced in: -
+
 ### lake_shard_info_cache_ttl_sec
 
 - Default: 60
@@ -289,6 +336,15 @@ This topic introduces the following types of BE configurations:
 - Unit: Seconds
 - Is mutable: Yes
 - Description: How long a BE or CN in a shared-data cluster keeps the storage location of a tablet it does not own, so that touching the tablet again within this time does not request the location from StarMgr. A node keeps two kinds of locations. The first kind is what it requested from StarMgr, counted in `starrocks_be_staros_shard_info_fallback_total`, when it read or wrote the files of a tablet assigned to another node, for example when several nodes write the same tablet in one load, or when a vacuum reads the metadata of every tablet in a partition; lookups answered by them are counted in `staros_shard_info_fallback_cache_hits_total`. The second kind is what the nodes that own the tablets hand over to the node that coordinates a load into a table with `file_bundling` enabled, together with their transaction logs, so that the coordinating node writes the combined transaction log of each partition without requesting the location; lookups answered by them are counted in `lake_tablet_location_handoff_hits_total`. The node that owns a tablet receives storage volume updates pushed by StarMgr, while a kept location picks them up only after it expires, so this item also bounds how long such a node can keep using outdated storage volume settings, such as rotated credentials. The kept locations include the credentials of the storage volume. `0` disables both kinds: nothing is handed over or kept, and every such lookup requests the location from StarMgr.
+- Introduced in: -
+
+### lake_tablet_metadata_cache_limit_percent
+
+- Default: 10
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The capacity of the tablet metadata cache in a shared-data cluster, as a percentage of the BE process memory limit. This cache holds tablet metadata and transaction logs. It is separate from the segment metadata cache (see `lake_segment_metadata_cache_limit_percent`), so loading many segments does not evict them. Values outside the range 0–100 are treated as 0 or 100. Set this item to `0` to disable the cache. Together with `lake_segment_metadata_cache_limit_percent`, this item replaces `lake_metadata_cache_limit`.
 - Introduced in: -
 
 ### lake_vacuum_enable_task_timeout
@@ -518,7 +574,7 @@ This topic introduces the following types of BE configurations:
 
 ### datacache_disk_idle_seconds_for_expansion
 
-- Default: 7200
+- Default: 180
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
@@ -633,13 +689,22 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to use a unified Data Cache instance to manage data caching for both internal catalog and external catalog in a shared-data cluster.
 - Introduced in: v3.4.0
 
+### external_table_clear_corrupted_cache_data
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to clear the corrupted data cache of external table files (for example, Hive and Iceberg tables). When a scan fails to decode a file whose content was read from the data cache, the system drops the cached blocks it read, so that the next read of the file recovers from the remote storage. For Parquet files, if no row has been returned yet, the system first reads the file again bypassing the data cache, and drops the cached blocks only if this read succeeds. This item does not affect the internal tables of shared-data clusters, which are controlled by `lake_clear_corrupted_cache_data`.
+- Introduced in: -
+
 ### jdbc_connection_idle_timeout_ms
 
 - Default: 600000
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: No
-- Description: The length of time after which an idle connection in the JDBC connection pool expires. If the connection idle time in the JDBC connection pool exceeds this value, the connection pool closes idle connections beyond the number specified in the configuration item `jdbc_minimum_idle_connections`.
+- Description: The length of time after which an idle connection in the JDBC connection pool expires. If the connection idle time in the JDBC connection pool exceeds this value, the connection pool closes idle connections beyond the number specified in the configuration item `jdbc_minimum_idle_connections`. If no query uses a connection pool for this length of time, the BE closes the whole connection pool, including the connections kept by `jdbc_minimum_idle_connections`, and creates a new one on the next query. This releases the connection pools of dropped or altered JDBC catalogs and resources.
 - Introduced in: -
 
 ### jdbc_connection_pool_size
@@ -680,7 +745,7 @@ This topic introduces the following types of BE configurations:
 
 ### lake_clear_corrupted_cache_data
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes

@@ -28,6 +28,7 @@
 #include "exprs/time_functions.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 
 #define PI acos(-1)
 
@@ -998,10 +999,7 @@ TEST_F(VecMathFunctionsTest, InfNanTest) {
     {
         Columns columns;
 
-        auto tc1 = DoubleColumn::create();
-        tc1->append(710.0);
-        tc1->append(2.47498282E8);
-        tc1->append(2.47498282E3);
+        auto tc1 = ColumnTestHelper::build_column<double>({710.0, 2.47498282E8, 2.47498282E3});
         columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -1313,9 +1311,7 @@ TEST_F(VecMathFunctionsTest, AbsDecimalNullableAllNullPreservesScale) {
 
     ColumnPtr result = MathFunctions::abs_decimal128(ctx.get(), columns).value();
     ASSERT_TRUE(result->is_nullable());
-    ASSERT_EQ(2, result->size());
-    ASSERT_TRUE(result->is_null(0));
-    ASSERT_TRUE(result->is_null(1));
+    ASSERT_EQ("[NULL, NULL]", result->debug_string());
 
     auto result_data =
             ColumnHelper::cast_to<TYPE_DECIMAL128>(FunctionHelper::get_data_column_of_nullable(result)).get();
@@ -1361,16 +1357,10 @@ TEST_F(VecMathFunctionsTest, CotTest) {
 TEST_F(VecMathFunctionsTest, Atan2Test) {
     {
         Columns columns;
-        auto tc1 = DoubleColumn::create();
-        tc1->append(0.1);
-        tc1->append(0.2);
-        tc1->append(0.3);
+        auto tc1 = ColumnTestHelper::build_column<double>({0.1, 0.2, 0.3});
         columns.emplace_back(std::move(tc1));
 
-        auto tc2 = DoubleColumn::create();
-        tc2->append(0.1);
-        tc2->append(0.2);
-        tc2->append(0.3);
+        auto tc2 = ColumnTestHelper::build_column<double>({0.1, 0.2, 0.3});
         columns.emplace_back(std::move(tc2));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -1535,10 +1525,7 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
         tc1->append(0.3);
         binary_columns.emplace_back(std::move(tc1));
 
-        auto tc2 = DoubleColumn::create();
-        tc2->append(0.8);
-        tc2->append(0.2);
-        tc2->append(0.3);
+        auto tc2 = ColumnTestHelper::build_column<double>({0.8, 0.2, 0.3});
         binary_columns.emplace_back(std::move(tc2));
 
         std::vector<bool> null_expect = {true, false, false};
@@ -1557,10 +1544,8 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
 
     {
         Columns columns;
-        auto col1 = Int32Column::create();
-        auto col2 = Int32Column::create();
-        col1->append(123);
-        col2->append(33);
+        auto col1 = ColumnTestHelper::build_column<int32_t>({123});
+        auto col2 = ColumnTestHelper::build_column<int32_t>({33});
         columns.emplace_back(std::move(col1));
         columns.emplace_back(std::move(col2));
 
@@ -1572,9 +1557,8 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
     }
     {
         Columns columns;
-        auto col1 = Int32Column::create();
+        auto col1 = ColumnTestHelper::build_column<int32_t>({123});
         auto col2 = Int32Column::create();
-        col1->append(123);
         auto col3 = NullableColumn::create(std::move(col1), NullColumn::create(col1->size(), DATUM_NOT_NULL));
         col3->append_nulls(1);
         col2->append(33);
@@ -1589,10 +1573,8 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
     }
     {
         Columns columns_const;
-        auto col1 = Int32Column::create();
-        auto col2 = Int32Column::create();
-        col1->append(123);
-        col2->append(15);
+        auto col1 = ColumnTestHelper::build_column<int32_t>({123});
+        auto col2 = ColumnTestHelper::build_column<int32_t>({15});
         auto const_col1 = ConstColumn::create(std::move(col1), 1);
         columns_const.emplace_back(std::move(const_col1));
         columns_const.emplace_back(std::move(col2));
@@ -1658,10 +1640,8 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
     }
     {
         Columns columns;
-        auto col1 = BinaryColumn::create();
-        auto col2 = Int32Column::create();
-        col1->append("我是");
-        col2->append(1);
+        auto col1 = ColumnTestHelper::build_column<Slice>({"我是"});
+        auto col2 = ColumnTestHelper::build_column<int32_t>({1});
         columns.emplace_back(std::move(col1));
         columns.emplace_back(std::move(col2));
 
@@ -1675,10 +1655,8 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
 
     {
         Columns columns;
-        auto col1 = Int32Column::create();
-        auto col2 = Int32Column::create();
-        col1->append(123);
-        col2->append(10);
+        auto col1 = ColumnTestHelper::build_column<int32_t>({123});
+        auto col2 = ColumnTestHelper::build_column<int32_t>({10});
         columns.emplace_back(std::move(col1));
         columns.emplace_back(std::move(col2));
 

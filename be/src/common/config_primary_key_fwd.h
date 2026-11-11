@@ -38,9 +38,21 @@ CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 // This config controls max memory that we can use for partial update.
 CONF_mInt64(partial_update_memory_limit_per_worker, "2147483648"); // 2GB
 
+// Rows per chunk when a primary key table reads segments to apply a load or a compaction, in both shared-data
+// and shared-nothing mode: the primary keys of the loaded rowset, the columns that partial updates read, and the
+// primary keys of a compaction output. Kept apart from vector_chunk_size so the apply batch can be tuned without
+// touching query execution. A value <= 0 falls back to 4096 and a value above 65535 is capped at 65535. Rebuilding
+// the primary key index from segments does not use it.
+CONF_mInt32(pk_vector_chunk_size, "4096");
+
 // The minimum threshold of data size for enabling pk index eager build.
 // Default is 100MB.
 CONF_mInt64(pk_index_eager_build_threshold_bytes, "104857600");
+
+// A delete file holding at least this many rows also gets its tombstone sstable built at import time, in addition
+// to the pk_index_eager_build_threshold_bytes trigger, so publish ingests the sstable instead of writing every
+// deleted key into the primary key index memtable. Not positive disables the row trigger.
+CONF_mInt64(pk_index_del_sst_min_rows, "1000000");
 
 // Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
 CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "0");

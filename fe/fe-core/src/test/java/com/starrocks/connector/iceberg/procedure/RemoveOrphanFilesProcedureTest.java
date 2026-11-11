@@ -55,6 +55,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -597,7 +598,7 @@ public class RemoveOrphanFilesProcedureTest {
                 MockedStatic<org.apache.iceberg.ReachableFileUtil> reachableUtil =
                         mockStatic(org.apache.iceberg.ReachableFileUtil.class);
                 MockedStatic<FileSystem> fsStatic = mockStatic(FileSystem.class)) {
-            mfStatic.when(() -> ManifestFiles.read(any(ManifestFile.class), any(FileIO.class)))
+            mfStatic.when(() -> ManifestFiles.read(any(ManifestFile.class), any(FileIO.class), anyMap()))
                     .thenReturn(manifestReader);
 
             reachableUtil.when(() -> org.apache.iceberg.ReachableFileUtil.metadataFileLocations(any(Table.class), eq(false)))
@@ -719,7 +720,7 @@ public class RemoveOrphanFilesProcedureTest {
         when(table.io()).thenReturn(fileIO);
 
         try (MockedStatic<ManifestFiles> mfStatic = mockStatic(ManifestFiles.class)) {
-            mfStatic.when(() -> ManifestFiles.read(any(ManifestFile.class), any(FileIO.class)))
+            mfStatic.when(() -> ManifestFiles.read(any(ManifestFile.class), any(FileIO.class), anyMap()))
                     .thenReturn(manifestReader);
 
             IcebergTableProcedureContext context = createContext(table);

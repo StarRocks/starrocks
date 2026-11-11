@@ -381,8 +381,9 @@ public class HiveTable extends Table {
                     })
                     .collect(Collectors.toList());
         } catch (StarRocksConnectorException e) {
+            // Rethrown: a null descriptor surfaced as an NPE inside thrift serialization, hiding the cause.
             LOG.warn("table {} gets partition info failed.", name, e);
-            return null;
+            throw e;
         }
 
         for (int i = 0; i < hivePartitions.size(); i++) {

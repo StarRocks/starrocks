@@ -30,6 +30,7 @@
 #include "exprs/agg/combinator/state_function.h"
 #include "exprs/agg/combinator/state_merge_function.h"
 #include "exprs/agg/combinator/state_union_function.h"
+#include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -838,8 +839,8 @@ TEST_F(AggStateFunctionsTest, test_state_function_avg) {
 // states, e.g. INSERT ... VALUES (..., avg_state(38)) that avg_merge later reads
 // back as garbage (or crashes the BE).
 TEST_F(AggStateFunctionsTest, test_state_function_const_column) {
-    TypeDescriptor return_type_desc = TypeDescriptor(TYPE_DOUBLE);
-    TypeDescriptor arg_type_desc = TypeDescriptor(TYPE_BIGINT);
+    TypeDescriptor return_type_desc = TYPE_DOUBLE_DESC;
+    TypeDescriptor arg_type_desc = TYPE_BIGINT_DESC;
     TypeDescriptor intermediate_type_desc = TypeDescriptor(TYPE_VARBINARY);
     std::vector<TypeDescriptor> arg_type_descs = {arg_type_desc};
     auto utils = std::make_unique<FunctionUtils>(nullptr, return_type_desc, arg_type_descs);
@@ -853,8 +854,7 @@ TEST_F(AggStateFunctionsTest, test_state_function_const_column) {
 
     // avg_state(38) evaluated over a 5-row chunk: the argument is a ConstColumn.
     const size_t chunk_size = 5;
-    auto data_column = Int64Column::create();
-    data_column->append(38);
+    auto data_column = ColumnTestHelper::build_column<int64_t>({38});
     ColumnPtr const_column = ConstColumn::create(std::move(data_column), chunk_size);
 
     Columns input_columns = {const_column};
@@ -877,8 +877,8 @@ TEST_F(AggStateFunctionsTest, test_state_function_const_column) {
 // Same for a const-NULL data argument (e.g. avg_state(NULL)): it must be expanded
 // into a nullable column instead of reaching the aggregate as a ConstColumn.
 TEST_F(AggStateFunctionsTest, test_state_function_const_null_column) {
-    TypeDescriptor return_type_desc = TypeDescriptor(TYPE_DOUBLE);
-    TypeDescriptor arg_type_desc = TypeDescriptor(TYPE_BIGINT);
+    TypeDescriptor return_type_desc = TYPE_DOUBLE_DESC;
+    TypeDescriptor arg_type_desc = TYPE_BIGINT_DESC;
     TypeDescriptor intermediate_type_desc = TypeDescriptor(TYPE_VARBINARY);
     std::vector<TypeDescriptor> arg_type_descs = {arg_type_desc};
     auto utils = std::make_unique<FunctionUtils>(nullptr, return_type_desc, arg_type_descs);
@@ -1849,7 +1849,7 @@ public:
 template <typename Combinator>
 void test_combinator_batch_destroy_with_selection() {
     LiveCountedFunction inner;
-    AggStateDesc agg_state_desc("live_counted", TypeDescriptor(TYPE_BIGINT), {TypeDescriptor(TYPE_BIGINT)}, false, 1);
+    AggStateDesc agg_state_desc("live_counted", TYPE_BIGINT_DESC, {TYPE_BIGINT_DESC}, false, 1);
     Combinator combinator(agg_state_desc, &inner);
     ASSERT_FALSE(combinator.is_pod_state());
 

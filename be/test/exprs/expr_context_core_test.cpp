@@ -28,7 +28,7 @@ namespace {
 class ExprContextTestExpr final : public Expr {
 public:
     explicit ExprContextTestExpr(bool register_fn_ctx = false)
-            : Expr(TypeDescriptor(TYPE_INT)), _register_fn_ctx(register_fn_ctx) {}
+            : Expr(TYPE_INT_DESC), _register_fn_ctx(register_fn_ctx) {}
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ExprContextTestExpr(*this)); }
 
@@ -40,7 +40,7 @@ public:
     Status prepare(RuntimeState* state, ExprContext* context) override {
         RETURN_IF_ERROR(Expr::prepare(state, context));
         if (_register_fn_ctx) {
-            _fn_ctx_idx = context->register_func(state, FunctionContext::TypeDesc(TypeDescriptor(TYPE_INT)), {});
+            _fn_ctx_idx = context->register_func(state, FunctionContext::TypeDesc(TYPE_INT_DESC), {});
         }
         return Status::OK();
     }

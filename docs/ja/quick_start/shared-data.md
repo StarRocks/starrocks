@@ -10,6 +10,7 @@ import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
 import Curl from '../_assets/quick-start/_curl.mdx'
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 
 ストレージとコンピュートを分離したシステムでは、データは Amazon S3、Google Cloud Storage、Azure Blob Storage、MinIO などの S3 互換ストレージのような低コストで信頼性の高いリモートストレージシステムに保存されます。ホットデータはローカルにキャッシュされ、キャッシュがヒットすると、クエリパフォーマンスはストレージとコンピュートが結合されたアーキテクチャと同等になります。コンピュートノード (CN) は、数秒でオンデマンドで追加または削除できます。このアーキテクチャは、ストレージコストを削減し、リソースの分離を改善し、弾力性とスケーラビリティを提供します。
 
@@ -49,6 +50,10 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 ### curl
 
 `curl` は StarRocks にデータロードジョブを発行し、データセットをダウンロードするために使用されます。OS のプロンプトで `curl` または `curl.exe` を実行してインストールされているか確認してください。curl がインストールされていない場合は、[こちらから curl を取得してください](https://curl.se/) 。
+
+### MinIO AIStor ライセンス
+
+このガイドでは、オブジェクトストレージとして MinIO AIStor を使用します。MinIO AIStor にはライセンスが必要です。Free Tier ライセンスで十分です。ライセンスの取得手順は、このガイドの後半で説明します。
 
 ### `/etc/hosts`
 
@@ -96,7 +101,7 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 - ニューヨーク市のクラッシュデータ
 - 気象データ
 
-このガイドでは、GNU Affero General Public License の下で提供される S3 互換のオブジェクトストレージである MinIO を使用します。
+このガイドでは、S3 互換のオブジェクトストレージである MinIO AIStor を使用します。MinIO AIStor にはライセンスが必要です。
 
 ### ラボファイルを保存するディレクトリを作成する
 
@@ -126,6 +131,10 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
 ```
+
+### MinIO AIStor ライセンスの取得
+
+<AIStorLicense />
 
 ---
 
