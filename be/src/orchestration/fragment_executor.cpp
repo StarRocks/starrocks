@@ -623,7 +623,7 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                     continue;
                 }
                 const auto& broker_range = scan_range.scan_range.broker_scan_range;
-                // skip merge commit or transaction streamload which has been handled by StreamLoadContextHandle
+                // Channel and merge-commit inputs are prepared below with StreamLoadContextHandle.
                 if (broker_range.__isset.channel_id) {
                     continue;
                 }
@@ -633,7 +633,11 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                     }
                     auto pipe = exec_env->load_stream_mgr()->get(range.load_id);
                     if (pipe == nullptr) {
-                        return Status::InternalError("Invalid or outdated load id " + print_id(range.load_id));
+                        auto status = Status::InternalError("Invalid or outdated load id " + print_id(range.load_id));
+                        for (const auto& attachment : attachments) {
+                            attachment->close(status);
+                        }
+                        return status;
                     }
                     attachments.emplace_back(std::make_unique<StreamLoadPipeAttachment>(std::move(pipe)));
                 }
@@ -652,6 +656,8 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                 }
             }
         }
+        // FE creates one input mode per fragment: existing BE-local pipes or channel inputs.
+        // Channel-only fragments fall through to StreamLoadContextHandle preparation below.
         if (!attachments.empty()) {
             _fragment_ctx->set_fragment_attachments(std::move(attachments));
             return Status::OK();

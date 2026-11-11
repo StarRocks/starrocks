@@ -33,6 +33,9 @@
 #include "compute_env/compute_env.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_context_mgr.h"
+#include "compute_env/load/stream_load_context_handle.h"
+#include "compute_env/load/stream_load_pipe_attachment.h"
 #include "compute_env/result/result_buffer_mgr.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
@@ -158,14 +161,15 @@ protected:
         return pipe;
     }
 
-    Status prepare_pipes() {
+    Status prepare_pipes(int32_t node_id = 0) {
         if (GetParam() == ExecutionMode::PIPELINE_DRIVER_RANGES) {
             _params.params.__isset.node_to_per_driver_seq_scan_ranges = true;
             for (size_t i = 0; i < _ranges.size(); ++i) {
-                _params.params.node_to_per_driver_seq_scan_ranges[0][static_cast<int32_t>(i % 2)].push_back(_ranges[i]);
+                _params.params.node_to_per_driver_seq_scan_ranges[node_id][static_cast<int32_t>(i % 2)].push_back(
+                        _ranges[i]);
             }
         } else {
-            _params.params.per_node_scan_ranges[0] = _ranges;
+            _params.params.per_node_scan_ranges[node_id] = _ranges;
         }
         if (is_pipeline()) {
             pipeline::UnifiedExecPlanFragmentParams request(_params, _params);
@@ -298,11 +302,93 @@ TEST_P(StreamLoadCancelTest, BindsAllPipesAndIgnoresLocalFiles) {
     EXPECT_TRUE(second->no_block_read().status().is_cancelled());
 }
 
+TEST_P(StreamLoadCancelTest, BindsPipesAfterEmptyNode) {
+    _params.params.per_node_scan_ranges[0] = {};
+    auto pipe = add_pipe();
+    ASSERT_OK(prepare_pipes(1));
+    cancel();
+    EXPECT_TRUE(pipe->no_block_read().status().is_cancelled());
+}
+
+TEST_P(StreamLoadCancelTest, BindsPipesAfterNonBrokerNode) {
+    _params.params.per_node_scan_ranges[0] = {TScanRangeParams{}};
+    auto pipe = add_pipe();
+    ASSERT_OK(prepare_pipes(1));
+    cancel();
+    EXPECT_TRUE(pipe->no_block_read().status().is_cancelled());
+}
+
+TEST_P(StreamLoadCancelTest, LegacyRejectsChannelBeforeBindingPipes) {
+    if (is_pipeline()) {
+        GTEST_SKIP() << "The legacy engine does not support channel inputs";
+    }
+    auto channel = make_range(UniqueId::gen_uid().to_thrift());
+    channel.scan_range.broker_scan_range.__set_channel_id(0);
+    _ranges.emplace_back(std::move(channel));
+    add_pipe();
+    EXPECT_TRUE(prepare_pipes().is_not_supported());
+    EXPECT_TRUE(_legacy->_stream_load_sinks.empty());
+}
+
+TEST_P(StreamLoadCancelTest, ChannelOnlyUsesContextHandle) {
+    if (GetParam() != ExecutionMode::PIPELINE_DRIVER_RANGES) {
+        GTEST_SKIP() << "Channel inputs use per-driver pipeline ranges";
+    }
+    _compute_env._stream_context_mgr = std::make_unique<StreamContextMgr>(_exec_env.load_stream_mgr());
+    const auto load_id = UniqueId::gen_uid().to_thrift();
+    auto channel = make_range(load_id);
+    auto& broker = channel.scan_range.broker_scan_range;
+    broker.__set_channel_id(0);
+    broker.params.__set_label("channel_only");
+    broker.params.__set_db_name("db");
+    broker.params.__set_table_name("table");
+    broker.params.__set_txn_id(1);
+    _ranges.emplace_back(std::move(channel));
+    ASSERT_OK(prepare_pipes());
+
+    const auto& attachments = _pipeline->_fragment_ctx->_fragment_attachments;
+    ASSERT_EQ(1, attachments.size());
+    EXPECT_NE(nullptr, dynamic_cast<StreamLoadContextHandle*>(attachments[0].get()));
+    auto pipe = _exec_env.load_stream_mgr()->get(load_id);
+    ASSERT_NE(nullptr, pipe);
+    _pipeline->_fragment_ctx.reset();
+    EXPECT_TRUE(pipe->no_block_read().status().is_cancelled());
+    EXPECT_EQ(nullptr, _exec_env.load_stream_mgr()->get(load_id));
+}
+
 TEST_P(StreamLoadCancelTest, MissingPipeFailsPrepare) {
     _ranges.emplace_back(make_range(UniqueId::gen_uid().to_thrift()));
     auto status = prepare_pipes();
     EXPECT_TRUE(status.is_internal_error()) << status;
     EXPECT_NE(std::string::npos, status.message().find("Invalid or outdated load id"));
+}
+
+TEST_P(StreamLoadCancelTest, PartialBindingFailureCancelsPipeWithOriginalError) {
+    if (!is_pipeline()) {
+        GTEST_SKIP() << "Pipeline prepare holds attachments locally until all pipes are bound";
+    }
+    auto pipe = add_pipe();
+    _ranges.emplace_back(make_range(UniqueId::gen_uid().to_thrift()));
+    const auto status = prepare_pipes();
+    ASSERT_TRUE(status.is_internal_error()) << status;
+    EXPECT_EQ(status.to_string(), pipe->no_block_read().status().to_string());
+    EXPECT_TRUE(_pipeline->_fragment_ctx->_fragment_attachments.empty());
+}
+
+TEST(StreamLoadPipeAttachmentTest, DestructionCancelsPipeAndPreservesFirstError) {
+    for (bool explicitly_closed : {false, true}) {
+        auto pipe = std::make_shared<StreamLoadPipe>();
+        const auto error = Status::InternalError("injected prepare failure");
+        {
+            std::unique_ptr<FragmentAttachment> attachment = std::make_unique<StreamLoadPipeAttachment>(pipe);
+            if (explicitly_closed) {
+                attachment->close(error);
+            }
+        }
+        const auto status = pipe->no_block_read().status();
+        const auto expected = explicitly_closed ? error : Status::Cancelled("Close the stream load pipe");
+        EXPECT_EQ(expected.to_string(), status.to_string());
+    }
 }
 
 TEST_P(StreamLoadCancelTest, RepeatedCancellationPreservesFirstError) {

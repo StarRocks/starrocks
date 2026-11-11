@@ -549,43 +549,47 @@ void PlanFragmentExecutor::close() {
 }
 
 Status PlanFragmentExecutor::_prepare_stream_load_pipe(const TExecPlanFragmentParams& request) {
-    const auto& scan_range_map = request.params.per_node_scan_ranges;
-    if (scan_range_map.size() == 0) {
-        return Status::OK();
-    }
-    auto iter = scan_range_map.begin();
-    if (iter->second.size() == 0) {
-        return Status::OK();
-    }
-    if (!iter->second[0].scan_range.__isset.broker_scan_range) {
-        return Status::OK();
-    }
-    if (!iter->second[0].scan_range.broker_scan_range.__isset.channel_id) {
-        // Ordinary stream/routine load owns these pipes outside the executor.
-        for (const auto& [node_id, scan_ranges] : scan_range_map) {
-            for (const auto& scan_range : scan_ranges) {
-                if (!scan_range.scan_range.__isset.broker_scan_range) {
+    auto check_channel_stream_load = [&]() -> Status {
+        const auto& scan_range_map = request.params.per_node_scan_ranges;
+        if (scan_range_map.size() == 0) {
+            return Status::OK();
+        }
+        auto iter = scan_range_map.begin();
+        if (iter->second.size() == 0) {
+            return Status::OK();
+        }
+        if (!iter->second[0].scan_range.__isset.broker_scan_range) {
+            return Status::OK();
+        }
+        if (!iter->second[0].scan_range.broker_scan_range.__isset.channel_id) {
+            return Status::OK();
+        }
+        return Status::NotSupported("Non-pipeline engine does not support channel stream load");
+    };
+    RETURN_IF_ERROR(check_channel_stream_load());
+
+    for (const auto& [node_id, scan_ranges] : request.params.per_node_scan_ranges) {
+        for (const auto& scan_range : scan_ranges) {
+            if (!scan_range.scan_range.__isset.broker_scan_range) {
+                continue;
+            }
+            const auto& broker_range = scan_range.scan_range.broker_scan_range;
+            if (broker_range.__isset.channel_id) {
+                continue;
+            }
+            for (const auto& range : broker_range.ranges) {
+                if (range.file_type != TFileType::FILE_STREAM) {
                     continue;
                 }
-                const auto& broker_range = scan_range.scan_range.broker_scan_range;
-                if (broker_range.__isset.channel_id) {
-                    continue;
+                auto pipe = runtime_services(_query_execution_services).load_stream_mgr->get(range.load_id);
+                if (pipe == nullptr) {
+                    return Status::InternalError("Invalid or outdated load id " + print_id(range.load_id));
                 }
-                for (const auto& range : broker_range.ranges) {
-                    if (range.file_type != TFileType::FILE_STREAM) {
-                        continue;
-                    }
-                    auto pipe = runtime_services(_query_execution_services).load_stream_mgr->get(range.load_id);
-                    if (pipe == nullptr) {
-                        return Status::InternalError("Invalid or outdated load id " + print_id(range.load_id));
-                    }
-                    _stream_load_sinks.emplace_back(std::move(pipe));
-                }
+                _stream_load_sinks.emplace_back(std::move(pipe));
             }
         }
-        return Status::OK();
     }
-    return Status::NotSupported("Non-pipeline engine does not support channel stream load");
+    return Status::OK();
 }
 
 } // namespace starrocks

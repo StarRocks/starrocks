@@ -26,6 +26,7 @@ class StreamLoadPipe;
 class StreamLoadPipeAttachment final : public FragmentAttachment {
 public:
     explicit StreamLoadPipeAttachment(std::shared_ptr<StreamLoadPipe> pipe);
+    ~StreamLoadPipeAttachment() override;
 
     void cancel(const Status& status) override;
     void close(const Status& status) override;

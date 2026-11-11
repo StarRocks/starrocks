@@ -22,6 +22,10 @@ namespace starrocks {
 
 StreamLoadPipeAttachment::StreamLoadPipeAttachment(std::shared_ptr<StreamLoadPipe> pipe) : _pipe(std::move(pipe)) {}
 
+StreamLoadPipeAttachment::~StreamLoadPipeAttachment() {
+    close(Status::Cancelled("Close the stream load pipe"));
+}
+
 void StreamLoadPipeAttachment::cancel(const Status& status) {
     // FragmentContext also calls cancel with OK on normal completion.
     if (!status.ok()) {
