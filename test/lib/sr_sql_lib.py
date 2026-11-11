@@ -3663,6 +3663,16 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 "assert expect {} is not found in plan {}".format(expect, res["result"]),
             )
 
+    def assert_query_not_contains(self, query, *expects):
+        """Assert that a query result does not contain any of the given strings."""
+        res = self.execute_sql(query, True)
+        tools.assert_true(res["status"], "query failed: %s" % res.get("msg"))
+        for expect in expects:
+            tools.assert_true(
+                expect not in str(res["result"]),
+                "unexpected {} in query result {}".format(expect, res["result"]),
+            )
+
     def print_query_columns(self, query, *columns):
         """
         Run `query` and print only the named columns, one row per line, tab separated.
