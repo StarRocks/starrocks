@@ -74,7 +74,7 @@ v3.3 以降、BE は起動時に Data Cache を有効化しようとします。
 
 ```
 # Data Cache 自動調整を無効化
-datacache_auto_adjust_enable = false
+enable_datacache_disk_auto_adjust = false
 # Data Cache ディスククォータを手動で設定
 datacache_disk_size = 1T
 ```

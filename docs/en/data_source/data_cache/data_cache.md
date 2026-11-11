@@ -266,7 +266,7 @@ StarRocks currently supports automatic scaling of disk capacity. If you do not s
 You can also enable automatic scaling by adding the following configuration item to the configuration file and restarting the BE or CN process:
 
 ```Plain
-datacache_auto_adjust_enable=true
+enable_datacache_disk_auto_adjust=true
 ```
 
 After automatic scaling is enabled:
@@ -315,7 +315,7 @@ You can configure Data Cache using the following system variables and parameters
 - [datacache_enable](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_enable)
 - [datacache_mem_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_mem_size)
 - [datacache_disk_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_size)
-- [datacache_auto_adjust_enable](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_auto_adjust_enable)
+- [enable_datacache_disk_auto_adjust](../../administration/configuration/BE_parameters/BE_parameters.md#enable_datacache_disk_auto_adjust)
 - [datacache_disk_high_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_high_level)
 - [datacache_disk_safe_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_safe_level)
 - [datacache_disk_low_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_low_level)

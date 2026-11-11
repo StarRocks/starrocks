@@ -67,9 +67,9 @@ SHOW TABLET <tablet_id>
 | TabletId | ReplicaId | BackendId | SchemaHash | Version | VersionHash | LstSuccessVersion | LstSuccessVersionHash | LstFailedVersion | LstFailedVersionHash | LstFailedTime | DataSize | RowCount | State  | LstConsistencyCheckTime | CheckVersion | CheckVersionHash | VersionCount | PathHash | MetaUrl  | CompactionStatus  | DiskRootPath  |
 +----------+-----------+-----------+------------+---------+-------------+-------------------+-----------------------+------------------+----------------------+---------------+----------+----------+--------+-------------------------+--------------+------------------+--------------+----------+----------+-------------------+---------------+
 -- 存算分离集群
-+----------+-----------+----------+----------+------------+
-| TabletId | BackendId | DataSize | RowCount | MinVersion |
-+----------+-----------+----------+----------+------------+
++----------+-----------+----------+----------+------------+-------+
+| TabletId | BackendId | DataSize | RowCount | MinVersion | Range |
++----------+-----------+----------+----------+------------+-------+
 ```
 
 | **字段**                | **说明**                        |
@@ -97,6 +97,7 @@ SHOW TABLET <tablet_id>
 | CompactionStatus        | 通过 URL 查询 Compaction 状态。    |
 | DiskRootPath            | 副本所在的磁盘。    |
 | MinVersion              | Tablet 保留的最小数据版本。仅适用于存算分离集群。 |
+| Range                   | Tablet 的键范围。仅适用于存算分离集群。 |
 
 ### 查看单个 tablet
 

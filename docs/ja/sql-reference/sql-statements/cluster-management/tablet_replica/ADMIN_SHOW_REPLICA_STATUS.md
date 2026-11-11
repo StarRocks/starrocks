@@ -9,6 +9,8 @@ description: "ADMIN SHOW REPLICA STATUS は、テーブルまたはパーティ�
 
 このステートメントは、テーブルまたはパーティションのレプリカのステータスを表示するために使用されます。
 
+このステートメントは、共有データクラスタ内のクラウドネイティブテーブルをサポートしていません。このようなテーブルに対しては、エラー `Table does not exist or is not OLAP table` を返します。
+
 :::tip
 
 この操作には、SYSTEM レベルの OPERATE 権限が必要です。この権限を付与するには、[GRANT](../../account-management/GRANT.md) の指示に従ってください。

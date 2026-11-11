@@ -43,7 +43,7 @@ sidebar_label: "能力边界"
 | enable_materialized_view_plan_cache             | 是否启用物化视图的 Plan Cache。默认情况下，缓存 1000 个物化视图 Plan。 | true       | v2.5.13+<br />v3.0.7+<br />v3.1.4+<br />v3.2.0+<br />v3.3.0+ |
 | query_including_mv_names                        | 查询改写时可使用的物化视图的白名单。                         |            | v3.1.11+<br />v3.2.5+                                        |
 | query_excluding_mv_names                        | 查询改写时不可使用的物化视图的黑名单。                       |            | v3.1.11+<br />v3.2.5+                                        |
-| cbo_materialized_view_rewrite_related_mvs_limit | 计划阶段候选物化视图的最大数量。                             | 64         | v3.1.9+<br /> v3.2.5+                                        |
+| cbo_materialized_view_rewrite_related_mvs_limit | 计划阶段候选物化视图的最大数量。                             | 16         | v3.1.9+<br /> v3.2.5+                                        |
 
 ## 属性
 

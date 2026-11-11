@@ -51,10 +51,13 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 ```SQL
 ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON
+[INTERVAL <value> <unit>]
 [STORAGE VOLUME <storage_volume_name>]
 ```
 
 参数：
+
+`INTERVAL <value> <unit>`：自动创建快照的时间间隔。`value` 必须为正整数，`unit` 必须为 `SECOND`、`MINUTE`、`HOUR`、`DAY` 或 `WEEK`。如果未指定此参数，则由 FE 配置项 `automated_cluster_snapshot_interval_seconds` 控制时间间隔。
 
 `storage_volume_name`：指定用于存储快照的存储卷。如果未指定此参数，将使用默认存储卷。有关创建存储卷的详细信息，请参阅 [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md)。
 
@@ -62,7 +65,19 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON
 
 元数据快照存储在 `/{storage_volume_locations}/{service_id}/meta/image/automated_cluster_snapshot_timestamp` 下。数据快照存储在与原始数据相同的位置。
 
-FE 配置项 `automated_cluster_snapshot_interval_seconds` 控制快照自动化周期。默认值为 600 秒（10 分钟）。
+如果启用该功能时未指定 `INTERVAL`，则由 FE 配置项 `automated_cluster_snapshot_interval_seconds` 控制快照自动化周期。默认值为 600 秒（10 分钟）。
+
+在功能启用期间，可以使用以下语句修改时间间隔：
+
+```SQL
+ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL <value> <unit>
+```
+
+使用以下语句查看该功能是否启用、生效的时间间隔、存储卷，以及上一次和下一次快照的时间：
+
+```SQL
+ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT
+```
 
 ### 禁用自动化集群快照
 
@@ -87,7 +102,7 @@ SELECT * FROM information_schema.cluster_snapshots;
 | 字段              | 描述                                                  |
 | ------------------ | ------------------------------------------------------------ |
 | snapshot_name      | 快照的名称。                                    |
-| snapshot_type      | 快照的类型。有效值：`automated` 和 `manual`。 |
+| snapshot_type      | 快照的类型。当前该值始终为 `AUTOMATED`。 |
 | created_time       | 快照创建的时间。                  |
 | fe_journal_id      | FE 日志的 ID。                                    |
 | starmgr_journal_id | StarManager 日志的 ID。                           |

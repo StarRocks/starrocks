@@ -90,7 +90,7 @@ SET GLOBAL enable_group_level_query_queue = true;
 | max_cpu_cores      | 0          | 该资源组在单个 BE 节点中使用的 CPU 核数上限。仅在设置为大于 `0` 后生效。取值范围：[0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。 |
 | mem_used_pct_limit | 0          | 该资源组在单个 BE 节点中的内存使用率上限。仅在设置为大于 `0` 后生效。取值范围：[0, 1] |
 
-`mem_used_pct_limit` 仅适用于 Query Queue v1。启用 Query Queue v2（将 `enable_query_queue_v2` 设置为 `true`）后，该参数不再生效。
+资源组粒度的查询队列仅由 Query Queue v1 实现。启用 Query Queue v2（将 `enable_query_queue_v2` 设置为 `true`，自 v4.1 起为默认值）后，资源组的 `concurrency_limit`、`max_cpu_cores` 和 `mem_used_pct_limit` 不再触发查询排队。
 
 您可以通过 SHOW USAGE RESOURCE GROUPS 来查看每个资源组在每个 BE 上的资源使用信息，参见[查看资源组的使用信息](./resource_group.md#查看资源组的使用信息)。
 
@@ -264,8 +264,16 @@ ADMIN SET FRONTEND CONFIG ("query_queue_v2_concurrency_level" = "<value>");
 默认值 `0` 表示不限制。只有在需要为同时运行的查询数设置绝对上限时，才建议配置该参数：
 
 ```SQL
+SET GLOBAL query_queue_concurrency_limit = 8;
+```
+
+在支持多 Warehouse 的版本中，您也可以为指定 Warehouse 设置该上限：
+
+```SQL
 ALTER WAREHOUSE default_warehouse SET ("query_queue_concurrency_limit" = "8");
 ```
+
+StarRocks 开源版仅有 `default_warehouse`，不支持 ALTER WAREHOUSE 等 Warehouse DDL 语句（执行时会报错 `Multi-Warehouse is not implemented`）。请使用全局变量进行设置。
 
 建议优先使用 `query_queue_v2_concurrency_level` 调整资源容量。只有在需要显式限制同时运行的查询数量时，才使用 `query_queue_concurrency_limit`。
 

@@ -51,10 +51,13 @@ Syntax:
 
 ```SQL
 ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON
+[INTERVAL <value> <unit>]
 [STORAGE VOLUME <storage_volume_name>]
 ```
 
-Parameter:
+Parameters:
+
+`INTERVAL <value> <unit>`: The interval at which automated snapshots are created. `value` must be a positive integer, and `unit` must be one of `SECOND`, `MINUTE`, `HOUR`, `DAY`, and `WEEK`. If this parameter is not specified, the interval is controlled by the FE configuration item `automated_cluster_snapshot_interval_seconds`.
 
 `storage_volume_name`: Specifies the storage volume used to store the snapshot. If this parameter is not specified, the default storage volume will be used. For details on creating a storage volume, see [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md).
 
@@ -62,7 +65,19 @@ Each time FE creates a new metadata image after completing a metadata checkpoint
 
 Metadata snapshots are stored under `/{storage_volume_locations}/{service_id}/meta/image/automated_cluster_snapshot_timestamp`. Data snapshots are stored in the same location as the original data.
 
-FE configuration item `automated_cluster_snapshot_interval_seconds` controls the snapshot automation cycle. The default value is 600 seconds (10 minutes).
+FE configuration item `automated_cluster_snapshot_interval_seconds` controls the snapshot automation cycle when no `INTERVAL` is specified for the feature. The default value is 600 seconds (10 minutes).
+
+Use the following statement to change the interval while the feature is enabled:
+
+```SQL
+ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL <value> <unit>
+```
+
+Use the following statement to view whether the feature is enabled, the effective interval, the storage volume, and the time of the last and the next snapshot:
+
+```SQL
+ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT
+```
 
 ### Disable automated cluster snapshot
 
@@ -87,7 +102,7 @@ Return:
 | Field              | Description                                                  |
 | ------------------ | ------------------------------------------------------------ |
 | snapshot_name      | The name of the snapshot.                                    |
-| snapshot_type      | The type of the snapshot. Valid values: `automated` and `manual`. |
+| snapshot_type      | The type of the snapshot. Currently, the value is always `AUTOMATED`. |
 | created_time       | The time at which the snapshot was created.                  |
 | fe_journal_id      | The ID of the FE journal.                                    |
 | starmgr_journal_id | The ID of the StarManager journal.                           |

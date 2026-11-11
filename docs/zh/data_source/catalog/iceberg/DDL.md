@@ -158,7 +158,7 @@ PARTITION BY (partition_expr[, partition_expr...])
 - `transform_expr(column_name)`
 - `transform_expr(column_name, parameter)`
 
-StarRocks 支持 Apache Iceberg 规范中定义的分区转换表达式。
+StarRocks 支持以下分区转换：identity（列名或 `identity()`）、`year()`、`month()`、`day()`、`hour()`、`truncate()`、`bucket()` 和 `void()`。使用其他转换会返回错误。
 
 :::note
 分区列支持除 FLOAT、DOUBLE、DECIMAL 和 DATETIME 之外的所有数据类型。

@@ -43,7 +43,7 @@ This document outlines the boundaries of competence for asynchronous materialize
 | enable_materialized_view_plan_cache             | Whether to enable plan cache for materialized views. By default, 1000 materialized view plans are cached. | TRUE        | v2.5.13+<br />v3.0.7+<br />v3.1.4+<br />v3.2.0+<br />v3.3.0+ |
 | query_including_mv_names                        | Whitelist of the materialized views that can be used for query rewrite. |             | v3.1.11+<br />v3.2.5+                                        |
 | query_excluding_mv_names                        | Blacklist of the materialized views that can be used for query rewrite. |             | v3.1.11+<br />v3.2.5+                                        |
-| cbo_materialized_view_rewrite_related_mvs_limit | Maximum number of candidate materialized views in the Plan stage. | 64          | v3.1.9+<br /> v3.2.5+                                        |
+| cbo_materialized_view_rewrite_related_mvs_limit | Maximum number of candidate materialized views in the Plan stage. | 16          | v3.1.9+<br /> v3.2.5+                                        |
 
 ## Properties
 

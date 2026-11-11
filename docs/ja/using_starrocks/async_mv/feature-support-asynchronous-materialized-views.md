@@ -43,7 +43,7 @@ sidebar_label: 機能サポート
 | enable_materialized_view_plan_cache             | マテリアライズドビューのプランキャッシュを有効にするかどうか。デフォルトで、1000 のマテリアライズドビュープランがキャッシュされます。 | TRUE        | v2.5.13+<br />v3.0.7+<br />v3.1.4+<br />v3.2.0+<br />v3.3.0+ |
 | query_including_mv_names                        | クエリの書き換えに使用できるマテリアライズドビューのホワイトリスト。 |             | v3.1.11+<br />v3.2.5+                                        |
 | query_excluding_mv_names                        | クエリの書き換えに使用できるマテリアライズドビューのブラックリスト。 |             | v3.1.11+<br />v3.2.5+                                        |
-| cbo_materialized_view_rewrite_related_mvs_limit | プラン段階での候補マテリアライズドビューの最大数。 | 64          | v3.1.9+<br /> v3.2.5+                                        |
+| cbo_materialized_view_rewrite_related_mvs_limit | プラン段階での候補マテリアライズドビューの最大数。 | 16          | v3.1.9+<br /> v3.2.5+                                        |
 
 ## プロパティ
 

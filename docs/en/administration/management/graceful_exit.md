@@ -49,12 +49,8 @@ Upon receiving the signal:
 
 **Leader FE**
 
-- Read request handling is identical to the of Followers.
-- Write request handling requires:
-
-  - Closing BDBJE.
-  - Allowing a new Leader election to complete.
-  - Redirecting subsequent writes to the newly elected Leader.
+- Request handling is identical to that of Followers: the Leader FE waits for its connections to drain and then exits.
+- The Leader FE does not hand over leadership before it exits. A new Leader is elected from the remaining FEs after the process exits.
 
 #### Timeout Control
 

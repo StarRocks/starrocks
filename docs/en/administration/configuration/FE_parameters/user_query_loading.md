@@ -1259,7 +1259,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The timeout duration for the INSERT INTO statement that is used to load data.
+- Description: Deprecated. This item no longer controls the timeout of INSERT statements. Use the session variable `insert_timeout` instead.
 - Introduced in: -
 
 ### `label_clean_interval_second`

@@ -342,8 +342,8 @@ SELECT * FROM iceberg_catalog.test_db.lineitem_days;
   您可以使用 `partition_refresh_number` 属性来指定每次刷新操作的粒度。`partition_refresh_number` 控制在单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。分区按照时间由远至近的顺序进行刷新（不包括提前创建的未来分区）。当值为 `-1` 时，将不会拆分刷新任务。自 v3.3 起，默认值由 `-1` 变为 `1`，表示 StarRocks 每次只刷新一个分区。
   
   您还可以通过 `partition_refresh_strategy` 属性来控制物化视图的刷新策略。该参数支持以下两种取值：
-  - "strict"（默认）：分区刷新严格按照 partition_refresh_number 控制粒度；
-  - "adaptive"：根据基表分区的数据量，自适应地调整每次刷新的分区数量，提升刷新效率。
+  - "strict"（v4.1 之前版本的默认值）：分区刷新严格按照 partition_refresh_number 控制粒度；
+  - "adaptive"（自 v4.1 起的默认值）：根据基表分区的数据量，自适应地调整每次刷新的分区数量，提升刷新效率。
   
 - **物化范围**
 

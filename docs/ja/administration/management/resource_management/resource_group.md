@@ -49,7 +49,7 @@ BE 上のリソースグループに対して、次のパラメータを使用�
 | exclusive_cpu_percent      | このリソースグループの CPU ハードアイソレーションのパーセンテージ。v4.1 以降でサポートされます。 | [0, 100] (0 より大きい場合に有効) | 0       |
 | mem_limit                  | 現在の BE ノード上でこのリソースグループがクエリに利用できるメモリの割合。 | (0, 1] (必須)               | -       |
 | mem_pool | リソースグループをグループ化して、メモリ制限を共有します。 | 文字列 | default_mem_pool |
-| spill_mem_limit_threshold  | ディスクへのスピリングをトリガーするメモリ使用量のしきい値。         | (0, 1]                                                         | 1.0     |
+| spill_mem_limit_threshold  | ディスクへのスピリングをトリガーするメモリ使用量のしきい値。         | (0, 1)                                                         | 1.0     |
 | concurrency_limit          | このリソースグループでの同時クエリの最大数。   | 整数 (0 より大きい場合に有効)                     | 0       |
 | mem_used_pct_limit         | このリソースグループのメモリ使用率の上限。`enable_group_level_query_queue` を有効にする必要があります。`enable_query_queue_v2` が `false` の場合にのみ使用できます。 | [0, 1] (0 より大きい場合に有効) | 0 |
 | big_query_cpu_second_limit | 各 BE ノードでの大規模クエリタスクの最大 CPU 時間（秒単位）。   | 整数 (0 より大きい場合に有効)               | 0       |
@@ -138,7 +138,7 @@ WITH (
 
 ##### `spill_mem_limit_threshold`
 
-ディスクへのスピリングをトリガーするメモリ使用量のしきい値を定義します。値の範囲は (0,1] で、デフォルトは 1（非アクティブ）です。v3.1.7 で導入されました。
+ディスクへのスピリングをトリガーするメモリ使用量のしきい値を定義します。値の範囲は (0,1) で、デフォルトは 1（非アクティブ）です。v3.1.7 で導入されました。
 
 - 自動スピリングが有効（`spill_mode` が `auto` に設定）で、リソースグループが無効な場合、クエリのメモリ使用量が `query_mem_limit` の 80% を超えると、システムは中間結果をディスクにスピルします。
 - リソースグループが有効な場合、次の場合にスピリングが発生します:
@@ -189,7 +189,7 @@ v3.3.5 以前は、StarRocks はリソースグループの `type` を `short_qu
 
 `default_wg` は、リソースグループの管理下にあるが、どのクラシファイアにも一致しない通常のクエリに割り当てられます。`default_wg` のデフォルトのリソース制限は次のとおりです。
 
-- `cpu_weight`: BE の CPU コア数。
+- `cpu_weight_percent`: 100、つまり BE の CPU コア数。（v4.1 より前は `cpu_weight` に BE の CPU コア数が設定されます。）
 - `mem_limit`: 100%。
 - `concurrency_limit`: 0。
 - `big_query_cpu_second_limit`: 0。
@@ -202,7 +202,7 @@ v3.3.5 以前は、StarRocks はリソースグループの `type` を `short_qu
 
 `default_mv_wg` は、マテリアライズドビューの作成時にプロパティ `resource_group` で対応するマテリアライズドビューにリソースグループが割り当てられていない場合、非同期マテリアライズドビューのリフレッシュタスクに割り当てられます。`default_mv_wg` のデフォルトのリソース制限は次のとおりです。
 
-- `cpu_weight`: 1。
+- `cpu_weight_percent`: 1。（v4.1 より前は `cpu_weight` に 1 が設定されます。）
 - `mem_limit`: 80%。
 - `concurrency_limit`: 0。
 - `spill_mem_limit_threshold`: 80%。

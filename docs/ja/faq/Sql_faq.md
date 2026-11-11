@@ -299,8 +299,8 @@ Query Dump には次の情報が含まれます：
 一般的なシナリオは 3 つあります：
 
 - **単一クエリのメモリ制限を超えた場合：**
-  - エラー: `Mem usage has exceed the limit of single query, You can change the limit by set session variable exec_mem_limit.`
-  - 解決策: `exec_mem_limit` を調整します。
+  - エラー: `Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.`
+  - 解決策: `query_mem_limit` を調整します。
 - **クエリプールのメモリ制限を超えた場合：**
   - エラー: `Mem usage has exceed the limit of query pool`
   - 解決策: SQL を最適化します。

@@ -50,7 +50,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 | exclusive_cpu_percent      | CPU hard isolation percentage for this resource group. Supported from v4.1.                                    | [0, 100] (takes effect when greater than 0)                    | 0                |
 | mem_limit                  | The percentage of memory available for queries by this resource group on the current BE node.                  | (0, 1] (required)                                              | -                |
 | mem_pool                   | Groups resource groups to share a memory limit.                                                                | String                                                         | default_mem_pool |
-| spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.                                                         | (0, 1]                                                         | 1.0              |
+| spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.                                                         | (0, 1)                                                         | 1.0              |
 | concurrency_limit          | Maximum number of concurrent queries in this resource group.                                                   | Integer (takes effect when greater than 0)                     | 0                |
 | mem_used_pct_limit         | Memory usage percentage limit in this resource group. Requires `enable_group_level_query_queue` to be enabled. Only available when `enable_query_queue_v2` is `false`. | [0, 1] (takes effect when greater than 0)                      | 0                |
 | big_query_cpu_second_limit | Maximum CPU time (in seconds) for big query tasks on each BE node.                                             | Integer (takes effect when greater than 0)                     | 0                |
@@ -139,7 +139,7 @@ WITH (
 
 ##### `spill_mem_limit_threshold`
 
-Defines the memory usage threshold that triggers spilling to disk. The value range is (0,1], with the default being 1 (inactive). Introduced in v3.1.7.
+Defines the memory usage threshold that triggers spilling to disk. The value range is (0,1), with the default being 1 (inactive). Introduced in v3.1.7.
 
 - When automatic spilling is enabled (`spill_mode` set to `auto`), but resource groups are disabled, the system will spill intermediate results to disk when a query’s memory usage exceeds 80% of `query_mem_limit`.
 - When resource groups are enabled, spilling will occur if:
@@ -190,7 +190,7 @@ There are two system-defined resource groups in each StarRocks instance: `defaul
 
 `default_wg` will be assigned to regular queries that are under the management of resource groups but don't match any classifier. The default resource limits of `default_wg` are as follows:
 
-- `cpu_weight`: The number of CPU cores of the BE.
+- `cpu_weight_percent`: 100, that is, the number of CPU cores of the BE. (Before v4.1, `cpu_weight` is set to the number of CPU cores of the BE.)
 - `mem_limit`: 100%.
 - `concurrency_limit`: 0.
 - `big_query_cpu_second_limit`: 0.
@@ -203,7 +203,7 @@ There are two system-defined resource groups in each StarRocks instance: `defaul
 
 `default_mv_wg` will be assigned to asynchronous materialized view refresh tasks if no resource group is allocated to the corresponding materialized view in the property `resource_group` during materialized view creation. The default resource limits of `default_mv_wg` are as follows:
 
-- `cpu_weight`: 1.
+- `cpu_weight_percent`: 1. (Before v4.1, `cpu_weight` is set to 1.)
 - `mem_limit`: 80%.
 - `concurrency_limit`: 0.
 - `spill_mem_limit_threshold`: 80%.

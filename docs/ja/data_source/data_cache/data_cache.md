@@ -266,7 +266,7 @@ StarRocks は現在、ディスク容量の自動スケーリングをサポー�
 設定ファイルに次の設定項目を追加し、BE または CN プロセスを再起動することで、自動スケーリングを有効にすることもできます:
 
 ```Plain
-datacache_auto_adjust_enable=true
+enable_datacache_disk_auto_adjust=true
 ```
 
 自動スケーリングが有効になると:
@@ -315,7 +315,7 @@ Data Cache は BE ノードのローカルディスクに依存しているた�
 - [datacache_enable](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_enable)
 - [datacache_mem_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_mem_size)
 - [datacache_disk_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_size)
-- [datacache_auto_adjust_enable](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_auto_adjust_enable)
+- [enable_datacache_disk_auto_adjust](../../administration/configuration/BE_parameters/BE_parameters.md#enable_datacache_disk_auto_adjust)
 - [datacache_disk_high_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_high_level)
 - [datacache_disk_safe_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_safe_level)
 - [datacache_disk_low_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_low_level)

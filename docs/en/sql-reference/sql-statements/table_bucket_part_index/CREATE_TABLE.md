@@ -852,7 +852,7 @@ PROPERTIES (
 )
 ```
 
-- `storage_volume`: The name of the storage volume used to store the cloud-native table you want to create. If this property is not specified, the default storage volume is used. This property is supported from v3.1 onwards.
+- `storage_volume`: The name of the storage volume used to store the cloud-native table you want to create. If this property is not specified, the storage volume of the database is used; if the database has no storage volume, the default storage volume is used. This property is supported from v3.1 onwards.
 
 - `datacache.enable`: Whether to enable the local disk cache. Default: `true`.
 
@@ -863,7 +863,7 @@ PROPERTIES (
   To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`.
   :::
 
-- `datacache.partition_duration`: The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
+- `datacache.partition_duration`: The time range of the hot partitions, counted back from the current time. For a table partitioned by a DATE or DATETIME column, when a query scans a partition, StarRocks populates the cache with the scanned data only if the partition's range overlaps this time range (or, for list partitioning, if a partition value falls within it). Queries on other partitions do not populate the cache. This property is checked against partition bounds at query time, not against the time when data was loaded, and it does not evict data that is already cached. It has no effect on tables that are not partitioned by a DATE or DATETIME column. This property is a string value in the format `<number> <unit>`, where the unit can be `YEAR`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE`, or `SECOND` (case-insensitive), for example, `7 DAY` and `12 HOUR`. If it is not specified, queries on all partitions populate the cache.
 
   :::note
   This property is available only when `datacache.enable` is set to `true`.

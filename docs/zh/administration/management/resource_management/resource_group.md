@@ -46,7 +46,7 @@ import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.md
 | exclusive_cpu_percent      | 该资源组的 CPU 硬隔离百分比。自 v4.1 起支持。                         | [0, 100] (大于 0 时生效)                      | 0      |
 | mem_limit                  | 该资源组在当前 BE 节点可使用于查询的内存的比例。                 | (0, 1] (必填项)                              | -      |
 | mem_pool                   | 将资源组进行分组以共享内存限制。                 | 字符串                                     | default_mem_pool |
-| spill_mem_limit_threshold  | 该资源组触发落盘的内存占用阈值。                               | (0, 1]                                      | 1.0    |
+| spill_mem_limit_threshold  | 该资源组触发落盘的内存占用阈值。                               | (0, 1)                                      | 1.0    |
 | concurrency_limit          | 该资源组中并发查询数的上限。                                  | 整数 (大于 0 才生效)                           | 0      |
 | mem_used_pct_limit         | 该资源组的内存使用率上限。需要启用 `enable_group_level_query_queue`。仅当 `enable_query_queue_v2` 为 `false` 时可用。 | [0, 1] (大于 0 才生效)                        | 0      |
 | big_query_cpu_second_limit | 该资源组的大查询任务在每个 BE 上可以使用 CPU 的时间上限。         | 整数 (大于 0 才生效)                          | 0      |
@@ -189,7 +189,7 @@ WITH (
 
 如果普通查询受资源组管理，但是没有匹配到分类器，系统将默认为其分配 `default_wg`。该资源组的默认资源配置如下：
 
-- `cpu_weight`：BE 的 CPU 核数。
+- `cpu_weight_percent`：100，即 BE 的 CPU 核数。（v4.1 之前为 `cpu_weight`：BE 的 CPU 核数。）
 - `mem_limit`：100%。
 - `concurrency_limit`：0。
 - `big_query_cpu_second_limit`：0。
@@ -202,7 +202,7 @@ WITH (
 
 如果创建异步物化视图时没有通过 `resource_group` 属性指定资源组，该物化视图刷新时，系统将默认为其分配 `default_mv_wg`。该资源组的默认资源配置如下：
 
-- `cpu_weight`：1。
+- `cpu_weight_percent`：1。（v4.1 之前为 `cpu_weight`：1。）
 - `mem_limit`：80%。
 - `concurrency_limit`: 0。
 - `spill_mem_limit_threshold`: 80%。

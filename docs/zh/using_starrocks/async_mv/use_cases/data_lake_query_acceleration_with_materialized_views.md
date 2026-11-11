@@ -161,7 +161,7 @@ FROM `iceberg`.`test`.`iceberg_sample_datetime_day`;
 **Description**:  Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。 <br/>
 
 
-对于 Iceberg Catalog, 从 v3.1.4 版本开始，StarRocks 支持检测分区级别的数据更改，当前只支持 Iceberg V1 表。
+对于 Iceberg Catalog, 从 v3.1.4 版本开始，StarRocks 支持检测分区级别的数据更改。
 
 ### 启用 External Catalog 物化视图的查询改写
 

@@ -115,7 +115,7 @@ SELECT /*+ SET_VAR(SET resource_group = '<resource_group_name>') */ * FROM tbl;
 
 ### 内存限制是全局生效、按用户生效还是按 BE 生效？
 
-`mem_limit` 应用于每个 BE 的资源组。每个 Instance 的内存由 `exec_mem_limit` 控制。
+`mem_limit` 应用于每个 BE 的资源组。每个 BE 上单个查询的内存由 `query_mem_limit` 控制。
 
 ### 并发和内存限制仅在启用资源组时有效吗？
 
@@ -193,7 +193,7 @@ WITH (
 
 问：如果一个查询总共消耗 128 GB 内存并生成 60 个 Instance ，而 `query_mem_limit=0` 和 `exec_mem_limit=2G`。查询会失败吗？
 
-答：只要任何 Instance 消耗超过 2 GB (`exec_mem_limit`) 内存，查询就会失败。
+答：不会因 `exec_mem_limit` 而失败。Pipeline 查询不受 `exec_mem_limit` 限制。每个 BE 上单个查询的内存限制为 `query_mem_limit`，`query_mem_limit=0` 表示不限制单个查询的内存。此时查询仅受资源组和 BE 内存上限的限制。
 
 ### 如何仅为一个资源组禁用全局查询队列？
 

@@ -312,8 +312,8 @@ Query Dumb 包含以下信息：
 常见三类情况：
 
 - **单查询内存超限：**
-  - 报错：`Mem usage has exceed the limit of single query, You can change the limit by set session variable exec_mem_limit.`
-  - 解决方案：调整 `exec_mem_limit`
+  - 报错：`Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.`
+  - 解决方案：调整 `query_mem_limit`
 - **查询池内存超限：**
   - 报错：`Mem usage has exceed the limit of query pool`
   - 解决方案：需优化 SQL。

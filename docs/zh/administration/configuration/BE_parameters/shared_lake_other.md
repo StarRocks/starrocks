@@ -580,11 +580,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### datacache_disk_size
 
-- 默认值：0
+- 默认值：100%
 - 类型：String
 - 单位：-
 - 是否动态：是
-- 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。假设系统使用了两块磁盘进行缓存，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
+- 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。假设系统使用了两块磁盘进行缓存，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `100%`。
 - 引入版本：-
 
 ### datacache_enable
@@ -873,8 +873,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：0
 - 类型：Int
 - 单位：-
-- 是否动态：是
-- 描述：物化视图刷新任务在单个 BE 上的并发上限。默认为 `0`，即不做并发数限制。
+- 是否动态：否
+- 描述：物化视图刷新任务在单个 BE 上的并发上限。默认为 `0`，即不做并发数限制。已弃用：FE 现在持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：-
 
 ### default_mv_resource_group_cpu_limit
@@ -882,8 +882,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：1
 - 类型：Int
 - 单位：-
-- 是否动态：是
-- 描述：物化视图刷新任务占用单个 BE 的 CPU 核数上限。
+- 是否动态：否
+- 描述：物化视图刷新任务占用单个 BE 的 CPU 核数上限。已弃用：FE 现在持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：-
 
 ### default_mv_resource_group_memory_limit
@@ -891,8 +891,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：0.8
 - 类型：Double
 - 单位：
-- 是否动态：是
-- 描述：物化视图刷新任务占用单个 BE 内存上限，默认 80%。
+- 是否动态：否
+- 描述：物化视图刷新任务占用单个 BE 内存上限，默认 80%。已弃用：FE 现在持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：v3.1
 
 ### default_mv_resource_group_spill_mem_limit_threshold
@@ -900,8 +900,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：0.8
 - 类型：Double
 - 单位：
-- 是否动态：是
-- 描述：物化视图刷新任务触发落盘的内存占用阈值，默认80%。
+- 是否动态：否
+- 描述：物化视图刷新任务触发落盘的内存占用阈值，默认80%。已弃用：FE 现在持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：v3.1
 
 ### enable_resolve_hostname_to_ip_in_load_error_url

@@ -35,7 +35,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 :::note
 
-分区列不允许 `NULL` 值。因此，您必须确保没有空值被加载到 Iceberg 表的分区列中。
+分区列允许 `NULL` 值。分区值为 `NULL` 的行会写入分区值为 `NULL` 的分区。
 
 :::
 
@@ -47,7 +47,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 #### OVERWRITE
 
-用 StarRocks 表的数据覆盖 Iceberg 表的现有数据。
+用 StarRocks 表的数据覆盖 Iceberg 表的现有数据。仅覆盖写入了新数据的分区，其他分区保持不变。该行为与变量 `dynamic_overwrite` 无关，该变量对 Iceberg 表不生效。如果查询未返回任何行，则不会覆盖任何数据。
 
 #### column_name
 
@@ -67,7 +67,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 #### PARTITION
 
-要加载数据的分区。您必须在此属性中指定 Iceberg 表的所有分区列。您在此属性中指定的分区列可以与您在表创建语句中定义的分区列顺序不同。如果指定此属性，则不能指定 `column_name` 属性。
+要加载数据的分区。您必须在此属性中指定 Iceberg 表的所有分区列。您在此属性中指定的分区列可以与您在表创建语句中定义的分区列顺序不同。如果 Iceberg 表的分区规范包含非 identity 转换（例如 `day()` 或 `bucket()`），则不支持 PARTITION 子句。如果指定此属性，则不能指定 `column_name` 属性。
 
 ### 示例
 
@@ -121,7 +121,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ## DELETE
 
-您可以使用 DELETE 语句根据指定条件从 Iceberg 表中删除数据。此功能在 StarRocks v4.1 及更高版本中受支持。
+您可以使用 DELETE 语句根据指定条件从 Iceberg 表中删除数据。此功能在 StarRocks v4.1 及更高版本中受支持。`WITH` 子句、`USING` 子句和 `FOR VERSION AS OF` 自 v4.2 起支持。必须指定 WHERE 子句，且不支持 PARTITION 子句。
 
 ### 语法
 
@@ -459,7 +459,7 @@ WHEN NOT MATCHED THEN INSERT *;
 
 ## TRUNCATE
 
-您可以使用 TRUNCATE TABLE 语句快速删除 Iceberg 表中的所有数据。
+您可以使用 TRUNCATE TABLE 语句快速删除 Iceberg 表中的所有数据。Iceberg 表不支持清空指定分区（`TRUNCATE TABLE ... PARTITION`）。
 
 ### 语法
 

@@ -51,10 +51,13 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 ```SQL
 ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON
+[INTERVAL <value> <unit>]
 [STORAGE VOLUME <storage_volume_name>]
 ```
 
 パラメータ:
+
+`INTERVAL <value> <unit>`: 自動スナップショットを作成する間隔。`value` は正の整数で、`unit` は `SECOND`、`MINUTE`、`HOUR`、`DAY`、`WEEK` のいずれかである必要があります。このパラメータが指定されていない場合、間隔は FE の設定項目 `automated_cluster_snapshot_interval_seconds` によって制御されます。
 
 `storage_volume_name`: スナップショットを保存するために使用されるストレージボリュームを指定します。このパラメータが指定されていない場合、デフォルトのストレージボリュームが使用されます。ストレージボリュームの作成の詳細については、[CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) を参照してください。
 
@@ -62,7 +65,19 @@ FE がメタデータチェックポイントを完了した後に新しいメ�
 
 メタデータスナップショットは `/{storage_volume_locations}/{service_id}/meta/image/automated_cluster_snapshot_timestamp` に保存されます。データスナップショットは元のデータと同じ場所に保存されます。
 
-FE の設定項目 `automated_cluster_snapshot_interval_seconds` はスナップショットの自動化サイクルを制御します。デフォルト値は 600 秒（10 分）です。
+機能の有効化時に `INTERVAL` が指定されていない場合、FE の設定項目 `automated_cluster_snapshot_interval_seconds` がスナップショットの自動化サイクルを制御します。デフォルト値は 600 秒（10 分）です。
+
+機能が有効な間、次のステートメントを使用して間隔を変更できます。
+
+```SQL
+ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL <value> <unit>
+```
+
+次のステートメントを使用して、機能が有効かどうか、有効な間隔、ストレージボリューム、および前回と次回のスナップショットの時刻を確認できます。
+
+```SQL
+ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT
+```
 
 ### 自動クラスタースナップショットを無効にする
 
@@ -87,7 +102,7 @@ SELECT * FROM information_schema.cluster_snapshots;
 | フィールド            | 説明                                                         |
 | ------------------ | ------------------------------------------------------------ |
 | snapshot_name      | スナップショットの名前。                                       |
-| snapshot_type      | スナップショットのタイプ。有効な値：`automated` および `manual`。 |
+| snapshot_type      | スナップショットのタイプ。現在、値は常に `AUTOMATED` です。 |
 | created_time       | スナップショットが作成された時間。                             |
 | fe_journal_id      | FE ジャーナルの ID。                                          |
 | starmgr_journal_id | StarManager ジャーナルの ID。                                 |
