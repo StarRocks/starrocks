@@ -39,7 +39,7 @@ shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_h
 0
 1
 -- !result
-shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -c "node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)"
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -F -c "<li class=\"active\"><a href=\"/proc_profile?node=BE%3A$(cat be_ip.txt)%3A$(cat be_http_port.txt)\">"
 -- result:
 0
 1
