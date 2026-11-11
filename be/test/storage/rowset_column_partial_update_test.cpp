@@ -42,6 +42,7 @@
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks {
 
@@ -643,6 +644,62 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_and_check) {
     auto st = tablet->rowset_commit(++version, partial_rowset, 10000);
     ASSERT_TRUE(st.ok()) << st.to_string();
     // check data
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+    }));
+}
+
+// Skip a column-mode partial update whose apply put the tablet in error state.
+TEST_P(RowsetColumnPartialUpdateTest, skip_failed_partial_update_apply) {
+    if (GetParam().primary_key_batch_get_index_memory_limit != 104857600) return;
+    const auto old_retry_timeout = config::retry_apply_timeout_second;
+    DeferOp restore_config([&]() { config::retry_apply_timeout_second = old_retry_timeout; });
+    // A failed apply puts the tablet in error state instead of retrying.
+    config::retry_apply_timeout_second = 0;
+
+    const int N = 100;
+    auto tablet = create_tablet(rand(), rand());
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    std::vector<RowsetSharedPtr> rowsets{create_rowset(tablet, keys)};
+    int64_t version = 1;
+    commit_rowsets(tablet, rowsets, version);
+    auto unchanged = [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+        return (int16_t)(k1 % 100 + 1) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+    };
+    ASSERT_TRUE(check_tablet(tablet, version, N, unchanged));
+
+    std::vector<int32_t> column_indexes = {0, 1};
+    auto v1_func = [](int64_t k1) { return (int16_t)(k1 % 100 + 3); };
+    auto v2_func = [](int64_t k1) { return (int32_t)(k1 % 1000 + 4); };
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    auto failed = create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schema, 1);
+    ASSERT_GT(failed->num_update_files(), 0);
+
+    // The column-mode apply fails and puts the tablet in error state.
+    auto fp = failpoint::FailPointRegistry::GetInstance()->get(
+            "tablet_apply_column_partial_update_commit_internal_error");
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp->setMode(trigger_mode);
+    ASSERT_OK(tablet->rowset_commit(++version, failed, 0));
+    tablet->updates()->wait_apply_done();
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+    ASSERT_TRUE(tablet->updates()->is_error());
+
+    // The skipped update leaves the data unchanged, and the same update applies normally afterwards.
+    int64_t skipped_txn_id = -1;
+    EditVersion skipped_version;
+    ASSERT_OK(tablet->updates()->skip_apply(&skipped_txn_id, &skipped_version));
+    ASSERT_EQ(failed->txn_id(), skipped_txn_id);
+    ASSERT_TRUE(skipped_version == EditVersion(version, 0));
+    ASSERT_FALSE(tablet->updates()->is_error());
+    ASSERT_TRUE(check_tablet(tablet, version, N, unchanged));
+    auto partial = create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schema, 1);
+    ASSERT_OK(tablet->rowset_commit(++version, partial, 10000));
     ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
         return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
     }));

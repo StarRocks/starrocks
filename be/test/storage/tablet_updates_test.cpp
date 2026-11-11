@@ -4229,6 +4229,118 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
     }
 }
 
+// Skip the apply of a txn that put the tablet in error state.
+void TabletUpdatesTest::test_skip_apply(bool enable_persistent_index) {
+    const auto old_retry_timeout = config::retry_apply_timeout_second;
+    DeferOp restore_config([&]() { config::retry_apply_timeout_second = old_retry_timeout; });
+    // A failed apply puts the tablet in error state instead of retrying.
+    config::retry_apply_timeout_second = 0;
+
+    _tablet = create_tablet(rand(), rand());
+    _tablet->updates()->stop_compaction(true);
+    _tablet->set_enable_persistent_index(enable_persistent_index);
+    auto* updates = _tablet->updates();
+    const int N = 10;
+    std::vector<int64_t> keys(N);
+    std::vector<int64_t> new_keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+        new_keys[i] = N + i;
+    }
+    ASSERT_OK(_tablet->rowset_commit(2, create_rowset(_tablet, keys)));
+    ASSERT_EQ(N, read_tablet(_tablet, 2));
+    // Only a tablet in error state can skip.
+    int64_t skipped_txn_id = -1;
+    EditVersion skipped_version;
+    ASSERT_TRUE(updates->skip_apply(&skipped_txn_id, &skipped_version).is_not_supported());
+
+    // Version 3 upserts new keys and deletes half of the old keys, but its apply fails.
+    auto fp = failpoint::FailPointRegistry::GetInstance()->get("tablet_apply_normal_rowset_commit_internal_error");
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp->setMode(trigger_mode);
+    Int64Column deletes;
+    deletes.append_numbers(keys.data(), sizeof(int64_t) * N / 2);
+    auto rs3 = create_rowset(_tablet, new_keys, &deletes);
+    ASSERT_OK(_tablet->rowset_commit(3, rs3));
+    updates->wait_apply_done();
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+    ASSERT_TRUE(updates->is_error());
+
+    // The skip reports the txn and the version it dropped.
+    std::string output;
+    ASSERT_OK(execute_script(fmt::format("System.print(StorageEngine.skip_apply({}))", _tablet->tablet_id()), output));
+    ASSERT_NE(std::string::npos, output.find(fmt::format("txn:{} version:3 status:OK", rs3->txn_id()))) << output;
+    ASSERT_FALSE(updates->is_error());
+    // A repeated request must not skip the next version, which never failed.
+    ASSERT_TRUE(updates->skip_apply(&skipped_txn_id, &skipped_version).is_not_supported());
+    // Version 3 applies as an empty load: neither its upserts nor its deletes are visible.
+    ASSERT_EQ(N, read_tablet_and_compare(_tablet, 3, keys));
+    EditVersion applied_version;
+    ASSERT_OK(updates->get_latest_applied_version(&applied_version));
+    ASSERT_EQ(3, applied_version.major_number());
+    size_t total_rows = 0;
+    size_t total_dels = 0;
+    ASSERT_OK(updates->get_rowsets_total_stats({rs3->rowset_meta()->get_rowset_seg_id()}, &total_rows, &total_dels));
+    ASSERT_EQ(0, total_rows);
+    ASSERT_EQ(0, total_dels);
+
+    // The primary index has no trace of version 3: upserting the old keys must replace the rows of
+    // version 2, and upserting the new keys must add new rows.
+    ASSERT_OK(_tablet->rowset_commit(4, create_rowset(_tablet, keys)));
+    ASSERT_EQ(N, read_tablet_and_compare(_tablet, 4, keys));
+    ASSERT_OK(_tablet->rowset_commit(5, create_rowset(_tablet, new_keys)));
+    ASSERT_EQ(2 * N, read_tablet(_tablet, 5));
+    ASSERT_FALSE(updates->is_error());
+
+    // The emptied rowset is persisted.
+    StorageEngine::instance()->update_manager()->clear_cached_del_vec_by_tablet_id(_tablet->tablet_id());
+    auto tablet1 = load_same_tablet_from_store(_tablet);
+    ASSERT_EQ(N, read_tablet_and_compare(tablet1, 3, keys));
+    ASSERT_EQ(2 * N, read_tablet(tablet1, 5));
+}
+
+TEST_F(TabletUpdatesTest, test_skip_apply) {
+    test_skip_apply(false);
+}
+
+TEST_F(TabletUpdatesTest, test_skip_apply_with_persistent_index) {
+    test_skip_apply(true);
+}
+
+// An apply that failed after writing its meta has deleted rows of older rowsets already, so it
+// cannot be skipped.
+TEST_F(TabletUpdatesTest, test_skip_apply_rejects_persisted_apply) {
+    _tablet = create_tablet(rand(), rand());
+    _tablet->updates()->stop_compaction(true);
+    auto* updates = _tablet->updates();
+    const int N = 10;
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    ASSERT_OK(_tablet->rowset_commit(2, create_rowset(_tablet, keys)));
+    ASSERT_EQ(N, read_tablet(_tablet, 2));
+
+    // The apply of version 3 fails after its meta is written.
+    auto fp = failpoint::FailPointRegistry::GetInstance()->get("tablet_apply_cache_del_vec_failed");
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp->setMode(trigger_mode);
+    auto rs3 = create_rowset(_tablet, keys);
+    ASSERT_OK(_tablet->rowset_commit(3, rs3));
+    updates->wait_apply_done();
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+    ASSERT_TRUE(updates->is_error());
+
+    int64_t skipped_txn_id = -1;
+    EditVersion skipped_version;
+    ASSERT_TRUE(updates->skip_apply(&skipped_txn_id, &skipped_version).is_already_exist());
+    ASSERT_TRUE(updates->is_error());
+}
+
 TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
     config::retry_apply_interval_second = 1;
     config::retry_apply_timeout_second = 0;
