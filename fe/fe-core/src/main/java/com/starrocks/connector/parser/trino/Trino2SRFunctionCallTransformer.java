@@ -178,6 +178,15 @@ public class Trino2SRFunctionCallTransformer {
                         new PlaceholderExpr(2, Expr.class)
                 )));
 
+        // with_timezone(timestamp, zone) -> convert_tz(timestamp, zone, @time_zone), the inverse of at_timezone:
+        // the wall-clock time in zone becomes the same instant in the session time zone
+        registerFunctionTransformer("with_timezone", 2,
+                new FunctionCallExpr("convert_tz", List.of(
+                        new PlaceholderExpr(1, Expr.class),
+                        new PlaceholderExpr(2, Expr.class),
+                        new VariableExpr("time_zone")
+                )));
+
         // date_parse -> str_to_date
         registerFunctionTransformer("date_parse", 2, "str_to_date",
                 List.of(Expr.class, Expr.class));
