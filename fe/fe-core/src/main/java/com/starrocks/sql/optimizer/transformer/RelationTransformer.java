@@ -706,13 +706,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                                 node.getTabletIds()).keySet());
                 scanOperator = LogicalOlapScanOperator.builder()
                         .setParallelRangeScan(parallelRangeScan)
-<<<<<<< HEAD
-                        .setTable(node.getTable())
-=======
                         .setGroupedRangeScan(groupedRangeScan)
                         .setOrderedPhysicalCUniqueIds(physicalCIds)
-                        .setTable(scanTable)
->>>>>>> 59c91172e34... [Enhancement][RB-533] Add grouped range-colocate aggregation scans (#65971)
+                        .setTable(node.getTable())
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
                         .setColumnMetaToColRefMap(columnMetaToColRefMap)
                         .setDistributionSpec(distributionSpec)

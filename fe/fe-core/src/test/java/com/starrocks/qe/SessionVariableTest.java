@@ -333,8 +333,6 @@ public class SessionVariableTest {
                 SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 512}");
         Assertions.assertEquals(4096, sessionVariable.getScanLakePartitionNumLimit());
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testGroupedRangeModeIsSessionOnlyAndIndependentOfParallel() throws Exception {
@@ -353,19 +351,4 @@ public class SessionVariableTest {
         Assertions.assertFalse(variables.isGroupedRangeScan());
     }
 
-    @Test
-    public void testUnionChildSubfieldPushdownState() throws Exception {
-        SessionVariable variables = new SessionVariable();
-        Assertions.assertTrue(variables.isEnableUnionChildSubfieldPushdown());
-        variables.replayFromJson("{}");
-        Assertions.assertTrue(variables.isEnableUnionChildSubfieldPushdown());
-        variables.setEnableUnionChildSubfieldPushdown(false);
-        Assertions.assertEquals(false, variables.getNonDefaultVariables()
-                .get(SessionVariable.ENABLE_UNION_CHILD_SUBFIELD_PUSHDOWN).actualValue);
-        SessionVariable restored = new SessionVariable();
-        restored.replayFromJson(variables.getJsonString());
-        Assertions.assertFalse(restored.isEnableUnionChildSubfieldPushdown());
-        Assertions.assertFalse(variables.clone().isEnableUnionChildSubfieldPushdown());
-    }
->>>>>>> 59c91172e34... [Enhancement][RB-533] Add grouped range-colocate aggregation scans (#65971)
 }

@@ -236,12 +236,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     @Override
     public int hashCode() {
-<<<<<<< HEAD
-        return Objects.hash(super.hashCode(), parallelRangeScan, selectedIndexMetaId, gtid, selectedPartitionId,
-=======
         return Objects.hash(super.hashCode(), parallelRangeScan, groupedRangeScan, orderedPhysicalCUniqueIds,
-                selectedIndexMetaId, gtid, bookmarkScoped, selectedPartitionId,
->>>>>>> 59c91172e34... [Enhancement][RB-533] Add grouped range-colocate aggregation scans (#65971)
+                selectedIndexMetaId, gtid, selectedPartitionId,
                 selectedTabletId, hintsTabletIds, hintsReplicaIds, sample);
     }
 

@@ -1241,11 +1241,7 @@ public class PlanFragmentBuilder {
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedIndex = physicalPartition.getQueryableIndex(selectedIndexMetaId);
                         totalTabletsNum += selectedIndex.getTablets().size();
-<<<<<<< HEAD
-                        if (!node.isParallelRangeScan()) {
-=======
                         if (!node.isParallelRangeScan() && !node.isGroupedRangeScan()) {
->>>>>>> 59c91172e34... [Enhancement][RB-533] Add grouped range-colocate aggregation scans (#65971)
                             OlapScanNode.fillTabletId2BucketSeq(
                                     dispatch, selectedIndex, selectedIndex.getTabletIdsInOrder(), tabletId2BucketSeq);
                         }

@@ -487,12 +487,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                     scanOperator.getProjection(), scanOperator.isUsePkIndex(),
                                     scanOperator.getVectorSearchOptions());
                     newOlapScan.setParallelRangeScan(scanOperator.isParallelRangeScan());
-<<<<<<< HEAD
-=======
                     newOlapScan.setGroupedRangeScan(scanOperator.isGroupedRangeScan());
                     newOlapScan.setOrderedPhysicalCUniqueIds(scanOperator.getOrderedPhysicalCUniqueIds());
-                    newOlapScan.setBm25SearchOptions(scanOperator.getBm25SearchOptions());
->>>>>>> 59c91172e34... [Enhancement][RB-533] Add grouped range-colocate aggregation scans (#65971)
                     newOlapScan.setScanOptimizeOption(scanOperator.getScanOptimizeOption());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(globalDicts);
