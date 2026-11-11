@@ -22,6 +22,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -32,16 +33,23 @@ import com.starrocks.statistic.ExternalFullStatisticsCollectJob;
 import com.starrocks.statistic.ExternalSampleStatisticsCollectJob;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTriggerExternalAnalyzeRequest;
+import com.starrocks.thrift.TTriggerExternalAnalyzeResponse;
+import com.starrocks.thrift.TTriggerExternalAnalyzeTable;
 import com.starrocks.utframe.UtFrameUtils;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.Triple;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.thrift.TException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -302,5 +310,148 @@ public class ConnectorAnalyzeTaskTest {
         Assertions.assertDoesNotThrow(() -> mgr.checkAndUpdateTableStats(columnStats));
         // Both columns are treated as due rather than silently dropped.
         Assertions.assertEquals(1, mgr.getConnectorAnalyzeTaskQueue().getPendingTaskSize());
+    }
+
+    @Test
+    public void testFollowerForwardsTriggeredColumnsToLeader() {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
+                "partitioned_db", "orders");
+        String tableUUID = table.getUUID();
+        Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> columnStats = Maps.newHashMap();
+        columnStats.put(new ConnectorTableColumnKey(tableUUID, "o_orderkey"), Optional.empty());
+
+        List<TTriggerExternalAnalyzeRequest> sent = Lists.newArrayList();
+        ConnectorTableTriggerAnalyzeMgr mgr = new ConnectorTableTriggerAnalyzeMgr() {
+            @Override
+            TTriggerExternalAnalyzeResponse sendToLeader(TTriggerExternalAnalyzeRequest request) throws TException {
+                sent.add(request);
+                if (sent.size() > 1) {
+                    throw new TException("leader unreachable");
+                }
+                return new TTriggerExternalAnalyzeResponse();
+            }
+        };
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+
+        // a follower cannot run the analyze: it buffers the columns instead of queueing a task nobody drains
+        mgr.checkAndUpdateTableStats(columnStats);
+        Assertions.assertEquals(0, mgr.getConnectorAnalyzeTaskQueue().getPendingTaskSize());
+        Assertions.assertEquals(1, mgr.getTriggeredColumnsSize());
+
+        // and sends them to the leader on the next round
+        mgr.forwardTriggeredColumnsToLeader();
+        Assertions.assertEquals(1, sent.size());
+        Assertions.assertEquals(tableUUID, sent.get(0).getTables().get(0).getTable_uuid());
+        Assertions.assertEquals(List.of("o_orderkey"), sent.get(0).getTables().get(0).getColumns());
+        Assertions.assertEquals(0, mgr.getTriggeredColumnsSize());
+
+        // nothing buffered, nothing sent
+        mgr.forwardTriggeredColumnsToLeader();
+        Assertions.assertEquals(1, sent.size());
+
+        // a lost request is dropped, the next query raises it again
+        mgr.checkAndUpdateTableStats(columnStats);
+        mgr.forwardTriggeredColumnsToLeader();
+        Assertions.assertEquals(2, sent.size());
+        Assertions.assertEquals(0, mgr.getTriggeredColumnsSize());
+    }
+
+    @Test
+    public void testLeaderQueuesForwardedColumns() {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
+                "partitioned_db", "orders");
+        String tableUUID = table.getUUID();
+        ConnectorTableTriggerAnalyzeMgr mgr = new ConnectorTableTriggerAnalyzeMgr();
+        mgr.addTriggeredColumns(tableUUID, List.of("o_orderkey"));
+        mgr.addTriggeredColumns(tableUUID, List.of("o_custkey"));
+        mgr.addTriggeredColumns("hive0.partitioned_db.no_such_table.1", List.of("c1"));
+        Assertions.assertEquals(2, mgr.getTriggeredColumnsSize());
+
+        mgr.queueTriggeredColumns();
+        Assertions.assertEquals(0, mgr.getTriggeredColumnsSize());
+        // the unknown table is skipped, the two requests for orders are one task
+        Assertions.assertEquals(1, mgr.getConnectorAnalyzeTaskQueue().getPendingTaskSize());
+    }
+
+    @Test
+    public void testForwardBufferBoundAndRejectedResponse() {
+        long oldMax = Config.connector_table_query_trigger_analyze_max_pending_task_num;
+        Config.connector_table_query_trigger_analyze_max_pending_task_num = 1;
+        try {
+            List<TTriggerExternalAnalyzeRequest> sent = Lists.newArrayList();
+            ConnectorTableTriggerAnalyzeMgr mgr = new ConnectorTableTriggerAnalyzeMgr() {
+                @Override
+                TTriggerExternalAnalyzeResponse sendToLeader(TTriggerExternalAnalyzeRequest request) {
+                    sent.add(request);
+                    TTriggerExternalAnalyzeResponse response = new TTriggerExternalAnalyzeResponse();
+                    TStatus status = new TStatus(TStatusCode.CANCELLED);
+                    status.addToError_msgs("current node is not leader");
+                    response.setStatus(status);
+                    return response;
+                }
+            };
+            // nothing to buffer
+            mgr.addTriggeredColumns(null, List.of("c1"));
+            mgr.addTriggeredColumns("t1", List.of());
+            Assertions.assertEquals(0, mgr.getTriggeredColumnsSize());
+
+            // columns of a buffered table still merge when the buffer is full, a new table is dropped
+            mgr.addTriggeredColumns("t1", List.of("c1"));
+            mgr.addTriggeredColumns("t1", List.of("c2"));
+            mgr.addTriggeredColumns("t2", List.of("c1"));
+            Assertions.assertEquals(1, mgr.getTriggeredColumnsSize());
+
+            // a rejected request is dropped like a failed one
+            mgr.forwardTriggeredColumnsToLeader();
+            Assertions.assertEquals(1, sent.size());
+            Assertions.assertEquals(Set.of("c1", "c2"), new HashSet<>(sent.get(0).getTables().get(0).getColumns()));
+            Assertions.assertEquals(0, mgr.getTriggeredColumnsSize());
+        } finally {
+            Config.connector_table_query_trigger_analyze_max_pending_task_num = oldMax;
+        }
+    }
+
+    @Test
+    public void testTriggerExternalAnalyzeRpc() throws TException {
+        Map<String, Collection<String>> received = Maps.newHashMap();
+        new MockUp<ConnectorTableTriggerAnalyzeMgr>() {
+            @Mock
+            public void addTriggeredColumns(String tableUUID, Collection<String> columns) {
+                received.put(tableUUID, columns);
+            }
+        };
+        TTriggerExternalAnalyzeTable t = new TTriggerExternalAnalyzeTable();
+        t.setTable_uuid("t1");
+        t.setColumns(List.of("c1", "c2"));
+        TTriggerExternalAnalyzeRequest request = new TTriggerExternalAnalyzeRequest();
+        request.addToTables(t);
+        FrontendServiceImpl impl = new FrontendServiceImpl(null);
+
+        // the leader buffers the request
+        TTriggerExternalAnalyzeResponse response = impl.triggerExternalAnalyze(request);
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+        Assertions.assertEquals(Map.of("t1", List.of("c1", "c2")), received);
+
+        // an empty request is fine
+        received.clear();
+        response = impl.triggerExternalAnalyze(new TTriggerExternalAnalyzeRequest());
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+        Assertions.assertTrue(received.isEmpty());
+
+        // a node that is no longer the leader rejects it
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+        response = impl.triggerExternalAnalyze(request);
+        Assertions.assertEquals(TStatusCode.CANCELLED, response.getStatus().getStatus_code());
+        Assertions.assertTrue(received.isEmpty());
     }
 }
