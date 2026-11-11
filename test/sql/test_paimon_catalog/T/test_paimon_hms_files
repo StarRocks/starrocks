@@ -14,9 +14,10 @@ properties (
 "aws.s3.secret_key" = "${oss_sk}",
 "aws.s3.endpoint" = "${oss_endpoint}"
 );
-set paimon_reader_mode = 'jni';
+set paimon_force_jni_reader = true;
 select count(*) > 0, coalesce(sum(record_count), 0) > 0 from ${paimon_hms_prefix}${uuid0}.${paimon_hms_prefix}${uuid0}.`${paimon_hms_prefix}files$files`;
-function: assert_paimon_reader("select record_count from ${paimon_hms_prefix}${uuid0}.${paimon_hms_prefix}${uuid0}.`${paimon_hms_prefix}files$files`", "${paimon_hms_prefix}files$files", "jni")
+function: assert_query_contains("trace values external select record_count from ${paimon_hms_prefix}${uuid0}.${paimon_hms_prefix}${uuid0}.`${paimon_hms_prefix}files$files`", "Paimon.metadata.reader.${paimon_hms_prefix}files$files.jniReaderReadNum: ", "Paimon.metadata.reader.${paimon_hms_prefix}files$files.nativeReaderReadNum: 0")
+function: assert_query_not_contains("trace values external select record_count from ${paimon_hms_prefix}${uuid0}.${paimon_hms_prefix}${uuid0}.`${paimon_hms_prefix}files$files`", "Paimon.metadata.reader.${paimon_hms_prefix}files$files.jniReaderReadNum: 0")
 CLEANUP {
   set catalog default_catalog;
   drop catalog if exists ${paimon_hms_prefix}${paimon_hms_test_id};
