@@ -385,6 +385,30 @@ Status HiveDataSource::_init_extended_values() {
     RETURN_IF_ERROR(Expr::prepare(_scanner_ctx.extended_col_expr_ctxs, _runtime_state));
     RETURN_IF_ERROR(Expr::open(_scanner_ctx.extended_col_expr_ctxs, _runtime_state));
 
+    // Extended columns (e.g. Iceberg `_file`, `$spec_id`) are constant per scan range and are
+    // appended to the chunk after the file reader runs, so the readers never evaluate the
+    // single-slot conjuncts on them. Evaluate those conjuncts here, the same way identity
+    // partition conjuncts are, and skip the whole scan range when they reject the values.
+    auto extended_chunk = std::make_shared<Chunk>();
+    std::vector<ExprContext*> ctxs;
+    const auto& by_slot = _scanner_ctx.format_scan_context.conjuncts.by_slot;
+    for (size_t i = 0; i < _scanner_ctx.extended_col_slots.size(); i++) {
+        SlotId slot_id = _scanner_ctx.extended_col_slots[i]->id();
+        auto it = by_slot.find(slot_id);
+        if (it == by_slot.end()) continue;
+        int extended_col_idx = _scanner_ctx.index_in_extended_columns[i];
+        ASSIGN_OR_RETURN(auto value_col, _scanner_ctx.extended_col_expr_ctxs[extended_col_idx]->evaluate(nullptr));
+        DCHECK(value_col->is_constant());
+        extended_chunk->append_column(std::move(value_col), slot_id);
+        ctxs.insert(ctxs.end(), it->second.begin(), it->second.end());
+    }
+    if (!ctxs.empty()) {
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(ctxs, extended_chunk.get()));
+        if (!extended_chunk->has_rows()) {
+            _partition_filter.filter_by_eval = true;
+        }
+    }
+
     return Status::OK();
 }
 
