@@ -714,6 +714,66 @@ TEST_P(RowsetColumnPartialUpdateTest, skip_failed_partial_update_apply) {
     }));
 }
 
+// A column-mode partial update whose apply exceeds column capacity keeps retrying instead of putting
+// the tablet in error state, so queries on the applied version still succeed.
+TEST_P(RowsetColumnPartialUpdateTest, retry_partial_update_apply_over_capacity) {
+    if (GetParam().primary_key_batch_get_index_memory_limit != 104857600) return;
+    const auto old_retry_interval = config::retry_apply_interval_second;
+    const auto old_retry_timeout = config::retry_apply_timeout_second;
+    DeferOp restore_config([&]() {
+        config::retry_apply_interval_second = old_retry_interval;
+        config::retry_apply_timeout_second = old_retry_timeout;
+    });
+    config::retry_apply_interval_second = 1;
+    // With no retry budget left, any error that is not always retryable puts the tablet in error state.
+    config::retry_apply_timeout_second = 0;
+
+    const int N = 100;
+    auto tablet = create_tablet(rand(), rand());
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    std::vector<RowsetSharedPtr> rowsets{create_rowset(tablet, keys)};
+    int64_t version = 1;
+    commit_rowsets(tablet, rowsets, version);
+    auto unchanged = [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+        return (int16_t)(k1 % 100 + 1) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+    };
+    ASSERT_TRUE(check_tablet(tablet, version, N, unchanged));
+
+    std::vector<int32_t> column_indexes = {0, 1};
+    auto v1_func = [](int64_t k1) { return (int16_t)(k1 % 100 + 3); };
+    auto v2_func = [](int64_t k1) { return (int32_t)(k1 % 1000 + 4); };
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    auto partial = create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schema, 1);
+    ASSERT_GT(partial->num_update_files(), 0);
+
+    auto fp = failpoint::FailPointRegistry::GetInstance()->get(
+            "tablet_apply_column_partial_update_finalize_capacity_exceed");
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp->setMode(trigger_mode);
+    DeferOp disable_fp([&]() {
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+    });
+    ASSERT_OK(tablet->rowset_commit(++version, partial, 0));
+    // The first attempt fails and schedules a retry.
+    tablet->updates()->wait_apply_done();
+    ASSERT_FALSE(tablet->updates()->is_error());
+    ASSERT_EQ(version - 1, tablet->updates()->max_readable_version());
+    ASSERT_TRUE(check_tablet(tablet, version - 1, N, unchanged));
+
+    // Once the apply can succeed, a retry applies the update.
+    trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+    fp->setMode(trigger_mode);
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+    }));
+    ASSERT_FALSE(tablet->updates()->is_error());
+}
+
 TEST_P(RowsetColumnPartialUpdateTest, normal_partial_update_and_check) {
     const int N = 100;
     auto tablet = create_tablet(rand(), rand());
