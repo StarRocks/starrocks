@@ -76,6 +76,24 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
 }
 
 Status MemTable::prepare(PrimaryKeyEncodingType pk_encoding_type) {
+    if (_slot_descs != nullptr) {
+        // insert() fills memtable column i from the load's slot i, so the load must bring one slot per column
+        // of the write schema, the row-store column aside (insert() encodes that one itself). The FE plans the
+        // slots and the write schema together. Should they still disagree -- one of them read before a schema
+        // change and the other after -- a column without a slot would stay empty while the others fill up, and
+        // sorting the memtable would read rows that column does not have. Fail the load instead.
+        size_t num_slot_fields = _vectorized_schema->num_fields();
+        if (_keys_type == KeysType::PRIMARY_KEYS && num_slot_fields > 0 &&
+            _vectorized_schema->field(num_slot_fields - 1)->name() == Schema::FULL_ROW_COLUMN) {
+            num_slot_fields--;
+        }
+        if (_slot_descs->size() != num_slot_fields) {
+            return Status::InternalError(fmt::format(
+                    "memtable of tablet {}: the load carries {} columns but its write schema has {}, so the load was "
+                    "planned against another version of the table schema. Retry the load",
+                    _tablet_id, _slot_descs->size(), num_slot_fields));
+        }
+    }
     if (_keys_type != KeysType::DUP_KEYS) {
         // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
         // which is not suitable for obtaining Chunk from ColumnPool,

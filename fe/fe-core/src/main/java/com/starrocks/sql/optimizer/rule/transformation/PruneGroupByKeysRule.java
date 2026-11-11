@@ -62,6 +62,9 @@ public class PruneGroupByKeysRule extends TransformationRule {
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
+        if (context.getSessionVariable().isGroupedRangeScan()) {
+            return false;
+        }
         LogicalAggregationOperator aggOperator = (LogicalAggregationOperator) input.getOp();
         List<ColumnRefOperator> groupingKeys = aggOperator.getGroupingKeys();
         if (groupingKeys == null || groupingKeys.isEmpty()) {

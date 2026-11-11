@@ -29,6 +29,7 @@
 #include "gen_cpp/Types_types.h" // for PUniqueId
 #include "gutil/macros.h"
 #include "platform/store_path.h"
+#include "storage/lake/metacache_key.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet_metadata.h"
@@ -390,6 +391,15 @@ public:
 
     std::string bundle_tablet_metadata_location(int64_t tablet_id, int64_t version) const;
 
+    // Keeps |metadata|, one tablet's publish result under file bundling that the aggregator may never put into
+    // the version's bundle, in this node's local disk cache (the datacache) and nowhere else: a retry of the
+    // publish on this node reads it back. Never written to object storage and never deleted; the cache evicts it
+    // like any other entry. NotSupported when the local disk cache is not enabled.
+    Status put_partial_tablet_metadata(const TabletMetadataPtr& metadata);
+
+    // Reads what put_partial_tablet_metadata() kept on this node. NotFound when there is none.
+    StatusOr<TabletMetadataPtr> get_partial_tablet_metadata(int64_t tablet_id, int64_t version, int64_t expected_gtid);
+
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) const;
@@ -440,10 +450,10 @@ public:
     // only for TEST purpose
     void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
 
-    // Update the cache size of the segment with the given key. The update is applied only when the
-    // key still maps to `segment`, so that a cache entry replaced by a different instance in the
-    // meantime is not charged with this segment's memory cost.
-    void update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment);
+    // Update the cache size of the segment identified by the file, including its bundle offset.
+    // Apply only when the key still maps to `segment`, so a cache entry replaced by another
+    // instance in the meantime is not charged with this segment's memory cost.
+    void update_segment_cache_size(const FileInfo& file, size_t mem_cost, const Segment* segment);
 
     // If |stats| is not null and the segment footer is read, the read is added to it.
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
@@ -476,9 +486,9 @@ public:
     TabletSchemaPtr get_cached_schema(int64_t schema_id);
 
 private:
-    static std::string global_schema_cache_key(int64_t index_id);
-    static std::string tablet_schema_cache_key(int64_t tablet_id);
-    static std::string tablet_latest_metadata_cache_key(int64_t tablet_id);
+    static MetacacheKey global_schema_cache_key(int64_t index_id);
+    static MetacacheKey tablet_schema_cache_key(int64_t tablet_id);
+    static MetacacheKey tablet_latest_metadata_cache_key(int64_t tablet_id);
 
     StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path);
     StatusOr<TabletSchemaPtr> get_tablet_schema_by_id(int64_t tablet_id, int64_t schema_id);

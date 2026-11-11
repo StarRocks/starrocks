@@ -139,7 +139,7 @@ public class OAuth2Action extends RestBaseAction {
             String idToken = authResponse.getString("id_token");
 
             JWTClaimsSet claims = OpenIdConnectVerifier.verify(idToken, context.getQualifiedUser(), jwkSource,
-                    oAuth2Context.principalFiled(),
+                    oAuth2Context.principalField(),
                     oAuth2Context.requiredIssuer(),
                     oAuth2Context.requiredAudience());
 

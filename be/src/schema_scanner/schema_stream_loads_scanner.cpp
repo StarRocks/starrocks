@@ -65,6 +65,9 @@ Status SchemaStreamLoadsScanner::start(RuntimeState* state) {
     if (_param->job_id != -1) {
         load_params.__set_job_id(_param->job_id);
     }
+    if (nullptr != _param->current_user_ident) {
+        load_params.__set_current_user_ident(*(_param->current_user_ident));
+    }
 
     // init schema scanner state
     RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));

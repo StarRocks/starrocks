@@ -1690,6 +1690,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                             "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
                                             " please use \"DROP PARTITION <partition> FORCE\".");
                         }
+                        // A tablet split or merge reserves its publish version without registering a transaction,
+                        // so the check above cannot see it, and a recovered partition would sit below that version.
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            if (stateMgr.getTabletReshardJobMgr()
+                                    .isPhysicalPartitionReshardingLocked(olapTable, physicalPartition.getId())) {
+                                throw new DdlException("A tablet split or merge is in progress on the partition [" +
+                                        partitionName + "]. Wait until it completes, or use " +
+                                        "\"DROP PARTITION <partition> FORCE\" to drop it forcibly (cannot be recovered).");
+                            }
+                        }
                     }
                 }
             }
@@ -2660,7 +2670,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     + table.getColocateGroup() + "', cannot create range colocate tablets");
         }
         int colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
-        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
+        // Expand with the sort key of the index being created, not the base index's: every index routes its rows by its
+        // own sort key, which starts with the colocate columns but can be shorter or longer than the base sort key.
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table, index.getMetaId());
 
         for (ColocateRange colocateRange : colocateRanges) {
             List<Long> shardIds = stateMgr.getStarOSAgent().createShards(1,
@@ -4643,6 +4655,31 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    private void alterTabletReshardTargetSize(OlapTable table, Map<String, String> properties,
+                                              Map<String, String> propertiesToPersist,
+                                              List<Runnable> appliers) throws DdlException {
+        if (!table.isRangeDistribution()) {
+            throw new DdlException(PropertyAnalyzer.TABLET_RESHARD_TARGET_SIZE_RANGE_ONLY_MSG);
+        }
+        long size;
+        try {
+            size = PropertyAnalyzer.analyzeTableTabletReshardTargetSize(
+                    properties.remove(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE), true);
+        } catch (SemanticException e) {
+            throw new DdlException(e.getMessage(), e);
+        }
+        // Store and journal the parsed value, as CREATE TABLE does, so "+1073741824" reads back as "1073741824";
+        // "" (a clear) stays "".
+        String value = size == 0L ? "" : String.valueOf(size);
+        propertiesToPersist.put(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, value);
+        // The same steps replay takes, so an empty value removes the property here as it does on a follower.
+        appliers.add(() -> {
+            TableProperty tableProperty = table.getTableProperty();
+            tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, value);
+            tableProperty.buildTabletReshardTargetSize();
+        });
+    }
+
     private void alterDataCacheEnable(Database db, OlapTable table,
                                       Map<String, String> properties,
                                       List<Runnable> appliers) throws DdlException {
@@ -4744,6 +4781,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
             alterTableQueryTimeout(table, properties, appliers);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE)) {
+            alterTabletReshardTargetSize(table, properties, propertiesToPersist, appliers);
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
             alterDataCacheEnable(db, table, properties, appliers);

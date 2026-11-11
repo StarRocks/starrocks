@@ -594,6 +594,16 @@ public class Config extends ConfigBase {
     public static int label_keep_max_second = 3 * 24 * 3600; // 3 days
 
     /**
+     * Whether the load job views (information_schema loads, load_tracking_logs, routine_load_jobs, stream_loads,
+     * SHOW LOAD / STREAM LOAD / ROUTINE LOAD, their SHOW PROC nodes and /api/{db}/_load_info) show a job only to
+     * callers with a privilege on its target tables or OPERATE, and its rejected rows and the fields leading to them
+     * only to callers with SELECT on them. Setting it to false returns every view to its earlier checks, and exposes
+     * the rejected rows and error-log URLs to the users those checks let through.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_new_load_job_privilege_check = true;
+
+    /**
      * for load job managed by LoadManager, such as Insert, Broker load and Spark load.
      */
     @ConfField(mutable = true)
@@ -3319,6 +3329,24 @@ public class Config extends ConfigBase {
             "column is left to the connector's own table metadata. <= 0 records whatever was collected.")
     public static double connector_table_analyze_min_column_coverage_ratio = 0.5;
 
+    // An external-table analyze deletes the statistics of partitions that are no longer in the table's partition
+    // list, since the read path aggregates every partition's rows and a dropped partition's would otherwise keep
+    // skewing NDV, row count and min/max. A partition's rows are deleted only once none of them has been written
+    // for this long: the partition list a job holds can lag the table, and a concurrent job that saw a newer
+    // snapshot may just have collected a partition this job does not know about yet.
+    @ConfField(mutable = true, comment = "External-table analyze deletes the column statistics of partitions " +
+            "that no longer exist once none of their rows has been written for this many seconds; " +
+            "<= 0 disables the cleanup.")
+    public static long connector_table_analyze_dropped_partition_stats_grace_second = 86400; // default 1 day
+
+    // The cleanup above only runs at the end of a collection, so a partition dropped after the table's last
+    // collection (or still inside the grace at it) keeps its statistics until the next one. The leader also runs
+    // the same cleanup periodically, at most once per this interval, over a bounded number of tables per round.
+    @ConfField(mutable = true, comment = "Interval at which the leader FE periodically deletes the column " +
+            "statistics of dropped partitions of external tables, independent of collections; <= 0 disables " +
+            "the periodic cleanup.")
+    public static long connector_table_analyze_dropped_partition_stats_cleanup_interval_second = 3600;
+
     /**
      * When true (default), queries that scan an external catalog with {@code labels.location}
      * are scheduled only on label-matched backends (L) union fixed-location scan backends (N)
@@ -3580,31 +3608,31 @@ public class Config extends ConfigBase {
     /**
      * iceberg metadata cache dir
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static String iceberg_metadata_cache_disk_path = Config.STARROCKS_HOME_DIR + "/caches/iceberg";
 
     /**
      * iceberg metadata memory cache total size, default 0MB (turn off)
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_memory_cache_capacity = 0L;
 
     /**
      * iceberg metadata memory cache expiration time, default 86500s
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_memory_cache_expiration_seconds = 86500;
 
     /**
      * enable iceberg metadata disk cache, default false
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static boolean enable_iceberg_metadata_disk_cache = false;
 
     /**
      * iceberg metadata disk cache total size, default 2GB
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_disk_cache_capacity = 2147483648L;
 
     /**
@@ -3616,8 +3644,50 @@ public class Config extends ConfigBase {
     /**
      * iceberg metadata cache max entry size, default 0L (turn off)
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_cache_max_entry_size = 0L;
+
+    /**
+     * Share of the FE heap for one cache of the data files of cached Iceberg manifests, shared by all Iceberg
+     * catalogs, so it bounds their total however many catalogs there are. 0 (the default) keeps a cache per
+     * catalog, sized by the catalog property iceberg_data_file_cache_memory_usage_ratio; above 0 that property is
+     * ignored.
+     */
+    @ConfField
+    public static double iceberg_data_file_cache_global_memory_ratio = 0;
+
+    /**
+     * Share of the FE heap for one cache of Iceberg delete files, shared by all Iceberg catalogs; the built delete
+     * file indexes get the same share in a cache of their own, as per catalog. 0 (the default) keeps both per
+     * catalog, sized by the catalog property iceberg_delete_file_cache_memory_usage_ratio; above 0 that property is
+     * ignored.
+     */
+    @ConfField
+    public static double iceberg_delete_file_cache_global_memory_ratio = 0;
+
+    /**
+     * Share of the FE heap for one cache of Iceberg partition maps, shared by all Iceberg catalogs. 0 (the default)
+     * keeps a cache per catalog, sized by the catalog property iceberg_partition_cache_memory_usage_ratio; above 0
+     * that property is ignored.
+     */
+    @ConfField
+    public static double iceberg_partition_cache_global_memory_ratio = 0;
+
+    /**
+     * Share of the FE heap for one cache of parsed Delta Lake checkpoint files, shared by all Delta Lake catalogs,
+     * so it bounds their total however many catalogs there are. 0 (the default) keeps a cache per catalog, sized by
+     * the catalog property deltalake_checkpoint_meta_cache_memory_usage_ratio; above 0 that property is ignored.
+     */
+    @ConfField
+    public static double deltalake_checkpoint_meta_cache_global_memory_ratio = 0;
+
+    /**
+     * Share of the FE heap for one cache of parsed Delta Lake log (JSON) files, shared by all Delta Lake catalogs.
+     * 0 (the default) keeps a cache per catalog, sized by the catalog property
+     * deltalake_json_meta_cache_memory_usage_ratio; above 0 that property is ignored.
+     */
+    @ConfField
+    public static double deltalake_json_meta_cache_global_memory_ratio = 0;
 
     /**
      * Whether to enable commit queue for Iceberg tables to avoid concurrent commit conflicts.
@@ -4181,6 +4251,14 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "disable table or partition compaction, format:'id1;id2'",
             aliases = {"lake_compaction_disable_tables"})
     public static String lake_compaction_disable_ids = "";
+
+    @ConfField(mutable = true, acceptEmpty = true, comment = "Compaction admission mode: NORMAL ignores the allowlist; " +
+            "ALLOWLIST only allows tables in lake_compaction_allow_table_ids.")
+    public static String lake_compaction_admission_mode = "NORMAL";
+
+    @ConfField(mutable = true, comment = "Table IDs allowed to compact in ALLOWLIST mode, format:'id1;id2'. " +
+            "An empty string allows no tables. lake_compaction_disable_ids takes precedence.")
+    public static String lake_compaction_allow_table_ids = "";
 
     @ConfField(mutable = true, comment = "partitions which can be vacuumed immediately, test only, format:'id1;id2'")
     public static String lake_vacuum_immediately_partition_ids = "";
@@ -5446,8 +5524,15 @@ public class Config extends ConfigBase {
 
     /**
      * Tablet splitting and merging will make tablet size around this value.
+     *
+     * <p>While this value is positive, a range-distributed table with the tablet_reshard_target_size table
+     * property uses that property in its place. Zero disables automatic split and merge for every table,
+     * including tables with the property.
      */
-    @ConfField(mutable = true, comment = "Tablet splitting and merging will make tablet size around this value.")
+    @ConfField(mutable = true, comment = "Tablet splitting and merging will make tablet size around this value. "
+            + "While it is positive, a range-distributed table with the tablet_reshard_target_size table property "
+            + "uses that property instead. Zero disables automatic split and merge for every table, including "
+            + "tables with the property.")
     public static long tablet_reshard_target_size = 10L * 1024L * 1024L * 1024L;
 
     /**
@@ -5476,12 +5561,19 @@ public class Config extends ConfigBase {
      * so raising this to tune pre-split also delays that split. The bound is the warehouse's
      * compute-node count capped by tablet_reshard_max_split_count, so lowering that configuration
      * lowers both the width this rule aims for and the tablet count at which it stops. The adaptive walk
-     * floors its child count and will not act until a tablet is worth two whole targets, so unlike
-     * the size rule it does not produce children below the target it aimed at.
+     * floors its child count and will not act until a tablet is worth two whole targets; the slots that
+     * leaves unspent go afterwards to the largest tablets it left alone, and this value is also the
+     * smallest child that fill may cut.
+     *
+     * <p>That target never exceeds the table's own target size (the tablet_reshard_target_size table
+     * property of a range-distributed table that has one, else the tablet_reshard_target_size
+     * configuration), so a value at or above it turns the adaptive split off for that table.
      */
     @ConfField(mutable = true, comment = "Minimum size of a tablet produced by pre-split, and the lower "
-            + "bound on the target an under-provisioned index splits at. Should be no larger than "
-            + "tablet_reshard_target_size; setting it at or above that disables the adaptive split.")
+            + "bound on the target an under-provisioned index splits at and on the tablets it splits into. "
+            + "Should be no larger than tablet_reshard_target_size; setting it at or above a table's target size (its "
+            + "tablet_reshard_target_size table property if it has one, else the tablet_reshard_target_size "
+            + "configuration) disables the adaptive split for that table.")
     public static long tablet_reshard_min_split_size = 2L * 1024L * 1024L * 1024L;
 
     @ConfField(mutable = true, comment = "TTL in milliseconds for the range-colocate checker's "
@@ -5628,19 +5720,24 @@ public class Config extends ConfigBase {
 
     /**
      * Target tablet size Sample-Based Tablet Pre-Split sizes a load's split count against, in bytes.
-     * Zero (the default) inherits tablet_reshard_target_size.
+     * Zero (the default) inherits tablet_reshard_target_size. A range-distributed table with the
+     * tablet_reshard_target_size table property is pre-split against that property instead while the
+     * tablet_reshard_target_size configuration is positive.
      *
      * <p>Exists so pre-split can be tuned independently of the background split/merge daemon.
-     * The daemon keeps every tablet in the cluster near tablet_reshard_target_size, so lowering
-     * that value to buy more write parallelism for one load would also shrink every unrelated
-     * tablet. Lowering this value instead only affects how finely a load's target partitions are
-     * pre-split; the daemon still converges them back toward tablet_reshard_target_size afterwards,
-     * so a load can be written in parallel without permanently raising the cluster's tablet count.
+     * The daemon keeps each table's tablets near that table's target (its tablet_reshard_target_size
+     * property while set and the tablet_reshard_target_size configuration is positive, otherwise that
+     * configuration), so lowering a target to buy more write parallelism for one load would also shrink
+     * every unrelated tablet that follows it. Lowering this value instead only affects how finely a load's
+     * target partitions are pre-split; the daemon still converges them back toward their table's target
+     * afterwards, so a load can be written in parallel without permanently raising the cluster's tablet count.
      */
     @ConfField(mutable = true, comment = "Target tablet size in bytes that Sample-Based Tablet "
             + "Pre-Split sizes a load's split count against. Zero (default) inherits "
-            + "tablet_reshard_target_size. Lower it to give a load more write parallelism without "
-            + "shrinking every tablet in the cluster: the background split/merge daemon keeps using "
+            + "tablet_reshard_target_size. A range-distributed table with the tablet_reshard_target_size table "
+            + "property is pre-split against that property instead while the tablet_reshard_target_size "
+            + "configuration is positive. Lower it to give a load more write parallelism without shrinking "
+            + "every tablet in the cluster: the background split/merge daemon keeps using "
             + "tablet_reshard_target_size, so it merges the finer tablets back afterwards.")
     public static long tablet_pre_split_target_size = 0L;
 

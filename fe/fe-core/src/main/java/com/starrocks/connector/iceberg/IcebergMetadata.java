@@ -95,6 +95,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ExternalScanPredicates;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticUtils;
@@ -145,12 +146,14 @@ import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.encryption.StarRocksKeyMetadata;
 import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.exceptions.ValidationException;
+import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ExpressionUtil;
@@ -164,6 +167,7 @@ import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.util.SerializationUtil;
 import org.apache.iceberg.util.SnapshotUtil;
 import org.apache.iceberg.util.TableScanUtil;
@@ -173,10 +177,12 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
@@ -213,6 +219,9 @@ import static java.util.Comparator.comparing;
 import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFAULT;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL_DEFAULT;
+import static org.apache.iceberg.TableProperties.ENCRYPTION_DEK_LENGTH;
+import static org.apache.iceberg.TableProperties.ENCRYPTION_DEK_LENGTH_DEFAULT;
+import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
 import static org.apache.iceberg.TableProperties.MERGE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.MERGE_ISOLATION_LEVEL_DEFAULT;
 import static org.apache.iceberg.TableProperties.UPDATE_ISOLATION_LEVEL;
@@ -262,6 +271,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor,
                 catalogProperties, new ConnectorProperties(ConnectorType.ICEBERG), new IcebergProcedureRegistry(),
                 null);
+    }
+
+    /** The catalog this metadata reads through; a {@link CachingIcebergCatalog} when metadata caching is on. */
+    public IcebergCatalog getIcebergCatalog() {
+        return icebergCatalog;
     }
 
     public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
@@ -521,8 +535,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         // executeMetadataDelete. Metadata (whole-file) delete stays sound only when every candidate file is
         // entirely matched or entirely unmatched by the whole predicate.
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
-        PartitionCastPredicatePruner.PartitionResidual residual =
-                PartitionCastPredicatePruner.split(conjuncts, identityStringPartitionColumns(icebergTable));
+        ExternalScanPredicates.PartitionResidual residual =
+                ExternalScanPredicates.splitStringPartitionCast(conjuncts, identityStringPartitionColumns(icebergTable));
         boolean droppedExists = residual.pushable.size() + residual.residual.size() < conjuncts.size();
         if (droppedExists) {
             // A cast-on-string conjunct references a non-partition column (or a mixed OR): a file may contain
@@ -633,8 +647,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         // StarRocks-side per partition and delete matching files individually. Anything else keeps the existing
         // row-filter delete. canDeleteUsingMetadata guarantees the whole predicate is partition level here.
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
-        PartitionCastPredicatePruner.PartitionResidual residual =
-                PartitionCastPredicatePruner.split(conjuncts, identityStringPartitionColumns(icebergTable));
+        ExternalScanPredicates.PartitionResidual residual =
+                ExternalScanPredicates.splitStringPartitionCast(conjuncts, identityStringPartitionColumns(icebergTable));
 
         DeleteFiles deleteFiles = nativeTbl.newDelete();
         String deleteDesc;
@@ -1425,14 +1439,15 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         GetRemoteFilesParams params = key.getParams();
-        boolean enableCollectColumnStatistics = params.isEnableColumnStats();
+        // Optional statistics are for the scan ranges only: keep them on the tasks, and collect no table statistics.
+        boolean enableCollectColumnStatistics = params.isEnableColumnStats() && !params.isOptionalColumnStats();
 
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
         // Cast-on-string-partition-column conjuncts (e.g. CAST(c AS DATETIME) = <ts>) are pruned unsoundly
         // by Iceberg's native string comparison, so keep them out of the pushed predicate and evaluate them
         // here against each file's partition values (consistent with the backend filter).
-        PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+        ExternalScanPredicates.PartitionResidual residual = ExternalScanPredicates.splitStringPartitionCast(
                 scalarOperators, identityStringPartitionColumns(icebergTable));
         boolean existPartitionTransformedEvolution = icebergTable.hasPartitionTransformedEvolution();
         Expression icebergPredicate = convertPredicate(icebergTable, residual.pushable);
@@ -1440,8 +1455,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
         try (CloseableIterator<FileScanTask> iterator =
                      maybeApplyScanBudget(
-                             buildFileScanTaskIterator(icebergTable, icebergPredicate, tvrVersionRange,
-                                     connectContext, enableCollectColumnStatistics, params.getFieldNames()),
+                             buildFileScanTaskIterator(icebergTable, icebergPredicate, key, connectContext),
                              applyScanBudget ? params : null)) {
             while (iterator.hasNext()) {
                 FileScanTask scanTask = iterator.next();
@@ -1588,10 +1602,10 @@ public class IcebergMetadata implements ConnectorMetadata {
             List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
             // See collectTableStatisticsAndCacheIcebergSplit: keep cast-on-string-partition conjuncts out of the
             // pushed predicate and evaluate them here so pruning stays consistent with the backend filter.
-            PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+            ExternalScanPredicates.PartitionResidual residual = ExternalScanPredicates.splitStringPartitionCast(
                     scalarOperators, identityStringPartitionColumns(icebergTable));
             Expression icebergPredicate = convertPredicate(icebergTable, residual.pushable);
-            baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, tvrVersionRange, params);
+            baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, predicateSearchKey);
             if (residual.hasResidual()) {
                 baseSource = filterByPartitionResidual(baseSource, residual.residual, icebergTable,
                         icebergTable.hasPartitionTransformedEvolution());
@@ -1632,12 +1646,11 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private RemoteFileInfoSource buildRemoteInfoSource(IcebergTable table,
                                                        Expression icebergPredicate,
-                                                       TvrVersionRange tvrVersionRange,
-                                                       GetRemoteFilesParams params) {
+                                                       PredicateSearchKey key) {
+        GetRemoteFilesParams params = key.getParams();
         CloseableIterator<FileScanTask> iterator =
                 maybeApplyScanBudget(
-                        buildFileScanTaskIterator(table, icebergPredicate, tvrVersionRange, ConnectContext.get(),
-                                params.isEnableColumnStats(), params.getFieldNames()),
+                        buildFileScanTaskIterator(table, icebergPredicate, key, ConnectContext.get()),
                         params);
         return new RemoteFileInfoSource() {
             @Override
@@ -1779,12 +1792,107 @@ public class IcebergMetadata implements ConnectorMetadata {
         };
     }
 
+    // A table scan of `snapshotId` with the catalog's planning settings, not yet planned.
+    private TableScan newSnapshotTableScan(IcebergTable icebergTable, long snapshotId, ConnectContext connectContext) {
+        return newSnapshotTableScan(icebergTable, snapshotId, connectContext, false);
+    }
+
+    // `optionalColumnStats`: the requested column statistics may be left out where serving them would bypass the
+    // manifest cache or force local planning.
+    private TableScan newSnapshotTableScan(IcebergTable icebergTable, long snapshotId, ConnectContext connectContext,
+                                          boolean optionalColumnStats) {
+        org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
+        // Force local planning for time-travel reads: the remote metadata-collection scanner
+        // (IcebergMetadataScanner) binds the pushed-down predicate against the current table specs, so a
+        // predicate on a column renamed after the target snapshot fails to bind. Local planning rebinds
+        // the specs to the snapshot's read schema and evaluates correctly. Remove once the remote
+        // metadata reader honors the snapshot schema/specs.
+        PlanMode planMode = icebergTable.isTimeTravelRead() ? PlanMode.LOCAL : planMode(connectContext);
+        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
+                catalogName, icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), planMode,
+                connectContext);
+        scanContext.setLocalParallelism(catalogProperties.getIcebergJobPlanningThreadNum());
+        scanContext.setOptionalColumnStats(optionalColumnStats);
+        scanContext.setLocalPlanningMaxSlotSize(catalogProperties.getLocalPlanningMaxSlotBytes());
+
+        // Bind the scan to the query's read schema so scan planning matches the predicate/descriptor:
+        //  - time-travel read: the targeted snapshot's schema (pinned via IcebergTable#withReadMetadata);
+        //  - ordinary current read: the current table schema, so a metadata-only ADD COLUMN (no new
+        //    snapshot) is visible instead of the stale schema recorded on the current snapshot.
+        // Other reads (e.g. an internal read pinned to an older snapshot) keep Iceberg's per-snapshot schema.
+        Snapshot currentSnapshot = nativeTbl.currentSnapshot();
+        if (icebergTable.isTimeTravelRead()) {
+            scanContext.setReadSchema(icebergTable.getReadSchema());
+        } else if (currentSnapshot != null && snapshotId == currentSnapshot.snapshotId()) {
+            scanContext.setReadSchema(nativeTbl.schema());
+        }
+        return icebergCatalog.getTableScan(nativeTbl, scanContext).useSnapshot(snapshotId);
+    }
+
+    // The columns whose file statistics the column-statistics path requests: the estimated top-level primitive
+    // columns, plus the fields the pushed-down predicate prunes files on, when the manifest cache keeps all of their
+    // statistics, so the path is served from the cache and prunes the same files. Otherwise null (all columns, read
+    // past the cache as before), which also keeps one planning per table and predicate however many column sets
+    // the optimizer estimates.
+    @VisibleForTesting
+    Set<String> statsColumnNamesServedFromCache(IcebergTable icebergTable, Collection<Column> columns,
+                                                ScalarOperator predicate, TvrVersionRange version,
+                                                ConnectContext connectContext) {
+        if (version.isEmpty() || !version.end().isPresent() ||
+                (version instanceof TvrTableDelta && version.start() != null && version.start().isPresent())) {
+            // incremental scans never use the manifest cache
+            return null;
+        }
+        TableScan scan = newSnapshotTableScan(icebergTable, version.end().get(), connectContext);
+        if (!(scan instanceof StarRocksIcebergTableScan)) {
+            return null;
+        }
+        Schema schema = scan.schema();
+        Set<String> names = new HashSet<>();
+        for (Column column : columns) {
+            Types.NestedField field = schema.caseInsensitiveFindField(column.getName());
+            // the provider estimates top-level primitive columns only; the others need no file statistics
+            if (field != null && field.type().isPrimitiveType() &&
+                    schema.asStruct().field(field.fieldId()) != null) {
+                names.add(field.name());
+            }
+        }
+        if (names.isEmpty()) {
+            return null;
+        }
+        if (predicate != null) {
+            // e.g. a struct subfield, which no estimated column covers
+            Expression icebergPredicate = convertPredicate(icebergTable, predicate);
+            if (icebergPredicate.op() != Expression.Operation.TRUE) {
+                try {
+                    for (Integer fieldId : Binder.boundReferences(schema.asStruct(), List.of(icebergPredicate),
+                            false)) {
+                        String name = schema.findColumnName(fieldId);
+                        if (name == null) {
+                            return null;
+                        }
+                        names.add(name);
+                    }
+                } catch (ValidationException e) {
+                    return null;
+                }
+            }
+        }
+        boolean covered = ((StarRocksIcebergTableScan) scan.includeColumnStats(names)).statsServedFromCache();
+        return covered ? names : null;
+    }
+
+    // Plans the files of `key`: its version, column statistics (the stats columns) and projected field names.
+    // `icebergPredicate` is the key's predicate converted for Iceberg, which callers may have narrowed.
     private CloseableIterator<FileScanTask> buildFileScanTaskIterator(IcebergTable icebergTable,
                                                                       Expression icebergPredicate,
-                                                                      TvrVersionRange tvrVersionRange,
-                                                                      ConnectContext connectContext,
-                                                                      boolean enableCollectColumnStats,
-                                                                      List<String> fieldNames) {
+                                                                      PredicateSearchKey key,
+                                                                      ConnectContext connectContext) {
+        GetRemoteFilesParams params = key.getParams();
+        TvrVersionRange tvrVersionRange = key.getVersion();
+        boolean enableCollectColumnStats = params.isEnableColumnStats();
+        Set<String> statsColumnNames = params.getStatsColumnNames();
+        List<String> fieldNames = params.getFieldNames();
         if (tvrVersionRange.isEmpty()) {
             return new CloseableIterator<>() {
                 @Override
@@ -1811,30 +1919,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         checkUnsupportedEncryption(nativeTbl);
         traceIcebergMetricsConfig(nativeTbl);
 
-        // Force local planning for time-travel reads: the remote metadata-collection scanner
-        // (IcebergMetadataScanner) binds the pushed-down predicate against the current table specs, so a
-        // predicate on a column renamed after the target snapshot fails to bind. Local planning rebinds
-        // the specs to the snapshot's read schema and evaluates correctly. Remove once the remote
-        // metadata reader honors the snapshot schema/specs.
-        PlanMode planMode = icebergTable.isTimeTravelRead() ? PlanMode.LOCAL : planMode(connectContext);
-        StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
-                catalogName, dbName, tableName, planMode, connectContext);
-        scanContext.setLocalParallelism(catalogProperties.getIcebergJobPlanningThreadNum());
-        scanContext.setLocalPlanningMaxSlotSize(catalogProperties.getLocalPlanningMaxSlotBytes());
-
         final long snapshotId = tvrVersionRange.end().orElseThrow(() -> new StarRocksConnectorException(
                 "Snapshot ID is not present in tvrVersionRange: " + tvrVersionRange));
-        // Bind the scan to the query's read schema so scan planning matches the predicate/descriptor:
-        //  - time-travel read: the targeted snapshot's schema (pinned via IcebergTable#withReadMetadata);
-        //  - ordinary current read: the current table schema, so a metadata-only ADD COLUMN (no new
-        //    snapshot) is visible instead of the stale schema recorded on the current snapshot.
-        // Other reads (e.g. an internal read pinned to an older snapshot) keep Iceberg's per-snapshot schema.
-        Snapshot currentSnapshot = nativeTbl.currentSnapshot();
-        if (icebergTable.isTimeTravelRead()) {
-            scanContext.setReadSchema(icebergTable.getReadSchema());
-        } else if (currentSnapshot != null && snapshotId == currentSnapshot.snapshotId()) {
-            scanContext.setReadSchema(nativeTbl.schema());
-        }
         Scan scan;
         IcebergMetricsReporter metricsReporter = icebergTable.getIcebergMetricsReporter();
         if (metricsReporter == null) {
@@ -1852,14 +1938,23 @@ public class IcebergMetadata implements ConnectorMetadata {
                     .metricsReporter(metricsReporter)
                     .planWith(jobPlanningExecutor);
         } else {
-            scan = icebergCatalog.getTableScan(nativeTbl, scanContext)
-                    .useSnapshot(snapshotId)
+            scan = newSnapshotTableScan(icebergTable, snapshotId, connectContext,
+                    enableCollectColumnStats && params.isOptionalColumnStats())
                     .metricsReporter(metricsReporter)
                     .planWith(jobPlanningExecutor);
         }
 
         if (enableCollectColumnStats) {
-            scan = (Scan) scan.includeColumnStats();
+            // Request the statistics of the given columns only (e.g. the min/max optimization), so the scan can be
+            // served from the manifest cache when it keeps them. Without stats columns (the column-statistics path),
+            // or when a name does not resolve against the scan schema, request all.
+            Schema scanSchema = scan.schema();
+            if (statsColumnNames != null && !statsColumnNames.isEmpty() &&
+                    statsColumnNames.stream().allMatch(name -> scanSchema.findField(name) != null)) {
+                scan = (Scan) scan.includeColumnStats(statsColumnNames);
+            } else {
+                scan = (Scan) scan.includeColumnStats();
+            }
         }
 
         if (icebergPredicate.op() != Expression.Operation.TRUE) {
@@ -2113,7 +2208,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         // value never equals the rendered '...00:00:00' string, so the deletes would not be applied and already
         // deleted rows would leak back into the result. Keep such conjuncts out of the pushed predicate and instead
         // filter the returned delete files against their partition values StarRocks-side.
-        PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+        ExternalScanPredicates.PartitionResidual residual = ExternalScanPredicates.splitStringPartitionCast(
                 scalarOperators, identityStringPartitionColumns(icebergTable));
         Expression icebergPredicate = convertPredicate(icebergTable, residual.pushable);
 
@@ -2387,6 +2482,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                 .setLimit(limit)
                 .setTableVersionRange(version)
                 .setEnableColumnStats(true)
+                .setStatsColumnNames(statsColumnNamesServedFromCache(
+                        icebergTable, columns.values(), predicate, version, ConnectContext.get()))
                 .build();
         PredicateSearchKey key = PredicateSearchKey.of(
                 icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), params);
@@ -2414,6 +2511,26 @@ public class IcebergMetadata implements ConnectorMetadata {
     // Returns a negative value when any matching manifest has files but is missing both
     // addedRowsCount and existingRowsCount (e.g. v1 manifest list or upgraded metadata) —
     // callers must fall back to planFiles for exact cardinality.
+    // Read from the snapshot's manifest list only (memoized on the Snapshot, scan planning reads it anyway). An
+    // incremental (delta) version reads part of the table, so it gets no range.
+    @Override
+    public Map<String, Pair<Double, Double>> getPartitionSourceColumnRanges(Table table, TvrVersionRange version) {
+        if (!(table instanceof IcebergTable icebergTable) || icebergTable.isUnPartitioned()
+                || version == null || version.isEmpty() || !version.end().isPresent()
+                || (version instanceof TvrTableDelta && version.start() != null && version.start().isPresent())) {
+            return Map.of();
+        }
+        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+        Snapshot snapshot = nativeTable.snapshot(version.end().get());
+        if (snapshot == null) {
+            return Map.of();
+        }
+        // The schema the query is bound to (a time-travel read may use a historical one), so the ranges are keyed by
+        // the column names the query uses.
+        return IcebergPartitionSourceRanges.compute(icebergTable.getReadSchema(), nativeTable.specs(),
+                snapshot.dataManifests(nativeTable.io()));
+    }
+
     private long getManifestPrunedRowCount(IcebergTable icebergTable, ScalarOperator predicate, TvrVersionRange version) {
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         if (!version.end().isPresent()) {
@@ -2430,7 +2547,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         // domain, so a manifest whose partition range definitely cannot satisfy them is still pruned. A kept
         // manifest is counted in full (manifest-level granularity), so the result stays a safe over-estimate.
         Set<String> stringPartitionColumns = identityStringPartitionColumns(icebergTable);
-        PartitionCastPredicatePruner.PartitionResidual residual = PartitionCastPredicatePruner.split(
+        ExternalScanPredicates.PartitionResidual residual = ExternalScanPredicates.splitStringPartitionCast(
                 Utils.extractConjuncts(predicate), stringPartitionColumns);
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
                 new ScalarOperatorToIcebergExpr.IcebergContext(nativeTbl.schema().asStruct());
@@ -2538,7 +2655,11 @@ public class IcebergMetadata implements ConnectorMetadata {
             FileScanTask fileScanTask, Expression icebergPredicate, PredicateSearchKey filter) {
         long offset = fileScanTask.start();
         long length = fileScanTask.length();
-        DataFile dataFileWithoutStats = fileScanTask.file().copyWithoutStats();
+        // With the statistics of a few columns requested, the file already carries just those (cheap to keep), and the
+        // min/max optimization may reuse these tasks under the same key, so they keep them. All columns' statistics
+        // are dropped.
+        DataFile dataFile = filter.getParams().isEnableColumnStats() && filter.getParams().getStatsColumnNames() != null ?
+                fileScanTask.file() : fileScanTask.file().copyWithoutStats();
         DeleteFile[] deleteFiles = fileScanTask.deletes().stream()
                 .map(DeleteFile::copyWithoutStats)
                 .toArray(DeleteFile[]::new);
@@ -2562,7 +2683,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         ResidualEvaluator residualEvaluator = ResidualEvaluator.of(taskSpec, icebergPredicate, true);
 
         BaseFileScanTask baseFileScanTask = new BaseFileScanTask(
-                dataFileWithoutStats,
+                dataFile,
                 deleteFiles,
                 schemaString,
                 partitionString,
@@ -2695,6 +2816,42 @@ public class IcebergMetadata implements ConnectorMetadata {
             IcebergTable table = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
             org.apache.iceberg.Table nativeTbl = table.getNativeTable();
             Transaction transaction = nativeTbl.newTransaction();
+
+            // Validate the whole file set before any file is built or committed.
+            //
+            // These are refusals, not commit failures, so commitWithCleanup never sees them -- and it
+            // is the only thing that calls deleteUncommittedDataFiles. Throwing straight out of the
+            // build loops therefore left the BE's output on object storage forever, unreferenced by
+            // any snapshot: for an encrypted table, permanent plaintext copies of exactly the rows
+            // the refusal was protecting. So refuse here, and delete what the BE wrote.
+            //
+            // The equality-delete check needs a full pass because the flag scan below short-circuits
+            // on `break` and would miss a delete that is not first.
+            for (TIcebergDataFile dataFile : dataFiles) {
+                if (dataFile.isSetFile_content() &&
+                        dataFile.getFile_content() == TIcebergFileContent.EQUALITY_DELETES) {
+                    // The dispatch below is a two-way split on POSITION_DELETES, so an equality
+                    // delete falls into the data-file arm and would be committed through
+                    // buildDataFile as a DataFile -- its rows ADDED to the table instead of deleting
+                    // anything, silently. StarRocks emits none today; this makes that an enforced
+                    // invariant. On an encrypted table it would also carry the literal column values
+                    // that table encryption exists to protect.
+                    refuseAndDeleteUncommitted(dataFiles, dbName, tableName,
+                            "Refusing to commit %s into %s: equality-delete files are not supported. " +
+                                    "Committing one would add its rows to the table rather than delete " +
+                                    "them, and on an encrypted table would expose the column values it " +
+                                    "matches on.",
+                            dataFile.path, nativeTbl.name());
+                }
+            }
+            try {
+                for (TIcebergDataFile dataFile : dataFiles) {
+                    validateFileEncryption(dataFile, nativeTbl);
+                }
+            } catch (StarRocksConnectorException e) {
+                deleteUncommittedQuietly(dataFiles, dbName, tableName);
+                throw e;
+            }
 
             boolean hasPositionDeletes = false;
             boolean hasDataFiles = false;
@@ -2923,6 +3080,120 @@ public class IcebergMetadata implements ConnectorMetadata {
         return dataFile.isSetFile_content() && dataFile.getFile_content() == TIcebergFileContent.POSITION_DELETES;
     }
 
+    // The AAD prefix length BE generates for every encrypted file (ParquetFileWriter). Fixed rather than
+    // configurable, so a commit can check it exactly.
+    private static final int AAD_PREFIX_LENGTH = 16;
+
+    /**
+     * Refuses this file if the table declares encryption but the file was not encrypted to the
+     * table's policy. Split out from {@link #encryptionKeyMetadata} so {@code finishSink} can run it
+     * over the whole file set <em>before</em> anything is built or committed: the throw has to happen
+     * somewhere that can still delete what the BE wrote, and the build loops cannot.
+     */
+    private void validateFileEncryption(TIcebergDataFile file, org.apache.iceberg.Table nativeTbl) {
+        // The same predicate the sinks used to decide whether BE should encrypt (writeSignalOrNull), so the
+        // plan and the commit cannot disagree about which tables are encrypted.
+        boolean tableIsEncrypted = IcebergEncryption.declaresEncryption(nativeTbl.properties());
+        if (!tableIsEncrypted) {
+            // The other direction matters as much: a file BE encrypted reaching a commit that would record no
+            // key. The commit re-reads the table, so if encryption.key-id was removed after planning, the key
+            // would be dropped here and the encrypted file committed with nothing able to decrypt it -- the
+            // data lost for good. Refuse instead; finishSink then deletes what BE wrote.
+            if (file.isSetFile_dek()) {
+                throw new StarRocksConnectorException(
+                        "Refusing to commit %s into %s: the file was written encrypted but the table no longer " +
+                                "declares encryption (%s), so its data key would not be recorded and the file " +
+                                "could never be read. Retry the statement.",
+                        file.path, nativeTbl.name(), ENCRYPTION_TABLE_KEY);
+            }
+            return;
+        }
+        // An encrypted table is format version 3, where Iceberg accepts only deletion vectors, and
+        // StarRocks writes Parquet position deletes. Planning refuses the statements that would write them;
+        // this keeps one that got past it from reaching the commit.
+        if (isPositionDelete(file)) {
+            throw new StarRocksConnectorException(
+                    "Refusing to commit %s into encrypted table %s: position delete files are not supported " +
+                            "on encrypted Iceberg tables.",
+                    file.path, nativeTbl.name());
+        }
+        if (!file.isSetFile_dek()) {
+            throw new StarRocksConnectorException(
+                    "Refusing to commit %s into encrypted table %s: the backend returned no data " +
+                            "encryption key, which means the file was written unencrypted. This usually " +
+                            "means the BE does not support Iceberg table encryption; check that FE and BE " +
+                            "are the same version.",
+                    file.path, nativeTbl.name());
+        }
+        // The key BE returned must be the length the table's policy asked for. Nothing else checks
+        // this: BE picks the length from what FE sent, and a mismatch would commit a file encrypted
+        // below the table's declared strength with no error anywhere.
+        int expectedDekLength = PropertyUtil.propertyAsInt(
+                nativeTbl.properties(), ENCRYPTION_DEK_LENGTH, ENCRYPTION_DEK_LENGTH_DEFAULT);
+        int actualDekLength = file.getFile_dek().length;
+        if (actualDekLength != expectedDekLength) {
+            throw new StarRocksConnectorException(
+                    "Refusing to commit %s: it was encrypted with a %d-byte data key but the table's " +
+                            "encryption.data-key-length is %d. Committing would record a file weaker " +
+                            "than the table's encryption policy.",
+                    file.path, actualDekLength, expectedDekLength);
+        }
+        // BE withholds the AAD prefix from the file (disable_aad_prefix_storage), so the copy recorded in
+        // key_metadata is the only one. Committing without it, or with a wrong-sized one, records a file whose
+        // module AADs no reader can rebuild: GCM verification then fails on every read, forever.
+        if (!file.isSetAad_prefix() || file.getAad_prefix().length != AAD_PREFIX_LENGTH) {
+            throw new StarRocksConnectorException(
+                    "Refusing to commit %s: the backend returned %s AAD prefix, but an encrypted file needs its " +
+                            "%d-byte prefix recorded in key_metadata to be readable.",
+                    file.path, file.isSetAad_prefix() ? "a " + file.getAad_prefix().length + "-byte" : "no",
+                    AAD_PREFIX_LENGTH);
+        }
+    }
+
+    /**
+     * Deletes files the BE already wrote, for a refusal that never reaches
+     * {@link #commitWithCleanup} (the only other caller of
+     * {@code deleteUncommittedDataFiles}). Best-effort: a cleanup failure must not mask the refusal
+     * that caused it, so it is logged and the original exception still propagates.
+     */
+    private void deleteUncommittedQuietly(List<TIcebergDataFile> dataFiles, String dbName, String tableName) {
+        try {
+            icebergCatalog.deleteUncommittedDataFiles(
+                    dataFiles.stream().map(TIcebergDataFile::getPath).collect(Collectors.toList()));
+        } catch (Exception cleanupFailure) {
+            LOG.warn("Failed to delete uncommitted data files for {}.{} after refusing the commit; " +
+                    "they remain on storage and must be removed manually", dbName, tableName, cleanupFailure);
+        }
+    }
+
+    /** Deletes what the BE wrote, then refuses. See {@link #deleteUncommittedQuietly}. */
+    private void refuseAndDeleteUncommitted(List<TIcebergDataFile> dataFiles, String dbName, String tableName,
+                                            String message, Object... args) {
+        deleteUncommittedQuietly(dataFiles, dbName, tableName);
+        throw new StarRocksConnectorException(message, args);
+    }
+
+    /**
+     * The Iceberg {@code key_metadata} for a file BE just wrote, or null when the table is not
+     * encrypted.
+     *
+     * <p>The requirement is driven by the TABLE, not by what BE happened to send. Keying it off
+     * {@code isSetFile_dek()} fails OPEN: a BE that does not implement encryption ignores the unknown
+     * optional thrift field, writes plaintext, and returns no key -- so the check would be skipped and
+     * the plaintext file committed into an encrypted table. That is reachable during a rolling upgrade
+     * with a new FE and an old BE.
+     */
+    private ByteBuffer encryptionKeyMetadata(TIcebergDataFile file, org.apache.iceberg.Table nativeTbl) {
+        // Re-checked rather than assumed: this is the last point before the key is recorded, and the
+        // data-file builder calls it independently of finishSink's pre-pass. Keeping the check here means
+        // a new caller cannot skip it.
+        validateFileEncryption(file, nativeTbl);
+        if (!IcebergEncryption.declaresEncryption(nativeTbl.properties())) {
+            return null;
+        }
+        return StarRocksKeyMetadata.serialize(file.getFile_dek(), file.getAad_prefix());
+    }
+
     private org.apache.iceberg.DeleteFile buildPositionDeleteFile(
             TIcebergDataFile dataFile, PartitionSpec partitionSpec, org.apache.iceberg.Table nativeTbl,
             Map<String, DataFile> otherSpecDataFiles) {
@@ -2962,7 +3233,8 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private org.apache.iceberg.DataFile buildDataFile(
             TIcebergDataFile dataFile, PartitionSpec partitionSpec, org.apache.iceberg.Table nativeTbl) {
-        Metrics metrics = IcebergApiConverter.buildDataFileMetrics(dataFile, nativeTbl);
+        Metrics metrics = IcebergApiConverter.applyWriteMetricsConfig(
+                IcebergApiConverter.buildDataFileMetrics(dataFile, nativeTbl), nativeTbl);
         DataFiles.Builder builder = DataFiles.builder(partitionSpec)
                 .withMetrics(metrics)
                 .withPath(dataFile.path)
@@ -2970,6 +3242,11 @@ public class IcebergMetadata implements ConnectorMetadata {
                 .withRecordCount(dataFile.record_count)
                 .withFileSizeInBytes(dataFile.file_size_in_bytes)
                 .withSplitOffsets(dataFile.split_offsets);
+
+        ByteBuffer keyMetadata = encryptionKeyMetadata(dataFile, nativeTbl);
+        if (keyMetadata != null) {
+            builder.withEncryptionKeyMetadata(keyMetadata);
+        }
 
         if (partitionSpec.isPartitioned()) {
             String nullFingerprint = dataFile.isSetPartition_null_fingerprint() ?
@@ -3271,11 +3548,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             batchWrite.toBranch(branch);
         }
 
-        PartitionSpec partitionSpec = nativeTbl.spec();
-        for (TIcebergDataFile dataFile : dataFiles) {
-            batchWrite.addFile(buildDataFile(dataFile, partitionSpec, nativeTbl));
-        }
-
         if (isRewrite && extra != null) {
             ((IcebergSinkExtra) extra).getScannedDataFiles().forEach(batchWrite::deleteFile);
             ((IcebergSinkExtra) extra).getAppliedDeleteFiles().forEach(batchWrite::deleteFile);
@@ -3305,7 +3577,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         try {
+            // Build the files inside commitWithCleanup so a rejected entry deletes the BE-written files.
             commitWithCleanup(() -> {
+                PartitionSpec partitionSpec = nativeTbl.spec();
+                for (TIcebergDataFile dataFile : dataFiles) {
+                    batchWrite.addFile(buildDataFile(dataFile, partitionSpec, nativeTbl));
+                }
                 batchWrite.commit();
                 transaction.commitTransaction();
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);

@@ -1,0 +1,88 @@
+-- name: test_iceberg_encryption_hive_catalog
+create external catalog iceberg_enc_hive_${uuid0}
+PROPERTIES ( "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false",
+    "encryption.kms-impl"="com.starrocks.connector.iceberg.StaticKeyManagementClient",
+    "encryption.static-kms.keys"="sql-tester-key:c3RhcnJvY2tzLXNxbC10ZXN0ZXItbWFzdGVyLWtleSE=");
+-- result:
+-- !result
+create database iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_encryption_hive_catalog/${uuid0}/iceberg_enc_db_${uuid0}"
+);
+-- result:
+-- !result
+create table iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t (
+    id INT,
+    name STRING,
+    region STRING
+)
+PARTITION BY (region)
+properties(
+  'format-version' = '3',
+  'encryption.key-id' = 'sql-tester-key',
+  'location' = 'oss://${oss_bucket}/test_iceberg_encryption_hive_catalog/${uuid0}/enc_t'
+);
+-- result:
+-- !result
+insert into iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t values (1, 'alpha', 'a'), (2, 'beta', 'a'), (3, 'gamma', 'b');
+-- result:
+-- !result
+insert into iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t values (4, 'delta', 'b');
+-- result:
+-- !result
+select * from iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t order by id;
+-- result:
+1	alpha	a
+2	beta	a
+3	gamma	b
+4	delta	b
+-- !result
+select region, count(*) from iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t group by region order by region;
+-- result:
+a	2
+b	2
+-- !result
+select name from iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t where id = 2;
+-- result:
+beta
+-- !result
+select * from files(
+    "path" = "oss://${oss_bucket}/test_iceberg_encryption_hive_catalog/${uuid0}/enc_t/data/*/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    "format" = "parquet");
+-- result:
+[REGEX]E: \(\d+.*encrypted.*
+-- !result
+delete from iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t where region = 'b';
+-- result:
+-- !result
+select * from iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t order by id;
+-- result:
+1	alpha	a
+2	beta	a
+-- !result
+delete from iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t where id = 1;
+-- result:
+[REGEX]E: \(\d+.*DELETE on Iceberg format version 3 table .*can only remove whole partitions or data files.*deletion vectors.*
+-- !result
+drop table iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0}.enc_t force;
+-- result:
+-- !result
+drop database iceberg_enc_hive_${uuid0}.iceberg_enc_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_enc_hive_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_encryption_hive_catalog/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result

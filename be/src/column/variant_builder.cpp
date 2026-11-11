@@ -117,18 +117,10 @@ static Status decode_variant_to_node(const VariantMetadata& metadata, const Vari
                     raw.data() + info.id_start_offset + i * info.id_size, info.id_size);
             ASSIGN_OR_RETURN(const auto key, metadata.get_key(field_id));
 
-            // Read the [offset, next_offset) byte range for this field's value.
-            const uint32_t offset = VariantUtil::read_little_endian_unsigned32(
-                    raw.data() + info.offset_start_offset + i * info.offset_size, info.offset_size);
-            const uint32_t next_offset = VariantUtil::read_little_endian_unsigned32(
-                    raw.data() + info.offset_start_offset + (i + 1) * info.offset_size, info.offset_size);
-            if (next_offset < offset || info.data_start_offset + next_offset > raw.size()) {
-                return Status::VariantError("Invalid variant object field offset");
-            }
-
+            // Field-name order and physical payload order can differ in an OBJECT.
+            ASSIGN_OR_RETURN(const auto field, value.get_object_field_at_index(i));
             VariantNode child;
-            RETURN_IF_ERROR(decode_variant_to_node(
-                    metadata, VariantValue(raw.substr(info.data_start_offset + offset, next_offset - offset)), &child));
+            RETURN_IF_ERROR(decode_variant_to_node(metadata, field, &child));
             const size_t idx = node->fields.size();
             node->fields.emplace_back(std::string(key), std::make_unique<VariantNode>(std::move(child)));
             node->field_index.emplace(node->fields.back().first, idx);

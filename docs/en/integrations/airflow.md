@@ -21,7 +21,7 @@ Enables orchestration and scheduling of data workflows with StarRocks using DAGs
 ### Prerequisites
 - Apache Airflow 2.0+ or 3.0+
 - Python 3.8+
-- Access to a StarRocks cluster (see the [quickstart guide](https://docs.starrocks.io/docs/quick_start/))
+- Access to a StarRocks cluster (see the [quickstart guide](../quick_start/quick_start.mdx))
 ### Install 
 The MySQL provider package is required to use StarRocks as StarRocks uses MySQL protocol. 
 
@@ -181,7 +181,7 @@ starrocks_stream_load_example()
 
 #### Insert From Files
 
-Use StarRocks' [FILES()](https://docs.starrocks.io/docs/sql-reference/sql-functions/table-functions/files/) table function to load data directly from files. This approach is ideal for: 
+Use StarRocks' [FILES()](../sql-reference/sql-functions/table-functions/files.md) table function to load data directly from files. This approach is ideal for: 
 - Loading data from S3, HDFS, Google Cloud Storage
 - One-step data ingestion with transformations applied during load
 - Ad-hoc data loads from various file sources

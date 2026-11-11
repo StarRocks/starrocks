@@ -490,6 +490,30 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：この項目が `true` に設定されている場合、サブタスクの 1 つが成功した場合、システムは共有データクラスターでのコンパクション操作を成功と見なします。
 - 導入時期：v3.5.2
 
+### `lake_compaction_admission_mode`
+
+- デフォルト：`NORMAL`
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：共有データの新規 Compaction ジョブのスケジューリングを制御します。有効値は `NORMAL` と `ALLOWLIST`（大文字小文字を区別）です。`NORMAL` は許可リストを無視し、従来の動作を維持します。`ALLOWLIST` は `lake_compaction_allow_table_ids` 内のテーブルだけを許可します。不正なモードは新規ジョブを禁止し、警告を記録します。設定更新後に再起動なしで有効になり、実行中のジョブをキャンセルしたり終了を待機したりしません。既存の拒否リストとタスク数制限は両モードで有効で、手動 Compaction にも適用されます。
+- 導入時期：-
+
+### `lake_compaction_allow_table_ids`
+
+- デフォルト：""
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：`12345;98765` のように正の**テーブル ID** をセミコロンで区切ります。`ALLOWLIST` モードでのみ使用し、空のリストはすべてのテーブルを禁止します。パーティション ID と `*` はサポートしません。テーブル ID は将来追加されるものも含め、すべての物理パーティションを許可します。不正なリストは `ALLOWLIST` モードで新規ジョブを禁止して警告を記録しますが、`NORMAL` モードには影響しません。`lake_compaction_disable_ids` のテーブルまたはパーティションの拒否設定が優先され、`lake_compaction_max_tasks = 0` はすべての新規ジョブを禁止します。再起動は不要です。
+- 導入時期：-
+
+replication 移行では、`lake_compaction_max_tasks = 0` を維持したまま許可リストを空にして `ALLOWLIST` に切り替えます。replication 開始前に既存の Compaction ジョブの終了を待ち、モードの反映後にタスク上限をゼロ以外に戻してください。リストはユーザーが手動で管理し、移行ツールの変更や自動管理は不要です。
+
+テーブルのすべての replication トランザクションが **VISIBLE** になり、データ検証が完了し、待機中、再試行中、今後予定する replication がない場合にのみ追加します。ターゲットへの書き込みまたは Compaction に引き渡した後は、そのテーブルで replication を再開しないでください。再移行にはターゲットテーブルの drop と再作成が必要です。リストから削除しても移行資格は戻りません。これは運用上の制約であり、許可リストはトランザクションの相互排他や恒久的な replication 禁止を実装しません。
+
+動的変更には `ADMIN SET FRONTEND CONFIG` を使用し、オンライン FE ごとに設定ファイルを編集する必要はありません。SQL 変更はオンライン FE に転送されます。再起動と Leader 切り替えに備え、対応環境では `WITH PERSISTENT`、コンテナー環境ではデプロイ基盤を使って両パラメーターを永続化してください。オフラインまたは新規 FE にも、Leader になる前に同じ設定を適用してください。
+
 ### `lake_compaction_disable_ids`
 
 - デフォルト：""
@@ -926,6 +950,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：No
 - 説明：Iceberg テーブルごとの保留中のコミット操作の最大数。コミットキュー (`enable_iceberg_commit_queue=true`) を使用する場合、これは単一テーブルのキューに入れられるコミット操作の数を制限します。制限に達すると、追加のコミット操作は呼び出し元のスレッドで実行されます (容量が利用可能になるまでブロックします)。この設定は FE 起動時に読み取られ、新しく作成されたテーブルエクゼキューターに適用されます。有効にするには FE の再起動が必要です。同じテーブルへの同時コミットが多いと予想される場合は、この値を増やしてください。この値が低すぎると、高並行時に呼び出し元スレッドでコミットがブロックされる可能性があります。
 - 導入時期：v4.1.0
+
+### `deltalake_checkpoint_meta_cache_global_memory_ratio`
+
+- デフォルト：0
+- タイプ：Double
+- 単位：-
+- 変更可能：No
+- 説明：すべての Delta Lake カタログで共有する 1 つの Delta Log Checkpoint ファイルキャッシュに使用できる FE JVM ヒープの割合。カタログの数にかかわらず、合計がこの上限に収まります。デフォルトの `0` では、カタログごとに専用のキャッシュを持ち、その上限はカタログプロパティ `deltalake_checkpoint_meta_cache_memory_usage_ratio` で決まります。`0` より大きい場合、そのカタログプロパティは無視されます。有効な値は `0` から `1` までです。変更を反映するには FE の再起動が必要です。
+- 導入時期：-
+
+### `deltalake_json_meta_cache_global_memory_ratio`
+
+- デフォルト：0
+- タイプ：Double
+- 単位：-
+- 変更可能：No
+- 説明：すべての Delta Lake カタログで共有する 1 つの Delta Log JSON ファイルキャッシュに使用できる FE JVM ヒープの割合。デフォルトの `0` では、カタログごとに専用のキャッシュを持ち、その上限はカタログプロパティ `deltalake_json_meta_cache_memory_usage_ratio` で決まります。`0` より大きい場合、そのカタログプロパティは無視されます。有効な値は `0` から `1` までです。変更を反映するには FE の再起動が必要です。
+- 導入時期：-
+
+### `iceberg_data_file_cache_global_memory_ratio`
+
+- デフォルト：0
+- タイプ：Double
+- 単位：-
+- 変更可能：No
+- 説明：すべての Iceberg カタログで共有する 1 つの Data File Manifest キャッシュに使用できる FE JVM ヒープの割合。カタログの数にかかわらず、合計がこの上限に収まります。デフォルトの `0` では、カタログごとに専用のキャッシュを持ち、その上限はカタログプロパティ `iceberg_data_file_cache_memory_usage_ratio` で決まります。`0` より大きい場合、そのカタログプロパティは無視されます。有効な値は `0` から `1` までです。変更を反映するには FE の再起動が必要です。
+- 導入時期：-
+
+### `iceberg_delete_file_cache_global_memory_ratio`
+
+- デフォルト：0
+- タイプ：Double
+- 単位：-
+- 変更可能：No
+- 説明：すべての Iceberg カタログで共有する 1 つの Delete File Manifest キャッシュに使用できる FE JVM ヒープの割合。削除ファイルから構築される削除ファイルインデックスには、同じ割合の別キャッシュが割り当てられます。デフォルトの `0` では、どちらもカタログごとに専用で、その上限はカタログプロパティ `iceberg_delete_file_cache_memory_usage_ratio` で決まります。`0` より大きい場合、そのカタログプロパティは無視されます。有効な値は `0` から `1` までです。変更を反映するには FE の再起動が必要です。
+- 導入時期：-
+
+### `iceberg_partition_cache_global_memory_ratio`
+
+- デフォルト：0
+- タイプ：Double
+- 単位：-
+- 変更可能：No
+- 説明：すべての Iceberg カタログで共有する 1 つのパーティションキャッシュに使用できる FE JVM ヒープの割合。デフォルトの `0` では、カタログごとに専用のキャッシュを持ち、その上限はカタログプロパティ `iceberg_partition_cache_memory_usage_ratio` で決まります。`0` より大きい場合、そのカタログプロパティは無視されます。有効な値は `0` から `1` までです。変更を反映するには FE の再起動が必要です。
+- 導入時期：-
 
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
