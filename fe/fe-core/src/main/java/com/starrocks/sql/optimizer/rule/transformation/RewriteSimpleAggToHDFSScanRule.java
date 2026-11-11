@@ -42,11 +42,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
-<<<<<<< HEAD
-=======
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.Type;
->>>>>>> 11ddfe0 ([BugFix][RB-1398] Declare the ___count___ placeholder column as BIGINT in the simple agg rewrite (#82904))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -126,11 +121,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             // generate a placeholder column for scan node.
             // ___count___ must be the column name for backend code.
             String metaColumnName = "___" + aggCall.getFnName() + "___";
-<<<<<<< HEAD
-            Column c = new Column(metaColumnName, Type.NULL);
-=======
-            Column c = new Column(metaColumnName, IntegerType.BIGINT);
->>>>>>> 11ddfe0 ([BugFix][RB-1398] Declare the ___count___ placeholder column as BIGINT in the simple agg rewrite (#82904))
+            Column c = new Column(metaColumnName, Type.BIGINT);
             c.setIsAllowNull(true);
             ColumnRefOperator placeholderColumn =
                     columnRefFactory.create(metaColumnName, aggCall.getType(), aggCall.isNullable());

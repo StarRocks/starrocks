@@ -14,15 +14,11 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.catalog.Type;
 import com.starrocks.planner.ScanNode;
-<<<<<<< HEAD
-=======
-import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.type.IntegerType;
-import com.starrocks.utframe.UtFrameUtils;
->>>>>>> 11ddfe0 ([BugFix][RB-1398] Declare the ___count___ placeholder column as BIGINT in the simple agg rewrite (#82904))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -177,7 +173,7 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                         .getSlots().stream()
                         .filter(slot -> slot.getColumn() != null && "___count___".equals(slot.getColumn().getName()))
                         .findFirst().orElseThrow();
-                Assertions.assertEquals(IntegerType.BIGINT, countSlot.getType(), sql);
+                Assertions.assertEquals(Type.BIGINT, countSlot.getType(), sql);
             }
         } finally {
             sv.setNewPlanerAggStage(aggStage);
