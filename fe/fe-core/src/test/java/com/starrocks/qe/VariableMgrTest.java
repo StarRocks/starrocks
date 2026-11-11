@@ -525,6 +525,53 @@ public class VariableMgrTest {
         Assertions.assertEquals(100, mgr2.getDefaultSessionVariable().getQueryTimeoutS());
     }
 
+    @Test
+    public void testEnableAdaptiveSinkDopDefaultIsTrue() {
+        VariableMgr mgr = new VariableMgr();
+        Assertions.assertTrue(mgr.getDefaultSessionVariable().getEnableAdaptiveSinkDop());
+        Assertions.assertTrue(mgr.newSessionVariable().getEnableAdaptiveSinkDop());
+    }
+
+    @Test
+    public void testPersistedEnableAdaptiveSinkDopOverridesDefault() throws Exception {
+        // A cluster upgraded from v2.4 or earlier persisted enable_adaptive_sink_dop=false in its image.
+        // The persisted value must keep winning over the code default (true).
+        PseudoImage image = new PseudoImage();
+        SRMetaBlockWriter writer = image.getImageWriter().getBlockWriter(SRMetaBlockID.VARIABLE_MGR, 1 + 1 + 1);
+        writer.writeInt(1);
+        writer.writeJson(new PersistedVariable(SessionVariable.ENABLE_ADAPTIVE_SINK_DOP, "false"));
+        writer.writeInt(0);
+        writer.close();
+
+        VariableMgr mgr = new VariableMgr();
+        mgr.load(image.getMetaBlockReader());
+        Assertions.assertFalse(mgr.getDefaultSessionVariable().getEnableAdaptiveSinkDop());
+        Assertions.assertFalse(mgr.newSessionVariable().getEnableAdaptiveSinkDop());
+
+        // The value survives another checkpoint.
+        PseudoImage image2 = new PseudoImage();
+        mgr.save(image2.getImageWriter());
+        VariableMgr restored = new VariableMgr();
+        restored.load(image2.getMetaBlockReader());
+        Assertions.assertFalse(restored.newSessionVariable().getEnableAdaptiveSinkDop());
+    }
+
+    @Test
+    public void testImageWithoutEnableAdaptiveSinkDopUsesDefault() throws Exception {
+        // An image written by a version that did not know the variable falls back to the code default.
+        PseudoImage image = new PseudoImage();
+        SRMetaBlockWriter writer = image.getImageWriter().getBlockWriter(SRMetaBlockID.VARIABLE_MGR, 1 + 1 + 1);
+        writer.writeInt(1);
+        writer.writeJson(new PersistedVariable(SessionVariable.QUERY_TIMEOUT, "100"));
+        writer.writeInt(0);
+        writer.close();
+
+        VariableMgr mgr = new VariableMgr();
+        mgr.load(image.getMetaBlockReader());
+        Assertions.assertEquals(100, mgr.newSessionVariable().getQueryTimeoutS());
+        Assertions.assertTrue(mgr.newSessionVariable().getEnableAdaptiveSinkDop());
+    }
+
     // Same layout as VariableMgr.VariableInfo, used to write an image as a newer build would.
     private static class PersistedVariable {
         @SerializedName(value = "n")

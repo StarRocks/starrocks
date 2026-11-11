@@ -551,8 +551,8 @@ FROM test;
 
 ### enable_adaptive_sink_dop
 
-* 描述：是否开启导入自适应并行度。开启后 INSERT INTO 和 Broker Load 自动设置导入并行度，保持和 `pipeline_dop` 一致。新部署的 2.5 版本默认值为 `true`，从 2.4 版本升级上来为 `false`。
-* 默认值：false
+* 描述：是否开启导入自适应并行度。开启后 INSERT INTO 和 Broker Load 自动设置导入并行度，保持和 `pipeline_dop` 一致。默认值为 `true`。如果集群持久化的元数据中已保存该变量的值，则保留该值。例如，从 v2.4 及更早版本升级上来的集群保持 `false`。
+* 默认值：true
 * 引入版本：v2.5
 
 ### enable_bucket_aware_execution_on_lake
