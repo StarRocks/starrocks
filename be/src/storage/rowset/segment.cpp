@@ -60,12 +60,14 @@
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
+#include "testutil/sync_point.h"
 #include "util/crc32c.h"
 #include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/json_flattener.h"
 #include "util/slice.h"
 #include "util/starrocks_metrics.h"
+#include "util/time.h"
 
 bvar::Adder<int> g_open_segments;    // NOLINT
 bvar::Adder<int> g_open_segments_io; // NOLINT
@@ -245,13 +247,27 @@ Segment::~Segment() {
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->short_key_index_mem_tracker(), _short_key_index_mem_usage());
 }
 
+// Adds what |file| has read to |stats|, under the fields SegmentIterator::_update_stats fills for the column files.
+static void add_read_file_io_stats(const RandomAccessFile& file, OlapReaderStatistics* stats) {
+    const auto io = file.get_io_stats_snapshot();
+    stats->compressed_bytes_read_local_disk += io.bytes_read_local_disk;
+    stats->compressed_bytes_read_remote += io.bytes_read_remote;
+    stats->compressed_bytes_read += io.bytes_read_local_disk + io.bytes_read_remote;
+    stats->io_count_local_disk += io.io_count_local_disk;
+    stats->io_count_remote += io.io_count_remote;
+    stats->io_count += io.io_count_local_disk + io.io_count_remote;
+    stats->io_ns_read_local_disk += io.io_ns_read_local_disk;
+    stats->io_ns_remote += io.io_ns_read_remote;
+}
+
 Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                     const LakeIOOptions& lake_io_opts) {
+                     const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats) {
     if (invoked(_open_once)) {
         return Status::OK();
     }
 
-    auto res = success_once(_open_once, [&] { return _open(footer_length_hint, partial_rowset_footer, lake_io_opts); });
+    auto res = success_once(_open_once,
+                            [&] { return _open(footer_length_hint, partial_rowset_footer, lake_io_opts, stats); });
     if (res.status().is_not_found()) {
         StarRocksMetrics::instance()->segment_file_not_found_total.increment(1);
     }
@@ -265,7 +281,7 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
 }
 
 Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                      const LakeIOOptions& lake_io_opts) {
+                      const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats) {
     SegmentFooterPB footer;
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                  .buffer_size = lake_io_opts.buffer_size};
@@ -284,7 +300,20 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     }
 #endif
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
-    RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
+    {
+        const int64_t footer_start_ns = stats != nullptr ? MonotonicNanos() : 0;
+        DeferOp record_footer_reads([&] {
+            if (stats != nullptr) {
+                stats->io_ns += MonotonicNanos() - footer_start_ns;
+                add_read_file_io_stats(*read_file, stats);
+            }
+        });
+        RETURN_IF_ERROR(
+                Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
+    }
+    if (stats != nullptr) {
+        stats->segments_read_count++;
+    }
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());

@@ -18,12 +18,6 @@
 
 #include <memory>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
->>>>>>> 9310fd1 ([BugFix] Fill the data cache when a meta scan or a PK publish opens a .cols segment (#82853))
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
@@ -35,6 +29,7 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment_writer.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -472,7 +467,7 @@ TEST_F(SegmentMetaCollecterTest, test_dcg_segment_open_fills_data_cache) {
     auto schema = TabletSchema::create(schema_pb);
 
     const std::string dir = "./meta_reader_test_dcg_open";
-    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(dir));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(dir));
     (void)fs->delete_dir_recursive(dir);
     ASSERT_OK(fs->create_dir_recursive(dir));
     DeferOp defer_op([&] { (void)fs->delete_dir_recursive(dir); });
@@ -535,7 +530,7 @@ TEST_F(SegmentMetaCollecterTest, test_dcg_segment_open_fills_data_cache) {
     ASSERT_EQ(1, cols_skip_fill.size());
     EXPECT_FALSE(cols_skip_fill[0]);
     // The base segment was opened before the scan, so the one segment counted is the `.cols` segment.
-    EXPECT_EQ(1, stats_of(collecter).segments_opened);
+    EXPECT_EQ(1, stats_of(collecter).segments_read_count);
 
     auto count_col = Int64Column::create();
     std::vector<Column*> columns = {count_col.get()};
