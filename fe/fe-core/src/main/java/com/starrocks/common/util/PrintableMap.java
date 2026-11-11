@@ -38,6 +38,9 @@ public class PrintableMap<K, V> {
     static {
         SENSITIVE_KEY = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         SENSITIVE_KEY.add("password");
+        SENSITIVE_KEY.add("ssl_key_password");
+        SENSITIVE_KEY.add("ssl_keystore_password");
+        SENSITIVE_KEY.add("ssl_truststore_password");
         SENSITIVE_KEY.add("api_key");
         SENSITIVE_KEY.add("kerberos_keytab_content");
         SENSITIVE_KEY.add("bos_secret_accesskey");

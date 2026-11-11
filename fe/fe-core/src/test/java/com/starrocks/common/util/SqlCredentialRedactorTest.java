@@ -21,6 +21,25 @@ import org.junit.jupiter.api.Timeout;
 public class SqlCredentialRedactorTest {
 
     @Test
+    public void testRedactSslConfigPasswords() {
+        for (String key : new String[] {"ssl_key_password", "ssl_keystore_password", "ssl_truststore_password"}) {
+            for (String quote : new String[] {"'", "\""}) {
+                String sql = "ADMIN SET FRONTEND CONFIG (" + quote + key + quote + "="
+                        + quote + "ssl-test-secret" + quote + ")";
+                String expected = "ADMIN SET FRONTEND CONFIG (" + quote + key + quote + " = ***)";
+                Assertions.assertEquals(expected, SqlCredentialRedactor.redact(sql));
+            }
+            String malformed = "ADMIN SET FRONTEND CONFIG (\"" + key + "\"=ssl-test-secret";
+            Assertions.assertEquals("ADMIN SET FRONTEND CONFIG (\"" + key + "\" = ***",
+                    SqlCredentialRedactor.redact(malformed));
+            Assertions.assertFalse(new PrintableMap<>(Map.of(key, "ssl-test-secret"),
+                    "=", true, false, true).toString().contains("ssl-test-secret"));
+        }
+        String sql = "ADMIN SET FRONTEND CONFIG (\"ssl_keystore_location\"=\"/tmp/test.jks\")";
+        Assertions.assertEquals(sql, SqlCredentialRedactor.redact(sql));
+    }
+
+    @Test
     public void testRedactAIProviderApiKey() {
         String sql = "CREATE AI PROVIDER p PROPERTIES ('API_KEY'='secret-ai-key')";
         Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(sql));
