@@ -25,11 +25,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.FileTable;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
->>>>>>> 387ca2b ([BugFix][RB-1306] Decide partition predicate removal per scan from its own statistics (#82902))
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -44,14 +40,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.PartitionCastPredicatePruner;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
-<<<<<<< HEAD
-=======
-import com.starrocks.connector.benchmark.BenchmarkRowCountCalculator;
-import com.starrocks.connector.benchmark.RowCountEstimate;
 import com.starrocks.connector.delta.ScalarOperationToDeltaLakeExpr;
->>>>>>> 387ca2b ([BugFix][RB-1306] Decide partition predicate removal per scan from its own statistics (#82902))
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
@@ -167,12 +159,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
-<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
-=======
-import com.starrocks.sql.optimizer.rewrite.ExternalScanPredicates;
->>>>>>> 387ca2b ([BugFix][RB-1306] Decide partition predicate removal per scan from its own statistics (#82902))
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
@@ -2354,7 +2342,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
             ColumnRefOperator ref = column.isColumnRef() ? (ColumnRefOperator) column : column.getChild(0).cast();
             return identityPartitionColumns.contains(StringUtils.lowerCase(ref.getName())) &&
-                    !ExternalScanPredicates.containsStringToTemporalCast(conjunct) &&
+                    !PartitionCastPredicatePruner.containsStringToTemporalCast(conjunct) &&
                     converter.convertStrict(List.of(conjunct), context) != null;
         };
     }
