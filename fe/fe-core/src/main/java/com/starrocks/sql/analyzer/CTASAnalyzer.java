@@ -95,6 +95,9 @@ public class CTASAnalyzer {
         createTableStmt.setTableRef(normalizedTableRef);
         TableName tableNameObject = TableName.fromTableRef(normalizedTableRef);
         CreateTableAnalyzer.analyzeEngineName(createTableStmt, tableNameObject.getCatalog());
+        if (Table.TableType.PAIMON.name().equalsIgnoreCase(createTableStmt.getEngineName())) {
+            throw new SemanticException("Paimon CREATE TABLE AS SELECT is not supported");
+        }
 
         // Recursive CTE execution rewrites and analyzes the same CTAS AST again. Preserve the columns
         // inferred from the original query instead of appending columns derived from the rewritten query.

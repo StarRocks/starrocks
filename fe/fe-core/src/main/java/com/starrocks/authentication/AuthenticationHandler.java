@@ -106,11 +106,24 @@ public class AuthenticationHandler {
     }
 
     private static void recordAuthFailure(AuthCredentials cred, AuthenticationException e) {
+        AuthFailureReason reason = (e.getReason() == null) ? AuthFailureReason.BAD_CREDENTIAL : e.getReason();
+        recordAuthFailure(cred, reason);
+    }
+
+    /**
+     * Counts a credential the caller could not even parse (a Basic header that is not Base64, or
+     * that names no user) as a {@link AuthFailureReason#MALFORMED} failure. The caller refuses such
+     * a request without calling {@link #authenticate}, which otherwise counts every failure.
+     */
+    public static void recordMalformedCredential(AuthCredentials cred) {
+        recordAuthFailure(cred, AuthFailureReason.MALFORMED);
+    }
+
+    private static void recordAuthFailure(AuthCredentials cred, AuthFailureReason reason) {
         if (!MetricRepo.hasInit) {
             return;
         }
         MetricRepo.COUNTER_AUTH_FAILURE.getMetric(cred.channelLabel(), cred.kindLabel()).increase(1L);
-        AuthFailureReason reason = (e.getReason() == null) ? AuthFailureReason.BAD_CREDENTIAL : e.getReason();
         MetricRepo.COUNTER_AUTH_FAILURE_REASON.getMetric(reason.label()).increase(1L);
     }
 

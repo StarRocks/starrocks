@@ -814,6 +814,46 @@ The range-based distribution semantic is different from the default semantic in 
 - This semantic is supported from v4.1 onwards. In shared-data mode it is enabled by default, controlled by the FE configuration `enable_range_distribution`.
 - To disable it and fall back to the previous default distribution, set the FE configuration `enable_range_distribution` to `false`. It has no effect in shared-nothing mode.
 
+#### Target tablet size
+
+Automatic tablet split and merge keep the tablets of a range-distributed table around a target size. By default, every table uses the FE configuration `tablet_reshard_target_size` (Default: 10 GB). To give a table its own target size, set the table property `tablet_reshard_target_size` (Unit: bytes) to a positive integer when you create the table, or change it with `ALTER TABLE ... SET`. The table property has the same name as the FE configuration and is supported only on range-distributed tables. On any other table, the statement fails with `tablet_reshard_target_size is only supported for range-distributed tables`.
+
+```SQL
+CREATE TABLE orders (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int,
+    amount decimal(18, 2)
+)
+DUPLICATE KEY (tenant_id, created_time, id)
+PROPERTIES ("tablet_reshard_target_size" = "1073741824");
+
+-- Change the target size of the table to 4 GB.
+ALTER TABLE orders SET ("tablet_reshard_target_size" = "4294967296");
+
+-- Remove the property. The table follows the FE configuration tablet_reshard_target_size again.
+ALTER TABLE orders SET ("tablet_reshard_target_size" = "");
+```
+
+A table with the property uses the property value in place of the FE configuration:
+
+- Automatic split splits a tablet once it reaches 1.5 times the property value (rounded up), into tablets of about the property value.
+- Automatic merge, when enabled by the FE configuration `tablet_reshard_enable_tablet_merge`, is triggered when two adjacent tablets together are smaller than 80% of the property value (rounded up), and the total size of each group of merged tablets does not exceed the property value.
+- `ALTER TABLE ... SPLIT TABLET` and `ALTER TABLE ... MERGE TABLET` use the property value as the target size unless `tablet_reshard_target_size` is specified in the `PROPERTIES` of the statement.
+- Tablet pre-split during data loading, online sort key changes such as `ALTER TABLE ... ORDER BY`, and rollups of the table size their new tablets against the property value.
+
+For details, see [ALTER TABLE - Modify the tablet size](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#modify-the-tablet-size).
+
+The table property has no default value. A table without it follows the FE configuration `tablet_reshard_target_size`, including any later change to that configuration. `0`, negative values, and non-numeric values are rejected.
+
+If the FE configuration `tablet_reshard_target_size` is set to `0`, automatic split and merge are disabled for all tables, including tables with the table property. The table property takes effect again after the configuration is set back to a positive value.
+
+:::note
+
+`SHOW CREATE TABLE` returns the `tablet_reshard_target_size` property of a table that has it. Where range distribution is not the default, that is, when the FE configuration `enable_range_distribution` is `false` or in shared-nothing mode, the returned statement would create a hash-bucketed or randomly bucketed table, so it fails because the property is supported only on range-distributed tables. A version that does not support the property rejects it as an unknown property. Remove the property before you run the statement in these environments.
+
+:::
+
 #### Examples
 
 ##### Create new tables with Range-based Distribution semantic
@@ -870,7 +910,11 @@ PRIMARY KEY (tenant_id, created_time, id);
 In addition to the colocation group, you must also specify the colocated columns in the `colocate_with` property in the format `<colocation_group>:<colocated_column>[,<colocated_column>]`:
 - The colocated columns must be a prefix of the sort columns.
 - Tables in the same colocation group must have the same type, number, and order of colocated columns.
+- The type of a colocated column cannot be changed after the table is created, including increasing the length of a VARCHAR column.
+- You can change the sort key online after the table is created (`ALTER TABLE ... ORDER BY`, adding or dropping a key column, or widening an integer sort-key column), as long as the new sort key still starts with the colocated columns, in the same order and with the same types. A change that drops, reorders, or changes the type of a colocated column is rejected. The table stays in its colocation group and keeps using Colocate Join.
 - Default colocated columns are the sort columns.
+- If `colocate_with` specifies only the colocation group and a sort key change makes the sort key longer than the colocated columns, StarRocks rewrites the property to the explicit form `<colocation_group>:<colocated_column>[,<colocated_column>]`, which `SHOW CREATE TABLE` returns from then on.
+- Rollups and synchronous materialized views are supported, as long as the sort key of the rollup or view starts with the colocated columns, in the same order and with the same types. A rollup defined in `CREATE TABLE ... ROLLUP (...)` is sorted by its key columns, and an `ORDER BY` written in it is not used, so its key columns must start with the colocated columns. The sort key of a synchronous materialized view is its leading non-aggregated columns, in `SELECT` order. For a view without `GROUP BY`, aggregation, or `DISTINCT`, the sort key is a prefix of the `SELECT` list (at most three columns and 36 bytes; it ends with the first VARCHAR column, or before the first column whose type cannot be a key, such as FLOAT or DOUBLE), and `ORDER BY` does not change it. To choose the sort key of such a projection, use `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` instead. The sort key changes described above are not supported on a table that has a rollup or synchronous materialized view.
 :::
 
 ```SQL
@@ -892,7 +936,7 @@ PROPERTIES(
 
 For detailed instructions on splitting and merging tablets, see [ALTER TABLE - Modify the tablet size](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#modify-the-tablet-size).
 
-- Split all tablets that meet the conditions in the table to a target size of 10 GB (Default).
+- Split all tablets that meet the conditions in the table to the table's target size (10 GB by default).
 
 ```SQL
 ALTER TABLE table1 SPLIT TABLETS;
@@ -913,8 +957,9 @@ The following operations are not supported on tables with Range-based Distributi
 | DDL | Reason |
 | --- | ------ |
 | `ALTER TABLE ... ADD ROLLUP ...` without an `ORDER BY` clause | A plain synchronous rollup assumes 1-to-1 base/rollup tablet pairing with the same row order, which range distribution semantic does not provide. Use `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` instead: on range tables in shared-data clusters, this statement builds an independent-sort-key rollup, and you can add multiple rollups (one per `ALTER TABLE` statement). |
-| `CREATE MATERIALIZED VIEW ... AS ...` (synchronous form, no `REFRESH` and no `DISTRIBUTED BY` clause) | A synchronous materialized view is internally a plain synchronous rollup and shares the same limitation. |
+| `CREATE MATERIALIZED VIEW ... AS ...` (synchronous form, no `REFRESH` and no `DISTRIBUTED BY` clause) | In a shared-data cluster, a synchronous materialized view on a Duplicate Key, Aggregate, or Unique Key table is supported; see [CREATE MATERIALIZED VIEW](../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md). In other cases, a synchronous materialized view is internally a plain synchronous rollup and shares the same limitation. |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE redistributes / rebuckets a partition, which is incompatible with range tablet boundaries. |
+| `CREATE TABLE ... ROLLUP (...)`, `ALTER TABLE ... ADD ROLLUP ...`, or `CREATE MATERIALIZED VIEW` on a table with `colocate_with`, when the sort key of the rollup or synchronous materialized view does not start with the colocated columns | The tablets of a rollup or synchronous materialized view must be aligned with the colocation group, and requiring its sort key to start with the colocated columns keeps every index of the table aligned. A synchronous materialized view without `GROUP BY`, aggregation, or `DISTINCT` cannot choose its sort key; use `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` instead. |
 | `ALTER TABLE ... MERGE TABLETS` on a Primary Key table whose `ORDER BY` differs from its primary key (automatic size-based merge is skipped for the same shape) | Such a table routes rows by a range in primary-key space while its segments are laid out in sort-key order, so a merge cannot decide which source tablet still owns a given row of a segment those sources share. SPLIT is unaffected, and a Primary Key table whose `ORDER BY` is its primary key can still be merged. |
 
 For rollup-like aggregation use cases, use an **asynchronous materialized view** with an explicit `REFRESH` clause or a `DISTRIBUTED BY` clause, for example:
@@ -980,6 +1025,7 @@ Buckets reflect how data files are actually organized in StarRocks.
       user_name VARCHAR(32) DEFAULT '')
   DUPLICATE KEY (event_day,site_id,pv)
   PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY RANDOM
   -- The number of buckets in a partition is automatically determined by StarRocks and the number dynamically increases on demand because the size of a bucket is set to 1 GB.
   PROPERTIES("bucket_size"="1073741824")
   ;
@@ -992,6 +1038,7 @@ Buckets reflect how data files are actually organized in StarRocks.
       user_name VARCHAR(32) DEFAULT '')
   DUPLICATE KEY (event_day,site_id,pv)
   PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY RANDOM
   -- The number of buckets in the table partition is automatically determined by StarRocks, and the number is fixed and does not dynamically increases on demand because the size of a bucket is not set.
   ;
   ```

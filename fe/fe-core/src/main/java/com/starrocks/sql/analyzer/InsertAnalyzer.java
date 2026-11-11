@@ -897,7 +897,9 @@ public class InsertAnalyzer {
             if (!(table instanceof OlapTable) && !table.isIcebergTable() && !table.isHiveTable()) {
                 throw unsupportedException("Only support insert overwrite olap/iceberg/hive table");
             }
-            if (table instanceof OlapTable && ((OlapTable) table).getState() != NORMAL) {
+            if (table instanceof OlapTable olapTable && olapTable.getState() != NORMAL
+                    && !(olapTable.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                        && olapTable.isCloudNativeTableOrMaterializedView() && olapTable.isRangeDistribution())) {
                 String msg =
                         String.format("table state is %s, please wait to insert overwrite until table state is normal",
                                 ((OlapTable) table).getState());

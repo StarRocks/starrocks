@@ -270,6 +270,11 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
             std::max<int64_t>(0, io_snap_after.io_count_local_disk - io_snap_before.io_count_local_disk));
     TRACE_COUNTER_INCREMENT("sstable_io_count_remote",
                             std::max<int64_t>(0, io_snap_after.io_count_remote - io_snap_before.io_count_remote));
+    // One message for every key: ParseFromString() clears it but keeps the repeated elements it has
+    // already allocated, so decoding a value costs no heap allocation once the first one is parsed.
+    // A large delete reverse-looks-up millions of keys here, and the per-key allocations otherwise
+    // dominate the lookup.
+    IndexValuesWithVerPB index_value_with_ver_pb;
     size_t i = 0;
     for (auto& key_index : key_indexes) {
         // Index_value_with_vers is empty means key is not found in sst.
@@ -278,7 +283,6 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
             ++i;
             continue;
         }
-        IndexValuesWithVerPB index_value_with_ver_pb;
         if (!index_value_with_ver_pb.ParseFromString(index_value_with_vers[i])) {
             return Status::InternalError("parse index value info failed");
         }
@@ -314,12 +318,12 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         if (index_value_with_ver_pb.values_size() > 0) {
             if (version < 0) {
                 values[key_index] = build_index_value(index_value_with_ver_pb.values(0));
-                found_key_indexes->insert(key_index);
+                found_key_indexes->insert(found_key_indexes->end(), key_index);
             } else {
                 for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
                     if (index_value_with_ver_pb.values(j).version() == version) {
                         values[key_index] = build_index_value(index_value_with_ver_pb.values(j));
-                        found_key_indexes->insert(key_index);
+                        found_key_indexes->insert(found_key_indexes->end(), key_index);
                         break;
                     }
                 }

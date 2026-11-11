@@ -319,7 +319,7 @@ struct DecoderChecker<Slice, is_dictionary> {
 
 TEST_F(ParquetEncodingTest, FindNoneExistedEncoding) {
     const EncodingInfo* enc_info = nullptr;
-    auto st = EncodingInfo::get(tparquet::Type::BOOLEAN, tparquet::Encoding::RLE_DICTIONARY, &enc_info);
+    auto st = EncodingInfo::get(tparquet::Type::BOOLEAN, tparquet::Encoding::DELTA_BINARY_PACKED, &enc_info);
     EXPECT_FALSE(st.ok());
 }
 
@@ -558,6 +558,46 @@ TEST_F(ParquetEncodingTest, Boolean) {
         // decode with buffer
         values.resize(31);
         DecoderChecker<uint8_t, false>::check(values, encoder->build(), decoder.get());
+    }
+
+    const EncodingInfo* dict_encoding = nullptr;
+    (void)EncodingInfo::get(tparquet::Type::BOOLEAN, tparquet::Encoding::RLE_DICTIONARY, &dict_encoding);
+    ASSERT_TRUE(dict_encoding != nullptr);
+    // dict
+    {
+        Status st = Status::OK();
+        std::unique_ptr<Decoder> decoder;
+        st = dict_encoding->create_decoder(&decoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        std::unique_ptr<Encoder> encoder;
+        st = dict_encoding->create_encoder(&encoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        st = encoder->append(reinterpret_cast<uint8_t*>(&values[0]), values.size());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        // construct dictionary encoder: the dictionary page is PLAIN, i.e. bit-packed booleans
+        std::unique_ptr<Encoder> dict_encoder;
+        st = plain_encoding->create_encoder(&dict_encoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        size_t num_dicts = 0;
+        st = encoder->encode_dict(dict_encoder.get(), &num_dicts);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        ASSERT_EQ(2, num_dicts);
+
+        // construct dictionary decoder
+        std::unique_ptr<Decoder> dict_decoder;
+        st = plain_encoding->create_decoder(&dict_decoder);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        dict_decoder->set_data(dict_encoder->build());
+
+        st = decoder->set_dict(config::vector_chunk_size, num_dicts, dict_decoder.get());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        DecoderChecker<uint8_t, true>::check(values, encoder->build(), decoder.get());
     }
 }
 

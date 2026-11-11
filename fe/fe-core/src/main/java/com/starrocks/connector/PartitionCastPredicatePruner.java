@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -27,11 +26,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * StarRocks-side residual partition pruning for STRING partition columns compared against a temporal value.
@@ -44,86 +41,19 @@ import java.util.Set;
  * partition value, so every data file is pruned and the query wrongly returns empty.
  *
  * <p>To keep pruning consistent with the backend filter, such conjuncts are kept out of the pushed predicate
+ * (classified by {@link com.starrocks.sql.optimizer.rewrite.ExternalScanPredicates#splitStringPartitionCast})
  * and evaluated here against each file's partition values, reusing StarRocks' own {@code CAST(VARCHAR AS
  * DATETIME)} folding (identical parsing semantics to the backend). A file is dropped only when a residual
  * conjunct definitively folds to {@code false}; anything indeterminate (unfoldable, parse failure, non-boolean)
  * keeps the file, so the pruning can only ever be more conservative than the backend filter (never unsound).
  *
  * <p>The connector supplies the identity string partition column names and, per file, the raw string partition
- * values; the split/evaluation logic here is connector agnostic.
+ * values; the evaluation logic here is connector agnostic.
  */
 public class PartitionCastPredicatePruner {
     private static final Logger LOG = LogManager.getLogger(PartitionCastPredicatePruner.class);
 
     private PartitionCastPredicatePruner() {
-    }
-
-    /**
-     * A conjunct "contains a string-to-temporal cast" if somewhere in it a string column is wrapped in a cast to
-     * a temporal type, e.g. {@code CAST(<string col> AS DATETIME)}. Native pushdown unwraps such casts and then
-     * compares in the STRING domain, which over-prunes, so these conjuncts must not be pushed.
-     */
-    public static boolean containsStringToTemporalCast(ScalarOperator operator) {
-        if (operator instanceof CastOperator) {
-            ScalarOperator child = operator.getChild(0);
-            if (child instanceof ColumnRefOperator && child.getType().isStringType()
-                    && (operator.getType().isDate() || operator.getType().isDatetime())) {
-                return true;
-            }
-        }
-        for (ScalarOperator child : operator.getChildren()) {
-            if (containsStringToTemporalCast(child)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean allColumnsAreIdentityStringPartition(ScalarOperator conjunct,
-                                                                Set<String> identityStringPartitionColumns) {
-        List<ColumnRefOperator> refs = conjunct.getColumnRefs();
-        if (refs.isEmpty()) {
-            return false;
-        }
-        for (ColumnRefOperator ref : refs) {
-            if (!identityStringPartitionColumns.contains(ref.getName().toLowerCase(Locale.ROOT))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * Classifies conjuncts for a connector that pushes predicates to a native engine:
-     * <ul>
-     *   <li>no string-to-temporal cast -> {@code pushable} (pushed to the native engine as usual);</li>
-     *   <li>has such a cast and every referenced column is an identity string partition column -> {@code residual}
-     *       (not pushed; pruned here against partition values, consistent with the backend filter);</li>
-     *   <li>has such a cast but references a non-(identity string partition) column - e.g. a data column or a
-     *       mixed OR - is dropped from both: not pushed (so the native engine cannot over-prune in the string
-     *       domain) and not residual (it cannot be evaluated from partition values alone). Correctness is kept by
-     *       the backend filter; only that conjunct's native pruning is given up.</li>
-     * </ul>
-     * {@code identityStringPartitionColumns} may be passed in any case; membership is case-insensitive.
-     */
-    public static PartitionResidual split(List<ScalarOperator> conjuncts, Set<String> identityStringPartitionColumns) {
-        // Normalize to lower case here so callers need not pre-normalize the set.
-        Set<String> normalizedPartitionColumns = new HashSet<>();
-        for (String name : identityStringPartitionColumns) {
-            normalizedPartitionColumns.add(name.toLowerCase(Locale.ROOT));
-        }
-        List<ScalarOperator> pushable = Lists.newArrayList();
-        List<ScalarOperator> residual = Lists.newArrayList();
-        for (ScalarOperator conjunct : conjuncts) {
-            if (!containsStringToTemporalCast(conjunct)) {
-                pushable.add(conjunct);
-            } else if (allColumnsAreIdentityStringPartition(conjunct, normalizedPartitionColumns)) {
-                residual.add(conjunct);
-            }
-            // else: contains a string-to-temporal cast that cannot be evaluated against partition values;
-            // drop it from pushdown to avoid unsound native pruning (the backend filter still applies it).
-        }
-        return new PartitionResidual(pushable, residual);
     }
 
     /**
@@ -323,20 +253,5 @@ public class PartitionCastPredicatePruner {
             }
         }
         return null;
-    }
-
-    /** Result of splitting conjuncts for partition pruning. */
-    public static class PartitionResidual {
-        public final List<ScalarOperator> pushable;
-        public final List<ScalarOperator> residual;
-
-        public PartitionResidual(List<ScalarOperator> pushable, List<ScalarOperator> residual) {
-            this.pushable = pushable;
-            this.residual = residual;
-        }
-
-        public boolean hasResidual() {
-            return !residual.isEmpty();
-        }
     }
 }

@@ -57,6 +57,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/storage_engine.h"
@@ -207,7 +208,10 @@ int init_test_env(int argc, char** argv, std::unique_ptr<SchemaScannerFactory> s
     storage_env_options.update_mem_tracker = runtime_env->update_mem_tracker();
     storage_env_options.process_mem_limit = runtime_env->process_mem_limit();
     storage_env_options.vector_index_mem_tracker = runtime_env->vector_index_mem_tracker();
-    storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
+    storage_env_options.lake_tablet_metadata_cache_limit = lake::metacache_capacity(
+            runtime_env->process_mem_limit(), config::lake_tablet_metadata_cache_limit_percent);
+    storage_env_options.lake_segment_metadata_cache_limit = lake::metacache_capacity(
+            runtime_env->process_mem_limit(), config::lake_segment_metadata_cache_limit_percent);
 #if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
     storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kStarlet;
 #elif defined(BE_TEST)

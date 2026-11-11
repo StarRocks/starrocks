@@ -301,7 +301,9 @@ Currently, StarRocks supports the following SQL Plan Manager functions:
 - `_spm_const_var(placeholdID)`: Used to mark a single constant value.
 - `_spm_const_list(placeholdID)`: Used to mark multiple constant values, typically used to mark multiple constant values in an IN condition.
 - `_spm_const_range(placeholdID, min, max)`：Used to mark a single constant value, but requires the constant value to be within the specified range '[min, max]'.
-- `_spm_const_num(placeholdID, value...)`：Used to mark a single constant value, but requires the constant value to be a value in the specified enum 'value...'.
+- `_spm_const_enum(placeholdID, value...)`：Used to mark a single constant value, but requires the constant value to be a value in the specified enum 'value...'.
+
+`_spm_const_range` and `_spm_const_enum` reject `GEOGRAPHY`, `GEOMETRY`, and types that contain either of them.
 
 The 'placeholdID' is an integer, which is used as a unique identifier for the parameter, which is used when binding Baseline and generating the Plan.
 

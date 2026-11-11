@@ -45,11 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-<<<<<<< HEAD
-=======
-import java.util.function.Function;
 import java.util.stream.Collectors;
->>>>>>> 744bd06d01a... [BugFix] Record the Iceberg snapshot an incremental refresh read in the MV version map (#64125)
 
 /**
  * `PCTTableSnapshotInfo` represents a snapshot of the base table of materialized view.
@@ -79,6 +75,13 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
 
     public void setPinnedRange(TvrVersionRange pinnedRange) {
         this.pinnedRange = pinnedRange;
+    }
+
+    /**
+     * The base-table snapshot this refresh reads, or null when it reads the live table.
+     */
+    protected TvrVersionRange readSnapshot() {
+        return pinnedRange;
     }
 
     @Override

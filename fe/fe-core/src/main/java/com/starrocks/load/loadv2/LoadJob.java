@@ -435,6 +435,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
      */
     public abstract Set<String> getTableNames(boolean noThrow) throws MetaNotFoundException;
 
+    /**
+     * Ids of the tables this job loads into, whether or not they still exist.
+     */
+    public abstract Set<Long> getTableIds();
+
     protected abstract List<TabletCommitInfo> getTabletCommitInfos();
 
     protected abstract List<TabletFailInfo> getTabletFailInfos();
@@ -888,6 +893,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
      */
     public void unprotectUpdateFailMsg(FailMsg failMsg) {
         this.failMsg = failMsg;
+    }
+
+    public FailMsg getFailMsg() {
+        return failMsg;
     }
 
     public List<Comparable> getShowInfo() throws DdlException {

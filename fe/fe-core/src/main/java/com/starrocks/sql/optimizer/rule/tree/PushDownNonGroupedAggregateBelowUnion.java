@@ -99,15 +99,20 @@ public class PushDownNonGroupedAggregateBelowUnion implements TreeRewriteRule {
         }
 
         ColumnRefFactory factory = taskContext.getOptimizerContext().getColumnRefFactory();
-        return root.getOp().accept(new PushDownNonGroupedAggregateBelowUnionVisitor(factory), root, null);
+        boolean unconditionalOnly =
+                ScalarOperatorsReuse.allowThrowException(taskContext.getOptimizerContext().getSessionVariable());
+        return root.getOp().accept(new PushDownNonGroupedAggregateBelowUnionVisitor(factory, unconditionalOnly),
+                root, null);
     }
 
     private static class PushDownNonGroupedAggregateBelowUnionVisitor
             extends OptExpressionVisitor<OptExpression, Void> {
         private final ColumnRefFactory factory;
+        private final boolean unconditionalOnly;
 
-        PushDownNonGroupedAggregateBelowUnionVisitor(ColumnRefFactory factory) {
+        PushDownNonGroupedAggregateBelowUnionVisitor(ColumnRefFactory factory, boolean unconditionalOnly) {
             this.factory = factory;
+            this.unconditionalOnly = unconditionalOnly;
         }
 
         @Override
@@ -417,7 +422,8 @@ public class PushDownNonGroupedAggregateBelowUnion implements TreeRewriteRule {
 
             // Build the new project operator above this branch.
             Projection newProjection =
-                    ScalarOperatorsReuse.rewriteProjectionOrLambdaExpr(new Projection(newProjectMap), factory);
+                    ScalarOperatorsReuse.rewriteProjectionOrLambdaExpr(new Projection(newProjectMap), factory,
+                            unconditionalOnly);
             PhysicalProjectOperator newProject = new PhysicalProjectOperator(newProjection.getColumnRefMap(),
                     newProjection.getCommonSubOperatorMap());
             OptExpression newProjectExpr = OptExpression.builder()

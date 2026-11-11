@@ -543,6 +543,7 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_global_dicts(_global_dicts)
                                           .set_is_multi_statements_txn(_is_multi_statements_txn)
                                           .set_multi_node_write(_multi_node_write)
+                                          .set_flat_json_config(_flat_json_config)
                                           .build());
     auto impl = new AsyncDeltaWriterImpl(std::move(writer));
     return std::make_unique<AsyncDeltaWriter>(impl);

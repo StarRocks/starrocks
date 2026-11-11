@@ -138,7 +138,8 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
                 const auto& [start_key, end_key] = key_pair;
                 if (comparator->Compare(keys[key_index], Slice(end_key)) <= 0) {
                     // key in range [start_key, end_key]
-                    sstable_key_indexes_map[sstable.get()].insert(key_index);
+                    auto& sstable_key_indexes = sstable_key_indexes_map[sstable.get()];
+                    sstable_key_indexes.insert(sstable_key_indexes.end(), key_index);
                 }
             }
         }
@@ -195,6 +196,16 @@ void PersistentIndexSstableFileset::for_each_sstable(
     if (_standalone_sstable != nullptr) {
         fn(*_standalone_sstable);
     }
+}
+
+bool PersistentIndexSstableFileset::any_sstable(
+        const std::function<bool(const PersistentIndexSstablePB&)>& pred) const {
+    for (const auto& [key_pair, sstable] : _sstable_map) {
+        if (pred(sstable->sstable_pb())) {
+            return true;
+        }
+    }
+    return _standalone_sstable != nullptr && pred(_standalone_sstable->sstable_pb());
 }
 
 void PersistentIndexSstableFileset::print_debug_info(std::stringstream& ss) {

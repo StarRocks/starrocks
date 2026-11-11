@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -40,8 +41,10 @@ class FragmentMgr;
 
 class RuntimeFilterWorker : public RuntimeFilterQueryLifecycle, public RuntimeFilterSender {
 public:
+    // Events of the same runtime filter always go to the same thread, so a merger is only touched by one
+    // thread. num_threads <= 1 keeps the single-threaded behavior.
     RuntimeFilterWorker(const RuntimeServices* runtime_services, const RpcServices* rpc_services,
-                        MemTracker* query_pool_mem_tracker, FragmentMgr* fragment_mgr);
+                        MemTracker* query_pool_mem_tracker, FragmentMgr* fragment_mgr, int32_t num_threads);
     ~RuntimeFilterWorker();
     void close();
     // open query for creating runtime filter merger.
@@ -49,7 +52,6 @@ public:
                     bool is_pipeline) override;
     void close_query(const TUniqueId& query_id) override;
     void receive_runtime_filter(const PTransmitRuntimeFilterParams& params);
-    void execute();
     void send_part_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                   const std::vector<starrocks::TNetworkAddress>& addrs, int timeout_ms,
                                   int64_t rpc_http_min_size, EventType type) override;
@@ -58,18 +60,31 @@ public:
                                        int64_t rpc_http_min_size) override;
 
     size_t queue_size() const;
+    size_t num_threads() const { return _shards.size(); }
     const RuntimeFilterWorkerMetrics* metrics() const { return _metrics; }
 
-private:
-    bool _reach_queue_limit();
+    // The thread that handles the runtime filter. A skew join's broadcast rf is merged into the shuffle
+    // join's rf, so it must be routed by skew_shuffle_filter_id.
+    static size_t shard_index(const TUniqueId& query_id, int32_t filter_id, size_t num_shards);
 
-    UnboundedBlockingQueue<RuntimeFilterWorkerEvent> _queue;
-    std::unordered_map<TUniqueId, RuntimeFilterMerger> _mergers;
+private:
+    // One thread with its own queue and the mergers of the runtime filters routed to it.
+    struct Shard {
+        UnboundedBlockingQueue<RuntimeFilterWorkerEvent> queue;
+        std::unordered_map<TUniqueId, RuntimeFilterMerger> mergers;
+        std::thread thread;
+    };
+
+    bool _reach_queue_limit();
+    void _execute(Shard* shard);
+    void _put(RuntimeFilterWorkerEvent&& ev, int32_t filter_id);
+    void _put_to_all_shards(RuntimeFilterWorkerEvent&& ev);
+
+    std::vector<std::unique_ptr<Shard>> _shards;
     const RuntimeServices* _runtime_services;
     const RpcServices* _rpc_services;
     MemTracker* _query_pool_mem_tracker;
     RuntimeFilterDelivery _delivery;
-    std::thread _thread;
     RuntimeFilterWorkerMetrics* _metrics = nullptr;
 };
 

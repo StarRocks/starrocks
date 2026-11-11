@@ -53,6 +53,8 @@ public:
     FileColumn();
     // Sub-columns holding `size` NULL rows.
     explicit FileColumn(size_t size);
+    // Shares six non-constant nullable fields in FileField order. Use Column::mutate() before writing.
+    explicit FileColumn(std::array<ColumnPtr, NUM_FIELDS>&& fields);
     DISALLOW_COPY(FileColumn);
     FileColumn(FileColumn&& rhs) noexcept : _fields(std::move(rhs._fields)) {}
 
