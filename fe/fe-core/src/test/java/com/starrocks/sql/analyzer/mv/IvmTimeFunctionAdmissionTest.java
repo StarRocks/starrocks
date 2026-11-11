@@ -44,7 +44,6 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -105,7 +104,7 @@ public class IvmTimeFunctionAdmissionTest extends MVIVMIcebergTestBase {
     })
     public void testIncrementalAcceptsTimeConversionOfColumns(String query) throws Exception {
         CreateMaterializedViewStatement stmt = analyzeMvDdl(mvDdl("mv_time_conversion", "incremental", query));
-        assertEquals(MaterializedView.RefreshMode.INCREMENTAL, stmt.getAnalyzedRefreshMode());
+        assertEquals(MaterializedView.RefreshMode.INCREMENTAL, stmt.getCurrentRefreshMode());
     }
 
     @Test
@@ -136,7 +135,7 @@ public class IvmTimeFunctionAdmissionTest extends MVIVMIcebergTestBase {
             createFunction("CREATE FUNCTION curdate(x INT) RETURNS x + 1");
             String query = "SELECT id, curdate(id) AS d FROM " + T0;
             CreateMaterializedViewStatement stmt = analyzeMvDdl(mvDdl("mv_time_named_udf", "incremental", query));
-            assertEquals(MaterializedView.RefreshMode.INCREMENTAL, stmt.getAnalyzedRefreshMode());
+            assertEquals(MaterializedView.RefreshMode.INCREMENTAL, stmt.getCurrentRefreshMode());
         } finally {
             dropFunction("DROP FUNCTION IF EXISTS curdate(INT)");
             Config.enable_udf = enableUdf;
@@ -144,25 +143,11 @@ public class IvmTimeFunctionAdmissionTest extends MVIVMIcebergTestBase {
     }
 
     @Test
-    public void testAutoFallsBackToPctWithTheTimeFunctionAsReason() throws Exception {
-        String query = "SELECT id, COUNT(*) AS cnt FROM " + T0
-                + " WHERE CAST(date AS DATETIME) >= date_sub(current_timestamp(), INTERVAL 1 DAY) GROUP BY id";
-        starRocksAssert.withMaterializedView(mvDdl("mv_time_auto", "auto", query), () -> {
-            MaterializedView mv = getMv("test", "mv_time_auto");
-            assertEquals(MaterializedView.RefreshMode.AUTO, mv.getRefreshMode());
-            assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
-            assertNotNull(mv.getCurrentRefreshModeReason());
-            assertTrue(mv.getCurrentRefreshModeReason().toLowerCase().contains(
-                    REJECTED.toLowerCase() + " current_timestamp()"), mv.getCurrentRefreshModeReason());
-        });
-    }
-
-    @Test
     public void testPctAcceptsCurrentTime() throws Exception {
         String query = "SELECT id, COUNT(*) AS cnt FROM " + T0
                 + " WHERE CAST(date AS DATETIME) >= date_sub(now(), INTERVAL 1 DAY) GROUP BY id";
         CreateMaterializedViewStatement stmt = analyzeMvDdl(mvDdl("mv_time_pct", "pct", query));
-        assertEquals(MaterializedView.RefreshMode.PCT, stmt.getAnalyzedRefreshMode());
+        assertEquals(MaterializedView.RefreshMode.PCT, stmt.getCurrentRefreshMode());
     }
 
     @Test

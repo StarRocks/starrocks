@@ -373,6 +373,22 @@ public class MaterializedViewAnalyzer {
             SECOND
         }
 
+        private static void rejectCurrentTimeFunction(CreateMaterializedViewStatement statement) {
+            // Rejecting a re-analysis would leave an mv created before this check unable to reactivate.
+            if (REANALYZING_EXISTING_MV.get()) {
+                return;
+            }
+            Optional<FunctionCallExpr> timeFunction =
+                    AnalyzerUtils.findCurrentTimeFunction(statement.getQueryStatement());
+            if (timeFunction.isEmpty()) {
+                return;
+            }
+            throw new SemanticException(String.format("Incremental refresh does not support %s in the materialized "
+                    + "view definition: rows already in the materialized view are not re-evaluated as time passes. "
+                    + "Use refresh_mode = 'pct', or keep a time window with the partition_retention_condition "
+                    + "property", ExprToSql.toSql(timeFunction.get())), timeFunction.get().getPos());
+        }
+
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
@@ -434,71 +450,11 @@ public class MaterializedViewAnalyzer {
             statement.setOriginalViewDefineSql(originalViewDef.substring(statement.getQueryStartIndex(),
                     statement.getQueryStopIndex()));
 
-<<<<<<< HEAD
             MaterializedView.RefreshMode refreshMode = IVMAnalyzer.getRefreshMode(statement);
-            if (refreshMode.isIncrementalOrAuto()) {
-=======
-            MaterializedView.RefreshMode requestedMode = IVMAnalyzer.getRefreshMode(statement);
-            if (requestedMode.isAuto()) {
-                analyzeAutoMvDefinition(statement, context, catalog, dbName);
-            } else {
-                analyzeMvDefinition(statement, context, requestedMode, catalog, dbName);
-            }
-            return null;
-        }
-
-        /**
-         * Analyses the definition strictly as INCREMENTAL and, if that is rejected, rolls the statement back
-         * to what the parser produced and re-analyses it as PCT.
-         */
-        private void analyzeAutoMvDefinition(CreateMaterializedViewStatement statement,
-                                             ConnectContext context,
-                                             String catalog,
-                                             String dbName) {
-            MvAnalysisState parsedState = MvAnalysisState.capture(statement);
-            try {
-                analyzeMvDefinition(statement, context, MaterializedView.RefreshMode.INCREMENTAL,
-                        catalog, dbName);
-                statement.setAnalyzedRefreshMode(AnalyzedRefreshMode.of(MaterializedView.RefreshMode.AUTO));
-            } catch (IvmBaseTableValidator.ChangeDataCaptureRequiredException e) {
-                throw e;
-            } catch (SemanticException e) {
-                // IvmTrialRewriter reports an internal rewriter failure as a rejection too, so a bug in the
-                // incremental path degrades silently unless it is logged here.
-                LOG.warn("Incremental analysis rejected mv {}, creating it as PCT",
-                        statement.getTblName(), e);
-                parsedState.restore(statement, context);
-                analyzeMvDefinition(statement, context, MaterializedView.RefreshMode.PCT, catalog, dbName);
-                statement.setAnalyzedRefreshMode(AnalyzedRefreshMode.degradedTo(
-                        MaterializedView.RefreshMode.PCT, e.getMessage()));
-            }
-        }
-
-        private static void rejectCurrentTimeFunction(CreateMaterializedViewStatement statement) {
-            // Rejecting a re-analysis would leave an mv created before this check unable to reactivate.
-            if (REANALYZING_EXISTING_MV.get()) {
-                return;
-            }
-            Optional<FunctionCallExpr> timeFunction =
-                    AnalyzerUtils.findCurrentTimeFunction(statement.getQueryStatement());
-            if (timeFunction.isEmpty()) {
-                return;
-            }
-            throw new SemanticException(String.format("Incremental refresh does not support %s in the materialized "
-                    + "view definition: rows already in the materialized view are not re-evaluated as time passes. "
-                    + "Use refresh_mode = 'pct', or keep a time window with the partition_retention_condition "
-                    + "property", ExprToSql.toSql(timeFunction.get())), timeFunction.get().getPos());
-        }
-
-        private void analyzeMvDefinition(CreateMaterializedViewStatement statement,
-                                         ConnectContext context,
-                                         MaterializedView.RefreshMode refreshMode,
-                                         String catalog,
-                                         String dbName) {
-            QueryStatement queryStatement = statement.getQueryStatement();
             if (refreshMode.isIncremental()) {
                 rejectCurrentTimeFunction(statement);
->>>>>>> e53e761f01e... [BugFix][RB-684] Reject reading the current time in incremental materialized view definitions (#66655)
+            }
+            if (refreshMode.isIncrementalOrAuto()) {
                 IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, statement, statement.getQueryStatement());
                 Optional<IVMAnalyzer.IVMAnalyzeResult> ivmAnalyzeResult = ivmAnalyzer.rewrite(refreshMode);
                 if (ivmAnalyzeResult.isPresent()) {
@@ -710,6 +666,26 @@ public class MaterializedViewAnalyzer {
         }
 
         /**
+         * The column list of a new incremental mv may name only the user query's columns, leaving the hidden ones
+         * the IVM rewrite added to their generated names.
+         */
+        private static List<ColWithComment> withIvmInternalColumns(List<ColWithComment> colWithComments,
+                                                                   List<String> columnNames) {
+            long queryColumnCount = columnNames.stream().filter(name -> !IvmOpUtils.isIvmInternalColumn(name)).count();
+            if (colWithComments.size() != queryColumnCount) {
+                return colWithComments;
+            }
+            List<ColWithComment> fullList = Lists.newArrayList();
+            int next = 0;
+            for (String columnName : columnNames) {
+                fullList.add(IvmOpUtils.isIvmInternalColumn(columnName)
+                        ? new ColWithComment(columnName, null, NodePosition.ZERO)
+                        : colWithComments.get(next++));
+            }
+            return fullList;
+        }
+
+        /**
          * NOTE: order or column names of the defined query may be changed when generating.
          *
          * @return : Generate materialized view's columns and corresponding output expression index pair
@@ -729,6 +705,9 @@ public class MaterializedViewAnalyzer {
             Scope queryScope = queryStatement.getQueryRelation().getScope();
             List<Field> relationFields = queryScope.getRelationFields().getAllFields();
             if (colWithComments != null) {
+                if (rowIdStrategy != null) {
+                    colWithComments = withIvmInternalColumns(colWithComments, columnNames);
+                }
                 if (colWithComments.size() != relationFields.size()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
                 }

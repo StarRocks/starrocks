@@ -27,17 +27,17 @@ ST_CoverageSimplify(GEOMETRY geom, DOUBLE tolerance, BOOLEAN simplify_boundary)
 
 `true` 可简化共享边及外边界。`false` 仅简化共享内部边，保持外部边界、间隙及未填充孔洞的原始边。由另一个成员填充的孔洞属于共享内部边界。
 
-仅接受具有统一平面 GEOMETRY CRS 描述符的 POLYGON/MULTIPOLYGON。非空内部不得重叠，共享边顶点必须匹配。允许间隙（`gapWidth = 0`），但不匹配的边细分、T 形连接、重复非空多边形、无效环或孔洞均报错。不自动修复、合并或补充节点。不支持 GEOGRAPHY、POINT、LINESTRING、GEOMETRYCOLLECTION 和 Z/M。UNKNOWN/MIXED 维度元数据只有在实际值通过 XY 验证后才可接受。
+仅接受具有统一平面 GEOMETRY CRS 描述符的 POLYGON/MULTIPOLYGON。非空内部不得重叠，共享边顶点必须匹配。允许间隙（`gapWidth = 0`）。函数不检查输入是否为有效覆盖。对于无效输入，输出可能包含异常结果，且不保证为有效覆盖。不自动修复、合并或补充节点。不支持 GEOGRAPHY、POINT、LINESTRING、GEOMETRYCOLLECTION 和 Z/M。UNKNOWN/MIXED 维度元数据只有在实际值通过 XY 验证后才可接受。
 
 ## 返回值和错误
 
-返回相同 CRS 的原生 XY WKB GEOMETRY，每行一个结果。保持 POLYGON/MULTIPOLYGON 类型、成员顺序、孔洞、环方向、接触点、交汇点及共享边。单成员 MULTIPOLYGON 仍为 MULTIPOLYGON。按位置映射行，不按几何值去重。
+返回相同 CRS 的原生 XY WKB GEOMETRY，每行一个结果。对于有效覆盖，保持 POLYGON/MULTIPOLYGON 类型、成员顺序、孔洞、环方向、接触点、交汇点及共享边。单成员 MULTIPOLYGON 仍为 MULTIPOLYGON。按位置映射行，不按几何值去重。
 
 - NULL 几何值不参与计算，并在原位置返回 NULL。
 - POLYGON/MULTIPOLYGON EMPTY 保持类型和位置。
 - 容差或显式边界参数为 NULL 时，所有结果为 NULL，不运行覆盖内核；类型和常量检查仍执行。
-- 容差为零时先验证输入和覆盖，再返回原始 WKB，包括重复的闭合坐标。
-- 空输入或全 NULL/EMPTY 仍检查参数。无效覆盖、损坏 WKB、不支持的描述符/维度和资源超限在发布该分区结果前报错。
+- 容差为零时保留输入结构检查，并返回原始 WKB，包括重复的闭合坐标。
+- 空输入或全 NULL/EMPTY 仍检查参数。损坏 WKB、结构无效的环、不支持的描述符/维度和资源超限在发布该分区结果前报错。
 
 ## 资源管理
 

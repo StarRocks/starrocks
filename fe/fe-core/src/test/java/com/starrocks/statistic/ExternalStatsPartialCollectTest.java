@@ -38,6 +38,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.File;
 import java.io.IOException;
@@ -52,6 +54,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 // A collection query that fails must not take the rest of the job (or the metadata describing what the job
 // did manage to collect) down with it. Covers both halves of that: the tolerance rules in
@@ -82,7 +85,8 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
     }
 
     // The backend's wording for "this whole node is out of memory", which is transient and retried rather
-    // than counted as a failed partition. Verbatim from a production failure.
+    // than counted as a failed partition. Verbatim from a production failure, which lacked the closing
+    // sentence MemTracker::err_msg appends nowadays.
     private static final String BACKEND_OUT_OF_MEMORY =
             "Memory of process exceed limit. Start execute plan fragment. " +
                     "Backend: 172.26.80.14, Used: 54716154728, Limit: 53402157342";
@@ -311,7 +315,7 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
         // Same 11 counted failures as with unlimited waiting, but reached in 12 queries instead of 33:
         // only the first was retried, and only once. The job as a whole slept 600ms, not 11 x 40s.
         Assertions.assertEquals(12, job.getExecutedCount());
-        Assertions.assertEquals(600, job.getProcessMemoryBackoffSpentMs());
+        Assertions.assertEquals(600, job.getSharedMemoryBackoffSpentMs());
     }
 
     @Test
@@ -474,7 +478,7 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
     @Test
     public void testQueryLevelFailureIsNotRetried() {
         // "This query is too big for its own memory limit" reproduces exactly on a retry, so it is counted
-        // immediately - only backend-wide exhaustion is worth waiting out.
+        // immediately - only a shared budget running out is worth waiting out.
         RecordingJob job = new RecordingJob(partitions(200), columns(), columnTypes(), Set.of(5));
         job.failureMessage = "Memory of query exceed limit. Used: 100, Limit: 50";
 
@@ -482,6 +486,71 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
         Assertions.assertEquals(0, job.backoffCount);
         Assertions.assertTrue(job.hasToleratedFailures());
         Assertions.assertEquals(199, job.collectedCount);
+    }
+
+    // Full memory-limit errors as the FE receives them: MemTracker::err_msg in be/src/runtime/mem_tracker.cpp
+    // plus the ": BE:<id>" suffix. The closing sentence names the kind of budget that ran out.
+    private static final String QUERY_POOL_EXHAUSTED =
+            "Memory of query_pool exceed limit. try consume:2684354560 Backend: 172.26.80.58, " +
+                    "Used: 45366981455, Limit: 48061935636. Mem usage has exceed the limit of query pool: BE:10004";
+
+    private static Stream<String> sharedMemoryLimitErrors() {
+        return Stream.of(
+                // The two failures from the TPC-DS run that motivated this: another query held the pool.
+                "Memory of default_wg exceed limit. Pipeline Backend: 172.26.80.57, fragment: " +
+                        "01a0db17-ca87-7a63-bea1-62e6d5642111 Used: 48065652496, Limit: 48061941607. " +
+                        "Mem usage has exceed the limit of query pool: BE:10003",
+                QUERY_POOL_EXHAUSTED,
+                "Memory of process exceed limit. Pipeline Backend: 172.26.80.57, Used: 60000000000, " +
+                        "Limit: 59000000000. Mem usage has exceed the limit of BE: BE:10003",
+                "Memory of rg1 exceed limit. Pipeline Backend: 172.26.80.57, Used: 100, Limit: 50. " +
+                        "Mem usage has exceed the limit of the resource group [rg1]. " +
+                        "You can change the limit by modifying [mem_limit] of this group: BE:10004",
+                "Memory of pool1 exceed limit. Pipeline Backend: 172.26.80.57, Used: 100, Limit: 50. " +
+                        "Mem usage has exceed the limit of resource group memory pool [pool1]. : BE:10004");
+    }
+
+    private static Stream<String> statementMemoryLimitErrors() {
+        return Stream.of(
+                "Memory of query exceed limit. Pipeline Backend: 172.26.80.57, Used: 100, Limit: 50. " +
+                        "Mem usage has exceed the limit of single query, You can change the limit by " +
+                        "set session variable query_mem_limit.: BE:10004",
+                "Memory of rg1 exceed limit. Pipeline Backend: 172.26.80.57, Used: 100, Limit: 50. " +
+                        "Mem usage has exceed the big query limit of the resource group [rg1]. " +
+                        "You can change the limit by modifying [big_query_mem_limit] of this group: BE:10004");
+    }
+
+    @ParameterizedTest
+    @MethodSource("sharedMemoryLimitErrors")
+    public void testSharedMemoryLimitIsWaitedOut(String error) throws Exception {
+        // The process, the query pool (default_wg reports as it) and resource groups are shared with other
+        // queries: a neighbour filling one says nothing about this query, and clears once it finishes.
+        RecordingJob job = new RecordingJob(partitions(200), columns(), columnTypes(), Set.of(5));
+        job.failureMessage = error;
+
+        job.runCollectPhases(connectContext, newAnalyzeStatus(), 1L);
+
+        Assertions.assertEquals(1, job.backoffCount);
+        Assertions.assertFalse(job.hasToleratedFailures());
+        Assertions.assertEquals(200, job.collectedCount);
+    }
+
+    @ParameterizedTest
+    @MethodSource("statementMemoryLimitErrors")
+    public void testStatementOwnMemoryLimitIsNotRetried(String error) {
+        // A limit that belongs to this query alone would reject it the same way on every retry.
+        RecordingJob job = new RecordingJob(partitions(200), columns(), columnTypes(), Set.of(5));
+        job.failureMessage = error;
+
+        Assertions.assertDoesNotThrow(() -> job.runCollectPhases(connectContext, newAnalyzeStatus(), 1L));
+        Assertions.assertEquals(0, job.backoffCount);
+        Assertions.assertTrue(job.hasToleratedFailures());
+        Assertions.assertEquals(199, job.collectedCount);
+    }
+
+    @Test
+    public void testStatisticsInsertWaitsOutQueryPoolExhaustion() throws Exception {
+        Assertions.assertEquals(3, flushWithFailingInserts(2, QUERY_POOL_EXHAUSTED));
     }
 
     @Test
@@ -972,6 +1041,156 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
         ConnectorTableColumnStats estimated = StatisticsUtils.estimateColumnStatistics(hiveTable, "c1", sampledStats(1000));
         Assertions.assertFalse(estimated.isUnknown());
         Assertions.assertEquals(1000, estimated.getRowCount());
+    }
+
+    // ---------------------------------------------------------------------------------------------------
+    // A FULL job that refreshes only some partitions cannot vouch for the whole table.
+    // ---------------------------------------------------------------------------------------------------
+
+    private static RecordingJob incrementalJob(int scanned, boolean scansWholeTable, int tablePartitions,
+                                               Set<Integer> failAtIndexes) {
+        RecordingJob job = new RecordingJob(partitions(scanned), columns(), columnTypes(), failAtIndexes) {
+            @Override
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+                runCollectPhases(context, analyzeStatus, 1L);
+            }
+        };
+        job.setTablePartitions(scansWholeTable, tablePartitions);
+        return job;
+    }
+
+    @Test
+    public void testIncrementalFullJobIsCommittedAsSampleOverTheTable() throws Exception {
+        // The column is FULL from an earlier whole-table run, and that FULL entry still carries the hashes an
+        // even earlier SAMPLE run merged in.
+        Set<Long> leftOver = new HashSet<>();
+        for (int i = 0; i < 10; i++) {
+            leftOver.add(hash("par_col=" + i));
+        }
+        putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), leftOver, -1));
+
+        // 3 of the table's 100 partitions were updated and refreshed.
+        new StatisticExecutor().collectStatistics(connectContext, incrementalJob(3, false, 100, new HashSet<>()),
+                newAnalyzeStatus(), false, false);
+
+        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
+        Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, columnMeta.getType());
+        Assertions.assertEquals(100, columnMeta.getAllPartitionSize());
+        // Neither this run's 3 partitions nor the old 10 are recorded: the read path takes the covered count
+        // from the rows, and a set would only stand in for it on a backend that cannot report it.
+        Assertions.assertTrue(columnMeta.getSampledPartitionsHashValue().isEmpty());
+        Assertions.assertFalse(columnMeta.isCoverageIncomplete());
+
+        // Rows still covering every partition: used as is.
+        Assertions.assertEquals(1000, StatisticsUtils.estimateColumnStatistics(hiveTable, "c1",
+                sampledStats(1000, 100, 100, 0)).getRowCount());
+        // Rows missing half the table (e.g. partitions never reported as updated): extrapolated instead of
+        // being taken as the whole table.
+        Assertions.assertEquals(2000, StatisticsUtils.estimateColumnStatistics(hiveTable, "c1",
+                sampledStats(1000, 100, 50, 0)).getRowCount());
+        // A backend that cannot report the covered count: unknown, not 1000 rows scaled by 100 / 10.
+        Assertions.assertTrue(StatisticsUtils.estimateColumnStatistics(hiveTable, "c1", sampledStats(1000))
+                .isUnknown());
+    }
+
+    @Test
+    public void testFullJobOverTheWholeTableStaysFull() throws Exception {
+        new StatisticExecutor().collectStatistics(connectContext, incrementalJob(3, true, 3, new HashSet<>()),
+                newAnalyzeStatus(), false, false);
+
+        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
+        Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, columnMeta.getType());
+    }
+
+    @Test
+    public void testFullJobWithUnknownTablePartitionsStaysFull() throws Exception {
+        // A caller that did not know the table's partitions keeps the FULL commit it always got.
+        RecordingJob job = new RecordingJob(partitions(3), columns(), columnTypes(), new HashSet<>()) {
+            @Override
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+                runCollectPhases(context, analyzeStatus, 1L);
+            }
+        };
+        new StatisticExecutor().collectStatistics(connectContext, job, newAnalyzeStatus(), false, false);
+
+        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
+        Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, columnMeta.getType());
+    }
+
+    @Test
+    public void testPartialIncrementalFullJobIsSizedByTheTable() throws Exception {
+        // 200 updated partitions of a 500-partition table, one query lost: the downgrade to SAMPLE sizes the
+        // table by its own partition count, not by the 200 this run asked for.
+        new StatisticExecutor().collectStatistics(connectContext, incrementalJob(200, false, 500, Set.of(5)),
+                newAnalyzeStatus(), false, false);
+
+        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
+        Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, columnMeta.getType());
+        Assertions.assertEquals(500, columnMeta.getAllPartitionSize());
+        Assertions.assertEquals(199, columnMeta.getSampledPartitionsHashValue().size());
+    }
+
+    @Test
+    public void testPartialRunKeepsTheEntryOfAnIncrementalFullRun() throws Exception {
+        // c1 was left by an incremental FULL run, so its rows cover the table like a FULL entry's. A later run
+        // that loses a partition keeps that entry - and its update time - exactly as it would keep a FULL one:
+        // advancing the update time past the lost partition would stop the next run from selecting it again.
+        LocalDateTime before = LocalDateTime.now().minusHours(1).withNano(0);
+        putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, before, new HashSet<>(), 250, 0));
+
+        new StatisticExecutor().collectStatistics(connectContext, incrementalJob(200, false, 250, Set.of(5)),
+                newAnalyzeStatus(), false, false);
+
+        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
+        Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, columnMeta.getType());
+        Assertions.assertEquals(before, columnMeta.getUpdateTime());
+        Assertions.assertEquals(250, columnMeta.getAllPartitionSize());
+        Assertions.assertTrue(columnMeta.getSampledPartitionsHashValue().isEmpty());
+        Assertions.assertTrue(columnMeta.isFullCoverageByRows());
+    }
+
+    @Test
+    public void testOnlyAnIncrementalFullEntryCoversTheTableByRows() {
+        Assertions.assertTrue(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.FULL, LocalDateTime.now())
+                .isFullCoverageByRows());
+        Assertions.assertTrue(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(), 10, 0).isFullCoverageByRows());
+        // a collected sample records what it sampled
+        Assertions.assertFalse(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(Set.of(1L)), 10, 0).isFullCoverageByRows());
+        // an incomplete one is being resumed
+        Assertions.assertFalse(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(), 10, 10).isFullCoverageByRows());
+        // no partition count: legacy or unusable
+        Assertions.assertFalse(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(), 0).isFullCoverageByRows());
+    }
+
+    @Test
+    public void testDirectValueColumnWithoutFullCoverageIsNotPromoted() {
+        // A FULL job scans direct-value columns over its own partitions only; committed as SAMPLE without
+        // full coverage, such a column must not be turned back into FULL.
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public boolean isDirectValuePartitionColumn(Table table, String columnName) {
+                return true;
+            }
+        };
+
+        new StatisticExecutor().commitExternalColumnStatsMeta(hiveDb, hiveTable, CATALOG,
+                Lists.newArrayList("c1"), Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
+                LocalDateTime.now(), Maps.newHashMap(), new HashSet<>(), Collections.emptySet(), 100,
+                Collections.emptyMap(), Collections.emptyMap(), true, false);
+
+        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
+        Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, columnMeta.getType());
+        Assertions.assertEquals(100, columnMeta.getAllPartitionSize());
     }
 
     @Test

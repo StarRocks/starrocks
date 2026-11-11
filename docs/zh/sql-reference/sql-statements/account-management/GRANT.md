@@ -47,7 +47,7 @@ GRANT USAGE ON AI PROVIDER <provider_name> TO {ROLE <role_name> | USER <user_ide
 GRANT USAGE ON ALL AI PROVIDERS TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
 ```
 
-AI FUNCTION 使用不带数据库前缀、无参数签名的公开内建函数族名称。`USAGE ON ALL AI FUNCTIONS` 覆盖当前及未来的函数族，带有 `WITH GRANT OPTION` 时可以转授单个或全部函数族的使用权限，但不包含 Provider 使用权限。Provider 名称保持精确匹配。参见 [AI 权限](../../sql-functions/ai-functions/ai_functions.mdx#ai-function-privileges)。
+AI FUNCTION 使用不带数据库前缀、无参数签名的公开内建函数族名称。`USAGE ON ALL AI FUNCTIONS` 覆盖当前及未来的函数族，带有 `WITH GRANT OPTION` 时可以转授单个或全部函数族的使用权限，但不包含 Provider 使用权限。Provider 名称保持精确匹配。参见 [AI 权限](../../../administration/user_privs/authorization/privilege_item.md#ai-function-privileges)。
 
 
 #### Resource group 相关

@@ -72,8 +72,8 @@ protected:
         EXPECT_OK(desc->init(&_pool, make_build_desc(has_remote_targets), &_runtime_state));
         Columns columns{make_key_column(num_rows, step)};
         OpTRuntimeBloomFilterBuildParams params;
-        params.emplace_back(RuntimeMembershipFilterBuildParam(false, false, false, std::move(columns), nullptr,
-                                                              TypeDescriptor(TYPE_INT)));
+        params.emplace_back(
+                RuntimeMembershipFilterBuildParam(false, false, false, std::move(columns), nullptr, TYPE_INT_DESC));
 
         PartialRuntimeFilterMerger merger(&_pool, kLocalRfLimit, kGlobalRfLimit, kFuncVersion, true);
         merger.incr_builder();

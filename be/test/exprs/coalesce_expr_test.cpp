@@ -56,18 +56,17 @@ private:
 TEST_F(VectorizedCoalesceExprTest, coalesceArray) {
     expr_node.type = tttype_desc[1];
     auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
-    TypeDescriptor type_arr_int = array_type(TYPE_INT);
-    auto array0 = ColumnHelper::create_column(type_arr_int, true);
+    auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     array0->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
     array0->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
     array0->append_datum(Datum{});                                          // NULL
-    auto array_expr0 = MockExpr(type_arr_int, array0);
+    auto array_expr0 = MockExpr(TYPE_ARRAY_INT_DESC, array0);
 
-    auto array1 = ColumnHelper::create_column(type_arr_int, false);
+    auto array1 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
     array1->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)41)}); // [11,41]
     array1->append_datum(DatumArray{Datum(), Datum()});                       // [NULL, NULL]
     array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});             // [NULL, 1]
-    auto array_expr1 = MockExpr(type_arr_int, array1);
+    auto array_expr1 = MockExpr(TYPE_ARRAY_INT_DESC, array1);
 
     expr->_children.push_back(&array_expr0);
     expr->_children.push_back(&array_expr1);
@@ -88,7 +87,7 @@ TEST_F(VectorizedCoalesceExprTest, coalesceAllNotNull) {
     for (const auto& desc : tttype_desc) {
         expr_node.type = desc;
         auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
         MockVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -112,7 +111,7 @@ TEST_F(VectorizedCoalesceExprTest, coalesceAllNull) {
     for (const auto& desc : tttype_desc) {
         expr_node.type = desc;
         auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
         MockNullVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
 
@@ -132,7 +131,7 @@ TEST_F(VectorizedCoalesceExprTest, coalesceNull) {
     for (const auto& desc : tttype_desc) {
         expr_node.type = desc;
         auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
         MockVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -163,7 +162,7 @@ TEST_F(VectorizedCoalesceExprTest, coalesceSameNull) {
     for (const auto& desc : tttype_desc) {
         expr_node.type = desc;
         auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
         MockNullVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -194,7 +193,7 @@ TEST_F(VectorizedCoalesceExprTest, coalesceConstNULL) {
     for (const auto& desc : tttype_desc) {
         expr_node.type = desc;
         auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10, true); // only null
         MockNullVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20, true); // only null
@@ -218,7 +217,7 @@ TEST_F(VectorizedCoalesceExprTest, coalesceConst) {
     for (const auto& desc : tttype_desc) {
         expr_node.type = desc;
         auto expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_coalesce_expr(expr_node));
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
         MockConstVectorizedExpr<TYPE_BIGINT> col2(expr_node, 20); // const

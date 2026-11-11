@@ -20,6 +20,7 @@
 #include "exprs/function_context.h"
 #include "exprs/string_functions.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -189,10 +190,7 @@ TEST_F(NgramSearchTest, Utf8On_HaystackVector_CyrillicInsensitive) {
     std::unique_ptr<RuntimeState> state;
     auto ctx = make_ctx(true, &state);
 
-    auto haystack_col = BinaryColumn::create();
-    haystack_col->append("ПРИВЕТ");
-    haystack_col->append("МИР");
-    haystack_col->append("hello");
+    auto haystack_col = ColumnTestHelper::build_column<Slice>({"ПРИВЕТ", "МИР", "hello"});
     Columns columns{haystack_col, ColumnHelper::create_const_column<TYPE_VARCHAR>("привет", 3),
                     ColumnHelper::create_const_column<TYPE_INT>(3, 3)};
     ctx->set_constant_columns(columns);

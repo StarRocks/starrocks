@@ -224,7 +224,7 @@ public:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         if constexpr (is_intdiv_op<Op> && lt_is_bigint<Type>) {
 #define EVALUATE_CHECKED_OVERFLOW(Mode)                                                   \
-    using CastFunction = VectorizedUnaryFunction<DecimalTo<Mode>>;                        \
+    using CastFunction = VectorizedDecimalCastFunction<DecimalTo, Mode>;                  \
     switch (_children[0]->type().type) {                                                  \
     case TYPE_DECIMAL32: {                                                                \
         ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL32>(context, ptr));   \

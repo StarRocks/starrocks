@@ -24,7 +24,6 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -49,6 +48,7 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
 import mockit.Mock;
@@ -199,13 +199,10 @@ public class FlussScanTest extends PlanTestBase {
         // it is the internal table that brings the lock, and setUp above left fluss0 current.
         connectContext.changeCatalogDb("default_catalog.test");
         try {
-            Map<String, Boolean> underLock = probeConnectorCalls();
+            LockProbe probe = probeConnectorCalls();
             getFragmentPlan("select t.v1, e.id from test.t0 t "
                     + "join fluss0.fluss_db.log_events e on t.v1 = e.id");
-            Assertions.assertFalse(underLock.isEmpty(),
-                    "planning never reached the fluss catalog, the probe proves nothing");
-            underLock.forEach((site, held) -> Assertions.assertFalse(held,
-                    "an FE metadata lock was held while planning contacted fluss, at " + site));
+            probe.assertNothingUnderTheLock("planning contacted fluss");
         } finally {
             connectContext.changeCatalogDb(CATALOG + "." + DB);
         }
@@ -213,31 +210,28 @@ public class FlussScanTest extends PlanTestBase {
 
     /**
      * Whether any connector call made while planning ran with an FE metadata lock held, per entry point.
-     * OR-accumulated: one planning run calls these along several paths and a plain put would keep only
-     * the last sample.
+     * Only statistics and file lists are probed, from any thread.
      */
-    private Map<String, Boolean> probeConnectorCalls() {
-        Map<String, Boolean> underLock = Maps.newConcurrentMap();
+    private LockProbe probeConnectorCalls() {
+        LockProbe probe = LockProbe.onAnyThread();
         new MockUp<MetadataMgr>() {
             @Mock
             public Statistics getTableStatistics(Invocation invocation, OptimizerContext session, String catalogName,
                                                  Table table, Map<ColumnRefOperator, Column> columns,
                                                  List<PartitionKey> partitionKeys, ScalarOperator predicate,
                                                  long limit, TvrVersionRange versionRange) {
-                underLock.merge("getTableStatistics:" + table.getName(), LockHoldDepth.isUnderLock(),
-                        Boolean::logicalOr);
+                probe.record("getTableStatistics:" + table.getName());
                 return invocation.proceed(session, catalogName, table, columns, partitionKeys, predicate, limit,
                         versionRange);
             }
 
             @Mock
             public List<RemoteFileInfo> getRemoteFiles(Invocation invocation, Table table, GetRemoteFilesParams params) {
-                underLock.merge("getRemoteFiles:" + table.getName(), LockHoldDepth.isUnderLock(),
-                        Boolean::logicalOr);
+                probe.record("getRemoteFiles:" + table.getName());
                 return invocation.proceed(table, params);
             }
         };
-        return underLock;
+        return probe;
     }
 
     private static String toPartitionName(PartitionKey partitionKey) {
@@ -353,7 +347,8 @@ public class FlussScanTest extends PlanTestBase {
         if (partitioned) {
             descriptorBuilder.partitionedBy("category");
         }
-        return TableInfo.of(TablePath.of(DB, tableName), 42L, 7, descriptorBuilder.build(), 1000L, 2000L);
+        return TableInfo.of(TablePath.of(DB, tableName), 42L, 7, descriptorBuilder.build(),
+                null, 1000L, 2000L);
     }
 
     private static class FakeConnection implements Connection {
@@ -375,6 +370,11 @@ public class FlussScanTest extends PlanTestBase {
 
         @Override
         public org.apache.fluss.client.table.Table getTable(TablePath tablePath) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public org.apache.fluss.client.table.MultiTable getMultiTable() {
             throw new UnsupportedOperationException();
         }
 

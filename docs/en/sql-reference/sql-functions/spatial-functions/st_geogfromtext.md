@@ -25,6 +25,8 @@ Coordinates use spherical `OGC:CRS84` semantics: longitude must be in `[-180, 18
 
 Returns a `GEOGRAPHY` value. Returns `NULL` if an argument is `NULL`, the WKT is invalid, a coordinate is outside the supported range, or `srid` is not `4326`.
 
+Native `GEOGRAPHY` and `GEOMETRY` values cannot be nested in `ARRAY`, `MAP`, or `STRUCT`. Analysis rejects these types even when an outer expression returns a scalar or the geo value is `NULL`.
+
 ## Examples
 
 ```SQL
