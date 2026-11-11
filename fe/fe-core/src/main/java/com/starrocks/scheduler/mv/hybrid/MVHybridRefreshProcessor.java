@@ -100,11 +100,12 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
         // reset the task run id for pct
         this.mvContext.getCtx().setQueryId(UUIDUtil.genUUID());
 
-        // First-batch setup: drop stale state from any prior attempt and install the freeze hook.
+        // First-batch setup: drop stale state from any prior attempt and install the freeze hook, which
+        // the sync path fires before it aligns partitions against the frozen snapshot.
         // Subsequent batches reuse the persisted owner and do not enter this branch.
         if (mvRefreshParams.isCompleteRefresh()) {
             mv.getRefreshScheme().getAsyncRefreshContext().clearTempBaseTableInfoTvrDeltaState();
-            pctProcessor.setAfterSyncHook(() -> {
+            pctProcessor.setBeforePartitionAlignHook(() -> {
                 MaterializedView.AsyncRefreshContext refreshContext =
                         mv.getRefreshScheme().getAsyncRefreshContext();
                 final Map<BaseTableInfo, TvrVersionRange> committedMap =
