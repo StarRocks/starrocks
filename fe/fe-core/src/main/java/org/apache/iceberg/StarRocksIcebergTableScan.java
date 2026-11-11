@@ -198,7 +198,9 @@ public class StarRocksIcebergTableScan
         List<ManifestFile> deleteManifests = findMatchingDeleteManifests(snapshot());
 
         boolean mayHaveEqualityDeletes = !deleteManifests.isEmpty() && mayHaveEqualityDeletes(snapshot());
-        boolean loadColumnStats = mayHaveEqualityDeletes || shouldReturnColumnStats();
+        // optional statistics are served by the local (cached) planning when it runs, but never force it
+        boolean loadColumnStats = mayHaveEqualityDeletes ||
+                (shouldReturnColumnStats() && !scanContext.isOptionalColumnStats());
 
         if (shouldPlanLocally(dataManifests, loadColumnStats)) {
             return planFileTasksLocally(dataManifests, deleteManifests);
@@ -239,7 +241,7 @@ public class StarRocksIcebergTableScan
     }
 
     private DeleteFileIndex planDeletesLocally(List<ManifestFile> deleteManifests, Set<DeleteFile> cachedDeleteFiles) {
-        DeleteFileIndex.Builder builder = DeleteFileIndex.builderFor(io(), deleteManifests);
+        DeleteFileIndex.Builder builder = DeleteFileIndex.builderFor(fileIO().get(), deleteManifests);
         if (cachedDeleteFiles != null && !cachedDeleteFiles.isEmpty()) {
             builder.cachedDeleteFiles(cachedDeleteFiles);
         }
@@ -259,7 +261,7 @@ public class StarRocksIcebergTableScan
     }
 
     private List<ManifestFile> findMatchingDataManifests(Snapshot snapshot) {
-        List<ManifestFile> dataManifests = snapshot.dataManifests(io());
+        List<ManifestFile> dataManifests = snapshot.dataManifests(fileIO().get());
         scanMetrics().totalDataManifests().increment(dataManifests.size());
 
         List<ManifestFile> matchingDataManifests =
@@ -271,7 +273,7 @@ public class StarRocksIcebergTableScan
     }
 
     private List<ManifestFile> findMatchingDeleteManifests(Snapshot snapshot) {
-        List<ManifestFile> deleteManifests = snapshot.deleteManifests(io());
+        List<ManifestFile> deleteManifests = snapshot.deleteManifests(fileIO().get());
         List<ManifestFile> matchingDeleteManifests =
                 IcebergApiConverter.filterManifests(deleteManifests, scanSpecsById, filter());
 
@@ -293,9 +295,75 @@ public class StarRocksIcebergTableScan
     }
 
     private boolean useCache() {
-        // A scan that needs full per-column statistics must not reuse the manifest cache, which
-        // may hold selectively-pruned entries; it reads full stats fresh via the non-cache path.
-        return dataFileCache != null && !shouldReturnColumnStats();
+        if (dataFileCache == null) {
+            return false;
+        }
+        // A scan that returns column statistics reuses the manifest cache only when the cache keeps every
+        // requested column; otherwise it reads the statistics fresh via the non-cache path.
+        if (!shouldReturnColumnStats()) {
+            return true;
+        }
+        boolean covered = cacheKeepsStatsColumns(columnsToKeepStats());
+        Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.STATS_FROM_MANIFEST_CACHE." + dbName + "." + tableName,
+                String.valueOf(covered));
+        return covered;
+    }
+
+    /**
+     * Whether this scan, which returns column statistics, will be served from the manifest cache, i.e. the cache
+     * keeps the statistics of every requested column. Planning nothing, it lets a caller decide which statistics
+     * to request before planning.
+     */
+    public boolean statsServedFromCache() {
+        return dataFileCache != null && shouldReturnColumnStats() && cacheKeepsStatsColumns(columnsToKeepStats());
+    }
+
+    // Whether every manifest cache entry keeps the statistics of `columnIds`: the cache always keeps the keep-set
+    // (statsKeepColumnIds) and fills the rest of the cacheStatsColumnLimit budget, which the keep-set columns with
+    // statistics count against, with the lowest ranked other columns that have statistics in the manifest. So a
+    // column ranked within the budget left after the whole keep-set can never be crowded out: it is kept in every
+    // manifest where it has statistics. All statistics (null) are never kept. An entry cached under an older metrics
+    // config may rank columns differently and lack one; min/max then skips that column for the file (slower, not
+    // wrong).
+    private boolean cacheKeepsStatsColumns(Set<Integer> columnIds) {
+        if (columnIds == null || columnIds.isEmpty() || !scanContext.isDataFileCacheWithMetrics()) {
+            return false;
+        }
+        return statsColumnIdsKeptByCache(table(), tableSchema(), cacheStatsColumnLimit, columnIds).size() ==
+                columnIds.size();
+    }
+
+    // The columns of `columnIds` whose statistics every manifest cache entry keeps, for a cache that keeps the
+    // statistics of `cacheStatsColumnLimit` columns (see cacheKeepsStatsColumns).
+    public static Set<Integer> statsColumnIdsKeptByCache(Table table, Schema schema, int cacheStatsColumnLimit,
+                                                         Set<Integer> columnIds) {
+        Set<Integer> keepColumnIds = statsKeepColumnIds(table, schema);
+        Set<Integer> topRankedColumnIds = null;
+        Set<Integer> kept = new HashSet<>();
+        for (Integer id : columnIds) {
+            if (!keepColumnIds.contains(id)) {
+                if (topRankedColumnIds == null) {
+                    int budget = cacheStatsColumnLimit - keepColumnIds.size();
+                    topRankedColumnIds = budget > 0 ?
+                            topRankedStatsColumnIds(statsCandidateRanks(table), keepColumnIds, budget) : Set.of();
+                }
+                if (!topRankedColumnIds.contains(id)) {
+                    continue;
+                }
+            }
+            kept.add(id);
+        }
+        return kept;
+    }
+
+    // The `limit` lowest ranked columns outside the keep-set.
+    static Set<Integer> topRankedStatsColumnIds(Map<Integer, Long> ranks, Set<Integer> keepColumnIds, int limit) {
+        return ranks.entrySet().stream()
+                .filter(e -> !keepColumnIds.contains(e.getKey()))
+                .sorted(Map.Entry.comparingByValue())
+                .limit(limit)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
     }
 
     private void planDeletesLocallyWithCache(List<ManifestFile> deleteManifests) {
@@ -365,7 +433,7 @@ public class StarRocksIcebergTableScan
                 deleteFiles.add(files);
             }
 
-            index = DeleteFileIndex.builderFor(io(), Collections.emptyList())
+            index = DeleteFileIndex.builderFor(fileIO().get(), Collections.emptyList())
                     .cachedDeleteFiles(Iterables.concat(deleteFiles))
                     .specsById(scanSpecsById)
                     .schemasById(table().schemas())
@@ -444,7 +512,7 @@ public class StarRocksIcebergTableScan
         LOG.info("Planning file tasks locally for table {}", table().name());
 
         ManifestGroup manifestGroup =
-                new ManifestGroup(io(), dataManifests, deleteManifests)
+                new ManifestGroup(fileIO().get(), dataManifests, deleteManifests)
                         .caseSensitive(isCaseSensitive())
                         .select(shouldReturnColumnStats() ? SCAN_WITH_STATS_COLUMNS : SCAN_COLUMNS)
                         .filterData(filter())
@@ -454,6 +522,7 @@ public class StarRocksIcebergTableScan
                         .ignoreDeleted()
                         .withDataFileCache(dataFileCache)
                         .preparedDeleteFileIndex(deleteFileIndex)
+                        .columnsToKeepStats(columnsToKeepStats())
                         .identifierFieldIds(getIdentifierFieldIds())
                         .cacheWithMetrics(dataFileCacheWithMetrics)
                         .cacheStatsColumnLimit(cacheStatsColumnLimit)
@@ -479,8 +548,8 @@ public class StarRocksIcebergTableScan
         if (dataFileCacheWithMetrics) {
             // The keep-set is always cached; other columns are cached too (ManifestColumnStats), up to the
             // column limit in total, so file-level min/max still prunes on columns that correlate with the
-            // file layout without being partition or sort keys. Scans that need full column stats never
-            // reach here -- useCache() routes them to the non-cache path.
+            // file layout without being partition or sort keys. Scans that need the stats of other columns
+            // never reach here -- useCache() routes them to the non-cache path.
             Set<Integer> keepColumnIds = statsKeepColumnIds(table(), tableSchema());
             if (!keepColumnIds.isEmpty()) {
                 return keepColumnIds;
@@ -637,7 +706,7 @@ public class StarRocksIcebergTableScan
 
         Set<DeleteFile> fetchedDeleteFiles = new HashSet<>();
         if (!deleteManifestWithoutCache.isEmpty()) {
-            DeleteFileIndex.Builder builder = DeleteFileIndex.builderFor(io(), deleteManifestWithoutCache);
+            DeleteFileIndex.Builder builder = DeleteFileIndex.builderFor(fileIO().get(), deleteManifestWithoutCache);
             if (shouldPlanWithExecutor() && deleteManifests.size() > 1) {
                 builder.planWith(planExecutor());
             }
@@ -666,9 +735,14 @@ public class StarRocksIcebergTableScan
 
         ScanMetricsUtil.fileTask(scanMetrics(), dataFile, deleteFiles);
 
-        // Pruning and delete matching are done; scans that need file statistics bypass the cache.
-        DataFile taskFile = dataFile instanceof DataFileWrapper ? ((DataFileWrapper) dataFile).withoutSharedStats() :
-                dataFile;
+        // Pruning and delete matching are done; the task keeps only the statistics the scan asked for, which
+        // useCache() checked the cache keeps.
+        DataFile taskFile = dataFile;
+        if (dataFile instanceof DataFileWrapper) {
+            DataFileWrapper wrapper = (DataFileWrapper) dataFile;
+            taskFile = shouldReturnColumnStats() ? wrapper.withStats(columnsToKeepStats()) :
+                    wrapper.withoutSharedStats();
+        }
         return new BaseFileScanTask(
                 taskFile,
                 deleteFiles,

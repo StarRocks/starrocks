@@ -771,16 +771,19 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                     }
                 }
                 long commitVersion = commitVersionMap.get(partitionId);
+                // A retry lets the tablets an earlier attempt already published answer from storage.
+                boolean isRetryPublish = getAndMarkLakePublishSent(partitionId);
 
                 TxnInfoPB rollUpTxnInfo = TxnInfoHelper.forJobPublish(watershedTxnId, TxnTypePB.TXN_NORMAL,
                         finishedTimeMs, commitGtid);
                 if (!useAggregatePublish) {
                     // publish rollup tablets
                     Utils.publishVersion(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), rollUpTxnInfo,
-                            1, commitVersion, computeResource, false);
+                            1, commitVersion, computeResource, false, isRetryPublish);
                 } else {
                     Utils.createSubRequestForAggregatePublish(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), 
-                            Lists.newArrayList(rollUpTxnInfo), 1, commitVersion, null, computeResource, request);
+                            Lists.newArrayList(rollUpTxnInfo), 1, commitVersion, null, computeResource, request,
+                            false, isRetryPublish);
                 }
 
                 TxnInfoPB originTxnInfo = TxnInfoHelper.forJobPublish(-1L, TxnTypePB.TXN_EMPTY, finishedTimeMs,
@@ -788,10 +791,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 if (!useAggregatePublish) {
                     // publish origin tablets
                     Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1,
-                            commitVersion, computeResource, false);
+                            commitVersion, computeResource, false, isRetryPublish);
                 } else {
                     Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo), 
-                            commitVersion - 1, commitVersion, null, computeResource, request);
+                            commitVersion - 1, commitVersion, null, computeResource, request, false, isRetryPublish);
                 }
 
                 if (useAggregatePublish) {

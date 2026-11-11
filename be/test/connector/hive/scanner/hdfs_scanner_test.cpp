@@ -661,6 +661,43 @@ TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnForDatetimeSupportsNegativeMi
     ASSERT_EQ("[1969-12-31 23:59:59.999999, 1970-01-01 00:00:00]", col->debug_string());
 }
 
+// Batches smaller than [null, min, max] (chunk_size <= 2) still emit every value across consecutive batches,
+// so MIN/MAX over a file whose other columns are read see the max too.
+TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnSpreadsValuesOverSmallBatches) {
+    SlotDesc descs[] = {{"c1", TYPE_INT_DESC}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    SlotDescriptor* slot = tuple_desc->slots()[0];
+
+    TExprMinMaxValue min_max_value;
+    min_max_value.__set_type(TExprNodeType::INT_LITERAL);
+    min_max_value.__set_has_null(true);
+    min_max_value.__set_all_null(false);
+    min_max_value.__set_min_int_value(1);
+    min_max_value.__set_max_int_value(9);
+
+    HdfsScannerContext ctx;
+    ctx.format_scan_context.is_first_split = true;
+    auto& fsc = ctx.format_scan_context;
+    // The file-open probe on the not-existed slots builds a 1-row chunk it throws away: it consumes no value.
+    FormatScannerStats stats;
+    fsc.stats = &stats;
+    fsc.options.use_min_max_opt = true;
+    fsc.not_existed_slots.push_back(slot);
+    fsc.min_max_values[slot->id()] = min_max_value;
+    ASSERT_FALSE(fsc.should_skip_by_evaluating_not_existed_slots().value());
+    ASSERT_EQ("[NULL]", fsc.create_min_max_value_column(slot, min_max_value, 1)->debug_string());
+    ASSERT_EQ("[1]", fsc.create_min_max_value_column(slot, min_max_value, 1)->debug_string());
+    ASSERT_EQ("[9]", fsc.create_min_max_value_column(slot, min_max_value, 1)->debug_string());
+
+    HdfsScannerContext ctx2;
+    ctx2.format_scan_context.is_first_split = true;
+    auto& fsc2 = ctx2.format_scan_context;
+    ASSERT_EQ("[NULL, 1]", fsc2.create_min_max_value_column(slot, min_max_value, 2)->debug_string());
+    ASSERT_EQ("[9, NULL]", fsc2.create_min_max_value_column(slot, min_max_value, 2)->debug_string());
+    // A batch that holds every value is unchanged: null/min/max first, then the min.
+    ASSERT_EQ("[NULL, 1, 9, 1]", fsc2.create_min_max_value_column(slot, min_max_value, 4)->debug_string());
+}
+
 // ========================= ORC SCANNER ============================
 
 static TTypeDesc create_primitive_type_desc(TPrimitiveType::type type) {
@@ -789,6 +826,274 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerContext* ctx, s
         READ_SCANNER_RETURN_ROWS(scanner, records); \
         EXPECT_EQ(records, exp);                    \
     }
+
+// ==================== file stats pruning ====================
+
+// small_row_group_data.parquet: c1 BIGINT holds 0..99999, 100000 rows. The tests give the scan range made-up
+// min/max values of c1, so a skipped file reads no row even where its real rows would pass.
+static const std::string file_stats_parquet_file =
+        "./be/test/exec/test_data/parquet_scanner/small_row_group_data.parquet";
+static SlotDesc file_stats_parquet_descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+                                              {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+                                              {""}};
+
+static TExprMinMaxValue int_min_max_value(int64_t min, int64_t max, bool has_null) {
+    TExprMinMaxValue value;
+    value.__set_type(TExprNodeType::INT_LITERAL);
+    value.__set_has_null(has_null);
+    value.__set_all_null(false);
+    value.__set_min_int_value(min);
+    value.__set_max_int_value(max);
+    return value;
+}
+
+static void add_c1_le_10_conjunct(ObjectPool* pool, RuntimeState* state, HdfsScannerContext* ctx) {
+    std::vector<TExprNode> nodes;
+    push_binary_pred_texpr_node(nodes, TExprOpcode::LE, ctx->tuple_desc->slots()[0], TPrimitiveType::BIGINT,
+                                create_int_literal_node(TPrimitiveType::BIGINT, 10));
+    ExprContext* expr_ctx = create_expr_context(pool, nodes);
+    ASSERT_OK(expr_ctx->prepare(state));
+    ASSERT_OK(expr_ctx->open(state));
+    ctx->format_scan_context.conjuncts.scanner_ctxs.push_back(expr_ctx);
+    ctx->format_scan_context.conjuncts.all_ctxs.push_back(expr_ctx);
+}
+
+// Scans the file of `ctx` with a parquet scanner; returns the rows read and the ScanRangesPrunedByFileStats count.
+static void scan_with_file_stats(RuntimeState* state, HdfsScannerContext* ctx, uint64_t* rows, int64_t* pruned) {
+    RuntimeProfile profile("file_stats");
+    ctx->profile.scan_ranges_pruned_by_file_stats_counter =
+            ADD_COUNTER(&profile, "ScanRangesPrunedByFileStats", TUnit::UNIT);
+    *rows = 0;
+    {
+        auto scanner = std::make_shared<HdfsParquetScanner>();
+        ASSERT_OK(scanner->init(state, ctx));
+        ASSERT_OK(scanner->open(state));
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*ctx->tuple_desc, 0);
+        for (;;) {
+            chunk->reset();
+            Status st = scanner->get_next(state, &chunk);
+            ASSERT_TRUE(st.ok() || st.is_end_of_file()) << st.message();
+            *rows += chunk->num_rows();
+            if (st.is_end_of_file()) {
+                break;
+            }
+        }
+        scanner->close();
+    }
+    *pruned = ctx->profile.scan_ranges_pruned_by_file_stats_counter->value();
+    ctx->profile.scan_ranges_pruned_by_file_stats_counter = nullptr;
+}
+
+TEST_F(HdfsScannerTest, TestParquetFileStatsPruneByConjunct) {
+    struct Case {
+        TExprMinMaxValue c1_min_max;
+        bool enable_prune;
+        bool skipped;
+    };
+    TExprMinMaxValue all_null;
+    all_null.__set_type(TExprNodeType::NULL_LITERAL);
+    all_null.__set_has_null(true);
+    all_null.__set_all_null(true);
+    TExprMinMaxValue float_value;
+    float_value.__set_type(TExprNodeType::FLOAT_LITERAL);
+    float_value.__set_has_null(false);
+    float_value.__set_all_null(false);
+    float_value.__set_min_float_value(100);
+    float_value.__set_max_float_value(200);
+    const Case cases[] = {
+            // c1 in [100, 200]: no row passes c1 <= 10
+            {int_min_max_value(100, 200, false), true, true},
+            // with nulls the zone map's min is null, which compares below 10 (as for row groups): kept
+            {int_min_max_value(100, 200, true), true, false},
+            // the range overlaps c1 <= 10
+            {int_min_max_value(0, 200, false), true, false},
+            // pruning disabled
+            {int_min_max_value(100, 200, false), false, false},
+            // all null and a value of another type carry no zone map
+            {all_null, true, false},
+            {float_value, true, false},
+    };
+    for (const auto& c : cases) {
+        auto* range = _create_scan_range(file_stats_parquet_file, 0, 0);
+        range->min_max_values[0] = c.c1_min_max;
+        auto* tuple_desc = _create_tuple_desc(file_stats_parquet_descs);
+        auto* ctx = _create_ctx(file_stats_parquet_file, range, tuple_desc);
+        ctx->format_scan_context.options.enable_dynamic_prune_scan_range = c.enable_prune;
+        add_c1_le_10_conjunct(&_pool, _runtime_state, ctx);
+
+        uint64_t rows = 0;
+        int64_t pruned = 0;
+        scan_with_file_stats(_runtime_state, ctx, &rows, &pruned);
+        if (c.skipped) {
+            EXPECT_EQ(1, pruned);
+            EXPECT_EQ(0, rows);
+        } else {
+            EXPECT_EQ(0, pruned);
+            EXPECT_EQ(11, rows); // c1 in 0..10
+        }
+    }
+}
+
+// A file skipped by its min/max values still reports the position deletes the parquet scanner built in do_init().
+TEST_F(HdfsScannerTest, TestParquetFileStatsSkipReportsDeleteFiles) {
+    const std::string delete_file_path =
+            "./be/test/exec/test_data/parquet_scanner/iceberg_position_delete_repeated_pos.parquet";
+    ASSIGN_OR_ABORT(const int64_t delete_file_size, FileSystem::Default()->get_file_size(delete_file_path));
+    TIcebergDeleteFile delete_file;
+    delete_file.__set_full_path(delete_file_path);
+    delete_file.__set_file_content(TIcebergFileContent::POSITION_DELETES);
+    delete_file.__set_length(delete_file_size);
+
+    auto* range = _create_scan_range(file_stats_parquet_file, 0, 0);
+    range->min_max_values[0] = int_min_max_value(100, 200, false);
+    auto* tuple_desc = _create_tuple_desc(file_stats_parquet_descs);
+    auto* ctx = _create_ctx(file_stats_parquet_file, range, tuple_desc);
+    ctx->table_specific.iceberg_delete_files.emplace_back(&delete_file);
+    add_c1_le_10_conjunct(&_pool, _runtime_state, ctx);
+
+    // close() publishes into every counter of HdfsScannerProfile, all of them Counter* after runtime_profile.
+    RuntimeProfile profile("skip_with_deletes");
+    RuntimeProfile::Counter* dummy = ADD_COUNTER(&profile, "Dummy", TUnit::UNIT);
+    static_assert(sizeof(HdfsScannerProfile) % sizeof(void*) == 0);
+    auto** fields = reinterpret_cast<RuntimeProfile::Counter**>(&ctx->profile);
+    for (size_t i = 1; i < sizeof(HdfsScannerProfile) / sizeof(void*); ++i) {
+        fields[i] = dummy;
+    }
+    ctx->profile.runtime_profile = &profile;
+
+    uint64_t rows = 0;
+    int64_t pruned = 0;
+    scan_with_file_stats(_runtime_state, ctx, &rows, &pruned);
+    ctx->profile = HdfsScannerProfile();
+    EXPECT_EQ(1, pruned);
+    EXPECT_EQ(0, rows);
+    auto* delete_files_per_scan = profile.get_counter("DeleteFilesPerScan");
+    ASSERT_NE(nullptr, delete_files_per_scan);
+    EXPECT_EQ(1, delete_files_per_scan->value());
+}
+
+// `c1 * 2 > 0`: monotonic for the FE, but evaluated in wrapping arithmetic. At the full BIGINT bounds both ends
+// wrap to non-positive values although c1 = 1 passes, so the file check must not judge an expression by its bounds.
+TEST_F(HdfsScannerTest, TestParquetFileStatsKeepFileForExprPredicate) {
+    auto* range = _create_scan_range(file_stats_parquet_file, 0, 0);
+    range->min_max_values[0] =
+            int_min_max_value(std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::max(), false);
+    auto* tuple_desc = _create_tuple_desc(file_stats_parquet_descs);
+    auto* ctx = _create_ctx(file_stats_parquet_file, range, tuple_desc);
+
+    TExprNode gt_node;
+    gt_node.__set_node_type(TExprNodeType::BINARY_PRED);
+    gt_node.__set_child_type(TPrimitiveType::BIGINT);
+    gt_node.__set_type(create_primitive_type_desc(TPrimitiveType::BOOLEAN));
+    gt_node.__set_opcode(TExprOpcode::GT);
+    gt_node.__set_num_children(2);
+    gt_node.__set_is_monotonic(true);
+    TExprNode mul_node;
+    mul_node.__set_node_type(TExprNodeType::ARITHMETIC_EXPR);
+    mul_node.__set_child_type(TPrimitiveType::BIGINT);
+    mul_node.__set_type(create_primitive_type_desc(TPrimitiveType::BIGINT));
+    mul_node.__set_opcode(TExprOpcode::MULTIPLY);
+    mul_node.__set_num_children(2);
+    mul_node.__set_is_monotonic(true);
+    TExprNode slot_node;
+    slot_node.__set_node_type(TExprNodeType::SLOT_REF);
+    slot_node.__set_num_children(0);
+    slot_node.__set_type(create_primitive_type_desc(TPrimitiveType::BIGINT));
+    slot_node.__set_is_monotonic(true);
+    TSlotRef slot_ref;
+    slot_ref.__set_slot_id(tuple_desc->slots()[0]->id());
+    slot_ref.__set_tuple_id(tuple_desc->slots()[0]->parent());
+    slot_node.__set_slot_ref(slot_ref);
+    std::vector<TExprNode> nodes{gt_node, mul_node, slot_node, create_int_literal_node(TPrimitiveType::BIGINT, 2),
+                                 create_int_literal_node(TPrimitiveType::BIGINT, 0)};
+    ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+    ASSERT_OK(expr_ctx->prepare(_runtime_state));
+    ASSERT_OK(expr_ctx->open(_runtime_state));
+    ctx->format_scan_context.conjuncts.scanner_ctxs.push_back(expr_ctx);
+    ctx->format_scan_context.conjuncts.all_ctxs.push_back(expr_ctx);
+
+    uint64_t rows = 0;
+    int64_t pruned = 0;
+    scan_with_file_stats(_runtime_state, ctx, &rows, &pruned);
+    EXPECT_EQ(0, pruned);
+    EXPECT_EQ(99999, rows); // c1 in 1..99999
+}
+
+// Datetime bounds (a timestamp without time zone, micros of the wall clock) skip a file only when the FE chose the
+// slots for file pruning; the min/max optimization also sends timestamptz bounds, converted inexactly.
+TEST_F(HdfsScannerTest, TestParquetFileStatsPruneByDatetime) {
+    // b in the file: 3023-01-01, 2023-01-01, 1000-01-01, 1900-01-01
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/timestamp_to_datetime.parquet";
+    SlotDesc descs[] = {{"b", TYPE_DATETIME_DESC}, {""}};
+    _create_runtime_state("Asia/Shanghai");
+    for (bool min_max_values_of_all_slots : {false, true}) {
+        auto* range = _create_scan_range(parquet_file, 0, 0);
+        // made-up bounds [1000-01-01, 2023-12-31]: no row passes b >= 2024-01-01
+        range->min_max_values[0] = int_min_max_value(-30610224000000000L, 1703980800000000L, false);
+        auto* tuple_desc = _create_tuple_desc(descs);
+        auto* ctx = _create_ctx(parquet_file, range, tuple_desc);
+        ctx->format_scan_context.options.min_max_values_of_all_slots = min_max_values_of_all_slots;
+
+        std::vector<TExprNode> nodes;
+        push_binary_pred_texpr_node(nodes, TExprOpcode::GE, tuple_desc->slots()[0], TPrimitiveType::DATETIME,
+                                    create_datetime_literal_node(TPrimitiveType::DATETIME, "2024-01-01 00:00:00"));
+        ExprContext* expr_ctx = create_expr_context(&_pool, nodes);
+        ASSERT_OK(expr_ctx->prepare(_runtime_state));
+        ASSERT_OK(expr_ctx->open(_runtime_state));
+        ctx->format_scan_context.conjuncts.scanner_ctxs.push_back(expr_ctx);
+        ctx->format_scan_context.conjuncts.all_ctxs.push_back(expr_ctx);
+
+        uint64_t rows = 0;
+        int64_t pruned = 0;
+        scan_with_file_stats(_runtime_state, ctx, &rows, &pruned);
+        EXPECT_EQ(min_max_values_of_all_slots ? 0 : 1, pruned);
+        EXPECT_EQ(min_max_values_of_all_slots ? 1 : 0, rows); // 3023-01-01 passes when the file is read
+    }
+}
+
+TEST_F(HdfsScannerTest, TestParquetFileStatsPruneByRuntimeFilter) {
+    struct Case {
+        int64_t rf_min;
+        int64_t rf_max;
+        bool skipped;
+        uint64_t exp_rows;
+    };
+    // The file bounds of c1 are [0, 99999].
+    const Case cases[] = {{10000000, 10000000, true, 0}, {-10, -10, true, 0}, {-10, 10000000, false, 100000}};
+    for (const Case& tc : cases) {
+        auto* range = _create_scan_range(file_stats_parquet_file, 0, 0);
+        range->min_max_values[0] = int_min_max_value(0, 99999, false);
+        auto* tuple_desc = _create_tuple_desc(file_stats_parquet_descs);
+        auto* ctx = _create_ctx(file_stats_parquet_file, range, tuple_desc);
+
+        RuntimeFilterProbeCollector rf_collector;
+        RuntimeFilterProbeDescriptor rf_probe_desc;
+        ColumnRef c1ref(tuple_desc->slots()[0]);
+        ExprContext probe_expr_ctx(&c1ref);
+        ASSERT_OK(probe_expr_ctx.prepare(_runtime_state));
+        ASSERT_OK(probe_expr_ctx.open(_runtime_state));
+
+        RuntimeFilter* f = RuntimeFilterFactory::create_bloom_filter(&_pool, LogicalType::TYPE_BIGINT, 0);
+        f->get_membership_filter()->init(10);
+        auto column = ColumnHelper::create_column(tuple_desc->slots()[0]->type(), false);
+        auto c = ColumnHelper::cast_to_raw<LogicalType::TYPE_BIGINT>(column);
+        c->append(tc.rf_max);
+        c->append(tc.rf_min);
+        ASSERT_OK(RuntimeFilterBuilder::fill(f, LogicalType::TYPE_BIGINT, column, 0, false));
+        ASSERT_OK(rf_probe_desc.init(0, &probe_expr_ctx));
+        rf_probe_desc.set_runtime_filter(f);
+        rf_collector.add_descriptor(&rf_probe_desc);
+        ctx->runtime_filter_collector = &rf_collector;
+
+        uint64_t rows = 0;
+        int64_t pruned = 0;
+        scan_with_file_stats(_runtime_state, ctx, &rows, &pruned);
+        EXPECT_EQ(tc.skipped ? 1 : 0, pruned);
+        // The bloom filter is applied to rows by the probe operator, not by the scanner.
+        EXPECT_EQ(tc.exp_rows, rows);
+        probe_expr_ctx.close(_runtime_state);
+    }
+}
 
 // ====================================================================================================
 

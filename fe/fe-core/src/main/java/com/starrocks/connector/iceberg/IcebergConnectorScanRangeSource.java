@@ -39,11 +39,11 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.expression.ExprToThrift;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.THdfsPartition;
@@ -149,6 +149,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final PartitionIdGenerator partitionIdGenerator;
     private final boolean usedForDelete;
     private Set<String> runtimeFilterPruningColumns = Set.of();
+    // Slots probed by a join runtime filter. Each data file carries its bounds of these slots, so the BE
+    // can skip the whole file once the filter has arrived, before opening it.
+    private Set<Integer> runtimeFilterProbeSlotIds = Set.of();
 
     public IcebergConnectorScanRangeSource(IcebergTable table,
                                            RemoteFileInfoSource remoteFileInfoSource,
@@ -401,6 +404,10 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         this.runtimeFilterPruningColumns = runtimeFilterPruningColumns;
     }
 
+    public void setRuntimeFilterProbeSlotIds(Set<Integer> runtimeFilterProbeSlotIds) {
+        this.runtimeFilterProbeSlotIds = runtimeFilterProbeSlotIds;
+    }
+
     // A runtime-filter pruning column of the delete scan takes the delete file's identity partition value, which
     // only a partition-scoped delete of the data file's own spec has. Any other delete file would get a wrong value
     // and silently stop deleting rows, so fail the query instead.
@@ -439,12 +446,10 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             isFirstSplit |= (file.splitOffsets().get(0) == hdfsScanRange.getOffset());
         }
 
-        ConnectContext context = ConnectContext.get();
-        // the runtime-filter pruning columns of a delete scan exist only as identity partition values, whatever the
-        // session (incremental scan ranges are built without one)
-        boolean identityColumnOptimize = !runtimeFilterPruningColumns.isEmpty() ||
-                (context != null && context.getSessionVariable().getEnableIcebergIdentityColumnOptimize());
-        if (identityColumnOptimize && partitionSlotIdsCache.containsKey(file.specId())) {
+        // An identity partition column takes its value from the partition metadata, as in Spark and Trino: a data file
+        // may not store it (e.g. a migrated Hive file), and the spec resolves such a missing column to the partition
+        // value. enable_iceberg_identity_column_optimize no longer turns this off.
+        if (partitionSlotIdsCache.containsKey(file.specId())) {
             hdfsScanRange.setPartition_id(partitionId);
             hdfsScanRange.setIdentity_partition_slot_ids(partitionSlotIdsCache.get(file.specId()));
         } else {
@@ -506,11 +511,16 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         hdfsScanRange.setRecord_count(file.recordCount());
         hdfsScanRange.setIs_first_split(isFirstSplit);
 
-        if (useMinMaxOpt && file.nullValueCounts() != null && file.valueCounts() != null) {
-            // fill min/max value
+        // min/max values: all slots for the min/max optimization, else the runtime filter probe slots, which the
+        // BE compares with the arrived filters to skip the file (it fills column values only under min/max opt).
+        // Bounds only for skipping widen a timestamp with time zone to surely cover the file in the session zone.
+        List<SlotDescriptor> minMaxSlots = useMinMaxOpt ? slots
+                : slots.stream().filter(slot -> runtimeFilterProbeSlotIds.contains(slot.getId().asInt())).toList();
+        if (!minMaxSlots.isEmpty() && file.nullValueCounts() != null && file.valueCounts() != null) {
+            // the read schema: the slots, the requested statistics and the field ids are all bound to it
             Map<Integer, TExprMinMaxValue> tExprMinMaxValueMap = IcebergUtil.toThriftMinMaxValueBySlots(
-                    table.getNativeTable().schema(), file.lowerBounds(), file.upperBounds(),
-                    file.nullValueCounts(), file.valueCounts(), slots);
+                    table.getReadSchema(), file.lowerBounds(), file.upperBounds(),
+                    file.nullValueCounts(), file.valueCounts(), minMaxSlots, !useMinMaxOpt);
             hdfsScanRange.setMin_max_values(tExprMinMaxValueMap);
         }
 
@@ -672,8 +682,17 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             // sends it once per fragment instance and drops it from later ranges
             // (FragmentInstance.removeDuplicatedPartitionValues).
             partitionValues.computeIfAbsent(partitionId, ignore -> {
+                // a BINARY key reads as its raw bytes; the PartitionKey holds it as text
+                List<LiteralExpr> keys = new ArrayList<>(partitionKey.getKeys());
+                for (int i = 0; i < identityValues.size(); i++) {
+                    if (identityValues.get(i) instanceof ByteBuffer buffer) {
+                        byte[] bytes = new byte[buffer.remaining()];
+                        buffer.duplicate().get(bytes);
+                        keys.set(i, new VarBinaryLiteral(bytes));
+                    }
+                }
                 THdfsPartition value = new THdfsPartition();
-                value.setPartition_key_exprs(partitionKey.getKeys().stream()
+                value.setPartition_key_exprs(keys.stream()
                         .map(ExprToThrift::treeToThrift)
                         .collect(Collectors.toList()));
                 return value;
@@ -684,10 +703,21 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         return partitionId;
     }
 
+    // The slot of the column an identity partition field takes its value from. A partition field may be named apart
+    // from its source column, so it is resolved by the source id, in the schema the scan reads. A TIME value has no
+    // literal to send, so a TIME column is read from the file.
+    private SlotDescriptor sourceColumnSlot(PartitionField field) {
+        Type sourceType = table.getReadSchema().findType(field.sourceId());
+        if (sourceType == null || sourceType.typeId() == Type.TypeID.TIME) {
+            return null;
+        }
+        return desc.getColumnSlot(table.getReadSchema().findColumnName(field.sourceId()));
+    }
+
     private List<Integer> buildPartitionSlotIds(PartitionSpec spec) {
         return spec.fields().stream()
                 .filter(x -> x.transform().isIdentity())
-                .map(x -> desc.getColumnSlot(x.name()))
+                .map(this::sourceColumnSlot)
                 .filter(Objects::nonNull)
                 .map(SlotDescriptor::getId)
                 .map(SlotId::asInt)
@@ -697,7 +727,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private List<Integer> getPartitionFieldIndexes(PartitionSpec spec, BiMap<Integer, PartitionField> indexToField) {
         return spec.fields().stream()
                 .filter(x -> x.transform().isIdentity())
-                .filter(x -> desc.getColumnSlot(x.name()) != null)
+                .filter(x -> sourceColumnSlot(x) != null)
                 .map(x -> indexToField.inverse().get(x))
                 .collect(Collectors.toList());
     }
@@ -744,7 +774,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             } else {
                 partitionValues.add(null);
             }
-            cols.add(table.getColumn(field.name()));
+            cols.add(table.getColumn(table.getReadSchema().findColumnName(id)));
         });
 
         return PartitionUtil.createPartitionKey(partitionValues, cols, Table.TableType.ICEBERG);

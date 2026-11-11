@@ -272,6 +272,8 @@ CONF_mInt32(lake_replication_max_parallel_files_per_tablet, "4");
 // Minimum number of files required to enable parallel copy in lake-to-lake replication.
 // Set to 0 to force disable parallel copy.
 CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
+// Allow compatible scalar add/drop histories in shared-data replication snapshots.
+CONF_mBool(lake_replication_enable_light_schema_change, "false");
 // Number of threads in the dedicated thread pool used by lake replication for per-file copy.
 // The fixed default bounds per-copy read buffers independently of CPU count. 0 means
 // cpu_cores * 4. Negative means -value * cpu_cores. The pool is built once at startup;
@@ -361,6 +363,10 @@ CONF_mInt32(scanner_row_num, "16384");
 CONF_mInt32(shared_scan_output_chunk_batch_size, "8");
 // Number of max hdfs scanners.
 CONF_Int32(max_hdfs_scanner_num, "50");
+// Timeout of the RPC with which a scan asks its coordinator for renewed vended credentials (Iceberg REST)
+// once they are due. Not retried: on failure the scan keeps its current credentials and asks
+// again a minute later. A value <= 0 turns the refresh off for scans that start afterwards.
+CONF_mInt32(scan_credential_refresh_rpc_timeout_ms, "10000");
 // Number of max scan keys.
 CONF_mInt32(max_scan_key_num, "1024");
 // The max number of push down values of a single column.
@@ -514,6 +520,12 @@ CONF_mInt32(update_compaction_delvec_file_io_amp_ratio, "2");
 CONF_mDouble(update_compaction_ratio_threshold, "0.5");
 // This config controls max memory that we can use for partial update.
 CONF_mInt64(partial_update_memory_limit_per_worker, "2147483648"); // 2GB
+// Rows per chunk when a primary key table reads segments to apply a load or a compaction, in both shared-data
+// and shared-nothing mode: the primary keys of the loaded rowset, the columns that partial updates read, and the
+// primary keys of a compaction output. Kept apart from vector_chunk_size so the apply batch can be tuned without
+// touching query execution. A value <= 0 falls back to 4096 and a value above 65535 is capped at 65535. Rebuilding
+// the primary key index from segments does not use it.
+CONF_mInt32(pk_vector_chunk_size, "4096");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");
@@ -550,6 +562,10 @@ CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
 // The minimum threshold of data size for enabling pk index eager build.
 // Default is 100MB.
 CONF_mInt64(pk_index_eager_build_threshold_bytes, "104857600");
+// A delete file holding at least this many rows also gets its tombstone sstable built at import time, in addition
+// to the pk_index_eager_build_threshold_bytes trigger, so publish ingests the sstable instead of writing every
+// deleted key into the primary key index memtable. Not positive disables the row trigger.
+CONF_mInt64(pk_index_del_sst_min_rows, "1000000");
 // Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
 CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "0");
 // The queue size for pk index parallel compaction threadpool in shared-data mode.
@@ -1733,6 +1749,12 @@ CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "true");
 // restore the static open everywhere.
 CONF_mBool(lake_pk_partial_update_use_segment_cache, "true");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
+// Under file bundling, keep a tablet's publish result (partial_meta) in this node's local disk cache when the
+// aggregator cannot have received it (the publish ran past the RPC timeout plus 3 seconds) or when the publish
+// is a retry, and let a retry on this node read it back before applying. Never written to object storage; the
+// cache evicts it like any other entry. Keeps tablets that already finished from being re-applied on every retry
+// of a slow partition. Needs the datacache. Read on every BE; set it to the same value on all.
+CONF_mBool(lake_enable_publish_partial_meta, "true");
 // Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
 // When writing a txn log takes longer than this threshold, the stack trace of the slow thread
 // is dumped to the log to help diagnose slow object-storage writes.
@@ -1750,6 +1772,14 @@ CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+// Lake primary-key size-tiered compaction picks the size level with the highest score, and the level of the
+// newest, smallest rowsets wins every round while loads keep arriving. A level of larger rowsets (outputs of
+// earlier rounds, medium-sized loads) then keeps growing, adding one segment to open per rowset for readers and
+// showing up as a compaction-score spike whenever a compaction leaves the small level empty. Once a level that
+// is not picked holds this many rowsets that still need compaction, and they fit in the compaction next to the
+// rowsets already picked (update_compaction_result_bytes, lake_pk_compaction_max_input_rowsets), it is merged into
+// the compaction as well. Set to 0 to disable.
+CONF_mInt64(lake_pk_compaction_max_rowsets_per_level, "20");
 // Whether a scheduled lake primary-key compaction switches to base compaction on its own once the
 // tablet's deletes reach one of the two thresholds below. Off by default: the rows threshold is an
 // absolute count, so on a large tablet whose existing keys keep being updated or deleted it is
@@ -2372,7 +2402,8 @@ CONF_mBool(enable_profile_for_external_plan, "false");
 // the max length supported for varchar type
 CONF_mInt32(olap_string_max_length, "1048576");
 
-// Skip get from pk index when light pk compaction publish is enabled
+// Skip get from pk index when light pk compaction publish is enabled.
+// Only for shared-nothing primary key tables: shared-data primary key tables always use light compaction publish.
 CONF_mBool(enable_light_pk_compaction_publish, "true");
 
 // jit LRU object cache size for total 32 shards, it will be an auto value if it < 0

@@ -160,7 +160,7 @@ public class LakeMvSortKeyRewriteJobTest {
                     70001L, baseIndex, baseIndex.getShardGroupId(), "p0", 1024L, MV_NAME, null);
 
             job.beforeShadowBuild();
-            assertEquals(2, job.selectRequestedTabletCount(plan, 3));
+            assertEquals(2, job.selectRequestedTabletCount(plan, 3, 0L));
             job.afterJobSettled(false);
 
             InOrder inOrder = inOrder(coord);

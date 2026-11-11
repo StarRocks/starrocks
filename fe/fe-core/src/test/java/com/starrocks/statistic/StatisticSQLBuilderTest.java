@@ -90,6 +90,33 @@ class StatisticSQLBuilderTest {
     }
 
     @Test
+    void buildQueryExternalStatPartitionsNotUpdatedSinceMatchesBothUuidsAndGrace() {
+        String hashed = StatisticUtils.hashTableUuidForPkStorage(TABLE_UUID);
+        String sql = StatisticSQLBuilder.buildQueryExternalStatPartitionsNotUpdatedSinceSQL(TABLE_UUID,
+                ImmutableList.of("c1", "c'2"), 86400);
+        Assertions.assertTrue(sql.startsWith("SELECT partition_name FROM external_column_statistics"), sql);
+        Assertions.assertTrue(sql.contains("table_uuid in ('" + hashed + "', '" + TABLE_UUID + "')"), sql);
+        Assertions.assertTrue(sql.contains("AND COLUMN_NAME IN ('c1', 'c''2') GROUP BY partition_name"), sql);
+        Assertions.assertTrue(sql.endsWith("HAVING max(update_time) < date_sub(now(), INTERVAL 86400 SECOND)"), sql);
+    }
+
+    @Test
+    void buildDropExternalStatSQLForDroppedPartitionsMatchesBothUuidsAndEscapes() {
+        String trickyUUID = "iceberg.db.o'brien\\table.uuid";
+        String hashed = StatisticUtils.hashTableUuidForPkStorage(trickyUUID);
+        String sql = StatisticSQLBuilder.buildDropExternalStatSQLForDroppedPartitions(
+                trickyUUID, ImmutableList.of("p'1", "dt=2024-01-01"), ImmutableList.of("c1", "c\\2"));
+        Assertions.assertTrue(sql.startsWith("DELETE FROM external_column_statistics WHERE "), sql);
+        Assertions.assertTrue(sql.contains("table_uuid in ('" + hashed + "', 'iceberg.db.o''brien\\\\table.uuid')"),
+                "dropped-partition delete must match both the hashed and the raw uuid: " + sql);
+        Assertions.assertTrue(sql.contains("PARTITION_NAME IN ('p''1', 'dt=2024-01-01')"), sql);
+        // Only the job's columns, whose cache the job refreshes.
+        Assertions.assertTrue(sql.endsWith("COLUMN_NAME IN ('c1', 'c\\\\2')"), sql);
+        // Key columns only: the shared-data statistics table is UNIQUE_KEYS, whose DELETE rejects anything else.
+        Assertions.assertFalse(sql.contains("update_time"), sql);
+    }
+
+    @Test
     void buildDropExternalHistogramSQLForRawUuidOnlyMatchesRawUuid() {
         String hashed = StatisticUtils.hashTableUuidForPkStorage(TABLE_UUID);
         String sql = StatisticSQLBuilder.buildDropExternalHistogramSQLForRawUuid(TABLE_UUID, ImmutableList.of("col1"));

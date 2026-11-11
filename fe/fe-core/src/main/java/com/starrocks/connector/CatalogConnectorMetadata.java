@@ -25,6 +25,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -271,6 +272,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
                                          TvrVersionRange version) {
         return normal.getTableStatistics(session, table, columns, partitionKeys, predicate, limit, version);
+    }
+
+    @Override
+    public Map<String, Pair<Double, Double>> getPartitionSourceColumnRanges(Table table, TvrVersionRange version) {
+        return normal.getPartitionSourceColumnRanges(table, version);
     }
 
     @Override

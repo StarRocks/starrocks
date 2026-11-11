@@ -708,6 +708,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v3.5.1
 
+### enable_delta_lake_function_predicate_pruning
+
+* **Description**: Whether a predicate on a function of a Delta Lake column can skip data files. StarRocks converts such a predicate into a condition on the column itself, for example `year(dt) = 2024` into `dt >= '2024-01-01' AND dt < '2025-01-01'`, so that files are skipped through partition values and file column statistics, and Parquet row groups are skipped through their column statistics. It applies to the same functions as `enable_iceberg_function_predicate_pruning`. The original predicate is still evaluated on the rows. Set it to `false` to plan such queries as before, for example to compare results.
+* **Default**: true
+* **Introduced in**: v26.3
+
 ### enable_distinct_agg_over_window
 
 * **Description**: Controls the optimizer rewrite that transforms DISTINCT aggregate calls over WINDOW clauses into an equivalent join-based plan. When enabled (`true`, the default) QueryOptimizer.invoke convertDistinctAggOverWindowToNullSafeEqualJoin will:
@@ -797,6 +803,12 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Description**: Whether to enable resource group-level [query queue](../administration/management/resource_management/query_queues.md).
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v3.1.4
+
+### enable_hive_function_predicate_pruning
+
+* **Description**: Whether a predicate on a function of a date or datetime column of a Hive table can prune partitions. StarRocks converts such a predicate into a condition on the column itself, for example `year(dt) = 2024` into `dt >= '2024-01-01' AND dt < '2025-01-01'`, so that partitions are pruned on a partition column and row groups are skipped through their column statistics. It applies to the date and time functions listed for `enable_iceberg_function_predicate_pruning`. The original predicate is still evaluated on the rows. Set it to `false` to plan such queries as before, for example to compare results.
+* **Default**: true
+* **Introduced in**: v26.3
 
 ### enable_iceberg_eq_delete_runtime_filter_pruning
 
@@ -1833,11 +1845,19 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Scope**: Session
 * **Default**: `colocate`
 * **Data type**: String
-* **Valid values**: `colocate`, `parallel`
+* **Valid values**: `colocate`, `parallel`, `grouped`
 
 A nonempty parallel scan must select at least two logical partitions and two real tablets, and the selected compute resource must contain at least two eligible CNs. Among aggregates with the DISTINCT modifier, only `COUNT DISTINCT` is supported. Pipeline execution and `parallel_fragment_exec_instance_num = 1` are required. Parallel mode adds network and aggregate-state transfer costs and can increase non-owner remote reads; it does not guarantee a speedup or use of every compute node. Partition and tablet pruning remain unchanged.
 
 Parallel mode rejects writes/refreshes, joins, set operations, CTEs, subqueries, analytic functions, grouping sets, special/historical/metadata/cache-stat or sampled/hinted scans, MV/rollup source replacement, multiple final scans, Query Cache, phased scheduling, prepared physical split scans, single-node plans, and nonpipeline execution. Fully pruned input retains normal empty-aggregate semantics. Unsupported requests fail explicitly without changing other session settings.
+
+`grouped` is a session-only experimental opt-in. It forms temporary groups from tablet range boundaries and aligns scan tasks for the same key range across selected partitions. All input rows for a SQL aggregation group are processed by one aggregate logical driver on one CN, eliminating key-based shuffles of raw rows between CNs and within a CN. Filters, output aliases, HAVING, and final ORDER BY/LIMIT retain their semantics when the complete grouping proof is preserved. Applicability is checked during planning; requests outside the current experimental implementation fail explicitly.
+
+Grouped execution captures source versions and tablet ranges once, then forms complete key-range groups across all selected physical partitions. It requires at least two selected physical partitions and two nonempty key-range groups. Each group feeds one blocking HASH aggregate and only finalized scalar results are gathered. It requires Pipeline and Group Execution, and `parallel_fragment_exec_instance_num = 1`. The parallel-mode exclusions also apply; forced multi-stage aggregation and incompatible global late materialization are unsupported. Sort aggregation and per-bucket aggregation are disabled for this path. Fully pruned input retains normal empty-input semantics. PREPARE/EXECUTE re-plans aggregates under the current mode instead of reusing a complete physical plan.
+
+Grouped scans support ordinary, nonprepared physical rowid splitting when `enable_lake_tablet_internal_parallel` is enabled. Each complete key group still has one aggregate logical driver on one CN; additional I/O tasks feed that same driver without a key shuffle. Disabling `enable_lake_tablet_internal_parallel` retains the unsplit path. The default 16 I/O slots limit live I/O concurrency, not the number of generated child tasks.
+
+A scan supports at most 1,024 groups and 8,192 root clip tasks; these limits do not cap generated I/O children. Group Execution capacity also applies. EXPLAIN reports grouped execution and unique source/group/root-task counts. `RangeClipTasks` counts successfully opened root clips once and excludes children; `MorselsCount` includes roots and children. Use `PeakIOTasks` with scan time, rows and remote bytes to assess I/O concurrency. Ordinary tablet and segment counters may count repeated task reads and are not global unique-source counts. This mode does not guarantee a speedup or constant-memory DISTINCT aggregation. The default remains `colocate`.
 
 ### resource_group
 

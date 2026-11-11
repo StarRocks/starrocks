@@ -556,20 +556,25 @@ Status DeltaWriterImpl::build_schema_and_writer() {
 
 inline Status DeltaWriterImpl::reset_memtable() {
     RETURN_IF_ERROR(build_schema_and_writer());
+    // Install the memtable only once prepare() accepts it. write() skips this function while _mem_table is set, so a
+    // memtable left behind by a failed prepare() -- e.g. slots that do not match the write schema -- would take the
+    // next write as is, from another sink instance or a later batch of this writer's queue.
+    std::unique_ptr<MemTable> mem_table;
     if (_slots != nullptr || !_merge_condition.empty()) {
-        _mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _slots, _mem_table_sink.get(),
-                                                _merge_condition, _mem_tracker);
+        mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _slots, _mem_table_sink.get(),
+                                               _merge_condition, _mem_tracker);
     } else {
-        _mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _mem_table_sink.get(),
-                                                _max_buffer_size, _mem_tracker);
+        mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _mem_table_sink.get(),
+                                               _max_buffer_size, _mem_tracker);
     }
 
     PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         ASSIGN_OR_RETURN(pk_encoding_type, _tablet_schema->primary_key_encoding_type_or_error());
     }
-    RETURN_IF_ERROR(_mem_table->prepare(pk_encoding_type));
-    _mem_table->set_write_buffer_row(_max_buffer_rows);
+    RETURN_IF_ERROR(mem_table->prepare(pk_encoding_type));
+    mem_table->set_write_buffer_row(_max_buffer_rows);
+    _mem_table = std::move(mem_table);
     return Status::OK();
 }
 
@@ -1053,10 +1058,10 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                     << " txn=" << _txn_id;
         } else if (_is_multi_statements_txn) {
             auto cache_key = _tablet_manager->txn_log_location(_tablet_id, _txn_id, _load_id);
-            _tablet_manager->metacache()->cache_txn_log(cache_key, txn_log);
+            _tablet_manager->metacache()->cache_txn_log(MetacacheKey::txn_log(cache_key), txn_log);
         } else {
             auto cache_key = _tablet_manager->txn_log_location(_tablet_id, _txn_id);
-            _tablet_manager->metacache()->cache_txn_log(cache_key, txn_log);
+            _tablet_manager->metacache()->cache_txn_log(MetacacheKey::txn_log(cache_key), txn_log);
         }
         VLOG(2) << "Cached txn log for tablet=" << _tablet_id << " txn=" << _txn_id
                 << " load_id=" << UniqueId(_load_id).to_string();

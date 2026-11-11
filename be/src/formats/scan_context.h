@@ -176,6 +176,10 @@ struct FormatScannerStats {
 struct FormatScannerOptions {
     bool case_sensitive = false;
     bool use_min_max_opt = false;
+    // The scan node plans with the min/max optimization, so min_max_values carry every slot (use_min_max_opt may be
+    // turned off for one scan range). Otherwise they carry only the runtime filter probe slots the FE chose for file
+    // pruning.
+    bool min_max_values_of_all_slots = false;
     // Set by PruneHDFSScanColumnRule when all queried columns are partition columns
     // and a placeholder materialized column was injected.  Combined with
     // use_min_max_opt to skip reading the placeholder from the data file.
@@ -282,6 +286,8 @@ struct FormatScanContext {
     int64_t scan_range_length = std::numeric_limits<int64_t>::max();
     int32_t scan_range_id = -1;
     std::map<int32_t, TExprMinMaxValue> min_max_values;
+    // Per slot, how many values of its [null?, min, max] the batches too small to hold them all have emitted.
+    std::unordered_map<int32_t, size_t> min_max_value_cursors;
     std::map<int32_t, TExpr> extended_column_exprs;
     std::optional<int64_t> first_row_id;
     int64_t file_record_count = 0;

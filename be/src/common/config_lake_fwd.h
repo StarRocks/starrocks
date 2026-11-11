@@ -36,6 +36,9 @@ CONF_mInt32(lake_replication_max_parallel_files_per_tablet, "4");
 // Set to 0 to force disable parallel copy.
 CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
 
+// Allow compatible scalar add/drop histories in shared-data replication snapshots.
+CONF_mBool(lake_replication_enable_light_schema_change, "false");
+
 // Enable segment metadata filter for lake tables.
 // When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
 CONF_mBool(enable_lake_segment_metadata_filter, "true");
@@ -114,6 +117,13 @@ CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mBool(lake_pk_partial_update_use_segment_cache, "true");
 
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
+
+// Under file bundling, keep a tablet's publish result (partial_meta) in this node's local disk cache when the
+// aggregator cannot have received it (the publish ran past the RPC timeout plus 3 seconds) or when the publish
+// is a retry, and let a retry on this node read it back before applying. Never written to object storage; the
+// cache evicts it like any other entry. Keeps tablets that already finished from being re-applied on every retry
+// of a slow partition. Needs the datacache. Read on every BE; set it to the same value on all.
+CONF_mBool(lake_enable_publish_partial_meta, "true");
 
 // Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
 // When writing a txn log takes longer than this threshold, the stack trace of the slow thread

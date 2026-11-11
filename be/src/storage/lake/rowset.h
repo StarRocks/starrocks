@@ -179,7 +179,9 @@ public:
             const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>& prepared_segments,
             size_t segment_idx, const PreparedSegmentReadStatePtr& prepared_segment_state,
             std::vector<ChunkIteratorPtr>* reusable_segment_iterators = nullptr);
-    StatusOr<std::optional<SeekRange>> get_seek_range() const;
+    // Default to archived ordinals. A grouped reader may request its current ID space
+    // after validating that both schemas retain the same ordered sort-key UIDs.
+    StatusOr<std::optional<SeekRange>> get_seek_range(const TabletSchemaCSPtr& decoding_schema = nullptr) const;
     Status init_segment_read_options(const RowsetReadOptions& options, const LakeIOOptions& lake_io_opts,
                                      const DisjunctivePredicates& delete_predicates, OlapReaderStatistics* stats,
                                      SegmentReadOptions* segment_options) const;
@@ -194,12 +196,14 @@ public:
     // simply get iterators to iterate all rows without complex options like predicates
     // |schema| read schema
     // |stats| used for iterator read stats
+    // |chunk_size| rows per chunk, 0 keeps the SegmentReadOptions default
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
     // this function does not expect segment schema will be changed, so return error if record predicate exists
     // but does not match its chunk schema
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema, bool file_data_cache,
-                                                                      OlapReaderStatistics* stats);
+                                                                      OlapReaderStatistics* stats,
+                                                                      size_t chunk_size = 0);
 
     // used for primary index load, it will get segment iterator by specifice version and it's delvec,
     // without complex options like predicates
@@ -288,6 +292,9 @@ public:
 
     [[nodiscard]] std::vector<SegmentSharedPtr> get_segments() override;
     [[nodiscard]] StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked() override;
+    [[nodiscard]] StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked(const LakeIOOptions& lake_io_opts,
+                                                                               OlapReaderStatistics* stats,
+                                                                               const std::atomic<bool>* is_cancelled);
 
     StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 

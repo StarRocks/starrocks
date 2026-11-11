@@ -55,12 +55,10 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSchemaScanNode;
 import com.starrocks.thrift.TUserIdentity;
-import com.starrocks.thrift.TUserRoles;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -209,12 +207,7 @@ public class SchemaScanNode extends ScanNode {
         msg.schema_scan_node.setPort(frontendPort);
 
         ConnectContext currentCtx = ConnectContext.get();
-        TUserIdentity tCurrentUser = UserIdentityUtils.toThrift(currentCtx.getCurrentUserIdentity());
-        if (currentCtx.getCurrentRoleIds() != null) {
-            TUserRoles userRoles = new TUserRoles();
-            userRoles.setRole_id_list(new ArrayList<>(currentCtx.getCurrentRoleIds()));
-            tCurrentUser.setCurrent_role_ids(userRoles);
-        }
+        TUserIdentity tCurrentUser = UserIdentityUtils.callerToThrift(currentCtx);
         msg.schema_scan_node.setCurrent_user_ident(tCurrentUser);
 
         if (tableId != null) {

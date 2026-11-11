@@ -369,6 +369,12 @@ under the License.
             <artifactId>iceberg-core</artifactId>
         </dependency>
 
+        <!-- Registers Parquet with Iceberg's InternalData: format-version 4 manifests are Parquet files. -->
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-parquet</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-hive-metastore</artifactId>

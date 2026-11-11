@@ -194,6 +194,9 @@ public class TypeManager {
     }
 
     private static Type getCompatibleTypeForBetweenAndIn(Type t1, Type t2, boolean isBetween) {
+        if (t1.hasNestedGeoType() || t2.hasNestedGeoType()) {
+            return InvalidType.INVALID;
+        }
         // if predicate is 'IN' and one type is string ,another type is not float
         // we choose string or decimal as cmpType according to session variable cboEqBaseType
         if (!isBetween) {
@@ -271,6 +274,9 @@ public class TypeManager {
     }
 
     public static Type getCompatibleTypeForBinary(boolean isRangeCompare, Type type1, Type type2) {
+        if (type1.hasNestedGeoType() || type2.hasNestedGeoType()) {
+            return InvalidType.INVALID;
+        }
         // 1. Many join on-clause use string = int predicate, follow mysql will cast to double, but
         //    starrocks cast to double will lose precision, the predicate result will error
         // 2. Why only support equivalence and unequivalence expression cast to string? Because string order is different
@@ -395,6 +401,8 @@ public class TypeManager {
     public static boolean canCastTo(Type from, Type to) {
         if (from.isNull()) {
             return true;
+        } else if (from.isGeoType() || to.isGeoType()) {
+            return canCastGeoType(from, to);
         } else if (from.isStringType() && to.isBitmapType()) {
             return true;
         } else if (from.isScalarType() && to.isScalarType()) {
@@ -783,6 +791,13 @@ public class TypeManager {
 
     // TODO(mofei) Why call implicit cast in the explicit cast context
     public static boolean canCastTo(ScalarType type, ScalarType targetType) {
+        if (type.isGeoType() || targetType.isGeoType()) {
+            return canCastGeoType(type, targetType);
+        }
         return PrimitiveType.isImplicitCast(type.getPrimitiveType(), targetType.getPrimitiveType());
+    }
+
+    private static boolean canCastGeoType(Type from, Type to) {
+        return from.isNull() || from.equals(to);
     }
 }

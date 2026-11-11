@@ -1,0 +1,63 @@
+-- name: test_iceberg_write_metrics_config
+create external catalog ice_cat_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+create database ice_cat_${uuid0}.ice_db_${uuid0};
+use ice_cat_${uuid0}.ice_db_${uuid0};
+
+-- No metrics property: Iceberg's default truncate(16), so string bounds are cut to 16 characters.
+create table t0 (c1 int, c2 string);
+insert into t0 values (1, 'abcdefghijklmnopqrstuvwxyz'), (2, 'bcdefghijklmnopqrstuvwxyza');
+select record_count, value_counts, null_value_counts, lower_bounds, upper_bounds from t0$files;
+
+-- Per-column modes: c1 full, c2 none, c3 counts, c4 truncate(4); c5 gets the inferred default truncate(16).
+create table t1 (c1 int, c2 int, c3 int, c4 string, c5 string) properties (
+    "write.metadata.metrics.column.c1" = "full",
+    "write.metadata.metrics.column.c2" = "none",
+    "write.metadata.metrics.column.c3" = "counts",
+    "write.metadata.metrics.column.c4" = "truncate(4)"
+);
+insert into t1 values (1, 10, 100, 'abcdefgh', 'abcdefghijklmnopqrstuvwxyz'), (2, null, 200, 'bcdefghi', 'bcdefghijklmnopqrstuvwxyza');
+select record_count, array_sort(map_keys(value_counts)), array_sort(map_keys(null_value_counts)), array_sort(map_keys(lower_bounds)), array_sort(map_keys(upper_bounds)), lower_bounds[1], upper_bounds[1], lower_bounds[4], upper_bounds[4], lower_bounds[5], upper_bounds[5] from t1$files;
+select count(*), sum(c2), min(c4), max(c5) from t1;
+
+-- default = none with one column back to full.
+create table t2 (c1 int, c2 int) properties (
+    "write.metadata.metrics.default" = "none",
+    "write.metadata.metrics.column.c1" = "full"
+);
+insert into t2 values (1, 10), (2, 20);
+select record_count, value_counts, null_value_counts, lower_bounds, upper_bounds from t2$files;
+select min(c1), max(c2) from t2;
+
+-- max-inferred-column-defaults = 1: only c1 gets the default truncate(16), c2 gets none.
+create table t3 (c1 int, c2 int) properties ("write.metadata.metrics.max-inferred-column-defaults" = "1");
+insert into t3 values (1, 10), (2, 20);
+select record_count, value_counts, null_value_counts, lower_bounds, upper_bounds from t3$files;
+
+-- A string bound that is not valid UTF-8 is dropped; the insert still succeeds.
+create table t4 (c1 int, c2 string);
+insert into t4 select 1, unhex('F0');
+select record_count, value_counts, null_value_counts, lower_bounds, upper_bounds from t4$files;
+select c1, hex(c2) from t4;
+
+-- Position delete files keep their stats even with default = none: the data file has none, the delete file keeps
+-- the counts of pos (2147483545) and file_path (2147483546). $files shows bounds only for table schema fields.
+create table t5 (c1 int, c2 string) properties ("write.metadata.metrics.default" = "none");
+insert into t5 values (1, 'a'), (2, 'b');
+delete from t5 where c1 = 1;
+select content, record_count, array_sort(map_keys(value_counts)), array_sort(map_keys(lower_bounds)), array_sort(map_keys(upper_bounds)) from t5$files order by content;
+select * from t5;
+
+drop table t0 force;
+drop table t1 force;
+drop table t2 force;
+drop table t3 force;
+drop table t4 force;
+drop table t5 force;
+drop database ice_cat_${uuid0}.ice_db_${uuid0};
+drop catalog ice_cat_${uuid0};

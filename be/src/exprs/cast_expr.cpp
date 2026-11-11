@@ -326,7 +326,7 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
             pool->add(cast_input.release());
         }
 
-        return new CastVariantToStruct(node, std::move(field_casts));
+        return new CastVariantToStruct(node, std::move(field_casts), allow_throw_exception);
     }
     default:
         LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
@@ -492,6 +492,12 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
             } else {
                 return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_VARBINARY, false>(node);
             }
+        } else if (is_binary_type(from_type)) {
+            if (allow_throw_exception) {
+                return new VectorizedCastExpr<TYPE_VARBINARY, TYPE_VARBINARY, true>(node);
+            } else {
+                return new VectorizedCastExpr<TYPE_VARBINARY, TYPE_VARBINARY, false>(node);
+            }
         } else {
             LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
             return nullptr;
@@ -610,7 +616,8 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
             return new CastStructExpr(node, std::move(field_casts), std::move(source_field_indices));
         }
     }
-    if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) && to_type.is_complex_type()) {
+    if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) &&
+        (to_type.is_complex_type() || to_type.is_geo_type())) {
         return new MustNullExpr(node);
     }
 
