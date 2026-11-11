@@ -170,6 +170,7 @@ Status PaimonWriteFileTracker::rollback() {
     std::lock_guard<std::mutex> lock(_mutex);
     _rolled_back = true;
     Status result;
+    // TODO: Consider bounded parallel deletion to reduce cancellation latency when many files need cleanup.
     for (auto& [path, state] : _files) {
         if (!state.owned) {
             continue;
