@@ -107,6 +107,9 @@ public:
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
+    // Opens the `.cols` file |idx| of |dcg|. The result is not cached, so every caller reads the
+    // footer again: |lake_io_opts| decides whether that read fills the local data cache, and the
+    // read is added to |stats| when it is not null.
     StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
                                                        const TabletSchemaCSPtr& read_tablet_schema);
 
