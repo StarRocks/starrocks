@@ -635,7 +635,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### enable_adaptive_sink_dop
 
-* **Description**: Specifies whether to enable adaptive parallelism for data loading. After this feature is enabled, the system automatically sets load parallelism for INSERT INTO and Broker Load jobs, which is equivalent to the mechanism of `pipeline_dop`. The default value is `true`. A cluster whose persisted metadata already holds a value for this variable keeps that value. For example, a cluster upgraded from v2.4 or earlier keeps `false`.
+* **Description**: Specifies whether to enable adaptive parallelism for data loading. After this feature is enabled, the system automatically sets load parallelism for INSERT INTO and Broker Load jobs, which is equivalent to the mechanism of `pipeline_dop`. The default value is `true`. A cluster whose persisted metadata already holds a value for this variable keeps that value. For example, a cluster upgraded from v2.4 or earlier keeps `false`. `SET enable_adaptive_sink_dop = DEFAULT` and `SET GLOBAL enable_adaptive_sink_dop = DEFAULT` set the variable to `true`, even if the cluster currently holds `false`.
 * **Default**: true
 * **Introduced in**: v2.5
 

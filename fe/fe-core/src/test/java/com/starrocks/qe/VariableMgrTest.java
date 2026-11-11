@@ -572,6 +572,38 @@ public class VariableMgrTest {
         Assertions.assertTrue(mgr.newSessionVariable().getEnableAdaptiveSinkDop());
     }
 
+    @Test
+    public void testResetEnableAdaptiveSinkDopToDefaultIgnoresPersistedValue() throws Exception {
+        // `SET [GLOBAL] enable_adaptive_sink_dop = DEFAULT` resolves to the code default (true), not to the
+        // value persisted in the image. A cluster holding a persisted false switches to true after the reset.
+        String name = SessionVariable.ENABLE_ADAPTIVE_SINK_DOP;
+        for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
+            PseudoImage image = new PseudoImage();
+            SRMetaBlockWriter writer = image.getImageWriter().getBlockWriter(SRMetaBlockID.VARIABLE_MGR, 1 + 1 + 1);
+            writer.writeInt(1);
+            writer.writeJson(new PersistedVariable(name, "false"));
+            writer.writeInt(0);
+            writer.close();
+
+            VariableMgr mgr = new VariableMgr();
+            mgr.load(image.getMetaBlockReader());
+            SessionVariable session = mgr.newSessionVariable();
+            Assertions.assertFalse(session.getEnableAdaptiveSinkDop());
+            Assertions.assertEquals("true", mgr.getDefaultValue(name));
+            // SHOW VERBOSE VARIABLES reports the code default and marks the persisted false as changed.
+            Assertions.assertTrue(mgr.dump(SetType.VERBOSE, session, null).stream()
+                    .anyMatch(row -> row.get(0).equals(name) && row.get(1).equals("false")
+                            && row.get(2).equals("true") && row.get(3).equals("1")));
+
+            SystemVariable reset = new SystemVariable(scope, name, null);
+            SetStmtAnalyzer.analyze(new SetStmt(List.of(reset)), null);
+            mgr.setSystemVariable(session, reset, false);
+            Assertions.assertTrue(session.getEnableAdaptiveSinkDop());
+            Assertions.assertEquals(scope == SetType.GLOBAL,
+                    mgr.newSessionVariable().getEnableAdaptiveSinkDop());
+        }
+    }
+
     // Same layout as VariableMgr.VariableInfo, used to write an image as a newer build would.
     private static class PersistedVariable {
         @SerializedName(value = "n")
