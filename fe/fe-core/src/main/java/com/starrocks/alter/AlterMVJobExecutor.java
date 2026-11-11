@@ -1880,6 +1880,19 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
     }
 
+    /**
+     * Inactivates an MV from inside the refresh that found it can no longer be refreshed, and stops scheduling it as
+     * every other inactivation does. Both happen under the MV's write lock, which ALTER ... ACTIVE takes too: an
+     * activation in between would be paused by the suspension, and leave an active MV that is never refreshed.
+     */
+    public static void inactiveMvAndSuspendTask(MaterializedView mv, String inactiveReason) {
+        try (AutoCloseableLock ignored = new AutoCloseableLock(mv.getDbId(), mv.getId(), LockType.WRITE)) {
+            inactiveMvAndLog(mv, inactiveReason);
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            taskManager.suspendTaskWithoutKilling(taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId())));
+        }
+    }
+
     // Mark the MV inactive and journal the transition, so the inactive state survives a leader restart
     // or failover instead of reverting to active until the next refresh re-detects the condition.
     public static void inactiveMvAndLog(MaterializedView mv, String inactiveReason) {
