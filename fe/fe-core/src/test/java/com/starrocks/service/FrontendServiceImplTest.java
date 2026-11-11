@@ -266,6 +266,103 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testInternalLoadRejectsInactiveFrontend() {
+        Frontend frontend = Mockito.mock(Frontend.class);
+        Mockito.when(frontend.getHost()).thenReturn("203.0.113.10");
+        Mockito.when(frontend.getNodeName()).thenReturn("audit_fe");
+        new MockUp<NodeMgr>() {
+            @Mock
+            public List<Frontend> getAllFrontends() {
+                return List.of(frontend);
+            }
+        };
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        Assertions.assertFalse(impl.checkIsInternalLoad("203.0.113.10", "audit_fe",
+                "starrocks_audit_db__", "starrocks_audit_tbl__", "203.0.113.10"));
+        Assertions.assertFalse(impl.checkIsInternalLoad("203.0.113.10", "audit_fe",
+                "_statistics_", "query_history", "203.0.113.10"));
+
+        Mockito.when(frontend.isAlive()).thenReturn(true);
+        Assertions.assertTrue(impl.checkIsInternalLoad("203.0.113.10", "audit_fe",
+                "starrocks_audit_db__", "starrocks_audit_tbl__", "203.0.113.10"));
+    }
+
+    @Test
+    public void testInternalLoadRejectsMixedFrontendIdentities() {
+        Frontend first = new Frontend(FrontendNodeType.FOLLOWER, "audit_fe_one", "203.0.113.10", 9010);
+        Frontend second = new Frontend(FrontendNodeType.FOLLOWER, "audit_fe_two", "203.0.113.11", 9010);
+        new MockUp<Frontend>() {
+            @Mock
+            public boolean isAlive() {
+                return true;
+            }
+        };
+        new MockUp<NodeMgr>() {
+            @Mock
+            public List<Frontend> getAllFrontends() {
+                return List.of(first, second);
+            }
+        };
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        Assertions.assertTrue(impl.checkIsInternalLoad(second.getHost(), second.getNodeName(),
+                "starrocks_audit_db__", "starrocks_audit_tbl__", second.getHost()));
+        // The peer, user and node credential must all belong to one registered FE.
+        Assertions.assertFalse(impl.checkIsInternalLoad(second.getHost(), second.getNodeName(),
+                "starrocks_audit_db__", "starrocks_audit_tbl__", first.getHost()));
+        Assertions.assertFalse(impl.checkIsInternalLoad(first.getHost(), second.getNodeName(),
+                "starrocks_audit_db__", "starrocks_audit_tbl__", first.getHost()));
+        Assertions.assertFalse(impl.checkIsInternalLoad(first.getHost(), first.getNodeName(),
+                "starrocks_audit_db__", "starrocks_audit_tbl__", "203.0.113.12"));
+    }
+
+    @Test
+    public void testLoadTxnBeginUsesInternalIdentityOnlyForWhitelistedTables() throws Exception {
+        new MockUp<Frontend>() {
+            @Mock
+            public boolean isAlive() {
+                return true;
+            }
+        };
+        Frontend self = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+        request.setUser(self.getHost());
+        request.setPasswd(self.getNodeName());
+        request.setUser_ip(self.getHost());
+        // An empty label stops after authentication, before creating a transaction.
+        request.setLabel("");
+        int originalLimit = Config.stream_load_max_txn_num_per_be;
+        Config.stream_load_max_txn_num_per_be = -1;
+        try (MockedStatic<AuthenticationHandler> authentication = mockStatic(AuthenticationHandler.class);
+                MockedStatic<Authorizer> authorization = mockStatic(Authorizer.class)) {
+            authentication.when(() -> AuthenticationHandler.authenticate(
+                    any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenThrow(new AuthenticationException("ordinary authentication required"));
+            for (List<String> target : List.of(List.of("starrocks_audit_db__", "starrocks_audit_tbl__"),
+                    List.of("_statistics_", "query_history"))) {
+                request.setDb(target.get(0));
+                request.setTbl(target.get(1));
+                TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+                Assertions.assertEquals(TStatusCode.ANALYSIS_ERROR, result.getStatus().getStatus_code());
+                Assertions.assertTrue(result.getStatus().getError_msgs().contains("empty label in begin request"));
+            }
+            authentication.verifyNoInteractions();
+            authorization.verifyNoInteractions();
+
+            request.setDb("test");
+            request.setTbl("site_access_auto");
+            TLoadTxnBeginResult rejected = impl.loadTxnBegin(request);
+            Assertions.assertNotEquals(TStatusCode.OK, rejected.getStatus().getStatus_code());
+            Assertions.assertTrue(rejected.getStatus().getError_msgs().contains("ordinary authentication required"));
+            authentication.verify(() -> AuthenticationHandler.authenticate(
+                    any(ConnectContext.class), any(AuthCredentials.class)), Mockito.times(1));
+            authorization.verifyNoInteractions();
+        } finally {
+            Config.stream_load_max_txn_num_per_be = originalLimit;
+        }
+    }
+
+    @Test
     public void testGetFeMetrics() throws TException {
         // information_schema.fe_metrics is served over this RPC instead of scraping HTTP /metrics.
         // It returns the same JSON payload as /metrics?type=json with an OK status.
