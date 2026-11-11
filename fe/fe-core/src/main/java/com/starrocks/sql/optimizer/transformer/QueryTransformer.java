@@ -406,18 +406,7 @@ public class QueryTransformer {
                 if (rewriteOperator.isSkewed()) {
                     windowOperator.setSkewed();
                 }
-<<<<<<< HEAD
-                windowOperator.addFunction(analyticExpr);
-=======
-                if (rewriteOperator.getSkewColumn() != null) {
-                    windowOperator.setSkewColumn(rewriteOperator.getSkewColumn());
-                    windowOperator.setSkewValues(rewriteOperator.getSkewValues());
-                }
-                if (rewriteOperator.isForceMergeSort()) {
-                    windowOperator.setForceMergeSort();
-                }
                 windowOperator.addFunction(analyticExpr, rewriteOperator);
->>>>>>> dd8c1bb ([BugFix][RB-1261] Keep reversed FIRST_VALUE/LAST_VALUE windows typed and stable across replanning (#82865))
             } else {
                 windowOperators.add(rewriteOperator);
             }
