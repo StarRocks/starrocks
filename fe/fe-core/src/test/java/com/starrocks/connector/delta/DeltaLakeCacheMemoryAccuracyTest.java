@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.cache.Cache;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.ConnectorMetadataCache;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
@@ -47,6 +48,7 @@ import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -274,7 +276,7 @@ public class DeltaLakeCacheMemoryAccuracyTest {
         long checkpointLedger = 0;
         List<Object> checkpointRoots = new ArrayList<>();
         for (Map.Entry<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> e :
-                checkpointCache.asMap().entrySet()) {
+                entries(checkpointCache).entrySet()) {
             checkpointLedger += (Integer) weighCheckpoint.invoke(metastore, e.getKey(), e.getValue());
             checkpointRoots.add(e.getKey().first);
             checkpointRoots.add(e.getValue());
@@ -287,7 +289,7 @@ public class DeltaLakeCacheMemoryAccuracyTest {
         weighJson.setAccessible(true);
         long jsonLedger = 0;
         List<Object> jsonRoots = new ArrayList<>();
-        for (Map.Entry<DeltaLakeFileStatus, List<JsonNode>> e : jsonCache.asMap().entrySet()) {
+        for (Map.Entry<DeltaLakeFileStatus, List<JsonNode>> e : entries(jsonCache).entrySet()) {
             jsonLedger += (Integer) weighJson.invoke(metastore, e.getKey(), e.getValue());
             jsonRoots.add(e.getKey());
             jsonRoots.add(e.getValue());
@@ -296,5 +298,17 @@ public class DeltaLakeCacheMemoryAccuracyTest {
         check(label, "json ledger", jsonLedger, jsonActual);
 
         check(label, "estimateSize()", metastore.estimateSize(), checkpointActual + jsonActual);
+    }
+
+    // the entries of a catalog's scoped cache view, a snapshot
+    private static <K, V> Map<K, V> entries(Cache<K, V> cache) {
+        Map<K, V> result = new HashMap<>();
+        for (K key : ((ConnectorMetadataCache.ScopedGuavaCache<K, V>) cache).keys()) {
+            V value = cache.getIfPresent(key);
+            if (value != null) {
+                result.put(key, value);
+            }
+        }
+        return result;
     }
 }

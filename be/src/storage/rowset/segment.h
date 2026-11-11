@@ -115,7 +115,9 @@ public:
                                                      ChunkIteratorPtr* reusable_slot);
 
     StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                       const TabletSchemaCSPtr& read_tablet_schema);
+                                                       const TabletSchemaCSPtr& read_tablet_schema,
+                                                       const LakeIOOptions& lake_io_opts = {},
+                                                       OlapReaderStatistics* stats = nullptr);
 
     uint64_t id() const { return _segment_id; }
 
