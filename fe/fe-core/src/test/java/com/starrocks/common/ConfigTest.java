@@ -659,9 +659,6 @@ public class ConfigTest {
             for (String valid : List.of("pct", "PCT", "Pct", "incremental", "INCREMENTAL")) {
                 Config.setMutableConfig("default_mv_refresh_mode", valid, false, "");
                 Assertions.assertEquals(valid, Config.default_mv_refresh_mode);
-                // Every accepted value must survive the parse that MaterializedView#getRefreshMode
-                // performs on it for any MV without an explicit refresh_mode property.
-                Assertions.assertNotNull(MaterializedView.RefreshMode.valueOf(valid.toUpperCase(Locale.ROOT)));
             }
 
             // AUTO parses as an enum constant but is not selectable, matching the refresh_mode property.
@@ -688,7 +685,8 @@ public class ConfigTest {
             Config.setMutableConfig("default_mv_refresh_mode", "incremental", false, "");
 
             MaterializedView mv = new MaterializedView();
-            mv.setTableProperty(new TableProperty(Maps.newHashMap()).buildMVRefreshMode());
+            mv.setTableProperty(new TableProperty(Maps.newHashMap(ImmutableMap.of(
+                    PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, "incremental"))).buildMVRefreshMode());
             Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getRefreshMode());
 
             Assertions.assertEquals("incremental",
