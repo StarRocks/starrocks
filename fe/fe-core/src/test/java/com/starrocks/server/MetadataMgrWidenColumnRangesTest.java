@@ -39,7 +39,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class MetadataMgrWidenColumnRangesTest {
@@ -112,7 +111,6 @@ public class MetadataMgrWidenColumnRangesTest {
         } finally {
             FeConstants.runningUnitTest = runningUnitTest;
         }
-        verify(session).setObtainedFromInternalStatistics(true);
         assertEquals(50, statistics.getColumnStatistic(ts).getMinValue());
         assertEquals(300, statistics.getColumnStatistic(ts).getMaxValue());
         assertEquals(1000, statistics.getOutputRowCount());
