@@ -27,6 +27,16 @@ CONF_mBool(enable_json_flat, "true");
 // enable compaction is base on flat json, not whole json
 CONF_mBool(enable_compaction_flat_json, "true");
 
+// When some inputs of a compaction have a flat JSON column and others store it as whole JSON, read the whole-JSON
+// inputs into the flat inputs' layout with every path typed JSON, so the output is written as it is read instead
+// of being buffered whole to derive a layout.
+CONF_mBool(enable_compaction_flat_json_mixed_inputs, "true");
+
+// When the inputs of a flat JSON compaction do not all flatten a path, keep the path if enough rows hold it as a
+// sub-column (json_flat_sparsity_factor), reading the other inputs' values from their remain, rather than only the
+// paths every input flattens.
+CONF_mBool(enable_compaction_flat_json_partial_paths, "true");
+
 // direct read flat json
 CONF_mBool(enable_lazy_dynamic_flat_json, "true");
 
@@ -53,6 +63,13 @@ CONF_mDouble(json_flat_sparsity_factor, "0.3");
 
 // the maximum number of extracted JSON sub-field
 CONF_mInt32(json_flat_column_max, "100");
+
+// Maximum object/array nesting depth accepted when parsing JSON (parse_json, CAST AS JSON, JSON
+// column ingest, ...). The velocypack parser recurses once per level, so an unbounded depth lets a
+// crafted document overflow the thread stack and abort the BE. A positive value sets the cap; 0 or
+// below keeps the parser's built-in default (1024) rather than disabling the check, so the guard
+// cannot be silently turned off by leaving it unset. Mutable so it can be tuned without a restart.
+CONF_mInt32(json_max_parse_nesting_depth, "1024");
 
 // for whitelist on flat json remain data, max set 1kb
 CONF_mInt32(json_flat_remain_filter_max_bytes, "1024");

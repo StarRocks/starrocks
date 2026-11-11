@@ -1,0 +1,5 @@
+-- name: test_http_pipelined_request_waits_for_stream
+function: assert_pipelined_request_waits_for_stream("select * from TABLE(generate_series(1, 2000000))")
+-- result:
+None
+-- !result

@@ -105,6 +105,39 @@ int RuntimeFilterSerde::deserialize(ObjectPool* pool, RuntimeFilter** rf, const 
     return version;
 }
 
+bool RuntimeFilterSerde::to_pass_all(const std::string& data, std::string* pass_all_data) {
+    // header = | version | rf_type | logical_type |, the same as deserialize reads.
+    uint8_t version = 0;
+    RuntimeFilterSerializeType rf_type = RuntimeFilterSerializeType::NONE;
+    TPrimitiveType::type tltype;
+    if (data.size() < HEADER_SIZE) return false;
+    const auto* src = reinterpret_cast<const uint8_t*>(data.data());
+    memcpy(&version, src, sizeof(version));
+    // an empty filter can only be serialized since RF_VERSION_V3.
+    if (version < RF_VERSION_V3) return false;
+    memcpy(&rf_type, src + sizeof(version), sizeof(rf_type));
+    if (rf_type == RuntimeFilterSerializeType::NONE || rf_type == RuntimeFilterSerializeType::IN_FILTER ||
+        rf_type >= RuntimeFilterSerializeType::UNKNOWN_FILTER) {
+        return false;
+    }
+    memcpy(&tltype, src + sizeof(version) + sizeof(rf_type), sizeof(tltype));
+
+    ObjectPool pool;
+    RuntimeFilter* pass_all =
+            RuntimeFilterFactory::create_pass_all_filter(&pool, thrift_to_type(tltype), TJoinDistributionMode::NONE);
+    if (pass_all == nullptr) return false;
+    pass_all_data->assign(max_size(version, pass_all), '\0');
+    pass_all_data->resize(serialize(version, pass_all, reinterpret_cast<uint8_t*>(pass_all_data->data())));
+    return true;
+}
+
+bool RuntimeFilterSerde::shrink_to_pass_all(std::string* data) {
+    std::string pass_all_data;
+    if (!to_pass_all(*data, &pass_all_data) || pass_all_data.size() > data->size()) return false;
+    data->swap(pass_all_data);
+    return true;
+}
+
 size_t RuntimeFilterSerde::skew_max_size(const ColumnPtr& column) {
     size_t size = RF_VERSION_SZ;
     size += (sizeof(bool) + sizeof(size_t) + sizeof(bool) + sizeof(bool));

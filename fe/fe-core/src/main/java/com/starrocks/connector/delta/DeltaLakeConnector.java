@@ -76,6 +76,7 @@ public class DeltaLakeConnector implements Connector {
     public void shutdown() {
         internalMgr.shutdown();
         metadataFactory.shutdown();
+        metadataFactory.releaseMetastoreCaches();
         GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogNameType);
     }
 

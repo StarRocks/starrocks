@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <utility>
 #include <vector>
 
 // This file include
@@ -33,13 +34,15 @@ struct GeoCoordinateList {
 };
 
 struct GeoCoordinateListList {
-    ~GeoCoordinateListList() {
-        for (auto item : list) {
-            delete item;
-        }
-    }
-    void add(GeoCoordinateList* coordinates) { list.push_back(coordinates); }
-    std::vector<GeoCoordinateList*> list;
+    GeoCoordinateListList() = default;
+    GeoCoordinateListList(const GeoCoordinateListList&) = delete;
+    GeoCoordinateListList& operator=(const GeoCoordinateListList&) = delete;
+    GeoCoordinateListList(GeoCoordinateListList&&) = default;
+    GeoCoordinateListList& operator=(GeoCoordinateListList&&) = default;
+
+    // Takes an rvalue so that a ring is never deep-copied by accident.
+    void add(GeoCoordinateList&& coordinates) { list.push_back(std::move(coordinates)); }
+    std::vector<GeoCoordinateList> list;
 };
 
 } // namespace starrocks

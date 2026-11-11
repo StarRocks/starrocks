@@ -169,7 +169,8 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
         Map<Long, ColocateRangeUtils.Classifier> classifiers = new HashMap<>();
 
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
-            if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+            if (table.getState() != OlapTable.OlapTableState.NORMAL
+                    && table.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
                 throw new StarRocksException("Unexpected table state " + table.getState()
                         + " in table " + db.getFullName() + '.' + table.getName());
             }

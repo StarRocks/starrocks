@@ -21,7 +21,8 @@ public class PaimonSplitScannerFactory implements ScannerFactory {
     static ClassLoader classLoader;
 
     static {
-        classLoader = ScannerHelper.createModuleClassLoader("paimon-reader-lib");
+        // Load the Hive/Thrift compatibility classes before the upstream Hive jar.
+        classLoader = ScannerHelper.createModuleClassLoader("paimon-reader-lib", "starrocks-paimon-reader.jar");
     }
 
     /**

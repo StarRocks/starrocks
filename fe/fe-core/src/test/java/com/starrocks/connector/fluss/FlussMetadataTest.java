@@ -342,11 +342,13 @@ public class FlussMetadataTest {
         if (partitioned) {
             descriptorBuilder.partitionedBy("dt", "region");
         }
-        return TableInfo.of(TablePath.of(DB, TABLE), TABLE_ID, 7, descriptorBuilder.build(), 1000L, 2000L);
+        return TableInfo.of(TablePath.of(DB, TABLE), TABLE_ID, 7, descriptorBuilder.build(),
+                null, 1000L, 2000L);
     }
 
     private static PartitionInfo partitionInfo(long partitionId, String dt, String region) {
         return new PartitionInfo(partitionId,
-                new ResolvedPartitionSpec(Lists.newArrayList("dt", "region"), Lists.newArrayList(dt, region)));
+                new ResolvedPartitionSpec(Lists.newArrayList("dt", "region"), Lists.newArrayList(dt, region)),
+                null, 3);
     }
 }

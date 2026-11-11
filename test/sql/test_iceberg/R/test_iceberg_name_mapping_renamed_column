@@ -1,0 +1,99 @@
+-- name: test_iceberg_name_mapping_renamed_column
+create external catalog iceberg_nm_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+create external catalog hive_nm_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+create database iceberg_nm_${uuid0}.nm_db_${uuid0} properties ("location" = "oss://${oss_bucket}/nm_db_${uuid0}/iceberg");
+-- result:
+-- !result
+create table hive_nm_${uuid0}.nm_db_${uuid0}.src(
+    id int,
+    c1 string,
+    c2 int,
+    c3 int
+) properties ("file_format" = "parquet", "location" = "oss://${oss_bucket}/nm_db_${uuid0}/src");
+-- result:
+-- !result
+insert into hive_nm_${uuid0}.nm_db_${uuid0}.src values (1, 'a', 10, 100), (2, 'b', 20, 200);
+-- result:
+-- !result
+create table iceberg_nm_${uuid0}.nm_db_${uuid0}.t(
+    id int,
+    c1 string,
+    c2 int,
+    c3 int
+);
+-- result:
+-- !result
+alter table iceberg_nm_${uuid0}.nm_db_${uuid0}.t execute add_files(location="oss://${oss_bucket}/nm_db_${uuid0}/src", file_format="parquet");
+-- result:
+-- !result
+alter table iceberg_nm_${uuid0}.nm_db_${uuid0}.t set ("schema.name-mapping.default" = '[{"field-id": 1, "names": ["id"]}, {"field-id": 2, "names": ["c1"]}, {"field-id": 3, "names": ["c2"]}, {"field-id": 4, "names": ["c3"]}]');
+-- result:
+-- !result
+alter table iceberg_nm_${uuid0}.nm_db_${uuid0}.t rename column c1 to c1_a;
+-- result:
+-- !result
+alter table iceberg_nm_${uuid0}.nm_db_${uuid0}.t rename column c1_a to c1_b;
+-- result:
+-- !result
+alter table iceberg_nm_${uuid0}.nm_db_${uuid0}.t rename column c3 to c3_old;
+-- result:
+-- !result
+alter table iceberg_nm_${uuid0}.nm_db_${uuid0}.t add column c3 int;
+-- result:
+-- !result
+select * from iceberg_nm_${uuid0}.nm_db_${uuid0}.t order by id;
+-- result:
+1	a	10	None	100
+2	b	20	None	200
+-- !result
+select c1_b from iceberg_nm_${uuid0}.nm_db_${uuid0}.t where c1_b = 'b';
+-- result:
+b
+-- !result
+select id from iceberg_nm_${uuid0}.nm_db_${uuid0}.t where c1_b is null order by id;
+-- result:
+-- !result
+insert into iceberg_nm_${uuid0}.nm_db_${uuid0}.t values (3, 'c', 30, 300, 3000);
+-- result:
+-- !result
+select * from iceberg_nm_${uuid0}.nm_db_${uuid0}.t order by id;
+-- result:
+1	a	10	None	100
+2	b	20	None	200
+3	c	30	300	3000
+-- !result
+drop table iceberg_nm_${uuid0}.nm_db_${uuid0}.t force;
+-- result:
+-- !result
+drop table hive_nm_${uuid0}.nm_db_${uuid0}.src force;
+-- result:
+-- !result
+drop database iceberg_nm_${uuid0}.nm_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_nm_${uuid0};
+-- result:
+-- !result
+drop catalog hive_nm_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/nm_db_${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

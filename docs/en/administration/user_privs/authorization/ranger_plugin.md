@@ -122,12 +122,22 @@ This step configures the StarRocks Service on Ranger so that users can perform a
 
    :::
 
+   To grant SELECT on views and materialized views through Ranger, the `accessTypeRestrictions` of the `view` and `materialized_view` resources in the .json file must include `"select"`. If they do not, add it before you add or update the service definition in the next step.
+
 2. Add StarRocks Service by running the following command as a Ranger administrator.
 
    ```Bash
    curl -u <ranger_adminuser>:<ranger_adminpwd> \
    -X POST -H "Accept: application/json" \
    -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/plugins/definitions -d@ranger-servicedef-starrocks.json
+   ```
+
+   If the StarRocks service definition is already registered in Ranger, for example when you upgrade StarRocks, update it instead of adding it again:
+
+   ```Bash
+   curl -u <ranger_adminuser>:<ranger_adminpwd> \
+   -X PUT -H "Accept: application/json" \
+   -H "Content-Type: application/json" http://<ranger-ip>:<ranger-port>/service/public/v2/api/servicedef/name/starrocks -d@ranger-servicedef-starrocks.json
    ```
 
 3. Access `http://<ranger-ip>:<ranger-host>/login.jsp` to log in to the Apache Ranger page. The STARROCKS service appears on the page.

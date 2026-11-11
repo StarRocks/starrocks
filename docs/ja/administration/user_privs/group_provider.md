@@ -389,6 +389,11 @@ ALTER SECURITY INTEGRATION LDAP SET
 GRANT example_role TO EXTERNAL GROUP analysts;
 ```
 
+外部グループに付与したロールは、作成したユーザーとして実行されるタスク（非同期マテリアライズドビューのリフレッシュや、[SUBMIT TASK](../../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) で送信したタスクなど）にも適用されます。このようなタスクを実行するたびに、StarRocks は作成者のグループを改めて解決します。次の点に注意してください：
+
+- ログイン時の認証情報だけが持つグループ（JWT や OAuth 2.0 トークンのクレームから読み取ったグループなど）は、タスクでは解決できません。
+- JWT または OAuth 2.0 のセキュリティインテグレーションでログインするユーザーの場合、タスクはインテグレーションの `group_provider` プロパティではなく、FE 設定項目 `group_provider` の Group Provider を参照します。
+
 ## Group Provider を外部認可システム (Apache Ranger) と組み合わせる
 
 セキュリティインテグレーションで関連する Group Provider を構成すると、StarRocks はログイン時にユーザーのグループ情報を記録します。このグループ情報は、Ranger との認可プロセスに自動的に含まれ、追加の構成が不要になります。

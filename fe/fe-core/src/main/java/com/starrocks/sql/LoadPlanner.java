@@ -32,6 +32,8 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
@@ -291,6 +293,27 @@ public class LoadPlanner {
 
     public void setJsonOptions(LoadJob.JSONOptions options) {
         this.jsonOptions = options;
+    }
+
+    /**
+     * {@link #plan()} under the destination table's READ lock, for a caller that holds no table or database lock of its
+     * own: the transaction stream load (StreamLoadTask).
+     *
+     * <p>The load's slots (the tuple descriptor) and the sink's schema param -- the index columns and the schema id the
+     * BE writes with, see OlapTableSink#complete -- must come from one version of the table schema. A fast schema
+     * change edits the catalog in place under the table WRITE lock; one that commits between the two reads gives the
+     * BE a write schema with a column no slot fills, which the memtable of a table that is not a primary key table
+     * keeps empty and then reads at flush. The other callers already plan under this lock or the database's; plan()
+     * does not take it itself because a file load's scan node set-up may reach remote storage.
+     */
+    public void planUnderTableLock() throws StarRocksException {
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(dbId, destTable.getId(), LockType.READ);
+        try {
+            plan();
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(dbId, destTable.getId(), LockType.READ);
+        }
     }
 
     public void plan() throws StarRocksException {

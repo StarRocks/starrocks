@@ -1376,15 +1376,15 @@ columnAliasesOrByName
     ;
 
 updateStatement
-    : explainDesc? withClause? UPDATE qualifiedName SET assignmentList fromClause (WHERE where=expression)?
+    : explainDesc? withClause? UPDATE qualifiedName writeBranch? SET assignmentList fromClause (WHERE where=expression)?
     ;
 
 deleteStatement
-    : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
+    : explainDesc? withClause? DELETE FROM qualifiedName writeBranch? partitionNames? (USING using=relations)? (WHERE where=expression)?
     ;
 
 mergeIntoStatement
-    : explainDesc? MERGE INTO qualifiedName (AS? targetAlias=identifier)?
+    : explainDesc? MERGE INTO qualifiedName writeBranch? (AS? targetAlias=identifier)?
       USING relation (AS? sourceAlias=identifier)?
       ON mergeCondition=expression
       mergeWhenClause+
