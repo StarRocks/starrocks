@@ -1330,7 +1330,7 @@ TEST_F(FileReaderTest, TestDictFilterRegistersColumnOnceForMultipleConjuncts) {
     auto file_reader = _create_file_reader(_file2_path);
     auto* ctx = _create_file2_base_context();
     // c3 >= "c" AND c3 <= "c"
-    auto& c3_conjuncts = ctx->format_scan_context.conjunct_ctxs_by_slot[2];
+    auto& c3_conjuncts = ctx->conjunct_ctxs_by_slot[2];
     for (auto opcode : {TExprOpcode::GE, TExprOpcode::LE}) {
         std::vector<ExprContext*> ctxs;
         _create_string_conjunct_ctxs(opcode, 2, "c", &ctxs);
@@ -1338,7 +1338,7 @@ TEST_F(FileReaderTest, TestDictFilterRegistersColumnOnceForMultipleConjuncts) {
     }
     ASSERT_EQ(2, c3_conjuncts.size());
 
-    Status status = file_reader->init(&ctx->format_scan_context);
+    Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
     const auto& materializer = file_reader->_row_group_readers[0]->_column_materializer;
@@ -2869,7 +2869,7 @@ TEST_F(FileReaderTest, TestStructDictFilterRegistersEachSubFieldPathOnce) {
 
     std::vector<std::string> inner_path({"c_struct", "c0"});
     std::vector<std::string> outer_path({"c0"});
-    auto& conjuncts = ctx->format_scan_context.conjunct_ctxs_by_slot[3];
+    auto& conjuncts = ctx->conjunct_ctxs_by_slot[3];
     auto add_conjunct = [&](TExprOpcode::type opcode, const std::vector<std::string>& path) {
         std::vector<ExprContext*> ctxs;
         _create_struct_subfield_predicate_conjunct_ctxs(opcode, 3, type_struct_in_struct, path, "55", &ctxs);
@@ -2889,7 +2889,7 @@ TEST_F(FileReaderTest, TestStructDictFilterRegistersEachSubFieldPathOnce) {
     chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(type_struct_in_struct, true), chunk->num_columns());
 
-    Status status = file_reader->init(&ctx->format_scan_context);
+    Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
     const auto& materializer = file_reader->_row_group_readers[0]->_column_materializer;
     const auto& dict_column_indices = materializer->dict_column_indices();
