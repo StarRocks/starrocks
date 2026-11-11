@@ -647,7 +647,7 @@ StatusOr<bool> StructColumnReader::row_group_bloom_filter(const std::vector<cons
         if (!val || !val->is_constant()) {
             return false;
         }
-        auto val_str = down_cast<const ConstColumn*>(val.get())->data_column()->debug_item(0);
+        auto val_str = down_cast<const ConstColumn*>(val.get())->data_column()->raw_item_value(0);
         auto t = get_type_info(root->get_child(1)->type().type);
         ColumnPredicate* pred = nullptr;
         pred = new_column_eq_predicate(t, rewritten_subfield_predicate->column_id(), val_str);
