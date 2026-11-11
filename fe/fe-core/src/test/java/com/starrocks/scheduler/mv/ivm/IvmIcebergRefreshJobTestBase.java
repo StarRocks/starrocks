@@ -164,7 +164,11 @@ abstract class IvmIcebergRefreshJobTestBase extends MVIVMIcebergTestBase {
         return runFirstBatch(mv, Map.of());
     }
 
-    protected static TaskRun runFirstBatch(MaterializedView mv, Map<String, String> requestProperties)
+    protected static TaskRun runForceFirstBatch(MaterializedView mv) throws Exception {
+        return runFirstBatch(mv, Map.of(TaskRun.FORCE, "true"));
+    }
+
+    private static TaskRun runFirstBatch(MaterializedView mv, Map<String, String> requestProperties)
             throws Exception {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(mv);
@@ -176,6 +180,10 @@ abstract class IvmIcebergRefreshJobTestBase extends MVIVMIcebergTestBase {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(requestProperties).build();
         executeBatch(taskRun);
         return taskRun;
+    }
+
+    protected static String executedRefreshMode(TaskRun taskRun) {
+        return taskRun.getStatus().getMvTaskRunExtraMessage().getRefreshMode();
     }
 
     protected static Constants.TaskRunState executeBatch(TaskRun taskRun) throws Exception {

@@ -108,8 +108,10 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
             pctProcessor.setBeforePartitionAlignHook(() -> {
                 MaterializedView.AsyncRefreshContext refreshContext =
                         mv.getRefreshScheme().getAsyncRefreshContext();
-                final Map<BaseTableInfo, TvrVersionRange> committedMap =
-                        refreshContext.getBaseTableInfoTvrVersionRangeMap();
+                // FORCE trusts no baseline, not even an unchanged table's: each one is dropped before the first
+                // write and set by the last batch, so a rebuild that stops part way is finished by the next refresh.
+                final Map<BaseTableInfo, TvrVersionRange> committedMap = mvRefreshParams.isNonTentativeForce()
+                        ? Map.of() : refreshContext.getBaseTableInfoTvrVersionRangeMap();
                 final Map<BaseTableInfo, TvrVersionRange> frozen = Maps.newHashMap();
                 for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
                     TvrVersionRange changedVersionRange = ivmProcessor.getBaseTableMaxChangedDelta(
