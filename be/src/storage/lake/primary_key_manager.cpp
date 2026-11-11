@@ -1811,7 +1811,10 @@ static StatusOr<std::shared_ptr<Segment>> get_lake_dcg_segment(GetDeltaColumnCon
         const auto& column_file = column_file_result.value();
 
         if (ctx.dcg_segments.count(column_file) == 0) {
-            auto dcg_segment_result = ctx.segment->new_dcg_segment(*dcg, idx.first, read_tablet_schema);
+            // A `.cols` segment is opened again by every publish that reads it, so its footer read has to
+            // fill the local data cache, as the column reads that follow do.
+            auto dcg_segment_result = ctx.segment->new_dcg_segment(*dcg, idx.first, read_tablet_schema,
+                                                                   LakeIOOptions{.fill_data_cache = true});
             if (!dcg_segment_result.ok()) {
                 return Status::InternalError(fmt::format("Failed to create DCG segment for column {}: {}", ucid,
                                                          dcg_segment_result.status().to_string()));
