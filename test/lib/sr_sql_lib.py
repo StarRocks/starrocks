@@ -4790,6 +4790,18 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         else:
             raise Exception(f"Failed to get tablet ID for table {table_name}")
 
+    def set_max_tablet_id(self, table_name, partition_name=None):
+        """Bind ${tablet_id} to the newest installed generation, using numeric tablet IDs."""
+        if partition_name:
+            sql = f"SHOW TABLETS FROM {table_name} PARTITION ({partition_name})"
+        else:
+            sql = f"SHOW TABLETS FROM {table_name}"
+        result = self.execute_sql(sql, True)
+        if not (result and result.get("result")):
+            raise Exception(f"Failed to get tablet IDs for table {table_name}")
+        self.tablet_id = str(max(int(row[0]) for row in result["result"]))
+        log.info(f"Set tablet_id = {self.tablet_id}")
+
     def wait_reshard_job_finish(self, table_name, job_type, expect_count, timeout_sec=60):
         """
         Wait until at least expect_count reshard jobs of job_type have FINISHED for the table.
