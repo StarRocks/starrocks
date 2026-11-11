@@ -23,7 +23,6 @@
 #include "column/chunk_schema_helper.h"
 #include "column/serde/column_array_serde.h"
 #include "common/config_compaction_fwd.h"
-#include "common/config_exec_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/stack_util.h"
 #include "common/tracer.h"
@@ -33,6 +32,7 @@
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_column_group.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset.h"
@@ -117,7 +117,7 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
     }
 
     ChunkPtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE));
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, get_pk_vector_chunk_size()));
 
     // alloc first BatchPKsPtr
     auto header_ptr = std::make_shared<BatchPKs>();
@@ -127,14 +127,15 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
         header_ptr->offsets.push_back(header_ptr->upserts->size());
         auto chunk = chunk_shared_ptr.get();
         auto col = pk_column->clone();
-        ASSIGN_OR_RETURN(auto itr, rowset->get_update_file_iterator(pkey_schema, idx, &stats));
+        ASSIGN_OR_RETURN(auto itr,
+                         rowset->get_update_file_iterator(pkey_schema, idx, &stats, get_pk_vector_chunk_size()));
         DeferOp iter_defer([&]() {
             if (itr != nullptr) {
                 itr->close();
             }
         });
         if (itr != nullptr) {
-            TRY_CATCH_BAD_ALLOC(col->reserve(DEFAULT_CHUNK_SIZE));
+            TRY_CATCH_BAD_ALLOC(col->reserve(get_pk_vector_chunk_size()));
             while (true) {
                 chunk->reset();
                 auto st = itr->get_next(chunk);
@@ -351,16 +352,16 @@ static Status read_from_source_segment_and_update(
     seg_options.version = version;
     // not use delvec loader
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(tablet->data_dir()->get_meta());
-    seg_options.chunk_size = config::vector_chunk_size;
+    seg_options.chunk_size = get_pk_vector_chunk_size();
     ASSIGN_OR_RETURN(auto seg_iter, (*segment)->new_iterator(schema, seg_options));
     ChunkUniquePtr source_chunk_ptr;
     ChunkUniquePtr tmp_chunk_ptr;
-    TRY_CATCH_BAD_ALLOC(source_chunk_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size));
-    TRY_CATCH_BAD_ALLOC(tmp_chunk_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size));
+    TRY_CATCH_BAD_ALLOC(source_chunk_ptr = ChunkFactory::new_chunk(schema, seg_options.chunk_size));
+    TRY_CATCH_BAD_ALLOC(tmp_chunk_ptr = ChunkFactory::new_chunk(schema, seg_options.chunk_size));
     uint32_t start_rowid = 0;
     // Accumulated rather than re-measured: bytes_usage() is O(1) for a binary column but walks every
     // element of an object-backed one -- JSON, BITMAP, HLL -- so asking the whole accumulator after each
-    // batch would cost O(rows^2 / vector_chunk_size) on those schemas. Appending adds exactly the
+    // batch would cost O(rows^2 / pk_vector_chunk_size) on those schemas. Appending adds exactly the
     // batch's bytes, so a running total is exact, not an estimate.
     int64_t source_chunk_bytes = 0;
     auto emit_container = [&](bool print_log) {
@@ -501,8 +502,9 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
         const uint32_t upt_id = each.first;
         // 1. get chunk from upt file
         ChunkUniquePtr upt_chunk;
-        TRY_CATCH_BAD_ALLOC(upt_chunk = ChunkFactory::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE));
-        ASSIGN_OR_RETURN(auto update_iterator, rowset->get_update_file_iterator(partial_schema, upt_id, stats));
+        TRY_CATCH_BAD_ALLOC(upt_chunk = ChunkFactory::new_chunk(partial_schema, get_pk_vector_chunk_size()));
+        ASSIGN_OR_RETURN(auto update_iterator,
+                         rowset->get_update_file_iterator(partial_schema, upt_id, stats, get_pk_vector_chunk_size()));
         DeferOp iter_defer([&]() {
             if (update_iterator != nullptr) {
                 update_iterator->close();
@@ -671,7 +673,8 @@ Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet
     Schema partial_schema = ChunkHelper::convert_schema(tablet_schema, read_update_column_ids.second);
     for (int upt_id = 0; upt_id < _partial_update_states.size(); upt_id++) {
         if (_partial_update_states[upt_id].insert_rowids.size() > 0) {
-            ASSIGN_OR_RETURN(auto update_iterator, rowset->get_update_file_iterator(partial_schema, upt_id, &stats));
+            ASSIGN_OR_RETURN(auto update_iterator, rowset->get_update_file_iterator(partial_schema, upt_id, &stats,
+                                                                                    get_pk_vector_chunk_size()));
             DeferOp iter_defer([&]() {
                 if (update_iterator != nullptr) {
                     update_iterator->close();
@@ -679,7 +682,7 @@ Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet
             });
             // 1. generate segment file
             auto chunk_ptr = ChunkFactory::new_chunk(schema, _partial_update_states[upt_id].insert_rowids.size());
-            ChunkUniquePtr partial_chunk_ptr = ChunkFactory::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
+            ChunkUniquePtr partial_chunk_ptr = ChunkFactory::new_chunk(partial_schema, get_pk_vector_chunk_size());
             ASSIGN_OR_RETURN(auto writer, _prepare_segment_writer(rowset, tablet_schema, segid));
             RETURN_IF_ERROR(read_chunk_from_update_file(update_iterator, partial_chunk_ptr));
             for (uint32_t column_id : read_update_column_ids.second) {
