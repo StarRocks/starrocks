@@ -10,6 +10,7 @@ import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
 import Curl from '../_assets/quick-start/_curl.mdx'
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 
 在存储与计算分离的系统中，数据存储在低成本、可靠的远端存储系统中，如 Amazon S3、Google Cloud Storage、Azure Blob Storage 和其他兼容 S3 的存储如 MinIO。热数据会被本地缓存，当缓存命中时，查询性能可与存储计算耦合架构相媲美。计算节点（CN）可以根据需求在几秒内添加或移除。这种架构降低了存储成本，确保了更好的资源隔离，并提供了弹性和可扩展性。
 
@@ -49,6 +50,10 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 ### curl
 
 `curl` 用于向 StarRocks 发起数据导入任务，并下载数据集。通过在操作系统提示符下运行 `curl` 或 `curl.exe` 来检查是否已安装 curl。如果未安装 curl，请[在此获取 curl](https://curl.se/)。
+
+### MinIO AIStor 许可证
+
+本指南使用 MinIO AIStor 作为对象存储，它需要许可证。免费版许可证即可满足需求。获取许可证的说明将在本指南后面提供。
 
 ### `/etc/hosts`
 
@@ -96,7 +101,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 - 纽约市交通事故数据
 - 天气数据
 
-本指南使用 MinIO，它是根据 GNU Affero 通用公共许可证提供的兼容 S3 的对象存储。
+本指南使用 MinIO AIStor，它是兼容 S3 的对象存储。MinIO AIStor 需要许可证。
 
 ### 创建一个目录来存储实验文件
 
@@ -126,6 +131,10 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
 ```
+
+### 获取 MinIO AIStor 许可证
+
+<AIStorLicense />
 
 ---
 

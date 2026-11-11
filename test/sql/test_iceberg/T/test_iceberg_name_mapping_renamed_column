@@ -1,0 +1,62 @@
+-- name: test_iceberg_name_mapping_renamed_column
+-- Parquet files without field ids (written by a hive table, registered with add_files) are matched by name. After a
+-- rename, the table's schema.name-mapping.default keeps the older name, so the renamed column still reads its values.
+
+create external catalog iceberg_nm_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create external catalog hive_nm_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+create database iceberg_nm_${uuid0}.nm_db_${uuid0} properties ("location" = "oss://${oss_bucket}/nm_db_${uuid0}/iceberg");
+
+create table hive_nm_${uuid0}.nm_db_${uuid0}.src(
+    id int,
+    c1 string,
+    c2 int,
+    c3 int
+) properties ("file_format" = "parquet", "location" = "oss://${oss_bucket}/nm_db_${uuid0}/src");
+
+insert into hive_nm_${uuid0}.nm_db_${uuid0}.src values (1, 'a', 10, 100), (2, 'b', 20, 200);
+
+create table iceberg_nm_${uuid0}.nm_db_${uuid0}.t(
+    id int,
+    c1 string,
+    c2 int,
+    c3 int
+);
+
+alter table iceberg_nm_${uuid0}.nm_db_${uuid0}.t execute add_files(location="oss://${oss_bucket}/nm_db_${uuid0}/src", file_format="parquet");
+alter table iceberg_nm_${uuid0}.nm_db_${uuid0}.t set ("schema.name-mapping.default" = '[{"field-id": 1, "names": ["id"]}, {"field-id": 2, "names": ["c1"]}, {"field-id": 3, "names": ["c2"]}, {"field-id": 4, "names": ["c3"]}]');
+
+-- c1 renamed twice keeps both older names in the mapping
+alter table iceberg_nm_${uuid0}.nm_db_${uuid0}.t rename column c1 to c1_a;
+alter table iceberg_nm_${uuid0}.nm_db_${uuid0}.t rename column c1_a to c1_b;
+-- c3 renamed, then a new column takes its old name: the name moves to the new column, as in Iceberg readers
+alter table iceberg_nm_${uuid0}.nm_db_${uuid0}.t rename column c3 to c3_old;
+alter table iceberg_nm_${uuid0}.nm_db_${uuid0}.t add column c3 int;
+
+select * from iceberg_nm_${uuid0}.nm_db_${uuid0}.t order by id;
+select c1_b from iceberg_nm_${uuid0}.nm_db_${uuid0}.t where c1_b = 'b';
+select id from iceberg_nm_${uuid0}.nm_db_${uuid0}.t where c1_b is null order by id;
+
+-- a file SR writes has field ids and is read by id
+insert into iceberg_nm_${uuid0}.nm_db_${uuid0}.t values (3, 'c', 30, 300, 3000);
+select * from iceberg_nm_${uuid0}.nm_db_${uuid0}.t order by id;
+
+drop table iceberg_nm_${uuid0}.nm_db_${uuid0}.t force;
+drop table hive_nm_${uuid0}.nm_db_${uuid0}.src force;
+drop database iceberg_nm_${uuid0}.nm_db_${uuid0};
+drop catalog iceberg_nm_${uuid0};
+drop catalog hive_nm_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/nm_db_${uuid0} >/dev/null || echo "exit 0" >/dev/null

@@ -20,6 +20,7 @@
 #include "exprs/function_call_expr.h"
 #include "exprs/like_predicate.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -527,17 +528,8 @@ TEST_F(LikeTest, constValueLike) {
     const int num_rows = 10;
 
     auto value_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("abcd", num_rows);
-    auto pattern_col = BinaryColumn::create();
-    pattern_col->append("abc");
-    pattern_col->append("ab%");
-    pattern_col->append("abc_");
-    pattern_col->append("%cd");
-    pattern_col->append("_bcd");
-    pattern_col->append("a%d");
-    pattern_col->append("ab_d");
-    pattern_col->append("abcd");
-    pattern_col->append("abcm");
-    pattern_col->append("abcd_");
+    auto pattern_col = ColumnTestHelper::build_column<Slice>(
+            {"abc", "ab%", "abc_", "%cd", "_bcd", "a%d", "ab_d", "abcd", "abcm", "abcd_"});
 
     bool expected[num_rows] = {false, true, true, true, true, true, true, true, false, false};
 
@@ -568,11 +560,7 @@ TEST_F(LikeTest, constValueRegexp) {
     const int num_rows = 4;
 
     auto value_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("abcd", num_rows);
-    auto pattern_col = BinaryColumn::create();
-    pattern_col->append("abc");
-    pattern_col->append("ab.*");
-    pattern_col->append("abcd");
-    pattern_col->append("abcm");
+    auto pattern_col = ColumnTestHelper::build_column<Slice>({"abc", "ab.*", "abcd", "abcm"});
 
     bool expected[num_rows] = {true, true, true, false};
 

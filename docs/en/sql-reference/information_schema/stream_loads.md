@@ -7,6 +7,8 @@ description: "stream_loads provides information about stream load jobs."
 
 `stream_loads` provides information about stream load jobs.
 
+`stream_loads` shows a stream load job to users who hold at least one privilege on each table that the job loads data into, or the OPERATE privilege. Unless you hold the SELECT privilege on each of those tables, `ERROR_MSG`, `TRACKING_URL`, and `TRACKING_SQL` are NULL. The `root` user can see all stream load jobs in full. A stream load job whose target table has been dropped is shown in full only to the `root` user, and with these fields hidden to users with the OPERATE privilege.
+
 The following fields are provided in `stream_loads`:
 
 | **Field**             | **Description**                                              |

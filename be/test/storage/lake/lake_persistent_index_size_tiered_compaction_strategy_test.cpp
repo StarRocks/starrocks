@@ -17,11 +17,14 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/sst_seek_range.h"
 #include "storage/lake/tablet_metadata.h"
 
 namespace starrocks::lake {
@@ -614,6 +617,118 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_no_starvation_a
     ASSERT_EQ(2, result.candidate_filesets.size());
     EXPECT_EQ(1, result.candidate_filesets[0][0].fileset_id().hi());
     EXPECT_EQ(2, result.candidate_filesets[1][0].fileset_id().hi());
+}
+
+namespace {
+
+void add_ranged_sstable(PersistentIndexSstableMetaPB* meta, int64_t fileset_id_hi, uint64_t max_rss_rowid, bool shared,
+                        const std::string& start_key, const std::string& end_key) {
+    auto* sstable = meta->add_sstables();
+    sstable->set_filename(std::to_string(fileset_id_hi) + "_" + std::to_string(max_rss_rowid) + ".sst");
+    sstable->mutable_fileset_id()->set_hi(fileset_id_hi);
+    sstable->mutable_fileset_id()->set_lo(0);
+    sstable->set_filesize(100000);
+    sstable->set_max_rss_rowid(max_rss_rowid);
+    sstable->set_shared(shared);
+    sstable->mutable_range()->set_start_key(start_key);
+    sstable->mutable_range()->set_end_key(end_key);
+}
+
+std::vector<int64_t> candidate_fileset_ids(const CompactionCandidateResult& result) {
+    std::vector<int64_t> ids;
+    for (const auto& fileset : result.candidate_filesets) {
+        ids.push_back(fileset.front().fileset_id().hi());
+        for (const auto& sstable : fileset) {
+            EXPECT_EQ(ids.back(), sstable.fileset_id().hi());
+        }
+    }
+    return ids;
+}
+
+} // namespace
+
+// UNSHARE rewrites the filesets from the first to the last one holding a file the tablet cannot keep. The private
+// base fileset in front of a shared one stays, and so does the private fileset behind it; the rewrite leaves the base
+// level out.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_unshare_starts_at_the_first_fileset_needing_rewrite) {
+    PersistentIndexSstableMetaPB meta;
+    add_ranged_sstable(&meta, 1, 100, /*shared=*/false, "b", "c");
+    add_ranged_sstable(&meta, 2, 200, /*shared=*/true, "d", "e");
+    add_ranged_sstable(&meta, 2, 210, /*shared=*/true, "f", "g");
+    add_ranged_sstable(&meta, 3, 300, /*shared=*/false, "h", "i");
+
+    ASSIGN_OR_ABORT(auto result, LakePersistentIndexSizeTieredCompactionStrategy::pick_unshare_candidates(
+                                         meta, SstSeekRange("a", "z")));
+    EXPECT_EQ((std::vector<int64_t>{2}), candidate_fileset_ids(result));
+    ASSERT_EQ(2, result.candidate_filesets[0].size());
+    EXPECT_FALSE(result.merge_base_level);
+    EXPECT_EQ(210, result.max_max_rss_rowid);
+}
+
+// When the base fileset is shared, the rewrite starts at it and merges the base level. A private fileset between two
+// that need a rewrite is rewritten with them, since the publish replaces one contiguous run of filesets.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_unshare_from_a_shared_base_merges_the_base_level) {
+    PersistentIndexSstableMetaPB meta;
+    add_ranged_sstable(&meta, 1, 100, /*shared=*/true, "b", "c");
+    add_ranged_sstable(&meta, 2, 200, /*shared=*/false, "d", "e");
+    add_ranged_sstable(&meta, 3, 300, /*shared=*/true, "f", "g");
+    add_ranged_sstable(&meta, 4, 400, /*shared=*/false, "h", "i");
+
+    ASSIGN_OR_ABORT(auto result, LakePersistentIndexSizeTieredCompactionStrategy::pick_unshare_candidates(
+                                         meta, SstSeekRange("a", "z")));
+    EXPECT_EQ((std::vector<int64_t>{1, 2, 3}), candidate_fileset_ids(result));
+    EXPECT_TRUE(result.merge_base_level);
+    EXPECT_EQ(300, result.max_max_rss_rowid);
+}
+
+// The size-tiered pick never compacts the newest fileset, nor a lone one. UNSHARE does.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_unshare_picks_a_lone_shared_fileset) {
+    PersistentIndexSstableMetaPB meta;
+    add_ranged_sstable(&meta, 1, 100, /*shared=*/true, "b", "c");
+    add_ranged_sstable(&meta, 1, 110, /*shared=*/true, "d", "e");
+
+    ASSIGN_OR_ABORT(auto size_tiered,
+                    LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(meta));
+    EXPECT_TRUE(size_tiered.candidate_filesets.empty());
+
+    ASSIGN_OR_ABORT(auto result, LakePersistentIndexSizeTieredCompactionStrategy::pick_unshare_candidates(
+                                         meta, SstSeekRange("a", "z")));
+    EXPECT_EQ((std::vector<int64_t>{1}), candidate_fileset_ids(result));
+    ASSERT_EQ(2, result.candidate_filesets[0].size());
+    EXPECT_TRUE(result.merge_base_level);
+    EXPECT_EQ(110, result.max_max_rss_rowid);
+}
+
+// A private file that reaches past the tablet range needs a rewrite too, so the rewrite can start at it.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest,
+       test_unshare_starts_at_a_private_sstable_outside_the_range) {
+    PersistentIndexSstableMetaPB meta;
+    add_ranged_sstable(&meta, 1, 100, /*shared=*/false, "b", "c");
+    // The tablet range stops before "m", so "m" itself is outside it.
+    add_ranged_sstable(&meta, 2, 200, /*shared=*/false, "d", "m");
+    add_ranged_sstable(&meta, 3, 300, /*shared=*/true, "f", "g");
+
+    ASSIGN_OR_ABORT(auto result, LakePersistentIndexSizeTieredCompactionStrategy::pick_unshare_candidates(
+                                         meta, SstSeekRange("a", "m")));
+    EXPECT_EQ((std::vector<int64_t>{2, 3}), candidate_fileset_ids(result));
+    EXPECT_FALSE(result.merge_base_level);
+    EXPECT_EQ(300, result.max_max_rss_rowid);
+}
+
+// A tablet that already owns all of its index files privately, inside its range, has nothing to rewrite. An empty
+// start key is a valid key (an empty VARCHAR primary key), so a file starting at it still declares a usable range.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest,
+       test_unshare_picks_nothing_when_every_sstable_is_private_and_in_range) {
+    PersistentIndexSstableMetaPB meta;
+    add_ranged_sstable(&meta, 1, 100, /*shared=*/false, "", "c");
+    add_ranged_sstable(&meta, 2, 200, /*shared=*/false, "d", "e");
+    add_ranged_sstable(&meta, 2, 210, /*shared=*/false, "f", "g");
+    ASSERT_TRUE(meta.sstables(0).range().has_start_key());
+
+    ASSIGN_OR_ABORT(auto result, LakePersistentIndexSizeTieredCompactionStrategy::pick_unshare_candidates(
+                                         meta, SstSeekRange("", "z")));
+    EXPECT_TRUE(result.candidate_filesets.empty());
+    EXPECT_FALSE(result.merge_base_level);
 }
 
 } // namespace starrocks::lake

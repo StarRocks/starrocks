@@ -78,7 +78,8 @@ public final class AIFunctionExtractor {
             calls.forEach((call, output) -> slotMap.put(output, call));
 
             Projection projection = ScalarOperatorsReuse.rewriteProjectionOrLambdaExpr(
-                    new Projection(slotMap), context.getColumnRefFactory());
+                    new Projection(slotMap), context.getColumnRefFactory(),
+                    ScalarOperatorsReuse.allowThrowException(context.getSessionVariable()));
             if (!isSafeCommonMap(projection.getCommonSubOperatorMap())) {
                 projection = new Projection(slotMap);
             }

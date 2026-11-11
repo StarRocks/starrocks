@@ -44,63 +44,6 @@ enum AggDistinctType { COUNT = 0, SUM = 1 };
 
 static const size_t MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA = 24;
 
-template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
-struct DistinctAggregateState {};
-
-template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
-    using T = RunTimeCppType<LT>;
-    using SumType = RunTimeCppType<SumLT>;
-    using MyHashSet = HashSetWithAggStateAllocator<T>;
-
-    void update([[maybe_unused]] MemPool* mem_pool, T key) { set.insert(key); }
-
-    void update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) { set.emplace_with_hash(hash, key); }
-
-    void prefetch(T key) { set.prefetch(key); }
-
-    int64_t distinct_count() const { return set.size(); }
-
-    size_t serialize_size() const {
-        size_t size = set.dump_bound();
-        DCHECK(size >= MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA);
-        return size;
-    }
-
-    void serialize(uint8_t* dst) const {
-        phmap::InMemoryOutput output(reinterpret_cast<char*>(dst));
-        [[maybe_unused]] auto err = set.dump(output);
-        DCHECK(output.length() == set.dump_bound());
-    }
-
-    void deserialize_and_merge(const uint8_t* src, size_t len) {
-        phmap::InMemoryInput input(reinterpret_cast<const char*>(src));
-        auto old_size = set.size();
-        if (old_size == 0) {
-            [[maybe_unused]] auto err = set.load(input);
-        } else {
-            MyHashSet set_src;
-            [[maybe_unused]] auto err = set_src.load(input);
-            set.merge(set_src);
-        }
-    }
-
-    SumType sum_distinct() const {
-        SumType sum{};
-        // Sum distinct doesn't support timestamp and date type
-        if constexpr (IsDateTime<SumType>) {
-            return sum;
-        }
-
-        for (auto& key : set) {
-            sum += key;
-        }
-        return sum;
-    }
-
-    MyHashSet set;
-};
-
 struct AdaptiveSliceHashSet {
     using KeyType = typename SliceHashSet::key_type;
 
@@ -248,9 +191,12 @@ struct AdaptiveSliceHashSet {
     HashOnSliceWithHash hash_function() const { return HashOnSliceWithHash(); }
 };
 
+template <LogicalType LT, LogicalType SumLT, bool compute_sum = false, typename = guard::Guard>
+struct DistinctAggregateStateBase {};
+
 template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateState<LT, SumLT, StringOrBinaryGuard<LT>> {
-    DistinctAggregateState() = default;
+struct DistinctAggregateStateBase<LT, SumLT, false, StringOrBinaryGuard<LT>> {
+    DistinctAggregateStateBase() = default;
     using KeyType = typename SliceHashSet::key_type;
 
     void reset() { set.clear(); }
@@ -285,12 +231,9 @@ struct DistinctAggregateState<LT, SumLT, StringOrBinaryGuard<LT>> {
     AdaptiveSliceHashSet set;
 };
 
-// use a different way to do serialization to gain performance.
-template <LogicalType LT, LogicalType SumLT, bool compute_sum = false, typename = guard::Guard>
-struct DistinctAggregateStateV2Base {};
-
+// Fixed-length keys: serialize by copying the keys one after another to gain performance.
 template <LogicalType LT, LogicalType SumLT, bool compute_sum>
-struct DistinctAggregateStateV2Base<LT, SumLT, compute_sum, FixedLengthLTGuard<LT>> {
+struct DistinctAggregateStateBase<LT, SumLT, compute_sum, FixedLengthLTGuard<LT>> {
     using T = RunTimeCppType<LT>;
     using SumType = RunTimeCppType<SumLT>;
     using MyHashSet = HashSetWithAggStateAllocator<T>;
@@ -366,7 +309,7 @@ struct DistinctAggregateStateV2Base<LT, SumLT, compute_sum, FixedLengthLTGuard<L
     }
 
     // NOLINTBEGIN
-    ~DistinctAggregateStateV2Base() {
+    ~DistinctAggregateStateBase() {
 #ifdef PHMAP_USE_CUSTOM_INFO_HANDLE
         const auto& info = set.infoz();
         VLOG_FILE << "HashSet Info: # of insert = " << info.insert_number
@@ -379,17 +322,13 @@ struct DistinctAggregateStateV2Base<LT, SumLT, compute_sum, FixedLengthLTGuard<L
     SumType sum{};
 };
 
-template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateStateV2Base<LT, SumLT, false, StringOrBinaryGuard<LT>>
-        : public DistinctAggregateState<LT, SumLT> {};
-
 template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
-struct DistinctAggregateStateV2 : public DistinctAggregateStateV2Base<LT, SumLT, false> {};
+struct DistinctAggregateState : public DistinctAggregateStateBase<LT, SumLT, false> {};
 
 template <LogicalType LT, LogicalType SumLT, bool compute_sum, typename = guard::Guard>
-struct FusedMultiDistinctAggregateState : public DistinctAggregateStateV2Base<LT, SumLT, compute_sum> {
+struct FusedMultiDistinctAggregateState : public DistinctAggregateStateBase<LT, SumLT, compute_sum> {
     using CppType = RunTimeCppType<LT>;
-    using Base = DistinctAggregateStateV2Base<LT, SumLT, compute_sum>;
+    using Base = DistinctAggregateStateBase<LT, SumLT, compute_sum>;
     using Base::reset;
     using Base::update;
     MemPool mem_pool;
@@ -572,16 +511,12 @@ using DistinctAggregateFunction =
         TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateState, DistinctType, T>;
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-using DistinctAggregateFunctionV2 =
-        TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateStateV2, DistinctType, T>;
-
-template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
 using DecimalDistinctAggregateFunction =
-        TDistinctAggregateFunction<LT, lt_is_decimal256<LT> ? TYPE_DECIMAL256 : TYPE_DECIMAL128,
-                                   DistinctAggregateStateV2, DistinctType, T>;
+        TDistinctAggregateFunction<LT, lt_is_decimal256<LT> ? TYPE_DECIMAL256 : TYPE_DECIMAL128, DistinctAggregateState,
+                                   DistinctType, T>;
 
 // now we only support String
-struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR, SumResultLT<TYPE_VARCHAR>> {
+struct DictMergeState : DistinctAggregateState<TYPE_VARCHAR, SumResultLT<TYPE_VARCHAR>> {
     DictMergeState() = default;
 
     void update_over_limit() { over_limit = set.size() > dict_threshold; }

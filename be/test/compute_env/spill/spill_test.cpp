@@ -49,6 +49,7 @@
 #include "common/statusor.h"
 #include "common/storage_define.h"
 #include "compute_env/sorting/merge.h"
+#include "compute_env/spill/input_stream_internal.h"
 #include "compute_env/spill/log_block_manager.h"
 #include "compute_env/spill/mem_table.h"
 #include "compute_env/spill/mem_tracker_guard.h"
@@ -747,6 +748,8 @@ TEST_F(SpillTest, order_by_restore_large_offsets_binary) {
     std::vector<int32_t> keys;
     std::vector<std::string> values;
     ASSERT_OK(caller.trigger_restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    // Marks the merge cursors data-ready, which restore() requires before it reads.
+    ASSERT_TRUE(caller._spiller->has_output_data());
     while (true) {
         auto chunk_st = caller.restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
         if (chunk_st.status().is_end_of_file()) {
@@ -808,8 +811,7 @@ TEST_F(SpillTest, ordered_mem_table_keeps_binary_over_4g_before_sort) {
 
     // The capacity check is kept: a chunk over the row limit is still rejected. A ConstColumn reports the rows without
     // allocating them.
-    auto value = BinaryColumn::create();
-    value->append(Slice("v"));
+    auto value = ColumnTestHelper::build_column<Slice>({"v"});
     Chunk too_many_rows(Columns{ConstColumn::create(std::move(value), capacity_limit + 1)}, slot_map);
     auto status = spill::OrderedMemTable::check_chunk_before_sort(too_many_rows);
     EXPECT_TRUE(status.is_capacity_limit_exceeded()) << status;
@@ -1566,6 +1568,76 @@ TEST_F(SpillTest, direct_io_open_failure_falls_back_to_buffered) {
     EXPECT_GT(input_rows, 0u);
 
     dummy_rt_st._query_options.spill_enable_direct_io = false;
+}
+
+// Child of a BufferedInputStream whose first get_next blocks until the test opens the gate, so the test
+// can hold the buffered stream's prefetch flag while another restore task asks for a prefetch.
+class GatedInputStream final : public spill::SpillInputStream {
+public:
+    explicit GatedInputStream(int num_chunks) : _remaining(num_chunks) {}
+
+    StatusOr<ChunkUniquePtr> get_next(workgroup::YieldContext& yield_ctx, spill::SerdeContext& ctx) override {
+        if (_calls.fetch_add(1) == 0) {
+            _entered.set_value();
+            _gate.wait();
+        }
+        if (_remaining-- <= 0) {
+            return Status::EndOfFile("end of gated stream");
+        }
+        return std::make_unique<Chunk>();
+    }
+    bool is_ready() override { return true; }
+    void close() override {}
+
+    void wait_entered() { _entered_future.wait(); }
+    void open_gate() { _gate_promise.set_value(); }
+    int calls() const { return _calls.load(); }
+
+private:
+    int _remaining;
+    std::atomic_int _calls{0};
+    std::promise<void> _entered;
+    std::future<void> _entered_future = _entered.get_future();
+    std::promise<void> _gate_promise;
+    std::shared_future<void> _gate = _gate_promise.get_future().share();
+};
+
+// Regression test for a lost wakeup in BufferedInputStream::prefetch. Restore tasks that found the
+// prefetch flag held used to return without doing anything; when they all landed while the holder was
+// on its way out after reading its single chunk, nothing read the next chunk and the spilled sort source
+// waited forever (row_number() over a force-spilled sort hung until query timeout). A prefetch request
+// that loses the race must be served by the task holding the flag.
+TEST_F(SpillTest, buffered_input_stream_serves_prefetch_request_that_lost_the_race) {
+    ObjectPool pool;
+    RawSpillerFixture fx(this, &pool, &dummy_rt_st, /*pool_size=*/1);
+    auto child = std::make_shared<GatedInputStream>(/*num_chunks=*/4);
+    auto stream = spill::detail::make_buffered_input_stream(/*capacity=*/4, child, fx.spiller.get());
+
+    auto holder = std::async(std::launch::async, [&stream]() {
+        workgroup::YieldContext yield_ctx;
+        spill::SerdeContext ctx;
+        return stream->prefetch(yield_ctx, ctx);
+    });
+    // The holder owns the prefetch flag and is blocked reading its chunk.
+    child->wait_entered();
+
+    workgroup::YieldContext yield_ctx;
+    spill::SerdeContext ctx;
+    // This request loses the race for the flag and returns immediately without reading.
+    ASSERT_OK(stream->prefetch(yield_ctx, ctx));
+    ASSERT_EQ(child->calls(), 1);
+
+    child->open_gate();
+    ASSERT_OK(holder.get());
+
+    // The holder served the request that lost the race: two chunks were read, not one.
+    EXPECT_EQ(child->calls(), 2);
+    ASSERT_TRUE(stream->is_ready());
+    ASSERT_OK(stream->get_next(yield_ctx, ctx).status());
+    ASSERT_TRUE(stream->is_ready());
+    ASSERT_OK(stream->get_next(yield_ctx, ctx).status());
+    ASSERT_FALSE(stream->is_ready());
+    ASSERT_FALSE(stream->eof());
 }
 
 /*

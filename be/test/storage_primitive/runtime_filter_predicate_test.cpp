@@ -17,18 +17,25 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <optional>
+#include <string>
 #include <vector>
 
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "common/object_pool.h"
+#include "common/system/cpu_info.h"
 #include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "runtime/bucket_aware_partition.h"
 #include "runtime/runtime_filter.h"
+#include "runtime/runtime_filter_builder.h"
+#include "runtime/runtime_filter_factory.h"
 #include "runtime/runtime_filter_layout.h"
 #include "runtime/runtime_state.h"
 #include "testutil/exprs_test_helper.h"
+#include "types/datum.h"
 
 namespace starrocks {
 namespace {
@@ -72,6 +79,18 @@ TRuntimeFilterDescription make_local_hash_bucket_desc(int32_t filter_id) {
     return desc;
 }
 
+TRuntimeFilterDescription make_broadcast_desc(int32_t filter_id) {
+    TRuntimeFilterDescription desc;
+    desc.__set_filter_id(filter_id);
+    desc.__set_has_remote_targets(false);
+    desc.__set_build_plan_node_id(5);
+    desc.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
+    desc.__set_filter_type(TRuntimeFilterBuildType::JOIN_FILTER);
+    desc.__set_plan_node_id_to_target_expr(
+            {{kProbeNodeId, ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(kProbeSlotId, true)}});
+    return desc;
+}
+
 // The sub-filter index the operator-level probe assigns to each row: the murmur3 bucket
 // transform, then bucketseq_to_instance.
 std::vector<uint32_t> operator_partitions(const RuntimeFilterLayout& layout, const Column* column) {
@@ -80,7 +99,7 @@ std::vector<uint32_t> operator_partitions(const RuntimeFilterLayout& layout, con
     std::vector<uint32_t> bucket_ids;
     std::vector<uint32_t> round_ids;
     BucketAwarePartitionCtx bctx(layout.bucket_properties(), hash_values, round_hashes, bucket_ids, round_ids);
-    calc_hash_values_and_bucket_ids({column}, bctx);
+    compute_hash_values_and_bucket_ids({column}, bctx);
 
     std::vector<uint32_t> partitions;
     partitions.reserve(bucket_ids.size());
@@ -95,6 +114,10 @@ std::vector<uint32_t> operator_partitions(const RuntimeFilterLayout& layout, con
 
 class RuntimeFilterPredicateTest : public ::testing::Test {
 protected:
+    // try_create_bitset_filter reads the L2/L3 cache sizes, which stay empty until CpuInfo::init(); this
+    // binary runs on gtest_main, which does not call it.
+    static void SetUpTestSuite() { CpuInfo::init(); }
+
     static ColumnPtr make_probe_column(size_t num_rows) {
         auto column = Int32Column::create();
         for (size_t i = 0; i < num_rows; ++i) {
@@ -103,10 +126,38 @@ protected:
         return column;
     }
 
+    static ColumnPtr make_nullable_int_column(const std::vector<std::optional<int32_t>>& keys) {
+        auto column = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        for (const auto& key : keys) {
+            if (key.has_value()) {
+                column->append_datum(Datum(*key));
+            } else {
+                column->append_nulls(1);
+            }
+        }
+        return column;
+    }
+
     RuntimeFilterProbeDescriptor* make_desc(int32_t filter_id) {
+        return make_desc(make_local_hash_bucket_desc(filter_id));
+    }
+
+    RuntimeFilterProbeDescriptor* make_desc(const TRuntimeFilterDescription& thrift_desc) {
         auto* desc = _pool.add(new RuntimeFilterProbeDescriptor());
-        CHECK(desc->init(&_pool, make_local_hash_bucket_desc(filter_id), kProbeNodeId, &_runtime_state).ok());
+        CHECK(desc->init(&_pool, thrift_desc, kProbeNodeId, &_runtime_state).ok());
         return desc;
+    }
+
+    RuntimeFilter* build_filter(RuntimeFilterSerializeType type, const ColumnPtr& build_keys, bool eq_null) {
+        RuntimeFilter* filter = type == RuntimeFilterSerializeType::BITSET_FILTER
+                                        ? RuntimeFilterFactory::try_create_bitset_filter(&_pool, TYPE_INT, {build_keys},
+                                                                                         0, build_keys->size())
+                                        : RuntimeFilterFactory::create_filter(&_pool, type, TYPE_INT,
+                                                                              TRuntimeFilterBuildJoinMode::BROADCAST);
+        CHECK(filter != nullptr);
+        filter->get_membership_filter()->init(build_keys->size());
+        CHECK(RuntimeFilterBuilder::fill(filter, TYPE_INT, build_keys, 0, eq_null).ok());
+        return filter;
     }
 
     // A partitioned bloom filter whose sub-filter i holds exactly the values the
@@ -207,6 +258,39 @@ TEST_F(RuntimeFilterPredicateTest, SelectionAwareOverloadsIgnoreBucketProperties
                                     static_cast<uint16_t>(column->size()), selection_hash_values, &selection_ctx);
 
     EXPECT_NE(operator_ctx.hash_values, selection_hash_values);
+}
+
+// The selection already holds the earlier predicates' results. A <=> join filter (eq_null) passes NULL
+// keys, but only the ones those predicates kept.
+TEST_F(RuntimeFilterPredicateTest, NullSafeFilterKeepsRowsRejectedByEarlierPredicates) {
+    const auto build_keys = make_nullable_int_column({5, std::nullopt});
+    const auto probe_keys = make_nullable_int_column({5, std::nullopt, 5, std::nullopt, 7, std::nullopt});
+    const std::vector<uint8_t> earlier_selection = {1, 1, 0, 0, 1, 0};
+
+    int32_t filter_id = 10;
+    for (auto type : {RuntimeFilterSerializeType::BLOOM_FILTER, RuntimeFilterSerializeType::BITSET_FILTER,
+                      RuntimeFilterSerializeType::EMPTY_FILTER}) {
+        for (bool eq_null : {true, false}) {
+            SCOPED_TRACE("filter type " + std::to_string(static_cast<int>(type)) +
+                         ", eq_null=" + std::to_string(eq_null));
+            auto* desc = make_desc(make_broadcast_desc(filter_id++));
+            auto* filter = build_filter(type, build_keys, eq_null);
+            ASSERT_EQ(filter->type(), type);
+            ASSERT_EQ(filter->has_null(), eq_null);
+            desc->set_runtime_filter(filter);
+
+            RuntimeFilterPredicate pred(desc, kProbeSlotId);
+            ASSERT_TRUE(pred.init(0 /*driver_sequence*/));
+
+            auto chunk = std::make_shared<Chunk>();
+            chunk->append_column(probe_keys, static_cast<ColumnId>(kProbeSlotId), true);
+            auto selection = earlier_selection;
+            ASSERT_OK(pred.evaluate(chunk.get(), selection.data(), 0, static_cast<uint16_t>(selection.size())));
+
+            const std::vector<uint8_t> expected = {1, static_cast<uint8_t>(eq_null), 0, 0, 0, 0};
+            EXPECT_EQ(selection, expected);
+        }
+    }
 }
 
 } // namespace starrocks

@@ -100,81 +100,99 @@ public class StatisticsUtils {
 
     public static ConnectorTableColumnStats estimateColumnStatistics(Table table, String columnName,
                                                                      ConnectorTableColumnStats connectorTableColumnStats) {
+        return estimateColumnStatistics(table, columnName, connectorTableColumnStats, getExternalBasicStatsMeta(table));
+    }
+
+    /**
+     * The analyze metadata of a connector table. Resolving it rebuilds the table from the connector
+     * (a 1000-column Iceberg table takes about 1 ms), so callers estimating several columns of the same
+     * table look it up once and pass it to
+     * {@link #estimateColumnStatistics(Table, String, ConnectorTableColumnStats, ExternalBasicStatsMeta)}.
+     */
+    public static ExternalBasicStatsMeta getExternalBasicStatsMeta(Table table) {
         try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
             Triple<String, Database, Table> tableIdentifier = getTableTripleByUUID(scope.getContext(), table.getUUID());
-            ExternalBasicStatsMeta externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
+            return GlobalStateMgr.getCurrentState().getAnalyzeMgr().
                     getExternalTableBasicStatsMeta(tableIdentifier.getLeft(), tableIdentifier.getMiddle().getFullName(),
                             tableIdentifier.getRight().getName());
-
-            // Rows in external_column_statistics only ever reach the CBO through this method, and they are
-            // per-partition rows aggregated with no partition filter and no completeness gate (see
-            // StatisticSQLBuilder#buildQueryExternalFullStatisticsSQL). ColumnStatsMeta is what says how many
-            // partitions those rows actually cover, so without it the aggregate is an unknown fraction of the
-            // table. A collection job that dies partway can leave exactly that state behind: its rows are
-            // flushed but its metadata is never committed. Trusting them as whole-table values hands the
-            // optimizer a confident underestimate, which is worse than having no statistics at all - so treat
-            // any row set we cannot size as unknown.
-            if (externalBasicStatsMeta == null) {
-                LOG.warn("External statistics rows exist without any ExternalBasicStatsMeta, treating column {} of " +
-                        "table {} as unknown (a previous collection likely failed before committing metadata)",
-                        columnName, table.getName());
-                return ConnectorTableColumnStats.unknown();
-            }
-
-            Map<String, ColumnStatsMeta> columnStatsMetaMap = externalBasicStatsMeta.getColumnStatsMetaMap();
-            if (!columnStatsMetaMap.containsKey(columnName)) {
-                LOG.warn("External statistics rows exist without a ColumnStatsMeta, treating column {} of table {} " +
-                        "as unknown (a previous collection likely failed before committing metadata)",
-                        columnName, table.getName());
-                return ConnectorTableColumnStats.unknown();
-            }
-
-            ColumnStatsMeta columnStatsMeta = columnStatsMetaMap.get(columnName);
-            if (columnStatsMeta.getType() == StatsConstants.AnalyzeType.FULL) {
-                return connectorTableColumnStats;
-            }
-
-            // The column statistics analyze type is sample, so scale it up to the whole table.
-            //
-            // The denominator comes from the rows themselves - how many partitions actually contributed
-            // to the aggregate - rather than from the partition set recorded in the metadata. The two are
-            // maintained on different paths: the rows in external_column_statistics accumulate across
-            // runs, while the recorded set is written by whichever collection job last committed, and a
-            // run that only covered part of what it asked for makes them disagree. Dividing a numerator
-            // by a denominator derived from somewhere else is what produced both of the estimation bugs
-            // this replaced; taken from the same aggregate, they cannot disagree by construction.
-            //
-            // A backend too old to report it sends 0, and then the recorded set is all there is.
-            int sampledPartitionSize =
-                    (int) Math.min(Integer.MAX_VALUE, connectorTableColumnStats.getCollectedPartitionCount());
-            if (sampledPartitionSize <= 0) {
-                sampledPartitionSize = columnStatsMeta.getSampledPartitionsHashValue().size();
-            }
-            int totalPartitionSize = columnStatsMeta.getAllPartitionSize();
-
-            // A SAMPLE meta that covers no partition cannot scale anything (and would divide by zero).
-            if (sampledPartitionSize <= 0 || totalPartitionSize <= 0) {
-                LOG.warn("Unusable sampled partition counts in ColumnStatsMeta for column {} of table {}: " +
-                        "sampled={} total={}, treating it as unknown",
-                        columnName, table.getName(), sampledPartitionSize, totalPartitionSize);
-                return ConnectorTableColumnStats.unknown();
-            }
-
-            double avgPartitionRowCount = connectorTableColumnStats.getRowCount() * 1.0 / sampledPartitionSize;
-            // Round once, at the end. Truncating the average first - (long) avg * total - throws away
-            // everything below a whole row per partition before it is multiplied back up, so a column
-            // whose sampled partitions hold less than one row each scales to zero however large the
-            // table is. The result also feeds the distinct-value ceiling below, so a zero row count
-            // takes the distinct count down with it.
-            long totalRowCount = Math.round(avgPartitionRowCount * totalPartitionSize);
-
-            ColumnStatistic columnStatistic = scaleNdv(connectorTableColumnStats, sampledPartitionSize,
-                    totalPartitionSize, totalRowCount);
-            return new ConnectorTableColumnStats(columnStatistic, totalRowCount,
-                    connectorTableColumnStats.getUpdateTime(),
-                    connectorTableColumnStats.getCollectedPartitionCount(),
-                    connectorTableColumnStats.getPerPartitionNdvSum());
         }
+    }
+
+    public static ConnectorTableColumnStats estimateColumnStatistics(Table table, String columnName,
+                                                                     ConnectorTableColumnStats connectorTableColumnStats,
+                                                                     ExternalBasicStatsMeta externalBasicStatsMeta) {
+        // Rows in external_column_statistics only ever reach the CBO through this method, and they are
+        // per-partition rows aggregated with no partition filter and no completeness gate (see
+        // StatisticSQLBuilder#buildQueryExternalFullStatisticsSQL). ColumnStatsMeta is what says how many
+        // partitions those rows actually cover, so without it the aggregate is an unknown fraction of the
+        // table. A collection job that dies partway can leave exactly that state behind: its rows are
+        // flushed but its metadata is never committed. Trusting them as whole-table values hands the
+        // optimizer a confident underestimate, which is worse than having no statistics at all - so treat
+        // any row set we cannot size as unknown.
+        if (externalBasicStatsMeta == null) {
+            LOG.warn("External statistics rows exist without any ExternalBasicStatsMeta, treating column {} of " +
+                    "table {} as unknown (a previous collection likely failed before committing metadata)",
+                    columnName, table.getName());
+            return ConnectorTableColumnStats.unknown();
+        }
+
+        Map<String, ColumnStatsMeta> columnStatsMetaMap = externalBasicStatsMeta.getColumnStatsMetaMap();
+        if (!columnStatsMetaMap.containsKey(columnName)) {
+            LOG.warn("External statistics rows exist without a ColumnStatsMeta, treating column {} of table {} " +
+                    "as unknown (a previous collection likely failed before committing metadata)",
+                    columnName, table.getName());
+            return ConnectorTableColumnStats.unknown();
+        }
+
+        ColumnStatsMeta columnStatsMeta = columnStatsMetaMap.get(columnName);
+        if (columnStatsMeta.getType() == StatsConstants.AnalyzeType.FULL) {
+            return connectorTableColumnStats;
+        }
+
+        // The column statistics analyze type is sample, so scale it up to the whole table.
+        //
+        // The denominator comes from the rows themselves - how many partitions actually contributed
+        // to the aggregate - rather than from the partition set recorded in the metadata. The two are
+        // maintained on different paths: the rows in external_column_statistics accumulate across
+        // runs, while the recorded set is written by whichever collection job last committed, and a
+        // run that only covered part of what it asked for makes them disagree. Dividing a numerator
+        // by a denominator derived from somewhere else is what produced both of the estimation bugs
+        // this replaced; taken from the same aggregate, they cannot disagree by construction.
+        //
+        // A backend too old to report it sends 0, and then the recorded set is all there is.
+        int sampledPartitionSize =
+                (int) Math.min(Integer.MAX_VALUE, connectorTableColumnStats.getCollectedPartitionCount());
+        if (sampledPartitionSize <= 0) {
+            sampledPartitionSize = columnStatsMeta.getSampledPartitionsHashValue().size();
+        }
+        int totalPartitionSize = columnStatsMeta.getAllPartitionSize();
+
+        // A SAMPLE meta that covers no partition cannot scale anything (and would divide by zero).
+        if (sampledPartitionSize <= 0 || totalPartitionSize <= 0) {
+            LOG.warn("Unusable sampled partition counts in ColumnStatsMeta for column {} of table {}: " +
+                    "sampled={} total={}, treating it as unknown",
+                    columnName, table.getName(), sampledPartitionSize, totalPartitionSize);
+            return ConnectorTableColumnStats.unknown();
+        }
+
+        double avgPartitionRowCount = connectorTableColumnStats.getRowCount() * 1.0 / sampledPartitionSize;
+        // Round once, at the end. Truncating the average first - (long) avg * total - throws away
+        // everything below a whole row per partition before it is multiplied back up, so a column
+        // whose sampled partitions hold less than one row each scales to zero however large the
+        // table is. The result also feeds the distinct-value ceiling below, so a zero row count
+        // takes the distinct count down with it.
+        long totalRowCount = Math.round(avgPartitionRowCount * totalPartitionSize);
+
+        ColumnStatistic columnStatistic = scaleNdv(connectorTableColumnStats, sampledPartitionSize,
+                totalPartitionSize, totalRowCount);
+        return new ConnectorTableColumnStats(columnStatistic, totalRowCount,
+                connectorTableColumnStats.getUpdateTime(),
+                connectorTableColumnStats.getCollectedPartitionCount(),
+                connectorTableColumnStats.getPerPartitionNdvSum(),
+                connectorTableColumnStats.getThirdNdv(),
+                connectorTableColumnStats.getTwoThirdsNdv(),
+                connectorTableColumnStats.getThirdPartitionCount(),
+                connectorTableColumnStats.getTwoThirdsPartitionCount());
     }
 
     /**
@@ -192,6 +210,13 @@ public class StatisticsUtils {
      * one partition's worth, every partition draws from the same small set - a foreign key into a
      * dimension - and the table has no more distinct values than one partition does. Real columns fall
      * between, and the occupancy model below interpolates between those two ends instead of picking one.
+     *
+     * <p>The occupancy model assumes every value is equally likely to turn up in a partition, and real
+     * columns rarely are: a few values that every partition holds make the partitions overlap a lot even
+     * while the rest keep bringing new values, and the model reads that overlap as a domain nearly used up.
+     * Where the backend reports how the merged count grew over the collected partitions, the growth curve
+     * is read directly as well, and the larger of the two estimates is taken: the curve can only add what
+     * the collected partitions were still adding at the end.
      */
     private static ColumnStatistic scaleNdv(ConnectorTableColumnStats stats, int sampledPartitionSize,
                                             int totalPartitionSize, long totalRowCount) {
@@ -206,6 +231,10 @@ public class StatisticsUtils {
         }
 
         double estimated = extrapolateNdv(mergedNdv, perPartitionNdvSum, sampledPartitionSize, totalPartitionSize);
+        estimated = Math.max(estimated, extrapolateNdvFromGrowth(
+                stats.getThirdNdv(), stats.getThirdPartitionCount(),
+                stats.getTwoThirdsNdv(), stats.getTwoThirdsPartitionCount(),
+                mergedNdv, sampledPartitionSize, totalPartitionSize));
         // Never below what was actually seen, and never above the same growth applied to every partition.
         // Both are properties of the model, not of the data: they say the estimate is somewhere between
         // "the remaining partitions add nothing" and "they add as much as the sampled ones did".
@@ -291,6 +320,78 @@ public class StatisticsUtils {
         // Same curve over every partition. Written as d * ratio rather than (d/q) * (...) so a tiny q
         // cannot blow the intermediate up to infinity before the multiplication brings it back.
         return d * occupancyRatio((low + high) / 2, totalPartitions);
+    }
+
+    /**
+     * Estimates the distinct count over {@code totalPartitions} from how the merged distinct count grew
+     * over the {@code sampledPartitions} collected ones, or returns 0 when the growth says nothing.
+     *
+     * <p>Input: the merged distinct count over two nested subsets of the collected partitions - about a
+     * third ({@code thirdPartitions} of them) and about two thirds ({@code twoThirdsPartitions}), picked by
+     * a hash of the partition name (see StatisticSQLBuilder's V4 query) - and over all of them. Because the
+     * subsets are a hash pick, they are a random order over the collected partitions, and the curve is how
+     * the count grows when partitions like these are added; extrapolating it assumes the partitions that
+     * were not collected are like the ones that were, the same assumption the sampling itself rests on.
+     *
+     * <p>Model: the merged count after k partitions is {@code A - B * r^k} - each partition adds a fixed
+     * fraction r of what the previous one added. Three points determine it. r = 1 is a column that keeps
+     * adding the same number of new values (an order key, a stream of new ids next to a fixed set of hot
+     * values) and grows linearly; r near 0 is one that has stopped growing. Unlike the occupancy model
+     * this does not assume anything about how the values are spread over the partitions; it only assumes
+     * the trend in what the last partitions added carries on.
+     *
+     * <p>Growth within the sketch's own error is no evidence of a trend - a column that has stopped
+     * growing shows marginal increments of either sign from HLL noise alone, and a ratio of two of those
+     * extrapolated over many partitions is noise amplified - so that case returns 0 and leaves the estimate
+     * to the occupancy model.
+     */
+    @VisibleForTesting
+    static double extrapolateNdvFromGrowth(double thirdNdv, long thirdPartitions, double twoThirdsNdv,
+                                           long twoThirdsPartitions, double mergedNdv, int sampledPartitions,
+                                           int totalPartitions) {
+        if (thirdNdv <= 0 || twoThirdsNdv <= 0 || thirdPartitions <= 0 || twoThirdsPartitions <= thirdPartitions
+                || sampledPartitions <= twoThirdsPartitions || totalPartitions <= sampledPartitions) {
+            return 0;
+        }
+        double earlierGrowth = twoThirdsNdv - thirdNdv;
+        double laterGrowth = mergedNdv - twoThirdsNdv;
+        if (earlierGrowth <= twoThirdsNdv * HLL_RELATIVE_ERROR_BAND
+                || laterGrowth <= mergedNdv * HLL_RELATIVE_ERROR_BAND) {
+            return 0;
+        }
+
+        int earlierSpan = (int) (twoThirdsPartitions - thirdPartitions);
+        int laterSpan = (int) (sampledPartitions - twoThirdsPartitions);
+        int remaining = totalPartitions - sampledPartitions;
+        double ratio = laterGrowth / earlierGrowth;
+        // At r = 1 the two spans add in proportion to their sizes; growth at least that fast is linear.
+        if (ratio >= laterSpan / (double) earlierSpan) {
+            return mergedNdv + laterGrowth * remaining / laterSpan;
+        }
+
+        // Solve laterGrowth / earlierGrowth = r^a * (1 - r^b) / (1 - r^a) for r, with a, b the two spans,
+        // over L = ln r < 0; the right side rises from 0 as L -> -inf to b/a as L -> 0. Written with
+        // expm1 so an r close to 1 - the slowly bending curves that matter most - keeps its precision.
+        double low = -50;
+        double high = -1e-12;
+        for (int i = 0; i < 100; i++) {
+            double mid = low + (high - low) / 2;
+            if (growthRatio(mid, earlierSpan, laterSpan) > ratio) {
+                high = mid;
+            } else {
+                low = mid;
+            }
+        }
+        double logR = low + (high - low) / 2;
+        // What the remaining partitions add: laterGrowth * r^b * (1 - r^remaining) / (1 - r^b).
+        return mergedNdv + laterGrowth * Math.exp(laterSpan * logR)
+                * Math.expm1(remaining * logR) / Math.expm1(laterSpan * logR);
+    }
+
+    // r^a * (1 - r^b) / (1 - r^a) for r = e^logR: how much the b partitions after the first a add,
+    // relative to what those a added, when every partition adds r times what the one before it did.
+    private static double growthRatio(double logR, int earlierSpan, int laterSpan) {
+        return Math.exp(earlierSpan * logR) * Math.expm1(laterSpan * logR) / Math.expm1(earlierSpan * logR);
     }
 
     // (1 - (1-q)^partitions) / q: how many distinct values `partitions` partitions cover, per

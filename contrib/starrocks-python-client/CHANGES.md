@@ -3,10 +3,8 @@ Version history
 
 **Unreleased**
 
-<<<<<<< HEAD
 - Stop autogenerate from resetting an unmanaged `bucket_size` on RANDOM-distributed tables to a hardcoded 4 GiB default; StarRocks 4.0+ defaults to 1 GiB (by @chris-celerdata)
 - Reflect `TIME` and `VARIANT` columns instead of returning `NullType` (#77259 by @rad-pat)
-=======
 - Support the `ON_CHANGE` refresh keyword that StarRocks 26.2 introduced for
   base-table-change-triggered materialized views, which rejects the bare `ASYNC` it replaces.
   Reflection accepts either spelling and keeps reporting `ASYNC`, Alembic autogenerate treats
@@ -14,7 +12,6 @@ Version history
   accepts, so one metadata definition works against every supported release. The scheduled
   mode (`ASYNC EVERY(...)`) is unchanged.
 
->>>>>>> ac1487bee93... [Enhancement] Support the ON_CHANGE refresh keyword in the Python client (#62262)
 - Add the `starrocks_temp_view_schema` Alembic option (`context.configure(...)`) to designate
   the schema in which the transient view used to canonicalize view/MV definitions is created.
   Lets a locked-down migration user be granted the required privileges on a single schema

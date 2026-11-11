@@ -56,12 +56,23 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
         // globalContext contains all physical operators' context
         PruneComplexTypeUtil.Context context = new PruneComplexTypeUtil.Context(
                 taskContext.getOptimizerContext().getSessionVariable().getEnablePruneComplexTypesInUnnest());
+        collectScanOutputs(root, context);
         root.getOp().accept(MARK_SUBFIELDS_OPT_VISITOR, root, context);
         if (context.getEnablePruneComplexTypes()) {
             // Still do prune
             root.getOp().accept(PRUNE_SUBFIELDS_OPT_VISITOR, root, context);
         }
         return root;
+    }
+
+    private static void collectScanOutputs(OptExpression optExpression, PruneComplexTypeUtil.Context context) {
+        if (optExpression.getOp() instanceof PhysicalScanOperator) {
+            ((PhysicalScanOperator) optExpression.getOp()).getColRefToColumnMetaMap().keySet()
+                    .forEach(context::addScanOutput);
+        }
+        for (OptExpression input : optExpression.getInputs()) {
+            collectScanOutputs(input, context);
+        }
     }
 
     private static class MarkSubfieldsOptVisitor extends OptExpressionVisitor<Void, PruneComplexTypeUtil.Context> {

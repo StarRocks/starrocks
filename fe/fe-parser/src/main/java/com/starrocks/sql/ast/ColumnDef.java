@@ -160,6 +160,10 @@ public class ColumnDef implements ParseNode {
         return isAllowNull;
     }
 
+    public boolean isAllowNullImplicit() {
+        return isAllowNullImplicit;
+    }
+
     public void setAllowNull(Boolean allowNull) {
         isAllowNull = allowNull;
     }
