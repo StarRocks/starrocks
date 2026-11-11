@@ -554,10 +554,15 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
         if (std::isinf(val)) {
             *result = PARSE_OVERFLOW;
             return negative ? -std::numeric_limits<T>::infinity() : std::numeric_limits<T>::infinity();
-        } else {
-            *result = PARSE_UNDERFLOW;
-            return negative ? (T)-0.0 : (T)0.0;
         }
+        // Underflow is not a parse error: a value below the smallest subnormal rounds to ±0,
+        // which is the correctly rounded result, unlike overflow where the value cannot be
+        // represented at all. Callers such as the CSV FloatConverter and the string-to-float
+        // cast treat anything other than PARSE_SUCCESS as unparseable input, so reporting
+        // underflow here would turn a value such as '1e-46' into a NULL, or into a rejected
+        // row in strict mode.
+        *result = PARSE_SUCCESS;
+        return negative ? (T)-0.0 : (T)0.0;
     }
 
     *result = PARSE_FAILURE;

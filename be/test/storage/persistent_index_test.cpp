@@ -661,6 +661,10 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
 // (offset-based) key size that never matched the length-keyed immutable shard info, so it always
 // returned OK.
 TEST_P(PersistentIndexTest, test_insert_existing_key_in_l1) {
+    const bool old_skip_check = config::skip_pindex_l1_l2_check_in_insert;
+    config::skip_pindex_l1_l2_check_in_insert = false;
+    DeferOp restore_skip_check([&]() { config::skip_pindex_l1_l2_check_in_insert = old_skip_check; });
+
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_insert_existing_key_in_l1";
     const std::string kIndexFile = kPersistentIndexDir + "/index.l0.0.0";
@@ -724,6 +728,10 @@ TEST_P(PersistentIndexTest, test_insert_existing_key_in_l1) {
 // entirely for var-len primary keys (_fixed_key_size == 0). The keys here span a range of lengths
 // (including > kSliceMaxFixLength) so both the fixlen and var-len immutable shards are exercised.
 TEST_P(PersistentIndexTest, test_insert_existing_varlen_key_in_l1) {
+    const bool old_skip_check = config::skip_pindex_l1_l2_check_in_insert;
+    config::skip_pindex_l1_l2_check_in_insert = false;
+    DeferOp restore_skip_check([&]() { config::skip_pindex_l1_l2_check_in_insert = old_skip_check; });
+
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_insert_existing_varlen_key_in_l1";
     const std::string kIndexFile = kPersistentIndexDir + "/index.l0.0.0";
@@ -797,6 +805,90 @@ TEST_P(PersistentIndexTest, test_insert_existing_varlen_key_in_l1) {
     ASSERT_OK(index.prepare(EditVersion(3, 0), dup_n));
     auto st = index.insert(dup_n, key_slices.data(), values.data(), true);
     ASSERT_TRUE(st.is_already_exist()) << "insert() should reject var-len keys already present in L1, but got: " << st;
+}
+
+TEST_P(PersistentIndexTest, test_insert_immutable_check_config) {
+    const bool old_skip_check = config::skip_pindex_l1_l2_check_in_insert;
+    const int64_t old_max_mem_usage = config::l0_max_mem_usage;
+    DeferOp restore_config([&]() {
+        config::skip_pindex_l1_l2_check_in_insert = old_skip_check;
+        config::l0_max_mem_usage = old_max_mem_usage;
+    });
+    ASSERT_TRUE(config::skip_pindex_l1_l2_check_in_insert); // default: check only the memtable
+    config::l0_max_mem_usage = 104857600;
+
+    for (size_t key_size : {size_t(8), size_t(0)}) {
+        // The variable-length case exercises both fixed-length and variable-length immutable shards.
+        std::vector<std::string> keys = key_size == 0 ? std::vector<std::string>{"short", std::string(100, 'a')}
+                                                      : std::vector<std::string>{"key_0001", "key_0002"};
+        std::vector<Slice> key_slices;
+        for (const auto& key : keys) {
+            key_slices.emplace_back(key);
+        }
+        std::vector<IndexValue> values{IndexValue(1), IndexValue(2)};
+        std::vector<IndexValue> new_values{IndexValue(3), IndexValue(4)};
+        for (const std::string level : {"l0", "l1", "tmp_l1", "l2"}) {
+            for (bool skip_check : {true, false}) {
+                for (bool check_l1 : {true, false}) {
+                    SCOPED_TRACE(testing::Message() << "key_size=" << key_size << " level=" << level
+                                                    << " skip_check=" << skip_check << " check_l1=" << check_l1);
+                    config::skip_pindex_l1_l2_check_in_insert = skip_check;
+                    const std::string dir = "./PersistentIndexTest_test_insert_immutable_check_config";
+                    auto* fs = FileSystem::Default();
+                    ASSERT_OK(fs->create_dir(dir));
+                    DeferOp cleanup([&]() { (void)fs::remove_all(dir); });
+                    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(dir + "/index.l0.0.0"));
+                    ASSERT_OK(wfile->close());
+
+                    PersistentIndexMetaPB meta;
+                    meta.set_key_size(key_size);
+                    meta.set_size(0);
+                    EditVersion(0, 0).to_pb(meta.mutable_version());
+                    auto* l0_meta = meta.mutable_l0_meta();
+                    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
+                    EditVersion(0, 0).to_pb(l0_meta->mutable_snapshot()->mutable_version());
+                    if (level == "l1" || level == "l2") {
+                        // Build an immutable index with an empty L0 so rejection cannot come from the memtable.
+                        ASSIGN_OR_ABORT(auto builder, ShardByLengthMutableIndex::create(key_size, dir));
+                        ASSERT_OK(builder->insert(keys.size(), key_slices.data(), values.data()));
+                        ASSERT_OK(builder->flush_to_immutable_index(dir + "/index." + level + ".1.0", EditVersion(1, 0),
+                                                                    true, true));
+                        meta.set_size(keys.size());
+                        EditVersion(1, 0).to_pb(meta.mutable_version());
+                        if (level == "l1") {
+                            EditVersion(1, 0).to_pb(meta.mutable_l1_version());
+                        } else {
+                            EditVersion(1, 0).to_pb(meta.add_l2_versions());
+                            meta.add_l2_version_merged(false);
+                        }
+                    }
+                    PersistentIndex index(dir);
+                    ASSERT_OK(index.load(meta));
+                    ASSERT_OK(index.prepare(EditVersion(2, 0), keys.size()));
+                    if (level == "l0" || level == "tmp_l1") {
+                        ASSERT_OK(index.insert(keys.size(), key_slices.data(), values.data(), check_l1));
+                        if (level == "tmp_l1") {
+                            ASSERT_OK(index.flush_advance());
+                        }
+                    }
+
+                    auto st = index.insert(keys.size(), key_slices.data(), new_values.data(), check_l1);
+                    const bool reject = level == "l0" || (!skip_check && (level != "l1" || check_l1));
+                    if (reject) {
+                        ASSERT_TRUE(st.is_already_exist()) << st;
+                    } else {
+                        ASSERT_OK(st);
+                        std::vector<IndexValue> actual(keys.size());
+                        ASSERT_OK(index.get(keys.size(), key_slices.data(), actual.data()));
+                        ASSERT_EQ(new_values, actual);
+                        // Skipping immutable files must never skip duplicate detection in L0.
+                        ASSERT_TRUE(index.insert(keys.size(), key_slices.data(), new_values.data(), check_l1)
+                                            .is_already_exist());
+                    }
+                }
+            }
+        }
+    }
 }
 
 TEST_P(PersistentIndexTest, test_l0_max_file_size) {
@@ -1440,6 +1532,157 @@ TEST_P(PersistentIndexTest, test_large_varlen_mutable_index_wal) {
         }
     }
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+}
+
+namespace {
+
+class PersistentIndexReadCountingStream final : public io::SeekableInputStreamWrapper {
+public:
+    explicit PersistentIndexReadCountingStream(std::shared_ptr<io::SeekableInputStream> stream)
+            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(std::move(stream)) {}
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        if (fail_reads) {
+            return Status::IOError("injected immutable-index read failure");
+        }
+        read_bytes += count;
+        read_calls++;
+        return _stream->read_at_fully(offset, out, count);
+    }
+
+    void reset_counts() {
+        read_bytes = 0;
+        read_calls = 0;
+    }
+
+    int64_t read_bytes = 0;
+    size_t read_calls = 0;
+    bool fail_reads = false;
+
+private:
+    std::shared_ptr<io::SeekableInputStream> _stream;
+};
+
+} // namespace
+
+TEST_P(PersistentIndexTest, test_check_not_exist_uses_get_io_path) {
+    const bool old_filter = config::enable_pindex_filter;
+    const bool old_read_by_page = config::enable_pindex_read_by_page;
+    DeferOp restore_config([&]() {
+        config::enable_pindex_filter = old_filter;
+        config::enable_pindex_read_by_page = old_read_by_page;
+    });
+    for (size_t key_size : {size_t(8), size_t(0)}) {
+        SCOPED_TRACE(testing::Message() << "key_size=" << key_size);
+        const std::string dir = "./PersistentIndexTest_test_check_not_exist_uses_get_io_path";
+        auto* fs = FileSystem::Default();
+        ASSERT_OK(fs->create_dir(dir));
+        DeferOp cleanup([&]() { (void)fs::remove_all(dir); });
+        const std::string path = dir + "/index.l1.1.0";
+        const size_t n = 20000; // Enough data for many pages in each probed shard.
+        auto make_key = [key_size](uint64_t i) {
+            if (key_size != 0) {
+                return std::string(reinterpret_cast<const char*>(&i), sizeof(i));
+            }
+            return (i % 2 == 0 ? "short_" : std::string(100, 'a')) + std::to_string(i);
+        };
+        std::vector<std::string> keys(n);
+        std::vector<Slice> key_slices;
+        std::vector<IndexValue> values(n);
+        for (size_t i = 0; i < n; i++) {
+            keys[i] = make_key(i);
+            key_slices.emplace_back(keys[i]);
+            values[i] = IndexValue(i + 1);
+        }
+        values.back() = IndexValue(NullIndexValue);
+        ASSIGN_OR_ABORT(auto builder, ShardByLengthMutableIndex::create(key_size, dir));
+        ASSERT_OK(builder->insert(n, key_slices.data(), values.data()));
+        ASSERT_OK(builder->flush_to_immutable_index(path, EditVersion(1, 0), true, true));
+        ASSIGN_OR_ABORT(auto file, fs->new_random_access_file(path));
+        auto stream = std::make_shared<PersistentIndexReadCountingStream>(file->stream());
+        ASSIGN_OR_ABORT(auto index, ImmutableIndex::load(std::make_unique<RandomAccessFile>(stream, path), true));
+
+        // Select an absent key that is definitely rejected by the loaded Bloom filter, so the
+        // zero-data-I/O assertion does not depend on its false-positive rate.
+        config::enable_pindex_filter = true;
+        std::string missing_key;
+        bool filtered = false;
+        for (size_t i = n + 1; i < n + 200; i += 2) {
+            missing_key = make_key(i);
+            Slice probe(missing_key);
+            KeysInfo keys_info;
+            keys_info.key_infos.emplace_back(0, key_index_hash(probe.data, probe.size));
+            KeysInfo found;
+            IndexValue value;
+            IOStat stat;
+            ASSERT_OK(index->get(1, &probe, keys_info, &value, &found, key_size, &stat));
+            ASSERT_EQ(0, found.size());
+            if (stat.filtered_kv_cnt == 1) {
+                filtered = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(filtered);
+        Slice missing_probe(missing_key);
+        // For variable-length indexes both probes use the >64-byte shard; the file also contains
+        // shorter fixed-length shards, exercising the key-length guard in check_not_exist().
+        Slice live_probe = key_slices[n - 3];
+        Slice tombstone_probe = key_slices.back();
+        for (bool filter : {false, true}) {
+            config::enable_pindex_filter = filter;
+            int64_t whole_shard_bytes = 0;
+            for (bool read_by_page : {false, true}) {
+                SCOPED_TRACE(testing::Message() << "filter=" << filter << " read_by_page=" << read_by_page);
+                config::enable_pindex_read_by_page = read_by_page;
+                KeysInfo keys_info;
+                keys_info.key_infos.emplace_back(0, key_index_hash(live_probe.data, live_probe.size));
+                KeysInfo found;
+                IndexValue value;
+                stream->reset_counts();
+                ASSERT_OK(index->get(1, &live_probe, keys_info, &value, &found, key_size));
+                ASSERT_EQ(1, found.size());
+                ASSERT_EQ(values[n - 3], value);
+                const auto get_read_bytes = stream->read_bytes;
+                const auto get_read_calls = stream->read_calls;
+                ASSERT_GT(get_read_bytes, 0);
+                if (!read_by_page) {
+                    whole_shard_bytes = get_read_bytes;
+                } else {
+                    ASSERT_LT(get_read_bytes, whole_shard_bytes);
+                }
+
+                stream->reset_counts();
+                auto st = index->check_not_exist(1, &live_probe);
+                ASSERT_TRUE(st.is_already_exist()) << st;
+                ASSERT_EQ(get_read_bytes, stream->read_bytes);
+                ASSERT_EQ(get_read_calls, stream->read_calls);
+                ASSERT_TRUE(index->check_not_exist(1, &tombstone_probe).is_already_exist());
+
+                stream->reset_counts();
+                ASSERT_OK(index->check_not_exist(1, &missing_probe));
+                if (filter) {
+                    ASSERT_EQ(0, stream->read_calls);
+                } else {
+                    ASSERT_GT(stream->read_bytes, 0);
+                }
+                stream->reset_counts();
+                ASSERT_OK(index->check_not_exist(0, nullptr));
+                ASSERT_EQ(0, stream->read_calls);
+                std::string short_key = "x";
+                Slice short_probe(short_key);
+                ASSERT_OK(index->check_not_exist(1, &short_probe));
+                if (key_size != 0) {
+                    ASSERT_EQ(0, stream->read_calls);
+                }
+
+                stream->fail_reads = true;
+                st = index->check_not_exist(1, &live_probe);
+                stream->fail_reads = false;
+                ASSERT_TRUE(st.is_io_error()) << st;
+                ASSERT_NE(std::string::npos, st.to_string().find("injected immutable-index read failure"));
+            }
+        }
+    }
 }
 
 TEST_P(PersistentIndexTest, test_flush_fixlen_to_immutable) {

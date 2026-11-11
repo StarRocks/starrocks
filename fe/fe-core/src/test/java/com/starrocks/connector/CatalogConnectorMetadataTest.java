@@ -182,6 +182,7 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadataRequestContext.DEFAULT);
                 connectorMetadata.dropTable(ctx, null);
                 connectorMetadata.refreshTable("test_db", null, null, false);
+                connectorMetadata.invalidateTableForRead("test_db", null);
                 connectorMetadata.alterMaterializedView(null);
                 connectorMetadata.addPartitions(ctx, null, null, null);
                 connectorMetadata.dropPartition(null, null, null);
@@ -219,6 +220,7 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadataRequestContext.DEFAULT);
         catalogConnectorMetadata.dropTable(ctx, null);
         catalogConnectorMetadata.refreshTable("test_db", null, null, false);
+        catalogConnectorMetadata.invalidateTableForRead("test_db", null);
         catalogConnectorMetadata.alterMaterializedView(null);
         catalogConnectorMetadata.addPartitions(com.starrocks.common.util.Util.getOrCreateInnerContext(), null, null, null);
         catalogConnectorMetadata.dropPartition(null, null, null);

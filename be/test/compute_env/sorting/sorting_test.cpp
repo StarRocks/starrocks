@@ -37,13 +37,14 @@
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "runtime/runtime_state.h"
+#include "testutil/type_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
 namespace {
 
 static MutableColumnPtr build_int_column(const std::vector<int32_t>& values) {
-    MutableColumnPtr column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    MutableColumnPtr column = ColumnHelper::create_column(TYPE_INT_DESC, false);
     for (int32_t value : values) {
         column->append_datum(Datum(value));
     }
@@ -71,7 +72,7 @@ class SortingCoreTest : public testing::Test {
 protected:
     void SetUp() override {
         _runtime_state = create_runtime_state();
-        _exprs.emplace_back(std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0));
+        _exprs.emplace_back(std::make_unique<ColumnRef>(TYPE_INT_DESC, 0));
         _sort_exprs.emplace_back(new ExprContext(_exprs.back().get()));
         ASSERT_OK(ExprExecutor::prepare(_sort_exprs, _runtime_state.get()));
         ASSERT_OK(ExprExecutor::open(_sort_exprs, _runtime_state.get()));
@@ -146,8 +147,7 @@ protected:
 
     void SetUp() override {
         _runtime_state = create_runtime_state();
-        _exprs.emplace_back(
-                std::make_unique<ColumnRef>(TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT)), 1));
+        _exprs.emplace_back(std::make_unique<ColumnRef>(TYPE_ARRAY_INT_DESC, 1));
         _sort_exprs.emplace_back(new ExprContext(_exprs.back().get()));
         ASSERT_OK(ExprExecutor::prepare(_sort_exprs, _runtime_state.get()));
         ASSERT_OK(ExprExecutor::open(_sort_exprs, _runtime_state.get()));

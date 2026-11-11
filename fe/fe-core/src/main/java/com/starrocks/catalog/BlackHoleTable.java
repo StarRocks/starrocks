@@ -21,4 +21,14 @@ public class BlackHoleTable extends Table {
         super(TableType.BLACKHOLE);
         super.setNewFullSchema(columns);
     }
+
+    /**
+     * Not a lock target: every INSERT INTO BLACKHOLE() builds its own instance, which is never published in a
+     * database, so there is nothing for the meta lock to protect -- and no reason for it to keep the other
+     * tables of the statement under the lock for the whole planning phase.
+     */
+    @Override
+    public boolean isMetaLockTarget() {
+        return false;
+    }
 }

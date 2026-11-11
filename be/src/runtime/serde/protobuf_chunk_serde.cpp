@@ -44,7 +44,8 @@ static StatusOr<uint8_t*> serialize_extra_columns(const ChunkExtraColumnsData& e
     return buff;
 }
 
-int64_t ProtobufChunkSerde::max_serialized_size(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context) {
+int64_t ProtobufChunkSerde::max_serialized_size(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context,
+                                                bool all_null_negotiated) {
     int64_t serialized_size = 8; // 4 bytes version plus 4 bytes row number
 
     if (context == nullptr) {
@@ -53,14 +54,16 @@ int64_t ProtobufChunkSerde::max_serialized_size(const Chunk& chunk, const std::s
         }
     } else {
         for (auto i = 0; i < chunk.columns().size(); ++i) {
-            serialized_size += ColumnArraySerde::max_serialized_size(*chunk.columns()[i], context->get_encode_level(i));
+            serialized_size += ColumnArraySerde::max_serialized_size(
+                    *chunk.columns()[i], wire_encode_level(context->get_encode_level(i), all_null_negotiated));
         }
     }
     return serialized_size;
 }
 
-StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context) {
-    StatusOr<ChunkPB> res = serialize_without_meta(chunk, context);
+StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context,
+                                                bool all_null_negotiated) {
+    StatusOr<ChunkPB> res = serialize_without_meta(chunk, context, all_null_negotiated);
     if (!res.ok()) return res.status();
 
     const auto& slot_id_to_index = chunk.get_slot_id_to_index_map();
@@ -101,12 +104,13 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const Chunk& chunk, const std::s
 }
 
 StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
-                                                             const std::shared_ptr<EncodeContext>& context) {
+                                                             const std::shared_ptr<EncodeContext>& context,
+                                                             bool all_null_negotiated) {
     ChunkPB chunk_pb;
     chunk_pb.set_compress_type(CompressionTypePB::NO_COMPRESSION);
 
     std::string* serialized_data = chunk_pb.mutable_data();
-    auto max_serialized_size = ProtobufChunkSerde::max_serialized_size(chunk, context);
+    auto max_serialized_size = ProtobufChunkSerde::max_serialized_size(chunk, context, all_null_negotiated);
     auto* chunk_extra_data =
             chunk.get_extra_data() ? dynamic_cast<ChunkExtraColumnsData*>(chunk.get_extra_data().get()) : nullptr;
     if (chunk_extra_data) {
@@ -127,9 +131,10 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
         using Serd = ColumnArraySerde;
         for (auto i = 0; i < chunk.columns().size(); ++i) {
             auto buff_begin = buff;
-            ASSIGN_OR_RETURN(buff, Serd::serialize(*chunk.columns()[i], buff, false, context->get_encode_level(i)));
+            const auto encode_level = wire_encode_level(context->get_encode_level(i), all_null_negotiated);
+            ASSIGN_OR_RETURN(buff, Serd::serialize(*chunk.columns()[i], buff, false, encode_level));
             context->update(i, chunk.columns()[i]->byte_size(), buff - buff_begin);
-            if (EncodeContext::enable_encode_integer(context->get_encode_level(i))) { // may be use streamvbyte
+            if (EncodeContext::enable_encode_integer(encode_level)) { // may be use streamvbyte
                 padding_size = context->STREAMVBYTE_PADDING_SIZE;
             }
         }

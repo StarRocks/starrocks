@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include <algorithm>
+#include <ctime>
 #include <sstream>
 #include <utility>
 
@@ -37,10 +38,10 @@
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/rows_mapper.h"
@@ -341,7 +342,8 @@ TabletParallelCompactionManager::TabletParallelCompactionManager(TabletManager* 
 TabletParallelCompactionManager::~TabletParallelCompactionManager() = default;
 
 StatusOr<std::vector<RowsetPtr>> TabletParallelCompactionManager::pick_rowsets_for_compaction(
-        int64_t tablet_id, int64_t txn_id, int64_t version, bool force_base_compaction, bool is_unshare) {
+        int64_t tablet_id, int64_t txn_id, int64_t version, bool force_base_compaction, bool is_unshare,
+        bool allow_base_compaction, bool* is_base_compaction) {
     // Get tablet metadata
     ASSIGN_OR_RETURN(auto tablet, _tablet_mgr->get_tablet(tablet_id, version));
     const auto& metadata = tablet.metadata();
@@ -362,7 +364,8 @@ StatusOr<std::vector<RowsetPtr>> TabletParallelCompactionManager::pick_rowsets_f
             << " first_10_rowset_ids=[" << JoinInts(first_rowset_ids, ",") << "]";
 
     // Get all rowsets to compact using standard pick_rowsets()
-    ASSIGN_OR_RETURN(auto policy, CompactionPolicy::create(_tablet_mgr, metadata, force_base_compaction, is_unshare));
+    ASSIGN_OR_RETURN(auto policy, CompactionPolicy::create(_tablet_mgr, metadata, force_base_compaction, is_unshare,
+                                                           allow_base_compaction));
     auto all_rowsets_or = policy->pick_rowsets();
     if (!all_rowsets_or.ok() || all_rowsets_or.value().empty()) {
         return Status::NotFound(strings::Substitute(
@@ -372,6 +375,7 @@ StatusOr<std::vector<RowsetPtr>> TabletParallelCompactionManager::pick_rowsets_f
                 all_rowsets_or.ok() ? "OK(empty)" : all_rowsets_or.status().to_string()));
     }
 
+    *is_base_compaction = policy->picked_base_compaction();
     return std::move(all_rowsets_or.value());
 }
 
@@ -643,7 +647,8 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
         int64_t tablet_id, int64_t txn_id, int64_t version, const TabletParallelConfig& config,
         std::shared_ptr<CompactionTaskCallback> callback, bool force_base_compaction, ThreadPool* thread_pool,
         const AcquireTokenFunc& acquire_token, const ReleaseTokenFunc& release_token, bool is_unshare,
-        int64_t handoff_in_queue_time_sec, int64_t handoff_queue_wait_ns, const ReturnTokenFunc& return_token) {
+        int64_t handoff_in_queue_time_sec, int64_t handoff_queue_wait_ns, const ReturnTokenFunc& return_token,
+        bool allow_base_compaction) {
     // Validate configuration
     // max_parallel comes from table property (via FE)
     // max_bytes comes from BE config if FE passes 0
@@ -669,6 +674,7 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
     ASSIGN_OR_RETURN(auto tablet, _tablet_mgr->get_tablet(tablet_id, version));
     const auto& metadata = tablet.metadata();
     bool is_pk_table = metadata->schema().keys_type() == PRIMARY_KEYS;
+    ASSIGN_OR_RETURN(is_unshare, CompactionPolicy::runs_as_unshare(*metadata, is_unshare, force_base_compaction));
 
     // Parallel compaction supports PK tables unconditionally, and non-PK tables only with the
     // size-tiered compaction strategy (no cumulative_point). For non-PK tables with the default
@@ -681,8 +687,10 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
     }
 
     // Step 1: Pick rowsets for compaction
+    bool is_base_compaction = false;
     ASSIGN_OR_RETURN(auto all_rowsets,
-                     pick_rowsets_for_compaction(tablet_id, txn_id, version, force_base_compaction, is_unshare));
+                     pick_rowsets_for_compaction(tablet_id, txn_id, version, force_base_compaction, is_unshare,
+                                                 allow_base_compaction, &is_base_compaction));
     size_t total_rowsets_count = all_rowsets.size();
 
     // Use the unified grouping algorithm that supports both large rowset splitting
@@ -711,6 +719,8 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
     ASSIGN_OR_RETURN(auto state_ptr,
                      create_and_register_tablet_state(tablet_id, txn_id, version, max_parallel, max_bytes, is_unshare,
                                                       std::move(callback), release_token));
+    state_ptr->is_base_compaction = is_base_compaction;
+    state_ptr->unshare_rewrites_index = is_unshare && !tablet.get_schema()->has_separate_sort_key();
     {
         // Carry over the queue wait of the caller's context, which is about to be destroyed.
         std::lock_guard<std::mutex> lock(state_ptr->mutex);
@@ -1236,9 +1246,9 @@ void TabletParallelCompactionManager::cleanup_tablet(int64_t tablet_id, int64_t 
     }
 
     // NOTE: Do NOT delete rows mapper files here!
-    // These files are needed by light_publish_primary_compaction which happens in a
-    // separate publish RPC after compaction completes. Each subtask's rows mapper file
-    // is cleaned up by RowsMapperIterator in its destructor during _light_publish_subtask().
+    // These files are needed by publish_primary_compaction which happens in a
+    // separate publish RPC after compaction completes. That publish records each
+    // rows mapper file as an orphan file, and vacuum deletes it.
 
     VLOG(1) << "Cleaned up parallel compaction state for tablet " << tablet_id << ", txn_id=" << txn_id;
 }
@@ -1273,7 +1283,6 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
 
         // Cache version for use outside the lock
         version = state->version;
-
         // Sort completed_subtasks by subtask_id to ensure consistent ordering
         // This is critical because rows_mapper files are merged by subtask_id order,
         // so segments must also be merged in the same order.
@@ -1705,12 +1714,22 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
                     << ", successful_subtasks=" << success_subtask_ids.size()
                     << ", subtask_compactions=" << op_parallel->subtask_compactions_size();
         } // end if (!state->is_range_split)
+
+        // A partially successful parallel Base compaction still did Base work. Stamp the
+        // interval only when at least one selected subtask with rowset inputs succeeded.
+        if (state->is_base_compaction) {
+            for (const auto& subtask : op_parallel->subtask_compactions()) {
+                if (!subtask.input_rowsets().empty()) {
+                    op_parallel->set_base_compaction_time(time(nullptr));
+                    break;
+                }
+            }
+        }
     }
     // Lock released here
 
     // Merge subtask LCRM files into a single LCRM for each large rowset split group.
-    // This enables the light publish path (SST ingestion) instead of the full publish
-    // path (try_replace), which is more robust and performant.
+    // Publish resolves a compaction through its LCRM, so the merged output needs one too.
     for (auto& task : lcrm_merge_tasks) {
         auto st = _merge_subtask_lcrm_files(tablet_id, txn_id, task.lcrm_files, task.num_rows_per_subtask,
                                             op_parallel->mutable_subtask_compactions(task.merged_compaction_idx));
@@ -1723,8 +1742,10 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
 
     // Execute SST compaction once after all subtasks complete.
     // Store results in OpParallelCompaction (not in individual subtask OpCompactions).
-    if (!state->is_unshare) {
-        RETURN_IF_ERROR(execute_sst_compaction_for_parallel(tablet_id, version, op_parallel));
+    // An UNSHARE of a tablet whose sort key is not its primary key rewrites shared data files only, so it skips this
+    // step, and the tablet metadata read it starts with, entirely.
+    if (!state->is_unshare || state->unshare_rewrites_index) {
+        RETURN_IF_ERROR(execute_sst_compaction_for_parallel(tablet_id, version, op_parallel, state->is_unshare));
     }
 
     return merged_log;
@@ -1918,26 +1939,27 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
     }
 }
 
-Status TabletParallelCompactionManager::execute_sst_compaction_for_parallel(
-        int64_t tablet_id, int64_t version, TxnLogPB_OpParallelCompaction* op_parallel) {
+Status TabletParallelCompactionManager::execute_sst_compaction_for_parallel(int64_t tablet_id, int64_t version,
+                                                                            TxnLogPB_OpParallelCompaction* op_parallel,
+                                                                            bool unshare) {
     // Get tablet metadata to check if SST compaction is applicable
     auto tablet_or = _tablet_mgr->get_tablet(tablet_id, version);
     if (!tablet_or.ok()) {
         LOG(WARNING) << "Failed to get tablet for SST compaction, tablet=" << tablet_id << ", version=" << version
                      << ": " << tablet_or.status();
-        return Status::OK(); // Don't fail the entire compaction for SST compaction failure
+        // An UNSHARE must not succeed while it may leave index files the tablet cannot keep, so it fails and the next
+        // COMPACT retries it. Any other compaction goes on without its SST compaction.
+        if (unshare) {
+            return tablet_or.status();
+        }
+        return Status::OK();
     }
 
     const auto& tablet = tablet_or.value();
     const auto& metadata = tablet.metadata();
 
-    // Check if this is a primary key table with cloud native persistent index
+    // Only a primary key tablet has an index to compact. Its index is always cloud native.
     if (!metadata || metadata->schema().keys_type() != KeysType::PRIMARY_KEYS) {
-        return Status::OK();
-    }
-
-    if (!metadata->enable_persistent_index() ||
-        metadata->persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE) {
         return Status::OK();
     }
 
@@ -1945,15 +1967,15 @@ Status TabletParallelCompactionManager::execute_sst_compaction_for_parallel(
     VLOG(1) << "Executing unified SST compaction for parallel compaction, tablet=" << tablet_id
             << ", version=" << version;
 
-    auto* update_mgr = _tablet_mgr->update_mgr();
-    if (update_mgr == nullptr) {
-        LOG(WARNING) << "UpdateManager is null, skip SST compaction for tablet " << tablet_id;
+    auto* primary_key_mgr = _tablet_mgr->primary_key_mgr();
+    if (primary_key_mgr == nullptr) {
+        LOG(WARNING) << "PrimaryKeyManager is null, skip SST compaction for tablet " << tablet_id;
         return Status::OK();
     }
 
     // Use a temporary TxnLogPB to capture SST compaction results
     TxnLogPB temp_log;
-    auto st = update_mgr->execute_index_major_compaction(metadata, &temp_log);
+    auto st = primary_key_mgr->execute_index_major_compaction(metadata, &temp_log, unshare);
     if (!st.ok()) {
         // Propagate, like horizontal_compaction_task.cpp, vertical_compaction_task.cpp and
         // cloud_native_index_compaction_task.cpp do for the same call. Swallowing it here let the

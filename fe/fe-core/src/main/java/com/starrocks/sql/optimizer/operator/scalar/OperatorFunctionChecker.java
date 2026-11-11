@@ -92,6 +92,32 @@ public class OperatorFunctionChecker {
         }
     }
 
+    /**
+     * Applies the cast predicate only outside (in)equalities and IN lists, where the order of the
+     * compared values is what the caller relies on.
+     */
+    static class RangeOnlyCastCheckVisitor extends FunctionCheckerVisitor {
+        private final FunctionCheckerVisitor anyCastVisitor;
+
+        public RangeOnlyCastCheckVisitor(Predicate<CallOperator> predicate, Predicate<CastOperator> castPredicate) {
+            super(predicate, castPredicate);
+            this.anyCastVisitor = new FunctionCheckerVisitor(predicate, cast -> true);
+        }
+
+        @Override
+        public Pair<Boolean, String> visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+            if (predicate.getBinaryType().isNotRangeComparison()) {
+                return anyCastVisitor.visit(predicate, null);
+            }
+            return visit(predicate, null);
+        }
+
+        @Override
+        public Pair<Boolean, String> visitInPredicate(InPredicateOperator predicate, Void context) {
+            return anyCastVisitor.visit(predicate, null);
+        }
+    }
+
     private static final ImmutableSet<Integer> FIRST_ARGUMENT = ImmutableSet.of(0);
     private static final ImmutableSet<Integer> SECOND_ARGUMENT = ImmutableSet.of(1);
     private static final ImmutableSet<Integer> EITHER_ARGUMENT = ImmutableSet.of(0, 1);
@@ -203,10 +229,16 @@ public class OperatorFunctionChecker {
     }
 
     /**
-     * Only some type pairs keep the order. Crossing between strings and numbers or dates does not:
-     * '99845' sorts after '998425506019' while 99845 is far below 998425506019, so a range predicate
-     * mapped through such a cast prunes partitions that hold matching rows. A narrowing numeric cast
-     * wraps or saturates and breaks the order the same way.
+     * Only some type pairs keep the order. Crossing between strings and numbers does not: '99845'
+     * sorts after '998425506019' while 99845 is far below 998425506019, so a range predicate mapped
+     * through such a cast prunes partitions that hold matching rows. A narrowing numeric cast wraps
+     * or saturates and breaks the order the same way.
+     * <p>
+     * Rendering a date as text is the exception. DATE and DATETIME render as fixed-width, zero-padded
+     * fields -- '2020-07-02', '2020-07-02 10:00:00', with a six-digit fraction appended only when it is
+     * not zero -- so the text sorts the way the instant does. str2date(dt, '%Y-%m-%d') over a DATE
+     * column goes through exactly this cast. The reverse direction is a different matter: an
+     * arbitrary string does not parse in text order (see isOrderPreservingCast(CastOperator)).
      * <p>
      * This is a question about monotonicity alone. Equality maps soundly through any deterministic
      * function -- a = c implies f(a) = f(c) whatever f does to the order -- so the FE-constant check,
@@ -223,6 +255,9 @@ public class OperatorFunctionChecker {
         if (fromRank > 0 && toRank > 0) {
             // widening within the integer family keeps every value and its order
             return toRank >= fromRank;
+        }
+        if ((from.isDate() || from.isDatetime()) && to.isVarchar()) {
+            return true;
         }
         // DATE and DATETIME order the same way; DATETIME -> DATE truncates, which is non-decreasing
         return (from.isDate() && to.isDatetime()) || (from.isDatetime() && to.isDate());
@@ -285,6 +320,19 @@ public class OperatorFunctionChecker {
     }
 
     /**
+     * Like onlyContainMonotonicFunctions(), but a cast only has to keep the order where the order is
+     * compared. Under an (in)equality or an IN list any deterministic cast is fine -- a = c implies
+     * f(a) = f(c) whatever f does to the order -- so there the casts are accepted as before and only
+     * the calls are checked. A retention condition such as str2date(dt, '%Y-%m-%d') = '2020-07-07'
+     * must not be refused because of a cast it only ever compares for equality.
+     */
+    public static Pair<Boolean, String> onlyContainMonotonicFunctionsWhereOrderMatters(ScalarOperator scalarOperator) {
+        return scalarOperator.accept(
+                new RangeOnlyCastCheckVisitor(call -> ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction(call),
+                        OperatorFunctionChecker::isOrderPreservingCast), null);
+    }
+
+    /**
      * Stricter than onlyContainMonotonicFunctions(): every function must also INCREASE with the
      * columns it reads, not merely preserve their order. Use this wherever a rewrite carries a
      * comparison operator across the expression -- deducing `partCol OP f(c)` from `col OP c` is only
@@ -297,6 +345,48 @@ public class OperatorFunctionChecker {
                         call -> ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction(call)
                                 && columnOnlyInIncreasingArguments(call),
                         OperatorFunctionChecker::isOrderPreservingCast), null);
+    }
+
+    /**
+     * Whether distinct values of the column the expression reads always give distinct results, so that
+     * f(a) = f(c) implies a = c. Monotonicity does not answer this: date_trunc() preserves the order
+     * and still sends a whole day onto one value. A rewrite that must select exactly the rows a
+     * predicate selects -- not merely all of them -- can map an equality through the expression only
+     * when this holds.
+     * <p>
+     * The list is kept short on purpose, because a wrong yes loses data: str2date() sends '2024-1-2'
+     * and '2024-01-02' to the same day, from_unixtime() repeats a local time across a clock rollback,
+     * and a multiplication by an even constant collides once it overflows. Adding or subtracting a
+     * constant is a bijection on fixed-width integers even when it wraps.
+     */
+    public static boolean isOneToOne(ScalarOperator operator) {
+        if (operator.isColumnRef()) {
+            return true;
+        }
+        if (operator instanceof CastOperator cast) {
+            Type from = cast.fromType();
+            Type to = cast.getType();
+            int fromRank = integerRank(from);
+            int toRank = integerRank(to);
+            boolean widens = from.equals(to) || (fromRank > 0 && toRank >= fromRank)
+                    || (from.isDate() && to.isDatetime());
+            return widens && isOneToOne(cast.getChild(0));
+        }
+        if (operator instanceof CallOperator call && call.getChildren().size() == 2
+                && integerRank(call.getType()) > 0) {
+            String fnName = call.getFnName().toLowerCase();
+            if (!FunctionSet.ADD.equals(fnName) && !FunctionSet.SUBTRACT.equals(fnName)) {
+                return false;
+            }
+            ScalarOperator left = call.getChild(0);
+            ScalarOperator right = call.getChild(1);
+            if (left.isConstant() == right.isConstant()) {
+                return false;
+            }
+            ScalarOperator variable = left.isConstant() ? right : left;
+            return integerRank(variable.getType()) > 0 && isOneToOne(variable);
+        }
+        return false;
     }
 
     public static Pair<Boolean, String> onlyContainFEConstantFunctions(ScalarOperator scalarOperator) {

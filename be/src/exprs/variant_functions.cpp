@@ -18,6 +18,8 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/const_column.h"
+#include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
 #include "column/variant_column.h"
@@ -88,21 +90,6 @@ Status VariantFunctions::variant_segments_close(FunctionContext* context, Functi
     return Status::OK();
 }
 
-template <LogicalType ResultType>
-static void append_variant_field_to_result(FunctionContext* context, VariantRowValue&& field,
-                                           ColumnBuilder<ResultType>* result) {
-    if constexpr (ResultType == TYPE_VARIANT) {
-        result->append(std::move(field));
-    } else {
-        const RuntimeState* state = context->state();
-        cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : context->state()->timezone_obj();
-        Status casted = VariantRowConverter::cast_to<ResultType, true>(field.as_ref(), zone, *result);
-        if (!casted.ok()) {
-            result->append_null();
-        }
-    }
-}
-
 // Bulk fast-path: const path + exact typed-type match, no suffix.
 // Copies the typed column data in bulk (SIMD for fixed-length, bulk for strings)
 // and merges null masks from the outer variant column and the typed column.
@@ -157,6 +144,8 @@ static ColumnPtr _build_typed_cast_result(FunctionContext* context, const Column
 
     const RuntimeState* state = context->state();
     cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : state->timezone_obj();
+    TzOffsetCache offset_cache;
+    offset_cache.bind(zone);
 
     ColumnBuilder<ResultType> result(num_rows);
 
@@ -186,7 +175,8 @@ static ColumnPtr _build_typed_cast_result(FunctionContext* context, const Column
             result.append_null();
             continue;
         }
-        Status cast_status = VariantRowConverter::cast_to<ResultType, true>(encoded.value.as_ref(), zone, result);
+        Status cast_status =
+                VariantRowConverter::cast_to<ResultType, true>(encoded.value.as_ref(), zone, result, &offset_cache);
         if (!cast_status.ok()) {
             result.append_null();
         }
@@ -236,6 +226,12 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
     ColumnBuilder<ResultType> result(num_rows);
     VariantPath row_path;
     VariantPathReader row_reader;
+    const RuntimeState* state = context->state();
+    const cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : state->timezone_obj();
+    TzOffsetCache offset_cache;
+    offset_cache.bind(zone);
+    // Backing storage for a field view when the row has to be materialised; reused across rows.
+    VariantRowValue row_buffer;
 
     for (size_t row = 0; row < num_rows; ++row) {
         if (variant_viewer.is_null(row) || path_viewer.is_null(row)) {
@@ -259,18 +255,66 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
 
         const size_t variant_row = columns[0]->is_constant() ? 0 : row;
 
-        VariantReadResult read = cur_reader->read_row(variant_row);
-        if (read.state != VariantReadState::kValue) {
-            result.append_null();
-            continue;
+        if constexpr (ResultType == TYPE_VARIANT) {
+            VariantReadResult read = cur_reader->read_row(variant_row);
+            if (read.state != VariantReadState::kValue) {
+                result.append_null();
+                continue;
+            }
+            result.append(std::move(read.value));
+        } else {
+            // A scalar result is cast straight from a view of the field; no owned copy of the row's metadata.
+            VariantRowRef field;
+            if (cur_reader->read_row_view(variant_row, &field, &row_buffer) != VariantReadState::kValue) {
+                result.append_null();
+                continue;
+            }
+            Status casted = VariantRowConverter::cast_to<ResultType, true>(field, zone, result, &offset_cache);
+            if (!casted.ok()) {
+                result.append_null();
+            }
         }
-        append_variant_field_to_result<ResultType>(context, std::move(read.value), &result);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+// Top-level type of a non-null row of `column`, or nullopt when the row cannot be materialized.
+static std::optional<VariantType> variant_row_type(const VariantColumn* column, size_t row) {
+    // Fast path: if any typed column (or its fallback) is non-null for this row, the top-level type
+    // is OBJECT (typed paths are always object-field paths, §1.3).
+    // If all typed columns are null (all fields tombstoned), fall through to remain,
+    // which may hold a scalar (e.g. a scalar row appended into a shredded column).
+    for (size_t i = 0; i < column->shredded_paths().size(); ++i) {
+        const Column* typed_col = column->typed_column_by_index(i);
+        if ((typed_col != nullptr && !typed_col->is_null(row)) || column->has_fallback_value(i, row)) {
+            return VariantType::OBJECT;
+        }
+    }
+
+    // All typed columns null or no typed columns: read type from remain.
+    VariantRowRef row_ref;
+    if (column->try_get_row_ref(row, &row_ref)) {
+        return row_ref.get_value().type();
+    }
+
+    VariantRowValue variant_buffer;
+    const VariantRowValue* variant = column->get_row_value(row, &variant_buffer);
+    if (variant == nullptr) {
+        return std::nullopt;
+    }
+    return variant->get_value().type();
+}
+
 StatusOr<ColumnPtr> VariantFunctions::variant_typeof(FunctionContext* context, const Columns& columns) {
+    // An only-null column carries no type to unwrap: ColumnHelper::get_data_column takes it down to
+    // the placeholder create_const_null_column builds, which is not a VariantColumn, and the
+    // down_cast below asserts and takes the BE down. _do_variant_query -- and so every
+    // variant_query / get_variant_* that delegates to it -- already guards this way, and it can
+    // produce exactly such a column: querying a path that the variant does not have.
+    //   SELECT variant_typeof(variant_query(s.v, '$.age'))
+    //   FROM (SELECT CAST('age' AS VARIANT) AS v) s;
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
     const auto& variant_column = columns[0];
     auto variant_viewer = ColumnViewer<TYPE_VARIANT>(variant_column);
     size_t num_rows = variant_column->size();
@@ -283,45 +327,44 @@ StatusOr<ColumnPtr> VariantFunctions::variant_typeof(FunctionContext* context, c
             result.append_null();
             continue;
         }
-
         const size_t variant_row = variant_column->is_constant() ? 0 : row;
-        // Fast path: if any typed column is non-null for this row, the top-level type
-        // is OBJECT (typed paths are always object-field paths, §1.3).
-        // If all typed columns are null (all fields tombstoned), fall through to remain,
-        // which may hold a scalar (e.g. a scalar row appended into a shredded column).
-        {
-            bool any_non_null = false;
-            for (size_t i = 0; i < variant_data_column->shredded_paths().size(); ++i) {
-                const Column* typed_col = variant_data_column->typed_column_by_index(i);
-                if (typed_col != nullptr && !typed_col->is_null(variant_row)) {
-                    any_non_null = true;
-                    break;
-                }
-            }
-            if (any_non_null) {
-                result.append(VariantUtil::variant_type_to_string(VariantType::OBJECT));
-                continue;
-            }
-        }
-
-        // All typed columns null or no typed columns: read type from remain.
-        VariantRowRef row_ref;
-        if (variant_data_column->try_get_row_ref(variant_row, &row_ref)) {
-            result.append(VariantUtil::variant_type_to_string(row_ref.get_value().type()));
-            continue;
-        }
-
-        VariantRowValue variant_buffer;
-        const VariantRowValue* variant = variant_data_column->get_row_value(variant_row, &variant_buffer);
-        if (variant == nullptr) {
+        auto type = variant_row_type(variant_data_column, variant_row);
+        if (!type.has_value()) {
             result.append_null();
             continue;
         }
-        result.append(VariantUtil::variant_type_to_string(variant->get_value().type()));
+        result.append(VariantUtil::variant_type_to_string(*type));
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+StatusOr<ColumnPtr> VariantFunctions::is_variant_null(FunctionContext* context, const Columns& columns) {
+    // TRUE only for a VARIANT null (for example a JSON null); FALSE for any other value and for SQL NULL, so
+    // is_variant_null(variant_query(v, path)) tells a path holding a JSON null from a missing path.
+    const auto& variant_column = columns[0];
+    const size_t num_rows = variant_column->size();
+    if (variant_column->only_null()) {
+        return ColumnHelper::create_const_column<TYPE_BOOLEAN>(false, num_rows);
+    }
+    auto variant_viewer = ColumnViewer<TYPE_VARIANT>(variant_column);
+    const auto* variant_data_column =
+            down_cast<const VariantColumn*>(ColumnHelper::get_data_column(variant_column.get()));
+
+    const size_t rows_to_check = variant_column->is_constant() ? 1 : num_rows;
+    auto result = BooleanColumn::create(rows_to_check, 0);
+    auto& data = result->get_data();
+    for (size_t row = 0; row < rows_to_check; ++row) {
+        if (variant_viewer.is_null(row)) {
+            continue;
+        }
+        const size_t variant_row = variant_column->is_constant() ? 0 : row;
+        data[row] = variant_row_type(variant_data_column, variant_row) == VariantType::NULL_TYPE;
+    }
+    if (variant_column->is_constant()) {
+        return ConstColumn::create(std::move(result), num_rows);
+    }
+    return result;
+}
 } // namespace starrocks
 
 #include "gen_cpp/opcode/VariantFunctions.inc"

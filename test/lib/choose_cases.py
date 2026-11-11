@@ -358,7 +358,7 @@ class ChooseCase(object):
                     this_line_res.append(_line_content)
                     _line_id += 1
 
-                    if _line_content.startswith(RESULT_END_FLAT):
+                    if _line_content.lstrip().startswith(RESULT_END_FLAT):
                         break
 
             if _is_in_loop:
@@ -463,7 +463,8 @@ class ChooseCase(object):
                     tools.ok_(False, "Case file loop struct illegal: file: %s, line: %s" % (file, line_id))
 
                 line_id += 1
-                tmp_loop_stat.clear()
+                # A new list, not clear(): every LOOP of the case keeps a reference to the list it was read into.
+                tmp_loop_stat = []
                 tmp_loop_prop = {}
 
                 # fetch property json

@@ -14,6 +14,8 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -23,6 +25,7 @@ import com.starrocks.catalog.IcebergView;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -57,6 +60,9 @@ import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.Metrics;
+import org.apache.iceberg.MetricsConfig;
+import org.apache.iceberg.MetricsModes;
+import org.apache.iceberg.MetricsUtil;
 import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
@@ -75,9 +81,12 @@ import org.apache.iceberg.expressions.ManifestEvaluator;
 import org.apache.iceberg.expressions.Projections;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.transforms.PartitionSpecVisitor;
+import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.BinaryUtil;
 import org.apache.iceberg.util.DateTimeUtil;
+import org.apache.iceberg.util.UnicodeUtil;
 import org.apache.iceberg.view.SQLViewRepresentation;
 import org.apache.iceberg.view.View;
 import org.apache.iceberg.view.ViewVersion;
@@ -85,7 +94,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.StandardCharsets;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -97,6 +110,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -114,6 +128,7 @@ import static org.apache.iceberg.view.ViewProperties.COMMENT;
 
 public class IcebergApiConverter {
     private static final Logger LOG = LogManager.getLogger(IcebergApiConverter.class);
+    private static final ObjectMapper NAME_MAPPING_READER = new ObjectMapper();
     public static final String PARTITION_NULL_VALUE = "null";
     private static final Pattern ICEBERG_BUCKET_PATTERN = Pattern.compile("bucket\\[(\\d+)]");
     private static final Pattern ICEBERG_TRUNCATE_PATTERN = Pattern.compile("truncate\\[(\\d+)]");
@@ -372,11 +387,11 @@ public class IcebergApiConverter {
             }
             Column column = new Column(field.name(), srType, field.isOptional());
             column.setComment(field.doc());
-            // Prioritize write-default (used for INSERT) over initial-default (used for backfill)
+            // The column default is what INSERT writes for an omitted column: only the write-default. Without
+            // one, the spec writes NULL; the initial-default only fills older data files on read.
             String writeDefault = toWriteDefaultValueString(field);
-            String defaultVal = writeDefault != null ? writeDefault : toInitialDefaultValueString(field);
-            if (defaultVal != null) {
-                column.setDefaultValue(defaultVal);
+            if (writeDefault != null) {
+                column.setDefaultValue(writeDefault);
             }
             fullSchema.add(column);
         }
@@ -386,6 +401,25 @@ public class IcebergApiConverter {
     public static String toInitialDefaultValueString(Types.NestedField field) {
         return toDefaultValueString(field, false);
     }
+
+    private static final DateTimeFormatter READ_DEFAULT_DATETIME_FORMATTER =
+            // uuuu is the proleptic year: yyyy (year of era) would print year 0 as 0001.
+            DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss.SSSSSS");
+
+    // The initial-default sent to BE to fill a column or subfield missing from a data file. BE reads a
+    // TIMESTAMPTZ value from a file in the session time zone, so its default is formatted in that zone too.
+    // Call it only when the plan is built, not for a cached schema.
+    public static String toReadInitialDefaultValueString(Types.NestedField field) {
+        if (field.type() instanceof Types.TimestampType timestampType && timestampType.shouldAdjustToUTC() &&
+                field.initialDefault() != null) {
+            long micros = ((Number) field.initialDefault()).longValue();
+            return DateTimeUtil.timestamptzFromMicros(micros)
+                    .atZoneSameInstant(TimeUtils.getTimeZone().toZoneId())
+                    .format(READ_DEFAULT_DATETIME_FORMATTER);
+        }
+        return toInitialDefaultValueString(field);
+    }
+
 
     public static String toWriteDefaultValueString(Types.NestedField field) {
         return toDefaultValueString(field, true);
@@ -512,7 +546,13 @@ public class IcebergApiConverter {
                 case DOUBLE:
                 case DECIMAL:
                 case STRING:
+                case UUID:
                     return defaultValue.toString();
+                case BINARY:
+                    // BE parses a VARBINARY default from the raw bytes of the thrift string, which only
+                    // round-trips through a Java String when the bytes are valid UTF-8.
+                    return StandardCharsets.UTF_8.newDecoder()
+                            .decode(((ByteBuffer) defaultValue).duplicate()).toString();
                 case DATE:
                     return DateTimeUtil.daysToIsoDate(((Number) defaultValue).intValue());
                 case TIME:
@@ -526,7 +566,7 @@ public class IcebergApiConverter {
                 default:
                     return null;
             }
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | CharacterCodingException e) {
             LOG.warn("Failed to convert {} default value for iceberg field {}",
                     useWriteDefault ? "write" : "initial", field.name(), e);
             return null;
@@ -566,11 +606,62 @@ public class IcebergApiConverter {
         return tIcebergSchema;
     }
 
+    // Older names of the top-level columns from the table's name mapping (schema.name-mapping.default). A data file
+    // without field ids may store a renamed column under one of them; the scan reads it from there when the file has
+    // no column of the current name.
+    public static void setMappedNames(TIcebergSchema tIcebergSchema, Map<String, String> tableProperties) {
+        String mappingJson = tableProperties.get(TableProperties.DEFAULT_NAME_MAPPING);
+        if (mappingJson == null) {
+            return;
+        }
+        // Read the top-level entries only: NameMappingParser indexes every nested name path, which grows with the
+        // product of the names at each level.
+        Map<Integer, List<String>> idToNames = new HashMap<>();
+        try {
+            JsonNode root = NAME_MAPPING_READER.readTree(mappingJson);
+            if (root == null || !root.isArray()) {
+                throw new IllegalArgumentException("not a JSON array");
+            }
+            for (JsonNode entry : root) {
+                JsonNode id = entry.get("field-id");
+                JsonNode names = entry.get("names");
+                if (id == null || !id.canConvertToInt() || names == null || !names.isArray()) {
+                    continue;
+                }
+                List<String> nameList = new ArrayList<>();
+                for (JsonNode name : names) {
+                    nameList.add(name.asText());
+                }
+                idToNames.put(id.asInt(), nameList);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to parse iceberg name mapping {}", mappingJson, e);
+            return;
+        }
+        for (TIcebergSchemaField field : tIcebergSchema.getFields()) {
+            List<String> names = idToNames.get(field.getField_id());
+            if (names == null) {
+                continue;
+            }
+            List<String> olderNames = names.stream()
+                    .filter(name -> !name.equals(field.getName()))
+                    .sorted()
+                    .toList();
+            if (!olderNames.isEmpty()) {
+                field.setMapped_names(olderNames);
+            }
+        }
+    }
+
     private static TIcebergSchemaField getTIcebergSchemaField(Types.NestedField nestedField) {
         TIcebergSchemaField tIcebergSchemaField = new TIcebergSchemaField();
         tIcebergSchemaField.setField_id(nestedField.fieldId());
         tIcebergSchemaField.setName(nestedField.name());
         tIcebergSchemaField.setIs_optional(nestedField.isOptional());
+        String initialDefault = toReadInitialDefaultValueString(nestedField);
+        if (initialDefault != null) {
+            tIcebergSchemaField.setInitial_default(initialDefault);
+        }
         // Preserve external semantics independently of SQL type conversion.
         // Do not infer these parameters from WKB or map these fields to VARBINARY.
         if (nestedField.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOGRAPHY) {
@@ -611,6 +702,20 @@ public class IcebergApiConverter {
         }
     }
 
+    // Iceberg spec (Appendix D, single-value serialization) requires a decimal bound to be the unscaled
+    // value as two's-complement big-endian binary using the minimum number of bytes. BE always emits a
+    // fixed-width buffer (4/8 bytes for decimal32/64, or the Parquet FIXED_LEN_BYTE_ARRAY width for
+    // decimal128), so re-encode it here to the minimal form. `new BigInteger(bytes)` interprets its input
+    // as big-endian two's-complement of any length, and `toByteArray()` returns the canonical minimal form.
+    private static ByteBuffer trimDecimalBound(ByteBuffer buf) {
+        if (buf == null || buf.remaining() == 0) {
+            return buf;
+        }
+        byte[] bytes = new byte[buf.remaining()];
+        buf.duplicate().get(bytes);
+        return ByteBuffer.wrap(new BigInteger(bytes).toByteArray());
+    }
+
     public static Metrics buildDataFileMetrics(TIcebergDataFile dataFile, org.apache.iceberg.Table nativeTable) {
         Map<Integer, Long> columnSizes = new HashMap<>();
         Map<Integer, Long> valueCounts = new HashMap<>();
@@ -641,16 +746,120 @@ public class IcebergApiConverter {
             // the decimal128/uuid data sinked with physical type fixed_len_byte_array will be stored as big endian
             // decimal64/32 are sinked with physical type int as little endian
             // iceberg data file's upper/lower bound treat decimal/uuid's byte buffer as big endian.
-            if (dataFile.getFormat().equalsIgnoreCase("PARQUET")
-                    && field.type() instanceof Types.DecimalType && ((Types.DecimalType) field.type()).precision() <= 18) {
-                //change to BigEndian
-                reverseBuffer(lowerBounds.get(field.fieldId()));
-                reverseBuffer(upperBounds.get(field.fieldId()));
+            if (dataFile.getFormat().equalsIgnoreCase("PARQUET") && field.type() instanceof Types.DecimalType) {
+                int fieldId = field.fieldId();
+                if (((Types.DecimalType) field.type()).precision() <= 18) {
+                    //change to BigEndian
+                    reverseBuffer(lowerBounds.get(fieldId));
+                    reverseBuffer(upperBounds.get(fieldId));
+                }
+                // Trim the fixed-width buffer down to the spec-mandated minimum-length encoding, regardless
+                // of precision -- strict Iceberg REST catalogs (e.g. Unity Catalog) reject non-minimal bounds.
+                lowerBounds.computeIfPresent(fieldId, (id, buf) -> trimDecimalBound(buf));
+                upperBounds.computeIfPresent(fieldId, (id, buf) -> trimDecimalBound(buf));
             }
         }
 
         return new Metrics(dataFile.record_count, columnSizes, valueCounts,
                 nullValueCounts, null, lowerBounds, upperBounds);
+    }
+
+    /**
+     * Applies the table's write.metadata.metrics.* config to the metrics of a data file SR wrote, the same way an
+     * Iceberg writer does (ParquetUtil footer metrics):
+     * - none: drop every stat of the column, column size included
+     * - counts: keep column size and value/null/nan counts, drop the bounds
+     * - truncate(n): truncate STRING and BINARY/FIXED bounds to n; a max that cannot be truncated is dropped
+     * - full: unchanged
+     * The config follows the Iceberg table properties: write.metadata.metrics.default (truncate(16) when unset),
+     * write.metadata.metrics.column.<col>, and write.metadata.metrics.max-inferred-column-defaults (100), past
+     * which columns get none unless a default is set. MetricsConfig.forTable resolves all of them.
+     * Only for data files: position delete files need their file_path bounds, so they keep their stats.
+     */
+    public static Metrics applyWriteMetricsConfig(Metrics metrics, org.apache.iceberg.Table nativeTable) {
+        if (metrics == null) {
+            return metrics;
+        }
+        Schema schema = nativeTable.schema();
+        MetricsConfig config = MetricsConfig.forTable(nativeTable);
+        Map<Integer, MetricsModes.MetricsMode> modes = new HashMap<>();
+        Function<Integer, MetricsModes.MetricsMode> modeOf =
+                fieldId -> modes.computeIfAbsent(fieldId, id -> MetricsUtil.metricsMode(schema, config, id));
+
+        Map<Integer, Long> columnSizes = filterCounts(metrics.columnSizes(), modeOf);
+        Map<Integer, Long> valueCounts = filterCounts(metrics.valueCounts(), modeOf);
+        Map<Integer, Long> nullValueCounts = filterCounts(metrics.nullValueCounts(), modeOf);
+        Map<Integer, Long> nanValueCounts = filterCounts(metrics.nanValueCounts(), modeOf);
+        Map<Integer, ByteBuffer> lowerBounds = filterBounds(metrics.lowerBounds(), schema, modeOf, true);
+        Map<Integer, ByteBuffer> upperBounds = filterBounds(metrics.upperBounds(), schema, modeOf, false);
+        return new Metrics(metrics.recordCount(), columnSizes, valueCounts, nullValueCounts, nanValueCounts,
+                lowerBounds, upperBounds);
+    }
+
+    private static Map<Integer, Long> filterCounts(Map<Integer, Long> counts,
+                                                   Function<Integer, MetricsModes.MetricsMode> modeOf) {
+        if (counts == null) {
+            return null;
+        }
+        Map<Integer, Long> result = new HashMap<>();
+        counts.forEach((fieldId, value) -> {
+            if (modeOf.apply(fieldId) != MetricsModes.None.get()) {
+                result.put(fieldId, value);
+            }
+        });
+        return result;
+    }
+
+    private static Map<Integer, ByteBuffer> filterBounds(Map<Integer, ByteBuffer> bounds, Schema schema,
+                                                         Function<Integer, MetricsModes.MetricsMode> modeOf,
+                                                         boolean isLower) {
+        if (bounds == null) {
+            return null;
+        }
+        Map<Integer, ByteBuffer> result = new HashMap<>();
+        bounds.forEach((fieldId, value) -> {
+            MetricsModes.MetricsMode mode = modeOf.apply(fieldId);
+            if (mode == MetricsModes.None.get() || mode == MetricsModes.Counts.get()) {
+                return;
+            }
+            ByteBuffer bound = value;
+            if (mode instanceof MetricsModes.Truncate && value != null) {
+                Types.NestedField field = schema.findField(fieldId);
+                bound = field == null ? value :
+                        truncateBound(field.type(), value, ((MetricsModes.Truncate) mode).length(), isLower);
+            }
+            if (bound != null) {
+                result.put(fieldId, bound);
+            }
+        });
+        return result;
+    }
+
+    // Returns null when the bound cannot be truncated (an upper bound with no larger prefix, or a string bound
+    // that is not valid UTF-8); the bound is then dropped.
+    private static ByteBuffer truncateBound(org.apache.iceberg.types.Type type, ByteBuffer bound, int length,
+                                            boolean isLower) {
+        switch (type.typeId()) {
+            case STRING: {
+                String str;
+                try {
+                    str = StandardCharsets.UTF_8.newDecoder().decode(bound.duplicate()).toString();
+                } catch (CharacterCodingException e) {
+                    // BE reports the raw bytes of a string column; a bound that is not valid UTF-8 cannot be
+                    // truncated as a string, so drop it instead of failing the commit.
+                    return null;
+                }
+                String truncated = isLower ? UnicodeUtil.truncateStringMin(str, length) :
+                        UnicodeUtil.truncateStringMax(str, length);
+                return truncated == null ? null : Conversions.toByteBuffer(Types.StringType.get(), truncated);
+            }
+            case FIXED:
+            case BINARY:
+                return isLower ? BinaryUtil.truncateBinaryMin(bound, length) :
+                        BinaryUtil.truncateBinaryMax(bound, length);
+            default:
+                return bound;
+        }
     }
 
     private static void setFormatProperties(ImmutableMap.Builder<String, String> tableProperties,
@@ -831,6 +1040,32 @@ public class IcebergApiConverter {
         return toPartitionField(spec.schema(), field, withTransfomPrefix);
     }
 
+    // True when toPartitionField can express this field's transform. Per the Iceberg spec, a reader
+    // ignores a partition field whose transform it does not know (no pruning on it, no error).
+    public static boolean isKnownPartitionTransform(PartitionField field) {
+        String transform = field.transform().toString();
+        switch (transform) {
+            case "identity":
+            case "year":
+            case "month":
+            case "day":
+            case "hour":
+            case "void":
+                return true;
+        }
+        return ICEBERG_BUCKET_PATTERN.matcher(transform).matches() ||
+                ICEBERG_TRUNCATE_PATTERN.matcher(transform).matches();
+    }
+
+    // A writer cannot compute the partition tuple of a field whose transform it does not know.
+    public static void checkPartitionTransformsWritable(PartitionSpec spec) {
+        for (PartitionField field : spec.fields()) {
+            if (!isKnownPartitionTransform(field)) {
+                throw new StarRocksConnectorException("Unsupported partition transform: " + field);
+            }
+        }
+    }
+
     public static String toPartitionField(Schema schema, PartitionField field, Boolean withTransfomPrefix) {
         String name = schema.findColumnName(field.sourceId());
         String escapedName =  "`" + name + "`";
@@ -858,7 +1093,9 @@ public class IcebergApiConverter {
             return prefix + format("truncate(%s, %s)", escapedName, matcher.group(1));
         }
 
-        throw new StarRocksConnectorException("Unsupported partition transform: " + field);
+        // An unknown transform is shown as is (SHOW CREATE TABLE, ALTER TABLE lookups). Reads skip it
+        // (readSchemaPartitionFields) and writes reject it (checkPartitionTransformsWritable).
+        return prefix + format("%s(%s)", transform, escapedName);
     }
 
     public static List<StructField> getPartitionColumns(List<PartitionField> fields, Schema schema) {

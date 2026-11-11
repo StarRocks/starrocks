@@ -40,6 +40,9 @@ CONF_mInt64(disk_safe_level, "80");
 // currently only supports data cache.
 CONF_mInt64(disk_low_level, "60");
 
+// clear corrupted datacache for external tables, as lake_clear_corrupted_cache_data does for lake tables
+CONF_mBool(external_table_clear_corrupted_cache_data, "true");
+
 // Configuration items for datacache
 CONF_Bool(datacache_enable, "true");
 
@@ -92,7 +95,7 @@ CONF_mInt64(datacache_disk_adjust_interval_seconds, "10");
 
 // The silent period, only when the disk usage falls bellow the low level for a time longer than this period,
 // the disk expansion can be triggered
-CONF_mInt64(datacache_disk_idle_seconds_for_expansion, "7200");
+CONF_mInt64(datacache_disk_idle_seconds_for_expansion, "180");
 
 // The minimum total disk quota bytes to adjust, once the quota to adjust is less than this value,
 // cache quota will be reset to zero to avoid overly frequent population and eviction.

@@ -33,6 +33,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_range_helper.h"
@@ -40,7 +41,6 @@
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
@@ -184,13 +184,6 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         SCOPED_RAW_TIMER(&_context->stats->txn_log_write_ns);
         RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     }
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        // preload primary key table's compaction state
-        SCOPED_RAW_TIMER(&_context->stats->preload_compaction_state_ns);
-        Tablet t(_tablet.tablet_manager(), _tablet.id());
-        _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
-    }
-
     if (config::enable_tablet_write_log) {
         SCOPED_RAW_TIMER(&_context->stats->tablet_write_log_ns);
         int64_t begin_time = _context->start_time.load(std::memory_order_relaxed) * 1000; // Convert to ms
@@ -208,6 +201,9 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
 StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         const std::vector<uint32_t>& column_group) {
+    // Every input source opens one buffered stream per column of the group, all at once.
+    const int64_t num_streams = _total_input_segs * static_cast<int64_t>(column_group.size());
+    _stream_buffer_size = stream_buffer_size_for_pass(num_streams);
     if (_input_rowsets.size() > 0 && _input_rowsets.back()->partial_segments_compaction()) {
         // can not call `get_read_chunk_size`, for example, if `_total_input_segs` is shrinked to half,
         // read_chunk_size might be doubled, in this case, this optimization will not take effect
@@ -232,7 +228,7 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         // it clears it for the remaining passes too).
         const bool reuse_via_shared_cache = !_hold_input_segments;
         LakeIOOptions lake_io_opts{.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                   .buffer_size = _stream_buffer_size,
                                    .fill_metadata_cache = reuse_via_shared_cache,
                                    .hold_segments = _hold_input_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
@@ -266,7 +262,8 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
     // resident regardless of this group's width -- and it grows as later passes touch more column
     // indexes, so this re-decides every pass: once holding would starve the budget the task stops
     // holding, for this pass and every later one. See there.
-    return chunk_size_with_held_segments(held_segments_bytes, _total_num_rows, total_mem_footprint, _total_input_segs);
+    return chunk_size_with_held_segments(held_segments_bytes, _total_num_rows, total_mem_footprint, _total_input_segs,
+                                         num_streams * _stream_buffer_size);
 }
 
 Status VerticalCompactionTask::compact_column_group(
@@ -308,7 +305,7 @@ Status VerticalCompactionTask::compact_column_group(
     reader_params.use_page_cache = false;
     reader_params.column_access_paths = &_column_access_paths;
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                  .buffer_size = _stream_buffer_size,
                                   .hold_segments = _hold_input_segments};
 
     // Apply range filter to ALL column groups (key and non-key) so that segment
@@ -354,7 +351,8 @@ Status VerticalCompactionTask::compact_column_group(
     VLOG(3) << "Compact column group. tablet: " << _tablet.id() << ", column group: " << column_group_index
             << ", reader chunk size: " << chunk_size;
 
-    const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
+    // Collect rssid & rowid only when compact primary key columns
+    const bool collect_rssid_rowids = _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && is_key;
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
             return Status::Aborted("background worker stopped");
@@ -369,9 +367,7 @@ Status VerticalCompactionTask::compact_column_group(
             auto st = Status::OK();
             {
                 SCOPED_RAW_TIMER(&_context->stats->reader_get_next_ns);
-                // Collect rssid & rowid only when compact primary key columns
-                if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && is_key &&
-                    enable_light_pk_compaction_publish) {
+                if (collect_rssid_rowids) {
                     st = reader.get_next(chunk.get(), source_masks, &rssid_rowids);
                 } else {
                     st = reader.get_next(chunk.get(), source_masks);
@@ -453,13 +449,13 @@ Status VerticalCompactionTask::compact_column_group(
             source_masks->clear();
         }
 
+        const auto& read_stats = reader.compaction_stats();
         if (_total_num_rows > 0 && column_group_size > 0) {
-            _context->progress.update(
-                    (100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
-                    column_group_size);
+            _context->progress.update((100 * column_group_index + 100 * read_stats.raw_rows_read / _total_num_rows) /
+                                      column_group_size);
         }
         CompactionTaskStats temp_stats;
-        temp_stats.collect(reader.stats());
+        temp_stats.collect(read_stats);
         CompactionTaskStats diff_stats = temp_stats - prev_stats;
         *_context->stats = *_context->stats + diff_stats;
         prev_stats = temp_stats;

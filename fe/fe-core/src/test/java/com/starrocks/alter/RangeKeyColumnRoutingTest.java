@@ -443,6 +443,45 @@ public class RangeKeyColumnRoutingTest {
         Assertions.assertFalse(SchemaChangeHandler.needsRangeRewriteSchemaChange(dup, unrelatedModify));
     }
 
+    @Test
+    public void testDemoteBitmapIndexedTrailingUniqueKeyStillRoutes() throws Exception {
+        // Demoting a BITMAP-indexed trailing key to a value column keeps its type, so the BITMAP type
+        // check on MODIFY COLUMN does not apply and the flip still routes to the range rewrite job.
+        String name = "t_rangekey_bitmap_demote_" + TABLE_SEQ.incrementAndGet();
+        starRocksAssert.withTable("create table " + name
+                + " (k1 int NOT NULL, k2 int NOT NULL, v1 int, INDEX ix_k2 (k2) USING BITMAP)\n"
+                + "unique key(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", name);
+        AlterJobV2 job = alterAndReturnJob(table, "MODIFY COLUMN k2 INT NOT NULL");
+        Assertions.assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob,
+                "Expected a LakeRangeRewriteSchemaChangeJob, got: " + job);
+
+        // A type change under the same BITMAP index is rejected. Spelled without KEY (DOUBLE cannot be a key
+        // column) it is also a keyness change, which the range-distribution rule refuses first.
+        String typeChangeName = "t_rangekey_bitmap_double_" + TABLE_SEQ.incrementAndGet();
+        starRocksAssert.withTable("create table " + typeChangeName
+                + " (k1 int NOT NULL, k2 int NOT NULL, v1 int, INDEX ix_k2 (k2) USING BITMAP)\n"
+                + "unique key(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        OlapTable typeChangeTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", typeChangeName);
+        assertThrowsDdl("MODIFY COLUMN that changes keyness is not supported on tables with range distribution",
+                () -> alterAndReturnJob(typeChangeTable, "MODIFY COLUMN k2 DOUBLE"));
+    }
+
+    @Test
+    public void testModifyBitmapIndexedValueColumnToUnsupportedTypeRejected() throws Exception {
+        String name = "t_rangekey_bitmap_value_" + TABLE_SEQ.incrementAndGet();
+        starRocksAssert.withTable("create table " + name
+                + " (k1 int NOT NULL, v1 int, INDEX ix_v1 (v1) USING BITMAP)\n"
+                + "duplicate key(k1)\n"
+                + "properties('replication_num' = '1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", name);
+        assertThrowsDdl("is not supported in bitmap index. invalid column: v1",
+                () -> alterAndReturnJob(table, "MODIFY COLUMN v1 DOUBLE"));
+    }
+
     // ---- ADD ROLLUP guard tests (issue #76521) ----------------------------------
     // A column-subset range rollup writes only its own columns in the online rewrite, which cannot
     // supply a value for base columns the rollup omits. Two shapes are therefore rejected up front

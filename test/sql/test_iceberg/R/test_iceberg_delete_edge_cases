@@ -1,0 +1,470 @@
+-- name: test_iceberg_delete_edge_cases
+create external catalog iceberg_del_edge_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+create external catalog hive_del_edge_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+create database iceberg_del_edge_${uuid0}.db_${uuid0};
+-- result:
+-- !result
+create database hive_del_edge_${uuid0}.hdb_${uuid0};
+-- result:
+-- !result
+set catalog iceberg_del_edge_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table groups_t(
+    id int,
+    k int,
+    v string
+) properties ("format-version" = "2");
+-- result:
+-- !result
+insert into groups_t values (1, 10, 'r1'), (1, 20, 'r2'), (2, 10, 'r3'), (2, 20, 'r4'), (3, 10, 'r5');
+-- result:
+-- !result
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id(
+    id int
+) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/groups_t_by_id");
+-- result:
+-- !result
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id values (3);
+-- result:
+-- !result
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id_k(
+    id int,
+    k int
+) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/groups_t_by_id_k");
+-- result:
+-- !result
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id_k values (1, 10), (2, 20);
+-- result:
+-- !result
+alter table groups_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/groups_t_by_id", file_format="parquet", equality_columns="id");
+-- result:
+-- !result
+alter table groups_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/groups_t_by_id_k", file_format="parquet", equality_columns="id,k");
+-- result:
+-- !result
+select * from groups_t order by v;
+-- result:
+1	20	r2
+2	10	r3
+-- !result
+select * from groups_t where id = 1 order by v;
+-- result:
+1	20	r2
+-- !result
+select * from groups_t where k = 10 order by v;
+-- result:
+2	10	r3
+-- !result
+insert into groups_t values (3, 10, 'r6'), (1, 10, 'r7');
+-- result:
+-- !result
+select * from groups_t order by v;
+-- result:
+1	20	r2
+2	10	r3
+3	10	r6
+1	10	r7
+-- !result
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id_k2(
+    id int,
+    k int
+) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/groups_t_by_id_k2");
+-- result:
+-- !result
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id_k2 values (1, 10);
+-- result:
+-- !result
+alter table groups_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/groups_t_by_id_k2", file_format="parquet", equality_columns="id,k");
+-- result:
+-- !result
+select * from groups_t order by v;
+-- result:
+1	20	r2
+2	10	r3
+3	10	r6
+-- !result
+select count(*) from groups_t;
+-- result:
+3
+-- !result
+create table groups_part_t(
+    id int,
+    k int,
+    v string,
+    p string
+) partition by(p) properties ("format-version" = "2");
+-- result:
+-- !result
+insert into groups_part_t values (1, 10, 'a1', 'a'), (2, 20, 'a2', 'a'), (1, 10, 'b1', 'b'), (2, 20, 'b2', 'b');
+-- result:
+-- !result
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_part_t_by_id(
+    id int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/groups_part_t_by_id");
+-- result:
+-- !result
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.groups_part_t_by_id values (1, 'a');
+-- result:
+-- !result
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_part_t_by_id_k(
+    id int,
+    k int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/groups_part_t_by_id_k");
+-- result:
+-- !result
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.groups_part_t_by_id_k values (2, 20, 'b');
+-- result:
+-- !result
+alter table groups_part_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/groups_part_t_by_id", file_format="parquet", equality_columns="id");
+-- result:
+-- !result
+alter table groups_part_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/groups_part_t_by_id_k", file_format="parquet", equality_columns="id,k");
+-- result:
+-- !result
+select * from groups_part_t order by v;
+-- result:
+2	20	a2	a
+1	10	b1	b
+-- !result
+select * from groups_part_t where id = 1 order by v;
+-- result:
+1	10	b1	b
+-- !result
+select * from groups_part_t where p = 'a' order by v;
+-- result:
+2	20	a2	a
+-- !result
+create table rename_t(
+    id int,
+    v string
+) properties ("format-version" = "2");
+-- result:
+-- !result
+insert into rename_t values (1, 'a'), (2, 'b'), (3, 'c');
+-- result:
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/add_equality_delete_files/eq_delete_id_1.parquet oss://${oss_bucket}/del_edge_${uuid0}/rename_t_deletes/eq_delete_id_1.parquet > /dev/null
+-- result:
+0
+
+-- !result
+alter table rename_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/rename_t_deletes", file_format="parquet", equality_columns="id");
+-- result:
+-- !result
+alter table rename_t rename column id to id2;
+-- result:
+-- !result
+select * from rename_t order by id2;
+-- result:
+2	b
+3	c
+-- !result
+select * from rename_t where id2 = 1;
+-- result:
+-- !result
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.rename_t_deletes2(
+    id2 int
+) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/rename_t_deletes2");
+-- result:
+-- !result
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.rename_t_deletes2 values (2);
+-- result:
+-- !result
+alter table rename_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/rename_t_deletes2", file_format="parquet", equality_columns="id2");
+-- result:
+-- !result
+select * from rename_t order by id2;
+-- result:
+3	c
+-- !result
+create table promote_t(
+    id int,
+    v string
+) properties ("format-version" = "2");
+-- result:
+-- !result
+insert into promote_t values (1, 'a'), (2, 'b'), (3, 'c');
+-- result:
+-- !result
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.promote_t_deletes(
+    id int
+) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/promote_t_deletes");
+-- result:
+-- !result
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.promote_t_deletes values (1);
+-- result:
+-- !result
+alter table promote_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/promote_t_deletes", file_format="parquet", equality_columns="id");
+-- result:
+-- !result
+alter table promote_t modify column id bigint;
+-- result:
+-- !result
+select * from promote_t order by id;
+-- result:
+2	b
+3	c
+-- !result
+insert into promote_t values (1, 'new1'), (4294967296, 'big');
+-- result:
+-- !result
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.promote_t_deletes2(
+    id bigint
+) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/promote_t_deletes2");
+-- result:
+-- !result
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.promote_t_deletes2 values (2), (4294967296);
+-- result:
+-- !result
+alter table promote_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/promote_t_deletes2", file_format="parquet", equality_columns="id");
+-- result:
+-- !result
+select * from promote_t order by id;
+-- result:
+1	new1
+3	c
+-- !result
+select * from promote_t where id = 1;
+-- result:
+1	new1
+-- !result
+create table travel_v2_t(
+    id int,
+    v string
+) properties ("format-version" = "2");
+-- result:
+-- !result
+insert into travel_v2_t values (1, 'v1'), (2, 'v2'), (3, 'v3'), (4, 'v4');
+-- result:
+-- !result
+alter table travel_v2_t create tag tag_insert;
+-- result:
+-- !result
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.travel_v2_t_deletes(
+    id int
+) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/travel_v2_t_deletes");
+-- result:
+-- !result
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.travel_v2_t_deletes values (1);
+-- result:
+-- !result
+alter table travel_v2_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/travel_v2_t_deletes", file_format="parquet", equality_columns="id");
+-- result:
+-- !result
+alter table travel_v2_t create tag tag_eq_delete;
+-- result:
+-- !result
+alter table travel_v2_t create branch branch_eq_delete;
+-- result:
+-- !result
+delete from travel_v2_t where v = 'v2';
+-- result:
+-- !result
+alter table travel_v2_t create tag tag_pos_delete;
+-- result:
+-- !result
+insert into travel_v2_t values (5, 'v5');
+-- result:
+-- !result
+select * from travel_v2_t version as of "tag_insert" order by id;
+-- result:
+1	v1
+2	v2
+3	v3
+4	v4
+-- !result
+select * from travel_v2_t version as of "tag_eq_delete" order by id;
+-- result:
+2	v2
+3	v3
+4	v4
+-- !result
+select * from travel_v2_t version as of "tag_pos_delete" order by id;
+-- result:
+3	v3
+4	v4
+-- !result
+select * from travel_v2_t order by id;
+-- result:
+3	v3
+4	v4
+5	v5
+-- !result
+select * from travel_v2_t version as of "branch_eq_delete" order by id;
+-- result:
+2	v2
+3	v3
+4	v4
+-- !result
+select * from travel_v2_t version as of "tag_eq_delete" where id = 1;
+-- result:
+-- !result
+select count(*) from travel_v2_t version as of "tag_insert" where id = 1;
+-- result:
+1
+-- !result
+create table compact_v2_t(
+    id int,
+    v string,
+    p string
+) partition by(p) properties ("format-version" = "2");
+-- result:
+-- !result
+insert into compact_v2_t values (1, 'a1', 'a'), (2, 'a2', 'a'), (3, 'a3', 'a'), (1, 'b1', 'b'), (2, 'b2', 'b'), (3, 'b3', 'b');
+-- result:
+-- !result
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.compact_v2_t_deletes(
+    id int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/compact_v2_t_deletes");
+-- result:
+-- !result
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.compact_v2_t_deletes values (1, 'a'), (1, 'b');
+-- result:
+-- !result
+alter table compact_v2_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/compact_v2_t_deletes", file_format="parquet", equality_columns="id");
+-- result:
+-- !result
+delete from compact_v2_t where v in ('a2', 'b2');
+-- result:
+-- !result
+select * from compact_v2_t order by v;
+-- result:
+3	a3	a
+3	b3	b
+-- !result
+select content, count(*) from compact_v2_t$files where content != 0 group by content order by content;
+-- result:
+1	2
+2	2
+-- !result
+[UC]alter table compact_v2_t execute rewrite_data_files("rewrite_all" = "true") where p = 'a';
+select * from compact_v2_t order by v;
+-- result:
+3	a3	a
+3	b3	b
+-- !result
+select content, count(*) from compact_v2_t$files where content != 0 group by content order by content;
+-- result:
+1	1
+2	2
+-- !result
+insert into compact_v2_t values (1, 'a1new', 'a'), (1, 'b1new', 'b');
+-- result:
+-- !result
+select * from compact_v2_t order by v;
+-- result:
+1	a1new	a
+3	a3	a
+1	b1new	b
+3	b3	b
+-- !result
+create table hive_del_edge_${uuid0}.hdb_${uuid0}.compact_v2_t_deletes2(
+    id int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/del_edge_${uuid0}/compact_v2_t_deletes2");
+-- result:
+-- !result
+insert into hive_del_edge_${uuid0}.hdb_${uuid0}.compact_v2_t_deletes2 values (3, 'a'), (1, 'b');
+-- result:
+-- !result
+alter table compact_v2_t execute add_equality_delete_files(location="oss://${oss_bucket}/del_edge_${uuid0}/compact_v2_t_deletes2", file_format="parquet", equality_columns="id");
+-- result:
+-- !result
+select * from compact_v2_t order by v;
+-- result:
+1	a1new	a
+3	b3	b
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop table iceberg_del_edge_${uuid0}.db_${uuid0}.groups_t force;
+-- result:
+-- !result
+drop table iceberg_del_edge_${uuid0}.db_${uuid0}.groups_part_t force;
+-- result:
+-- !result
+drop table iceberg_del_edge_${uuid0}.db_${uuid0}.rename_t force;
+-- result:
+-- !result
+drop table iceberg_del_edge_${uuid0}.db_${uuid0}.promote_t force;
+-- result:
+-- !result
+drop table iceberg_del_edge_${uuid0}.db_${uuid0}.travel_v2_t force;
+-- result:
+-- !result
+drop table iceberg_del_edge_${uuid0}.db_${uuid0}.compact_v2_t force;
+-- result:
+-- !result
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id force;
+-- result:
+-- !result
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id_k force;
+-- result:
+-- !result
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_t_by_id_k2 force;
+-- result:
+-- !result
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_part_t_by_id force;
+-- result:
+-- !result
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.groups_part_t_by_id_k force;
+-- result:
+-- !result
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.rename_t_deletes2 force;
+-- result:
+-- !result
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.promote_t_deletes force;
+-- result:
+-- !result
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.promote_t_deletes2 force;
+-- result:
+-- !result
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.travel_v2_t_deletes force;
+-- result:
+-- !result
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.compact_v2_t_deletes force;
+-- result:
+-- !result
+drop table hive_del_edge_${uuid0}.hdb_${uuid0}.compact_v2_t_deletes2 force;
+-- result:
+-- !result
+drop database iceberg_del_edge_${uuid0}.db_${uuid0};
+-- result:
+-- !result
+drop database hive_del_edge_${uuid0}.hdb_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_del_edge_${uuid0};
+-- result:
+-- !result
+drop catalog hive_del_edge_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/del_edge_${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

@@ -22,6 +22,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -261,6 +262,11 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     }
 
     @Override
+    public Map<String, Pair<Double, Double>> getPartitionSourceColumnRanges(Table table, TvrVersionRange version) {
+        return metadataOfTable(table).getPartitionSourceColumnRanges(table, version);
+    }
+
+    @Override
     public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
         ConnectorMetadata metadata = metadataOfTable(item.getTable());
         return metadata.prepareMetadata(item, tracers, connectContext);
@@ -275,6 +281,11 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
         ConnectorMetadata metadata = metadataOfTable(table);
         metadata.refreshTable(srDbName, table, partitionNames, onlyCachedPartitions);
+    }
+
+    @Override
+    public void invalidateTableForRead(String srDbName, Table table) {
+        metadataOfTable(table).invalidateTableForRead(srDbName, table);
     }
 
     @Override

@@ -22,6 +22,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.FileType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
@@ -354,6 +355,7 @@ public class ColumnTypeConverterTest {
     public void testPaimonSchema() {
         org.apache.paimon.types.TimeType type = new org.apache.paimon.types.TimeType(3);
         Assertions.assertEquals(DateType.TIME, fromPaimonType(type));
+        Assertions.assertEquals(FileType.FILE, fromPaimonType(new org.apache.paimon.types.BlobType()));
     }
 
     @Test

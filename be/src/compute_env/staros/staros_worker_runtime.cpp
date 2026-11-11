@@ -54,6 +54,8 @@ DECLARE_int64(fslib_s3_min_upload_part_size);
 DECLARE_int64(fslib_gs_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_min_upload_part_size);
+// Cut S3 multipart uploads into parts of exactly fslib_s3_min_upload_part_size bytes.
+DECLARE_bool(fslib_s3_multipart_equal_part_size);
 // threadpool size for buffer prefetch task
 DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 // switch to turn on/off buffer prefetch when read
@@ -99,6 +101,9 @@ void apply_starlet_upload_threshold_configs() {
     APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_azure_storage_min_upload_part_size,
                                    fslib_azure_storage_min_upload_part_size);
 #undef APPLY_STARLET_UPLOAD_THRESHOLD
+
+    // Shared with the BE S3 filesystem, hence no `starlet_` prefix on the BE config.
+    FLAGS_fslib_s3_multipart_equal_part_size = config::s3_multipart_equal_part_size;
 }
 
 namespace fslib = staros::starlet::fslib;
@@ -167,8 +172,21 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
     fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
     apply_starlet_upload_threshold_configs();
 
+    // Goes through UpdateFlagValue rather than a typed FLAGS_ assignment: starlet registers an update
+    // hook on this flag that resolves the string to the enum its heartbeat path actually reads, and
+    // only SetCommandLineOption fires that hook. Assigning the flag directly would leave the
+    // heartbeat on "none" whatever this is set to.
+    if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("starmgr_client_compression_type",
+                                                              config::starlet_starmgr_client_compression_type.value())
+                .empty()) {
+        LOG(WARNING) << "Failed to apply BE config starlet_starmgr_client_compression_type="
+                     << config::starlet_starmgr_client_compression_type << "; worker heartbeats stay uncompressed";
+    }
+
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
     fslib::FLAGS_star_cache_async_init = config::starlet_star_cache_async_init;
+    fslib::FLAGS_star_cache_skip_fresh_block_checksum_verification =
+            config::starlet_star_cache_skip_fresh_block_checksum_verification;
     fslib::FLAGS_star_cache_mem_size_percent = config::starlet_star_cache_mem_size_percent;
     fslib::FLAGS_star_cache_mem_size_bytes = config::starlet_star_cache_mem_size_bytes;
     fslib::FLAGS_star_cache_disk_size_percent = config::starlet_star_cache_disk_size_percent;

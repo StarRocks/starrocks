@@ -923,10 +923,12 @@ For cloud-native tables with Fast Schema Evolution v2 enabled, schema change job
 
 ### Forbid Base Compaction
 
-`base_compaction_forbidden_time_ranges`: The time range within which Base Compaction is forbidden for the table. When this property is set, the system performs Base Compaction on eligible tablets only outside the specified time range. This property is supported from v3.2.13.
+`base_compaction_forbidden_time_ranges`: The time range used to restrict Base Compaction for the table. Its effect depends on the table architecture and compaction policy, as described below. This property is supported from v3.2.13.
+
+For shared-data Primary Key tables and non-Primary Key tables using the Base and Cumulative policy, the range restricts automatic Base Compaction when compaction is dispatched; Cumulative Compaction can still run. For non-Primary Key tables using the Size Tiered policy, the range only disables the delete-version threshold that forces Base Compaction. Normal Size Tiered level selection can still choose the oldest level during the forbidden period. The BE/CN parameter `base_compaction_interval_seconds_since_last_operation` applies the same restrictions until the minimum interval has elapsed. Manual `ALTER TABLE ... COMPACT` requests override these restrictions.
 
 :::note
-Make sure that the number of data loading to the table does not exceed 500 during the period when Base Compaction is forbidden.
+For shared-nothing tables, make sure that the number of data loading to the table does not exceed 500 during the period when Base Compaction is forbidden.
 :::
 
 The value of `base_compaction_forbidden_time_ranges` follows the [Quartz cron syntax](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm), and only supports these fields: `<minute> <hour> <day-of-the-month> <month> <day-of-the-week>`, where `<minute>` must be `*`.
@@ -1003,6 +1005,38 @@ PROPERTIES (
 - `flat_json.null.factor` (Optional): The proportion threshold of NULL values in the column. A column will not be extracted by Flat JSON if its proportion of NULL values is higher than this threshold. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.3`.
 - `flat_json.sparsity.factor` (Optional): The proportion threshold of columns with the same name. A column will not be extracted by Flat JSON if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.3`.
 - `flat_json.column.max` (Optional): The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `100`.
+
+### Target tablet size of a range-distributed table
+
+*Available only on range-distributed tables*
+
+You can set the property `tablet_reshard_target_size` to give a range-distributed table its own target tablet size. Automatic tablet split and merge of the table use this value in place of the FE configuration `tablet_reshard_target_size` while that configuration is positive. Unit: bytes. The value must be a positive integer.
+
+```SQL
+PROPERTIES (
+    "tablet_reshard_target_size" = "4294967296"
+)
+```
+
+The property has no default value. A table without it follows the FE configuration `tablet_reshard_target_size`. On a table that is not range-distributed, the statement fails with `tablet_reshard_target_size is only supported for range-distributed tables`. You can change or remove this property with [ALTER TABLE](ALTER_TABLE.md). For details, see [Data distribution - Target tablet size](../../../table_design/data_distribution/Data_distribution.md#target-tablet-size).
+
+### Skip a table in automatic statistics collection
+
+You can set `enable_statistic_auto_collect` to `false` to stop automatic statistics collection from collecting statistics on a table. Default: `true`.
+
+```SQL
+PROPERTIES (
+    "enable_statistic_auto_collect" = "false"
+)
+```
+
+When this property is `false`:
+
+- The automatic collection task provided by StarRocks, and the automatic collection tasks created by `CREATE ANALYZE ALL` or `CREATE ANALYZE DATABASE`, skip this table.
+- Collection tasks that name this table, created by `CREATE ANALYZE TABLE` or run with `ANALYZE TABLE`, still collect its statistics.
+- Statistics collection triggered by data loading is not affected. It is controlled separately by `enable_statistic_collect_on_first_load`.
+
+You can change this property with [ALTER TABLE](ALTER_TABLE.md). This property is not supported for materialized views.
 
 ## Examples
 

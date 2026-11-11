@@ -37,11 +37,11 @@ SELECT @@session.auto_increment_increment, @@character_set_client, @@character_s
 -- !result
 select cast(100 as time);
 -- result:
-0:01:00
+00:01:00
 -- !result
 select cast(1.123 as time);
 -- result:
-0:00:01
+00:00:01
 -- !result
 set enable_constant_execute_in_fe = false;
 -- result:
@@ -81,11 +81,11 @@ select cast(0.00001 as float), cast(0.00001 as double);
 -- !result
 select cast(100 as time);
 -- result:
-0:01:00
+00:01:00
 -- !result
 select cast(1.123 as time);
 -- result:
-0:00:01
+00:00:01
 -- !result
 CREATE TABLE pksk_tbl (
     c1 int,

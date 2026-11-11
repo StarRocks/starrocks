@@ -196,8 +196,7 @@
         "be/src/column/datum_tuple.*",
         "be/src/column/field.*",
         "be/src/column/schema.*",
-        "be/src/column/sorting/**",
-        "be/src/column/segmented_chunk.*"
+        "be/src/column/sorting/**"
       ],
       "allowed_include_prefixes": ["column/", "types/", "common/", "base/", "gutil/", "gen_cpp/"],
       "allowed_target_deps": ["Types", "Common", "Base", "Gutil", "StarRocksGen"],

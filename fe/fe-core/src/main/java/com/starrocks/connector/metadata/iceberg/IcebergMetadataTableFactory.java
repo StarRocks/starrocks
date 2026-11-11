@@ -41,9 +41,15 @@ public class IcebergMetadataTableFactory implements AbstractMetadataTableFactory
             case SNAPSHOTS:
                 return IcebergSnapshotsTable.create(catalogName, dbName, tableName);
             case MANIFESTS:
-                return IcebergManifestsTable.create(catalogName, dbName, tableName);
+            case ALL_MANIFESTS:
+                return IcebergManifestsTable.create(catalogName, dbName, tableName, tableType);
             case FILES:
-                return IcebergFilesTable.create(catalogName, dbName, tableName);
+            case ALL_DATA_FILES:
+            case ALL_DELETE_FILES:
+                return IcebergFilesTable.create(context, catalogName, dbName, tableName, tableType);
+            case ENTRIES:
+            case ALL_ENTRIES:
+                return IcebergEntriesTable.create(context, catalogName, dbName, tableName, tableType);
             case PARTITIONS:
                 return IcebergPartitionsTable.create(context, catalogName, dbName, tableName);
             case PROPERTIES:

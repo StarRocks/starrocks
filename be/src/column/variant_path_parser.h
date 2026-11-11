@@ -108,6 +108,8 @@ struct VariantPath {
 
     // Seek into a variant using the parsed segments, starting at seg_offset.
     // Returns a non-owning row ref. Call to_owned() when retained storage is required.
+    // A path that does not exist (missing key, index out of range, or more segments below a null) returns
+    // NotFound; a JSON null at the path is returned as a null value.
     static StatusOr<VariantRowRef> seek_view(const VariantRowRef& value, const VariantPath& path,
                                              size_t seg_offset = 0);
 };

@@ -18,8 +18,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.MultiCastPlanFragment;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryGroupAssignment;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
@@ -33,6 +35,7 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFunctionVersion;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TQueryOptions;
@@ -69,9 +72,10 @@ public class TFragmentInstanceFactory {
         // calculate the number of all tablet sinks in advance and assign them to each fragment instance
         boolean enablePipelineTableSinkDop = jobSpec.isEnablePipeline() && fragment.getPlanFragment().hasTableSink();
 
+        TPlanFragment sharedFragment = createSharedFragment(fragment);
         List<TExecPlanFragmentParams> res = new ArrayList<>(instances.size());
         for (FragmentInstance instance : instances) {
-            res.add(create(instance, descTable, accTabletSinkDop, totalTableSinkDop));
+            res.add(create(instance, sharedFragment, descTable, accTabletSinkDop, totalTableSinkDop));
 
             if (enablePipelineTableSinkDop) {
                 accTabletSinkDop += instance.getTableSinkDop();
@@ -81,19 +85,75 @@ public class TFragmentInstanceFactory {
         return res;
     }
 
+    /**
+     * Create the thrift fragment shared by the requests of all the instances of {@code execFragment}, so that it is
+     * built and serialized only once. Returns null if sharing gains nothing for a single instance, or
+     * the instances need their own fragment because {@link #toThriftForUniqueParams} modifies the output sink per
+     * instance.
+     */
+    public TPlanFragment createSharedFragment(ExecutionFragment execFragment) {
+        if (hasGroupedScan(execFragment)) {
+            QueryGroupAssignment assignment = execFragment.getQueryGroupAssignment();
+            Preconditions.checkState(assignment != null && context != null,
+                    "range_scan_execution_mode=grouped: a captured one-shot pipeline assignment is required");
+            assignment.validateLayout(execFragment, context.getSessionVariable());
+        }
+        PlanFragment fragment = execFragment.getPlanFragment();
+        if (execFragment.getInstances().size() <= 1 || fragment.hasInstanceSpecificSink()) {
+            return null;
+        }
+        execFragment.setLayoutInfosForRuntimeFilters();
+        return fragment.toThrift(new SerializeOnceTPlanFragment());
+    }
+
     public TExecPlanFragmentParams create(FragmentInstance instance,
+                                          TDescriptorTable descTable,
+                                          int accTabletSinkDop,
+                                          int totalTableSinkDop) {
+        return create(instance, null, descTable, accTabletSinkDop, totalTableSinkDop);
+    }
+
+    /**
+     * @param sharedFragment the fragment from {@link #createSharedFragment}, or null to build one for this instance.
+     */
+    public TExecPlanFragmentParams create(FragmentInstance instance,
+                                          TPlanFragment sharedFragment,
                                           TDescriptorTable descTable,
                                           int accTabletSinkDop,
                                           int totalTableSinkDop) {
         TExecPlanFragmentParams result = new TExecPlanFragmentParams();
 
-        toThriftFromCommonParams(result, instance.getExecFragment(), descTable, totalTableSinkDop);
+        toThriftFromCommonParams(result, instance.getExecFragment(), sharedFragment, descTable, totalTableSinkDop);
         toThriftForUniqueParams(result, instance, accTabletSinkDop);
+        validateGroupedHandoff(result, instance);
 
         return result;
     }
 
+    private static boolean hasGroupedScan(ExecutionFragment fragment) {
+        return fragment.getScanNodes().stream()
+                .anyMatch(scan -> scan instanceof OlapScanNode nativeScan && nativeScan.isGroupedRangeScan());
+    }
+
+    private void validateGroupedHandoff(TExecPlanFragmentParams result, FragmentInstance instance) {
+        ExecutionFragment fragment = instance.getExecFragment();
+        if (!hasGroupedScan(fragment)) {
+            return;
+        }
+        QueryGroupAssignment assignment = fragment.getQueryGroupAssignment();
+        Preconditions.checkState(assignment != null && context != null && jobSpec.isEnablePipeline()
+                        && !jobSpec.isIncrementalScanRanges(),
+                "range_scan_execution_mode=grouped: a captured one-shot pipeline assignment is required");
+        assignment.validateInstance(instance, context.getSessionVariable());
+        // A shared fragment can predate a late plan mutation. Check both the live plan and emitted bytes' source.
+        assignment.validatePlan(fragment.getPlanFragment().toThrift());
+        assignment.validatePlan(result.getFragment());
+        result.setEnable_shared_scan(false);
+    }
+
     public TExecPlanFragmentParams createIncrementalScanRanges(FragmentInstance instance) {
+        Preconditions.checkState(!hasGroupedScan(instance.getExecFragment()),
+                "range_scan_execution_mode=grouped: incremental deployment is unsupported");
         TExecPlanFragmentParams result = new TExecPlanFragmentParams();
         result.setProtocol_version(InternalServiceVersion.V1);
         result.setParams(new TPlanFragmentExecParams());
@@ -107,6 +167,7 @@ public class TFragmentInstanceFactory {
 
     public void toThriftFromCommonParams(TExecPlanFragmentParams result,
                                          ExecutionFragment execFragment,
+                                         TPlanFragment sharedFragment,
                                          TDescriptorTable descTable,
                                          int totalTableSinkDop) {
         // TODO(lzh): move to a more proper place.
@@ -118,7 +179,7 @@ public class TFragmentInstanceFactory {
         boolean isEnablePipelineTableSinkDop = isEnablePipeline && fragment.hasTableSink();
 
         result.setProtocol_version(InternalServiceVersion.V1);
-        result.setFragment(fragment.toThrift());
+        result.setFragment(sharedFragment != null ? sharedFragment : fragment.toThrift());
         result.setDesc_tbl(descTable);
         result.setFunc_version(TFunctionVersion.RUNTIME_FILTER_SERIALIZE_VERSION_3.getValue());
         result.setArrow_flight_sql_version(TArrowFlightSQLVersion.V1.getValue());
@@ -199,6 +260,11 @@ public class TFragmentInstanceFactory {
 
         boolean isEnablePipeline = jobSpec.isEnablePipeline();
         boolean isEnablePipelineTableSinkDop = isEnablePipeline && fragment.hasTableSink();
+        // The per-instance changes below would leak into the other instances through a shared fragment.
+        Preconditions.checkState(!fragment.hasInstanceSpecificSink() ||
+                        !(result.getFragment() instanceof SerializeOnceTPlanFragment),
+                "fragment %s with an instance-specific sink must not share its thrift fragment",
+                fragment.getFragmentId());
 
         result.setBackend_num(instance.getIndexInJob());
         if (isEnablePipeline) {

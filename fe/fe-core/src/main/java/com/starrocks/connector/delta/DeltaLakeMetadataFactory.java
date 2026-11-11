@@ -84,4 +84,13 @@ public class DeltaLakeMetadataFactory {
             ((DeltaLakeMetastore) metastore).invalidateAll();
         }
     }
+
+    // Drops the metastore's cached checkpoint and log files for good, when the catalog is dropped.
+    public void releaseMetastoreCaches() {
+        if (metastore instanceof CachingDeltaLakeMetastore) {
+            ((CachingDeltaLakeMetastore) metastore).releaseCaches();
+        } else if (metastore instanceof DeltaLakeMetastore) {
+            ((DeltaLakeMetastore) metastore).releaseCaches();
+        }
+    }
 }

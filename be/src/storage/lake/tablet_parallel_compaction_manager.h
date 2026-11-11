@@ -113,6 +113,10 @@ struct TabletParallelCompactionState {
     int64_t txn_id = 0;
     int64_t version = 0;
     bool is_unshare = false;
+    // An UNSHARE that also rewrites the index files the tablet cannot keep: false when the tablet's sort key is not
+    // its primary key, whose UNSHARE rewrites shared data files only.
+    bool unshare_rewrites_index = false;
+    bool is_base_compaction = false;
 
     // Rowsets currently being compacted (to avoid conflicts)
     // Key: rowset_id, Value: reference count (number of subtasks using this rowset)
@@ -243,7 +247,7 @@ public:
                                         ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
                                         const ReleaseTokenFunc& release_token, bool is_unshare = false,
                                         int64_t handoff_in_queue_time_sec = 0, int64_t handoff_queue_wait_ns = 0,
-                                        const ReturnTokenFunc& return_token = {});
+                                        const ReturnTokenFunc& return_token = {}, bool allow_base_compaction = true);
 
     // Get tablet's parallel state (for testing/monitoring)
     // Returns shared_ptr to ensure the state remains valid while being used.
@@ -341,12 +345,15 @@ private:
     // Execute SST compaction once after all subtasks complete
     // This is called from get_merged_txn_log to perform unified SST compaction
     // Results are stored in OpParallelCompaction instead of OpCompaction
+    // With unshare, rewrite the index files the tablet cannot keep as they are, and fail when the tablet metadata
+    // cannot be read.
     Status execute_sst_compaction_for_parallel(int64_t tablet_id, int64_t version,
-                                               TxnLogPB_OpParallelCompaction* op_parallel);
+                                               TxnLogPB_OpParallelCompaction* op_parallel, bool unshare);
 
     // Pick rowsets for compaction using CompactionPolicy
     StatusOr<std::vector<RowsetPtr>> pick_rowsets_for_compaction(int64_t tablet_id, int64_t txn_id, int64_t version,
-                                                                 bool force_base_compaction, bool is_unshare);
+                                                                 bool force_base_compaction, bool is_unshare,
+                                                                 bool allow_base_compaction, bool* is_base_compaction);
 
     // Split rowsets into groups for parallel compaction
     // Returns empty vector if no valid groups can be formed
@@ -483,7 +490,7 @@ private:
                                                    const std::vector<SubtaskGroup>& groups);
 
     // Merge multiple subtask LCRM files into a single LCRM file for the merged compaction.
-    // This enables the light publish path (SST ingestion) for large rowset split compaction.
+    // Publish of a large rowset split compaction reads this merged LCRM.
     Status _merge_subtask_lcrm_files(int64_t tablet_id, int64_t txn_id, const std::vector<FileMetaPB>& lcrm_files,
                                      const std::vector<int64_t>& num_rows_per_subtask,
                                      TxnLogPB_OpCompaction* merged_compaction);

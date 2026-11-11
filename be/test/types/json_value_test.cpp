@@ -23,6 +23,8 @@
 #include <tuple>
 #include <vector>
 
+#include "base/utility/defer_op.h"
+#include "common/config_json_flat_fwd.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
@@ -47,6 +49,57 @@ TEST(JsonValueTest, Parse) {
     oversized.size = kJSONLengthLimit + 1;
     auto oversized_json = JsonValue::parse_json_or_string(oversized);
     ASSERT_FALSE(oversized_json.ok());
+}
+
+// A deeply nested value used to overflow the recursive velocypack parser's stack and take the whole
+// BE down with an unreportable signal. parse_json_or_string now rejects anything nested past the cap
+// before it reaches the parser, so the same input fails cleanly instead of crashing.
+TEST(JsonValueTest, ParseRejectsExcessiveNestingDepth) {
+    // 100k levels is far past the cap and, before the fix, past the point the stack blows.
+    const int deep = 100000;
+    std::string deep_json = std::string(deep, '[') + std::string(deep, ']');
+    auto res = JsonValue::parse_json_or_string(Slice(deep_json));
+    ASSERT_FALSE(res.ok());
+    ASSERT_EQ(TStatusCode::DATA_QUALITY_ERROR, res.status().code()) << res.status();
+
+    // Comfortably over the cap is rejected too. The exact boundary depends on how velocypack counts
+    // top-level nesting, so this stays a few levels past 1024 rather than testing off-by-one.
+    std::string over = std::string(1100, '[') + std::string(1100, ']');
+    ASSERT_FALSE(JsonValue::parse_json_or_string(Slice(over)).ok());
+}
+
+// The cap must not reject legitimately nested JSON, and brackets inside string literals must not
+// count toward depth.
+TEST(JsonValueTest, ParseAcceptsNestingWithinLimit) {
+    // Nesting just under the cap parses fine.
+    const int ok_depth = 999;
+    std::string ok_json = std::string(ok_depth, '[') + std::string(ok_depth, ']');
+    ASSERT_TRUE(JsonValue::parse_json_or_string(Slice(ok_json)).ok()) << "depth " << ok_depth;
+
+    // A shallow value whose string content is full of brackets is not nesting.
+    std::string bracket_string = R"(["]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"])";
+    ASSERT_TRUE(JsonValue::parse_json_or_string(Slice(bracket_string)).ok());
+}
+
+// The exact off-by-one that ParseRejectsExcessiveNestingDepth deliberately skips. With an explicit
+// small cap, a document nested to exactly the cap parses, and one level deeper fails cleanly.
+TEST(JsonValueTest, ParseNestingDepthExactBoundary) {
+    const int32_t saved = config::json_max_parse_nesting_depth;
+    DeferOp restore([&]() { config::json_max_parse_nesting_depth = saved; });
+
+    const int cap = 8;
+    config::json_max_parse_nesting_depth = cap;
+
+    // Every array from the outermost to the innermost counts as one level, so a document with
+    // exactly cap nested arrays sits right at the limit and parses.
+    std::string at_cap = std::string(cap, '[') + std::string(cap, ']');
+    ASSERT_TRUE(JsonValue::parse_json_or_string(Slice(at_cap)).ok()) << "depth " << cap;
+
+    // One level deeper is rejected as a data-quality error rather than overflowing the stack.
+    std::string over_cap = std::string(cap + 1, '[') + std::string(cap + 1, ']');
+    auto res = JsonValue::parse_json_or_string(Slice(over_cap));
+    ASSERT_FALSE(res.ok());
+    ASSERT_TRUE(res.status().is_data_quality_error()) << res.status();
 }
 
 TEST(JsonValueTest, ParseInvalidJsonReportsVelocypackError) {
@@ -171,6 +224,43 @@ TEST(JsonValueTest, CompareLargeIntegerArrays) {
     auto neg_small = JsonValue::parse("[-1]").value();
     auto neg_large = JsonValue::parse("[-9223372036854775808]").value();
     EXPECT_GT(neg_small.compare(neg_large), 0);
+}
+
+TEST(JsonValueTest, CompareUnsignedIntegersAboveInt64Max) {
+    // Numbers above INT64_MAX are stored as UInt. Comparing them used to call Slice::getInt(), which throws
+    // NumberOutOfRange, so the comparison escaped as an exception instead of returning an order. Bare scalars
+    // parse as strings, hence the arrays and objects.
+    auto v = [](const char* json) { return JsonValue::parse(json).value(); };
+    auto max_int64 = v("[9223372036854775807]");
+    auto two_pow_63 = v("[9223372036854775808]");
+    auto max_uint64 = v("[18446744073709551615]");
+    auto max_uint64_minus_1 = v("[18446744073709551614]");
+
+    // same encoding (UInt vs UInt): exact
+    EXPECT_GT(two_pow_63.compare(max_int64), 0);
+    EXPECT_LT(max_int64.compare(two_pow_63), 0);
+    EXPECT_GT(max_uint64.compare(max_uint64_minus_1), 0);
+    EXPECT_EQ(max_uint64.compare(v("[18446744073709551615]")), 0);
+    EXPECT_GT(v("[18446744073709551615]").compare(v("[1]")), 0);
+
+    // mixed encodings: negative Int vs large UInt, integer vs double
+    EXPECT_LT(v("[-1]").compare(max_uint64), 0);
+    EXPECT_LT(v("[-9223372036854775808]").compare(two_pow_63), 0);
+    EXPECT_GT(max_uint64.compare(v("[1.0e19]")), 0);
+    EXPECT_LT(two_pow_63.compare(v("[1.0e19]")), 0);
+    EXPECT_EQ(v("[10]").compare(v("[10.0]")), 0);
+
+    // nested inside objects, as produced by json_query on real documents
+    auto big_obj = v(R"({"a": 18446744073709551615})");
+    auto mid_obj = v(R"({"a": 9223372036854775808})");
+    EXPECT_GT(big_obj.compare(mid_obj), 0);
+    EXPECT_LT(mid_obj.compare(big_obj), 0);
+    EXPECT_EQ(big_obj.compare(v(R"({"a": 18446744073709551615})")), 0);
+
+    // the same values through the predicate operators
+    EXPECT_TRUE(big_obj > mid_obj);
+    EXPECT_FALSE(big_obj < mid_obj);
+    EXPECT_TRUE(big_obj == v(R"({"a": 18446744073709551615})"));
 }
 
 TEST(JsonValueTest, Hash) {
@@ -303,6 +393,43 @@ TEST(JsonValueTest, ConvertFromSimdjsonErrorMalformedObjectBounded) {
     auto maybe_json = JsonValue::from_simdjson(&obj);
     ASSERT_FALSE(maybe_json.ok());
     ASSERT_TRUE(maybe_json.status().is_data_quality_error());
+}
+
+// A JSON document nested past json_max_parse_nesting_depth must be rejected on the native simdjson
+// ingest path (from_simdjson -> SimdJsonConverter), the same as parse_json, instead of recursing
+// once per level. The converter builds a vpack::Builder directly and never runs vpack::Parser, so it
+// needs its own depth guard driven by the same config.
+TEST(JsonValueTest, ConvertFromSimdjsonRejectsExcessiveNestingDepth) {
+    using namespace simdjson;
+    const int32_t saved = config::json_max_parse_nesting_depth;
+    DeferOp restore([&]() { config::json_max_parse_nesting_depth = saved; });
+
+    // 20 levels of nested objects: well within simdjson's own limit, but past the configured cap of 5.
+    std::string deep = "1";
+    for (int i = 0; i < 20; ++i) {
+        deep = std::string(R"({"a":)") + deep + "}";
+    }
+
+    config::json_max_parse_nesting_depth = 5;
+    {
+        ondemand::parser parser;
+        padded_string json_str(deep);
+        ondemand::document doc = parser.iterate(json_str);
+        ondemand::object obj = doc.get_object();
+        auto res = JsonValue::from_simdjson(&obj);
+        ASSERT_FALSE(res.ok());
+        ASSERT_TRUE(res.status().is_data_quality_error()) << res.status();
+    }
+
+    // Raising the cap above the input depth lets the same document convert successfully.
+    config::json_max_parse_nesting_depth = 100;
+    {
+        ondemand::parser parser;
+        padded_string json_str(deep);
+        ondemand::document doc = parser.iterate(json_str);
+        ondemand::object obj = doc.get_object();
+        ASSERT_TRUE(JsonValue::from_simdjson(&obj).ok());
+    }
 }
 
 } // namespace starrocks

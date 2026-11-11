@@ -41,6 +41,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.Expr;
@@ -98,6 +99,11 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private String viewDefineSql;
     @SerializedName(value = "isColocateMVIndex")
     private boolean isColocateMVIndex = false;
+
+    @SerializedName(value = "syncMvDefinition")
+    private SyncMaterializedViewDefinition syncMvDefinition;
+    @SerializedName(value = "syncMvRequiredTxnId")
+    private long syncMvRequiredTxnId;
 
     private Expr whereClause;
 
@@ -256,6 +262,25 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         this.whereClause = whereClause;
     }
 
+    public SyncMaterializedViewDefinition getSyncMvDefinition() {
+        return syncMvDefinition;
+    }
+
+    public void setSyncMvDefinition(SyncMaterializedViewDefinition definition) {
+        this.syncMvDefinition = definition;
+    }
+
+    public long getSyncMvRequiredTxnId() {
+        return syncMvRequiredTxnId;
+    }
+
+    public void setSyncMvRequiredTxnId(long txnId) {
+        if (txnId < 0) {
+            throw new SemanticException("Synchronous MV required transaction ID cannot be negative");
+        }
+        this.syncMvRequiredTxnId = txnId;
+    }
+
     public Expr getWhereClause() {
         return whereClause;
     }
@@ -296,6 +321,9 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     }
 
     public void setSchema(List<Column> newSchema) {
+        if (syncMvDefinition != null) {
+            syncMvDefinition = syncMvDefinition.withSchema(newSchema);
+        }
         this.schema = newSchema;
     }
 
@@ -320,6 +348,8 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         indexMeta.isColocateMVIndex = this.isColocateMVIndex;
         indexMeta.whereClause = this.whereClause;
         indexMeta.schemaId = this.schemaId;
+        indexMeta.syncMvDefinition = this.syncMvDefinition;
+        indexMeta.syncMvRequiredTxnId = this.syncMvRequiredTxnId;
         return indexMeta;
     }
 
@@ -368,6 +398,11 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     public void gsonPostProcess() throws IOException {
         if (schemaId <= 0) {
             schemaId = indexMetaId;
+        }
+        setSyncMvRequiredTxnId(syncMvRequiredTxnId);
+        if (syncMvDefinition != null) {
+            whereClause = syncMvDefinition.restore(schema);
+            return;
         }
         // analyze define stmt
         if (defineStmt == null) {

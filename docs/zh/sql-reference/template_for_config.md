@@ -6,7 +6,7 @@ unlisted: true
 
 # FE/BE 参数和变量模板
 
-> 如果您新增或修改了代码文件中的 FE/BE 参数以及变量，务必更新文档 [FE configuration](https://docs.starrocks.io/zh/docs/administration/management/FE_configuration/), [BE configuration](https://docs.starrocks.io/zh/docs/administration/management/BE_configuration/), [System variables](https://docs.starrocks.io/zh/docs/reference/System_variable/)。
+> 如果您新增或修改了代码文件中的 FE/BE 参数以及变量，务必更新文档 [FE configuration](../administration/configuration/FE_parameters/FE_parameters.md), [BE configuration](../administration/configuration/BE_parameters/BE_parameters.md), [System variables](./System_variable.md)。
 
 参数和变量描述需要包含以下字段：
 

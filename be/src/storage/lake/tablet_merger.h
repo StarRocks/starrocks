@@ -27,6 +27,9 @@ class TabletManager;
 // A real MERGE: the output owns its rowsets, delete vectors, DCG/IDG projections and primary-index
 // sstable, and a reshard transaction publishes it.
 //
+// Sources it cannot merge are refused before anything is written, with an error whose message starts with
+// "MERGE_REJECTED: " (see tablet_merge_admission.h for the input contract).
+//
 // The read-only parent alias an ORDER BY != PK split keeps alive is NOT built here -- see
 // virtual_merge_for_read in tablet_virtual_merge.h.
 StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,

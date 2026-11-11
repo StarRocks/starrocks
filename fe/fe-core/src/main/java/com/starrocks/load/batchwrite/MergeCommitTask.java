@@ -236,6 +236,8 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
     private volatile TaskStateCancelHandler taskStateCancelHandler = null;
     // Transaction id; set in {@link #run()} after transaction begins.
     private volatile long txnId = -1;
+    // The id of the target table, set once run() resolves it. -1 until then.
+    private volatile long tableId = -1;
     // Load statistics; set when entering COMMITTING in {@link #run()}.
     private volatile LoadStats loadStats = null;
     // Observes state transitions for unit tests.
@@ -311,6 +313,7 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             transitionToState(TaskState.BEGINNING_TXN, "", null, () -> {});
             final Database database = getDatabase();
             final OlapTable table = getOlapTable(database);
+            tableId = table.getId();
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(this);
             localTxnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                     dbId, Lists.newArrayList(table.getId()), label, null,
@@ -823,6 +826,10 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
     @Override
     public String getTableName() {
         return tableRef.getTableName();
+    }
+
+    public long getTableId() {
+        return tableId;
     }
 
     @Override

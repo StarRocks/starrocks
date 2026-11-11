@@ -6,6 +6,7 @@
 #   gcc           14.3.0   built from source, pinned via GCC_DOWNLOAD_URL
 #   jdk           21       distro java-21-openjdk-devel (currently 21.0.11)
 #   cmake         3.31.x   distro cmake (currently 3.31.8)
+#   ninja         1.10.2   distro ninja-build from the CRB repo (env.sh selects the Ninja generator when ninja is on PATH)
 #   maven         3.6.3    distro maven-openjdk21 (maven 3.6.3 bound to jdk21)
 #   lld           21.1.8   distro lld (STARROCKS_LINKER=lld)
 #   clang-format  21.1.8   distro clang-tools-extra
@@ -54,8 +55,9 @@ LABEL com.starrocks.commit=${COMMIT_ID}
 RUN dnf install -y 'dnf-command(config-manager)' && \
         dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo && \
         dnf install -y epel-release && \
+        dnf config-manager --set-enabled crb && \
         dnf install -y gh wget unzip bzip2 xz pigz patch bison byacc flex autoconf automake make cmake maven-openjdk21 \
-        gettext perl binutils libtool which git ccache python3 java-21-openjdk-devel file less psmisc clang-tools-extra lld glibc-langpack-en && \
+        gettext perl binutils libtool which git ccache python3 java-21-openjdk-devel file less psmisc clang-tools-extra lld glibc-langpack-en ninja-build && \
         dnf clean all && rm -rf /var/cache/dnf
 
 # install gcc

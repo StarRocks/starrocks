@@ -84,8 +84,13 @@ public class InfoSchemaDbTest {
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withTable("create table db.tbl " + createTblStmtStr);
         starRocksAssert.withView("create view db.v as select * from db.tbl");
+        // The cases only need the MV to exist. An auto-refreshing MV starts a refresh task run whose
+        // thread calls MetadataMgr#getTable; if it lands while a case records Expectations on
+        // MetadataMgr, JMockit records it as an expected call and the case fails with a missing
+        // invocation. A manual MV never refreshes on its own.
         starRocksAssert.withMaterializedView(
-                "create materialized view db.mv distributed by hash(k4) buckets 10 REFRESH ASYNC as select * from db.tbl");
+                "create materialized view db.mv distributed by hash(k4) buckets 10 REFRESH DEFERRED MANUAL " +
+                        "as select * from db.tbl");
 
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
         GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgr(new DefaultAuthorizationProvider()));

@@ -48,3 +48,6 @@ select "cluster still alive" as status;
 -- result:
 cluster still alive
 -- !result
+CLEANUP {
+  admin disable failpoint 'spill_hash_join_build_set_finishing_sleep';
+} END CLEANUP

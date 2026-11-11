@@ -4,7 +4,8 @@
 -- tablet schema directly into DeltaWriter, bypassing TableSchemaService entirely. Before
 -- the fix the writer fell back to an FE schema RPC and the alter was cancelled with
 -- "table not found, db id: 0, table id: 0" because the alter task carried no catalog ids.
-update information_schema.be_configs set value = "0" where name = "lake_metadata_cache_limit";
+update information_schema.be_configs set value = "0" where name = "lake_tablet_metadata_cache_limit_percent";
+update information_schema.be_configs set value = "0" where name = "lake_segment_metadata_cache_limit_percent";
 create database test_db_${uuid0};
 use test_db_${uuid0};
 
@@ -22,4 +23,5 @@ insert into t1 values (-1, 4, 40, 400);
 select * from t1 order by k1;
 
 drop database test_db_${uuid0};
-update information_schema.be_configs set value = "2147483648" where name = "lake_metadata_cache_limit";
+update information_schema.be_configs set value = "10" where name = "lake_tablet_metadata_cache_limit_percent";
+update information_schema.be_configs set value = "20" where name = "lake_segment_metadata_cache_limit_percent";

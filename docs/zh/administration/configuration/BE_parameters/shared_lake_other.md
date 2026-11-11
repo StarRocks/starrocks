@@ -80,7 +80,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，Compaction 任务是否在其 Rowset 实例上持有输入 Segment 对象直至任务结束，使 Vertical Compaction 的各列组趟直接复用这些对象，而不再依赖元数据缓存重新加载。关闭持有时，一旦元数据缓存装不下全部输入 Segment（`lake_metadata_cache_limit` 较小，或节点上 Tablet 较多），每一趟都会重新加载并解析全部输入 Segment；该开销为 CPU 密集且与列数成正比，可能使宽表 Compaction 慢一个数量级，或因反复超出内存限制而失败。持有期间，任务不再把输入 Segment 和 Delete Vector 填入共享元数据缓存，因为输入数据在 Compaction 完成后即被删除，缓存它们只会挤掉其他 Tablet 的条目。内存代价为每个运行中任务持有一套输入 Segment 元数据，计入该 Compaction 任务的内存跟踪并随任务释放。设为 `false` 可恢复旧行为，即 Compaction 通过共享元数据缓存复用 Segment 并向其填充输入。
+- 描述：存算分离集群中，Compaction 任务是否在其 Rowset 实例上持有输入 Segment 对象直至任务结束，使 Vertical Compaction 的各列组趟直接复用这些对象，而不再依赖元数据缓存重新加载。关闭持有时，一旦元数据缓存装不下全部输入 Segment（`lake_segment_metadata_cache_limit_percent` 较小，或节点上 Tablet 较多），每一趟都会重新加载并解析全部输入 Segment；该开销为 CPU 密集且与列数成正比，可能使宽表 Compaction 慢一个数量级，或因反复超出内存限制而失败。持有期间，任务不再把输入 Segment 和 Delete Vector 填入共享元数据缓存，因为输入数据在 Compaction 完成后即被删除，缓存它们只会挤掉其他 Tablet 的条目。内存代价为每个运行中任务持有一套输入 Segment 元数据，计入该 Compaction 任务的内存跟踪并随任务释放。设为 `false` 可恢复旧行为，即 Compaction 通过共享元数据缓存复用 Segment 并向其填充输入。
 - 引入版本：v4.2
 
 ### lake_compaction_stream_buffer_size_bytes
@@ -146,6 +146,26 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否在写入存算分离集群的 Tablet 元数据和事务日志文件时附加 Adler-32 校验和，以便在读取时检测这些文件是否损坏。无论该配置项如何设置，读取端在文件包含校验和时都会自动识别并校验；该配置项仅控制写入格式。仅当集群仍可能降级到不支持该校验和格式的版本时，才将该配置项设置为 `false`。在滚动升级或降级期间，旧版本的 BE 或 CN 使用旧的读取逻辑，无法解析新格式写入的文件。
 - 引入版本：v4.2
 
+### lake_replication_enable_light_schema_change
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：允许存算分离集群复制包含兼容轻量加删列历史的活跃 Rowset 快照。源端与目标端的当前 Schema 必须在逻辑上匹配。新增列必须是具有默认值或可空语义的普通标量值列；不支持 Key 列、排序列、类型、生成列、嵌套列 UID、外部索引、捆绑文件及共享/范围 Tablet 的变更。关闭时，包含历史 Schema 活跃 Rowset 的快照会被拒绝。已验证删除的列会从 Segment footer 元数据中移除，不重写其数据页。每个复制任务启动时读取并固定该配置值。
+- 引入版本：-
+
+仅在**所有目标 CN** 均支持此能力后启用。规范化的复制事务会记录目标 Schema；若发布前目标 Schema 发生变化，发布将失败。关闭该配置只阻止新的准入，不改变已记录事务的回放行为。旧版 CN 无法安全回放这些事务日志；降级前必须完成或中止待处理的规范化事务，不能认为关闭配置就可以安全降级。
+
+### lake_enable_publish_partial_meta
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中开启 File Bundling 的表在导入发布（Publish）时，是否保留聚合节点可能未收到的 Tablet 发布结果。某个 Tablet 的 Publish 在请求到达后超过 Publish RPC 超时时间加 3 秒才完成，或者本次 Publish 是重试，就会把结果保存在本节点的 Data Cache 中，不写入对象存储。之后该节点上的重试会直接读取这份结果，不再重新执行事务，因此慢分区每次重试时，已完成的 Tablet 不会被重做。这些缓存条目和其他 Data Cache 数据一样按需淘汰。仅在开启 Data Cache 时生效。所有 BE 和 CN 节点应设置相同的值。
+- 引入版本：v4.2
+
 ### lake_pk_compaction_max_input_rowsets
 
 - 默认值：500
@@ -155,13 +175,31 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。该参数默认值自 v3.2.4 和 v3.1.10 版本开始从 `5` 变更为 `1000`，并自 v3.3.1 和 v3.2.9 版本开始变更为 `500`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
 - 引入版本：v3.1.8, v3.2.3
 
+### lake_pk_compaction_max_rowsets_per_level
+
+- 默认值：20
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，主键表的某个大小层中待合并的 Rowset 达到该数量时，即使该层得分不是最高，也会被合并。Size-tiered Compaction 策略每轮只合并得分最高的一层。持续导入时，最新写入的小 Rowset 所在层每轮得分都最高，由较大 Rowset（之前 Compaction 的产物和中等批次的导入）组成的层会一直增长，导致查询需要读取的 Segment 增多，并在 Compaction 刚完成时表现为 Compaction Score 的尖峰。当某个未被选中的层中待合并的 Rowset 达到该数量，且这些 Rowset 能与已选中的 Rowset 在同一次 Compaction 任务中合并时，该层会并入该次 Compaction 任务。设置为 `0` 表示关闭该行为。
+- 引入版本：-
+
+### lake_pk_compaction_base_enable_delete_trigger
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，主键表 Tablet 的删除量达到 `lake_pk_compaction_base_delete_ratio_threshold` 或 `lake_pk_compaction_base_delete_rows_threshold` 时，是否自动从 Cumulative Compaction 切换到 Base Compaction。默认关闭，因为 `lake_pk_compaction_base_delete_rows_threshold` 是绝对行数：在已有数据持续被更新或删除的大表上，Tablet 每次 Base Compaction 之后很快又会达到该值，而每次 Base Compaction 最多重写 Tablet 中 `update_compaction_ratio_threshold`（默认 0.5）比例的数据。手动执行 `ALTER TABLE ... COMPACT` 时，无论该参数如何设置都会执行 Base Compaction。
+- 引入版本：v4.1.6, v26.2.1
+
 ### lake_pk_compaction_base_delete_ratio_threshold
 
 - 默认值：0.5
 - 类型：Double
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下，将主键表 Tablet 从 Cumulative Compaction（Size-tiered 小文件合并）切换到 Base Compaction 的两个触发条件之一。Base Compaction 会重写带删除的 Rowset（删除行数多的优先），物理清除被删除的行并缩小其 Delete Vector。当 Tablet 的整体删除比例（各 Rowset 的 `sum(num_dels) / sum(num_rows)`）达到该值、其累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold`、或手动执行 `ALTER TABLE ... COMPACT` 强制 Base Compaction 时触发。将两个阈值都调至足够大可关闭自动触发。
+- 描述：存算分离集群下，将主键表 Tablet 从 Cumulative Compaction（Size-tiered 小文件合并）切换到 Base Compaction 的两个触发条件之一。Base Compaction 会重写带删除的 Rowset（删除行数多的优先），物理清除被删除的行并缩小其 Delete Vector。`lake_pk_compaction_base_enable_delete_trigger` 为 `true` 时，当 Tablet 的整体删除比例（各 Rowset 的 `sum(num_dels) / sum(num_rows)`）达到该值、或其累计删除行数达到 `lake_pk_compaction_base_delete_rows_threshold` 时触发。手动执行 `ALTER TABLE ... COMPACT` 时，无论这些参数如何设置都会强制执行 Base Compaction。
 - 引入版本：v4.2
 
 ### lake_pk_compaction_base_delete_rows_threshold
@@ -170,7 +208,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群下主键表 Base Compaction 的两个触发条件之一（参见 `lake_pk_compaction_base_delete_ratio_threshold`）。当 Tablet 的累计删除行数（各 Rowset 的 `sum(num_dels)`）达到该值时触发 Base Compaction。该绝对数量触发条件是对比例触发条件的补充：在高频更新/删除的表上，Delete Vector 会膨胀、空间被浪费，但整体删除比例可能因大量存活行的稀释而偏低，仅靠比例触发条件不会触发。调大该值可降低 Base Compaction 频率，调小则可更早回收 Delete Vector。
+- 描述：存算分离集群下主键表 Base Compaction 的两个触发条件之一（参见 `lake_pk_compaction_base_delete_ratio_threshold`）。`lake_pk_compaction_base_enable_delete_trigger` 为 `true` 时，当 Tablet 的累计删除行数（各 Rowset 的 `sum(num_dels)`）达到该值时触发 Base Compaction。该绝对数量触发条件是对比例触发条件的补充：在高频更新/删除的表上，Delete Vector 会膨胀、空间被浪费，但整体删除比例可能因大量存活行的稀释而偏低，仅靠比例触发条件不会触发。调大该值可降低 Base Compaction 频率，调小则可更早回收 Delete Vector。
 - 引入版本：v4.2
 
 ### enable_lake_pk_compaction_score_gate
@@ -227,6 +265,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：主键表 Compaction 评分门控的一个豁免条件。当低于阈值的层的总字节数超过 `ratio * largest_rowset_bytes * size_tiered_level_multiple`（即自然的下一层晋升目标的 `ratio` 倍）时，强制执行 Compaction，以约束长尾的中间层堆积。默认值 `2.0` 表示在强制合并前容忍达到自然晋升阈值的两倍。设置为 `0` 可禁用该豁免，即不设置大小上限。
 - 引入版本：v4.2
 
+### lake_pk_partial_update_use_segment_cache
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中主键表的 publish 在读取所需的基底 Segment 时，是否通过 Segment 元数据缓存读取，而不是每次都重新打开。该项同时覆盖行模式部分列更新和条件更新，二者都需要从相同的 Segment 重新读取旧值。打开一个 Segment 需要解析其 footer 并为表 Schema 的每一列创建一个列读取器，因此在宽表上，高频的部分列更新会在每次 publish 时对相同的基底 Segment 重复付出这份开销。通过缓存读取可以让后续的 publish 复用已经打开的 Segment。包含 JSON、ARRAY、MAP 或 STRUCT 列，或通过 `zstd_compression_columns` 启用列级压缩的列时，使用原有的打开路径，因为按顶层列数估算无法涵盖嵌套元数据或压缩字典。关闭字典写入后，这些表仍绕过缓存，因为已有 Segment 可能仍包含字典。仅当该 tablet 的基底 Segment 能够全部放入 Segment 元数据缓存（容量由 `lake_segment_metadata_cache_limit_percent` 决定），且每个 Segment 的估计大小不超过单个缓存分片的容量时才使用缓存；否则，填充缓存会以与写入相同的速度淘汰条目，因此会退回原有行为。之所以按整个 tablet 而非单次 publish 计算，是因为相继的多次 publish 读取的是其中不同的子集。将该项设置为 `false` 可始终重新打开 Segment。
+- 引入版本：v4.2
+
 ### enable_lake_prepared_split_pre_refinement
 
 - 默认值：true
@@ -270,6 +317,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 流水化读取 `.lcrm` 文件时使用的 sub-chunk 粒度。每个输出 segment 被切分为 `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 个 sub-chunk，独立流水化。值越小，少而大的输出 segment 能获得越高的并发度，但代价是更多的范围读取和消费时一次额外的 memcpy。默认 4 MiB，与 starcache 磁盘层 block 大小对齐。
 
+### lake_segment_metadata_cache_limit_percent
+
+- 默认值：20
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中 Segment 元数据缓存的容量，以 BE 进程内存上限的百分比表示。该缓存存放已打开的 Segment（包括 Footer、索引和列读取器）、Delete Vector 以及 Tablet Schema。它与 Tablet 元数据缓存（参见 `lake_tablet_metadata_cache_limit_percent`）相互独立，加载再多的 Segment 也不会把 Tablet 元数据和事务日志挤出缓存。超出 0–100 的取值按 0 或 100 处理。设为 `0` 即关闭该缓存。该项与 `lake_tablet_metadata_cache_limit_percent` 共同取代原有的 `lake_metadata_cache_limit`。
+- 引入版本：-
+
+### lake_shard_info_cache_ttl_sec
+
+- 默认值：60
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：存算分离集群下，BE 或 CN 保留不归自己持有的 tablet 的存储位置的时长。在此期间再次访问该 tablet，不必向 StarMgr 查询。节点保留两类存储位置。第一类是节点自己向 StarMgr 查询得到的：节点读写分配给其他节点的 tablet 的文件时需要查询，查询计入 `starrocks_be_staros_shard_info_fallback_total`，例如一次导入由多个节点同时写同一个 tablet，或者 Vacuum 读取一个分区内所有 tablet 的元数据；由这类位置直接应答的查询计入 `staros_shard_info_fallback_cache_hits_total`。第二类是持有 tablet 的节点交来的：向开启了 `file_bundling` 的表导入时，持有节点在回传事务日志时附带存储位置，负责该导入的协调节点据此写各分区的 combined txn log，无需查询；由这类位置直接应答的查询计入 `lake_tablet_location_handoff_hits_total`。持有 tablet 的节点会收到 StarMgr 推送的存储卷变更，而保留的存储位置要到过期后才会更新，因此该配置项同时限定了这类节点最多还会使用多久过时的存储卷配置，例如已轮换的访问凭证。保留的存储位置包含存储卷的访问凭证。设为 `0` 表示两类都关闭：既不交接也不保留，每次都向 StarMgr 查询。
+- 引入版本：-
+
+### lake_tablet_metadata_cache_limit_percent
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中 Tablet 元数据缓存的容量，以 BE 进程内存上限的百分比表示。该缓存存放 Tablet 元数据和事务日志。它与 Segment 元数据缓存（参见 `lake_segment_metadata_cache_limit_percent`）相互独立，加载再多的 Segment 也不会把这些元数据挤出缓存。超出 0–100 的取值按 0 或 100 处理。设为 `0` 即关闭该缓存。该项与 `lake_segment_metadata_cache_limit_percent` 共同取代原有的 `lake_metadata_cache_limit`。
+- 引入版本：-
+
 ### lake_vacuum_enable_task_timeout
 
 - 默认值：true
@@ -312,6 +386,42 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态配置: 是
 - 描述: Paimon native reader 将两个必需的 Parquet 读取范围合并为一次读取时允许的最大间隔。值越大，请求次数越少，但读放大越多。默认值与 StarRocks 原生 Parquet reader 使用的 `io_coalesce_read_max_distance_size` 一致；paimon-cpp 自身的默认值远小于此，会在对象存储上产生大量小请求。
 - 引入版本: -
+
+### primary_key_index_memory_high_percent
+
+- 默认值: 75
+- 类型: Int
+- 单位: -
+- 是否动态配置: 是
+- 描述: 存算分离集群中，后台线程定期回收主键索引缓存的目标，以缓存容量的百分比表示。缓存容量即更新相关内存的上限（参见 `update_memory_limit_percent`）。占用超过该比例时，按最近最少使用的顺序淘汰未在使用的主键索引，直至占用回落到该比例以内。正在使用的主键索引不会被淘汰。建议设置为小于 `primary_key_index_memory_urgent_percent` 的值。
+- 引入版本: -
+
+### primary_key_index_memory_middle_percent
+
+- 默认值: 50
+- 类型: Int
+- 单位: -
+- 是否动态配置: 是
+- 描述: 存算分离集群中主键表 Publish 因超出内存限制而失败时，主键索引缓存的回收目标，以缓存容量的百分比表示。此时系统会淘汰未在使用的主键索引，直至占用回落到该比例以内，为重试的 Publish 腾出内存。建议设置为小于 `primary_key_index_memory_high_percent` 的值。
+- 引入版本: -
+
+### primary_key_index_memory_urgent_percent
+
+- 默认值: 85
+- 类型: Int
+- 单位: -
+- 是否动态配置: 是
+- 描述: 存算分离集群中主键索引缓存的占用上限，以缓存容量的百分比表示。每次 Publish 结束后（因超出内存限制而失败的除外）都会检查一次：占用超过该比例时，按最近最少使用的顺序淘汰未在使用的主键索引，直至占用回落到该比例以内。缓存增长快于后台线程将其回收到 `primary_key_index_memory_high_percent` 的速度时，由该配置项兜底，因此应设置为大于该配置项的值。
+- 引入版本: -
+
+### s3_multipart_equal_part_size
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：向 S3 或兼容 S3 的对象存储进行分片上传（Multipart Upload）时，是否让除最后一个分片以外的所有分片大小完全一致。部分兼容 S3 的对象存储（如 Cloudflare R2）要求非末尾分片大小相同，否则会拒绝整次分片上传，并报错 `InvalidPart: All non-trailing parts must have the same length`。使用此类对象存储时需开启该参数。开启后，除最后一个分片外，每个分片都严格等于配置的分片大小：存算分离集群中的 starlet 上传按 `starlet_fslib_s3_min_upload_part_size` 切分，BE 其他带缓冲的 S3 上传按 `experimental_s3_min_upload_part_size` 切分。默认值 `false` 保持原有行为：缓冲数据一旦达到分片大小，就把整个缓冲区作为一个分片上传，因此各分片大小不一。Parquet、ORC、CSV 文件写入器写出的文件（例如 `INSERT INTO FILES` 导出的文件，以及 Hive、Iceberg Sink 写出的文件）边生成边上传分片，不受该参数影响。修改后仅对之后开始的上传生效。S3 单次分片上传最多允许 10000 个分片，因此按等大分片上传的对象不能超过分片大小的 10000 倍；以 starlet 默认的 5 MiB 分片计算，上限约为 48.8 GiB。如需写入更大的对象，请调大分片大小。
+- 引入版本：-
 
 ### starlet_filesystem_instance_cache_capacity
 
@@ -394,6 +504,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群中，Data Cache 最多可使用的磁盘容量百分比。仅在 `datacache_unified_instance_enable` 为 `false` 时生效。
 - 引入版本：v3.1
 
+### starlet_star_cache_skip_fresh_block_checksum_verification
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：存算分离集群中，对于由当前 CN 进程写入且此后未被淘汰的 Data Cache 磁盘 Block，后续请求首次访问时是否跳过整块 Checksum 校验读取。该校验会从磁盘重新读取整个 Block，以校验进程刚刚写入且仍在内存中跟踪的数据，因此每个新写入 Block 的首次访问都会多一次磁盘读取。将该项设置为 `false` 可在首次访问时校验每个 Block，仅当怀疑缓存磁盘存在静态数据损坏时才值得付出该开销。无论该项如何设置，从进程上一次运行继承下来的 Block 始终会被校验，因为当前进程并未见证其写入过程。该项仅在 Data Cache 初始化时读取一次。
+- 引入版本：v4.2.0
+
+### starlet_starmgr_client_compression_type
+
+- 默认值：none
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，当前 CN 发送给 StarMgr 的 Worker 心跳所使用的压缩方式。该心跳会为 CN 上的每个 Tablet 携带一个条目，是集群中最大的周期性请求。有效值：`none` 和 `zstd`。`zstd` 在心跳线程中压缩负载，并占用同一个 RPC 超时预算，由 FE 负责解压。`none` 表示不压缩发送心跳。在切换任何 CN 之前，FE 必须具备解压能力，因为不支持该机制的 FE 会丢弃压缩后的心跳，所以请先升级 FE，再在 CN 上设置该项。无法识别的取值会被记录并回退为 `none`，而不会导致 CN 启动失败。
+- 引入版本：v4.2.0
+
 ### starlet_use_star_cache
 
 - 默认值：false（v3.1）true（v3.2.3 起）
@@ -443,7 +571,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### datacache_disk_idle_seconds_for_expansion
 
-- 默认值：7200
+- 默认值：180
 - 类型：Int
 - 单位：秒
 - 是否动态：是
@@ -558,13 +686,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：Data Cache 磁盘容量自动调整开关，启用后会根据当前磁盘使用率动态调整缓存容量。该参数自 v4.0 起由 `datacache_auto_adjust_enable` 更名为 `enable_datacache_disk_auto_adjust`。
 - 引入版本：v3.3.0
 
+### external_table_clear_corrupted_cache_data
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否允许自动清理外表文件（例如 Hive 表、Iceberg 表）损坏的数据缓存。扫描文件时，如果从数据缓存读到的内容解析失败，系统会删除本次读到的缓存块，下次读取该文件时从远端存储重新读取。对于 Parquet 文件，如果出错前还未返回任何行，系统会先绕过数据缓存重新读取该文件，读取成功后才删除缓存块。该参数不影响存算分离集群的内表，内表由 `lake_clear_corrupted_cache_data` 控制。
+- 引入版本：-
+
 ### jdbc_connection_idle_timeout_ms
 
 - 默认值：600000
 - 类型：Int
 - 单位：毫秒
 - 是否动态：否
-- 描述：JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。
+- 描述：JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。如果某个连接池在此时间内没有被任何查询使用，BE 会关闭整个连接池（包括 `jdbc_minimum_idle_connections` 保留的连接），并在下一次查询时重新创建。这样可以释放已删除或已修改的 JDBC Catalog 和资源所对应的连接池。
 - 引入版本：-
 
 ### jdbc_connection_pool_size
@@ -605,7 +742,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_clear_corrupted_cache_data
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
@@ -668,11 +805,29 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_replication_file_copy_threads
 
-- 默认值：0
+- 默认值：16
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：存算分离跨集群复制（lake-to-lake replication）逐文件拷贝所使用的独立线程池大小。`0` 表示 `cpu_cores * 4`（与 `replication_threads` 默认语义一致）；负值表示 `-value * cpu_cores`。该线程池与 agent 任务的 `replicate_snapshot` 线程池刻意区分，目的是让外层任务可以安全地通过 `ThreadPoolToken::wait()` 等待逐文件拷贝子任务，而不触发线程池自死锁保护。该线程池在启动时一次性创建，无运行时 resize 入口，调整大小需重启 CN。
+- 描述：存算分离跨集群复制（lake-to-lake replication）逐文件拷贝所使用的 CN 全局独立线程池大小。默认值用于限制并发拷贝任务及其读缓冲区，不随 CPU 核数增长。`0` 表示 `cpu_cores * 4`；负值表示 `-value * cpu_cores`。该线程池在启动时一次性创建，调整大小需重启 CN。
+- 引入版本：v4.1.2
+
+### lake_replication_max_parallel_files_per_tablet
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离跨集群复制（lake-to-lake replication）中单个 tablet 同时拷贝文件的最大数量。所有 tablet 共用 CN 全局的 `lake_replication_file_copy_threads` 线程池，因此该配置可防止单个 tablet 独占线程池。配置值小于或等于 `1` 时，单个 tablet 内的文件串行拷贝。
+- 引入版本：v4.1.4
+
+### lake_replication_parallel_copy_min_file_count
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离跨集群复制（lake-to-lake replication）中，启用单个 tablet 内文件并行拷贝所需的最小文件数。设置为 `0` 时关闭独立文件拷贝线程池，由调用复制任务直接执行文件拷贝。
 - 引入版本：v4.1.2
 
 ### lake_service_max_concurrency

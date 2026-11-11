@@ -43,6 +43,9 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 
 public class DeleteStmt extends DmlStmt {
+    // the Iceberg branch to read and write, or null for the main branch
+    private final String targetBranch;
+
     private TableRef tableRef;
     private final PartitionRef partitionRef;
     private final List<Relation> usingRelations;
@@ -75,12 +78,19 @@ public class DeleteStmt extends DmlStmt {
 
     public DeleteStmt(TableRef tableRef, PartitionRef partitionNames, List<Relation> usingRelations,
                       Expr wherePredicate, List<CTERelation> commonTableExpressions, NodePosition pos) {
+        this(tableRef, partitionNames, usingRelations, wherePredicate, commonTableExpressions, null, pos);
+    }
+
+    public DeleteStmt(TableRef tableRef, PartitionRef partitionNames, List<Relation> usingRelations,
+                      Expr wherePredicate, List<CTERelation> commonTableExpressions, String targetBranch,
+                      NodePosition pos) {
         super(pos);
         this.tableRef = tableRef;
         this.partitionRef = partitionNames;
         this.usingRelations = usingRelations;
         this.wherePredicate = wherePredicate;
         this.commonTableExpressions = commonTableExpressions;
+        this.targetBranch = targetBranch;
     }
 
     public long getJobId() {
@@ -160,5 +170,9 @@ public class DeleteStmt extends DmlStmt {
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitDeleteStatement(this, context);
+    }
+
+    public String getTargetBranch() {
+        return targetBranch;
     }
 }

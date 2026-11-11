@@ -1,0 +1,349 @@
+-- name: test_paimon_predicate_pushdown
+create external catalog paimon_static_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"enable_get_stats_from_external_metadata" = "true",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id = 1;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.filter\.0:\ Equal\(id,\ 1\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id = 1 order by id;
+-- result:
+1
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where amount >= 1000;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.filter\.0:\ GreaterOrEqual\(amount,\ 1000\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where amount >= 1000 order by id;
+-- result:
+100
+101
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id in (1,2);
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.filter\.0:\ Or\(\[Equal\(id,\ 1\),\ Equal\(id,\ 2\)\]\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id in (1,2) order by id;
+-- result:
+1
+2
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id > amount;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 0)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 2)(?!.*Paimon\.plan\.file_pruning_v1\.filter\.).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id > amount order by id;
+-- result:
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where abs(id) = 1;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 0)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 2)(?!.*Paimon\.plan\.file_pruning_v1\.filter\.).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where abs(id) = 1 order by id;
+-- result:
+1
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id = 1 or id = 100;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 0)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 2)(?=.*Paimon\.plan\.file_pruning_v1\.filter\.0:\ Or\(\[Equal\(id,\ 1\),\ Equal\(id,\ 100\)\]\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id = 1 or id = 100 order by id;
+-- result:
+1
+100
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id = 1;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.filter\.0:\ Equal\(id,\ 1\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id = 1 order by id;
+-- result:
+1
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where amount >= 1000;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.filter\.0:\ GreaterOrEqual\(amount,\ 1000\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where amount >= 1000 order by id;
+-- result:
+100
+101
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id in (1,2);
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.filter\.0:\ Or\(\[Equal\(id,\ 1\),\ Equal\(id,\ 2\)\]\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id in (1,2) order by id;
+-- result:
+1
+2
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id > amount;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 0)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 2)(?!.*Paimon\.plan\.file_pruning_v1\.filter\.).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id > amount order by id;
+-- result:
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where abs(id) = 1;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 0)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 2)(?!.*Paimon\.plan\.file_pruning_v1\.filter\.).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where abs(id) = 1 order by id;
+-- result:
+1
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id = 1 or id = 100;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 0)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 2)(?=.*Paimon\.plan\.file_pruning_v1\.filter\.0:\ Or\(\[Equal\(id,\ 1\),\ Equal\(id,\ 100\)\]\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id = 1 or id = 100 order by id;
+-- result:
+1
+100
+-- !result
+set paimon_reader_mode = 'auto';
+-- result:
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id = 1;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.filter\.0:\ Equal\(id,\ 1\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id = 1 order by id;
+-- result:
+1
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where amount >= 1000;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.filter\.0:\ GreaterOrEqual\(amount,\ 1000\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where amount >= 1000 order by id;
+-- result:
+100
+101
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id in (1,2);
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 1)(?=.*Paimon\.plan\.file_pruning_v1\.filter\.0:\ Or\(\[Equal\(id,\ 1\),\ Equal\(id,\ 2\)\]\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id in (1,2) order by id;
+-- result:
+1
+2
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id > amount;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 0)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 2)(?!.*Paimon\.plan\.file_pruning_v1\.filter\.).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id > amount order by id;
+-- result:
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where abs(id) = 1;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 0)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 2)(?!.*Paimon\.plan\.file_pruning_v1\.filter\.).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where abs(id) = 1 order by id;
+-- result:
+1
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id = 1 or id = 100;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.file_pruning_v1\.skippedDataFilesNum:\ 0)(?=.*Paimon\.plan\.file_pruning_v1\.resultedDataFilesNum:\ 2)(?=.*Paimon\.plan\.file_pruning_v1\.filter\.0:\ Or\(\[Equal\(id,\ 1\),\ Equal\(id,\ 100\)\]\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.file_pruning_v1 where id = 1 or id = 100 order by id;
+-- result:
+1
+100
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_int is null;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.scalar_types\.filter\.0:\ IsNull\(c_int\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_int is null order by id;
+-- result:
+3
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_dec_9_2 = cast(0.10 as decimal(9,2));
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.scalar_types\.filter\.0:\ Equal\(c_dec_9_2,\ 0\.10\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_dec_9_2 = cast(0.10 as decimal(9,2)) order by id;
+-- result:
+4
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_date >= cast("2024-01-01" as date);
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.scalar_types\.filter\.0:\ GreaterOrEqual\(c_date,\ 19723\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_date >= cast("2024-01-01" as date) order by id;
+-- result:
+1
+4
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_string = "StarRocks";
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.scalar_types\.filter\.0:\ Equal\(c_string,\ StarRocks\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_string = "StarRocks" order by id;
+-- result:
+4
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_int > 0 and c_int > c_smallint;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.scalar_types\.filter\.0:\ GreaterThan\(c_int,\ 0\))(?!.*Paimon\.plan\.scalar_types\.filter\.1:).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_int > 0 and c_int > c_smallint order by id;
+-- result:
+1
+4
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 where id = 1;
+-- result:
+[REGEX](?s).*Paimon\.plan\.pk_parquet_unmerged_v1\.filter\.0:\ Equal\(id,\ 1\).*
+-- !result
+select id, amount from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 where id = 1;
+-- result:
+1	100
+-- !result
+select count(*) from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 where amount = 10;
+-- result:
+0
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_int is null;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.scalar_types\.filter\.0:\ IsNull\(c_int\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_int is null order by id;
+-- result:
+3
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_dec_9_2 = cast(0.10 as decimal(9,2));
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.scalar_types\.filter\.0:\ Equal\(c_dec_9_2,\ 0\.10\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_dec_9_2 = cast(0.10 as decimal(9,2)) order by id;
+-- result:
+4
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_date >= cast("2024-01-01" as date);
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.scalar_types\.filter\.0:\ GreaterOrEqual\(c_date,\ 19723\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_date >= cast("2024-01-01" as date) order by id;
+-- result:
+1
+4
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_string = "StarRocks";
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.scalar_types\.filter\.0:\ Equal\(c_string,\ StarRocks\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_string = "StarRocks" order by id;
+-- result:
+4
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_int > 0 and c_int > c_smallint;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.scalar_types\.filter\.0:\ GreaterThan\(c_int,\ 0\))(?!.*Paimon\.plan\.scalar_types\.filter\.1:).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_int > 0 and c_int > c_smallint order by id;
+-- result:
+1
+4
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 where id = 1;
+-- result:
+[REGEX](?s).*Paimon\.plan\.pk_parquet_unmerged_v1\.filter\.0:\ Equal\(id,\ 1\).*
+-- !result
+select id, amount from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 where id = 1;
+-- result:
+1	100
+-- !result
+select count(*) from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 where amount = 10;
+-- result:
+0
+-- !result
+set paimon_reader_mode = 'auto';
+-- result:
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_int is null;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.scalar_types\.filter\.0:\ IsNull\(c_int\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_int is null order by id;
+-- result:
+3
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_dec_9_2 = cast(0.10 as decimal(9,2));
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.scalar_types\.filter\.0:\ Equal\(c_dec_9_2,\ 0\.10\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_dec_9_2 = cast(0.10 as decimal(9,2)) order by id;
+-- result:
+4
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_date >= cast("2024-01-01" as date);
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.scalar_types\.filter\.0:\ GreaterOrEqual\(c_date,\ 19723\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_date >= cast("2024-01-01" as date) order by id;
+-- result:
+1
+4
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_string = "StarRocks";
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.scalar_types\.filter\.0:\ Equal\(c_string,\ StarRocks\)).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_string = "StarRocks" order by id;
+-- result:
+4
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_int > 0 and c_int > c_smallint;
+-- result:
+[REGEX](?s)(?=.*Paimon\.plan\.scalar_types\.filter\.0:\ GreaterThan\(c_int,\ 0\))(?!.*Paimon\.plan\.scalar_types\.filter\.1:).*
+-- !result
+[ORDER]select id from paimon_static_${uuid0}.paimon_test.scalar_types where c_int > 0 and c_int > c_smallint order by id;
+-- result:
+1
+4
+-- !result
+trace values external select id from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 where id = 1;
+-- result:
+[REGEX](?s).*Paimon\.plan\.pk_parquet_unmerged_v1\.filter\.0:\ Equal\(id,\ 1\).*
+-- !result
+select id, amount from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 where id = 1;
+-- result:
+1	100
+-- !result
+select count(*) from paimon_static_${uuid0}.paimon_test.pk_parquet_unmerged_v1 where amount = 10;
+-- result:
+0
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog paimon_static_${uuid0};
+-- result:
+-- !result

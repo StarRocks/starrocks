@@ -143,8 +143,8 @@ public class SimpleExecutor {
     /**
      * Same as {@link #executeDQL(String)} but bounds the internal query with an explicit
      * {@code query_timeout} (seconds) instead of the default {@code statistic_collect_query_timeout}.
-     * Used by serving-path internal queries (e.g. filling {@code information_schema.materialized_views}
-     * or {@code lookup_string}) so they never outlive the outer user query.
+     * Used by serving-path internal queries (e.g. filling {@code information_schema.materialized_views})
+     * so they never outlive the outer user query.
      */
     public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
         ConnectContext prev = ConnectContext.get();
@@ -162,6 +162,91 @@ public class SimpleExecutor {
     }
 
     /**
+     * Same as {@link #executeDQL(String, int)} but runs the internal query with the identity of
+     * {@code caller} instead of ROOT, so the caller's table/column privileges and the row filter /
+     * column masking policies of an external access controller (e.g. Ranger) apply to it. Must be
+     * used by internal queries that read user data on behalf of a user (e.g. {@code lookup_string}),
+     * otherwise any user could read tables it has no privilege on.
+     * The child inherits a copy of the caller's resource policy and follows its cancellation and
+     * remaining timeout. It has its own query ID: inheriting a memory limit does not share a memory budget.
+     */
+    public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds, ConnectContext caller) {
+        Preconditions.checkNotNull(caller, "caller context is required");
+        ConnectContext prev = ConnectContext.get();
+        try {
+            if (caller.isStatementCancelled()) {
+                throw new SemanticException(name + " query was cancelled");
+            }
+            int timeout = Math.min(queryTimeoutSeconds, remainingQueryTimeoutS(caller));
+            if (timeout <= 0) {
+                throw new SemanticException(name + " query timed out before execution");
+            }
+            ConnectContext context = createCallerQueryContext(caller, timeout);
+            context.setThreadLocalInfo();
+            return executeDQL(sql, context);
+        } finally {
+            ConnectContext.remove();
+            if (prev != null) {
+                prev.setThreadLocalInfo();
+            }
+        }
+    }
+
+    private static ConnectContext createCallerQueryContext(ConnectContext caller, int timeout) {
+        ConnectContext context = ConnectContext.build();
+        // Setting the warehouse installs its session defaults before applying query policy.
+        context.setCurrentWarehouse(caller.getCurrentWarehouseName());
+        inheritIdentity(context, caller);
+        context.setDatabase(caller.getDatabase());
+        context.setParentConnectContext(caller);
+
+        SessionVariable variables = context.getSessionVariable();
+        SessionVariable callerVariables = caller.getSessionVariable();
+        variables.copyQueryResourcePolicyFrom(callerVariables);
+        if (caller.getResourceGroup() != null) {
+            variables.setResourceGroup(caller.getResourceGroup().getName());
+        }
+        // Resolve unqualified names and evaluate access-policy expressions in the caller's SQL context.
+        variables.setCatalog(callerVariables.getCatalog());
+        variables.setSqlMode(callerVariables.getSqlMode());
+        variables.setTimeZone(callerVariables.getTimeZone());
+        variables.setQueryTimeoutS(timeout);
+        variables.setInsertTimeoutS(timeout);
+
+        // Short-circuit RPCs bypass the coordinator's fragment cancellation path.
+        variables.setEnableShortCircuit(false);
+        variables.setEnableMaterializedViewRewrite(false);
+        variables.setEnableSPMRewrite(false);
+        variables.setEnableProfile(false);
+        variables.setEnableLoadProfile(false);
+        variables.setBigQueryProfileThreshold("0s");
+        context.setNeedQueued(false);
+        context.setQueryId(UUIDUtil.genUUID());
+        context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
+        context.setStartTime();
+        return context;
+    }
+
+    /**
+     * Copies the caller's user, roles, groups, DN and remote IP. The remote IP matters
+     * because USER()/SESSION_USER() are folded from qualifiedUser plus remoteIP, and Ranger
+     * row-filter / masking expressions are analyzed in this context, so dropping it would make
+     * such policies see 'user'@% rather than the caller's actual host. The caller's
+     * {@code bypassAuthorizerCheck} is deliberately NOT copied: it is a transient control-flow
+     * flag that makes {@link StatementPlanner} skip {@code Authorizer.check}, so inheriting it
+     * would let a lookup triggered inside an existing bypass scope skip the SELECT / Ranger
+     * checks this method exists to enforce. The internal context keeps its default (false).
+     */
+    private static void inheritIdentity(ConnectContext context, ConnectContext caller) {
+        context.setQualifiedUser(caller.getQualifiedUser());
+        context.setCurrentUserIdentity(caller.getCurrentUserIdentity());
+        context.setCurrentRoleIds(caller.getCurrentRoleIds());
+        context.setGroups(caller.getGroups());
+        context.setDistinguishedName(caller.getDistinguishedName());
+        context.setRemoteIP(caller.getRemoteIP());
+    }
+
+    /**
      * Remaining time budget (in seconds) derived from the outer (triggering) user query's
      * {@code query_timeout}: {@code query_timeout - elapsed}. Serving-path internal queries should be
      * bounded by this so a single one cannot outlive the outer query. When there is no outer user query
@@ -173,17 +258,29 @@ public class SimpleExecutor {
         if (outer == null || outer.getStartTime() <= 0) {
             return (int) Config.statistic_collect_query_timeout;
         }
-        long elapsedSeconds = (System.currentTimeMillis() - outer.getStartTime()) / 1000;
-        return (int) (outer.getSessionVariable().getQueryTimeoutS() - elapsedSeconds);
+        return remainingQueryTimeoutS(outer);
+    }
+
+    private static int remainingQueryTimeoutS(ConnectContext context) {
+        long elapsedSeconds = context.getStartTime() > 0
+                ? Math.max(0, (System.currentTimeMillis() - context.getStartTime()) / 1000) : 0;
+        return (int) Math.max(Integer.MIN_VALUE, context.getSessionVariable().getQueryTimeoutS() - elapsedSeconds);
     }
 
     public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
         try {
+            if (context.isStatementCancelled()) {
+                throw new SemanticException(name + " query was cancelled");
+            }
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             sql = formatSQL(sql, parsedStmt);
             ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, queryResultProtocol);
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
+            ConnectContext parent = context.getParent();
+            if (parent != null && parent.getExecutor() != null) {
+                parent.getExecutor().registerSubStmtExecutor(executor);
+            }
             context.setQueryId(UUIDUtil.genUUID());
             context.getSessionVariable().setPipelineDop(dop);
             AuditLog.getInternalAudit()

@@ -1,0 +1,451 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.qe.scheduler;
+
+import com.starrocks.planner.DataPartition;
+import com.starrocks.planner.MultiCastPlanFragment;
+import com.starrocks.planner.PlanFragment;
+import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
+import com.starrocks.rpc.PExecPlanFragmentRequest;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.InternalServiceVersion;
+import com.starrocks.thrift.TBucketProperty;
+import com.starrocks.thrift.TDataPartition;
+import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPlanFragment;
+import com.starrocks.thrift.TPlanFragmentExecParams;
+import com.starrocks.thrift.TUniqueId;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
+import org.apache.thrift.TDeserializer;
+import org.apache.thrift.TException;
+import org.apache.thrift.TSerializer;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static com.starrocks.utframe.MockedBackend.MockPBackendService;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+public class SerializeOnceTPlanFragmentTest extends SchedulerTestBase {
+    private static final String JOIN_AGG_SQL = "select l_orderkey, count(*), sum(l_extendedprice * (1 - l_discount)) " +
+            "from lineitem join orders on l_orderkey = o_orderkey " +
+            "where o_orderdate > '1995-01-01' and l_shipmode in ('AIR', 'MAIL') " +
+            "group by l_orderkey order by 3 desc limit 10";
+    private static final String MULTI_CAST_SQL = "with w as (select l_orderkey, count(*) as c from lineitem " +
+            "group by l_orderkey) select /*+SET_VAR(cbo_cte_reuse_rate=0) */ * from w union all select * from w";
+
+    @AfterEach
+    public void resetProtocol() throws Exception {
+        setPlanProtocol("binary");
+    }
+
+    private void setPlanProtocol(String protocol) throws Exception {
+        GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(connectContext.getSessionVariable(),
+                new SystemVariable(SessionVariable.THRIFT_PLAN_PROTOCOL, new StringLiteral(protocol)), true);
+    }
+
+    private static TExecPlanFragmentParams newRequest(TPlanFragment fragment) {
+        // Set fields on both sides of the fragment (field 2), so that the compact protocol encodes the fields after
+        // it as deltas from the fragment's field id.
+        TExecPlanFragmentParams request = new TExecPlanFragmentParams();
+        request.setProtocol_version(InternalServiceVersion.V1);
+        request.setFragment(fragment);
+        request.setParams(new TPlanFragmentExecParams());
+        request.params.setQuery_id(new TUniqueId(1, 2));
+        request.params.setFragment_instance_id(new TUniqueId(3, 4));
+        request.params.setPer_node_scan_ranges(new HashMap<>());
+        request.params.setPer_exch_num_senders(Map.of(1, 3));
+        request.params.setDestinations(new ArrayList<>());
+        request.setCoord(new TNetworkAddress("127.0.0.1", 9020));
+        request.setBackend_num(7);
+        return request;
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"binary", "compact", "json"})
+    public void testSameBytesAsRegularSerialization(String protocol) throws Exception {
+        ExecPlan execPlan = getExecPlan(JOIN_AGG_SQL);
+        assertTrue(execPlan.getFragments().size() > 1);
+
+        TSerializer serializer = ConfigurableSerDesFactory.getTSerializer(protocol);
+        TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer(protocol);
+        for (PlanFragment fragment : execPlan.getFragments()) {
+            TExecPlanFragmentParams regular = newRequest(fragment.toThrift());
+            SerializeOnceTPlanFragment shared = fragment.toThrift(new SerializeOnceTPlanFragment());
+            assertEquals(regular.getFragment(), shared);
+
+            byte[] expected = serializer.serialize(regular);
+            // Serialize several requests sharing the fragment: the first one fills the cache, the rest use it.
+            for (int i = 0; i < 3; i++) {
+                assertArrayEquals(expected, serializer.serialize(newRequest(shared)));
+            }
+            // The standalone fragment, whose bytes are the ones cached.
+            assertArrayEquals(serializer.serialize(regular.getFragment()), serializer.serialize(shared));
+
+            TExecPlanFragmentParams decoded = new TExecPlanFragmentParams();
+            deserializer.deserialize(decoded, serializer.serialize(newRequest(shared)));
+            assertEquals(regular, decoded);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"binary", "compact"})
+    public void testDeployedRequestsMatchRegularSerialization(String protocol) throws Exception {
+        setPlanProtocol(protocol);
+        TSerializer serializer = ConfigurableSerDesFactory.getTSerializer(protocol);
+        TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer(protocol);
+        Map<Integer, List<TPlanFragment>> rootNodeIdToFragments = new ConcurrentHashMap<>();
+        setBackendService(address -> new MockPBackendService() {
+            @Override
+            public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
+                try {
+                    byte[] bytes = request.getSerializedRequest();
+                    TExecPlanFragmentParams tRequest = new TExecPlanFragmentParams();
+                    deserializer.deserialize(tRequest, bytes);
+                    // The decoded request has a regular TPlanFragment.
+                    assertArrayEquals(serializer.serialize(tRequest), bytes);
+                    rootNodeIdToFragments.computeIfAbsent(
+                                    tRequest.getFragment().getPlan().getNodes().get(0).getNode_id(),
+                                    k -> new ArrayList<>())
+                            .add(tRequest.getFragment());
+                } catch (TException e) {
+                    throw new RuntimeException(e);
+                }
+                return super.execPlanFragmentAsync(request);
+            }
+        });
+
+        DefaultCoordinator scheduler = startScheduling(JOIN_AGG_SQL);
+        assertTrue(scheduler.getExecStatus().ok());
+
+        assertFalse(rootNodeIdToFragments.isEmpty());
+        assertTrue(rootNodeIdToFragments.values().stream().anyMatch(fragments -> fragments.size() > 1));
+        rootNodeIdToFragments.values().forEach(fragments ->
+                fragments.forEach(fragment -> assertEquals(fragments.get(0), fragment)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {JOIN_AGG_SQL, MULTI_CAST_SQL})
+    public void testSharedFragmentOnlyWithoutPerInstanceSink(String sql) throws Exception {
+        DefaultCoordinator scheduler = startScheduling(sql);
+        assertTrue(scheduler.getExecStatus().ok());
+
+        TFragmentInstanceFactory factory = new TFragmentInstanceFactory(connectContext, scheduler.getJobSpec(),
+                scheduler.getExecutionDAG(), new TNetworkAddress("127.0.0.1", 9020));
+        boolean hasMultiCast = false;
+        boolean hasShared = false;
+        for (ExecutionFragment execFragment : scheduler.getExecutionDAG().getFragmentsInCreatedOrder()) {
+            TPlanFragment shared = factory.createSharedFragment(execFragment);
+            if (execFragment.getPlanFragment() instanceof MultiCastPlanFragment) {
+                hasMultiCast = true;
+                assertNull(shared);
+            } else if (execFragment.getInstances().size() > 1) {
+                hasShared = true;
+                assertInstanceOf(SerializeOnceTPlanFragment.class, shared);
+            } else {
+                assertNull(shared);
+            }
+        }
+        assertEquals(sql.equals(MULTI_CAST_SQL), hasMultiCast);
+        assertTrue(hasShared);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"binary", "compact"})
+    public void testDetectModificationAfterSerialization(String protocol) throws Exception {
+        PlanFragment fragment = getExecPlan(JOIN_AGG_SQL).getFragments().get(0);
+        SerializeOnceTPlanFragment shared = fragment.toThrift(new SerializeOnceTPlanFragment());
+        TSerializer serializer = ConfigurableSerDesFactory.getTSerializer(protocol);
+        serializer.serialize(newRequest(shared));
+
+        shared.setMin_reservation_bytes(1);
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> serializer.serialize(newRequest(shared)));
+        assertTrue(e.getMessage().contains("modified after it was serialized"), e.getMessage());
+    }
+
+    @Test
+    public void testDetectInstanceDifferingFromSharedFragment() throws Exception {
+        DefaultCoordinator scheduler = startScheduling(JOIN_AGG_SQL);
+        TFragmentInstanceFactory factory = new TFragmentInstanceFactory(connectContext, scheduler.getJobSpec(),
+                scheduler.getExecutionDAG(), new TNetworkAddress("127.0.0.1", 9020));
+        ExecutionFragment execFragment = scheduler.getExecutionDAG().getFragmentsInCreatedOrder().stream()
+                .filter(fragment -> fragment.getInstances().size() > 1)
+                .findFirst().orElseThrow();
+        TPlanFragment shared = factory.createSharedFragment(execFragment);
+        TUniqueId queryId = scheduler.getJobSpec().getQueryId();
+        assertTrue(Deployer.isSharedFragmentConsistent(execFragment, shared, queryId));
+
+        // Stands for any per-instance change that sharing would lose, from modifying either a request's fragment or
+        // the plan fragment.
+        shared.setMin_reservation_bytes(1);
+        assertFalse(Deployer.isSharedFragmentConsistent(execFragment, shared, queryId));
+    }
+
+    @Test
+    public void testFallBackToFragmentPerInstance() throws Exception {
+        // Every thrift conversion gives a different fragment, so the shared fragment never matches the regular one and
+        // every fragment falls back. The instances must still get the regular fragments. JMockit removes the mock
+        // after the test.
+        AtomicInteger numConversions = new AtomicInteger();
+        new MockUp<DataPartition>() {
+            @Mock
+            public TDataPartition toThrift(Invocation invocation) {
+                TDataPartition partition = invocation.proceed();
+                partition.addToBucket_properties(new TBucketProperty().setBucket_num(numConversions.incrementAndGet()));
+                return partition;
+            }
+        };
+        List<TPlanFragment> deployedFragments = Collections.synchronizedList(new ArrayList<>());
+        setBackendService(address -> new MockPBackendService() {
+            @Override
+            public Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request) {
+                TExecPlanFragmentParams tRequest = new TExecPlanFragmentParams();
+                try {
+                    request.getRequest(tRequest);
+                } catch (TException e) {
+                    throw new RuntimeException(e);
+                }
+                deployedFragments.add(tRequest.getFragment());
+                return super.execPlanFragmentAsync(request);
+            }
+        });
+
+        DefaultCoordinator scheduler = startScheduling(JOIN_AGG_SQL);
+        assertTrue(scheduler.getExecStatus().ok());
+        // Each instance converted its own fragment, so no two deployed fragments are equal.
+        assertTrue(deployedFragments.size() > 1);
+        assertEquals(deployedFragments.size(), deployedFragments.stream().distinct().count());
+    }
+
+    private record GroupedFixture(com.starrocks.qe.QueryGroupBackendSelectorTest.Fixture source,
+                                  ExecutionFragment fragment, TFragmentInstanceFactory factory,
+                                  com.starrocks.qe.scheduler.dag.JobSpec job) { }
+
+    private static GroupedFixture groupedFixture(int groups, int workers) throws Exception {
+        return groupedFixture(groups, workers, true);
+    }
+
+    private static GroupedFixture groupedFixture(int groups, int workers, boolean internalParallel) throws Exception {
+        var f = com.starrocks.qe.QueryGroupBackendSelectorTest.fixture(groups, workers, 8);
+        f.context().setExecutionId(new TUniqueId(99, 101));
+        f.context().setQualifiedUser("root");
+        f.context().setCurrentUserIdentity(com.starrocks.catalog.UserIdentity.ROOT);
+        var sharedScan = SessionVariable.class.getDeclaredField("enableSharedScan");
+        sharedScan.setAccessible(true);
+        sharedScan.setBoolean(f.context().getSessionVariable(), true);
+        var parallel = SessionVariable.class.getDeclaredField("enableTabletInternalParallel");
+        parallel.setAccessible(true);
+        parallel.setBoolean(f.context().getSessionVariable(), RunMode.isSharedDataMode() ? !internalParallel : internalParallel);
+        var lakeParallel = SessionVariable.class.getDeclaredField("enableLakeTabletInternalParallel");
+        lakeParallel.setAccessible(true);
+        lakeParallel.setBoolean(f.context().getSessionVariable(), internalParallel);
+        f.fragment().getPlanFragment().setSink(new com.starrocks.planner.ResultSink(
+                new com.starrocks.planner.PlanNodeId(1), com.starrocks.thrift.TResultSinkType.MYSQL_PROTOCAL));
+        var job = com.starrocks.qe.scheduler.dag.JobSpec.Factory.fromQuerySpec(f.context(),
+                List.of(f.fragment().getPlanFragment()), List.of(f.scan()),
+                new com.starrocks.thrift.TDescriptorTable().setTupleDescriptors(List.of()),
+                com.starrocks.thrift.TQueryType.SELECT, null);
+        var dag = com.starrocks.qe.scheduler.dag.ExecutionDAG.build(job);
+        var fragment = dag.getFragmentsInCreatedOrder().get(0);
+        new com.starrocks.qe.scheduler.assignment.LocalFragmentAssignmentStrategy(f.context(), f.provider(),
+                true, false, false).assignFragmentToWorker(fragment);
+        dag.finalizeDAG();
+        return new GroupedFixture(f, fragment, new TFragmentInstanceFactory(f.context(), job, dag,
+                new TNetworkAddress("127.0.0.1", 9020)), job);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"binary, true", "binary, false", "compact, true", "compact, false"})
+    public void groupedRequestsPreserveCapturedParallelOptionAndCompleteQueues(String protocol,
+                                                                              boolean internalParallel) throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        for (int workers : List.of(1, 2)) {
+            var f = groupedFixture(9, workers, internalParallel);
+            var capturedOptions = f.job().getQueryOptions().deepCopy();
+            assertEquals(internalParallel, capturedOptions.isEnable_tablet_internal_parallel());
+            // A later session change must not replace the option already captured by the job.
+            var parallel = SessionVariable.class.getDeclaredField("enableTabletInternalParallel");
+            parallel.setAccessible(true);
+            parallel.setBoolean(f.source().context().getSessionVariable(), internalParallel);
+            var lakeParallel = SessionVariable.class.getDeclaredField("enableLakeTabletInternalParallel");
+            lakeParallel.setAccessible(true);
+            lakeParallel.setBoolean(f.source().context().getSessionVariable(), !internalParallel);
+            var sessionOptions = f.source().context().getSessionVariable().toThrift();
+            assertEquals(!internalParallel, sessionOptions.isEnable_tablet_internal_parallel());
+            var serializer = ConfigurableSerDesFactory.getTSerializer(protocol);
+            var deserializer = ConfigurableSerDesFactory.getTDeserializer(protocol);
+            TPlanFragment shared = f.factory().createSharedFragment(f.fragment());
+            byte[] sharedBefore = shared == null ? null : serializer.serialize(shared);
+            int totalTasks = 0;
+            Map<Integer, Long> owners = new HashMap<>();
+            for (var instance : f.fragment().getInstances()) {
+                var request = f.factory().create(instance, shared,
+                        new com.starrocks.thrift.TDescriptorTable().setTupleDescriptors(List.of()), 0, 0);
+                assertFalse(request.isEnable_shared_scan());
+                assertEquals(internalParallel, request.getQuery_options().isEnable_tablet_internal_parallel());
+                TExecPlanFragmentParams decoded = new TExecPlanFragmentParams();
+                deserializer.deserialize(decoded, serializer.serialize(request));
+                assertFalse(decoded.isEnable_shared_scan());
+                assertEquals(internalParallel, decoded.getQuery_options().isEnable_tablet_internal_parallel());
+                assertEquals(instance.getPipelineDop(), decoded.getPipeline_dop());
+                assertEquals(instance.getGroupExecutionScanDop(), decoded.getGroup_execution_scan_dop());
+                assertTrue(decoded.getParams().getPer_node_scan_ranges().isEmpty());
+                var queues = decoded.getParams().getNode_to_per_driver_seq_scan_ranges().get(0);
+                assertEquals(instance.getGroupExecutionScanDop(), queues.size());
+                for (var queue : queues.values()) {
+                    assertTrue(queue.isEmpty() || queue.size() == 2);
+                    assertTrue(queue.stream().map(r -> r.getScan_range().getGrouped_range_task().getGroup_id())
+                            .distinct().count() <= 1);
+                    if (!queue.isEmpty()) {
+                        int group = queue.get(0).getScan_range().getGrouped_range_task().getGroup_id();
+                        assertNull(owners.put(group, instance.getWorkerId()));
+                    }
+                    for (var range : queue) {
+                        assertFalse(range.isHas_more());
+                        assertEquals("23", range.getScan_range().getInternal_scan_range().getVersion());
+                        assertEquals(range.getScan_range().getInternal_scan_range().getBucket_sequence(),
+                                range.getScan_range().getGrouped_range_task().getGroup_id());
+                        totalTasks++;
+                    }
+                }
+                f.fragment().getQueryGroupAssignment().validatePlan(decoded.getFragment());
+            }
+            assertEquals(capturedOptions, f.job().getQueryOptions());
+            assertEquals(sessionOptions, f.source().context().getSessionVariable().toThrift());
+            assertEquals(18, totalTasks);
+            assertEquals(f.fragment().getQueryGroupAssignment().getGroupToWorker(), owners);
+            assertTrue(f.source().context().getSessionVariable().isEnableSharedScan());
+            if (shared != null) {
+                assertArrayEquals(sharedBefore, serializer.serialize(shared));
+            }
+        }
+    }
+
+    @Test
+    public void groupedBatchRejectsDuplicateOwnersBeforeBuildingRequests() throws Exception {
+        var f = groupedFixture(9, 2);
+        f.fragment().getInstances().set(1, f.fragment().getInstances().get(0));
+        assertThrows(IllegalStateException.class, () -> f.factory().createSharedFragment(f.fragment()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 8})
+    public void groupedRequestValidationHasLinearDescriptorAllocation(int workers) throws Exception {
+        var f = groupedFixture(9, workers);
+        AtomicInteger copies = new AtomicInteger();
+        new MockUp<com.starrocks.planner.QueryGroupManifest>() {
+            @Mock
+            public com.starrocks.thrift.TScanRange toScanRange(Invocation invocation,
+                                                               com.starrocks.planner.QueryGroupManifest.Task task) {
+                copies.incrementAndGet();
+                return invocation.proceed(task);
+            }
+        };
+        var shared = f.factory().createSharedFragment(f.fragment());
+        int emittedTasks = 0;
+        for (var instance : f.fragment().getInstances()) {
+            var request = f.factory().create(instance, shared,
+                    new com.starrocks.thrift.TDescriptorTable().setTupleDescriptors(List.of()), 0, 0);
+            emittedTasks += request.getParams().getNode_to_per_driver_seq_scan_ranges().get(0)
+                    .values().stream().mapToInt(List::size).sum();
+        }
+        assertEquals(18, emittedTasks);
+        // Nine complete groups with two source tasks each: one full batch check and one per-owner pass.
+        assertTrue(copies.get() <= 36, "descriptor copies must not grow with the owner count: " + copies.get());
+    }
+
+    @Test
+    public void groupedHandoffRejectsQueueMutationAfterBatchValidation() throws Exception {
+        var f = groupedFixture(9, 2);
+        var shared = f.factory().createSharedFragment(f.fragment());
+        var instance = f.fragment().getInstances().get(1);
+        var queue = instance.getNode2DriverSeqToScanRanges().get(0).get(0);
+        queue.get(0).getScan_range().getInternal_scan_range().setVersion("999");
+        assertThrows(IllegalStateException.class, () -> f.factory().create(instance, shared,
+                new com.starrocks.thrift.TDescriptorTable().setTupleDescriptors(List.of()), 0, 0));
+    }
+
+    @Test
+    public void groupedHandoffRejectsLateQueueAndConsumerTampering() throws Exception {
+        for (int mutation = 0; mutation < 12; mutation++) {
+            var f = groupedFixture(mutation == 10 ? 9 : 3, 1);
+            var instance = f.fragment().getInstances().get(0);
+            var queues = instance.getNode2DriverSeqToScanRanges().get(0);
+            switch (mutation) {
+                case 0 -> queues.get(0).remove(0);
+                case 1 -> queues.get(0).add(queues.get(0).get(0).deepCopy());
+                case 2 -> queues.get(0).get(0).getScan_range().getInternal_scan_range().setVersion("999");
+                case 3 -> ((com.starrocks.qe.QueryGroupBackendSelectorTest.ConsumerNode)
+                        f.fragment().getPlanFragment().getPlanRoot()).needsFinalize = false;
+                case 4 -> queues.get(0).get(0).setHas_more(true);
+                case 5 -> queues.get(0).get(0).setEmpty(true);
+                case 6 -> instance.setPipelineDop(1);
+                case 7 -> instance.setGroupExecutionScanDop(1);
+                case 8 -> ((com.starrocks.qe.QueryGroupBackendSelectorTest.ConsumerNode)
+                        f.fragment().getPlanFragment().getPlanRoot()).streaming = true;
+                case 9 -> f.fragment().getPlanFragment().disablePhysicalPropertyOptimize();
+                case 11 -> f.fragment().getPlanFragment().enableAdaptiveDop();
+                default -> queues.get(15).add(queues.get(0).get(0).deepCopy());
+            }
+            assertThrows(IllegalStateException.class, () -> f.factory().create(instance,
+                    new com.starrocks.thrift.TDescriptorTable().setTupleDescriptors(List.of()), 0, 0));
+        }
+    }
+
+    @Test
+    public void groupedHandoffRejectsIncrementalAndAlteredSharedFragment() throws Exception {
+        var f = groupedFixture(9, 2);
+        var instance = f.fragment().getInstances().get(0);
+        assertThrows(IllegalStateException.class, () -> f.factory().createIncrementalScanRanges(instance));
+        TPlanFragment shared = f.factory().createSharedFragment(f.fragment());
+        shared.getGroup_execution_param().setExec_groups(List.of());
+        assertThrows(IllegalStateException.class, () -> f.factory().create(instance, shared,
+                new com.starrocks.thrift.TDescriptorTable().setTupleDescriptors(List.of()), 0, 0));
+    }
+}

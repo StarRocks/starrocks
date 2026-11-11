@@ -72,7 +72,7 @@
                     <!-- UDFHelper reflectively accesses the private java.nio.DirectByteBuffer
                          constructor, which requires java.nio to be opened. This mirrors the
                          JAVA_OPTS used by the backend when launching the UDF JVM (conf/be.conf). -->
-                    <argLine>@{argLine} --add-opens=java.base/java.nio=ALL-UNNAMED</argLine>
+                    <argLine>@{argLine} --add-opens=java.base/java.nio=ALL-UNNAMED ${security.manager.arg}</argLine>
                 </configuration>
             </plugin>
             <plugin>
