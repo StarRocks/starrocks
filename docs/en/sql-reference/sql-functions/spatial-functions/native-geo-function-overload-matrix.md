@@ -102,6 +102,16 @@ These overloads support XY `POLYGON` and `MULTIPOLYGON` values. `GEOMETRY` input
 All overloads accept the seven XY OGC families and recurse through `MULTI*` and `GEOMETRYCOLLECTION` where applicable. `NULL` propagates. Measurements return zero for `EMPTY`; `ST_Centroid` returns `POINT EMPTY`; `ST_IsValid` returns `true`. Topology-invalid readable values return `false` only from `ST_IsValid`; measurements and centroid reject them. Malformed WKB and unsupported dimensions or descriptors are errors.
 
 Spherical polygon rings are orientation-independent and normalized to their smaller region; a single ring does not represent more than a hemisphere. See [ST_Area](st_area.md), [ST_Length](st_length.md), [ST_Perimeter](st_perimeter.md), [ST_Centroid](st_centroid.md), and [ST_IsValid](st_isvalid.md).
+## CRS metadata and transformation
+
+| Signature | Function ID | Result | Behavior |
+| --- | ---: | --- | --- |
+| `ST_SRID(GEOMETRY value)` | 120300 | `INT` or `NULL` | Reads the numeric EPSG mapping from the descriptor; does not transform coordinates. |
+| `ST_SetSRID(GEOMETRY value, INT constant)` | 120305 | `GEOMETRY`, target EPSG descriptor | Changes metadata only; WKB and coordinates are unchanged. |
+| `ST_Transform(GEOMETRY value, INT constant)` | 120310 | `GEOMETRY`, target EPSG descriptor | Reprojects XY coordinates between EPSG:4326 and EPSG:3857 using Web Mercator formulas. |
+
+The two target SRIDs must be FE-foldable constants equal to 4326 or 3857. Source CRS must be EPSG:4326, EPSG:3857, or OGC:CRS84. `ST_Transform` handles all seven XY OGC families and collections; `NULL` propagates and `EMPTY` stays empty. See [ST_SRID](st_srid.md), [ST_SetSRID](st_setsrid.md), and [ST_Transform](st_transform.md).
+
 ## Legacy compatibility
 
 The native overloads do not renumber or replace the existing `VARCHAR` functions:
@@ -118,6 +128,60 @@ The native overloads do not renumber or replace the existing `VARCHAR` functions
 
 ## Upgrade and reference-test contract
 
-For a rolling upgrade, upgrade BEs before FEs. These functions use the ordinary stable function-ID dispatch and do not introduce a separate GEO version gate. A newer FE with an older BE is not a supported upgrade order.
+For a rolling upgrade, upgrade BEs before FEs. Native scalar functions use the ordinary stable function-ID dispatch and do not introduce a separate GEO version gate. The coverage window registry is described below. A newer FE with an older BE is not a supported upgrade order.
 
 The contract is enforced by focused FE analyzer tests for overload resolution, return types, legacy compatibility, and function IDs, and by BE registry tests for every native ID. Existing BE function tests cover constant, nullable, varying, `EMPTY`, malformed-input, family, dimension, CRS, and descriptor behavior.
+
+## Polygon overlays
+
+Native XY polygons and multipolygons with compatible CRS; Cartesian semantics in both 4326 and 3857. NULL propagates. For `ST_Union`, `ST_Difference`, and `ST_SymDifference`, one component returns POLYGON, multiple return MULTIPOLYGON, and empty returns POLYGON EMPTY. Invalid topology is an error. See the linked pages for precision and resource limits.
+
+`ST_Intersection` also preserves shared edges and isolated contact points, returning line or point families when no area is present, or GEOMETRYCOLLECTION for mixed dimensions. Parts covered by higher-dimensional output are not repeated; disjoint inputs return POLYGON EMPTY.
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_Intersection(GEOMETRY, GEOMETRY)` | 120341 | [ST_Intersection](st_intersection.md) |
+| `ST_Union(GEOMETRY, GEOMETRY)` | 120351 | [ST_Union](st_union.md) |
+| `ST_Difference(GEOMETRY, GEOMETRY)` | 120361 | [ST_Difference](st_difference.md) |
+| `ST_SymDifference(GEOMETRY, GEOMETRY)` | 120371 | [ST_SymDifference](st_symdifference.md) |
+
+## Cartesian buffer
+
+Native XY POINT, LINESTRING, POLYGON and their MULTI families; finite signed distance in input CRS units, round approximation, NULL propagation and polygonal EMPTY output. The result preserves CRS. GEOGRAPHY, collections, Z/M and options are unsupported by ST_Buffer.
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_Buffer(GEOMETRY, DOUBLE)` | 120401 | [ST_Buffer](st_buffer.md) |
+
+## Topology preserving simplification
+
+Cartesian XY scalar geometry with preserved families, rings, contacts, typed empty children and CRS. Tolerance uses input coordinate units. GEOGRAPHY, Z/M and cross-row coverage simplification are unsupported.
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_SimplifyPreserveTopology(GEOMETRY, DOUBLE)` | 120411 | [ST_SimplifyPreserveTopology](st_simplifypreservetopology.md) |
+
+## H3 cell functions
+
+These overloads require native XY CRS84 GEOGRAPHY for geometry arguments; the cell is a signed BIGINT. See [H3 functions](h3-functions.md) for validity, NULL/EMPTY, fill approximation, and limits.
+
+| Signature | Function ID | Result |
+| --- | ---: | --- |
+| `H3_FromGeo(GEOGRAPHY, INT)` | 120500 | `BIGINT` |
+| `H3_GridDisk(BIGINT, INT)` | 120501 | `ARRAY<BIGINT>` |
+| `H3_ToParent(BIGINT, INT)` | 120502 | `BIGINT` |
+| `H3_ToChildren(BIGINT, INT)` | 120503 | `ARRAY<BIGINT>` |
+| `H3_Resolution(BIGINT)` | 120504 | `INT` |
+| `H3_ToBoundary(BIGINT)` | 120505 | `GEOGRAPHY` |
+| `H3_PolygonToCells(GEOGRAPHY, INT)` | 120506 | `ARRAY<BIGINT>` |
+
+## Joint coverage simplification (window)
+
+Both overloads process the whole partition jointly and return one XY GEOMETRY per row with the original family and CRS. Parameters must be foldable plan constants; OVER is required. No inner ORDER BY, explicit frame or ordinary aggregate support. See [ST_CoverageSimplify](st_coveragesimplify.md) for topology, NULL/EMPTY, tolerance and resource limits.
+
+| Signature | Result |
+| --- | --- |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE) OVER (...)` | `GEOMETRY` |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE, BOOLEAN) OVER (...)` | `GEOMETRY` |
+
+GEOGRAPHY overloads are not registered. BE resolves this window function by name and logical argument/result types through the window registry. Upgrade BEs before FEs.

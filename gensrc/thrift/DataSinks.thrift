@@ -263,6 +263,10 @@ struct TOlapTableSink {
     // combined txn logs (each writing CN produces a PARTIAL txn log for the tablet; the sender
     // aggregates them into one before writing the combined log).
     36: optional bool enable_multi_node_write
+    // Shared-data only: the destination table's flat_json.* properties, set when the table has any.
+    // The CN writer takes them from here instead of from its tablet metadata cache, which is empty
+    // for a tablet's first write under light_weight_tablet_creation.
+    37: optional Descriptors.TFlatJsonConfig flat_json_config
 }
 
 struct TSchemaTableSink {
@@ -309,6 +313,8 @@ struct TIcebergTableSink {
     //   IcebergRowDeltaSink (both)        → both
     11: optional Types.TCompressionType delete_compression_type
     12: optional TIcebergTableSinkExt ext
+    // Parquet encryption info for encrypted Iceberg tables
+    13: optional PlanNodes.TParquetEncryptionInfo parquet_encryption_info
 }
 
 struct THiveTableSink {

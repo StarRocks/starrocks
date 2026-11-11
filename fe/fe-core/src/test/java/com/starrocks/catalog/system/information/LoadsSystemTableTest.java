@@ -18,25 +18,31 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.LoadJobVisibility;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadMultiStmtTask;
 import com.starrocks.load.streamload.StreamLoadTask;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TGetLoadsResult;
 import com.starrocks.thrift.TLoadInfo;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,6 +67,34 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * incompatible interpretation mid-flight.
  */
 public class LoadsSystemTableTest {
+
+    // The stream load tasks authorized by the current test.
+    private static final AtomicInteger AUTHORIZED_TASKS = new AtomicInteger();
+
+    // These tests pin the request predicates and paging. How much of a job a caller may see is covered by
+    // LoadJobVisibilityTest, so here every job is shown in full.
+    @BeforeEach
+    public void showEveryJob() {
+        AUTHORIZED_TASKS.set(0);
+        new MockUp<LoadJobVisibility>() {
+            @Mock
+            public ConnectContext callerOf(TGetLoadsParams request) {
+                return null;
+            }
+
+            @Mock
+            public LoadJobVisibility.Access accessOf(ConnectContext context, LoadJob job) {
+                return LoadJobVisibility.Access.FULL;
+            }
+
+            @Mock
+            public List<LoadJobVisibility.VisibleTask> visibleTasks(ConnectContext context,
+                                                                     AbstractStreamLoadTask task) {
+                AUTHORIZED_TASKS.incrementAndGet();
+                return LoadJobVisibility.allTasksInFull(task);
+            }
+        };
+    }
 
     private static long epochMillis(String wallClock, ZoneId zone) {
         return LocalDateTime.parse(wallClock.replace(' ', 'T'))
@@ -1180,5 +1214,7 @@ public class LoadsSystemTableTest {
 
         assertEquals(0, labels(result).size());
         assertFalse(result.isSetNext_job_id_offset());
+        // Authorizing locks the target tables, so a task the request rules out is not authorized.
+        assertEquals(0, AUTHORIZED_TASKS.get());
     }
 }

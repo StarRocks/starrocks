@@ -299,10 +299,10 @@ int StreamLoadAction::on_header(HttpRequest* req) {
 }
 
 Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ctx) {
-    // auth information
-    if (!parse_basic_auth(*http_req, &ctx->auth)) {
-        LOG(WARNING) << "parse basic authorization failed." << ctx->brief();
-        return Status::InternalError("no valid Basic authorization");
+    // auth information (Basic or Bearer)
+    if (!parse_auth(*http_req, &ctx->auth)) {
+        LOG(WARNING) << "parse authorization failed." << ctx->brief();
+        return Status::InternalError("no valid authorization");
     }
 
     if (!http_req->header(HTTP_ENABLE_MERGE_COMMIT).empty()) {

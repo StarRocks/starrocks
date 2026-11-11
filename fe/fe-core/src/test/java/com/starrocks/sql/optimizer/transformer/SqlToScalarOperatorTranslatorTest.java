@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LambdaArgument;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -33,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.InvalidType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Test;
 
@@ -101,16 +103,19 @@ public class SqlToScalarOperatorTranslatorTest {
         FunctionSet functionSet = new FunctionSet();
         functionSet.init();
         Function function = functionSet.getFunction(
-                new Function(new FunctionName("ai_complete"), new com.starrocks.type.Type[] {VarcharType.VARCHAR},
+                new Function(new FunctionName("ai_complete"), new com.starrocks.type.Type[] {VarcharType.VARCHAR,
+                        VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON},
                         InvalidType.INVALID, false),
                 Function.CompareMode.IS_IDENTICAL);
         assertNotNull(function);
-        assertEquals(1, function.getNumArgs());
+        assertEquals(4, function.getNumArgs());
 
-        FunctionCallExpr firstExpr = new FunctionCallExpr("ai_complete", ImmutableList.of(new StringLiteral("same")));
+        FunctionCallExpr firstExpr = new FunctionCallExpr("ai_complete", ImmutableList.of(new StringLiteral("same"),
+                new StringLiteral(""), new StringLiteral(""), NullLiteral.create(JsonType.JSON)));
         firstExpr.setFn(function);
         firstExpr.setType(VarcharType.VARCHAR);
-        FunctionCallExpr secondExpr = new FunctionCallExpr("ai_complete", ImmutableList.of(new StringLiteral("same")));
+        FunctionCallExpr secondExpr = new FunctionCallExpr("ai_complete", ImmutableList.of(new StringLiteral("same"),
+                new StringLiteral(""), new StringLiteral(""), NullLiteral.create(JsonType.JSON)));
         secondExpr.setFn(function);
         secondExpr.setType(VarcharType.VARCHAR);
 
@@ -119,12 +124,12 @@ public class SqlToScalarOperatorTranslatorTest {
         CallOperator first = (CallOperator) SqlToScalarOperatorTranslator.translate(firstExpr, mapping, factory);
         CallOperator second = (CallOperator) SqlToScalarOperatorTranslator.translate(secondExpr, mapping, factory);
 
-        assertEquals(2, first.getArguments().size());
-        assertEquals(2, second.getArguments().size());
-        assertEquals(1, first.getFunction().getNumArgs());
-        assertEquals(1, second.getFunction().getNumArgs());
-        int firstOccurrenceId = ((ConstantOperator) first.getArguments().get(1)).getInt();
-        int secondOccurrenceId = ((ConstantOperator) second.getArguments().get(1)).getInt();
+        assertEquals(5, first.getArguments().size());
+        assertEquals(5, second.getArguments().size());
+        assertEquals(4, first.getFunction().getNumArgs());
+        assertEquals(4, second.getFunction().getNumArgs());
+        int firstOccurrenceId = ((ConstantOperator) first.getArguments().get(4)).getInt();
+        int secondOccurrenceId = ((ConstantOperator) second.getArguments().get(4)).getInt();
         assertNotEquals(firstOccurrenceId, secondOccurrenceId);
     }
 }

@@ -16,6 +16,7 @@
 
 #include <arpa/inet.h>
 #include <curl/curl.h>
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 #include <netinet/in.h>
 #include <openssl/evp.h>
@@ -595,7 +596,7 @@ public:
     }
 
     std::string url(std::string_view host, std::string_view target) const {
-        return "https://" + std::string(host) + ":" + std::to_string(_port) + std::string(target);
+        return fmt::format("https://{}:{}{}", host, _port, target);
     }
 
 private:
@@ -1587,9 +1588,8 @@ TEST_F(AIHttpClientTest, TwoChunkReservationFailureReleasesOnlyRequestAndOwnedFi
     constexpr std::string_view second_chunk = "2";
     ResponseChunkHandshake handshake;
     LoopbackHttpServer server([&](int socket, const CapturedHttpRequest&) {
-        std::string headers =
-                "HTTP/1.1 200 OK\r\nContent-Length: " + std::to_string(first_chunk.size() + second_chunk.size()) +
-                "\r\nConnection: close\r\n\r\n";
+        std::string headers = fmt::format("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                                          first_chunk.size() + second_chunk.size());
         ASSERT_TRUE(send_all(socket, headers));
         ASSERT_TRUE(send_all(socket, first_chunk));
         if (!handshake.wait_for_client_to_consume_first_chunk()) {

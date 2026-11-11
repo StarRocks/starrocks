@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.load.Load;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -87,6 +88,7 @@ public abstract class LoadScanNode extends ScanNode {
         }
         whereExpr = ExprSubstitutionVisitor.rewrite(whereExpr, smap);
         whereExpr = ExprUtils.analyzeAndCastFold(whereExpr);
+        Load.rejectAIExpression(whereExpr);
 
         if (!whereExpr.getType().isBoolean()) {
             throw new StarRocksException("where statement is not a valid statement return bool");

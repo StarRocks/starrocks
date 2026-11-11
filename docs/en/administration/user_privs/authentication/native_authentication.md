@@ -6,6 +6,9 @@ description: "Create and manage users using the native authentication within Sta
 
 # Native Authentication
 
+import EditionSpecificDefaultAdminUser from '../../../_assets/commonMarkdown/Edition_Specific_Default_Admin_User.mdx'
+import EditionSpecificResetLostAdminPassword from '../../../_assets/commonMarkdown/Edition_Specific_Reset_Lost_Admin_Password.mdx'
+
 Create and manage users using the native authentication within StarRocks through SQL commands.
 
 StarRocks native authentication is a password-based authentication method. In addition to that, StarRocks also supports integrating with external authentication systems such as LDAP. For more instructions, see [Authenticate with Security Integration](./security_integration.md).
@@ -15,6 +18,8 @@ StarRocks native authentication is a password-based authentication method. In ad
 Users with the system-defined role `user_admin` can create users, alter users, and drop users in StarRocks.
 
 :::
+
+<EditionSpecificDefaultAdminUser />
 
 ## Create user
 
@@ -60,7 +65,6 @@ You can reset the password for a user using [SET PASSWORD](../../../sql-referenc
 > **NOTE**
 >
 > - Any user can reset their own passwords without needing any privileges.
-> - Only the `root` user itself can set its password. If you have lost its password and cannot connect to StarRocks, see [Reset lost root password](#reset-lost-root-password) for more instructions.
 
 Both the following examples reset the password of `jack` to `54321`:
 
@@ -76,53 +80,7 @@ Both the following examples reset the password of `jack` to `54321`:
   ALTER USER jack@'172.10.1.10' IDENTIFIED BY '54321';
   ```
 
-#### Reset lost root password
-
-If you have lost the password of the `root` user and cannot connect to StarRocks, you can reset it by following these procedures:
-
-1. Add the following configuration item to the configuration files **fe/conf/fe.conf** of **all FE nodes** to disable user authentication:
-
-   ```YAML
-   enable_auth_check = false
-   ```
-
-2. Restart **all FE nodes** to allow the configuration to take effect.
-
-   ```Bash
-   ./fe/bin/stop_fe.sh
-   ./fe/bin/start_fe.sh
-   ```
-
-3. Connect from a MySQL client to StarRocks via the `root` user. You do not need to specify the password when user authentication is disabled.
-
-   ```Bash
-   mysql -h <fe_ip_or_fqdn> -P<fe_query_port> -uroot
-   ```
-
-4. Reset the password for the `root` user.
-
-   ```SQL
-   SET PASSWORD for root = PASSWORD('xxxxxx');
-   ```
-
-5. Re-enable user authentication by setting the configuration item `enable_auth_check` to `true` in the configuration files **fe/conf/fe.conf** of **all FE nodes**.
-
-   ```YAML
-   enable_auth_check = true
-   ```
-
-6. Restart **all FE nodes** to allow the configuration to take effect.
-
-   ```Bash
-   ./fe/bin/stop_fe.sh
-   ./fe/bin/start_fe.sh
-   ```
-
-7. Connect from a MySQL client to StarRocks using the `root` user and the new password to verify whether the password is reset successfully.
-
-   ```Bash
-   mysql -h <fe_ip_or_fqdn> -P<fe_query_port> -uroot -p<xxxxxx>
-   ```
+<EditionSpecificResetLostAdminPassword />
 
 ## Drop a user
 

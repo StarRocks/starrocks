@@ -175,7 +175,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     /**
      * A bare union-aggregate select item collapses to a single column: the state IS the visible
      * output, so no hidden __AGG_STATE_ copy is stored. Creating the MV runs the CREATE-time
-     * trial, so this also exercises IvmRewriter.bindStateColumnsForAggregate end to end.
+     * trial, so this also exercises IvmRewriter.bindMvColumnsForAggregate end to end.
      */
     @Test
     public void testUnionAggregateCollapsesStateColumn() throws Exception {
@@ -760,6 +760,22 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         } finally {
             connectContext.getSessionVariable().setEnableIVMRefresh(previousIvmEnabled);
             connectContext.getSessionVariable().setTvrTargetMvid(previousTvrTargetMvId);
+        }
+    }
+
+    @Test
+    public void testTrialRewriteIgnoresSqlSelectLimit() throws Exception {
+        long previousSelectLimit = connectContext.getSessionVariable().getSqlSelectLimit();
+        try {
+            connectContext.getSessionVariable().setSqlSelectLimit(200);
+            String ddl = "CREATE MATERIALIZED VIEW mv_trial_select_limit "
+                    + "REFRESH DEFERRED MANUAL "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+            CreateMaterializedViewStatement stmt = analyzeMvDdl(ddl);
+            assertEquals(MaterializedView.RefreshMode.INCREMENTAL, stmt.getCurrentRefreshMode());
+        } finally {
+            connectContext.getSessionVariable().setSqlSelectLimit(previousSelectLimit);
         }
     }
 

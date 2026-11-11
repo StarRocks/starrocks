@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.api.client.util.Lists;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.cache.CacheBuilder;
@@ -36,6 +37,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.mv.PreResolvedBaseTables;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -44,6 +46,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -93,6 +96,7 @@ import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.logging.log4j.LogManager;
@@ -103,6 +107,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -301,7 +306,9 @@ public class MetadataMgr {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
                 }
 
-                if (tableExists(context, catalogName, dbName, tableName)) {
+                // Paimon's native create handles existing tables without consulting the read-side table cache.
+                if (!Table.TableType.PAIMON.name().equalsIgnoreCase(stmt.getEngineName())
+                        && tableExists(context, catalogName, dbName, tableName)) {
                     if (stmt.isSetIfNotExists()) {
                         LOG.info("create table[{}] which already exists", tableName);
                         return false;
@@ -590,8 +597,8 @@ public class MetadataMgr {
         if (baseTableInfo.isInternalCatalog()) {
             return Optional.ofNullable(localMetastore.getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
         } else {
-            return Optional.ofNullable(
-                    getTable(context, baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName()));
+            return PreResolvedBaseTables.getOrResolve(baseTableInfo, () -> Optional.ofNullable(
+                    getTable(context, baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName())));
         }
     }
 
@@ -754,6 +761,28 @@ public class MetadataMgr {
         return statistics.setStatsSource(Statistics.StatsSource.ANALYZE).build();
     }
 
+    // An external table planned from ANALYZE statistics gets its scan row count from the max of the scanned columns'
+    // own row counts, each SAMPLE-analyzed column extrapolated separately; no single table row count reproduces it,
+    // so a query dump records them per column. They are read from the same (cached) statistics the plan just used.
+    private void captureAnalyzedColumnRowCountsToDump(OptimizerContext session, String catalogName, Table table,
+                                                      Map<ColumnRefOperator, Column> columns) {
+        if (session.getDumpInfo() == null || CatalogMgr.isInternalCatalog(catalogName)) {
+            return;
+        }
+        List<ColumnRefOperator> refs = columns.keySet().stream()
+                .filter(ref -> !FeNameFormat.FORBIDDEN_COLUMN_NAMES.contains(ref.getName()))
+                .collect(Collectors.toList());
+        List<String> columnNames = refs.stream().map(ref -> columns.get(ref).getName()).collect(Collectors.toList());
+        List<ConnectorTableColumnStats> stats =
+                GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table, columnNames);
+        for (int i = 0; i < refs.size() && i < stats.size(); i++) {
+            if (!stats.get(i).isUnknown()) {
+                session.getDumpInfo().addExternalColumnRowCount(table, refs.get(i).getName(),
+                        (long) stats.get(i).getRowCount());
+            }
+        }
+    }
+
     public Statistics getTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
@@ -786,6 +815,10 @@ public class MetadataMgr {
         // (100 for iceberg / 1 for hive) and plans an empty table with the wrong cardinality.
         if (statistics.getOutputRowCount() >= 0 && !Double.isInfinite(statistics.getOutputRowCount())) {
             session.getDumpInfo().addExternalTableRowCount(table, (long) statistics.getOutputRowCount());
+        }
+        if (table instanceof IcebergTable icebergTable
+                && icebergTable.getNativeTable() instanceof BaseTable) {
+            session.getDumpInfo().addExternalTableFormatVersion(table, icebergTable.getFormatVersion());
         }
         // For a partitioned iceberg table also record its partition spec + names + per-partition counts (hive
         // captures the same via OptExternalPartitionPruner) so replay can reproduce partition pruning.
@@ -836,7 +869,6 @@ public class MetadataMgr {
         if (internalStatistics == null ||
                 internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             // Get basic stats from connector metadata.
-            session.setObtainedFromInternalStatistics(false);
             // Avoid `analyze table` to collect table statistics from metadata.
             if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
                 return internalStatistics;
@@ -866,13 +898,66 @@ public class MetadataMgr {
                             setOutputRowCount(connectorBasicStats.getOutputRowCount())
                             .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
                 } else {
+                    // A connector serving ANALYZE statistics (query dump replay) keeps that stats source, so the
+                    // partition predicate stays in the selectivity like the internal-statistics branch below.
                     return connectorBasicStats;
                 }
             }
         } else {
-            session.setObtainedFromInternalStatistics(true);
-            return internalStatistics;
+            captureAnalyzedColumnRowCountsToDump(session, catalogName, table, columns);
+            return widenWithPartitionSourceRanges(catalogName, table, columns, internalStatistics, versionRange);
         }
+    }
+
+    // ANALYZE min/max are a snapshot of the last collection: partitions ingested since then lie outside them, and a
+    // predicate selecting only those would be estimated at 0 rows. Widen each partition source column to the range
+    // the table version's partitions cover, as table metadata reports it. Row count and NDV stay the ANALYZE values.
+    // The widened statistics are what a query dump records, so replay (without table metadata) sees the same.
+    private Statistics widenWithPartitionSourceRanges(String catalogName, Table table,
+                                                      Map<ColumnRefOperator, Column> columns,
+                                                      Statistics statistics, TvrVersionRange versionRange) {
+        Map<String, Pair<Double, Double>> ranges;
+        try {
+            ranges = getOptionalMetadata(catalogName)
+                    .map(metadata -> metadata.getPartitionSourceColumnRanges(table, versionRange))
+                    .orElse(Map.of());
+        } catch (Exception e) {
+            LOG.warn("Failed to get partition source column ranges of {}.{}", catalogName, table.getName(), e);
+            return statistics;
+        }
+        return widenColumnRanges(statistics, columns, ranges);
+    }
+
+    // Only widens: a range never narrows ANALYZE min/max, and a column without ANALYZE statistics is left alone.
+    @VisibleForTesting
+    static Statistics widenColumnRanges(Statistics statistics, Map<ColumnRefOperator, Column> columns,
+                                        Map<String, Pair<Double, Double>> ranges) {
+        if (ranges.isEmpty()) {
+            return statistics;
+        }
+        Statistics.Builder builder = null;
+        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : statistics.getColumnStatistics().entrySet()) {
+            ColumnStatistic stat = entry.getValue();
+            Column column = columns.get(entry.getKey());
+            if (stat.isUnknown() || column == null) {
+                continue;
+            }
+            Pair<Double, Double> range = ranges.get(column.getName().toLowerCase(Locale.ROOT));
+            if (range == null) {
+                continue;
+            }
+            double min = Math.min(stat.getMinValue(), range.first);
+            double max = Math.max(stat.getMaxValue(), range.second);
+            if (min == stat.getMinValue() && max == stat.getMaxValue()) {
+                continue;
+            }
+            if (builder == null) {
+                builder = Statistics.buildFrom(statistics);
+            }
+            builder.addColumnStatistic(entry.getKey(),
+                    ColumnStatistic.buildFrom(stat).setMinValue(min).setMaxValue(max).build());
+        }
+        return builder == null ? statistics : builder.build();
     }
 
     public Statistics getTableStatistics(OptimizerContext session,
@@ -986,6 +1071,15 @@ public class MetadataMgr {
                              List<String> partitionNames, boolean onlyCachedPartitions) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         connectorMetadata.ifPresent(metadata -> metadata.refreshTable(srDbName, table, partitionNames, onlyCachedPartitions));
+    }
+
+    /**
+     * See {@link ConnectorMetadata#invalidateTableForRead}. Goes through the query-level metadata when there is a
+     * query, so what this query already cached about the table is dropped along with the catalog's cache.
+     */
+    public void invalidateTableForRead(String catalogName, String srDbName, Table table) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> metadata.invalidateTableForRead(srDbName, table));
     }
 
     public void finishSink(String catalogName, String dbName, String tableName,

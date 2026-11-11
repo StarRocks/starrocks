@@ -20,10 +20,14 @@
 #include <cstring>
 #include <limits>
 #include <optional>
+#include <random>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "base/time/timezone_utils.h"
+#include "base/time/tz_offset_cache.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
@@ -148,6 +152,69 @@ TEST(VariantRowConverterTest, CastArithmeticAndTemporalValues) {
     TimestampValue expected;
     expected.from_unix_second(kSeconds, kSubMicros);
     EXPECT_EQ(expected, datetime_data->get_data()[0]);
+}
+
+// TIMESTAMP_TZ casts to DATETIME / DATE / TIME show the instant in the zone with its offset at that instant, the
+// same with a bound offset cache (as the column loops pass) as with the per-row cctz conversion, across DST changes,
+// in any order and far outside the usual range.
+TEST(VariantRowConverterTest, CastTimestampTzWithOffsetCache) {
+    std::mt19937_64 rng(3);
+    std::vector<int64_t> micros_values = {0,
+                                          -1,
+                                          1,
+                                          1719835200LL * USECS_PER_SEC + 1,
+                                          1729990800LL * USECS_PER_SEC - 1,
+                                          1729990800LL * USECS_PER_SEC,
+                                          std::numeric_limits<int64_t>::min() / 2,
+                                          std::numeric_limits<int64_t>::max() / 2};
+    for (int i = 0; i < 3000; i++) {
+        micros_values.push_back((static_cast<int64_t>(rng() % 6000000000ULL) - 2000000000LL) * USECS_PER_SEC +
+                                static_cast<int64_t>(rng() % USECS_PER_SEC));
+    }
+    for (const std::string name : {"America/Los_Angeles", "Europe/London", "UTC", "+05:45"}) {
+        cctz::time_zone zone;
+        ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(name, zone)) << name;
+        TzOffsetCache offset_cache;
+        offset_cache.bind(zone);
+        ColumnBuilder<TYPE_DATETIME> datetime_plain(micros_values.size()), datetime_cached(micros_values.size());
+        ColumnBuilder<TYPE_DATE> date_plain(micros_values.size()), date_cached(micros_values.size());
+        ColumnBuilder<TYPE_TIME> time_plain(micros_values.size()), time_cached(micros_values.size());
+        for (int64_t micros : micros_values) {
+            VariantRowValue row = make_variant_row(encode_primitive<int64_t>(VariantType::TIMESTAMP_TZ, micros));
+            ASSERT_OK((VariantRowConverter::cast_to<TYPE_DATETIME, false>(row.as_ref(), zone, datetime_plain)));
+            ASSERT_OK((VariantRowConverter::cast_to<TYPE_DATETIME, false>(row.as_ref(), zone, datetime_cached,
+                                                                          &offset_cache)));
+            ASSERT_OK((VariantRowConverter::cast_to<TYPE_DATE, false>(row.as_ref(), zone, date_plain)));
+            ASSERT_OK((VariantRowConverter::cast_to<TYPE_DATE, false>(row.as_ref(), zone, date_cached, &offset_cache)));
+            ASSERT_OK((VariantRowConverter::cast_to<TYPE_TIME, false>(row.as_ref(), zone, time_plain)));
+            ASSERT_OK((VariantRowConverter::cast_to<TYPE_TIME, false>(row.as_ref(), zone, time_cached, &offset_cache)));
+        }
+        auto check = [&](auto& plain, auto& cached, const char* type) {
+            auto plain_column = plain.build(false);
+            auto cached_column = cached.build(false);
+            ASSERT_EQ(micros_values.size(), cached_column->size());
+            for (size_t i = 0; i < micros_values.size(); i++) {
+                ASSERT_EQ(plain_column->debug_item(i), cached_column->debug_item(i))
+                        << name << " " << type << " micros=" << micros_values[i];
+            }
+        };
+        check(datetime_plain, datetime_cached, "DATETIME");
+        check(date_plain, date_cached, "DATE");
+        check(time_plain, time_cached, "TIME");
+
+        // Spot values, independent of the conversion code.
+        if (name == "Europe/London") {
+            ColumnBuilder<TYPE_DATETIME> spot(2);
+            for (int64_t seconds : {1719835200LL, 1704110400LL}) {
+                VariantRowValue row =
+                        make_variant_row(encode_primitive<int64_t>(VariantType::TIMESTAMP_TZ, seconds * USECS_PER_SEC));
+                ASSERT_OK((VariantRowConverter::cast_to<TYPE_DATETIME, true>(row.as_ref(), zone, spot, &offset_cache)));
+            }
+            auto column = spot.build(false);
+            EXPECT_EQ("2024-07-01 13:00:00", column->debug_item(0));
+            EXPECT_EQ("2024-01-01 12:00:00", column->debug_item(1));
+        }
+    }
 }
 
 TEST(VariantRowConverterTest, CastBooleanAndString) {

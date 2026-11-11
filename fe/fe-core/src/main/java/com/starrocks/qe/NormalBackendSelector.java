@@ -94,9 +94,10 @@ public class NormalBackendSelector implements BackendSelector {
 
             // [Shared-Data Only] If all replicas are in unavailable nodes, a backup node can be selected on behalf of starmgr.
             if (minLocation == null && workerProvider.allowUsingBackupNode() && !unavailableDataNodeIds.isEmpty()) {
-                Collections.shuffle(unavailableDataNodeIds);
+                // Keep the order deterministic, so the same tablet resolves to the same backup on every query.
+                Collections.sort(unavailableDataNodeIds);
                 for (long unavailableId : unavailableDataNodeIds) {
-                    long backupNodeId = workerProvider.selectBackupWorker(unavailableId);
+                    long backupNodeId = selectBackupWorker(scanRangeLocations, unavailableId);
                     LOG.debug("Select a backup node:{} for node:{}", backupNodeId, unavailableId);
                     if (backupNodeId > 0) {
                         // using the backupNode to generate a new ScanRangeLocation
@@ -137,5 +138,14 @@ public class NormalBackendSelector implements BackendSelector {
         if (LOG.isDebugEnabled()) {
             LOG.debug("assignedRowCountPerHost: {}", assignedRowCountPerHost);
         }
+    }
+
+    private long selectBackupWorker(TScanRangeLocations scanRangeLocations, long unavailableId) {
+        if (scanRangeLocations.getScan_range().isSetInternal_scan_range()) {
+            // The tablet is the affinity key, the same key OlapTableSink uses, so scan and ingest agree on the backup.
+            long tabletId = scanRangeLocations.getScan_range().getInternal_scan_range().getTablet_id();
+            return workerProvider.selectBackupWorker(unavailableId, tabletId);
+        }
+        return workerProvider.selectBackupWorker(unavailableId);
     }
 }

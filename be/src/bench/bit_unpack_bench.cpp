@@ -25,6 +25,12 @@
 #include "base/bit/bit_packing_avx2.h"
 #include "bench/bit_copy.h"
 
+// The BM_*_AVX2 arms below measure bitpacking_arrow, which only reaches Arrow's unpack32_avx2()
+// kernels when the thirdparty Arrow still installs its (internal) bpacking headers -- see
+// STARROCKS_HAVE_ARROW_BITPACKING_HEADERS in be/CMakeLists.txt. Recent Arrow releases no longer do,
+// and bitpacking_arrow then forwards to bitpacking_default, so those arms report the scalar
+// baseline rather than an AVX2 number. Check the configure-time message before comparing columns.
+
 namespace starrocks {
 
 class BitUnpackBench {

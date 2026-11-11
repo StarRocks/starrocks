@@ -74,8 +74,20 @@ public record GeoTypeDescriptor(LogicalType logicalType, CoordinateSystem coordi
         if (!crs.startsWith("EPSG:")) {
             return null;
         }
+        // Match BE std::from_chars: an optional minus followed by ASCII digits.
+        // Other non-empty CRS identifiers remain opaque, with no derived numeric SRID.
+        String suffix = crs.substring("EPSG:".length());
+        int start = suffix.startsWith("-") ? 1 : 0;
+        if (start == suffix.length()) {
+            return null;
+        }
+        for (int i = start; i < suffix.length(); ++i) {
+            if (suffix.charAt(i) < '0' || suffix.charAt(i) > '9') {
+                return null;
+            }
+        }
         try {
-            return Integer.valueOf(crs.substring("EPSG:".length()));
+            return Integer.valueOf(suffix);
         } catch (NumberFormatException e) {
             return null;
         }

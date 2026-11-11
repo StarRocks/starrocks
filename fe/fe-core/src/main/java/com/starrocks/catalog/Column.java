@@ -245,6 +245,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                     "aggregation type is AGG_STATE_UNION");
         }
         this.aggStateDesc = aggStateDesc;
+        // Aggregate-state metadata belongs to this column, even when the input type is a shared primitive
+        // or comes from another column (for example, a view over a synchronous MV).
+        if (aggStateDesc != null || this.type.getAggStateDesc() != null) {
+            this.type = this.type.clone();
+        }
         this.type.setAggStateDesc(aggStateDesc);
 
         this.isAggregationTypeImplicit = false;
@@ -289,6 +294,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.columnId = column.getColumnId();
         this.aggStateDesc = column.aggStateDesc;
         this.type = column.type;
+        if (column.aggStateDesc != null || this.type.getAggStateDesc() != null) {
+            this.type = this.type.clone();
+        }
         this.type.setAggStateDesc(column.aggStateDesc);
         this.aggregationType = column.getAggregationType();
         this.isAggregationTypeImplicit = column.isAggregationTypeImplicit();

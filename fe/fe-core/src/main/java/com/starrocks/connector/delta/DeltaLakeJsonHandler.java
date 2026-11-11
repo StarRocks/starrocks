@@ -24,6 +24,7 @@ import com.google.common.cache.Cache;
 import com.google.common.collect.Lists;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.defaults.engine.DefaultJsonHandler;
@@ -67,6 +68,10 @@ public class DeltaLakeJsonHandler extends DefaultJsonHandler {
     }
 
     public static List<JsonNode> readJsonFile(String filePath, FileIO fileIO) throws IOException {
+        // Both callers below reach storage: the jsonCache loader on a miss, and the last_checkpoint file
+        // which is deliberately never cached. The delta kernel reads its log on its own rather than
+        // through the FE's file-system layer, so this wrapper is the only door there is.
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "DeltaLakeJsonHandler.readParseJsonFile")) {
             try (BufferedReader fileReader = new BufferedReader(new InputStreamReader(
                     fileIO.newInputFile(filePath, -1).newStream(), StandardCharsets.UTF_8))) {

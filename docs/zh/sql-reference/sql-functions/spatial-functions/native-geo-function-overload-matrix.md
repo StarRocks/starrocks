@@ -102,6 +102,16 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 所有 overload 均接受七种 XY OGC family，并在适用时递归处理 `MULTI*` 和 `GEOMETRYCOLLECTION`。`NULL` 传播；度量对 `EMPTY` 返回 0，`ST_Centroid` 返回 `POINT EMPTY`，`ST_IsValid` 返回 `true`。可读取但拓扑无效的值仅由 `ST_IsValid` 返回 `false`，度量和质心会拒绝该输入。WKB 格式错误、不支持的维度或 descriptor 会返回错误。
 
 球面面环与方向无关，并归一化为较小区域；单个环不表示超过半球的区域。参见 [ST_Area](st_area.md)、[ST_Length](st_length.md)、[ST_Perimeter](st_perimeter.md)、[ST_Centroid](st_centroid.md) 和 [ST_IsValid](st_isvalid.md)。
+## CRS 元数据与坐标转换
+
+| 签名 | 函数 ID | 结果 | 行为 |
+| --- | ---: | --- | --- |
+| `ST_SRID(GEOMETRY value)` | 120300 | `INT` 或 `NULL` | 从描述符读取数字 EPSG 映射，不转换坐标。 |
+| `ST_SetSRID(GEOMETRY value, INT constant)` | 120305 | `GEOMETRY`，目标 EPSG 描述符 | 只修改元数据；WKB 和坐标保持不变。 |
+| `ST_Transform(GEOMETRY value, INT constant)` | 120310 | `GEOMETRY`，目标 EPSG 描述符 | 使用 Web Mercator 公式在 EPSG:4326 和 EPSG:3857 之间重投影 XY 坐标。 |
+
+两个目标 SRID 都必须是可由 FE 折叠为常量的 4326 或 3857。源 CRS 必须是 EPSG:4326、EPSG:3857 或 OGC:CRS84。`ST_Transform` 处理七种 XY OGC 几何类型及集合；`NULL` 传播，`EMPTY` 保持为空。参见 [ST_SRID](st_srid.md)、[ST_SetSRID](st_setsrid.md) 和 [ST_Transform](st_transform.md)。
+
 ## 旧版兼容性
 
 原生重载不会重新编号或替换现有的 `VARCHAR` 函数：
@@ -118,6 +128,60 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 
 ## 升级与参考测试契约
 
-滚动升级时，应先升级 BE，再升级 FE。这些函数使用普通的稳定函数 ID 分发，不引入单独的 GEO 版本门控。不支持新 FE 与旧 BE 的升级顺序。
+滚动升级时，应先升级 BE，再升级 FE。原生标量函数使用普通的稳定函数 ID 分发，不引入单独的 GEO 版本门控。覆盖窗口注册表见下文。不支持新 FE 与旧 BE 的升级顺序。
 
 该契约由聚焦的 FE analyzer 测试验证重载解析、返回类型、旧版兼容性和函数 ID，并由 BE registry 测试验证每个原生 ID。现有 BE 函数测试覆盖常量、Nullable、变化输入、`EMPTY`、格式错误输入、类型、维度、CRS 和描述符行为。
+
+## 多边形叠加运算
+
+支持具有兼容 CRS 的原生 XY 多边形及多多边形；4326 和 3857 均使用笛卡尔语义。NULL 参数返回 NULL。`ST_Union`、`ST_Difference` 和 `ST_SymDifference` 的单个组成部分返回 POLYGON，多个返回 MULTIPOLYGON，空结果返回 POLYGON EMPTY。无效拓扑返回错误。精度与资源限制见链接页面。
+
+`ST_Intersection` 还保留公共边和孤立接触点：无面积时返回线或点类型，混合维度返回 GEOMETRYCOLLECTION。已被较高维结果覆盖的部分不会重复返回；不相交的输入返回 POLYGON EMPTY。
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_Intersection(GEOMETRY, GEOMETRY)` | 120341 | [ST_Intersection](st_intersection.md) |
+| `ST_Union(GEOMETRY, GEOMETRY)` | 120351 | [ST_Union](st_union.md) |
+| `ST_Difference(GEOMETRY, GEOMETRY)` | 120361 | [ST_Difference](st_difference.md) |
+| `ST_SymDifference(GEOMETRY, GEOMETRY)` | 120371 | [ST_SymDifference](st_symdifference.md) |
+
+## 笛卡尔缓冲区
+
+支持原生 XY POINT、LINESTRING、POLYGON 及其 MULTI 类型。距离为输入 CRS 单位下的有限有符号值；圆角近似、NULL 传播、空结果为多边形 EMPTY。结果保留 CRS。ST_Buffer 不支持 GEOGRAPHY、集合、Z/M 或选项。
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_Buffer(GEOMETRY, DOUBLE)` | 120401 | [ST_Buffer](st_buffer.md) |
+
+## 保留拓扑的简化
+
+笛卡尔 XY 标量几何，保留类型、环、接触关系、带类型的 EMPTY 子元素和 CRS。容差使用输入坐标单位。不支持 GEOGRAPHY、Z/M 或跨行覆盖简化。
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_SimplifyPreserveTopology(GEOMETRY, DOUBLE)` | 120411 | [ST_SimplifyPreserveTopology](st_simplifypreservetopology.md) |
+
+## H3 网格函数
+
+几何参数需要原生 XY CRS84 GEOGRAPHY；网格索引是有符号 BIGINT。有效性、NULL/EMPTY、填充近似和限制见 [H3 函数](h3-functions.md)。
+
+| Signature | Function ID | Result |
+| --- | ---: | --- |
+| `H3_FromGeo(GEOGRAPHY, INT)` | 120500 | `BIGINT` |
+| `H3_GridDisk(BIGINT, INT)` | 120501 | `ARRAY<BIGINT>` |
+| `H3_ToParent(BIGINT, INT)` | 120502 | `BIGINT` |
+| `H3_ToChildren(BIGINT, INT)` | 120503 | `ARRAY<BIGINT>` |
+| `H3_Resolution(BIGINT)` | 120504 | `INT` |
+| `H3_ToBoundary(BIGINT)` | 120505 | `GEOGRAPHY` |
+| `H3_PolygonToCells(GEOGRAPHY, INT)` | 120506 | `ARRAY<BIGINT>` |
+
+## 联合覆盖简化（窗口）
+
+两个重载共同处理整个分区，每行返回保留原类型和 CRS 的 XY GEOMETRY。参数必须为可折叠的计划常量，OVER 必需。不支持窗口内 ORDER BY、显式 frame 和普通聚合。拓扑、NULL/EMPTY、容差与资源限制参见 [ST_CoverageSimplify](st_coveragesimplify.md)。
+
+| 签名 | 返回值 |
+| --- | --- |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE) OVER (...)` | `GEOMETRY` |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE, BOOLEAN) OVER (...)` | `GEOMETRY` |
+
+未注册 GEOGRAPHY 重载。BE 根据名称及逻辑参数/返回类型在窗口注册表中解析。升级时先升级 BE，再升级 FE。

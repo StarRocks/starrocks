@@ -4,6 +4,11 @@
 -- SELECT with v (defer + fetch K survivors), predicate + ANN (eager), IVFPQ (eager).
 
 
+-- index_build_threshold=1 forces the inline .vi build at these row counts; the default is
+-- 10000, which a SQL-tester-sized table never reaches, so without it every query below
+-- would run the missing-.vi fallback and never exercise lazy materialization over a real
+-- HNSW index.
+
 -- IVFPQ is quantized; refine so its embedding stays eager and distances are exact (the eager check below).
 SET enable_vector_index_refine = true;
 
@@ -16,7 +21,8 @@ CREATE TABLE lm_hnsw (
         "metric_type" = "l2_distance",
         "is_vector_normed" = "false",
         "M" = "16",
-        "efconstruction" = "100")
+        "efconstruction" = "100",
+        "index_build_threshold" = "1")
 ) ENGINE=OLAP
 DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1

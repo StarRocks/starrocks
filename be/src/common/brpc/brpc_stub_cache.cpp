@@ -44,6 +44,11 @@ std::mutex& singleton_cache_mutex() {
 inline int64_t absolute_deadline_us(int64_t ttl_seconds) {
     return butil::gettimeofday_us() + ttl_seconds * 1000 * 1000;
 }
+
+// brpc_failed_channel_reset_interval_s is mutable, and a value <= 0 disables the reset. While it's disabled,
+// FailedChannelResetTask still wakes up at this interval, only to read the config, so that setting it back to a
+// positive value takes effect without restarting the BE.
+constexpr int64_t kDisabledChannelResetPollIntervalS = 10;
 } // namespace
 
 template <typename CacheT, typename ExtractFn>
@@ -76,6 +81,61 @@ void reset_state_for_rebind(CacheT* cache, BthreadTimer* timer) {
     cache->_timer = timer;
 }
 
+template <typename CacheT>
+class FailedChannelResetTask : public BthreadTimerTask {
+public:
+    static void start(CacheT* cache) {
+        std::lock_guard<SpinLock> l(cache->_lock);
+        if (cache->_timer != nullptr && cache->_channel_reset_task == nullptr) {
+            schedule_locked(cache);
+        }
+    }
+
+    static void stop(CacheT* cache) {
+        std::shared_ptr<FailedChannelResetTask<CacheT>> task;
+        BthreadTimer* timer = nullptr;
+        {
+            std::lock_guard<SpinLock> l(cache->_lock);
+            task = std::move(cache->_channel_reset_task);
+            timer = cache->_timer;
+        }
+        if (task != nullptr && timer != nullptr) {
+            task->unschedule_and_join(timer);
+        }
+    }
+
+    explicit FailedChannelResetTask(CacheT* cache) : _cache(cache) {}
+
+    void Run() override {
+        if (config::brpc_failed_channel_reset_interval_s > 0) {
+            _cache->reset_failed_channels();
+        }
+        std::lock_guard<SpinLock> l(_cache->_lock);
+        if (_cache->_stopping || _cache->_channel_reset_task.get() != this) {
+            return;
+        }
+        schedule_locked(_cache);
+    }
+
+private:
+    static void schedule_locked(CacheT* cache) {
+        const int64_t interval_s = config::brpc_failed_channel_reset_interval_s;
+        auto task = std::make_shared<FailedChannelResetTask<CacheT>>(cache);
+        timespec tm = butil::seconds_from_now(interval_s > 0 ? interval_s : kDisabledChannelResetPollIntervalS);
+        auto status = cache->_timer->schedule(task.get(), tm);
+        if (!status.ok()) {
+            LOG(WARNING) << "Failed to schedule brpc failed channel reset task, failed brpc channels won't be reset "
+                            "until BE restarts: "
+                         << status;
+            cache->_channel_reset_task.reset();
+            return;
+        }
+        cache->_channel_reset_task = std::move(task);
+    }
+
+    CacheT* _cache;
+};
+
 struct BrpcStubCache::Metrics {
     Metrics(MetricRegistry* metric_registry, BrpcStubCache* cache) : registry(metric_registry), cache(cache) {
         DCHECK(registry != nullptr);
@@ -101,11 +161,37 @@ BrpcStubCache::BrpcStubCache(BthreadTimer* timer, MetricRegistry* metric_registr
     if (metric_registry != nullptr) {
         _metrics = std::make_unique<Metrics>(metric_registry, this);
     }
+    FailedChannelResetTask<BrpcStubCache>::start(this);
 }
 
 BrpcStubCache::~BrpcStubCache() {
     _metrics.reset();
+    FailedChannelResetTask<BrpcStubCache>::stop(this);
     wait_clean_tasks_terminate(this, [](const std::shared_ptr<StubPool>& pool) { return pool->_cleanup_task; });
+}
+
+void BrpcStubCache::reset_failed_channels() {
+    std::vector<std::pair<butil::EndPoint, std::vector<std::shared_ptr<PInternalService_RecoverableStub>>>> pools;
+    {
+        std::lock_guard<SpinLock> l(_lock);
+        pools.reserve(_stub_map.size());
+        for (auto& entry : _stub_map) {
+            pools.emplace_back(entry.first, entry.second->_stubs);
+        }
+    }
+    // Reset outside the lock
+    for (const auto& [endpoint, stubs] : pools) {
+        size_t num_reset = 0;
+        for (const auto& stub : stubs) {
+            if (stub->reset_channel_if_failed()) {
+                ++num_reset;
+            }
+        }
+        if (num_reset > 0) {
+            LOG(INFO) << "reset " << num_reset << " of " << stubs.size()
+                      << " brpc stubs whose connection failed, endpoint:" << endpoint;
+        }
+    }
 }
 
 bool BrpcStubCache::replace_cleanup_task_locked(const butil::EndPoint& endpoint,
@@ -305,6 +391,7 @@ LakeServiceBrpcStubCache* LakeServiceBrpcStubCache::getInstance() {
 
 LakeServiceBrpcStubCache::LakeServiceBrpcStubCache(BthreadTimer* timer) : _timer(timer) {
     _stub_map.init(500);
+    FailedChannelResetTask<LakeServiceBrpcStubCache>::start(this);
 }
 
 LakeServiceBrpcStubCache::~LakeServiceBrpcStubCache() {
@@ -313,10 +400,29 @@ LakeServiceBrpcStubCache::~LakeServiceBrpcStubCache() {
 
 void LakeServiceBrpcStubCache::bind_timer(BthreadTimer* timer) {
     reset_state_for_rebind(this, timer);
+    FailedChannelResetTask<LakeServiceBrpcStubCache>::start(this);
 }
 
 void LakeServiceBrpcStubCache::shutdown() {
+    FailedChannelResetTask<LakeServiceBrpcStubCache>::stop(this);
     wait_clean_tasks_terminate(this, [](const StubEntry& entry) { return entry.cleanup_task; });
+}
+
+void LakeServiceBrpcStubCache::reset_failed_channels() {
+    std::vector<std::pair<butil::EndPoint, std::shared_ptr<LakeService_RecoverableStub>>> stubs;
+    {
+        std::lock_guard<SpinLock> l(_lock);
+        stubs.reserve(_stub_map.size());
+        for (auto& entry : _stub_map) {
+            stubs.emplace_back(entry.first, entry.second.stub);
+        }
+    }
+    // Reset outside the lock
+    for (const auto& [endpoint, stub] : stubs) {
+        if (stub->reset_channel_if_failed()) {
+            LOG(INFO) << "reset lake service brpc stub whose connection failed, endpoint:" << endpoint;
+        }
+    }
 }
 
 bool LakeServiceBrpcStubCache::replace_cleanup_task_locked(

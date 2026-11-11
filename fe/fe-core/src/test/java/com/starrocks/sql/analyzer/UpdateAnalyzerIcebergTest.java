@@ -182,15 +182,27 @@ public class UpdateAnalyzerIcebergTest {
     }
 
     @Test
+    public void testIcebergUpdateOnBranch() {
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 FOR VERSION AS OF no_such_branch SET data = 'new' " +
+                "WHERE id = 1";
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        assertEquals("no_such_branch", updateStmt.getTargetBranch());
+
+        SemanticException exception = assertThrows(SemanticException.class,
+                () -> UpdateAnalyzer.analyze(updateStmt, connectContext));
+        assertTrue(exception.getMessage().contains("Cannot find snapshot with reference name: no_such_branch"));
+    }
+
+    @Test
     public void testIcebergUpdateWithCTEClause() {
         String sql = "WITH cte AS (SELECT id FROM iceberg0.unpartitioned_db.t0_v2) " +
                 "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = 'new' WHERE id IN (SELECT id FROM cte)";
         UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
 
-        SemanticException exception = assertThrows(SemanticException.class,
-                () -> UpdateAnalyzer.analyze(updateStmt, connectContext));
-        assertTrue(exception.getMessage().contains("with"));
+        assertDoesNotThrow(() -> UpdateAnalyzer.analyze(updateStmt, connectContext));
+        assertNotNull(updateStmt.getQueryStatement());
     }
 
     @Test

@@ -318,12 +318,16 @@ Status JsonReader::open() {
     if (!st.ok()) {
         // Timeout can happen when reading from a TimeBoundedStreamLoadPipe (e.g. merge-commit).
         // It's a retryable condition and should not be written into user-facing error logs.
-        if (!st.is_time_out()) {
+        // Neither is EOF: the input has no data, or no complete document, which is reported already.
+        if (!st.is_time_out() && !st.is_end_of_file()) {
             _append_error_msg("", st.to_string());
         }
         return st;
     }
-    _empty_parser = false;
+    if (_empty_parser) {
+        // The first buffer has no row.
+        _report_truncated_tail();
+    }
     _closed = false;
     return Status::OK();
 }
@@ -395,7 +399,13 @@ Status JsonReader::_read_chunk_with_except(Chunk* chunk, int32_t rows_to_read) {
                 _append_error_msg("", st.to_string());
                 return st;
             }
-            _empty_parser = false;
+            if (_empty_parser) {
+                // The buffer has no row, go on with the next one.
+                if (_report_truncated_tail()) {
+                    ++rows_read;
+                }
+                continue;
+            }
         }
 
         Status st;
@@ -429,7 +439,10 @@ Status JsonReader::_read_chunk_with_except(Chunk* chunk, int32_t rows_to_read) {
         }
 
         if (st.is_end_of_file()) {
-            // the parser is exhausted.
+            // the parser is exhausted. A dropped document is an error row of this chunk, like a malformed one.
+            if (_report_truncated_tail()) {
+                ++rows_read;
+            }
             _empty_parser = true;
         } else if (!st.ok()) {
             return st;
@@ -966,13 +979,44 @@ Status JsonReader::_read_and_parse_json() {
     }
 
     _empty_parser = false;
-    return _parser->parse(_payload, _payload_size, _payload_capacity);
+    Status st = _parser->parse(_payload, _payload_size, _payload_capacity);
+    if (st.is_end_of_file()) {
+        // The expanded parsers read the first row in parse(), so EOF means that this buffer has no row. A stream (e.g.
+        // one buffer per Kafka message) goes on with its next buffer, and the caller reports what was dropped. A file
+        // is read as a single buffer.
+        if (file_type == TFileType::FILE_STREAM) {
+            _empty_parser = true;
+            return Status::OK();
+        }
+        _report_truncated_tail();
+    }
+    return st;
 }
 
 // _construct_column constructs column based on no value.
 Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                                      std::string_view col_name) {
     return add_adaptive_nullable_column(column, type_desc, col_name, &value, !_strict_mode);
+}
+
+// simdjson's iterate_many stops before an incomplete document at the end of the input (e.g. a truncated Kafka
+// message, or the cut-off last line of a stream load) and only reports EOF, so the document would be neither a row
+// nor an error row. Report it as one error row, like a complete but malformed document. Returns whether it did.
+bool JsonReader::_report_truncated_tail() {
+    std::string_view tail = _parser->truncated_tail();
+    if (tail.empty()) {
+        return false;
+    }
+    auto st = status_from_json_parse_error(
+            fmt::format("Incomplete or malformed json document at the end of the input ({} bytes)", tail.size()));
+    if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
+        _append_error_msg(std::string(tail.substr(0, MAX_ERROR_LOG_LENGTH)), st.to_string());
+    }
+    if (_state->enable_log_rejected_record()) {
+        LoadPathStateHelper::append_rejected_record_to_file(_state, std::string(tail), st.to_string(),
+                                                            _file->filename());
+    }
+    return true;
 }
 
 void JsonReader::_append_error_msg(const std::string& row, const std::string& error_msg) {

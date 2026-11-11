@@ -22,7 +22,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.transformation.AiFunctionExtractor;
+import com.starrocks.sql.optimizer.rule.transformation.AIFunctionExtractor;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.ArrayList;
@@ -79,12 +79,12 @@ public final class AIQuantifiedApplyLoweringRule implements TreeRewriteRule {
     private OptExpression lowerInPredicate(OptExpression input, LogicalApplyOperator apply,
                                            InPredicateOperator predicate, OptimizerContext context) {
         ScalarOperator leftOperand = predicate.getChild(0);
-        if (!AiFunctionExtractor.containsAI(leftOperand)) {
+        if (!AIFunctionExtractor.containsAI(leftOperand)) {
             return input;
         }
         validateAIInputs(leftOperand, input.inputAt(0).getOutputColumns());
 
-        AiFunctionExtractor.Result result = AiFunctionExtractor.extract(
+        AIFunctionExtractor.Result result = AIFunctionExtractor.extract(
                 input.inputAt(0), List.of(leftOperand), context);
         List<ScalarOperator> arguments = new ArrayList<>(predicate.getChildren());
         arguments.set(0, result.expressions().get(0));
@@ -96,13 +96,13 @@ public final class AIQuantifiedApplyLoweringRule implements TreeRewriteRule {
     private OptExpression lowerMultiInPredicate(OptExpression input, LogicalApplyOperator apply,
                                                 MultiInPredicateOperator predicate, OptimizerContext context) {
         List<ScalarOperator> leftOperands = predicate.getChildren().subList(0, predicate.getTupleSize());
-        if (leftOperands.stream().noneMatch(AiFunctionExtractor::containsAI)) {
+        if (leftOperands.stream().noneMatch(AIFunctionExtractor::containsAI)) {
             return input;
         }
         ColumnRefSet leftOutputs = input.inputAt(0).getOutputColumns();
         leftOperands.forEach(operand -> validateAIInputs(operand, leftOutputs));
 
-        AiFunctionExtractor.Result result = AiFunctionExtractor.extract(
+        AIFunctionExtractor.Result result = AIFunctionExtractor.extract(
                 input.inputAt(0), leftOperands, context);
         List<ScalarOperator> arguments = new ArrayList<>(predicate.getChildren());
         for (int index = 0; index < predicate.getTupleSize(); index++) {
@@ -124,14 +124,14 @@ public final class AIQuantifiedApplyLoweringRule implements TreeRewriteRule {
         OptExpression root = derived(OptExpression.create(
                 rewrittenApply, leftChild, input.inputAt(1)));
         if (!originalOutputs.equals(root.getOutputColumns())) {
-            root = AiFunctionExtractor.retainOutputs(root, originalOutputs, context);
+            root = AIFunctionExtractor.retainOutputs(root, originalOutputs, context);
         }
         hasRewrite = true;
         return root;
     }
 
     private static void validateAIInputs(ScalarOperator expression, ColumnRefSet leftOutputs) {
-        if (AiFunctionExtractor.isAICall(expression)) {
+        if (AIFunctionExtractor.isAICall(expression)) {
             CallOperator call = expression.cast();
             ColumnRefSet semanticInputs = new ColumnRefSet();
             int semanticArity = Math.min(call.getFunction().getNumArgs(), call.getChildren().size());

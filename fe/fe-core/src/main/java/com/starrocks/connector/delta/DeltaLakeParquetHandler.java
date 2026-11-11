@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.defaults.engine.DefaultParquetHandler;
 import io.delta.kernel.defaults.engine.fileio.FileIO;
@@ -51,6 +52,9 @@ public class DeltaLakeParquetHandler extends DefaultParquetHandler {
 
     public static List<ColumnarBatch> readParquetFile(String filePath, long fileSize, long modificationTime,
                                                       StructType physicalSchema, FileIO fileIO) {
+        // The checkpointCache loader on a miss. Same story as the json handler: the kernel's parquet
+        // reader goes to storage by itself, so the FE-owned wrapper is where the wait is visible.
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL,
                 "DeltaLakeParquetHandler.readParquetFileAndGetColumnarBatch")) {
             io.delta.kernel.defaults.internal.parquet.ParquetFileReader batchReader =

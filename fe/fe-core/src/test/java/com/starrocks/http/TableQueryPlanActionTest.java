@@ -134,7 +134,8 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                         "api_key", "export-test-secret"), "");
         GlobalStateMgr.getCurrentState().getAIProviderMgr().replayCreateProvider(provider);
         try {
-            String sql = "select ai_custom_query('http_export_provider', cast(k1 as varchar)) from "
+            String sql = "select ai_complete(provider => 'http_export_provider', model => 'explicit-model', prompt "
+                    + "=> cast(k1 as varchar)) from "
                     + DB_NAME + "." + TABLE_NAME;
             Request request = new Request.Builder()
                     .post(RequestBody.create(JSON, new JSONObject().put("sql", sql).toString()))
@@ -199,7 +200,6 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
     @Test
     public void testQueryPlanActionPruneEmpty() throws Exception {
         super.setUpWithCatalog();
-
 
         String tableName = "test_empty_table";
 

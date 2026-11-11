@@ -5,6 +5,7 @@ displayed_sidebar: docs
 ---
 import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
@@ -27,6 +28,12 @@ import TabItem from '@theme/TabItem';
 
 このガイドのすべての手順は、クローンした `demo` GitHub リポジトリの `demo/documentation-samples/hudi/` ディレクトリから実行されます。
 
+### MinIO AIStor ライセンス
+
+<AIStorLicense />
+
+このガイドでは、`demo/documentation-samples/hudi/` ディレクトリです。
+
 ### Docker
 
 - Docker セットアップ: Mac の場合は、[Install Docker Desktop on Mac](https://docs.docker.com/desktop/setup/install/mac-install/) に定義されている手順に従ってください。Spark-SQL クエリを実行するには、少なくとも 5 GB のメモリと 4 つの CPU を Docker に割り当ててください (Docker → Preferences → Advanced を参照)。そうしないと、メモリの問題で Spark-SQL クエリが終了される可能性があります。
@@ -48,7 +55,7 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 | **`starrocks-be`**       | クエリプランの実行                                                 |
 | **`metastore_db`**       | Hive メタデータを保存するために使用される Postgres DB             |
 | **`hive_metastore`**     | Apache Hive メタストアを提供                                       |
-| **`minio`** と **`mc`**  | MinIO オブジェクトストレージと MinIO コマンドラインクライアント    |
+| **`minio`** と **`mc`**  | MinIO AIStor オブジェクトストレージと MinIO コマンドラインクライアント |
 | **`spark-hudi`**         | 分散コンピューティングとトランザクショナルデータレイクプラットフォーム |
 
 ### 設定ファイル

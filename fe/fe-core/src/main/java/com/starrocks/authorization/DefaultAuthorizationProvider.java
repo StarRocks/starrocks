@@ -78,7 +78,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
         typeToActionList.put(ObjectType.VIEW, Lists.newArrayList(
                 PrivilegeType.SELECT,
                 PrivilegeType.ALTER,
-                PrivilegeType.DROP));
+                PrivilegeType.DROP,
+                PrivilegeType.EXPORT));
 
         typeToActionList.put(ObjectType.CATALOG, Lists.newArrayList(
                 PrivilegeType.USAGE,
@@ -90,7 +91,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 PrivilegeType.ALTER,
                 PrivilegeType.REFRESH,
                 PrivilegeType.DROP,
-                PrivilegeType.SELECT));
+                PrivilegeType.SELECT,
+                PrivilegeType.EXPORT));
 
         typeToActionList.put(ObjectType.FUNCTION, Lists.newArrayList(
                 PrivilegeType.USAGE,
@@ -118,6 +120,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 PrivilegeType.USAGE,
                 PrivilegeType.ALTER,
                 PrivilegeType.DROP));
+
+        typeToActionList.put(ObjectType.AI_FUNCTION, Lists.newArrayList(PrivilegeType.USAGE));
+        typeToActionList.put(ObjectType.AI_PROVIDER, Lists.newArrayList(PrivilegeType.USAGE));
     }
 
     public static final String UNEXPECTED_TYPE = "unexpected type ";
@@ -191,6 +196,10 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             return PipePEntryObject.generate(objectTokens);
         } else if (ObjectType.WAREHOUSE.equals(objectType)) {
             return WarehousePEntryObject.generate(objectTokens);
+        } else if (ObjectType.AI_FUNCTION.equals(objectType)) {
+            return AIFunctionPEntryObject.generate(objectTokens);
+        } else if (ObjectType.AI_PROVIDER.equals(objectType)) {
+            return AIProviderPEntryObject.generate(objectTokens);
         }
         throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
     }

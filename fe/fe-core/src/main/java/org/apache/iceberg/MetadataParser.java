@@ -29,6 +29,7 @@ import com.starrocks.thrift.TResultBatch;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.metrics.ScanMetrics;
 import org.apache.iceberg.metrics.ScanMetricsUtil;
+import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.ArrayUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -48,7 +49,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import static org.apache.iceberg.BaseFile.EMPTY_PARTITION_DATA;
 
 public class MetadataParser {
     private static final Logger LOG = LogManager.getLogger(MetadataParser.class);
@@ -243,6 +243,9 @@ public class MetadataParser {
         // build key metadata
         ByteBuffer keyMetadata = thrift.isSetKey_metadata() ? ByteBuffer.wrap(thrift.getKey_metadata()) : null;
 
+        // build first row id (format v3); _row_id of the data file's rows derives from it
+        Long firstRowId = thrift.isSetFirst_row_id() ? thrift.getFirst_row_id() : null;
+
         BaseFile<?> baseFile;
         if (content == FileContent.DATA) {
             baseFile = new GenericDataFile(
@@ -255,7 +258,7 @@ public class MetadataParser {
                     keyMetadata,
                     splitOffsets,
                     null,
-                    null);
+                    firstRowId);
         } else {
             baseFile = new GenericDeleteFile(
                     specId,
@@ -288,7 +291,7 @@ public class MetadataParser {
 
     private PartitionData buildPartitionData(TIcebergMetadata thrift) {
         if (!isPartitionedTable) {
-            return EMPTY_PARTITION_DATA;
+            return new PartitionData(Types.StructType.of());
         }
 
         Integer specId = thrift.getSpec_id();

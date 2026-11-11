@@ -40,17 +40,29 @@ public enum SkipReason {
     UNSUPPORTED_SORT_KEY,
     /**
      * A column the sampler has to project -- the base sort key, a visible rollup's sort key, or a
-     * partition source column -- is fed by neither a source column nor a literal, so no projection
-     * can produce it. Reached by an INSERT-from-FILES whose target column is legitimately absent from
-     * the inferred {@code FILES()} schema (a {@code BY NAME} load defaults it, or reads it NULL under
-     * {@code fill_mismatch_column_with=null}).
+     * partition source column -- is absent from the resolved INSERT projection. Reached by an
+     * INSERT-from-FILES whose target column is legitimately absent from the inferred
+     * {@code FILES()} schema (a {@code BY NAME} load defaults it, or reads it NULL under
+     * {@code fill_mismatch_column_with=null}), and by an INSERT whose explicit target column list
+     * omits a nullable partition column.
      *
      * <p>Deliberately NOT recorded for a projection-shape rejection (a duplicate output name, a
-     * by-position arity mismatch, a foreign-qualified slot), nor for a key made only of literals:
+     * by-position arity mismatch, a foreign-qualified slot), a computed or NULL projection, a
+     * generated column, nor for a key made only of literals:
      * those decline for reasons that have nothing to do with a missing column, and a wrong reason
      * sends an operator to the wrong place.
      */
     SOURCE_MISSING_SAMPLED_COLUMN,
+    /**
+     * A sampled INSERT column is supplied by an expression the sampler cannot reproduce, or reads a FILES
+     * column that column-type push-down reads at another target column's type.
+     */
+    UNSUPPORTED_SAMPLED_PROJECTION,
+    /**
+     * A sampled column is a generated column the sampler cannot compute the way the load does. The FE
+     * log names the exact reason.
+     */
+    UNSUPPORTED_GENERATED_COLUMN,
     /** Catalog snapshot did not resolve the partition or base index — load surfaces this error. */
     METADATA_NOT_RESOLVED,
     /** Pre-submit phase (sample + plan + build job) exceeded its timeout. */
@@ -103,32 +115,33 @@ public enum SkipReason {
      */
     PARTITION_NOT_ELIGIBLE_POST_CREATE,
     /**
-     * Target is a materialized view that the derived tier cannot key: not an incremental MV, more than
-     * one visible index, a sort key that is not the single hidden row-id column, or a row-id kind no
-     * boundary source serves yet. Replaces an older unconditional materialized-view skip that recorded
-     * nothing at all.
+     * Target is a materialized view written by anything other than its own refresh, or an incremental
+     * MV the derived tier cannot key: more than one visible index, a sort key that is not the single
+     * hidden row-id column, or a row id that is an order-preserving encoding of the group-by keys,
+     * whose values follow the data. A view without a row id (a PCT view) refreshed by the system is
+     * sampled instead. Replaces an older unconditional materialized-view skip that recorded nothing at all.
      */
     MATERIALIZED_VIEW_TARGET,
     /**
-     * Derived tier: the estimated output is too small for the row-id key space to be carved usefully —
-     * a tablet's share of rows would not stay clear of the gaps that per-node id caching leaves behind,
-     * so the split would be unbalanced rather than helpful.
+     * Derived tier: the estimated output is too small for the row-id key space to be carved usefully.
+     * For auto-increment ids, a tablet's share of rows would not stay clear of the gaps that per-node
+     * id caching leaves behind, so the split would be unbalanced rather than helpful. For fingerprint
+     * ids, each partition's share of the estimate cannot fill two tablets of
+     * {@code tablet_reshard_min_split_size}. A multi-partition refresh is also skipped when its estimate
+     * calls for no more tablets than it has partitions: each partition's share is then one tablet, which
+     * the partition already has, whatever {@code tablet_reshard_min_split_size} is.
      */
     ROW_ID_SPAN_TOO_SMALL,
-    /**
-     * Derived tier: the target's auto-increment counter has already handed out ids, so compute nodes may
-     * hold cached id intervals this planner cannot account for. Only a pristine id space lets the
-     * boundaries be derived; anything else falls back to no pre-split.
-     */
-    ROW_ID_SPACE_NOT_PRISTINE,
     /** Derived tier: no usable output-size estimate, so the tablet count cannot be chosen. */
     ESTIMATE_UNAVAILABLE,
     /**
-     * Derived tier: the load writes more than one temporary partition. A row-id key is allocated from one
-     * counter for the whole table, so ids for any single partition form a contiguous band whenever the
-     * source is scanned in partition order — cuts spanning the whole id space would then leave most of
-     * each partition's tablets empty. Enabling the feature would not change this, which is why it is
-     * reported separately from the config gate.
+     * Derived tier: the load writes more than one temporary partition of a view keyed by auto-increment
+     * row ids. Those ids are allocated from one counter for the whole table, so ids for any single
+     * partition form a contiguous band whenever the source is scanned in partition order — cuts spanning
+     * the whole id space would then leave most of each partition's tablets empty. Enabling the feature
+     * would not change this, which is why it is reported separately from the config gate. Fingerprint row
+     * ids are uniform in every partition, so a fingerprint view's partitions are all carved instead and
+     * never record this.
      */
     MULTIPLE_TEMPORARY_PARTITIONS,
     /**

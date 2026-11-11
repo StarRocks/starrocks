@@ -99,6 +99,29 @@ public class IcebergRESTCatalogAuthRecoveryTest {
     }
 
     @Test
+    public void testNoRebuildAfterShutdown() throws Exception {
+        new Expectations() {
+            {
+                restCatalog.loadNamespaceMetadata((SessionCatalog.SessionContext) any, (Namespace) any);
+                result = new NotAuthorizedException("Not authorized: %s", "token expired");
+            }
+        };
+
+        IcebergRESTCatalog catalog = newOAuth2CredentialCatalog();
+        catalog.shutdown();
+        // a query still holding the dropped catalog must not install a session catalog that nobody closes
+        Assertions.assertThrows(StarRocksConnectorException.class, () -> catalog.getDB(connectContext, "db1"));
+        new Verifications() {
+            {
+                restCatalog.initialize(anyString, (Map<String, String>) any);
+                times = 1;
+                restCatalog.close();
+                times = 1;
+            }
+        };
+    }
+
+    @Test
     public void testFailedRetryPropagatesAfterSingleRebuild() {
         new Expectations() {
             {

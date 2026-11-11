@@ -97,14 +97,16 @@ public class ScalarOperatorsReuseRule implements TreeRewriteRule {
         Projection rewriteProject(OptExpression input, TaskContext context) {
             Projection projection = input.getOp().getProjection();
 
+            boolean unconditionalOnly = unconditionalOnly(context);
             projection = ScalarOperatorsReuse.rewriteProjectionOrLambdaExpr(projection,
-                    context.getOptimizerContext().getColumnRefFactory());
+                    context.getOptimizerContext().getColumnRefFactory(), unconditionalOnly);
 
             if (projection.needReuseLambdaDependentExpr()) {
                 // rewrite lambda functions with lambda arguments
                 rewriteLambdaFunction(projection.getCommonSubOperatorMap(),
-                        context.getOptimizerContext().getColumnRefFactory());
-                rewriteLambdaFunction(projection.getColumnRefMap(), context.getOptimizerContext().getColumnRefFactory());
+                        context.getOptimizerContext().getColumnRefFactory(), unconditionalOnly);
+                rewriteLambdaFunction(projection.getColumnRefMap(), context.getOptimizerContext().getColumnRefFactory(),
+                        unconditionalOnly);
             }
             return projection;
         }
@@ -128,16 +130,21 @@ public class ScalarOperatorsReuseRule implements TreeRewriteRule {
                     columnRefFactory.getNextUniqueId(), predicate.getType(), "predicate", predicate.isNullable()),
                     predicate);
             Projection result = ScalarOperatorsReuse.rewriteProjectionOrLambdaExpr(
-                    new Projection(columnRefMap), columnRefFactory);
+                    new Projection(columnRefMap), columnRefFactory, unconditionalOnly(context));
             return result;
         }
 
-        void rewriteLambdaFunction(Map<ColumnRefOperator, ScalarOperator> operatorMap, ColumnRefFactory factory) {
+        private static boolean unconditionalOnly(TaskContext context) {
+            return ScalarOperatorsReuse.allowThrowException(context.getOptimizerContext().getSessionVariable());
+        }
+
+        void rewriteLambdaFunction(Map<ColumnRefOperator, ScalarOperator> operatorMap, ColumnRefFactory factory,
+                                   boolean unconditionalOnly) {
             if (operatorMap.isEmpty()) {
                 return;
             }
             ScalarOperatorsReuse.LambdaFunctionOperatorRewriter rewriter =
-                    new ScalarOperatorsReuse.LambdaFunctionOperatorRewriter(factory);
+                    new ScalarOperatorsReuse.LambdaFunctionOperatorRewriter(factory, unconditionalOnly);
 
             for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : operatorMap.entrySet()) {
                 kv.getValue().accept(rewriter, null);

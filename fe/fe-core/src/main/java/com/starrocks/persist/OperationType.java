@@ -410,6 +410,9 @@ public class OperationType {
     public static final short OP_UPSERT_TRANSACTION_STATE_V2 = 12110;
     public static final short OP_SAVE_TRANSACTION_ID_V2 = 12111;
     public static final short OP_UPSERT_TRANSACTION_STATE_BATCH = 12112;
+    // Must stay below OP_TYPE_EOF and must not be @IgnorableOnReplayFailed: skipping a batch
+    // record would let a later leader reissue gtids that were already handed out.
+    public static final short OP_SAVE_GTID = 12113;
 
     //colocate table json format log
     @IgnorableOnReplayFailed
@@ -703,6 +706,16 @@ public class OperationType {
     // exception should be skippable (metadata_journal_ignore_replay_failure) rather than abort the FE.
     @IgnorableOnReplayFailed
     public static final short OP_ERASE_MATERIALIZED_INDEX = 13558;
+    // Per-partition incremental (bounded, resumable) auto-vacuum state, written each round by the
+    // autovacuum coordinator. Non-critical operational state, so replay failure is ignorable.
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_PARTITION_VACUUM_STATE = 13559;
+    // Release the history schema (the pre-alter schemas kept for loads still bound to them) of a done alter job.
+    // Only the leader can tell that no such load is left, so it journals the release; followers and checkpoint
+    // images would otherwise keep the payload until the job itself is removed. Ignorable: replay is idempotent
+    // and skips a job that is gone, and a skipped release only keeps the payload until the job is removed.
+    @IgnorableOnReplayFailed
+    public static final short OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA = 13562;
 
     /*
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number

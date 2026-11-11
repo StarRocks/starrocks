@@ -15,6 +15,8 @@
 package com.starrocks.authentication;
 
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.mysql.MysqlProto;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -67,7 +69,7 @@ class LDAPMemberOfAuthProviderTest {
         private int serviceAccountProbes = 0;
         private int binds = 0;
 
-        RecordingProvider(String bindDnPattern, String userDn, LdapGroupSource groupSource, String memberOfAttr,
+        RecordingProvider(String bindDnPattern, String userDn, GroupSource groupSource, String memberOfAttr,
                           String bindRootDn, String bindRootPwd,
                           Attributes userReadableAttributes, Attributes serviceAccountAttributes,
                           boolean failUserAttributeRead) {
@@ -119,20 +121,23 @@ class LDAPMemberOfAuthProviderTest {
 
     private static AccessControlContext authenticate(LDAPAuthProvider provider) throws AuthenticationException {
         AccessControlContext context = new AccessControlContext();
-        provider.authenticate(context, UserIdentity.createEphemeralUserIdent("alice", "%"), PASSWORD);
+        // The MySQL clear-password frame, read the way the entry point reads it: PLAIN_PASSWORD with
+        // the frame's trailing NUL stripped. The provider refuses a raw scramble.
+        provider.authenticate(context, UserIdentity.createEphemeralUserIdent("alice", "%"),
+                MysqlProto.handshakeCredentials("alice", PASSWORD, AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(), "%"));
         return context;
     }
 
     @Test
     void testSearchAndBindReadsMemberOfWithinTheExistingSearch() throws Exception {
-        RecordingProvider provider = new RecordingProvider(null, null, LdapGroupSource.MEMBEROF, "memberOf",
+        RecordingProvider provider = new RecordingProvider(null, null, GroupSource.AUTHENTICATOR, "memberOf",
                 "cn=svc,dc=starrocks,dc=com", "secret",
                 memberOf("memberOf", "CN=SR Analysts,OU=Groups,DC=starrocks,DC=com",
                         "CN=Data Platform,OU=Groups,DC=starrocks,DC=com"), null, false);
 
         AccessControlContext context = authenticate(provider);
 
-        Assertions.assertEquals(Set.of("SR Analysts", "Data Platform"), context.getMemberOfGroups());
+        Assertions.assertEquals(Set.of("SR Analysts", "Data Platform"), context.getAuthenticatorGroups());
         Assertions.assertEquals(USER_DN, context.getDistinguishedName());
         // One search, and it is the search that resolves the DN anyway - the attribute rides along.
         Assertions.assertEquals(1, provider.searchRequestedAttributes.size());
@@ -144,14 +149,14 @@ class LDAPMemberOfAuthProviderTest {
 
     @Test
     void testDefaultGroupSourceRequestsNoAttributeAtAll() throws Exception {
-        RecordingProvider provider = new RecordingProvider(null, null, LdapGroupSource.GROUP_PROVIDER, "memberOf",
+        RecordingProvider provider = new RecordingProvider(null, null, GroupSource.GROUP_PROVIDER, "memberOf",
                 "cn=svc,dc=starrocks,dc=com", "secret",
                 memberOf("memberOf", "CN=SR Analysts,OU=Groups,DC=starrocks,DC=com"), null, false);
 
         AccessControlContext context = authenticate(provider);
 
         // Nothing is read and nothing is resolved: the disabled feature costs nothing.
-        Assertions.assertTrue(context.getMemberOfGroups().isEmpty());
+        Assertions.assertTrue(context.getAuthenticatorGroups().isEmpty());
         Assertions.assertEquals(1, provider.searchRequestedAttributes.size());
         Assertions.assertEquals(0, provider.searchRequestedAttributes.get(0).length,
                 "the default path must not ask the directory for any attribute");
@@ -162,13 +167,13 @@ class LDAPMemberOfAuthProviderTest {
     @Test
     void testDirectBindReadsMemberOfOnTheUserConnection() throws Exception {
         RecordingProvider provider = new RecordingProvider(
-                "uid=${USER},ou=People,dc=starrocks,dc=com", null, LdapGroupSource.BOTH, "memberOf",
+                "uid=${USER},ou=People,dc=starrocks,dc=com", null, GroupSource.BOTH, "memberOf",
                 "cn=svc,dc=starrocks,dc=com", "secret",
                 memberOf("memberOf", "CN=SR Analysts,OU=Groups,DC=starrocks,DC=com"), null, false);
 
         AccessControlContext context = authenticate(provider);
 
-        Assertions.assertEquals(Set.of("SR Analysts"), context.getMemberOfGroups());
+        Assertions.assertEquals(Set.of("SR Analysts"), context.getAuthenticatorGroups());
         Assertions.assertEquals("uid=alice,ou=People,dc=starrocks,dc=com", context.getDistinguishedName());
         // Exactly one bind, on which the attribute was read - no extra connection, no extra bind.
         Assertions.assertEquals(1, provider.binds);
@@ -184,14 +189,14 @@ class LDAPMemberOfAuthProviderTest {
     @Test
     void testDirectBindProbesWithServiceAccountWhenTheUserReadsNothing() throws Exception {
         RecordingProvider provider = new RecordingProvider(
-                "uid=${USER},ou=People,dc=starrocks,dc=com", null, LdapGroupSource.MEMBEROF, "memberOf",
+                "uid=${USER},ou=People,dc=starrocks,dc=com", null, GroupSource.AUTHENTICATOR, "memberOf",
                 "cn=svc,dc=starrocks,dc=com", "secret",
                 new BasicAttributes(true),
                 memberOf("memberOf", "CN=SR Analysts,OU=Groups,DC=starrocks,DC=com"), false);
 
         AccessControlContext context = authenticate(provider);
 
-        Assertions.assertEquals(Set.of("SR Analysts"), context.getMemberOfGroups());
+        Assertions.assertEquals(Set.of("SR Analysts"), context.getAuthenticatorGroups());
         Assertions.assertEquals(1, provider.serviceAccountProbes);
         Assertions.assertFalse(provider.isGroupProviderUsed());
     }
@@ -199,14 +204,14 @@ class LDAPMemberOfAuthProviderTest {
     @Test
     void testDirectBindSkipsTheProbeWithoutAServiceAccount() throws Exception {
         RecordingProvider provider = new RecordingProvider(
-                "uid=${USER},ou=People,dc=starrocks,dc=com", null, LdapGroupSource.MEMBEROF, "memberOf",
+                "uid=${USER},ou=People,dc=starrocks,dc=com", null, GroupSource.AUTHENTICATOR, "memberOf",
                 /* bindRootDn */ "", /* bindRootPwd */ "",
                 new BasicAttributes(true), null, false);
 
         AccessControlContext context = authenticate(provider);
 
         // No service account to fall back to: empty group set, and the login still succeeds.
-        Assertions.assertTrue(context.getMemberOfGroups().isEmpty());
+        Assertions.assertTrue(context.getAuthenticatorGroups().isEmpty());
         Assertions.assertEquals(0, provider.serviceAccountProbes);
         Assertions.assertEquals("uid=alice,ou=People,dc=starrocks,dc=com", context.getDistinguishedName());
     }
@@ -214,26 +219,26 @@ class LDAPMemberOfAuthProviderTest {
     @Test
     void testLoginSucceedsWhenNeitherReaderCanSeeTheAttribute() throws Exception {
         RecordingProvider provider = new RecordingProvider(
-                "uid=${USER},ou=People,dc=starrocks,dc=com", null, LdapGroupSource.MEMBEROF, "memberOf",
+                "uid=${USER},ou=People,dc=starrocks,dc=com", null, GroupSource.AUTHENTICATOR, "memberOf",
                 "cn=svc,dc=starrocks,dc=com", "secret",
                 null, /* service account also fails */ null, /* failUserAttributeRead */ true);
 
         AccessControlContext context = authenticate(provider);
 
-        Assertions.assertTrue(context.getMemberOfGroups().isEmpty());
+        Assertions.assertTrue(context.getAuthenticatorGroups().isEmpty());
         Assertions.assertEquals(1, provider.serviceAccountProbes);
         Assertions.assertEquals("uid=alice,ou=People,dc=starrocks,dc=com", context.getDistinguishedName());
     }
 
     @Test
     void testUserWithoutAnyGroupIsNotAnError() throws Exception {
-        RecordingProvider provider = new RecordingProvider(null, null, LdapGroupSource.MEMBEROF, "memberOf",
+        RecordingProvider provider = new RecordingProvider(null, null, GroupSource.AUTHENTICATOR, "memberOf",
                 /* no service account, so no probe on the search path anyway */ "", "",
                 new BasicAttributes(true), null, false);
 
         AccessControlContext context = authenticate(provider);
 
-        Assertions.assertTrue(context.getMemberOfGroups().isEmpty());
+        Assertions.assertTrue(context.getAuthenticatorGroups().isEmpty());
         Assertions.assertEquals(USER_DN, context.getDistinguishedName());
     }
 
@@ -241,42 +246,45 @@ class LDAPMemberOfAuthProviderTest {
     void testSearchPathNeverProbes() throws Exception {
         // The reader on the search-and-bind path already is the service account, so there is nothing
         // to fall back to and no probe must be attempted even when nothing came back.
-        RecordingProvider provider = new RecordingProvider(null, null, LdapGroupSource.MEMBEROF, "memberOf",
+        RecordingProvider provider = new RecordingProvider(null, null, GroupSource.AUTHENTICATOR, "memberOf",
                 "cn=svc,dc=starrocks,dc=com", "secret",
                 new BasicAttributes(true), memberOf("memberOf", "CN=Never,DC=x"), false);
 
         AccessControlContext context = authenticate(provider);
 
         Assertions.assertEquals(0, provider.serviceAccountProbes);
-        Assertions.assertTrue(context.getMemberOfGroups().isEmpty());
+        Assertions.assertTrue(context.getAuthenticatorGroups().isEmpty());
     }
 
     @Test
     void testLegacyPerUserDnFormDoesNotReadMemberOf() throws Exception {
         // `CREATE USER ... AS '<dn>'` is the legacy form and is excluded on purpose, even with
         // group_source = memberof.
-        RecordingProvider provider = new RecordingProvider(null, USER_DN, LdapGroupSource.MEMBEROF, "memberOf",
+        RecordingProvider provider = new RecordingProvider(null, USER_DN, GroupSource.AUTHENTICATOR, "memberOf",
                 "cn=svc,dc=starrocks,dc=com", "secret",
                 memberOf("memberOf", "CN=SR Analysts,OU=Groups,DC=starrocks,DC=com"), null, false);
 
         AccessControlContext context = authenticate(provider);
 
-        Assertions.assertTrue(context.getMemberOfGroups().isEmpty());
+        Assertions.assertTrue(context.getAuthenticatorGroups().isEmpty());
         Assertions.assertTrue(provider.searchRequestedAttributes.isEmpty());
         Assertions.assertTrue(provider.bindRequestedAttributes.isEmpty());
         Assertions.assertEquals(0, provider.serviceAccountProbes);
         Assertions.assertEquals(USER_DN, context.getDistinguishedName());
+        // Unsupported means unchanged, not "no group": the group providers keep serving it.
+        Assertions.assertTrue(provider.isGroupProviderUsed());
+        Assertions.assertFalse(provider.isAuthenticatorGroupsUsed());
     }
 
     @Test
     void testCustomMemberOfAttributeIsRequested() throws Exception {
-        RecordingProvider provider = new RecordingProvider(null, null, LdapGroupSource.MEMBEROF, "isMemberOf",
+        RecordingProvider provider = new RecordingProvider(null, null, GroupSource.AUTHENTICATOR, "isMemberOf",
                 "cn=svc,dc=starrocks,dc=com", "secret",
                 memberOf("isMemberOf", "CN=SR Analysts,OU=Groups,DC=starrocks,DC=com"), null, false);
 
         AccessControlContext context = authenticate(provider);
 
-        Assertions.assertEquals(Set.of("SR Analysts"), context.getMemberOfGroups());
+        Assertions.assertEquals(Set.of("SR Analysts"), context.getAuthenticatorGroups());
         Assertions.assertEquals(List.of("isMemberOf"), Arrays.asList(provider.searchRequestedAttributes.get(0)));
     }
 
@@ -284,7 +292,7 @@ class LDAPMemberOfAuthProviderTest {
     void testLegacyConstructorKeepsTheOldBehaviour() {
         LDAPAuthProvider provider = new LDAPAuthProvider("localhost", 389, false, null, null,
                 "cn=svc,dc=starrocks,dc=com", "secret", "ou=People,dc=starrocks,dc=com", "uid", null, null);
-        Assertions.assertEquals(LdapGroupSource.GROUP_PROVIDER, provider.getGroupSource());
+        Assertions.assertEquals(GroupSource.GROUP_PROVIDER, provider.getGroupSource());
         Assertions.assertTrue(provider.isGroupProviderUsed());
         Assertions.assertEquals("memberOf", provider.getMemberOfAttr());
     }

@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
+import java.util.Set;
 
 public class LogicalIcebergEqualityDeleteScanOperator extends LogicalScanOperator {
     // Origin query predicate may have some filters that don't belong to delete scan table.
@@ -43,6 +44,10 @@ public class LogicalIcebergEqualityDeleteScanOperator extends LogicalScanOperato
     // Mainly used for table with iceberg equality delete files.
     // Marking this split scan node type after IcebergEqualityDeleteRewriteRule rewriting.
     private IcebergMORParams morParams;
+
+    // Identity partition columns whose value every delete file of this scan takes from its own partition, so a
+    // runtime filter on the matching data column may skip the delete files of the partitions it rejects.
+    private Set<String> runtimeFilterPruningColumns = Set.of();
 
     public LogicalIcebergEqualityDeleteScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -93,6 +98,14 @@ public class LogicalIcebergEqualityDeleteScanOperator extends LogicalScanOperato
         this.morParams = morParams;
     }
 
+    public Set<String> getRuntimeFilterPruningColumns() {
+        return runtimeFilterPruningColumns;
+    }
+
+    public void setRuntimeFilterPruningColumns(Set<String> runtimeFilterPruningColumns) {
+        this.runtimeFilterPruningColumns = runtimeFilterPruningColumns;
+    }
+
     private LogicalIcebergEqualityDeleteScanOperator() {
         super(OperatorType.LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN);
     }
@@ -118,6 +131,7 @@ public class LogicalIcebergEqualityDeleteScanOperator extends LogicalScanOperato
             builder.originPredicate = scanOperator.originPredicate;
             builder.tableFullMORParams = scanOperator.tableFullMORParams;
             builder.morParams = scanOperator.morParams;
+            builder.runtimeFilterPruningColumns = scanOperator.runtimeFilterPruningColumns;
             return this;
         }
     }

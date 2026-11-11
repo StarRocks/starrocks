@@ -54,6 +54,8 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
+import com.starrocks.load.LoadJobRedaction;
+import com.starrocks.load.LoadJobVisibility;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.AlterLoadJobOperationLog;
@@ -71,6 +73,7 @@ import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
@@ -421,8 +424,11 @@ public class LoadMgr implements MemoryTrackable {
         return (currentTimeMs - job.getFinishTimestamp()) / 1000 > Config.label_keep_max_second;
     }
 
-    public void cancelResidualJob() {
-        // cancel residual insert job
+    /**
+     * Ends the INSERT jobs whose statements will not record their final state, for example because the FE running a
+     * statement stopped being the leader in the middle of it. Each such job ends the way its transaction did.
+     */
+    public void endResidualInsertJobs() {
         readLock();
         List<LoadJob> insertJobs;
         try {
@@ -433,19 +439,56 @@ public class LoadMgr implements MemoryTrackable {
             readUnlock();
         }
 
-        insertJobs.forEach(job -> {
-            TransactionState state = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelTransactionState(
-                    job.getDbId(), job.getLabel());
-            if (state == null || state.getTransactionStatus() == TransactionStatus.UNKNOWN) {
-                try {
-                    recordFinishedOrCancelledLoadJob(
-                            job.getId(), EtlJobType.INSERT, "Cancelled since transaction status unknown", "");
-                    LOG.warn("abort job: {}-{} since transaction status unknown", job.getLabel(), job.getId());
-                } catch (StarRocksException e) {
-                    LOG.warn("failed to abort job: {}", job.getLabel(), e);
-                }
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        for (LoadJob job : insertJobs) {
+            InsertLoadJob insertJob = (InsertLoadJob) job;
+            // A label is reusable once its transaction is aborted, so look the transaction up by id.
+            TransactionState txnState = txnMgr.getTransactionState(job.getDbId(), job.getTransactionId());
+            TransactionStatus txnStatus;
+            if (txnState != null) {
+                txnStatus = txnState.getTransactionStatus();
+            } else if (insertJob.isTxnCommitted()
+                    && GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(job.getDbId()) != null) {
+                // The transaction manager drops a transaction some time after it finishes, and a committed
+                // transaction is aborted only if its database is dropped.
+                txnStatus = TransactionStatus.VISIBLE;
+            } else {
+                // An INSERT transaction is persisted only once it commits, so the transaction of a job created on an
+                // FE that stopped being the leader before the commit is lost. The jobs of a dropped database are
+                // removed when the database is erased.
+                txnStatus = TransactionStatus.UNKNOWN;
             }
-        });
+
+            String failMsg;
+            switch (txnStatus) {
+                case VISIBLE:
+                    failMsg = "";
+                    break;
+                case ABORTED:
+                    failMsg = "Cancelled since transaction aborted: " + txnState.getReason();
+                    break;
+                case UNKNOWN:
+                    failMsg = "Cancelled since transaction status unknown";
+                    break;
+                default:
+                    continue;
+            }
+            // The statement that runs a job on this FE records the final state itself, with the load statistics and
+            // the tracking URL, possibly after the jobs were listed. A transaction is dropped long after it is
+            // aborted, so a statement that has not recorded the final state when its transaction is gone never will.
+            if ((txnStatus != TransactionStatus.UNKNOWN && insertJob.hasRunningStatement()) || job.isCompleted()) {
+                continue;
+            }
+
+            try {
+                recordFinishedOrCancelledLoadJob(job.getId(), EtlJobType.INSERT, failMsg, "");
+                LOG.warn("end residual insert job: {}-{}, transaction {} {}, {}", job.getLabel(), job.getId(),
+                        job.getTransactionId(), txnState == null ? "not found" : "is " + txnStatus,
+                        failMsg.isEmpty() ? "finished" : failMsg);
+            } catch (StarRocksException e) {
+                LOG.warn("failed to end residual insert job: {}", job.getLabel(), e);
+            }
+        }
     }
 
     public void removeOldLoadJob() {
@@ -562,12 +605,13 @@ public class LoadMgr implements MemoryTrackable {
      * @param labelValue    used to filter jobs which's label is or like labelValue.
      * @param accurateMatch true: filter jobs which's label is labelValue. false: filter jobs which's label like itself.
      * @param statesValue   used to filter jobs which's state within the statesValue set.
+     * @param caller        the user to show the jobs to: each job is shown as {@link LoadJobVisibility} allows.
      * @return The result is the list of jobInfo.
      * JobInfo is a List<Comparable> which includes the comparable object: jobId, label, state etc.
      * The result is unordered.
      */
-    public List<List<Comparable>> getLoadJobInfosByDb(long dbId, String labelValue,
-                                                      boolean accurateMatch, Set<String> statesValue) {
+    public List<List<Comparable>> getLoadJobInfosByDb(long dbId, String labelValue, boolean accurateMatch,
+                                                      Set<String> statesValue, ConnectContext caller) {
 
         LinkedList<List<Comparable>> loadJobInfos = new LinkedList<>();
 
@@ -591,8 +635,16 @@ public class LoadMgr implements MemoryTrackable {
                 if (!states.contains(loadJob.getAcutalState())) {
                     continue;
                 }
+                // With the rule off SHOW LOAD and SHOW PROC check nothing, as before it.
+                LoadJobVisibility.Access access = LoadJobVisibility.isEnabled()
+                        ? LoadJobVisibility.accessOf(caller, loadJob) : LoadJobVisibility.Access.FULL;
+                if (access == LoadJobVisibility.Access.NONE) {
+                    continue;
+                }
                 // add load job info
-                loadJobInfos.add(loadJob.getShowInfo());
+                List<Comparable> jobInfo = loadJob.getShowInfo();
+                loadJobInfos.add(access == LoadJobVisibility.Access.FULL ? jobInfo
+                        : LoadJobRedaction.redactShowLoad(jobInfo, loadJob.getFailMsg()));
             } catch (DdlException ignored) {
                 // ignored
             }
@@ -679,7 +731,10 @@ public class LoadMgr implements MemoryTrackable {
         }
     }
 
-    public void getLoadJobInfo(Load.JobInfo info) throws DdlException {
+    /**
+     * Fills {@code info} from the latest load job with its label, and returns that job.
+     */
+    public LoadJob getLoadJobInfo(Load.JobInfo info) throws DdlException {
         Database database = checkDb(info.dbName);
         readLock();
         try {
@@ -695,6 +750,7 @@ public class LoadMgr implements MemoryTrackable {
 
             LoadJob loadJob = loadJobList.get(loadJobList.size() - 1);
             loadJob.getJobInfo(info);
+            return loadJob;
         } finally {
             readUnlock();
         }
