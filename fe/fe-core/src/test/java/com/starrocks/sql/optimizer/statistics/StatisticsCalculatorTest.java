@@ -26,6 +26,11 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+>>>>>>> 387ca2b ([BugFix][RB-1306] Decide partition predicate removal per scan from its own statistics (#82902))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -54,6 +59,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.type.DateType;
@@ -338,20 +344,200 @@ public class StatisticsCalculatorTest {
                                 new ColumnStatistic(0, 100, 0.0, 5.0, 100))
                 );
                 builder.setOutputRowCount(100);
-                return builder.build();
+                // like the real method: internal statistics are full-table ANALYZE statistics
+                return builder.setStatsSource(Statistics.StatsSource.ANALYZE).build();
             }
         };
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, optimizerContext);
         statisticsCalculator.estimatorStats();
+        // ANALYZE statistics cover the whole table, so the partition predicate stays in the selectivity
         Assertions.assertEquals(50, expressionContext.getStatistics().getOutputRowCount(), 0.001);
         Assertions.assertEquals(50, expressionContext.getStatistics().
                 getColumnStatistic(partitionColumn).getMaxValue(), 0.001);
-        Assertions.assertTrue(optimizerContext.isObtainedFromInternalStatistics());
-        optimizerContext.setObtainedFromInternalStatistics(false);
     }
 
     @Test
+    public void testRemoveIcebergPartitionPredicateFollowsScanStatsSource() {
+        LogicalIcebergScanOperator scan = icebergScan("partitioned_db", "t1");
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.LT, icebergColumn(scan, "date"),
+                ConstantOperator.createVarchar("2020-01-03"));
+        StatisticsCalculator calculator = new StatisticsCalculator();
+
+        // row count from the pruned files: the partition predicate is already applied
+        Assertions.assertEquals(ConstantOperator.TRUE,
+                calculator.removePartitionPredicate(predicate, scan, ICEBERG_TABLE_METADATA));
+        // full-table ANALYZE statistics and default statistics keep it in the selectivity
+        Statistics analyzed = Statistics.builder().setStatsSource(Statistics.StatsSource.ANALYZE).build();
+        Assertions.assertEquals(predicate, calculator.removePartitionPredicate(predicate, scan, analyzed));
+        Assertions.assertEquals(predicate,
+                calculator.removePartitionPredicate(predicate, scan, Statistics.builder().build()));
+        Assertions.assertEquals(predicate, calculator.removePartitionPredicate(predicate, scan, null));
+    }
+
+    @Test
+    public void testRemovedIcebergPartitionPredicateKeepsColumnStatistics() {
+        LogicalIcebergScanOperator scan = icebergScan("partitioned_db", "t1");
+        ColumnRefOperator date = icebergColumn(scan, "date");
+        ColumnRefOperator id = icebergColumn(scan, "id");
+        ScalarOperator predicate = new InPredicateOperator(false, date, ConstantOperator.createVarchar("2020-01-01"),
+                ConstantOperator.createVarchar("2020-01-02"));
+        scan = new LogicalIcebergScanOperator(scan.getTable(), scan.getColRefToColumnMetaMap(),
+                scan.getColumnMetaToColRefMap(), -1, predicate, TvrTableSnapshot.empty());
+        LogicalIcebergScanOperator finalScan = scan;
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatistics(OptimizerContext session, String catalogName, Table table,
+                                                 Map<ColumnRefOperator, Column> columns,
+                                                 List<PartitionKey> partitionKeys, ScalarOperator predicate,
+                                                 long limit, TvrVersionRange version) {
+                // the row count of the files planned with the scan predicate
+                Statistics.Builder builder = Statistics.builder().setOutputRowCount(100)
+                        .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
+                finalScan.getOutputColumns().forEach(col -> builder.addColumnStatistic(col,
+                        new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0.0, 10.0, 50)));
+                return builder.build();
+            }
+        };
+        GroupExpression groupExpression = new GroupExpression(scan, Lists.newArrayList());
+        groupExpression.setGroup(new Group(0));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+
+        Statistics statistics = expressionContext.getStatistics();
+        // the IN list is not applied to the pruned row count again, but still caps the NDV of its column
+        Assertions.assertEquals(100, statistics.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(2, statistics.getColumnStatistic(date).getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(50, statistics.getColumnStatistic(id).getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testRemoveIcebergPartitionPredicateOnlyForPrunedConjuncts() {
+        StatisticsCalculator calculator = new StatisticsCalculator();
+
+        // a string-to-temporal cast on the identity partition column is not part of the converted scan predicate
+        LogicalIcebergScanOperator identity = icebergScan("partitioned_db", "t1");
+        ScalarOperator castEq = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(DateType.DATE, icebergColumn(identity, "date")),
+                ConstantOperator.createDate(LocalDateTime.of(2020, 1, 1, 0, 0)));
+        Assertions.assertEquals(castEq, calculator.removePartitionPredicate(castEq, identity, ICEBERG_TABLE_METADATA));
+        // a literal the converter cannot bind to the string column does not prune either
+        ScalarOperator intLt = new BinaryPredicateOperator(BinaryType.LT, icebergColumn(identity, "date"),
+                ConstantOperator.createInt(50));
+        Assertions.assertEquals(intLt, calculator.removePartitionPredicate(intLt, identity, ICEBERG_TABLE_METADATA));
+
+        // bucket / truncate / time transforms prune at most whole transformed partitions, a range on a bucket column
+        // not at all
+        List<String[]> transformed = List.of(new String[] {"t0_bucket", "ts"}, new String[] {"t0_day", "ts"},
+                new String[] {"t0_truncate", "data"});
+        for (String[] t : transformed) {
+            LogicalIcebergScanOperator scan = icebergScan("partitioned_transforms_db", t[0]);
+            ColumnRefOperator column = icebergColumn(scan, t[1]);
+            ScalarOperator literal = column.getType().isStringType() ? ConstantOperator.createVarchar("abcde")
+                    : ConstantOperator.createDatetime(LocalDateTime.of(2024, 1, 1, 0, 0));
+            ScalarOperator ge = new BinaryPredicateOperator(BinaryType.GE, column, literal);
+            Assertions.assertEquals(ge, calculator.removePartitionPredicate(ge, scan, ICEBERG_TABLE_METADATA), t[0]);
+        }
+
+        // identity partitioned in the current spec only: files of the older month(ts) spec are not pruned exactly
+        LogicalIcebergScanOperator evolved = icebergScan("partitioned_transforms_db", "t0_date_month_identity_evolution");
+        ScalarOperator tsEq = new BinaryPredicateOperator(BinaryType.EQ, icebergColumn(evolved, "ts"),
+                ConstantOperator.createDatetime(LocalDateTime.of(2024, 1, 1, 0, 0)));
+        Assertions.assertEquals(tsEq, calculator.removePartitionPredicate(tsEq, evolved, ICEBERG_TABLE_METADATA));
+    }
+
+    private static final Statistics ICEBERG_TABLE_METADATA =
+            Statistics.builder().setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
+
+    private LogicalIcebergScanOperator icebergScan(String db, String tableName) {
+        Table icebergTable = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", db, tableName);
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        List<Column> columns = icebergTable.getColumns();
+        for (int i = 0; i < columns.size(); i++) {
+            ColumnRefOperator ref = new ColumnRefOperator(i, columns.get(i).getType(), columns.get(i).getName(), true);
+            refToColumn.put(ref, columns.get(i));
+            columnToRef.put(columns.get(i), ref);
+        }
+        return new LogicalIcebergScanOperator(icebergTable, refToColumn, columnToRef, -1, null,
+                TvrTableSnapshot.empty());
+    }
+
+    private static ColumnRefOperator icebergColumn(LogicalIcebergScanOperator scan, String name) {
+        return scan.getColRefToColumnMetaMap().keySet().stream().filter(ref -> ref.getName().equals(name))
+                .findFirst().orElseThrow();
+    }
+
+    @Test
+<<<<<<< HEAD
+=======
+    public void testLogicalIcebergTableScanCapturesAnalyzedStatsToDump() {
+        // A query dump records the per-column ANALYZE row counts and the iceberg format version of an external table
+        // planned from ANALYZE statistics, so replay can reproduce the scan row count and V3-only rewrites.
+        Table icebergTable = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "partitioned_db", "t1");
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        List<Column> columns = icebergTable.getColumns();
+        for (int i = 0; i < columns.size(); i++) {
+            ColumnRefOperator ref = new ColumnRefOperator(i, columns.get(i).getType(), columns.get(i).getName(), true);
+            refToColumn.put(ref, columns.get(i));
+            columnToRef.put(columns.get(i), ref);
+        }
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator,
+                    Column> cols) {
+                Statistics.Builder builder = Statistics.builder();
+                cols.keySet().forEach(col -> builder.addColumnStatistic(col, new ColumnStatistic(0, 100, 0.0, 5.0, 100)));
+                return builder.setOutputRowCount(100).build();
+            }
+        };
+        String analyzed = columns.get(0).getName();
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> cols) {
+                return cols.stream().map(c -> c.equals(analyzed)
+                        ? new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0.0, 5.0, 100), 3612L, "")
+                        : ConnectorTableColumnStats.unknown()).collect(Collectors.toList());
+            }
+        };
+
+        DumpInfo previous = connectContext.getDumpInfo();
+        try {
+            QueryDumpInfo dumpInfo = new QueryDumpInfo(connectContext);
+            // the analyzer registers every table of a dumped query
+            dumpInfo.addTable("partitioned_db", icebergTable);
+            connectContext.setDumpInfo(dumpInfo);
+            estimateIcebergScan(icebergTable, refToColumn, columnToRef);
+            Assertions.assertEquals(Map.of("partitioned_db.t1", Map.of(analyzed, 3612L)),
+                    dumpInfo.getExternalColumnRowCountMap());
+            Assertions.assertEquals(1, dumpInfo.getExternalTableFormatVersionMap().size());
+
+            // a dump info that does not keep these sections, and no dump at all, plan the same way
+            connectContext.setDumpInfo(new MockDumpInfo());
+            estimateIcebergScan(icebergTable, refToColumn, columnToRef);
+            connectContext.setDumpInfo(null);
+            estimateIcebergScan(icebergTable, refToColumn, columnToRef);
+        } finally {
+            connectContext.setDumpInfo(previous);
+        }
+    }
+
+    private void estimateIcebergScan(Table icebergTable, Map<ColumnRefOperator, Column> refToColumn,
+                                     Map<Column, ColumnRefOperator> columnToRef) {
+        LogicalIcebergScanOperator scan = new LogicalIcebergScanOperator(icebergTable, refToColumn, columnToRef, -1,
+                null, TvrTableSnapshot.empty());
+        GroupExpression groupExpression = new GroupExpression(scan, Lists.newArrayList());
+        groupExpression.setGroup(new Group(0));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+        Assertions.assertEquals(100, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+    }
+
+    @Test
+>>>>>>> 387ca2b ([BugFix][RB-1306] Decide partition predicate removal per scan from its own statistics (#82902))
     public void testLogicalOlapTableEmptyPartition() {
         ColumnRefOperator idDate = columnRefFactory.create("id_date", DateType.DATE, true);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();

@@ -763,7 +763,6 @@ public class MetadataMgr {
         if (internalStatistics == null ||
                 internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             // Get basic stats from connector metadata.
-            session.setObtainedFromInternalStatistics(false);
             // Avoid `analyze table` to collect table statistics from metadata.
             if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
                 return internalStatistics;
@@ -793,12 +792,22 @@ public class MetadataMgr {
                             setOutputRowCount(connectorBasicStats.getOutputRowCount())
                             .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
                 } else {
+<<<<<<< HEAD
+=======
+                    // A connector serving ANALYZE statistics (query dump replay) keeps that stats source, so the
+                    // partition predicate stays in the selectivity like the internal-statistics branch below.
+>>>>>>> 387ca2b ([BugFix][RB-1306] Decide partition predicate removal per scan from its own statistics (#82902))
                     return connectorBasicStats;
                 }
             }
         } else {
+<<<<<<< HEAD
             session.setObtainedFromInternalStatistics(true);
             return internalStatistics;
+=======
+            captureAnalyzedColumnRowCountsToDump(session, catalogName, table, columns);
+            return widenWithPartitionSourceRanges(catalogName, table, columns, internalStatistics, versionRange);
+>>>>>>> 387ca2b ([BugFix][RB-1306] Decide partition predicate removal per scan from its own statistics (#82902))
         }
     }
 
