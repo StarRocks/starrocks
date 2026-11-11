@@ -161,7 +161,8 @@ public final class DeltaLakePrefetchSource implements RemoteFileInfoSource {
             submit(future);
         }
         Batch batch;
-        try (Timer ignored = Tracers.watchScope(ownerTracers, EXTERNAL, "DELTA_LAKE.prefetchWait")) {
+        // Background deployment installs its own tracer fork and merges it when the task completes.
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.prefetchWait")) {
             batch = future.get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

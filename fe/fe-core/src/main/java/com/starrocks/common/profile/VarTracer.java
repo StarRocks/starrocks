@@ -14,7 +14,6 @@
 
 package com.starrocks.common.profile;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 import java.util.Comparator;
@@ -25,13 +24,13 @@ import java.util.stream.Collectors;
 public class VarTracer {
     private final Map<String, Var<?>> allVars = Maps.newHashMap();
 
-    public void record(long time, String name, String value) {
+    public synchronized void record(long time, String name, String value) {
         StringVar v = new StringVar(time, name);
         v.update(value);
         allVars.put(name, v);
     }
 
-    public void count(long time, String name, long value) {
+    public synchronized void count(long time, String name, long value) {
         if (allVars.containsKey(name)) {
             allVars.get(name).add(value);
             return;
@@ -42,12 +41,19 @@ public class VarTracer {
     }
 
     public List<Var<?>> getAllVarsWithOrder() {
-        return allVars.values().stream().sorted(Comparator.comparingLong(Var::getTimePoint))
+        return getAllVars().stream().sorted(Comparator.comparingLong(Var::getTimePoint))
                 .collect(Collectors.toList());
     }
 
-    public List<Var<?>> getAllVars() {
-        return Lists.newArrayList(allVars.values());
+    // Forked tracers share this store, including during asynchronous query cleanup.
+    public synchronized List<Var<?>> getAllVars() {
+        return allVars.values().stream().map(VarTracer::snapshot).collect(Collectors.toList());
+    }
+
+    private static <T> Var<T> snapshot(Var<T> original) {
+        Var<T> copy = new Var<>(original.getTimePoint(), original.getName());
+        copy.update(original.getValue());
+        return copy;
     }
 
     private static class StringVar extends Var<String> {

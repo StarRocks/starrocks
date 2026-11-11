@@ -17,6 +17,7 @@ package com.starrocks.connector.delta;
 import com.google.common.cache.CacheBuilder;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
@@ -149,6 +150,30 @@ class DeltaLakePrefetchSourceTest {
         }
         assertEquals(1, files.closes.get());
         assertTrue(Tracers.printScopeTimer().contains("DELTA_LAKE.prefetchRead"));
+    }
+
+    @Test
+    void testBackgroundConsumerKeepsWaitTimerOnItsFork() throws Exception {
+        Tracers owner = Tracers.get();
+        Tracers consumer = owner.fork(false);
+        try (DeltaLakePrefetchSource source = new DeltaLakePrefetchSource(new Files(0), Runnable::run);
+                Timer planning = Tracers.watchScope(Tracers.Module.EXTERNAL, "RetryPlanning")) {
+            executor.submit(() -> {
+                Tracers previous = Tracers.get();
+                Tracers.set(consumer);
+                try (Timer deployment = Tracers.watchScope(Tracers.Module.EXTERNAL, "DeployScanRanges")) {
+                    assertFalse(source.hasMoreOutput());
+                    assertTrue(Tracers.getSpecifiedTimer("DELTA_LAKE.prefetchWait").isPresent());
+                } finally {
+                    Tracers.set(previous);
+                }
+            }).get(5, TimeUnit.SECONDS);
+            // The planning thread must not own the consumer's live wait scope.
+            assertFalse(Tracers.getSpecifiedTimer("DELTA_LAKE.prefetchWait").isPresent());
+            owner.mergeFrom(consumer);
+        }
+        assertTrue(Tracers.getSpecifiedTimer("DELTA_LAKE.prefetchWait").isPresent());
+        assertTrue(Tracers.printScopeTimer().contains("    -- DELTA_LAKE.prefetchWait[1]"));
     }
 
     @Test
