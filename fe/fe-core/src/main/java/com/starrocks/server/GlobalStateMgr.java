@@ -284,11 +284,13 @@ import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -573,6 +575,8 @@ public class GlobalStateMgr {
     private final ExecutorService queryDeployExecutor;
     private final ThreadPoolExecutor refreshOtherFeDispatchExecutor;
     private final ThreadPoolExecutor refreshOtherFeRpcExecutor;
+    // Separate from refreshOtherFeRpcExecutor so invalidations do not queue behind full refreshes
+    private final ThreadPoolExecutor invalidateOtherFeRpcExecutor;
     private final WarehouseIdleChecker warehouseIdleChecker;
 
     private final ClusterSnapshotMgr clusterSnapshotMgr;
@@ -938,6 +942,11 @@ public class GlobalStateMgr {
                 Math.max(16, Config.refresh_other_fe_rpc_executor_thread_num * 4),
                 "refresh-other-fe-rpc",
                 true);
+        this.invalidateOtherFeRpcExecutor = ThreadPoolManager.newDaemonFixedThreadPoolWithAbortPolicy(
+                Config.refresh_other_fe_rpc_executor_thread_num,
+                Math.max(16, Config.refresh_other_fe_rpc_executor_thread_num * 4),
+                "invalidate-other-fe-rpc",
+                true);
         getConfigRefreshDaemon().registerListener(this::refreshOtherFeExecutorConfig);
 
         this.warehouseIdleChecker = new WarehouseIdleChecker();
@@ -963,6 +972,8 @@ public class GlobalStateMgr {
             if (Config.refresh_other_fe_rpc_executor_thread_num > 0) {
                 ThreadPoolManager.setFixedThreadPoolSize(
                         refreshOtherFeRpcExecutor, Config.refresh_other_fe_rpc_executor_thread_num);
+                ThreadPoolManager.setFixedThreadPoolSize(
+                        invalidateOtherFeRpcExecutor, Config.refresh_other_fe_rpc_executor_thread_num);
             } else {
                 LOG.warn("ignore invalid config refresh_other_fe_rpc_executor_thread_num={}",
                         Config.refresh_other_fe_rpc_executor_thread_num);
@@ -3546,6 +3557,81 @@ public class GlobalStateMgr {
             LOG.error("Async refresh others fe dispatch rejected on {}.{}.{} with partitions {}",
                     tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), partitionsSnapshot, e);
             return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    /**
+     * Invalidate the table on other alive FEs and wait for them, for at most
+     * {@code iceberg_commit_invalidate_other_fe_timeout_ms}. It runs after a successful commit, so failures are
+     * only logged.
+     */
+    public void invalidateOthersFeTable(TableName tableName) {
+        int timeoutMs = Config.iceberg_commit_invalidate_other_fe_timeout_ms;
+        if (timeoutMs <= 0) {
+            return;
+        }
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+        Map<String, Future<TStatus>> pending = Maps.newHashMap();
+        try {
+            String selfHost = getNodeMgr().getSelfNode().first;
+            for (Frontend fe : getNodeMgr().getFrontends(null)) {
+                if (!fe.getHost().equals(selfHost) && fe.isAlive()) {
+                    enqueueOtherFeInvalidate(pending, fe, tableName, timeoutMs);
+                }
+            }
+            for (Map.Entry<String, Future<TStatus>> entry : pending.entrySet()) {
+                awaitOtherFeInvalidated(entry.getKey(), entry.getValue(), tableName, deadline, timeoutMs);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            LOG.warn("Failed to invalidate {} on other fes", tableName, e);
+        } finally {
+            pending.values().forEach(future -> future.cancel(false));
+        }
+    }
+
+    private void enqueueOtherFeInvalidate(Map<String, Future<TStatus>> pending, Frontend fe, TableName tableName,
+                                          int timeoutMs) {
+        TNetworkAddress thriftAddress = new TNetworkAddress(fe.getHost(), fe.getRpcPort());
+        try {
+            pending.put(fe.getHost(), invalidateOtherFeRpcExecutor.submit(
+                    () -> invalidateOtherFeTableRpc(thriftAddress, tableName, timeoutMs)));
+        } catch (RejectedExecutionException e) {
+            LOG.warn("Invalidate {} on fe {} was not enqueued: {}", tableName, fe.getHost(), e.getMessage());
+        }
+    }
+
+    private void awaitOtherFeInvalidated(String host, Future<TStatus> future, TableName tableName, long deadline,
+                                         int timeoutMs) throws InterruptedException, ExecutionException {
+        try {
+            TStatus status = future.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+            if (status.getStatus_code() != TStatusCode.OK) {
+                LOG.warn("Fe {} did not invalidate {}: {}", host, tableName, status.getError_msgs());
+            }
+        } catch (TimeoutException e) {
+            LOG.warn("Fe {} did not invalidate {} within {} ms", host, tableName, timeoutMs);
+        }
+    }
+
+    private TStatus invalidateOtherFeTableRpc(TNetworkAddress thriftAddress, TableName tableName, int timeoutMs) {
+        TRefreshTableRequest request = new TRefreshTableRequest();
+        request.setCatalog_name(tableName.getCatalog());
+        request.setDb_name(tableName.getDb());
+        request.setTable_name(tableName.getTbl());
+        request.setInvalidate_only(true);
+        try {
+            TRefreshTableResponse response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    thriftAddress,
+                    timeoutMs,
+                    1,
+                    client -> client.refreshTable(request));
+            return response.getStatus();
+        } catch (Exception e) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            return status;
         }
     }
 

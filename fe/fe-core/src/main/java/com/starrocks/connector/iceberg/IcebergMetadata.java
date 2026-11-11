@@ -461,8 +461,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                 LOG.error("Failed to refresh caching iceberg table.");
                 icebergCatalog.invalidateCache(dbName, tableName);
             }
-            asyncRefreshOthersFeMetadataCache(dbName, tableName);
         }
+        invalidateThenRefreshOthersFeMetadataCache(dbName, tableName);
         return resultSet;
     }
 
@@ -495,7 +495,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         } finally {
             if (shouldInvalidateCache) {
                 invalidateCacheAfterCommit(dbName, tableName);
-                asyncRefreshOthersFeMetadataCache(dbName, tableName);
+                invalidateThenRefreshOthersFeMetadataCache(dbName, tableName);
             }
         }
     }
@@ -764,7 +764,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         // Invalidate cache after commit
         invalidateCacheAfterCommit(dbName, tableName);
-        asyncRefreshOthersFeMetadataCache(dbName, tableName);
+        invalidateThenRefreshOthersFeMetadataCache(dbName, tableName);
     }
 
     /**
@@ -798,7 +798,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             icebergCatalog.dropTable(context, stmt.getDbName(), stmt.getTableName(), false);
             tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
             dropNameKeyedStatistics(stmt.getDbName(), stmt.getTableName());
-            asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
+            invalidateThenRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
             return;
         }
 
@@ -814,7 +814,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         icebergCatalog.dropTable(context, stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
-        asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
+        invalidateThenRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
     }
 
     /**
@@ -2728,6 +2728,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         icebergCatalog.invalidateTableCache(dbName, tableName);
     }
 
+    @Override
+    public void invalidateCachedTable(String dbName, String tableName) {
+        tables.remove(TableIdentifier.of(dbName, tableName));
+        icebergCatalog.invalidateTableCacheAfterPeerCommit(dbName, tableName);
+    }
+
     private void refreshTableWithResource(Table table) {
         IcebergTable icebergTable = (IcebergTable) table;
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
@@ -2914,6 +2920,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                 throw new RuntimeException(e);
             }
         }
+        // Outside the commit task, so waiting on a slow FE does not hold up the next commit queued for this table
+        invalidateOthersFeMetadataCache(dbName, tableName);
     }
 
     private void commitWithCleanup(Runnable commitAction, Runnable cleanupAction,
@@ -3612,6 +3620,16 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
+    }
+
+    private void invalidateThenRefreshOthersFeMetadataCache(String dbName, String tableName) {
+        invalidateOthersFeMetadataCache(dbName, tableName);
+        asyncRefreshOthersFeMetadataCache(dbName, tableName);
+    }
+
+    private void invalidateOthersFeMetadataCache(String dbName, String tableName) {
+        LOG.info("Invalidate others fe iceberg metadata cache on {}.{}.{}", catalogName, dbName, tableName);
+        GlobalStateMgr.getCurrentState().invalidateOthersFeTable(new TableName(catalogName, dbName, tableName));
     }
 
     private void asyncRefreshOthersFeMetadataCache(String dbName, String tableName) {

@@ -49,6 +49,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -409,6 +410,29 @@ public class MetadataMgrTest {
         Assertions.assertTrue(metadata.isPresent());
         metadata = metadataMgr.getOptionalMetadata("hive_catalog_not_exist");
         Assertions.assertFalse(metadata.isPresent());
+    }
+
+    @Test
+    public void testInvalidateCachedTableReachesTheCatalogMetadata() {
+        List<String> invalidated = new ArrayList<>();
+        ConnectorMetadata catalogMetadata = new ConnectorMetadata() {
+            @Override
+            public void invalidateCachedTable(String dbName, String tableName) {
+                invalidated.add(dbName + "." + tableName);
+            }
+        };
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Optional<ConnectorMetadata> getOptionalMetadata(Optional<String> queryId, String catalogName) {
+                return "iceberg_catalog".equals(catalogName) ? Optional.of(catalogMetadata) : Optional.empty();
+            }
+        };
+
+        metadataMgr.invalidateCachedTable("iceberg_catalog", "iceberg_db", "iceberg_table");
+        metadataMgr.invalidateCachedTable("catalog_not_exist", "iceberg_db", "iceberg_table");
+
+        Assertions.assertEquals(List.of("iceberg_db.iceberg_table"), invalidated);
     }
 
     @Test

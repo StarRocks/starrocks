@@ -1088,6 +1088,11 @@ public class MetadataMgr {
         connectorMetadata.ifPresent(metadata -> metadata.invalidateTableForRead(srDbName, table));
     }
 
+    public void invalidateCachedTable(String catalogName, String dbName, String tableName) {
+        getOptionalMetadata(Optional.empty(), catalogName)
+                .ifPresent(metadata -> metadata.invalidateCachedTable(dbName, tableName));
+    }
+
     public void finishSink(String catalogName, String dbName, String tableName,
                            List<TSinkCommitInfo> sinkCommitInfos, String branch) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);

@@ -48,6 +48,7 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.TableScan;
+import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.io.CloseableIterable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -675,6 +676,107 @@ public class CachingIcebergCatalogTest {
         Assertions.assertSame(cachedTable, catalog.getTable(ctx, "db1", "t1"));
         catalog.refreshTable("db1", "t1", ctx, executor);
         Assertions.assertSame(reloadedTable, tableCache.getIfPresent(key));
+    }
+
+    @Test
+    public void testRefreshAfterAPeerCommitWarmsTheCommittedSnapshot(@Mocked IcebergCatalog delegate,
+                                                                    @Mocked PartitionSpec spec) {
+        Table beforeCommit = tableAtSnapshot(11L, 1000L, "metadata-v1", spec);
+        Table afterCommit = tableAtSnapshot(22L, 2000L, "metadata-v2", spec);
+        new Expectations() {
+            {
+                delegate.getTable((ConnectContext) any, "db1", "t1");
+                result = beforeCommit;
+                result = afterCommit;
+                delegate.getPartitions((IcebergTable) any, anyLong, null);
+                result = new HashMap<String, Partition>();
+                minTimes = 0;
+            }
+        };
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        CachingIcebergCatalog catalog = new CachingIcebergCatalog(CATALOG_NAME, delegate,
+                DEFAULT_CATALOG_PROPERTIES, executor);
+        ConnectContext ctx = new ConnectContext();
+
+        catalog.getTable(ctx, "db1", "t1");
+        catalog.invalidateTableCacheAfterPeerCommit("db1", "t1");
+        // The refresh that follows a commit reads the table first, so it finds the committed snapshot cached
+        Assertions.assertSame(afterCommit, catalog.getTable(ctx, "db1", "t1"));
+        catalog.refreshTable("db1", "t1", ctx, executor);
+
+        Assertions.assertNotNull(cachedPartitions(catalog).getIfPresent(new IcebergTableName("db1", "t1", 22L)));
+    }
+
+    @Test
+    public void testRefreshOfAnUnchangedTableDoesNotWarmItsCaches(@Mocked IcebergCatalog delegate,
+                                                                 @Mocked PartitionSpec spec) {
+        Table current = tableAtSnapshot(22L, 2000L, "metadata-v2", spec);
+        new Expectations() {
+            {
+                delegate.getTable((ConnectContext) any, "db1", "t1");
+                result = current;
+                delegate.getPartitions((IcebergTable) any, anyLong, null);
+                result = new HashMap<String, Partition>();
+                minTimes = 0;
+            }
+        };
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        CachingIcebergCatalog catalog = new CachingIcebergCatalog(CATALOG_NAME, delegate,
+                DEFAULT_CATALOG_PROPERTIES, executor);
+        ConnectContext ctx = new ConnectContext();
+
+        catalog.getTable(ctx, "db1", "t1");
+        catalog.refreshTable("db1", "t1", ctx, executor);
+
+        Assertions.assertNull(cachedPartitions(catalog).getIfPresent(new IcebergTableName("db1", "t1", 22L)));
+    }
+
+    @Test
+    public void testLookupOfADroppedTableDropsWhatWasCachedForIt(@Mocked IcebergCatalog delegate,
+                                                                @Mocked PartitionSpec spec) {
+        Table table = tableAtSnapshot(11L, 1000L, "metadata-v1", spec);
+        new Expectations() {
+            {
+                delegate.getTable((ConnectContext) any, "db1", "t1");
+                result = table;
+                result = new NoSuchTableException("Table does not exist: db1.t1");
+            }
+        };
+        CachingIcebergCatalog catalog = new CachingIcebergCatalog(CATALOG_NAME, delegate,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        ConnectContext ctx = new ConnectContext();
+        IcebergTableName key = new IcebergTableName("db1", "t1");
+        Map<IcebergTableName, Set<String>> metaFiles = Deencapsulation.getField(catalog, "metaFileCacheMap");
+        Map<IcebergTableName, ?> droppedForPeerCommit = Deencapsulation.getField(catalog, "droppedForPeerCommit");
+
+        catalog.getTable(ctx, "db1", "t1");
+        metaFiles.put(key, Sets.newHashSet("/metadata/m1.avro"));
+        // Another FE dropped the table: its invalidation drops the cached table, so the next lookup misses
+        catalog.invalidateTableCacheAfterPeerCommit("db1", "t1");
+        Assertions.assertThrows(NoSuchTableException.class, () -> catalog.getTable(ctx, "db1", "t1"));
+
+        Assertions.assertAll(
+                () -> Assertions.assertFalse(metaFiles.containsKey(key)),
+                () -> Assertions.assertFalse(droppedForPeerCommit.containsKey(key)));
+    }
+
+    private static LoadingCache<IcebergTableName, Map<String, Partition>> cachedPartitions(
+            CachingIcebergCatalog catalog) {
+        return Deencapsulation.getField(catalog, "partitionCache");
+    }
+
+    private static Table tableAtSnapshot(long snapshotId, long timestampMillis, String location, PartitionSpec spec) {
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        Mockito.when(snapshot.snapshotId()).thenReturn(snapshotId);
+        Mockito.when(snapshot.timestampMillis()).thenReturn(timestampMillis);
+        Mockito.when(snapshot.dataManifests(Mockito.any())).thenReturn(Lists.newArrayList());
+        TableMetadata meta = Mockito.mock(TableMetadata.class);
+        Mockito.when(meta.metadataFileLocation()).thenReturn(location);
+        Mockito.when(meta.spec()).thenReturn(spec);
+        Mockito.when(meta.currentSnapshot()).thenReturn(snapshot);
+        TableOperations ops = Mockito.mock(TableOperations.class);
+        Mockito.when(ops.current()).thenReturn(meta);
+        return new BaseTable(ops, "db1.t1");
     }
 
     @Test

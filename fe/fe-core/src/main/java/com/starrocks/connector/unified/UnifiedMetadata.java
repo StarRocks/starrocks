@@ -289,6 +289,11 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     }
 
     @Override
+    public void invalidateCachedTable(String dbName, String tableName) {
+        metadataMap.values().forEach(metadata -> metadata.invalidateCachedTable(dbName, tableName));
+    }
+
+    @Override
     public boolean dbExists(ConnectContext context, String dbName) {
         return hiveMetadata.dbExists(context, dbName);
     }

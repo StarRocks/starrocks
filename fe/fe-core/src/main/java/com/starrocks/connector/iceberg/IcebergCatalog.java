@@ -280,6 +280,11 @@ public interface IcebergCatalog extends MemoryTrackable {
     default void invalidateTableCache(String dbName, String tableName) {
     }
 
+    /** Drop the cached table after another FE committed to it. */
+    default void invalidateTableCacheAfterPeerCommit(String dbName, String tableName) {
+        invalidateTableCache(dbName, tableName);
+    }
+
     default void invalidatePartitionCache(String dbName, String tableName) {
     }
 
