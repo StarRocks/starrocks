@@ -18,6 +18,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import org.apache.hadoop.conf.Configuration;
@@ -37,6 +38,7 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.reflect.Field;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -224,6 +226,14 @@ public class IcebergCachingFileIOTest {
         keyFile.set("fs.gs.auth.service.account.email", "sa@project.iam.gserviceaccount.com");
         Assertions.assertNotSame(shared, fileSystemOf(newFileIO(keyFile, new HashMap<>()), "gs://bucket-a/t"));
 
+        // gcs-connector reads google.cloud.* when the fs.gs.* key is unset, so it is part of the credential.
+        Configuration fallbackKeyFile = new Configuration(base);
+        fallbackKeyFile.set("google.cloud.auth.service.account.json.keyfile", "/etc/keys/a.json");
+        FileSystem fallback = fileSystemOf(newFileIO(fallbackKeyFile, new HashMap<>()), "gs://bucket-a/t");
+        Assertions.assertNotSame(shared, fallback);
+        fallbackKeyFile.set("google.cloud.auth.service.account.json.keyfile", "/etc/keys/b.json");
+        Assertions.assertNotSame(fallback, fileSystemOf(newFileIO(fallbackKeyFile, new HashMap<>()), "gs://bucket-a/t"));
+
         Configuration endpoint = new Configuration(base);
         endpoint.set("fs.gs.endpoint", "https://storage.example.com");
         Assertions.assertNotSame(shared, fileSystemOf(newFileIO(endpoint, new HashMap<>()), "gs://bucket-a/t"));
@@ -242,7 +252,7 @@ public class IcebergCachingFileIOTest {
         Assertions.assertNotSame(hadoopCached, fileSystemOf(ambient, "gs://bucket-c/t"));
 
         // Other schemes keep going through the wrapped FileIO.
-        Assertions.assertNull(IcebergCachingFileIO.sharedGcsFileSystem("file:///tmp/t", base));
+        Assertions.assertNull(IcebergCachingFileIO.sharedFileSystem("file:///tmp/t", base));
     }
 
     @Test
@@ -265,7 +275,7 @@ public class IcebergCachingFileIOTest {
         conf.set("fs.gs.impl", FakeGcsFileSystem.class.getName());
         conf.set("fs.defaultFS", "gs://bucket-d/");
 
-        FileSystem fs = IcebergCachingFileIO.sharedGcsFileSystem("/t/metadata/v1.metadata.json", conf);
+        FileSystem fs = IcebergCachingFileIO.sharedFileSystem("/t/metadata/v1.metadata.json", conf);
         Assertions.assertEquals(URI.create("gs://bucket-d"), fs.getUri());
     }
 
@@ -275,21 +285,29 @@ public class IcebergCachingFileIOTest {
         conf.set("fs.gs.impl", FailingGcsFileSystem.class.getName());
 
         Assertions.assertThrows(UncheckedIOException.class,
-                () -> IcebergCachingFileIO.sharedGcsFileSystem("gs://bucket-e/t", conf));
+                () -> IcebergCachingFileIO.sharedFileSystem("gs://bucket-e/t", conf));
+        // An upper-case scheme is still resolved here rather than through Hadoop's credential-blind cache.
+        Assertions.assertThrows(UncheckedIOException.class,
+                () -> IcebergCachingFileIO.sharedFileSystem("GS://bucket-e/t", conf));
     }
 
     @Test
-    public void testEvictedGcsFileSystemIsClosedQuietly() {
-        TrackingGcsFileSystem fs = new TrackingGcsFileSystem(false);
-        IcebergCachingFileIO.closeQuietly(fs);
-        Assertions.assertTrue(fs.closeCalled);
+    public void testEvictedGcsFileSystemStaysOpenForItsFiles() throws ReflectiveOperationException {
+        Configuration conf = new Configuration();
+        conf.set("fs.gs.impl", FakeGcsFileSystem.class.getName());
+        IcebergCachingFileIO fileIO = newFileIO(conf, new HashMap<>());
 
-        // A failing close is logged, not thrown, so eviction never breaks the cache.
-        TrackingGcsFileSystem failing = new TrackingGcsFileSystem(true);
-        Assertions.assertDoesNotThrow(() -> IcebergCachingFileIO.closeQuietly(failing));
-        Assertions.assertTrue(failing.closeCalled);
+        // A file handed out before eviction keeps a usable FileSystem; the next file gets a new one.
+        FakeGcsFileSystem held = (FakeGcsFileSystem) fileSystemOf(fileIO, "gs://bucket-f/t");
+        IcebergCachingFileIO.SHARED_FILE_SYSTEMS.invalidateAll();
+        Assertions.assertFalse(held.closed);
+        Assertions.assertNotSame(held, fileSystemOf(fileIO, "gs://bucket-f/t"));
 
-        Assertions.assertDoesNotThrow(() -> IcebergCachingFileIO.closeQuietly(null));
+        // Hadoop's own cache keeps an instance until close(), so one that is never closed must not be in it.
+        Field hadoopCache = FileSystem.class.getDeclaredField("CACHE");
+        hadoopCache.setAccessible(true);
+        Map<?, FileSystem> hadoopCached = Deencapsulation.getField(hadoopCache.get(null), "map");
+        Assertions.assertFalse(hadoopCached.containsValue(held));
     }
 
     private static IcebergCachingFileIO newFileIO(Configuration conf, Map<String, String> properties) {
@@ -305,6 +323,13 @@ public class IcebergCachingFileIOTest {
 
     public static class FakeGcsFileSystem extends RawLocalFileSystem {
         private URI uri;
+        private volatile boolean closed;
+
+        @Override
+        public void close() throws IOException {
+            closed = true;
+            super.close();
+        }
 
         @Override
         public void initialize(URI name, Configuration conf) throws IOException {
@@ -323,23 +348,6 @@ public class IcebergCachingFileIOTest {
         @Override
         public void initialize(URI name, Configuration conf) throws IOException {
             throw new IOException("cannot reach GCS");
-        }
-    }
-
-    private static class TrackingGcsFileSystem extends RawLocalFileSystem {
-        private final boolean failClose;
-        private boolean closeCalled;
-
-        TrackingGcsFileSystem(boolean failClose) {
-            this.failClose = failClose;
-        }
-
-        @Override
-        public void close() throws IOException {
-            closeCalled = true;
-            if (failClose) {
-                throw new IOException("close failed");
-            }
         }
     }
 

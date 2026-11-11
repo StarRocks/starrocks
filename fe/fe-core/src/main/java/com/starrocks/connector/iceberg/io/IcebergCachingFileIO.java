@@ -65,6 +65,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.hadoop.HadoopInputFile;
@@ -94,6 +95,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -219,9 +221,9 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             Configuration fileConf = buildConfFromProperties(properties, path);
             // deleteFile() and getWrappedIO() still go through wrappedIO, so it needs this file's credential too.
             setWrappedConf(fileConf);
-            FileSystem gcs = sharedGcsFileSystem(path, fileConf);
-            if (gcs != null) {
-                return new CachingInputFile(fileContentCache, HadoopInputFile.fromPath(new Path(path), gcs, fileConf));
+            FileSystem shared = sharedFileSystem(path, fileConf);
+            if (shared != null) {
+                return new CachingInputFile(fileContentCache, HadoopInputFile.fromPath(new Path(path), shared, fileConf));
             }
             return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(path));
         } catch (StarRocksException e) {
@@ -236,9 +238,9 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         try {
             Configuration fileConf = buildConfFromProperties(properties, path);
             setWrappedConf(fileConf);
-            FileSystem gcs = sharedGcsFileSystem(path, fileConf);
-            if (gcs != null) {
-                return HadoopOutputFile.fromPath(new Path(path), gcs, fileConf);
+            FileSystem shared = sharedFileSystem(path, fileConf);
+            if (shared != null) {
+                return HadoopOutputFile.fromPath(new Path(path), shared, fileConf);
             }
             // Wrapped rather than returned as is: newOutputFile itself contacts nothing -- the wait is in
             // create()/createOrOverwrite() on the object handed back, which is where the guard has to be.
@@ -336,55 +338,57 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         }
     }
 
-    // HadoopFileIO resolves gs:// through FileSystem.get(), whose cache key (scheme, authority, ugi) ignores the
-    // credential, and the isolation flag above then builds a GoogleHadoopFileSystem per file instead. gcs-connector
-    // registers a metrics source per instance and never unregisters it, even on close, so that leaks heap on every
-    // metadata read. Keep one instance per bucket and per fs.gs.* configuration here, outside Hadoop's cache, so a
-    // catalog can neither hand its client to another catalog nor pick up one cached with another credential.
-    // Entries idle for an hour (typically expired vended tokens) are closed.
-    private static final Cache<String, FileSystem> GCS_FILE_SYSTEMS = Caffeine.newBuilder()
+    // HadoopFileIO resolves a path through FileSystem.get(), whose cache key (scheme, authority, ugi) ignores the
+    // credential, and the isolation flag above then builds a FileSystem per file instead. On gs:// that leaks heap
+    // on every metadata read: gcs-connector registers a metrics source per instance and never unregisters it, even
+    // on close. For the schemes listed here, keep one instance per authority and per credential configuration,
+    // outside Hadoop's cache, so a catalog can neither hand its client to another catalog nor pick up one cached
+    // with another credential. The prefixes are where the scheme's connector reads credentials and endpoints from
+    // (gcs-connector falls back from fs.gs.* to google.cloud.*). A scheme listed here also has to stay in
+    // SCHEMES_REQUIRING_FS_ISOLATION while deleteFile() goes through the wrapped IO.
+    private static final Map<String, List<String>> SHARED_FS_CONF_PREFIXES =
+            Map.of("gs", List.of("fs.gs.", "google.cloud."));
+
+    // Entries idle for an hour (typically expired vended tokens) are dropped, not closed: a returned InputFile or
+    // OutputFile keeps using its FileSystem, so the garbage collector reclaims it after the last of them.
+    @VisibleForTesting
+    static final Cache<String, FileSystem> SHARED_FILE_SYSTEMS = Caffeine.newBuilder()
             .expireAfterAccess(1, TimeUnit.HOURS)
-            .<String, FileSystem>removalListener((key, fs, cause) -> closeQuietly(fs))
             .build();
 
-    @VisibleForTesting
-    static void closeQuietly(FileSystem fs) {
-        try {
-            if (fs != null) {
-                fs.close();
-            }
-        } catch (IOException e) {
-            LOG.warn("Failed to close an idle GCS FileSystem", e);
-        }
-    }
-
-    static FileSystem sharedGcsFileSystem(String path, Configuration conf) {
+    static FileSystem sharedFileSystem(String path, Configuration conf) {
         URI uri = new Path(path).toUri();
         if (uri.getScheme() == null) {
             uri = FileSystem.getDefaultUri(conf);
         }
-        if (!"gs".equalsIgnoreCase(uri.getScheme())) {
+        List<String> confPrefixes = SHARED_FS_CONF_PREFIXES.get(uri.getScheme().toLowerCase(Locale.ROOT));
+        if (confPrefixes == null) {
             return null;
         }
         URI fsUri = uri;
-        String key = "gs://" + uri.getAuthority() + "/" + gcsConfigurationDigest(conf);
-        return GCS_FILE_SYSTEMS.get(key, k -> {
+        String key = uri.getScheme() + "://" + uri.getAuthority() + "/" + configurationDigest(conf, confPrefixes);
+        return SHARED_FILE_SYSTEMS.get(key, k -> {
             try {
-                return FileSystem.newInstance(fsUri, conf);
+                // Not FileSystem.newInstance(): Hadoop keeps such an instance in its own cache until close().
+                FileSystem fs = ReflectionUtils.newInstance(FileSystem.getFileSystemClass(fsUri.getScheme(), conf), conf);
+                fs.initialize(fsUri, conf);
+                return fs;
             } catch (IOException e) {
                 throw new UncheckedIOException("Failed to create a FileSystem for " + path, e);
             }
         });
     }
 
-    private static String gcsConfigurationDigest(Configuration conf) {
+    private static String configurationDigest(Configuration conf, List<String> prefixes) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            for (Map.Entry<String, String> entry : new TreeMap<>(conf.getPropsWithPrefix("fs.gs.")).entrySet()) {
-                digest.update(entry.getKey().getBytes(StandardCharsets.UTF_8));
-                digest.update((byte) 0);
-                digest.update(entry.getValue().getBytes(StandardCharsets.UTF_8));
-                digest.update((byte) 0);
+            for (String prefix : prefixes) {
+                for (Map.Entry<String, String> entry : new TreeMap<>(conf.getPropsWithPrefix(prefix)).entrySet()) {
+                    digest.update((prefix + entry.getKey()).getBytes(StandardCharsets.UTF_8));
+                    digest.update((byte) 0);
+                    digest.update(entry.getValue().getBytes(StandardCharsets.UTF_8));
+                    digest.update((byte) 0);
+                }
             }
             return HexFormat.of().formatHex(digest.digest());
         } catch (NoSuchAlgorithmException e) {
