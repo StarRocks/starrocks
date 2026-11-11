@@ -99,9 +99,6 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
         });
         // reset the task run id for pct
         this.mvContext.getCtx().setQueryId(UUIDUtil.genUUID());
-        if (mvRefreshParams.isNonTentativeForce()) {
-            recordRefreshModeReason(MaterializedView.RefreshModeReason.FORCE_REFRESH, null);
-        }
 
         // First-batch setup: drop stale state from any prior attempt and install the freeze hook.
         // Subsequent batches reuse the persisted owner and do not enter this branch.

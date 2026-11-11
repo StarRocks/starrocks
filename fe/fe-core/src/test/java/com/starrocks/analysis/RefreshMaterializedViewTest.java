@@ -342,12 +342,6 @@ public class RefreshMaterializedViewTest extends MVTestBase {
     }
 
     @Test
-<<<<<<< HEAD
-    public void testIncrementalRefreshModeRejectsForceRefresh() throws Exception {
-        // Create a MV with PCT mode (no Iceberg required), then flip the persisted refresh_mode
-        // to "incremental" so the FORCE-rejection branch in the analyzer fires. This isolates the
-        // analyzer check from the IVM eligibility constraints of the CREATE path.
-=======
     public void testAutoRefreshModeRejectsPartitionRefreshButAllowsForce() throws Exception {
         // AUTO may fall back to PCT at refresh time but is still an incrementally maintained
         // view, so it keeps INCREMENTAL's restrictions on how a refresh can be asked for.
@@ -388,7 +382,6 @@ public class RefreshMaterializedViewTest extends MVTestBase {
     public void testIncrementalRefreshModeAllowsForceRefresh() throws Exception {
         // Created as PCT and flipped to "incremental", which keeps the CREATE path's IVM eligibility
         // checks out of an analyzer test.
->>>>>>> 10f258ff916... [Feature] Support FORCE refresh for incrementally maintained materialized views (#64692)
         starRocksAssert.withMaterializedView("create materialized view test.mv_incremental_force_refresh\n" +
                 "distributed by hash(k2) buckets 3\n" +
                 "refresh manual\n" +

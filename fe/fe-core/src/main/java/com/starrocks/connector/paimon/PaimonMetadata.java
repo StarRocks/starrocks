@@ -22,7 +22,10 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrDeltaStats;
@@ -50,6 +53,7 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.KeyPartitionRef;
@@ -70,6 +74,7 @@ import org.apache.paimon.CoreOptions;
 import org.apache.paimon.Snapshot;
 import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
+import org.apache.paimon.catalog.DelegateCatalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
@@ -79,6 +84,7 @@ import org.apache.paimon.operation.metrics.ScanMetrics;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
+import org.apache.paimon.schema.Schema;
 import org.apache.paimon.stats.ColStats;
 import org.apache.paimon.table.DataTable;
 import org.apache.paimon.table.FileStoreTable;
@@ -171,6 +177,92 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void createDb(ConnectContext context, String dbName, Map<String, String> dbProperties)
+            throws DdlException, AlreadyExistsException {
+        if (dbProperties != null && !dbProperties.isEmpty()) {
+            throw new DdlException("Paimon CREATE DATABASE does not support catalog or location overrides");
+        }
+        try {
+            paimonNativeCatalog.createDatabase(dbName, false);
+            invalidateDatabaseAfterDdl(dbName);
+        } catch (Catalog.DatabaseAlreadyExistException e) {
+            throw new AlreadyExistsException("Paimon database already exists: " + dbName);
+        } catch (RuntimeException e) {
+            throw new DdlException("Cannot create Paimon database " + dbName, e);
+        }
+    }
+
+    @Override
+    public void dropDb(ConnectContext context, String dbName, boolean isForceDrop)
+            throws DdlException, MetaNotFoundException {
+        try {
+            // FORCE must not turn a nonempty external database into a recursive delete.
+            paimonNativeCatalog.dropDatabase(dbName, false, false);
+            invalidateDatabaseAfterDdl(dbName);
+        } catch (Catalog.DatabaseNotExistException e) {
+            throw new MetaNotFoundException("Paimon database does not exist: " + dbName, e);
+        } catch (Catalog.DatabaseNotEmptyException e) {
+            throw new DdlException("Cannot drop nonempty Paimon database " + dbName, e);
+        } catch (RuntimeException e) {
+            throw new DdlException("Cannot drop Paimon database " + dbName, e);
+        }
+    }
+
+    @Override
+    public boolean createTable(ConnectContext context, CreateTableStmt stmt) throws DdlException {
+        Schema schema = PaimonTableSchemaConverter.toSchema(stmt);
+        Identifier identifier = new Identifier(stmt.getDbName(), stmt.getTableName());
+        try {
+            // Handle duplicates reported by the SDK; filesystem creation races may still raise RuntimeException.
+            paimonNativeCatalog.createTable(identifier, schema, false);
+        } catch (Catalog.TableAlreadyExistException e) {
+            if (stmt.isSetIfNotExists()) {
+                return false;
+            }
+            throw new DdlException("Paimon table already exists: " + identifier.getFullName(), e);
+        } catch (Catalog.DatabaseNotExistException e) {
+            throw new DdlException("Paimon database does not exist: " + stmt.getDbName(), e);
+        } catch (RuntimeException e) {
+            throw new DdlException("Cannot create Paimon table " + identifier.getFullName(), e);
+        }
+        invalidateTableAfterDdl(identifier);
+        return true;
+    }
+
+    private void invalidateDatabaseAfterDdl(String dbName) {
+        databases.remove(dbName);
+        Set<Identifier> cached = new HashSet<>(tables.keySet());
+        cached.addAll(partitionInfos.keySet());
+        // The SDK only evicts cached tables for a cascading drop. An external client may already
+        // have dropped the tables, leaving positive entries even though this database is empty.
+        Catalog catalog = paimonNativeCatalog;
+        while (catalog instanceof DelegateCatalog delegate) {
+            if (catalog instanceof CachingCatalog caching) {
+                caching.tableCache().asMap().keySet().stream()
+                        .filter(identifier -> identifier.getDatabaseName().equals(dbName)).forEach(cached::add);
+            }
+            catalog = delegate.wrapped();
+        }
+        cached.stream().filter(identifier -> identifier.getDatabaseName().equals(dbName))
+                .forEach(this::invalidateTableAfterDdl);
+        paimonSplits.keySet().removeIf(key -> key.getDatabaseName().equals(dbName));
+    }
+
+    private void invalidateTableAfterDdl(Identifier identifier) {
+        tables.remove(identifier);
+        partitionInfos.remove(identifier);
+        paimonSplits.keySet().removeIf(key -> key.getDatabaseName().equals(identifier.getDatabaseName())
+                && key.getTableName().equals(identifier.getObjectName()));
+        try {
+            paimonNativeCatalog.invalidateTable(identifier);
+        } catch (RuntimeException e) {
+            // The durable mutation succeeded; a cache failure must not report the DDL as failed.
+            LOG.warn("Cannot invalidate Paimon metadata after a successful mutation of {}.{}",
+                    identifier.getDatabaseName(), identifier.getObjectName());
+        }
+    }
+
+    @Override
     public void createView(ConnectContext context, CreateViewStmt stmt) {
         String dbName = stmt.getDbName();
         String viewName = stmt.getTable();
@@ -194,18 +286,23 @@ public class PaimonMetadata implements ConnectorMetadata {
         String tableName = stmt.getTableName();
         Table paimonTable = getTable(context, stmt.getDbName(), stmt.getTableName());
         if (paimonTable == null) {
+            if (!stmt.isSetIfExists()) {
+                throw new StarRocksConnectorException("Paimon table %s.%s does not exist", dbName, tableName);
+            }
             return;
         }
+        Identifier identifier = new Identifier(dbName, tableName);
         try {
             if (paimonTable.isPaimonView()) {
-                paimonNativeCatalog.dropView(new Identifier(dbName, tableName), stmt.isForceDrop());
-                return;
+                paimonNativeCatalog.dropView(identifier, stmt.isSetIfExists());
+            } else {
+                paimonNativeCatalog.dropTable(identifier, stmt.isSetIfExists());
             }
-            paimonNativeCatalog.dropTable(new Identifier(dbName, tableName), stmt.isForceDrop());
         } catch (Exception e) {
             throw new StarRocksConnectorException(
                     String.format("Paimon dropTable error for %s.%s", dbName, tableName), e);
         }
+        invalidateTableAfterDdl(identifier);
     }
 
     private void updateAllPartitionInfos(String databaseName, String tableName) {

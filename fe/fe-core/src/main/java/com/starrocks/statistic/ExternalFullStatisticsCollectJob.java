@@ -120,6 +120,14 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     // columns (see StatisticUtils#isDirectValuePartitionColumn) across every partition while other
     // columns stay within the sampled subset - see its buildCollectSQLList override.
     protected List<String> allPartitionNames;
+    // Whether this job scans every partition the table has, and how many partitions the table has, as known to
+    // the caller that built it (see StatisticsCollectJobFactory#buildExternalStatisticsCollectJob). A FULL job
+    // that refreshes only some partitions leaves rows of earlier runs for the rest, which may or may not cover
+    // the table, so its result is committed as SAMPLE over the table's partition count and read through the
+    // SAMPLE extrapolation rather than trusted as whole-table values. Defaults describe an unknown table
+    // partition list, which keeps the FULL commit this job always made.
+    private boolean scansWholeTable = true;
+    private int tablePartitionCount = -1;
     private final List<String> sqlBuffer = Lists.newArrayList();
     private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
     // Per-partition total row count from connector metadata (Iceberg PARTITIONS table), used to extrapolate a
@@ -203,6 +211,20 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         this.catalogName = catalogName;
         this.partitionNames = partitionNames;
         this.allPartitionNames = partitionNames;
+    }
+
+    public void setTablePartitions(boolean scansWholeTable, int tablePartitionCount) {
+        this.scansWholeTable = scansWholeTable;
+        this.tablePartitionCount = tablePartitionCount;
+    }
+
+    public boolean scansWholeTable() {
+        return scansWholeTable;
+    }
+
+    // -1 when the caller did not know the table's partition list.
+    public int getTablePartitionCount() {
+        return tablePartitionCount;
     }
 
     @Override
@@ -326,6 +348,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         executeCollectPhase(collectTasks, context, analyzeStatus, 0, collectTasks.size(), parallelism);
         flushInsertStatisticsData(context, true);
         cleanupStaleRawKeyedRows(context, jobId);
+        cleanupDroppedPartitionStats(context, jobId);
         reportToleratedFailures(analyzeStatus, jobId);
     }
 
@@ -675,6 +698,69 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
+    // Deletes the statistics of partitions that no longer exist in the table. Nothing else removes them: a
+    // later collection only rewrites the partitions it collects, while the read path aggregates every row of
+    // the table, so a dropped partition's rows keep inflating NDV and row count and pin min/max to its values.
+    //
+    // A partition is deleted only when it is missing from the table's partition list, listed here after the
+    // collection, AND none of its rows was written within
+    // Config.connector_table_analyze_dropped_partition_stats_grace_second. The grace covers a list that lags the
+    // table (connector caches) and a concurrent job that just collected a partition this list does not have yet.
+    //
+    // Only this job's columns are cleaned: the job commits (and so refreshes the statistics cache for) exactly
+    // these columns, so deleting another column's rows would leave its cached statistics stale.
+    //
+    // It is best-effort and errs on the side of keeping rows, which a later collection cleans up: it skips after
+    // a tolerated failure (not every column is committed, and resume records may still name the partitions),
+    // when the analyze is cancelled, and when the partition list cannot be obtained or is empty. A failure must
+    // never fail the job. Rare races (a dropped partition reappearing between the lookup and the DELETE) are
+    // accepted; such rows are collected again later.
+    protected void cleanupDroppedPartitionStats(ConnectContext context, long jobId) {
+        long graceSeconds = Config.connector_table_analyze_dropped_partition_stats_grace_second;
+        if (graceSeconds <= 0 || table.isUnPartitioned() || hasToleratedFailures() || isAnalyzeCancelled(jobId)) {
+            return;
+        }
+        try {
+            List<String> livePartitionNames = listLivePartitionNames();
+            if (livePartitionNames == null || livePartitionNames.isEmpty()) {
+                return;
+            }
+            StatisticExecutor executor = new StatisticExecutor();
+            List<String> dropped = ExternalDroppedPartitionStats.findDroppedPartitions(context, executor, table,
+                    livePartitionNames, columnNames, graceSeconds);
+            if (dropped.isEmpty()) {
+                return;
+            }
+            ExternalDroppedPartitionStats.DeleteResult result =
+                    ExternalDroppedPartitionStats.deleteInBatches(context, executor, table, dropped, columnNames);
+            int batches = result.batches;
+            int failedBatches = result.failedBatches;
+            if (failedBatches > 0) {
+                LOG.warn("[ExternalStats] dropped partition stats cleanup partially failed | jobId={} catalog={} " +
+                                "db={} table={} droppedPartitions={} batches={} failedBatches={}",
+                        jobId, catalogName, db.getOriginName(), table.getName(), dropped.size(), batches,
+                        failedBatches);
+            } else {
+                LOG.info("[ExternalStats] dropped partition stats cleaned up | jobId={} catalog={} db={} table={} " +
+                                "droppedPartitions={} batches={}",
+                        jobId, catalogName, db.getOriginName(), table.getName(), dropped.size(), batches);
+            }
+        } catch (Exception e) {
+            LOG.warn("[ExternalStats] dropped partition stats cleanup failed | jobId={} catalog={} db={} table={}",
+                    jobId, catalogName, db.getOriginName(), table.getName(), e);
+        }
+    }
+
+    // The table's complete partition list. Usually served from the connector's metadata cache, which the
+    // collection has just refreshed.
+    protected List<String> listLivePartitionNames() {
+        return ExternalDroppedPartitionStats.listLivePartitionNames(table);
+    }
+
+    private static boolean isAnalyzeCancelled(long jobId) {
+        return GlobalStateMgr.getCurrentState().getAnalyzeMgr().isAnalyzeCancelled(jobId);
+    }
+
     protected List<CollectTask> buildCollectSQLList(int parallelism) {
         return buildCollectSQLListForColumns(partitionNames, columnNames, columnTypes, parallelism);
     }
@@ -829,7 +915,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         return build(context, BATCH_FULL_STATISTIC_SELECT_TEMPLATE);
     }
 
-    private Collection<String> resolveNullValues(Table table) {
+    static Collection<String> resolveNullValues(Table table) {
         if (table.isIcebergTable()) {
             return Collections.singleton(IcebergApiConverter.PARTITION_NULL_VALUE);
         } else if (table.isPaimonTable()) {

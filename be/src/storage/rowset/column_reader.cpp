@@ -170,6 +170,9 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
         const JsonMetaPB& json_meta = meta->json_meta();
         _is_flat_json = json_meta.is_flat();
         _has_remain = json_meta.has_remain();
+        if (json_meta.has_value_stats()) {
+            _json_value_stats = std::make_unique<JsonValueStatsPB>(json_meta.value_stats());
+        }
 
         if (json_meta.has_remain_filter() && config::enable_json_flat_remain_filter) {
             DCHECK(_has_remain);

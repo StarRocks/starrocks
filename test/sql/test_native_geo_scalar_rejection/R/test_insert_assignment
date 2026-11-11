@@ -1,0 +1,75 @@
+-- name: test_geo_insert_assignment
+CREATE TABLE geo_insert_src (id INT, wkt VARCHAR(160)) PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO geo_insert_src VALUES (1,'POINT (1 2)'),(2,NULL),(3,'POINT EMPTY');
+-- result:
+-- !result
+CREATE TABLE geo_insert_text (id INT, payload VARCHAR(256)) PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE TABLE geo_insert_binary (id INT, payload VARBINARY) PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+function: assert_query_error_contains("INSERT INTO geo_insert_text SELECT id,ST_GeogFromText(wkt) FROM geo_insert_src", "native geo assignments require identical types")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("INSERT INTO geo_insert_binary SELECT id,ST_GeogFromText(wkt) FROM geo_insert_src", "native geo assignments require identical types")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("INSERT INTO geo_insert_text SELECT id,ST_GeomFromText(wkt,'EPSG:3857') FROM geo_insert_src", "native geo assignments require identical types")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("INSERT INTO geo_insert_binary SELECT id,ST_GeomFromText(wkt,'EPSG:3857') FROM geo_insert_src", "native geo assignments require identical types")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("INSERT INTO geo_insert_text SELECT id,ST_GeomFromText(wkt,'EPSG:4326') FROM geo_insert_src", "native geo assignments require identical types")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("INSERT INTO geo_insert_binary SELECT id,ST_GeomFromText(wkt,'EPSG:4326') FROM geo_insert_src", "native geo assignments require identical types")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("INSERT INTO geo_insert_text SELECT id,ST_GeomFromText(wkt,'LOCAL:linear') FROM geo_insert_src", "native geo assignments require identical types")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("INSERT INTO geo_insert_binary SELECT id,ST_GeomFromText(wkt,'LOCAL:linear') FROM geo_insert_src", "native geo assignments require identical types")
+-- result:
+None
+-- !result
+INSERT INTO geo_insert_text SELECT id,ST_AsText(ST_GeogFromText(wkt)) FROM geo_insert_src;
+-- result:
+-- !result
+[ORDER]SELECT id,payload FROM geo_insert_text ORDER BY id;
+-- result:
+1	POINT (1 2)
+2	None
+3	POINT EMPTY
+-- !result
+TRUNCATE TABLE geo_insert_text;
+-- result:
+-- !result
+INSERT INTO geo_insert_text SELECT id,id FROM geo_insert_src;
+-- result:
+-- !result
+[ORDER]SELECT id,payload FROM geo_insert_text ORDER BY id;
+-- result:
+1	1
+2	2
+3	3
+-- !result
+INSERT INTO geo_insert_binary SELECT id,ST_AsBinary(ST_GeomFromText(wkt,'EPSG:3857')) FROM geo_insert_src;
+-- result:
+-- !result
+[ORDER]SELECT id,hex(payload) FROM geo_insert_binary ORDER BY id;
+-- result:
+1	0101000000000000000000F03F0000000000000040
+2	None
+3	0101000000000000000000F87F000000000000F87F
+-- !result

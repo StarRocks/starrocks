@@ -66,6 +66,9 @@ public:
 
     void for_each_sstable(const std::function<void(const PersistentIndexSstable&)>& fn) const;
 
+    // Return true when pred holds for the standalone sstable or for any sstable of this fileset.
+    bool any_sstable(const std::function<bool(const PersistentIndexSstablePB&)>& pred) const;
+
     void print_debug_info(std::stringstream& ss);
 
 private:

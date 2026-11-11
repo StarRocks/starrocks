@@ -137,7 +137,10 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
                 .runtime_filter_query_lifecycle->open_query(_query_id, request.query_options,
                                                             params.runtime_filter_params, false);
     }
-    runtime_services(_query_execution_services).stream_mgr->prepare_pass_through_chunk_buffer(_query_id);
+    // A non-pipeline fragment instance owns its query tracker (RuntimeState::init_mem_trackers(query_id, parent)),
+    // so it is not shared with the other instances of the query, and DataStreamSender never appends to a
+    // pass-through channel. Leave the buffer without a query tracker.
+    runtime_services(_query_execution_services).stream_mgr->prepare_pass_through_chunk_buffer(_query_id, nullptr);
 
     // set #senders of exchange nodes before calling Prepare()
     std::vector<ExecNode*> exch_nodes;

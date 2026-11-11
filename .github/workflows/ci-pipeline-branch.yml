@@ -345,6 +345,12 @@ jobs:
     needs: [be-checker, thirdparty-info]
     timeout-minutes: 180
     name: BE UT
+    # The implicit success() would skip this job whenever thirdparty-update is skipped.
+    # thirdparty-info only succeeds when BE changed and thirdparty-update did not fail.
+    if: >
+      !cancelled() &&
+      needs.be-checker.result == 'success' &&
+      needs.thirdparty-info.result == 'success'
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}

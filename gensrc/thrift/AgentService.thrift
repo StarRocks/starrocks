@@ -85,14 +85,6 @@ struct TBinlogConfig {
     4: optional i64 binlog_max_size;
 }
 
-struct TFlatJsonConfig {
-    1: optional bool flat_json_enable;
-    2: optional double flat_json_null_factor;
-    3: optional double flat_json_sparsity_factor;
-    4: optional i64 flat_json_column_max;
-    5: optional i64 version;
-}
-
 // If you want to add types,
 // don't forget to also add type to PersistentIndexTypePB
 enum TPersistentIndexType {
@@ -162,7 +154,7 @@ struct TCreateTabletReq {
     23: optional i64 timeout_ms = -1;
     // Global transaction id
     24: optional i64 gtid = 0;
-    25: optional TFlatJsonConfig flat_json_config;
+    25: optional Descriptors.TFlatJsonConfig flat_json_config;
     26: optional TCompactionStrategy compaction_strategy;
     27: optional Types.TTabletRange range;
 
@@ -604,7 +596,7 @@ struct TTabletMetaInfo {
     // |create_schema_file| only used when |tablet_schema| exists
     10: optional bool create_schema_file;
     11: optional TPersistentIndexType persistent_index_type;
-    12: optional TFlatJsonConfig flat_json_config;
+    12: optional Descriptors.TFlatJsonConfig flat_json_config;
     13: optional bool bundle_tablet_metadata;
     14: optional TCompactionStrategy compaction_strategy;
     15: optional Types.TTabletRange tablet_range;

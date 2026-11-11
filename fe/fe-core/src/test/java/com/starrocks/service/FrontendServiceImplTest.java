@@ -2830,6 +2830,69 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testBearerStreamLoadIsRecordedUnderTheTokenUser() throws Exception {
+        // A BE forwarding a Bearer stream load sends an empty `user`: the principal is in the
+        // token. Both the load task and the pipeline put stage must carry the user the token
+        // authenticated as, or SHOW STREAM LOAD shows no user and user-scoped resource groups
+        // never match.
+        String siName = "jwt_corp_load_user";
+        String[] savedAuthChain = Config.authentication_chain;
+        boolean savedPipelineStreamLoad = Config.enable_pipeline_stream_load;
+        withJwtSecurityIntegration(siName);
+        long txnId = -1;
+        try (MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            String token = new MockTokenUtils().generateTestOIDCToken(3600 * 1000);
+            TLoadTxnBeginRequest begin = new TLoadTxnBeginRequest();
+            begin.setLabel(UUID.randomUUID().toString());
+            begin.setDb("test");
+            begin.setTbl("site_access_auto");
+            begin.setUser("");
+            begin.setPasswd(token);
+            begin.setAuth_type("bearer");
+            begin.setUser_ip("10.1.2.3");
+            TLoadTxnBeginResult begun = impl.loadTxnBegin(begin);
+            Assertions.assertEquals(TStatusCode.OK, begun.getStatus().getStatus_code(),
+                    String.valueOf(begun.getStatus()));
+            txnId = begun.getTxnId();
+            Assertions.assertEquals("harbor", GlobalStateMgr.getCurrentState().getStreamLoadMgr()
+                    .getTaskByLabel(begin.getLabel()).getUser());
+
+            // The put stage: authenticating the token set the context's user; the pipeline branch
+            // must not overwrite it with the empty declared one. Planning itself may fail here.
+            Config.enable_pipeline_stream_load = true;
+            TStreamLoadPutRequest put = new TStreamLoadPutRequest();
+            put.setDb("test");
+            put.setTbl("site_access_auto");
+            put.setUser("");
+            put.setPasswd(token);
+            put.setAuth_type("bearer");
+            put.setUser_ip("10.1.2.3");
+            put.setTxnId(txnId);
+            put.setBackend_id(10001);
+            put.setFileType(TFileType.FILE_STREAM);
+            ConnectContext context = new ConnectContext();
+            context.setQualifiedUser("harbor");
+            try {
+                impl.streamLoadPutImpl(context, put);
+            } catch (Exception e) {
+                // Only the user set before planning matters.
+            }
+            Assertions.assertEquals("harbor", context.getQualifiedUser());
+        } finally {
+            Config.enable_pipeline_stream_load = savedPipelineStreamLoad;
+            if (txnId != -1) {
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getId(),
+                        txnId, "test cleanup");
+            }
+            Config.authentication_chain = savedAuthChain;
+            GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                    .replayDropSecurityIntegration(siName);
+        }
+    }
+
+    @Test
     public void testStreamLoadPutRecoversASecurityIntegrationUser() throws Exception {
         // TC-L3-48-04: a security-integration user is not in the native table, so the put stage cannot
         // look the identity up; it has to authenticate the credential again. The request then fails on

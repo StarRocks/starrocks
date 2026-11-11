@@ -624,7 +624,7 @@ void detail::LeafNode::process_input(const int32_t parallel_idx) {
 }
 
 ChunkPtr detail::LeafNode::_generate_ordinal(const size_t chunk_id, const size_t num_rows) {
-    static TypeDescriptor s_type_desc = TypeDescriptor(TYPE_BIGINT);
+    static TypeDescriptor s_type_desc = TYPE_BIGINT_DESC;
     static Chunk::SlotHashMap s_slot_map = {{0, 0}};
     MutableColumnPtr ordinal_column = ColumnHelper::create_column(s_type_desc, false);
     ordinal_column->resize(num_rows);
@@ -1189,7 +1189,7 @@ void MergePathCascadeMerger::_init_late_materialization() {
     } else {
         locality_decay_factor = 5.5;
     }
-    static TypeDescriptor s_auxiliary_column_type = TypeDescriptor(TYPE_BIGINT);
+    static TypeDescriptor s_auxiliary_column_type = TYPE_BIGINT_DESC;
     const size_t total_late_materialized_cost = s_auxiliary_column_type.get_slot_size() * level_size +
                                                 non_orderby_materialized_cost_per_level * locality_decay_factor;
 

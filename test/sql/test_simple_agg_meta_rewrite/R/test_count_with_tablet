@@ -1,0 +1,29 @@
+-- name: test_count_with_tablet
+CREATE TABLE t_dup (
+    k1 date NOT NULL,
+    k2 bigint NOT NULL,
+    v1 bigint NULL
+) DUPLICATE KEY(k1, k2)
+PARTITION BY RANGE(k1) (
+    PARTITION p1 VALUES LESS THAN ('2025-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2025-03-01')
+)
+DISTRIBUTED BY HASH(k2) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_dup VALUES ('2025-01-10', 1, 10), ('2025-01-10', 2, 10), ('2025-01-10', 3, 10);
+-- result:
+-- !result
+function: set_first_tablet_id("t_dup", "p2")
+-- result:
+None
+-- !result
+SELECT count(*) FROM t_dup TABLET(${tablet_id});
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_dup TABLET(1);
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Invalid tablet id: '1'. Table 't_dup' has no such tablet.")
+-- !result
