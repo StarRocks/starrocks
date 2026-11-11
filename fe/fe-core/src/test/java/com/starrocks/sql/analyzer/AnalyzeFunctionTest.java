@@ -201,8 +201,7 @@ public class AnalyzeFunctionTest {
             for (String expr : List.of("[[g]]", "map{'a': g}", "row([g])", "named_struct('a', [g])",
                     "array_agg(g)", "max_by([g], id)", "map_agg(id, g)",
                     "array_distinct([g])", "array_sort([g])", "array_contains([g], g)", "[g] = [g]",
-                    "ST_AsText([g][1])", "cardinality([g])", "array_contains([], g)", "array_position([], g)",
-                    "array_contains(NULL, g)")) {
+                    "ST_AsText([g][1])", "cardinality([g])")) {
                 analyzeFail("select " + expr + source, NESTED_GEO_ERROR);
             }
             analyzeFail("select map{g: 'a'}" + source, "Map key doesn't support type: ");
@@ -219,6 +218,9 @@ public class AnalyzeFunctionTest {
             }
             analyzeSuccess("select ST_AsText(g), ST_AsBinary(g), g IS NULL" + source);
             analyzeSuccess("select array_contains([ST_AsText(g)], ST_AsText(g))" + source);
+            for (String expr : List.of("array_contains([], g)", "array_position([], g)", "array_contains(NULL, g)")) {
+                analyzeFail("select " + expr + source, "does not support geo arguments");
+            }
             StarRocksAssert sr = AnalyzeTestUtil.getStarRocksAssert();
             sr.withView("create view nested_geo_view as select " + String.format(constructor, "'POINT (1 2)'") + " g");
             try {
