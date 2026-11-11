@@ -100,7 +100,6 @@ import com.starrocks.sql.optimizer.base.QueryGroupDistributionSpec;
 import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -272,6 +271,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                     new RelationTransformer(columnRefFactory, session,
                             new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
                             cteContext, mvTransformerContext).transform(cteRelation.getCteQueryStatement().getQueryRelation());
+            registerTextMatchCandidate(producerPlan.getRoot().getOp(), cteRelation.getCteQueryStatement());
             OptExprBuilder produceOptBuilder =
                     new OptExprBuilder(produceOperator, Lists.newArrayList(producerPlan.getRootBuilder()),
                             producerPlan.getRootBuilder().getExpressionMapping());
@@ -857,6 +857,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         if (!cteContext.hasRegisteredCte(node.getCteMouldId())) {
             // doesn't register CTE, should inline directly
             LogicalPlan childPlan = transform(node.getCteQueryStatement().getQueryRelation());
+            registerTextMatchCandidate(childPlan.getRoot().getOp(), node.getCteQueryStatement());
             OptExprBuilder builder = new OptExprBuilder(childPlan.getRoot().getOp(),
                     childPlan.getRootBuilder().getInputs(),
                     new ExpressionMapping(node.getScope(), childPlan.getOutputColumn(), childPlan.getRootBuilder()
@@ -889,6 +890,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         } else {
             // Leave the optimizer to decide later whether to materialize or inline
             LogicalPlan childPlan = transform(node.getCteQueryStatement().getQueryRelation());
+            registerTextMatchCandidate(childPlan.getRoot().getOp(), node.getCteQueryStatement());
             Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = checkCtePlanOutput(cteId, childPlan, node);
             LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(cteId, cteOutputColumnRefMap);
             consumeBuilder = new OptExprBuilder(consume, Lists.newArrayList(childPlan.getRootBuilder()),
@@ -917,14 +919,17 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             LogicalAssertOneRowOperator assertOneRowOperator = LogicalAssertOneRowOperator.createLessEqOne("");
             builder = builder.withNewRoot(assertOneRowOperator);
         }
-        // store opt expression to ast map if sub-query's type is supported.
-        OperatorType operatorType = subQueryOptExpression.getOp().getOpType();
-        if (this.mvTransformerContext != null
-                && TextMatchBasedRewriteRule.SUPPORTED_REWRITE_OPERATOR_TYPES.contains(operatorType)) {
-            this.mvTransformerContext.registerOpAST(subQueryOptExpression.getOp(), node.getQueryStatement());
-        }
+        registerTextMatchCandidate(subQueryOptExpression.getOp(), node.getQueryStatement());
 
         return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
+    }
+
+    // store opt expression to ast map if sub-query's type is supported, so text based mv rewrite can match it.
+    private void registerTextMatchCandidate(Operator op, QueryStatement ast) {
+        if (this.mvTransformerContext != null
+                && TextMatchBasedRewriteRule.SUPPORTED_REWRITE_OPERATOR_TYPES.contains(op.getOpType())) {
+            this.mvTransformerContext.registerOpAST(op, ast);
+        }
     }
 
     @Override
