@@ -36,6 +36,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
@@ -73,15 +74,15 @@ TEST_F(LakeMetacacheTest, test_tablet_metadata_cache) {
     auto* metacache = _tablet_mgr->metacache();
 
     auto m1 = std::make_shared<TabletMetadataPB>();
-    metacache->cache_tablet_metadata("metadata1", m1);
+    metacache->cache_tablet_metadata(MetacacheKey::TEST_from_string("metadata1"), m1);
 
-    auto m2 = metacache->lookup_tablet_metadata("metadata1");
+    auto m2 = metacache->lookup_tablet_metadata(MetacacheKey::TEST_from_string("metadata1"));
     EXPECT_EQ(m1.get(), m2.get());
 
-    auto m3 = metacache->lookup_tablet_metadata("metadata2");
+    auto m3 = metacache->lookup_tablet_metadata(MetacacheKey::TEST_from_string("metadata2"));
     ASSERT_TRUE(m3 == nullptr);
 
-    auto log = metacache->lookup_txn_log("metadata1");
+    auto log = metacache->lookup_txn_log(MetacacheKey::TEST_from_string("metadata1"));
     ASSERT_TRUE(log == nullptr);
 }
 
@@ -89,15 +90,15 @@ TEST_F(LakeMetacacheTest, test_txn_log_cache) {
     auto* metacache = _tablet_mgr->metacache();
 
     auto log1 = std::make_shared<TxnLogPB>();
-    metacache->cache_txn_log("log1", log1);
+    metacache->cache_txn_log(MetacacheKey::TEST_from_string("log1"), log1);
 
-    auto log2 = metacache->lookup_txn_log("log1");
+    auto log2 = metacache->lookup_txn_log(MetacacheKey::TEST_from_string("log1"));
     EXPECT_EQ(log1.get(), log2.get());
 
-    auto log3 = metacache->lookup_txn_log("log2");
+    auto log3 = metacache->lookup_txn_log(MetacacheKey::TEST_from_string("log2"));
     ASSERT_TRUE(log3 == nullptr);
 
-    auto schema = metacache->lookup_tablet_schema("log1");
+    auto schema = metacache->lookup_tablet_schema(MetacacheKey::TEST_from_string("log1"));
     ASSERT_TRUE(schema == nullptr);
 }
 
@@ -105,15 +106,15 @@ TEST_F(LakeMetacacheTest, test_tablet_schema_cache) {
     auto* metacache = _tablet_mgr->metacache();
 
     auto schema1 = std::make_shared<TabletSchema>();
-    metacache->cache_tablet_schema("schema1", schema1, 0);
+    metacache->cache_tablet_schema(MetacacheKey::TEST_from_string("schema1"), schema1, 0);
 
-    auto schema2 = metacache->lookup_tablet_schema("schema1");
+    auto schema2 = metacache->lookup_tablet_schema(MetacacheKey::TEST_from_string("schema1"));
     EXPECT_EQ(schema1.get(), schema2.get());
 
-    auto schema3 = metacache->lookup_tablet_schema("schema2");
+    auto schema3 = metacache->lookup_tablet_schema(MetacacheKey::TEST_from_string("schema2"));
     ASSERT_TRUE(schema3 == nullptr);
 
-    auto delvec = metacache->lookup_delvec("schema1");
+    auto delvec = metacache->lookup_delvec(MetacacheKey::TEST_from_string("schema1"));
     ASSERT_TRUE(delvec == nullptr);
 }
 
@@ -121,18 +122,18 @@ TEST_F(LakeMetacacheTest, test_deletion_vector_cache) {
     auto* metacache = _tablet_mgr->metacache();
 
     auto dv1 = std::make_shared<DelVector>();
-    metacache->cache_delvec("dv1", dv1);
+    metacache->cache_delvec(MetacacheKey::TEST_from_string("dv1"), dv1);
 
-    auto dv2 = metacache->lookup_delvec("dv1");
+    auto dv2 = metacache->lookup_delvec(MetacacheKey::TEST_from_string("dv1"));
     EXPECT_EQ(dv1.get(), dv2.get());
 
-    auto dv3 = metacache->lookup_delvec("dv2");
+    auto dv3 = metacache->lookup_delvec(MetacacheKey::TEST_from_string("dv2"));
     ASSERT_TRUE(dv3 == nullptr);
 
-    auto seg = metacache->lookup_segment("dv1");
+    auto seg = metacache->lookup_segment(MetacacheKey::TEST_from_string("dv1"));
     ASSERT_TRUE(seg == nullptr);
 
-    auto meta = metacache->lookup_tablet_metadata("dv1");
+    auto meta = metacache->lookup_tablet_metadata(MetacacheKey::TEST_from_string("dv1"));
     ASSERT_TRUE(meta == nullptr);
 }
 
@@ -197,7 +198,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     // no segment
-    auto sz0 = metacache->memory_usage();
+    auto sz0 = metacache->segment_metadata_memory_usage();
 
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     ASSERT_OK(reader->prepare());
@@ -205,7 +206,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
     ASSERT_OK(reader->open(params));
 
     // load segment without indexes
-    auto sz1 = metacache->memory_usage();
+    auto sz1 = metacache->segment_metadata_memory_usage();
 
     auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     for (int j = 0; j < 2; ++j) {
@@ -218,7 +219,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
     reader->close();
 
     // load segment with indexes, and remove index meta (index meta is larger than index)
-    auto sz2 = metacache->memory_usage();
+    auto sz2 = metacache->segment_metadata_memory_usage();
     LOG(INFO) << "metadata cache memory usage: " << sz0 << "-" << sz1 << "-" << sz2;
     ASSERT_GT(sz1, sz0);
     ASSERT_LT(sz2, sz1);
@@ -227,26 +228,107 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
 TEST_F(LakeMetacacheTest, test_update_capacity) {
     auto* metacache = _tablet_mgr->metacache();
 
-    auto old_cap = metacache->capacity();
-    metacache->update_capacity(old_cap + 1024 * 1024);
-    auto new_cap = metacache->capacity();
-    ASSERT_EQ(old_cap + 1024 * 1024, new_cap);
-    metacache->update_capacity(new_cap - 1024);
-    auto new_cap2 = metacache->capacity();
-    ASSERT_EQ(new_cap - 1024, new_cap2);
+    const auto meta_cap = metacache->tablet_metadata_capacity();
+    const auto segment_cap = metacache->segment_metadata_capacity();
+    metacache->update_tablet_metadata_capacity(meta_cap + 1024 * 1024);
+    ASSERT_EQ(meta_cap + 1024 * 1024, metacache->tablet_metadata_capacity());
+    ASSERT_EQ(segment_cap, metacache->segment_metadata_capacity());
+    metacache->update_tablet_metadata_capacity(meta_cap - 1024);
+    ASSERT_EQ(meta_cap - 1024, metacache->tablet_metadata_capacity());
+
+    metacache->update_segment_metadata_capacity(segment_cap + 2 * 1024 * 1024);
+    ASSERT_EQ(segment_cap + 2 * 1024 * 1024, metacache->segment_metadata_capacity());
+    ASSERT_EQ(meta_cap - 1024, metacache->tablet_metadata_capacity());
+    metacache->update_segment_metadata_capacity(segment_cap - 1024);
+    ASSERT_EQ(segment_cap - 1024, metacache->segment_metadata_capacity());
+}
+
+TEST_F(LakeMetacacheTest, test_metacache_capacity) {
+    EXPECT_EQ(100, metacache_capacity(1000, 10));
+    EXPECT_EQ(200, metacache_capacity(1000, 20));
+    EXPECT_EQ(0, metacache_capacity(1000, 0));
+    EXPECT_EQ(0, metacache_capacity(1000, -5));
+    EXPECT_EQ(1000, metacache_capacity(1000, 100));
+    EXPECT_EQ(1000, metacache_capacity(1000, 150));
+    EXPECT_EQ(int64_t{10} << 30, metacache_capacity(int64_t{100} << 30, 10));
+}
+
+// Segments filling up their own cache must not evict tablet metadata or txn logs.
+TEST_F(LakeMetacacheTest, test_segments_do_not_evict_tablet_metadata) {
+    std::shared_ptr<FileSystem> fs;
+    TabletSchemaCSPtr schema;
+    auto probe = std::make_shared<Segment>(fs, FileInfo{"probe.dat"}, 0, schema, _tablet_mgr.get());
+    const size_t segment_capacity = 4 * probe->mem_usage() * kNumShards;
+    Metacache metacache(1024 * 1024, segment_capacity);
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    auto txn_log = std::make_shared<TxnLogPB>();
+    auto combined_log = std::make_shared<CombinedTxnLogPB>();
+    metacache.cache_tablet_metadata(MetacacheKey::TEST_from_string("metadata"), metadata);
+    metacache.cache_txn_log(MetacacheKey::TEST_from_string("txn_log"), txn_log);
+    metacache.cache_combined_txn_log(MetacacheKey::TEST_from_string("combined_txn_log"), combined_log);
+    metacache.cache_bundled_metadata_marker(MetacacheKey::TEST_from_string("bundled_marker"));
+    const auto tablet_metadata_usage = metacache.tablet_metadata_memory_usage();
+    ASSERT_GT(tablet_metadata_usage, 0);
+    ASSERT_EQ(0, metacache.segment_metadata_memory_usage());
+
+    // Far more segments than the segment cache holds.
+    for (int i = 0; i < 64 * kNumShards; ++i) {
+        const auto path = fmt::format("segment_{}.dat", i);
+        metacache.cache_segment(MetacacheKey::TEST_from_string(path),
+                                std::make_shared<Segment>(fs, FileInfo{path}, i, schema, _tablet_mgr.get()));
+    }
+    EXPECT_LE(metacache.segment_metadata_memory_usage(), segment_capacity);
+    EXPECT_GT(metacache.segment_metadata_memory_usage(), 0);
+    EXPECT_EQ(nullptr, metacache.lookup_segment(MetacacheKey::TEST_from_string("segment_0.dat")));
+
+    EXPECT_EQ(tablet_metadata_usage, metacache.tablet_metadata_memory_usage());
+    EXPECT_EQ(metadata, metacache.lookup_tablet_metadata(MetacacheKey::TEST_from_string("metadata")));
+    EXPECT_EQ(txn_log, metacache.lookup_txn_log(MetacacheKey::TEST_from_string("txn_log")));
+    EXPECT_EQ(combined_log, metacache.lookup_combined_txn_log(MetacacheKey::TEST_from_string("combined_txn_log")));
+    EXPECT_TRUE(metacache.lookup_bundled_metadata_marker(MetacacheKey::TEST_from_string("bundled_marker")));
+}
+
+TEST_F(LakeMetacacheTest, test_erase_and_prune_cover_both_caches) {
+    std::shared_ptr<FileSystem> fs;
+    TabletSchemaCSPtr schema;
+    Metacache metacache(1024 * 1024, 1024 * 1024);
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    auto segment = std::make_shared<Segment>(fs, FileInfo{"segment.dat"}, 0, schema, _tablet_mgr.get());
+    auto delvec = std::make_shared<DelVector>();
+
+    metacache.cache_tablet_metadata(MetacacheKey::TEST_from_string("metadata"), metadata);
+    metacache.cache_segment(MetacacheKey::TEST_from_string("segment.dat"), segment);
+    metacache.cache_delvec(MetacacheKey::TEST_from_string("delvec"), delvec);
+    ASSERT_GT(metacache.tablet_metadata_memory_usage(), 0);
+    ASSERT_GT(metacache.segment_metadata_memory_usage(), 0);
+
+    metacache.erase(MetacacheKey::TEST_from_string("metadata"));
+    metacache.erase(MetacacheKey::TEST_from_string("segment.dat"));
+    EXPECT_EQ(nullptr, metacache.lookup_tablet_metadata(MetacacheKey::TEST_from_string("metadata")));
+    EXPECT_EQ(nullptr, metacache.lookup_segment(MetacacheKey::TEST_from_string("segment.dat")));
+    EXPECT_EQ(0, metacache.tablet_metadata_memory_usage());
+    EXPECT_EQ(delvec, metacache.lookup_delvec(MetacacheKey::TEST_from_string("delvec")));
+
+    metacache.cache_tablet_metadata(MetacacheKey::TEST_from_string("metadata"), metadata);
+    metacache.prune();
+    EXPECT_EQ(nullptr, metacache.lookup_tablet_metadata(MetacacheKey::TEST_from_string("metadata")));
+    EXPECT_EQ(nullptr, metacache.lookup_delvec(MetacacheKey::TEST_from_string("delvec")));
+    EXPECT_EQ(0, metacache.tablet_metadata_memory_usage());
+    EXPECT_EQ(0, metacache.segment_metadata_memory_usage());
 }
 
 TEST_F(LakeMetacacheTest, test_prune) {
     auto* metacache = _tablet_mgr->metacache();
 
     auto meta = std::make_shared<TabletMetadataPB>();
-    metacache->cache_tablet_metadata("meta1", meta);
-    auto meta2 = metacache->lookup_tablet_metadata("meta1");
+    metacache->cache_tablet_metadata(MetacacheKey::TEST_from_string("meta1"), meta);
+    auto meta2 = metacache->lookup_tablet_metadata(MetacacheKey::TEST_from_string("meta1"));
     ASSERT_TRUE(meta2 != nullptr);
 
     metacache->prune();
 
-    auto meta3 = metacache->lookup_tablet_metadata("meta1");
+    auto meta3 = metacache->lookup_tablet_metadata(MetacacheKey::TEST_from_string("meta1"));
     ASSERT_TRUE(meta3 == nullptr);
 }
 
@@ -261,25 +343,25 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent) {
     uint32_t segment_id = 1000;
     std::string segment_path("test_cache_segment_if_absent.dat");
 
-    EXPECT_EQ(nullptr, metacache->lookup_segment(segment_path));
+    EXPECT_EQ(nullptr, metacache->lookup_segment(MetacacheKey::TEST_from_string(segment_path)));
     auto seg1 = std::make_shared<Segment>(fs, FileInfo{segment_path}, segment_id, schema, _tablet_mgr.get());
 
     {
         // cache seg1, since there is no segment cached before, cache_segment_if_absent will cache the seg1 and return it.
-        auto seg = metacache->cache_segment_if_absent(segment_path, seg1);
+        auto seg = metacache->cache_segment_if_absent(MetacacheKey::TEST_from_string(segment_path), seg1);
         EXPECT_TRUE(seg != nullptr);
         EXPECT_EQ(seg1, seg);
-        EXPECT_EQ(seg1, metacache->lookup_segment(segment_path));
+        EXPECT_EQ(seg1, metacache->lookup_segment(MetacacheKey::TEST_from_string(segment_path)));
     }
 
     auto seg2 = std::make_shared<Segment>(fs, FileInfo{segment_path}, segment_id, schema, _tablet_mgr.get());
     {
-        auto seg = metacache->cache_segment_if_absent(segment_path, seg2);
+        auto seg = metacache->cache_segment_if_absent(MetacacheKey::TEST_from_string(segment_path), seg2);
         EXPECT_TRUE(seg != nullptr);
         EXPECT_NE(seg1, seg2);
         // still returns seg1
         EXPECT_EQ(seg1, seg);
-        EXPECT_EQ(seg1, metacache->lookup_segment(segment_path));
+        EXPECT_EQ(seg1, metacache->lookup_segment(MetacacheKey::TEST_from_string(segment_path)));
     }
 }
 
@@ -297,7 +379,8 @@ static void run_single(TestCacheSegmentConcurrency* ctx) {
     std::unique_lock lk(*(ctx->mutex));
     ctx->cv->wait(lk);
     ctx->pending_count->fetch_sub(1);
-    auto seg = ctx->cache->cache_segment_if_absent(ctx->segment->file_name(), ctx->segment);
+    auto seg = ctx->cache->cache_segment_if_absent(MetacacheKey::TEST_from_string(ctx->segment->file_name()),
+                                                   ctx->segment);
     ctx->seg_promise.set_value(seg);
 }
 
@@ -380,8 +463,8 @@ TEST_F(LakeMetacacheTest, test_segment_destruction_does_not_block_cache) {
     // Size the cache so that a single shard holds exactly one of these segments.
     const size_t victim_charge = victim->mem_usage() + LRUCache::key_handle_size(CacheKey(paths[0]));
     const size_t replacement_charge = replacement->mem_usage() + LRUCache::key_handle_size(CacheKey(paths[1]));
-    Metacache metacache(std::max(victim_charge, replacement_charge) * kNumShards);
-    metacache.cache_segment(paths[0], victim);
+    Metacache metacache(/*tablet_metadata_capacity=*/0, std::max(victim_charge, replacement_charge) * kNumShards);
+    metacache.cache_segment(MetacacheKey::TEST_from_string(paths[0]), victim);
 
     auto* victim_ptr = victim.get();
     std::weak_ptr<Segment> victim_weak = victim;
@@ -406,7 +489,9 @@ TEST_F(LakeMetacacheTest, test_segment_destruction_does_not_block_cache) {
     });
 
     // Evicts the victim, and blocks inside its deleter.
-    auto insert_future = std::async(std::launch::async, [&]() { metacache.cache_segment(paths[1], replacement); });
+    auto insert_future = std::async(std::launch::async, [&]() {
+        metacache.cache_segment(MetacacheKey::TEST_from_string(paths[1]), replacement);
+    });
     bool deletion_released = false;
     auto unblock_deleter = MakeScopedCleanup([&]() {
         if (!deletion_released) {
@@ -417,7 +502,8 @@ TEST_F(LakeMetacacheTest, test_segment_destruction_does_not_block_cache) {
     using namespace std::chrono_literals;
     ASSERT_EQ(std::future_status::ready, deleter_entered_future.wait_for(5s));
 
-    auto lookup_future = std::async(std::launch::async, [&]() { return metacache.lookup_segment(paths[1]); });
+    auto lookup_future = std::async(
+            std::launch::async, [&]() { return metacache.lookup_segment(MetacacheKey::TEST_from_string(paths[1])); });
     EXPECT_EQ(std::future_status::ready, lookup_future.wait_for(1s));
 
     allow_deletion.set_value();
@@ -435,18 +521,20 @@ TEST_F(LakeMetacacheTest, test_replace_segment_if_matches_preserves_old_reader_a
     const std::string key = "segment_to_replace";
     auto old = std::make_shared<Segment>(fs, FileInfo{"old.dat"}, 0, schema, _tablet_mgr.get());
     auto replacement = std::make_shared<Segment>(fs, FileInfo{std::string(256, 'r')}, 0, schema, _tablet_mgr.get());
-    Metacache metacache(1024 * 1024);
-    metacache.cache_segment(key, old);
-    ASSERT_TRUE(metacache.replace_segment_if_matches(key, old.get(), replacement));
-    EXPECT_EQ(replacement, metacache.lookup_segment(key));
+    Metacache metacache(/*tablet_metadata_capacity=*/0, 1024 * 1024);
+    metacache.cache_segment(MetacacheKey::TEST_from_string(key), old);
+    ASSERT_TRUE(metacache.replace_segment_if_matches(MetacacheKey::TEST_from_string(key), old.get(), replacement));
+    EXPECT_EQ(replacement, metacache.lookup_segment(MetacacheKey::TEST_from_string(key)));
     EXPECT_EQ(1, old.use_count());
     EXPECT_EQ("old.dat", old->file_name());
     const auto replacement_charge = replacement->mem_usage() + LRUCache::key_handle_size(CacheKey(key));
-    EXPECT_EQ(replacement_charge, metacache.memory_usage());
-    EXPECT_FALSE(metacache.update_segment_cache_size(key, replacement->mem_usage() + 1024, old.get()));
-    EXPECT_EQ(replacement_charge, metacache.memory_usage());
-    EXPECT_TRUE(metacache.update_segment_cache_size(key, replacement->mem_usage() + 128, replacement.get()));
-    EXPECT_EQ(replacement_charge + 128, metacache.memory_usage());
+    EXPECT_EQ(replacement_charge, metacache.segment_metadata_memory_usage());
+    EXPECT_FALSE(metacache.update_segment_cache_size(MetacacheKey::TEST_from_string(key),
+                                                     replacement->mem_usage() + 1024, old.get()));
+    EXPECT_EQ(replacement_charge, metacache.segment_metadata_memory_usage());
+    EXPECT_TRUE(metacache.update_segment_cache_size(MetacacheKey::TEST_from_string(key), replacement->mem_usage() + 128,
+                                                    replacement.get()));
+    EXPECT_EQ(replacement_charge + 128, metacache.segment_metadata_memory_usage());
 }
 
 TEST_F(LakeMetacacheTest, test_replace_segment_if_matches_self_eviction_preserves_caller_ownership) {
@@ -455,17 +543,17 @@ TEST_F(LakeMetacacheTest, test_replace_segment_if_matches_self_eviction_preserve
     const std::string key = "oversized_replacement";
     auto old = std::make_shared<Segment>(fs, FileInfo{"old.dat"}, 0, schema, _tablet_mgr.get());
     const auto shard_capacity = old->mem_usage() + LRUCache::key_handle_size(CacheKey(key));
-    Metacache metacache(shard_capacity * kNumShards);
-    metacache.cache_segment(key, old);
-    ASSERT_EQ(old, metacache.lookup_segment(key));
-    ASSERT_EQ(shard_capacity, metacache.memory_usage());
+    Metacache metacache(/*tablet_metadata_capacity=*/0, shard_capacity * kNumShards);
+    metacache.cache_segment(MetacacheKey::TEST_from_string(key), old);
+    ASSERT_EQ(old, metacache.lookup_segment(MetacacheKey::TEST_from_string(key)));
+    ASSERT_EQ(shard_capacity, metacache.segment_metadata_memory_usage());
 
     const std::string replacement_path(shard_capacity * 2, 'r');
     auto replacement = std::make_shared<Segment>(fs, FileInfo{replacement_path}, 0, schema, _tablet_mgr.get());
     ASSERT_GT(replacement->mem_usage(), shard_capacity);
-    EXPECT_TRUE(metacache.replace_segment_if_matches(key, old.get(), replacement));
-    EXPECT_EQ(nullptr, metacache.lookup_segment(key));
-    EXPECT_EQ(0, metacache.memory_usage());
+    EXPECT_TRUE(metacache.replace_segment_if_matches(MetacacheKey::TEST_from_string(key), old.get(), replacement));
+    EXPECT_EQ(nullptr, metacache.lookup_segment(MetacacheKey::TEST_from_string(key)));
+    EXPECT_EQ(0, metacache.segment_metadata_memory_usage());
     EXPECT_EQ(1, old.use_count());
     EXPECT_EQ(1, replacement.use_count());
     EXPECT_EQ("old.dat", old->file_name());
@@ -479,17 +567,17 @@ TEST_F(LakeMetacacheTest, test_replace_segment_if_matches_rejects_missing_and_ch
     auto old = std::make_shared<Segment>(fs, FileInfo{key}, 0, schema, _tablet_mgr.get());
     auto winner = std::make_shared<Segment>(fs, FileInfo{key}, 0, schema, _tablet_mgr.get());
     auto rejected = std::make_shared<Segment>(fs, FileInfo{key}, 0, schema, _tablet_mgr.get());
-    Metacache metacache(1024 * 1024);
-    EXPECT_FALSE(metacache.replace_segment_if_matches(key, old.get(), rejected));
-    EXPECT_EQ(nullptr, metacache.lookup_segment(key));
-    EXPECT_EQ(0, metacache.memory_usage());
+    Metacache metacache(/*tablet_metadata_capacity=*/0, 1024 * 1024);
+    EXPECT_FALSE(metacache.replace_segment_if_matches(MetacacheKey::TEST_from_string(key), old.get(), rejected));
+    EXPECT_EQ(nullptr, metacache.lookup_segment(MetacacheKey::TEST_from_string(key)));
+    EXPECT_EQ(0, metacache.segment_metadata_memory_usage());
     EXPECT_EQ(1, rejected.use_count());
 
-    metacache.cache_segment(key, winner);
-    const auto usage = metacache.memory_usage();
-    EXPECT_FALSE(metacache.replace_segment_if_matches(key, old.get(), rejected));
-    EXPECT_EQ(winner, metacache.lookup_segment(key));
-    EXPECT_EQ(usage, metacache.memory_usage());
+    metacache.cache_segment(MetacacheKey::TEST_from_string(key), winner);
+    const auto usage = metacache.segment_metadata_memory_usage();
+    EXPECT_FALSE(metacache.replace_segment_if_matches(MetacacheKey::TEST_from_string(key), old.get(), rejected));
+    EXPECT_EQ(winner, metacache.lookup_segment(MetacacheKey::TEST_from_string(key)));
+    EXPECT_EQ(usage, metacache.segment_metadata_memory_usage());
     EXPECT_EQ(1, rejected.use_count());
 }
 
@@ -499,8 +587,8 @@ TEST_F(LakeMetacacheTest, test_replace_segment_destruction_does_not_block_cache)
     const std::string key = "segment_to_replace";
     auto old = std::make_shared<Segment>(fs, FileInfo{key}, 0, schema, _tablet_mgr.get());
     auto replacement = std::make_shared<Segment>(fs, FileInfo{key}, 0, schema, _tablet_mgr.get());
-    Metacache metacache(1024 * 1024);
-    metacache.cache_segment(key, old);
+    Metacache metacache(/*tablet_metadata_capacity=*/0, 1024 * 1024);
+    metacache.cache_segment(MetacacheKey::TEST_from_string(key), old);
     auto* expected = old.get();
     std::weak_ptr<Segment> old_weak = old;
     old.reset();
@@ -522,15 +610,17 @@ TEST_F(LakeMetacacheTest, test_replace_segment_destruction_does_not_block_cache)
         sync_point->DisableProcessing();
         sync_point->ClearCallBack("lake::Metacache::cache_value_deleter");
     });
-    auto replace_future = std::async(
-            std::launch::async, [&]() { return metacache.replace_segment_if_matches(key, expected, replacement); });
+    auto replace_future = std::async(std::launch::async, [&]() {
+        return metacache.replace_segment_if_matches(MetacacheKey::TEST_from_string(key), expected, replacement);
+    });
     bool deletion_released = false;
     auto unblock_deleter = MakeScopedCleanup([&]() {
         if (!deletion_released) allow_deletion.set_value();
     });
     using namespace std::chrono_literals;
     ASSERT_EQ(std::future_status::ready, entered_future.wait_for(5s));
-    auto lookup_future = std::async(std::launch::async, [&]() { return metacache.lookup_segment(key); });
+    auto lookup_future = std::async(std::launch::async,
+                                    [&]() { return metacache.lookup_segment(MetacacheKey::TEST_from_string(key)); });
     EXPECT_EQ(std::future_status::ready, lookup_future.wait_for(1s));
     allow_deletion.set_value();
     deletion_released = true;
@@ -548,42 +638,157 @@ TEST_F(LakeMetacacheTest, test_update_segment_cache_size) {
 
     std::string segment_path("test_update_segment_cache_size.dat");
     auto seg = std::make_shared<Segment>(fs, FileInfo{segment_path}, 1000, schema, _tablet_mgr.get());
-    metacache->cache_segment(segment_path, seg);
-    const size_t base_usage = metacache->memory_usage();
+    metacache->cache_segment(MetacacheKey::TEST_from_string(segment_path), seg);
+    const size_t base_usage = metacache->segment_metadata_memory_usage();
 
     // Absent key is a no-op.
-    EXPECT_FALSE(metacache->update_segment_cache_size("no_such_segment.dat", 4096, seg.get()));
-    EXPECT_EQ(base_usage, metacache->memory_usage());
+    EXPECT_FALSE(metacache->update_segment_cache_size(MetacacheKey::TEST_from_string("no_such_segment.dat"), 4096,
+                                                      seg.get()));
+    EXPECT_EQ(base_usage, metacache->segment_metadata_memory_usage());
 
     // Key that maps to a different Segment instance is a no-op too.
     auto other = std::make_shared<Segment>(fs, FileInfo{segment_path}, 1000, schema, _tablet_mgr.get());
-    EXPECT_FALSE(metacache->update_segment_cache_size(segment_path, 4096, other.get()));
-    EXPECT_EQ(base_usage, metacache->memory_usage());
+    EXPECT_FALSE(metacache->update_segment_cache_size(MetacacheKey::TEST_from_string(segment_path), 4096, other.get()));
+    EXPECT_EQ(base_usage, metacache->segment_metadata_memory_usage());
 
     // Matching instance updates the charge in place, the cached segment stays the same object.
     const size_t old_mem_cost = seg->mem_usage();
-    EXPECT_TRUE(metacache->update_segment_cache_size(segment_path, old_mem_cost + 4096, seg.get()));
-    EXPECT_EQ(base_usage + 4096, metacache->memory_usage());
-    EXPECT_EQ(seg, metacache->lookup_segment(segment_path));
+    EXPECT_TRUE(metacache->update_segment_cache_size(MetacacheKey::TEST_from_string(segment_path), old_mem_cost + 4096,
+                                                     seg.get()));
+    EXPECT_EQ(base_usage + 4096, metacache->segment_metadata_memory_usage());
+    EXPECT_EQ(seg, metacache->lookup_segment(MetacacheKey::TEST_from_string(segment_path)));
 }
 
 TEST_F(LakeMetacacheTest, test_combined_txn_log_cache) {
     auto* metacache = _tablet_mgr->metacache();
 
     auto log = std::make_shared<CombinedTxnLogPB>();
-    metacache->cache_combined_txn_log("combined1", log);
+    metacache->cache_combined_txn_log(MetacacheKey::TEST_from_string("combined1"), log);
 
-    auto log2 = metacache->lookup_combined_txn_log("combined1");
+    auto log2 = metacache->lookup_combined_txn_log(MetacacheKey::TEST_from_string("combined1"));
     EXPECT_EQ(log.get(), log2.get());
 
-    auto log3 = metacache->lookup_combined_txn_log("combined2");
+    auto log3 = metacache->lookup_combined_txn_log(MetacacheKey::TEST_from_string("combined2"));
     ASSERT_TRUE(log3 == nullptr);
 
     auto meta = std::make_shared<TabletMetadataPB>();
-    metacache->cache_tablet_metadata("meta1", meta);
+    metacache->cache_tablet_metadata(MetacacheKey::TEST_from_string("meta1"), meta);
 
-    auto log4 = metacache->lookup_combined_txn_log("meta1");
+    auto log4 = metacache->lookup_combined_txn_log(MetacacheKey::TEST_from_string("meta1"));
     ASSERT_TRUE(log4 == nullptr);
+}
+
+// Even in UT builds with -fno-access-control, a bare path cannot be passed to
+// cache APIs: no single-argument constructor or implicit conversion exists.
+static_assert(!std::is_constructible_v<MetacacheKey, std::string_view>);
+static_assert(!std::is_invocable_v<decltype(&Metacache::lookup_tablet_metadata), Metacache*, std::string_view>);
+static_assert(!std::is_invocable_v<decltype(&Metacache::cache_txn_log), Metacache*, std::string_view, TxnLogPtr>);
+static_assert(!std::is_invocable_v<decltype(&Metacache::erase), Metacache*, std::string_view>);
+
+namespace {
+class PartitionCacheKeyLocationProvider : public LocationProvider {
+public:
+    std::string root_location(int64_t tablet_id) const override { return fmt::format("staros://{}", tablet_id); }
+    StatusOr<std::string> real_location(const std::string& path) const override {
+        if (fail_resolution) {
+            return Status::IOError("injected resolution failure");
+        }
+        return "bucket/partition" + path.substr(path.find('/', std::string("staros://").size()));
+    }
+    bool fail_resolution = false;
+};
+} // namespace
+
+TEST(MetacacheKeyTest, partition_objects_share_keys_and_tablet_objects_keep_virtual_keys) {
+    PartitionCacheKeyLocationProvider provider;
+    ASSIGN_OR_ABORT(auto first, MetacacheKey::combined_txn_log(provider, provider.combined_txn_log_location(100, 10)));
+    ASSIGN_OR_ABORT(auto second, MetacacheKey::combined_txn_log(provider, provider.combined_txn_log_location(101, 10)));
+    EXPECT_EQ(first, second);
+    EXPECT_EQ("bucket/partition/log/000000000000000A.logs", first.view());
+    Metacache cache(1 << 20, 1 << 20);
+    auto log = std::make_shared<CombinedTxnLogPB>();
+    cache.cache_combined_txn_log(first, log);
+    EXPECT_EQ(log, cache.lookup_combined_txn_log(second));
+    cache.erase(second);
+    EXPECT_EQ(nullptr, cache.lookup_combined_txn_log(first));
+
+    EXPECT_EQ(MetacacheKey::shared_initial_metadata(provider, provider.tablet_initial_metadata_location(100)),
+              MetacacheKey::shared_initial_metadata(provider, provider.tablet_initial_metadata_location(101)));
+    ASSIGN_OR_ABORT(auto marker_a,
+                    MetacacheKey::bundled_metadata_marker(provider, provider.metadata_root_location(100)));
+    ASSIGN_OR_ABORT(auto marker_b,
+                    MetacacheKey::bundled_metadata_marker(provider, provider.metadata_root_location(101)));
+    EXPECT_EQ(marker_a, marker_b);
+    cache.cache_bundled_metadata_marker(marker_a);
+    EXPECT_TRUE(cache.lookup_bundled_metadata_marker(marker_b));
+    cache.erase(marker_b);
+    EXPECT_FALSE(cache.lookup_bundled_metadata_marker(marker_a));
+
+    auto metadata_a = MetacacheKey::tablet_metadata(provider.tablet_metadata_location(100, 2));
+    auto metadata_b = MetacacheKey::tablet_metadata(provider.tablet_metadata_location(101, 2));
+    EXPECT_NE(metadata_a.view(), metadata_b.view());
+    EXPECT_TRUE(metadata_a.view().starts_with("staros://100/"));
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    cache.cache_tablet_metadata(metadata_a, metadata);
+    EXPECT_EQ(nullptr, cache.lookup_tablet_metadata(metadata_b));
+    EXPECT_EQ(metadata, cache.lookup_tablet_metadata(metadata_a));
+}
+
+TEST(MetacacheKeyTest, path_lifetime_and_resolution_failure) {
+    const std::string path(256, 'p');
+    const auto borrowed = MetacacheKey::tablet_metadata(path);
+    EXPECT_EQ(path.data(), borrowed.view().data());
+    auto make_key = [&] { return MetacacheKey::txn_log(std::string(path)); };
+    auto copied = [&] {
+        auto original = make_key();
+        return MetacacheKey(original);
+    }();
+    auto moved = [&] {
+        auto original = make_key();
+        return MetacacheKey(std::move(original));
+    }();
+    EXPECT_EQ(path, copied.view());
+    EXPECT_EQ(path, moved.view());
+    EXPECT_NE(path.data(), copied.view().data());
+
+    PartitionCacheKeyLocationProvider provider;
+    provider.fail_resolution = true;
+    EXPECT_TRUE(MetacacheKey::combined_txn_log(provider, path).status().is_io_error());
+    EXPECT_TRUE(MetacacheKey::bundled_metadata_marker(provider, path).status().is_io_error());
+    // This fallback must own even a temporary path.
+    auto fallback = MetacacheKey::shared_initial_metadata(provider, std::string(path));
+    EXPECT_EQ(path, fallback.view());
+}
+
+TEST(MetacacheKeyTest, composite_keys_preserve_identity) {
+    EXPECT_EQ("TL100", MetacacheKey::latest_tablet_metadata(100).view());
+    EXPECT_EQ("TS100", MetacacheKey::tablet_schema(100).view());
+    EXPECT_EQ("GS100", MetacacheKey::global_schema(100).view());
+    FileInfo file{.path = "segment.dat"};
+    EXPECT_EQ(file.cache_key(), MetacacheKey::segment(file).view());
+    auto unbundled = MetacacheKey::segment(file);
+    file.bundle_file_offset = 128;
+    auto first_slice = MetacacheKey::segment(file);
+    EXPECT_EQ(file.cache_key(), first_slice.view());
+    file.bundle_file_offset = 256;
+    EXPECT_NE(first_slice.view(), MetacacheKey::segment(file).view());
+    EXPECT_NE(unbundled.view(), first_slice.view());
+
+    DelvecPagePB page;
+    page.set_version(2);
+    page.set_offset(128);
+    page.set_size(32);
+    page.set_crc32c(10);
+    auto key = MetacacheKey::delvec(100, page);
+    DelvecCacheKeyPB encoded;
+    ASSERT_TRUE(encoded.ParseFromString(std::string(key.view())));
+    EXPECT_EQ(100, encoded.id());
+    EXPECT_EQ(page.SerializeAsString(), encoded.delvec_page().SerializeAsString());
+    page.set_crc32c_gen_version(3);
+    EXPECT_EQ(key, MetacacheKey::delvec(100, page));
+    page.set_crc32c(11);
+    EXPECT_NE(key.view(), MetacacheKey::delvec(100, page).view());
+    EXPECT_NE(key.view(), MetacacheKey::delvec(101, encoded.delvec_page()).view());
 }
 
 } // namespace starrocks::lake

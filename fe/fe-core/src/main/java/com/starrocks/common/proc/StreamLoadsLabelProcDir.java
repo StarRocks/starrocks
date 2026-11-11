@@ -16,8 +16,12 @@
 package com.starrocks.common.proc;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.load.LoadJobRedaction;
+import com.starrocks.load.LoadJobVisibility;
+import com.starrocks.load.LoadJobVisibility.VisibleTask;
 import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadMgr;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ShowStreamLoadStmt;
 
@@ -47,9 +51,17 @@ public class StreamLoadsLabelProcDir implements ProcNodeInterface {
         }
         BaseProcResult baseProcResult = new BaseProcResult();
         baseProcResult.setNames(ShowStreamLoadStmt.getTitleNames());
+        // SHOW PROC needs OPERATE, so every task is listed, but only in full where the caller may read the rows it
+        // loads; with the rule off, every task in full, as before it.
         for (AbstractStreamLoadTask streamLoadTask : streamLoadTaskList) {
-            for (List<String> row : streamLoadTask.getShowInfo()) {
-                baseProcResult.addRow(row);
+            List<VisibleTask> visibleTasks = LoadJobVisibility.isEnabled()
+                    ? LoadJobVisibility.visibleTasks(ConnectContext.get(), streamLoadTask)
+                    : LoadJobVisibility.allTasksInFull(streamLoadTask);
+            for (VisibleTask visibleTask : visibleTasks) {
+                for (List<String> row : visibleTask.task().getShowInfo()) {
+                    baseProcResult.addRow(visibleTask.access() == LoadJobVisibility.Access.FULL ? row
+                            : LoadJobRedaction.redactShowStreamLoad(row));
+                }
             }
         }
         return baseProcResult;

@@ -209,9 +209,9 @@ TEST_F(ArrowScannerTest, TestScanArrowStream) {
     std::vector<std::string> columns{"c0_int", "c1_str", "c2_double"};
 
     SlotTypeDescInfoArray src_slot_infos;
-    src_slot_infos.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
-    src_slot_infos.emplace_back("c1_str", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
-    src_slot_infos.emplace_back("c2_double", TypeDescriptor::from_logical_type(TYPE_DOUBLE), true);
+    src_slot_infos.emplace_back("c0_int", TYPE_INT_DESC, true);
+    src_slot_infos.emplace_back("c1_str", TYPE_VARCHAR_DESC, true);
+    src_slot_infos.emplace_back("c2_double", TYPE_DOUBLE_DESC, true);
 
     SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
 
@@ -289,9 +289,9 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamMismatchAndCast) {
     // c1_str is TYPE_VARCHAR in StarRocks, and arrow file has utf8
     // c2_null is TYPE_INT in StarRocks, but not present in arrow file (should be NULL)
     SlotTypeDescInfoArray src_slot_infos;
-    src_slot_infos.emplace_back("c0_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
-    src_slot_infos.emplace_back("c1_str", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
-    src_slot_infos.emplace_back("c2_null", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    src_slot_infos.emplace_back("c0_bigint", TYPE_BIGINT_DESC, true);
+    src_slot_infos.emplace_back("c1_str", TYPE_VARCHAR_DESC, true);
+    src_slot_infos.emplace_back("c2_null", TYPE_INT_DESC, true);
 
     SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
 
@@ -360,9 +360,9 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamNullColumnChunkBoundary) {
     std::vector<std::string> columns{"c0_bigint", "c1_str", "c2_null"};
 
     SlotTypeDescInfoArray src_slot_infos;
-    src_slot_infos.emplace_back("c0_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
-    src_slot_infos.emplace_back("c1_str", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
-    src_slot_infos.emplace_back("c2_null", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    src_slot_infos.emplace_back("c0_bigint", TYPE_BIGINT_DESC, true);
+    src_slot_infos.emplace_back("c1_str", TYPE_VARCHAR_DESC, true);
+    src_slot_infos.emplace_back("c2_null", TYPE_INT_DESC, true);
 
     SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
 
@@ -472,11 +472,11 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamStrictModeQualityError) {
     ASSERT_ARROW_OK(out_file->Close());
 
     SlotTypeDescInfoArray src_slot_infos;
-    src_slot_infos.emplace_back("c0_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    src_slot_infos.emplace_back("c0_bigint", TYPE_BIGINT_DESC, true);
     src_slot_infos.emplace_back("c1_str", TypeDescriptor::create_char_type(2), true);
 
     SlotTypeDescInfoArray dst_slot_infos;
-    dst_slot_infos.emplace_back("c0_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    dst_slot_infos.emplace_back("c0_bigint", TYPE_BIGINT_DESC, true);
     dst_slot_infos.emplace_back("c1_str", TypeDescriptor::create_char_type(2), true); // CHAR(2)
 
     std::vector<std::string> file_names = {file_path};
@@ -605,8 +605,8 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamEmptyFile) {
     std::vector<std::string> columns{"c0_int", "c1_str"};
 
     SlotTypeDescInfoArray src_slot_infos;
-    src_slot_infos.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
-    src_slot_infos.emplace_back("c1_str", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+    src_slot_infos.emplace_back("c0_int", TYPE_INT_DESC, true);
+    src_slot_infos.emplace_back("c1_str", TYPE_VARCHAR_DESC, true);
 
     SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
 
@@ -663,8 +663,8 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamNullable) {
     std::vector<std::string> columns{"c0_int", "c1_str"};
 
     SlotTypeDescInfoArray src_slot_infos;
-    src_slot_infos.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
-    src_slot_infos.emplace_back("c1_str", TypeDescriptor::from_logical_type(TYPE_VARCHAR), true);
+    src_slot_infos.emplace_back("c0_int", TYPE_INT_DESC, true);
+    src_slot_infos.emplace_back("c1_str", TYPE_VARCHAR_DESC, true);
 
     SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
 
@@ -741,7 +741,7 @@ TEST_F(ArrowScannerTest, TestScanArrowStreamMultiBatch) {
     std::vector<std::string> columns{"c0_int"};
 
     SlotTypeDescInfoArray src_slot_infos;
-    src_slot_infos.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+    src_slot_infos.emplace_back("c0_int", TYPE_INT_DESC, true);
 
     SlotTypeDescInfoArray dst_slot_infos = src_slot_infos;
 

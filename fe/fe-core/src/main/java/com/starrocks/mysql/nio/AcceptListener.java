@@ -115,6 +115,8 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         }
 
                         MysqlProto.sendResponsePacket(context);
+                        // the auth OK goes out uncompressed, everything after it is compressed
+                        context.getMysqlChannel().startCompression();
 
                         context.setStartTime();
                         ConnectProcessor processor = new ConnectProcessor(context);

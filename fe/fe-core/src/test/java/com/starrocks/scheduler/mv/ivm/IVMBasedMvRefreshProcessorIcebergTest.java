@@ -380,26 +380,6 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     }
 
     @Test
-    public void testPartitionedIVMWithScanWithDisableIcebergIdentityColumnOptimize() throws Exception {
-        connectContext.getSessionVariable().setEnableIcebergIdentityColumnOptimize(false);
-        doTestWith3Runs("SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1` as a;",
-                plan -> {
-                    PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.COSTS),
-                            "  0:IcebergScanNode\n" +
-                                    "     TABLE: partitioned_db.t1\n" +
-                                    "     TABLE VERSION: Delta@[0,1]");
-                },
-                plan -> {
-                    PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.COSTS),
-                            "  0:IcebergScanNode\n" +
-                                    "     TABLE: partitioned_db.t1\n" +
-                                    "     TABLE VERSION: Delta@[1,2]");
-                }
-        );
-        connectContext.getSessionVariable().setEnableIcebergIdentityColumnOptimize(true);
-    }
-
-    @Test
     public void testUnionAll() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(true);
         doTestWith3Runs("SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1` as a " +

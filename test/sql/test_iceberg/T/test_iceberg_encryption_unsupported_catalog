@@ -1,0 +1,35 @@
+-- name: test_iceberg_encryption_unsupported_catalog
+-- A Hadoop catalog has no Iceberg encryption manager, so a table that declares encryption.key-id on it can
+-- be neither written nor read: StarRocks refuses rather than write plaintext or read without a key. The
+-- table is also format version 3, which is where row-level DELETE is refused.
+create external catalog iceberg_enc_unsupported_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hadoop", "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_encryption_unsupported_catalog/${uuid0}/warehouse/");
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_encryption_unsupported_catalog/${uuid0}/warehouse/iceberg_enc_db > /dev/null
+use iceberg_enc_unsupported_${uuid0}.iceberg_enc_db;
+
+CREATE TABLE enc_t (
+    id INT,
+    region STRING
+)
+PARTITION BY (region)
+properties(
+  'format-version' = '3'
+);
+insert into enc_t values (1, 'a'), (2, 'a'), (3, 'b');
+
+-- Format version 3: deleting some rows of a file needs a deletion vector, so it is refused at planning.
+delete from enc_t where id = 1;
+-- Deleting a whole partition writes no delete file, so it still works.
+delete from enc_t where region = 'b';
+select * from enc_t order by id;
+
+-- Declare encryption on a catalog that cannot enforce it.
+alter table enc_t set ('encryption.key-id' = 'sql-tester-key');
+insert into enc_t values (4, 'a');
+select * from enc_t order by id;
+
+drop table enc_t force;
+set catalog default_catalog;
+drop catalog iceberg_enc_unsupported_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_encryption_unsupported_catalog/${uuid0}/ > /dev/null

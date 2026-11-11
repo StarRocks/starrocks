@@ -102,6 +102,8 @@ struct ColumnWriterOptions {
 
     bool is_compaction = false;
     bool need_flat = false;
+    // JSON columns the segment writer writes together; a flat JSON compaction splits its buffer budget among them.
+    size_t json_columns_in_segment = 1;
 
     std::string field_name;
     const FlatJsonConfig* flat_json_config = nullptr;

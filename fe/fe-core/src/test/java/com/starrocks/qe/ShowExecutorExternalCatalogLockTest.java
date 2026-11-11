@@ -175,6 +175,57 @@ public class ShowExecutorExternalCatalogLockTest extends ConnectorPlanTestBase {
         }
     }
 
+    /**
+     * SHOW COLUMNS / SHOW INDEX resolve through MetadataMgr and then lock {@code db.getId()} plus
+     * {@code table.getId()}. For an external catalog both are connector-minted, so the intention lock on the
+     * database is taken on an id the FE does not own. A connector table id is a large positive number
+     * (ConnectorTableId offsets by 100_000_000), so the lock-target validator's placeholder check cannot see
+     * this one -- the call site has to decline the lock itself.
+     */
+    @Test
+    public void testShowColumnsFromExternalCatalogTakesNoLock() throws Exception {
+        useFixedIdHiveMetadata();
+        Assertions.assertTrue(
+                completesWhileDbIsWriteLocked("show columns from hive0.tpch.customer", COLLIDING_DB_ID),
+                "SHOW COLUMNS on an external catalog must not lock the connector-minted database id");
+    }
+
+    @Test
+    public void testShowIndexFromExternalCatalogTakesNoLock() throws Exception {
+        useFixedIdHiveMetadata();
+        Assertions.assertTrue(
+                completesWhileDbIsWriteLocked("show index from hive0.tpch.customer", COLLIDING_DB_ID),
+                "SHOW INDEX on an external catalog must not lock the connector-minted database id");
+    }
+
+    /**
+     * The other half of the contract: an internal table keeps the lock it always had. Without this, declining
+     * the lock for everything would pass the two tests above.
+     */
+    @Test
+    public void testShowColumnsOnInternalTableStillLocks() throws Exception {
+        long internalDbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getId();
+        Assertions.assertFalse(completesWhileDbIsWriteLocked("show columns from test.t0", internalDbId),
+                "SHOW COLUMNS on an internal table must still block behind a DB WRITE lock");
+    }
+
+    @Test
+    public void testShowColumnsAndIndexStillWorkForBothCatalogKinds() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+
+        ShowStmt internal = (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show columns from test.t0", ctx);
+        Assertions.assertFalse(ShowExecutor.execute(internal, ctx).getResultRows().isEmpty());
+
+        ShowStmt external =
+                (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show columns from hive0.tpch.customer", ctx);
+        Assertions.assertFalse(ShowExecutor.execute(external, ctx).getResultRows().isEmpty());
+
+        // SHOW INDEX only ever returns rows for an OlapTable; the point here is that it does not throw.
+        ShowStmt externalIndex =
+                (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show index from hive0.tpch.customer", ctx);
+        Assertions.assertTrue(ShowExecutor.execute(externalIndex, ctx).getResultRows().isEmpty());
+    }
+
     @Test
     public void testShowTablesStillWorksForBothCatalogKinds() throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();

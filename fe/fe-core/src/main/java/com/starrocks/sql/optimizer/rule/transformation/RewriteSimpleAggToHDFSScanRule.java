@@ -42,7 +42,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.type.IntegerType;
-import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -123,7 +122,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             // generate a placeholder column for scan node.
             // ___count___ must be the column name for backend code.
             String metaColumnName = "___" + aggCall.getFnName() + "___";
-            Column c = new Column(metaColumnName, NullType.NULL);
+            Column c = new Column(metaColumnName, IntegerType.BIGINT);
             c.setIsAllowNull(true);
             ColumnRefOperator placeholderColumn =
                     columnRefFactory.create(metaColumnName, aggCall.getType(), aggCall.isNullable());

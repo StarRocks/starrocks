@@ -191,12 +191,12 @@ public class OAuth2AuthenticationProvider implements AuthenticationProvider {
     private UserIdentity verifyBearer(AccessControlContext authContext, UserIdentity userIdentity, String idToken,
                                       String remoteHost) throws AuthenticationException {
         String userName = (userIdentity != null) ? userIdentity.getUser()
-                : OpenIdConnectVerifier.extractPrincipal(idToken, oAuth2Context.principalFiled());
+                : OpenIdConnectVerifier.extractPrincipal(idToken, oAuth2Context.principalField());
         try {
             JWKSource<SecurityContext> jwkSource =
                     GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSource(oAuth2Context.jwksUrl());
             JWTClaimsSet claims = OpenIdConnectVerifier.verify(idToken, userName, jwkSource,
-                    oAuth2Context.principalFiled(), oAuth2Context.requiredIssuer(),
+                    oAuth2Context.principalField(), oAuth2Context.requiredIssuer(),
                     oAuth2Context.requiredAudience());
             // Only after the signature holds - see JWTAuthenticationProvider for why.
             if (groupSource.usesAuthenticatorGroups()) {

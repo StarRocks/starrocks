@@ -17,6 +17,9 @@ package com.starrocks.qe;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
@@ -38,11 +41,14 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -367,8 +373,10 @@ public class ColocatedBackendSelectorTest {
                 4L, allNodes.get(4L)
         );
 
+        // CIRCULAR resolves the backup through the overridden selectBackupWorker(long)
         WorkerProvider workerProvider =
-                new DefaultSharedDataWorkerProvider(allNodes, availableNodes, WarehouseManager.DEFAULT_RESOURCE) {
+                new DefaultSharedDataWorkerProvider(allNodes, availableNodes, WarehouseManager.DEFAULT_RESOURCE,
+                        SessionVariableConstants.BlacklistBackupRoutingPolicy.CIRCULAR) {
                     @Override
                     public long selectBackupWorker(long workerId) {
                         // Map unavailable nodes to available backup nodes
@@ -403,6 +411,79 @@ public class ColocatedBackendSelectorTest {
         assertThat(workerProvider.isWorkerSelected(3L)).isTrue();
     }
 
+    /**
+     * {@link SessionVariableConstants.BlacklistBackupRoutingPolicy#TABLET_HASH}: the backup of a bucket is keyed on
+     * (colocate group, bucket seq), so separate queries over different tables of one colocate group, whose tablets
+     * differ, send each bucket to the same backup, while the buckets of the unavailable node spread over the other
+     * nodes. A table outside any colocate group is keyed on its own id.
+     */
+    @Test
+    public void testColocatedBackendSelectorTabletHashBackupFollowsColocateGroup() throws StarRocksException {
+        final int numBuckets = 64;
+        final long downNodeId = 1L;
+        final long colocateTableId1 = 101L;
+        final long colocateTableId2 = 102L;
+        final long plainTableId = 103L;
+        final ColocateTableIndex.GroupId groupId = new ColocateTableIndex.GroupId(1L, 1000L);
+        new MockUp<ColocateTableIndex>() {
+            @Mock
+            public ColocateTableIndex.GroupId getMetaGroupColocateGroupId(long tableId) {
+                return tableId == colocateTableId1 || tableId == colocateTableId2 ? groupId : null;
+            }
+        };
+
+        ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+        for (long id = 1; id <= 8; id++) {
+            builder.put(id, createTestComputeNode(id, "host" + id, 9030));
+        }
+        ImmutableMap<Long, ComputeNode> allNodes = builder.build();
+        ImmutableMap<Long, ComputeNode> availableNodes =
+                ImmutableMap.copyOf(Maps.filterKeys(allNodes, id -> id != downNodeId));
+        Map<Integer, List<Long>> bucketSeqToBackends = new HashMap<>();
+        for (int bucketSeq = 0; bucketSeq < numBuckets; bucketSeq++) {
+            bucketSeqToBackends.put(bucketSeq, ImmutableList.of(downNodeId));
+        }
+
+        Map<Integer, Long> colocateSeqToWorkerId1 =
+                assignBucketsWithTabletHash(colocateTableId1, bucketSeqToBackends, allNodes, availableNodes);
+        Map<Integer, Long> colocateSeqToWorkerId2 =
+                assignBucketsWithTabletHash(colocateTableId2, bucketSeqToBackends, allNodes, availableNodes);
+        Map<Integer, Long> plainSeqToWorkerId =
+                assignBucketsWithTabletHash(plainTableId, bucketSeqToBackends, allNodes, availableNodes);
+
+        assertThat(colocateSeqToWorkerId1).hasSize(numBuckets).doesNotContainValue(downNodeId);
+        assertThat(colocateSeqToWorkerId1.values()).containsOnlyElementsOf(availableNodes.keySet());
+        assertThat(colocateSeqToWorkerId2).isEqualTo(colocateSeqToWorkerId1);
+        assertThat(ImmutableSet.copyOf(colocateSeqToWorkerId1.values())).hasSize(availableNodes.size());
+        assertThat(plainSeqToWorkerId).hasSize(numBuckets).isNotEqualTo(colocateSeqToWorkerId1);
+    }
+
+    /**
+     * Runs one query's colocate assignment of a table under the TABLET_HASH policy and returns its bucket seq to worker
+     * id mapping. Every table gets its own tablet ids.
+     */
+    private Map<Integer, Long> assignBucketsWithTabletHash(long tableId, Map<Integer, List<Long>> bucketSeqToBackends,
+                                                           ImmutableMap<Long, ComputeNode> allNodes,
+                                                           ImmutableMap<Long, ComputeNode> availableNodes)
+            throws StarRocksException {
+        int numBuckets = bucketSeqToBackends.size();
+        OlapScanNode scanNode = genOlapScanNode(0, numBuckets);
+        scanNode.getOlapTable().setId(tableId);
+        ArrayListMultimap<Integer, TScanRangeLocations> bucketSeqToLocations =
+                genBucketSeq2Locations(bucketSeqToBackends, 1);
+        bucketSeqToLocations.forEach((bucketSeq, locations) ->
+                locations.getScan_range().getInternal_scan_range().setTablet_id(tableId * 1000 + bucketSeq));
+        scanNode.getBucketSeqToLocations().putAll(bucketSeqToLocations);
+
+        WorkerProvider workerProvider = new DefaultSharedDataWorkerProvider(allNodes, availableNodes,
+                WarehouseManager.DEFAULT_RESOURCE, SessionVariableConstants.BlacklistBackupRoutingPolicy.TABLET_HASH);
+        ColocatedBackendSelector.Assignment colocatedAssignment =
+                new ColocatedBackendSelector.Assignment(numBuckets, 1, Optional.empty());
+        new ColocatedBackendSelector(scanNode, new FragmentScanRangeAssignment(), colocatedAssignment, false,
+                workerProvider, 1).computeScanRangeAssignment();
+        return colocatedAssignment.getSeqToWorkerId();
+    }
+
     @Test
     public void testColocatedBackendSelectorWithAllNodesUnavailable() {
         // Test case where all nodes for a bucket are unavailable and no backup available
@@ -420,8 +501,9 @@ public class ColocatedBackendSelectorTest {
         ImmutableMap<Long, ComputeNode> availableNodes = ImmutableMap.of();
 
         // Create a mock WorkerProvider that supports backup node selection but returns no backup
+        // CIRCULAR resolves the backup through the overridden selectBackupWorker(long)
         WorkerProvider noBackupWorkerProvider = new DefaultSharedDataWorkerProvider(allNodes, availableNodes,
-                WarehouseManager.DEFAULT_RESOURCE) {
+                WarehouseManager.DEFAULT_RESOURCE, SessionVariableConstants.BlacklistBackupRoutingPolicy.CIRCULAR) {
             @Override
             public long selectBackupWorker(long workerId) {
                 // No backup available

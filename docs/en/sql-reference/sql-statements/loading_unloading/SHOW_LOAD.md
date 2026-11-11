@@ -9,6 +9,10 @@ SHOW LOAD displays information of all load jobs or given load jobs in a database
 
 In addition to the preceding loading methods, StarRocks supports using Stream Load and Routine Load to load data. Stream Load is a synchronous operation and will directly return information of Stream Load jobs. Routine Load is an asynchronous operation where you can use the [SHOW ROUTINE LOAD](routine_load/SHOW_ROUTINE_LOAD.md) statement to display information of Routine Load jobs.
 
+SHOW LOAD displays a load job if you hold at least one privilege on each table that the job loads data into, or the OPERATE privilege. Unless you hold the SELECT privilege on each of those tables, `TaskInfo` and `TrackingSQL` are NULL, `ErrorMsg` keeps only the failure type, and `JobDetails` omits the backends. The `root` user can see all load jobs in full. A load job whose target table has been dropped is shown in full only to the `root` user, and with these fields hidden to users with the OPERATE privilege.
+
+SHOW STREAM LOAD displays a Stream Load job if you hold at least one privilege on each table that the job loads data into, or the OPERATE privilege. Unless you hold the SELECT privilege on each of those tables, `ErrorMsg`, `TrackingURL`, and `TrackingSQL` are NULL. The `root` user can see all Stream Load jobs in full. A Stream Load job whose target table has been dropped is shown in full only to the `root` user, and with these fields hidden to users with the OPERATE privilege.
+
 ## Syntax
 
 ```SQL

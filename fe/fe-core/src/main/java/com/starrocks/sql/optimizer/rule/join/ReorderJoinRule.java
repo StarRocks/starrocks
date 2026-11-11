@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.join;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -258,8 +257,10 @@ public class ReorderJoinRule extends Rule {
                 }
                 enumerate(new JoinReorderLeftDeep(context), context, innerJoinRoot, multiJoinNode, true);
                 // If there is no statistical information, the DP and greedy reorder algorithm are disabled,
-                // and the query plan degenerates to the left deep tree
+                // and the query plan degenerates to the left deep tree, unless
+                // cbo_join_reorder_with_unknown_stats asks to reorder on the estimates anyway
                 if (Utils.hasUnknownColumnsStats(innerJoinRoot) &&
+                        !context.getSessionVariable().isCboJoinReorderWithUnknownStats() &&
                         (!FeConstants.runningUnitTest || FeConstants.isReplayFromQueryDump)) {
                     continue;
                 }
@@ -385,14 +386,8 @@ public class ReorderJoinRule extends Rule {
             LogicalProperty newProperty = new LogicalProperty(optExpression.getLogicalProperty());
             newProperty.setOutputColumns(newCols);
 
-            if (!Optional.ofNullable(optExpression.getStatistics()).isPresent()) {
-                ExpressionContext expressionContext = new ExpressionContext(optExpression);
-                StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
-                        expressionContext, optimizerContext.getColumnRefFactory(), optimizerContext);
-                statisticsCalculator.estimatorStats();
-                optExpression.setStatistics(expressionContext.getStatistics());
-            }
-            Preconditions.checkState(optExpression.getStatistics() != null);
+            // Estimating this operator requires statistics for its children, which may also be missing.
+            ensureStatistics(optExpression, optimizerContext);
             Statistics oldStats = optExpression.getStatistics();
             Statistics.Builder newStatsBuilder = Statistics.builder()
                     .setOutputRowCount(oldStats.getOutputRowCount())

@@ -106,11 +106,24 @@ public class AuthenticationHandler {
     }
 
     private static void recordAuthFailure(AuthCredentials cred, AuthenticationException e) {
+        AuthFailureReason reason = (e.getReason() == null) ? AuthFailureReason.BAD_CREDENTIAL : e.getReason();
+        recordAuthFailure(cred, reason);
+    }
+
+    /**
+     * Counts a credential the caller could not even parse (a Basic header that is not Base64, or
+     * that names no user) as a {@link AuthFailureReason#MALFORMED} failure. The caller refuses such
+     * a request without calling {@link #authenticate}, which otherwise counts every failure.
+     */
+    public static void recordMalformedCredential(AuthCredentials cred) {
+        recordAuthFailure(cred, AuthFailureReason.MALFORMED);
+    }
+
+    private static void recordAuthFailure(AuthCredentials cred, AuthFailureReason reason) {
         if (!MetricRepo.hasInit) {
             return;
         }
         MetricRepo.COUNTER_AUTH_FAILURE.getMetric(cred.channelLabel(), cred.kindLabel()).increase(1L);
-        AuthFailureReason reason = (e.getReason() == null) ? AuthFailureReason.BAD_CREDENTIAL : e.getReason();
         MetricRepo.COUNTER_AUTH_FAILURE_REASON.getMetric(reason.label()).increase(1L);
     }
 
@@ -120,9 +133,8 @@ public class AuthenticationHandler {
 
         // The context outlives one authentication (COM_CHANGE_USER authenticates again on the same
         // one), and only a provider that resolves groups by itself writes this field. Every
-        // authentication starts from an empty set, so a provider that reports authenticator groups
-        // but resolves none for this login - LDAP skipping memberOf for a legacy `AS '<dn>'` user -
-        // cannot hand the previous user's groups to the new one.
+        // authentication starts from an empty set, so whatever this login resolves - or does not -
+        // the previous user's authenticator groups are never carried over to the new one.
         authContext.setAuthenticatorGroups(Set.of());
 
         // Input validation, not dispatch: anything but a token has to name the user it is for.

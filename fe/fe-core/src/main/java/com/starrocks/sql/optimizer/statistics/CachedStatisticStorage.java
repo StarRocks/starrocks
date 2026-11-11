@@ -38,6 +38,7 @@ import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
@@ -246,7 +247,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                     LOG.warn("Get connector table column statistics filed, exception: ", e);
                     return;
                 }
-                if (sessionVariable.isEnableQueryTriggerAnalyze() && GlobalStateMgr.getCurrentState().isLeader()) {
+                // Followers too: the manager forwards their requests to the leader, which runs the analyze.
+                if (sessionVariable.isEnableQueryTriggerAnalyze()) {
                     GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr().checkAndUpdateTableStats(res);
                 }
             }, statsCacheRefresherExecutor);
@@ -254,13 +256,21 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 List<ConnectorTableColumnStats> columnStatistics = new ArrayList<>();
                 Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> realResult;
                 realResult = result.get();
+                // Looked up on the first column that has statistics and shared by the rest: it rebuilds the
+                // table, so doing it per column made planning quadratic in the column count.
+                ExternalBasicStatsMeta basicStatsMeta = null;
+                boolean basicStatsMetaResolved = false;
                 for (String column : columns) {
                     Optional<ConnectorTableColumnStats> columnStatistic =
                             realResult.getOrDefault(new ConnectorTableColumnKey(table.getUUID(), column),
                                     Optional.empty());
                     if (columnStatistic.isPresent()) {
-                        columnStatistics.add(
-                                StatisticsUtils.estimateColumnStatistics(table, column, columnStatistic.get()));
+                        if (!basicStatsMetaResolved) {
+                            basicStatsMeta = StatisticsUtils.getExternalBasicStatsMeta(table);
+                            basicStatsMetaResolved = true;
+                        }
+                        columnStatistics.add(StatisticsUtils.estimateColumnStatistics(table, column,
+                                columnStatistic.get(), basicStatsMeta));
                     } else {
                         columnStatistics.add(ConnectorTableColumnStats.unknown());
                     }

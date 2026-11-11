@@ -32,6 +32,7 @@ namespace starrocks {
 class Conditions;
 class KVStore;
 struct OlapReaderStatistics;
+struct RangeGroupTask;
 class RuntimeProfile;
 class RowCursor;
 class RuntimeState;
@@ -51,6 +52,9 @@ class RowsetReadOptions {
     using PredicateList = std::vector<const ColumnPredicate*>;
 
 public:
+    // Immutable query ownership clip, independent of the query range union.
+    std::shared_ptr<const RangeGroupTask> grouped_range_task;
+
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
 

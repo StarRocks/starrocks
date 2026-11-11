@@ -7,6 +7,8 @@ description: "load_tracking_logs 提供导入作业的错误日志。"
 
 提供导入作业相关的错误信息。此视图自 StarRocks v3.0 起支持。
 
+导入作业的错误日志中可能包含被拒绝的数据行，因此只有对该作业的每一张目标表都拥有 SELECT 权限的用户，才能通过 `load_tracking_logs` 查看该日志。对每一张目标表拥有其他权限，或者拥有 OPERATE 权限的用户，能看到该作业，但 `TRACKING_LOG` 为 NULL。`root` 用户可以查看所有错误日志。目标表已被删除的导入作业，其错误日志仅对 `root` 用户可见。
+
 `load_tracking_logs` 提供以下字段：
 
 | **字段**      | **描述**                         |

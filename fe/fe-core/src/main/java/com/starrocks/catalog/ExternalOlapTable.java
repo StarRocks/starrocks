@@ -368,6 +368,8 @@ public class ExternalOlapTable extends OlapTable {
         tableProperty.buildDynamicProperty();
         tableProperty.buildWriteQuorum();
         tableProperty.buildReplicatedStorage();
+        // A sink into this table forwards the flat_json.* settings to the writing CNs (OlapTableSink).
+        tableProperty.buildFlatJsonConfig();
 
         indexes = null;
         if (meta.isSetIndex_infos()) {

@@ -14,7 +14,11 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.context.ai.AIProvider;
+import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.AIProviderMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AIProviderAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt;
@@ -23,12 +27,88 @@ import com.starrocks.sql.ast.aiprovider.DropAIProviderStmt;
 import com.starrocks.sql.ast.aiprovider.SetDefaultAIProviderStmt;
 import com.starrocks.sql.parser.NodePosition;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 public class AIProviderAnalysisTest {
+    private AIProviderMgr providers;
+    private GlobalStateMgr state;
+
+    @BeforeEach
+    public void setUp() {
+        providers = new AIProviderMgr();
+        state = mock(GlobalStateMgr.class);
+        when(state.getAIProviderMgr()).thenReturn(providers);
+        providers.replayCreateProvider(storedProvider(AIProviderType.EMBEDDING));
+    }
+
+    private ConnectContext context() {
+        ConnectContext context = new ConnectContext();
+        context.setGlobalStateMgr(state);
+        return context;
+    }
+
+    private AIProvider storedProvider(AIProviderType type) {
+        Map<String, String> properties = switch (type) {
+            case CHAT -> validChat();
+            case EMBEDDING -> validEmbedding();
+            case RERANK -> validRerank();
+        };
+        CreateAIProviderStmt statement = create(type.name(), properties);
+        AIProviderAnalyzer.analyze(statement, context());
+        return new AIProvider("p1-id", "p1", type, statement.getProperties(), "");
+    }
+
+    @Test
+    public void testAlterValidatesPropertiesAgainstStoredTypeWithoutMutatingMetadata() {
+        for (AIProviderType type : AIProviderType.values()) {
+            AIProvider provider = storedProvider(type);
+            providers.replayCreateProvider(provider);
+            for (String key : new String[] {"unknown_property", "typo_timeout_ms", "dimensions", "max_documents"}) {
+                if (type == AIProviderType.EMBEDDING && key.equals("dimensions")
+                        || type == AIProviderType.RERANK && key.equals("max_documents")) {
+                    continue;
+                }
+                Map<String, String> before = Map.copyOf(provider.getParams());
+                AlterAIProviderStmt statement = new AlterAIProviderStmt(false, "p1",
+                        new LinkedHashMap<>(Map.of("model", "replacement", key, "256")), NodePosition.ZERO);
+                SemanticException error = Assertions.assertThrows(SemanticException.class,
+                        () -> AIProviderAnalyzer.analyze(statement, context()));
+                Assertions.assertTrue(error.getMessage().contains("Unknown property '" + key + "'"));
+                Assertions.assertEquals(before, providers.getProvider("p1").getParams());
+            }
+        }
+    }
+
+    @Test
+    public void testAlterAllowsStoredTypeSpecificProperty() {
+        for (AIProviderType type : new AIProviderType[] {AIProviderType.EMBEDDING, AIProviderType.RERANK}) {
+            providers.replayCreateProvider(storedProvider(type));
+            String key = type == AIProviderType.EMBEDDING ? "dimensions" : "max_documents";
+            AIProviderAnalyzer.analyze(new AlterAIProviderStmt(false, "p1",
+                    new LinkedHashMap<>(Map.of(key, "256")), NodePosition.ZERO), context());
+        }
+    }
+
+    @Test
+    public void testMissingProviderIsHandledByManagerIncludingIfExists() throws Exception {
+        for (boolean ifExists : new boolean[] {false, true}) {
+            AlterAIProviderStmt statement = new AlterAIProviderStmt(ifExists, "missing",
+                    new LinkedHashMap<>(Map.of("model", "new-model")), NodePosition.ZERO);
+            Assertions.assertDoesNotThrow(() -> AIProviderAnalyzer.analyze(statement, context()));
+        }
+        Assertions.assertDoesNotThrow(() -> providers.alterProvider("missing", Map.of("model", "new-model"), true));
+        Assertions.assertThrows(com.starrocks.common.MetaNotFoundException.class,
+                () -> providers.alterProvider("missing", Map.of("model", "new-model"), false));
+        Assertions.assertNull(providers.getProvider("missing"));
+    }
+
 
     private static Map<String, String> validEmbedding() {
         Map<String, String> p = new LinkedHashMap<>();
@@ -57,42 +137,42 @@ public class AIProviderAnalysisTest {
 
     @Test
     public void testCreateEmbeddingValid() {
-        AIProviderAnalyzer.analyze(create("embedding", validEmbedding()), new ConnectContext());
+        AIProviderAnalyzer.analyze(create("embedding", validEmbedding()), context());
     }
 
     @Test
     public void testCreateRerankValid() {
         Map<String, String> p = validRerank();
         p.put("max_documents", "500");
-        AIProviderAnalyzer.analyze(create("rerank", p), new ConnectContext());
+        AIProviderAnalyzer.analyze(create("rerank", p), context());
     }
 
     @Test
     public void testCreateRejectsUnknownType() {
         Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(create("bogus", validEmbedding()), new ConnectContext()));
+                AIProviderAnalyzer.analyze(create("bogus", validEmbedding()), context()));
     }
 
     @Test
     public void testCreateFillsDefaultProtocol() {
         // CREATE without protocol gets the type's default written into the statement properties.
         CreateAIProviderStmt emb = create("embedding", validEmbedding());
-        AIProviderAnalyzer.analyze(emb, new ConnectContext());
+        AIProviderAnalyzer.analyze(emb, context());
         Assertions.assertEquals("openai", emb.getProperties().get("protocol"));
 
         CreateAIProviderStmt rr = create("rerank", validRerank());
-        AIProviderAnalyzer.analyze(rr, new ConnectContext());
+        AIProviderAnalyzer.analyze(rr, context());
         Assertions.assertEquals("cohere", rr.getProperties().get("protocol"));
 
         CreateAIProviderStmt chat = create("chat", validChat());
-        AIProviderAnalyzer.analyze(chat, new ConnectContext());
+        AIProviderAnalyzer.analyze(chat, context());
         Assertions.assertEquals("openai", chat.getProperties().get("protocol"));
 
         // An explicit value is kept as written.
         Map<String, String> p = validChat();
         p.put("protocol", "anthropic");
         CreateAIProviderStmt explicit = create("chat", p);
-        AIProviderAnalyzer.analyze(explicit, new ConnectContext());
+        AIProviderAnalyzer.analyze(explicit, context());
         Assertions.assertEquals("anthropic", explicit.getProperties().get("protocol"));
     }
 
@@ -100,14 +180,14 @@ public class AIProviderAnalysisTest {
     public void testCreateChatAnthropic() {
         Map<String, String> p = validChat();
         p.put("protocol", "anthropic");
-        AIProviderAnalyzer.analyze(create("chat", p), new ConnectContext());
+        AIProviderAnalyzer.analyze(create("chat", p), context());
     }
 
     @Test
     public void testCreateRerankCohere() {
         Map<String, String> p = validRerank();
         p.put("protocol", "cohere");
-        AIProviderAnalyzer.analyze(create("rerank", p), new ConnectContext());
+        AIProviderAnalyzer.analyze(create("rerank", p), context());
     }
 
     @Test
@@ -115,13 +195,13 @@ public class AIProviderAnalysisTest {
         Map<String, String> p = validChat();
         p.put("protocol", "gemini");
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(create("chat", p), new ConnectContext()));
+                AIProviderAnalyzer.analyze(create("chat", p), context()));
         Assertions.assertTrue(ex.getMessage().contains("invalid AI provider protocol"), ex.getMessage());
 
         Map<String, String> empty = validChat();
         empty.put("protocol", "");
         Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(create("chat", empty), new ConnectContext()));
+                AIProviderAnalyzer.analyze(create("chat", empty), context()));
     }
 
     @Test
@@ -130,19 +210,19 @@ public class AIProviderAnalysisTest {
         Map<String, String> ok = new LinkedHashMap<>();
         ok.put("protocol", "anthropic");
         AIProviderAnalyzer.analyze(
-                new AlterAIProviderStmt(false, "p1", ok, NodePosition.ZERO), new ConnectContext());
+                new AlterAIProviderStmt(false, "p1", ok, NodePosition.ZERO), context());
 
         Map<String, String> bad = new LinkedHashMap<>();
         bad.put("protocol", "bogus");
         Assertions.assertThrows(SemanticException.class, () ->
                 AIProviderAnalyzer.analyze(
-                        new AlterAIProviderStmt(false, "p1", bad, NodePosition.ZERO), new ConnectContext()));
+                        new AlterAIProviderStmt(false, "p1", bad, NodePosition.ZERO), context()));
 
         Map<String, String> empty = new LinkedHashMap<>();
         empty.put("protocol", "");
         Assertions.assertThrows(SemanticException.class, () ->
                 AIProviderAnalyzer.analyze(
-                        new AlterAIProviderStmt(false, "p1", empty, NodePosition.ZERO), new ConnectContext()));
+                        new AlterAIProviderStmt(false, "p1", empty, NodePosition.ZERO), context()));
     }
 
     @Test
@@ -150,7 +230,7 @@ public class AIProviderAnalysisTest {
         Map<String, String> p = new LinkedHashMap<>();
         p.put("model", "m");
         Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(create("embedding", p), new ConnectContext()));
+                AIProviderAnalyzer.analyze(create("embedding", p), context()));
     }
 
     @Test
@@ -158,7 +238,7 @@ public class AIProviderAnalysisTest {
         Map<String, String> p = new LinkedHashMap<>();
         p.put("endpoint", "https://x.example.com/v1/embeddings");
         Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(create("embedding", p), new ConnectContext()));
+                AIProviderAnalyzer.analyze(create("embedding", p), context()));
     }
 
     @Test
@@ -166,7 +246,7 @@ public class AIProviderAnalysisTest {
         Map<String, String> p = validEmbedding();
         p.put("endpoint", "ftp://x.example.com/v1/embeddings");
         Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(create("embedding", p), new ConnectContext()));
+                AIProviderAnalyzer.analyze(create("embedding", p), context()));
     }
 
     @Test
@@ -174,7 +254,7 @@ public class AIProviderAnalysisTest {
         Map<String, String> p = validEmbedding();
         p.put("dimensions", "0");
         Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(create("embedding", p), new ConnectContext()));
+                AIProviderAnalyzer.analyze(create("embedding", p), context()));
     }
 
     @Test
@@ -182,7 +262,7 @@ public class AIProviderAnalysisTest {
         Map<String, String> p = validEmbedding();
         p.put("extra_thing", "x");
         Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(create("embedding", p), new ConnectContext()));
+                AIProviderAnalyzer.analyze(create("embedding", p), context()));
     }
 
     @Test
@@ -191,7 +271,7 @@ public class AIProviderAnalysisTest {
         Map<String, String> p = validRerank();
         p.put("dimensions", "1536");
         Assertions.assertThrows(SemanticException.class, () ->
-                AIProviderAnalyzer.analyze(create("rerank", p), new ConnectContext()));
+                AIProviderAnalyzer.analyze(create("rerank", p), context()));
     }
 
     @Test
@@ -199,7 +279,7 @@ public class AIProviderAnalysisTest {
         Assertions.assertThrows(SemanticException.class, () ->
                 AIProviderAnalyzer.analyze(
                         new CreateAIProviderStmt(false, "", "embedding", validEmbedding(), null, NodePosition.ZERO),
-                        new ConnectContext()));
+                        context()));
     }
 
     @Test
@@ -207,7 +287,7 @@ public class AIProviderAnalysisTest {
         Assertions.assertThrows(SemanticException.class, () ->
                 AIProviderAnalyzer.analyze(
                         new AlterAIProviderStmt(false, "p1", new LinkedHashMap<>(), NodePosition.ZERO),
-                        new ConnectContext()));
+                        context()));
     }
 
     @Test
@@ -215,7 +295,7 @@ public class AIProviderAnalysisTest {
         Map<String, String> p = new LinkedHashMap<>();
         p.put("api_key", "sk-rotated");
         AIProviderAnalyzer.analyze(
-                new AlterAIProviderStmt(false, "p1", p, NodePosition.ZERO), new ConnectContext());
+                new AlterAIProviderStmt(false, "p1", p, NodePosition.ZERO), context());
     }
 
     @Test
@@ -224,7 +304,7 @@ public class AIProviderAnalysisTest {
         p.put("endpoint", "");
         SemanticException ex = Assertions.assertThrows(SemanticException.class, () ->
                 AIProviderAnalyzer.analyze(
-                        new AlterAIProviderStmt(false, "p1", p, NodePosition.ZERO), new ConnectContext()));
+                        new AlterAIProviderStmt(false, "p1", p, NodePosition.ZERO), context()));
         Assertions.assertTrue(ex.getMessage().contains("endpoint"), ex.getMessage());
     }
 
@@ -234,20 +314,20 @@ public class AIProviderAnalysisTest {
         Map<String, String> p = new LinkedHashMap<>();
         p.put("api_key", "");
         AIProviderAnalyzer.analyze(
-                new AlterAIProviderStmt(false, "p1", p, NodePosition.ZERO), new ConnectContext());
+                new AlterAIProviderStmt(false, "p1", p, NodePosition.ZERO), context());
     }
 
     @Test
     public void testDropEmptyName() {
         Assertions.assertThrows(SemanticException.class, () ->
                 AIProviderAnalyzer.analyze(
-                        new DropAIProviderStmt(false, "", NodePosition.ZERO), new ConnectContext()));
+                        new DropAIProviderStmt(false, "", NodePosition.ZERO), context()));
     }
 
     @Test
     public void testSetDefaultEmptyName() {
         Assertions.assertThrows(SemanticException.class, () ->
                 AIProviderAnalyzer.analyze(
-                        new SetDefaultAIProviderStmt("", NodePosition.ZERO), new ConnectContext()));
+                        new SetDefaultAIProviderStmt("", NodePosition.ZERO), context()));
     }
 }

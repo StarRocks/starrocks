@@ -7,6 +7,8 @@ description: "routine_load_jobs 提供例行导入作业的信息。"
 
 `routine_load_jobs` 提供有关例行导入作业的信息。
 
+对例行导入作业的目标表拥有至少一项权限，或者拥有 OPERATE 权限的用户，可以在 `routine_load_jobs` 中看到该作业。如果没有目标表的 SELECT 权限，`JOB_PROPERTIES`、`DATA_SOURCE_PROPERTIES`、`CUSTOM_PROPERTIES`、`ERROR_LOG_URLS`、`TRACKING_SQL` 和 `OTHER_MSG` 为 NULL，`REASONS_OF_STATE_CHANGED` 只保留错误码。`root` 用户可以看到所有例行导入作业的完整信息。目标表已被删除的例行导入作业，只有 `root` 用户能看到完整信息，拥有 OPERATE 权限的用户看到的是隐藏上述字段后的信息。
+
 `routine_load_jobs` 提供以下字段：
 
 | **字段**                 | **描述**                                         |

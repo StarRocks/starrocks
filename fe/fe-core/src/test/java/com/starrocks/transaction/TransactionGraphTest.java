@@ -97,7 +97,7 @@ public class TransactionGraphTest {
         // txn3 must still wait for txn1
         assertEquals(Lists.newArrayList(1L), graph.getTxnsWithoutDependency());
         // the single-table batch walk follows the spliced chain 1 -> 3
-        assertEquals(Lists.newArrayList(1L, 3L), graph.getTxnsWithTxnDependencyBatch(1, 5, 1));
+        assertEquals(Lists.newArrayList(1L, 3L), graph.getTxnsWithTxnDependencyBatch(5, 1));
         graph.remove(1);
         expectNextBatch(graph, Lists.newArrayList(3L));
         assertEquals(0, graph.size());
@@ -222,7 +222,6 @@ public class TransactionGraphTest {
     @Test
     public void testGetTxnsWithTxnDependencyBatch() {
         int maxBatchSize = 5;
-        int minBatchSize = 2;
 
         // TransactionGraph
         // table1: txn1 -> txn4 -> txn6
@@ -239,8 +238,9 @@ public class TransactionGraphTest {
 
         List<Long> txnIds = graph.getTxnsWithoutDependency();
         assertEquals(txnIds.size(), 3);
-        assertEquals(3, graph.getTxnsWithTxnDependencyBatch(minBatchSize, maxBatchSize, 1).size());
-        assertEquals(0, graph.getTxnsWithTxnDependencyBatch(minBatchSize, maxBatchSize, 3).size());
+        assertEquals(3, graph.getTxnsWithTxnDependencyBatch(maxBatchSize, 1).size());
+        // a head with no successor is still returned on its own, it must not wait for more loads
+        assertEquals(Lists.newArrayList(3L), graph.getTxnsWithTxnDependencyBatch(maxBatchSize, 3));
 
         // test txns with multi tables
         TransactionGraph graph2 = new TransactionGraph();
@@ -248,7 +248,7 @@ public class TransactionGraphTest {
 
         txnIds = graph2.getTxnsWithoutDependency();
         assertEquals(txnIds.size(), 1);
-        List<Long> batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(1, 5, txnIds.get(0));
+        List<Long> batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(5, txnIds.get(0));
         assertEquals(1, batchTxnIds.size());
         assertEquals(txnIds.get(0).longValue(), 1);
 
@@ -259,11 +259,11 @@ public class TransactionGraphTest {
         graph2.add(3, Lists.newArrayList(1L));
         txnIds = graph2.getTxnsWithoutDependency();
         assertEquals(txnIds.size(), 1);
-        batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(1, 5, txnIds.get(0));
+        batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(5, txnIds.get(0));
         assertEquals(batchTxnIds.get(0).longValue(), 1);
 
         graph2.remove(1);
-        batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(1, 5, 2);
+        batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(5, 2);
         assertEquals(batchTxnIds.size(), 2);
         assertEquals(batchTxnIds.get(0).longValue(), 2);
         assertEquals(batchTxnIds.get(1).longValue(), 3);
@@ -278,14 +278,14 @@ public class TransactionGraphTest {
 
         txnIds = graph2.getTxnsWithoutDependency();
         assertEquals(txnIds.size(), 1);
-        batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(1, 5, 2);
+        batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(5, 2);
         assertEquals(batchTxnIds.size(), 2);
         graph.remove(2);
         graph.remove(3);
 
         txnIds = graph2.getTxnsWithoutDependency();
         assertEquals(txnIds.size(), 1);
-        batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(1, 5, 4);
+        batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(5, 4);
         assertEquals(batchTxnIds.size(), 1);
     }
 
@@ -296,10 +296,10 @@ public class TransactionGraphTest {
         for (int i = 1; i <= 6; i++) {
             graph.add(i, Lists.newArrayList(1L, 2L, 3L));
         }
-        List<Long> batch = graph.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 1);
+        List<Long> batch = graph.getTxnsWithTxnDependencyBatchMultiTable(10, 1);
         assertEquals(Lists.newArrayList(1L, 2L, 3L, 4L, 5L, 6L), batch);
         // maxBatchSize caps the batch
-        batch = graph.getTxnsWithTxnDependencyBatchMultiTable(1, 4, 1);
+        batch = graph.getTxnsWithTxnDependencyBatchMultiTable(4, 1);
         assertEquals(Lists.newArrayList(1L, 2L, 3L, 4L), batch);
 
         // diamond: txn1 {1,2} -> txn2 {1} / txn3 {2} -> txn4 {1,2}.
@@ -310,7 +310,7 @@ public class TransactionGraphTest {
         graph2.add(2, Lists.newArrayList(1L));
         graph2.add(3, Lists.newArrayList(2L));
         graph2.add(4, Lists.newArrayList(1L, 2L));
-        batch = graph2.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 1);
+        batch = graph2.getTxnsWithTxnDependencyBatchMultiTable(10, 1);
         assertEquals(Lists.newArrayList(1L, 2L), batch);
 
         // a txn introducing a new table still joins when it extends the chain; a txn
@@ -321,7 +321,7 @@ public class TransactionGraphTest {
         graph3.add(2, Lists.newArrayList(1L, 3L)); // table 3 is new, depends on txn1 only
         graph3.add(3, Lists.newArrayList(2L));     // depends on txn1 only, independent of txn2
         graph3.add(4, Lists.newArrayList(1L));     // depends on txn2, extends the chain
-        batch = graph3.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 1);
+        batch = graph3.getTxnsWithTxnDependencyBatchMultiTable(10, 1);
         assertEquals(Lists.newArrayList(1L, 2L, 4L), batch);
 
         // single-table head: a multi-table successor joins as well
@@ -329,12 +329,8 @@ public class TransactionGraphTest {
         graph4.add(1, Lists.newArrayList(1L));
         graph4.add(2, Lists.newArrayList(1L));
         graph4.add(3, Lists.newArrayList(1L, 2L));
-        batch = graph4.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 1);
+        batch = graph4.getTxnsWithTxnDependencyBatchMultiTable(10, 1);
         assertEquals(Lists.newArrayList(1L, 2L, 3L), batch);
-
-        // minBatchSize not reached -> empty result
-        batch = graph4.getTxnsWithTxnDependencyBatchMultiTable(4, 10, 1);
-        assertEquals(0, batch.size());
 
         // a txn depending on another dependency-free head outside the batch must not join:
         // publishing it in this batch would jump over that txn
@@ -342,11 +338,38 @@ public class TransactionGraphTest {
         graph5.add(1, Lists.newArrayList(9L));     // independent head on table 9
         graph5.add(2, Lists.newArrayList(1L, 2L)); // head of the walk
         graph5.add(3, Lists.newArrayList(2L, 9L)); // depends on txn2 AND txn1 (outside)
-        batch = graph5.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 2);
+        batch = graph5.getTxnsWithTxnDependencyBatchMultiTable(10, 2);
         assertEquals(Lists.newArrayList(2L), batch);
         // walking from txn1 must not pull txn3 either (txn2 outside that batch)
-        batch = graph5.getTxnsWithTxnDependencyBatchMultiTable(1, 10, 1);
+        batch = graph5.getTxnsWithTxnDependencyBatchMultiTable(10, 1);
         assertEquals(Lists.newArrayList(1L), batch);
+    }
+
+    @Test
+    public void testBatchOnlyTakesTxnsThatCanJoin() {
+        TransactionGraph graph = new TransactionGraph();
+        for (long txnId = 1; txnId <= 4; txnId++) {
+            graph.add(txnId, Lists.newArrayList(1L));
+        }
+        assertEquals(Lists.newArrayList(1L, 2L), graph.getTxnsWithTxnDependencyBatch(10, 1, id -> id <= 2));
+
+        // Multi-table: commit Y {C}, H {A, B}, X {A, C}, Z {B}. X depends on Y outside the batch, so the batch
+        // from H is [H, Z]. Once Y is gone X qualifies and comes first, but a walk that only takes H and Z
+        // still gives [H, Z].
+        long y = 1;
+        long h = 2;
+        long x = 3;
+        long z = 4;
+        TransactionGraph multi = new TransactionGraph();
+        multi.add(y, Lists.newArrayList(3L));
+        multi.add(h, Lists.newArrayList(1L, 2L));
+        multi.add(x, Lists.newArrayList(1L, 3L));
+        multi.add(z, Lists.newArrayList(2L));
+        assertEquals(Lists.newArrayList(h, z), multi.getTxnsWithTxnDependencyBatchMultiTable(10, h));
+        multi.remove(y);
+        assertEquals(Lists.newArrayList(h, x), multi.getTxnsWithTxnDependencyBatchMultiTable(10, h));
+        assertEquals(Lists.newArrayList(h, z),
+                multi.getTxnsWithTxnDependencyBatchMultiTable(10, h, id -> id == h || id == z));
     }
 
     @Test

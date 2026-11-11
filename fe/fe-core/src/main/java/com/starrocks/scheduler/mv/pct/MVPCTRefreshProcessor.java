@@ -389,6 +389,7 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                 newProperties.put(TaskRun.MV_NON_REF_TABLE_FINGERPRINT, fingerprint);
             }
         }
+        TaskRun.seedRefreshJobProcessStartTime(newProperties, mvContext.getStatus());
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
