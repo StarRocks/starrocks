@@ -28,6 +28,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.proc.ExternalSchemaProcNode;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
@@ -38,6 +39,7 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PointerType;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.credential.CloudConfiguration;
@@ -152,6 +154,8 @@ import org.apache.paimon.utils.SnapshotManager;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.file.Files;
 import java.time.LocalDateTime;
@@ -1056,8 +1060,9 @@ public class PaimonMetadataTest {
         Files.delete(tmpDir);
     }
 
-    @Test
-    public void testScalarGlobalIndexUsesFullMode() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testScalarGlobalIndexUsesFullMode(boolean incremental) throws Exception {
         java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_scalar_index_");
         Identifier identifier = Identifier.create("test_db", "indexed_table");
         ConnectContext context = UtFrameUtils.createDefaultCtx();
@@ -1088,28 +1093,44 @@ public class PaimonMetadataTest {
 
             PaimonMetadata fullMetadata = new PaimonMetadata(
                     "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
-            PaimonSplitsInfo fullSplits = planSplits(fullMetadata, context, predicate, snapshotId);
+            Tracers.register(context);
+            Tracers.init(Tracers.Mode.VARS, Tracers.Module.EXTERNAL, false, false);
+            PaimonSplitsInfo fullSplits = planSplits(fullMetadata, context, predicate, snapshotId, incremental);
             assertTrue(fullSplits.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
             assertEquals(List.of(1, 3), readIds((FileStoreTable) catalog.getTable(identifier), fullSplits));
+            if (incremental) {
+                String prefix = "Paimon.plan." + table.name() + ".";
+                long fileCount = fullSplits.getPaimonSplits().stream()
+                        .map(IndexedSplit.class::cast).mapToLong(split -> split.dataSplit().dataFiles().size()).sum();
+                assertTrue(fileCount > 0);
+                assertEquals(String.valueOf(fileCount), Tracers.getAllVars().stream()
+                        .filter(var -> var.getName().equals(prefix + "resultedDataFilesNum"))
+                        .findFirst().orElseThrow().getValue());
+                assertNotEquals("0 B", Tracers.getAllVars().stream()
+                        .filter(var -> var.getName().equals(prefix + "resultedDataFilesSize"))
+                        .findFirst().orElseThrow().getValue());
+            }
 
             catalog.alterTable(identifier,
                     SchemaChange.setOption(CoreOptions.SCALAR_INDEX_SEARCH_MODE.key(), "FAST"), false);
             PaimonMetadata fastMetadata = new PaimonMetadata(
                     "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
-            PaimonSplitsInfo fastSplits = planSplits(fastMetadata, context, predicate, snapshotId);
+            PaimonSplitsInfo fastSplits = planSplits(fastMetadata, context, predicate, snapshotId, incremental);
             assertTrue(fastSplits.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
             assertEquals(List.of(1), readIds((FileStoreTable) catalog.getTable(identifier), fastSplits));
 
             catalog.dropTable(identifier, true);
             catalog.dropDatabase(identifier.getDatabaseName(), true, true);
         } finally {
+            Tracers.close();
             ConnectContext.remove();
             FileUtils.deleteDirectory(tmpDir.toFile());
         }
     }
 
-    @Test
-    public void testEmptyAppendOnlyAndDataEvolutionTablesDoNotUseInvalidSnapshot() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testEmptyAppendOnlyAndDataEvolutionTablesDoNotUseInvalidSnapshot(boolean incremental) throws Exception {
         java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_empty_table_");
         ConnectContext context = UtFrameUtils.createDefaultCtx();
         context.setThreadLocalInfo();
@@ -1128,7 +1149,7 @@ public class PaimonMetadataTest {
                             "paimon", new HdfsEnvironment(), catalog,
                             new ConnectorProperties(ConnectorType.PAIMON));
                     PaimonSplitsInfo splitsInfo = planEmptyTableSplits(
-                            emptyTableMetadata, context, tableName, tablePredicate);
+                            emptyTableMetadata, context, tableName, tablePredicate, incremental);
                     assertTrue(splitsInfo.getPaimonSplits().isEmpty());
                 }
             }
@@ -1138,8 +1159,9 @@ public class PaimonMetadataTest {
         }
     }
 
-    @Test
-    public void testBranchRequestIsIsolatedByTable() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testBranchRequestIsIsolatedByTable(boolean incremental) throws Exception {
         java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_branch_isolation_");
         ConnectContext context = UtFrameUtils.createDefaultCtx();
         context.setThreadLocalInfo();
@@ -1183,8 +1205,8 @@ public class PaimonMetadataTest {
                     .build();
 
             // Planning another table must neither consume nor inherit the pending branch request.
-            branchMetadata.getRemoteFiles(mainTable, mainParams);
-            branchMetadata.getRemoteFiles(branchedTable, branchParams);
+            planRemoteSplits(branchMetadata, mainTable, mainParams, incremental);
+            planRemoteSplits(branchMetadata, branchedTable, branchParams, incremental);
 
             assertNotEquals("dev", CoreOptions.branch(mainTable.getNativeTable().options()));
             assertEquals("dev", CoreOptions.branch(branchedTable.getNativeTable().options()));
@@ -1217,7 +1239,8 @@ public class PaimonMetadataTest {
     }
 
     private static PaimonSplitsInfo planEmptyTableSplits(
-            PaimonMetadata metadata, ConnectContext context, String tableName, ScalarOperator predicate) {
+            PaimonMetadata metadata, ConnectContext context, String tableName, ScalarOperator predicate,
+            boolean incremental) throws Exception {
         PaimonTable table = (PaimonTable) metadata.getTable(context, "test_db", tableName);
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
                 .setFieldNames(List.of("id", "payload"))
@@ -1225,8 +1248,7 @@ public class PaimonMetadataTest {
                 .setLimit(-1)
                 .setTableVersionRange(TvrTableSnapshot.of(-1L))
                 .build();
-        RemoteFileInfo remoteFile = metadata.getRemoteFiles(table, params).get(0);
-        return ((PaimonRemoteFileDesc) remoteFile.getFiles().get(0)).getPaimonSplitsInfo();
+        return planRemoteSplits(metadata, table, params, incremental);
     }
 
     private static void writeRows(FileStoreTable table, GenericRow... rows) throws Exception {
@@ -1255,7 +1277,8 @@ public class PaimonMetadataTest {
     }
 
     private static PaimonSplitsInfo planSplits(
-            PaimonMetadata metadata, ConnectContext context, ScalarOperator predicate, long snapshotId) {
+            PaimonMetadata metadata, ConnectContext context, ScalarOperator predicate, long snapshotId, boolean incremental)
+            throws Exception {
         PaimonTable table = (PaimonTable) metadata.getTable(context, "test_db", "indexed_table");
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
                 .setFieldNames(List.of("id", "payload"))
@@ -1263,8 +1286,26 @@ public class PaimonMetadataTest {
                 .setLimit(-1)
                 .setTableVersionRange(TvrTableSnapshot.of(snapshotId))
                 .build();
-        RemoteFileInfo remoteFile = metadata.getRemoteFiles(table, params).get(0);
-        return ((PaimonRemoteFileDesc) remoteFile.getFiles().get(0)).getPaimonSplitsInfo();
+        return planRemoteSplits(metadata, table, params, incremental);
+    }
+
+    private static PaimonSplitsInfo planRemoteSplits(
+            PaimonMetadata metadata, PaimonTable table, GetRemoteFilesParams params, boolean incremental) throws Exception {
+        if (!incremental) {
+            RemoteFileInfo remoteFile = metadata.getRemoteFiles(table, params).get(0);
+            return ((PaimonRemoteFileDesc) remoteFile.getFiles().get(0)).getPaimonSplitsInfo();
+        }
+        List<Split> splits = new ArrayList<>();
+        List<Predicate> predicates = new ArrayList<>();
+        try (RemoteFileInfoSource source = metadata.getRemoteFilesAsync(table, params)) {
+            while (source.hasMoreOutput()) {
+                PaimonSplitsInfo batch = ((PaimonRemoteFileDesc) source.getOutput().getFiles().get(0))
+                        .getPaimonSplitsInfo();
+                splits.addAll(batch.getPaimonSplits());
+                predicates = batch.getPredicate();
+            }
+        }
+        return new PaimonSplitsInfo(predicates, splits);
     }
 
     private static List<Integer> readIds(FileStoreTable table, PaimonSplitsInfo splitsInfo) throws Exception {
