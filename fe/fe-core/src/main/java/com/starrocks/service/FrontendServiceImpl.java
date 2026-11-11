@@ -120,18 +120,7 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-<<<<<<< HEAD
-=======
-import com.starrocks.connector.SelfDescribingCatalog;
 import com.starrocks.connector.statistics.ConnectorTableTriggerAnalyzeMgr;
-import com.starrocks.epack.catalog.system.starrocks.PolicyReferences;
-import com.starrocks.epack.http.rest.WarehouseInfosBuilder;
-import com.starrocks.epack.service.FrontendServiceImplEPack;
-import com.starrocks.epack.thrift.TFailoverGroupHandshakeRequest;
-import com.starrocks.epack.thrift.TFailoverGroupHandshakeResponse;
-import com.starrocks.epack.thrift.TFailoverGroupRequestMetaRequest;
-import com.starrocks.epack.thrift.TFailoverGroupRequestMetaResponse;
->>>>>>> b8929bb53da... [BugFix][RB-1044] Forward query-triggered external analyze from followers to the leader (#69198)
 import com.starrocks.failpoint.FailPoint;
 import com.starrocks.failpoint.TriggerPolicy;
 import com.starrocks.http.BaseAction;
