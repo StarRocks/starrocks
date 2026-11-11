@@ -3639,6 +3639,48 @@ public class Config extends ConfigBase {
     public static long iceberg_metadata_cache_max_entry_size = 0L;
 
     /**
+     * Share of the FE heap for one cache of the data files of cached Iceberg manifests, shared by all Iceberg
+     * catalogs, so it bounds their total however many catalogs there are. 0 (the default) keeps a cache per
+     * catalog, sized by the catalog property iceberg_data_file_cache_memory_usage_ratio; above 0 that property is
+     * ignored.
+     */
+    @ConfField
+    public static double iceberg_data_file_cache_global_memory_ratio = 0;
+
+    /**
+     * Share of the FE heap for one cache of Iceberg delete files, shared by all Iceberg catalogs; the built delete
+     * file indexes get the same share in a cache of their own, as per catalog. 0 (the default) keeps both per
+     * catalog, sized by the catalog property iceberg_delete_file_cache_memory_usage_ratio; above 0 that property is
+     * ignored.
+     */
+    @ConfField
+    public static double iceberg_delete_file_cache_global_memory_ratio = 0;
+
+    /**
+     * Share of the FE heap for one cache of Iceberg partition maps, shared by all Iceberg catalogs. 0 (the default)
+     * keeps a cache per catalog, sized by the catalog property iceberg_partition_cache_memory_usage_ratio; above 0
+     * that property is ignored.
+     */
+    @ConfField
+    public static double iceberg_partition_cache_global_memory_ratio = 0;
+
+    /**
+     * Share of the FE heap for one cache of parsed Delta Lake checkpoint files, shared by all Delta Lake catalogs,
+     * so it bounds their total however many catalogs there are. 0 (the default) keeps a cache per catalog, sized by
+     * the catalog property deltalake_checkpoint_meta_cache_memory_usage_ratio; above 0 that property is ignored.
+     */
+    @ConfField
+    public static double deltalake_checkpoint_meta_cache_global_memory_ratio = 0;
+
+    /**
+     * Share of the FE heap for one cache of parsed Delta Lake log (JSON) files, shared by all Delta Lake catalogs.
+     * 0 (the default) keeps a cache per catalog, sized by the catalog property
+     * deltalake_json_meta_cache_memory_usage_ratio; above 0 that property is ignored.
+     */
+    @ConfField
+    public static double deltalake_json_meta_cache_global_memory_ratio = 0;
+
+    /**
      * Whether to enable commit queue for Iceberg tables to avoid concurrent commit conflicts.
      * <p>
      * Iceberg uses optimistic concurrency control (OCC) for metadata commits. When multiple threads

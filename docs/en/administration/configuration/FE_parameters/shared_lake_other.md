@@ -938,6 +938,63 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Description: The maximum number of pending commit operations per Iceberg table. When using the commit queue (`enable_iceberg_commit_queue=true`), this limits the number of commit operations that can be queued for a single table. When the limit is reached, additional commit operations will execute in the caller thread (blocking until capacity available). This configuration is read at FE startup and applies to newly created table executors. Requires FE restart to take effect. Increase this value if you expect many concurrent commits to the same table. If this value is too low, commits may block in the caller thread during high concurrency.
 - Introduced in: v4.1.0
 
+<<<<<<< HEAD
+=======
+### `iceberg_hms_client_pool_size`
+
+- Default: `max(2, CPU cores * 3 / 4)`
+- Type: Int
+- Unit: Count
+- Is mutable: No
+- Description: The default Hive metastore (HMS) client pool size for an Iceberg catalog created with `"iceberg.catalog.type" = "hive"`. The pool size limits how many HMS calls the catalog can issue concurrently. Iceberg's own default is `2`, which pins the concurrency of every external metadata load against that metastore no matter how many threads are loading, so this item instead derives the default from the FE's CPU core count. The catalog property `clients` takes precedence over this item, which supplies a value only when the catalog does not set `clients` itself. Iceberg caches one HMS client pool per metastore URI for the whole FE process, which has two consequences. First, changing this item takes effect only after an FE restart, because a pool that already exists is never rebuilt when the value changes. `SHOW CREATE CATALOG` can therefore report the new value while the concurrency actually in effect is still the old one. Second, all catalogs on the same metastore URI share one pool whose capacity is fixed by whichever catalog initialized that URI first after startup, and the value carried by any catalog created later is silently ignored. Give every catalog that points at the same metastore URI the same value.
+- Introduced in: v4.2.0
+
+### `deltalake_checkpoint_meta_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one Delta Log Checkpoint file cache shared by all Delta Lake catalogs, so that its total stays within this bound however many catalogs there are. `0` (default) keeps a cache per catalog, bounded by the catalog property `deltalake_checkpoint_meta_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `deltalake_json_meta_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one Delta Log JSON file cache shared by all Delta Lake catalogs. `0` (default) keeps a cache per catalog, bounded by the catalog property `deltalake_json_meta_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `iceberg_data_file_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one data file Manifest cache shared by all Iceberg catalogs, so that its total stays within this bound however many catalogs there are. `0` (default) keeps a cache per catalog, bounded by the catalog property `iceberg_data_file_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `iceberg_delete_file_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one delete file Manifest cache shared by all Iceberg catalogs; the delete file indexes built from them get the same share in a cache of their own. `0` (default) keeps both caches per catalog, bounded by the catalog property `iceberg_delete_file_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `iceberg_partition_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one partition cache shared by all Iceberg catalogs. `0` (default) keeps a cache per catalog, bounded by the catalog property `iceberg_partition_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+>>>>>>> c9b00a52f49... [Enhancement][RB-225] Add opt-in global budgets for Iceberg and Delta Lake metadata caches (#69081)
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
 - Default: 86400
