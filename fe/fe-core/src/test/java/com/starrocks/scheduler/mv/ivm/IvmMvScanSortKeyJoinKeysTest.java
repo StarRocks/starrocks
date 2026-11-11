@@ -36,7 +36,11 @@ import java.util.regex.Pattern;
  */
 public class IvmMvScanSortKeyJoinKeysTest extends MVIVMIcebergTestBase {
     private static final String BASE_TABLE = "`iceberg0`.`partitioned_db`.`t2`";
+    // t2's four days fall in one month: a single mv partition keeps the join in the mv's buckets.
     private static final String MONTHLY_PARTITIONS = "PARTITION BY date_trunc('month', date)";
+    private static final String DAILY_PARTITIONS = "PARTITION BY date";
+    // These mvs hold no rows, so the join would broadcast them; a production mv is far past that limit.
+    private static final String NO_BROADCAST = ", 'session.broadcast_row_limit' = '0'";
     private static final String QUERY =
             "SELECT date, id, data, COUNT(*) AS total FROM " + BASE_TABLE + " GROUP BY date, id, data";
 
@@ -110,12 +114,34 @@ public class IvmMvScanSortKeyJoinKeysTest extends MVIVMIcebergTestBase {
                         + "the row -- and every later sort column is clustered only within it:\n" + plan);
     }
 
+    @Test
+    public void testAShuffledJoinKeepsOnlyTheRowIdKey() throws Exception {
+        String plan = refreshPlanWithDelta("mv_daily", DAILY_PARTITIONS, "ORDER BY (data)", NO_BROADCAST);
+        Assertions.assertTrue(plan.contains("(PARTITIONED)"),
+                "a mv in four partitions outside any colocate group shuffles the join:\n" + plan);
+        Assertions.assertFalse(plan.contains("<=>"),
+                "a second shuffle key would keep the row-id runtime filter out of the mv scan:\n" + plan);
+    }
+
+    @Test
+    public void testAColocatedMvKeepsTheSortKeyAcrossPartitions() throws Exception {
+        String plan = refreshPlanWithDelta("mv_daily_colocated", DAILY_PARTITIONS, "ORDER BY (data)",
+                ", 'colocate_with' = 'sk_colocate_group'" + NO_BROADCAST);
+        Assertions.assertFalse(plan.contains("(PARTITIONED)"), "colocation keeps the mv in its buckets:\n" + plan);
+        assertJoinsOn(plan, "data");
+    }
+
     private String refreshPlanWithDelta(String name, String orderBy) throws Exception {
         return refreshPlanWithDelta(name, orderBy, "");
     }
 
     private String refreshPlanWithDelta(String name, String orderBy, String extraProperties) throws Exception {
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + name + " " + MONTHLY_PARTITIONS +
+        return refreshPlanWithDelta(name, MONTHLY_PARTITIONS, orderBy, extraProperties);
+    }
+
+    private String refreshPlanWithDelta(String name, String partitionBy, String orderBy, String extraProperties)
+            throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + name + " " + partitionBy +
                 " DISTRIBUTED BY HASH(id) BUCKETS 1 " + orderBy + " REFRESH DEFERRED MANUAL " +
                 "PROPERTIES ('refresh_mode' = 'INCREMENTAL'" + extraProperties + ") AS " + QUERY);
         createdMvs.add(name);

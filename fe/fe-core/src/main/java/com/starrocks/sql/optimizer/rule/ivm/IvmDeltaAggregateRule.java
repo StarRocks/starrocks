@@ -17,9 +17,11 @@ package com.starrocks.sql.optimizer.rule.ivm;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -171,7 +173,7 @@ public class IvmDeltaAggregateRule extends TransformationRule {
         ScalarOperator eqPredicate = IvmOpUtils.buildRowIdEqBinaryPredicateOp(
                 encodeRowIdVersion, mvRowIdRef, uniqueKeys);
         List<ScalarOperator> onConjuncts = Lists.newArrayList(eqPredicate);
-        if (context.getSessionVariable().isEnableIvmMvScanSortKeyJoinKeys()) {
+        if (context.getSessionVariable().isEnableIvmMvScanSortKeyJoinKeys() && keepsMvDistribution(mv, mvScan)) {
             onConjuncts.addAll(buildSortKeyPrefixConjuncts(mv, mvColMetaToRefMap, groupingKeys,
                     context.getTvrOptContext().getIvmGroupKeyRefIdByMvColumn()));
         }
@@ -232,6 +234,21 @@ public class IvmDeltaAggregateRule extends TransformationRule {
             projMap.put(actionColumn, ConstantOperator.createTinyInt(IvmRuleUtils.INSERT_ACTION));
         }
         return projMap;
+    }
+
+    /**
+     * Whether the join can leave the mv scan in its own buckets, by the test {@code HashDistributionSpec} applies:
+     * one selected partition, or a stable colocate group. Otherwise the join shuffles on every equi-join key, and
+     * a runtime filter partitioned on more than one expression is not pushed into storage, the row-id one included.
+     */
+    private static boolean keepsMvDistribution(MaterializedView mv, LogicalOlapScanOperator mvScan) {
+        List<Long> partitionIds = mvScan.getSelectedPartitionId();
+        if (partitionIds.size() == 1) {
+            return true;
+        }
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        return !partitionIds.isEmpty() && colocateIndex.isColocateTable(mv.getId())
+                && !colocateIndex.isGroupUnstable(colocateIndex.getGroup(mv.getId()));
     }
 
     /**
