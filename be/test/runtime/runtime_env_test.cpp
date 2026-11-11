@@ -16,9 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <filesystem>
+#include <thread>
 #include <utility>
 
+#include "base/concurrency/await.h"
 #include "base/metrics.h"
 #include "base/testutil/scoped_updater.h"
 #include "common/config_exec_env_fwd.h"
@@ -28,6 +31,7 @@
 #include "common/thread/threadpool.h"
 #include "platform/platform_env.h"
 #include "runtime/diagnose_daemon.h"
+#include "runtime/global_thread_pools.h"
 #include "runtime/runtime_env_test_util.h"
 
 namespace starrocks {
@@ -106,6 +110,7 @@ TEST(RuntimeEnvTest, OwnsExecutionThreadPools) {
     ASSERT_NE(env->load_rowset_thread_pool(), nullptr);
     ASSERT_NE(env->load_segment_thread_pool(), nullptr);
     ASSERT_NE(env->put_combined_txn_log_thread_pool(), nullptr);
+    ASSERT_NE(env->load_sink_close_thread_pool(), nullptr);
     ASSERT_NE(env->java_env(), nullptr);
     ASSERT_NE(env->java_env()->jvm_call_pool(), nullptr);
     ASSERT_NE(env->java_env()->udf_call_pool(), nullptr);
@@ -151,6 +156,46 @@ TEST(RuntimeEnvTest, OwnsLakeThreadPools) {
     env->shutdown_thread_pools();
     env->destroy_thread_pools();
     ASSERT_EQ(env->lake_metadata_fetch_thread_pool(), nullptr);
+}
+
+TEST(GlobalThreadPoolsTest, PkIndexExecutionThreadPoolSizing) {
+    CpuInfo::init();
+    SCOPED_UPDATE(int32_t, config::pk_index_parallel_execution_threadpool_size, 8);
+
+    for (const auto& [configured_threads, expected_threads] :
+         {std::pair{0, CpuInfo::num_cores()}, std::pair{-1, CpuInfo::num_cores()}, std::pair{1, 1}, std::pair{7, 7}}) {
+        SCOPED_TRACE(configured_threads);
+        SCOPED_UPDATE(int32_t, config::pk_index_parallel_execution_threadpool_max_threads, configured_threads);
+
+        GlobalThreadPools pools;
+        // Exercise the production initializer; the ordinary BE_TEST lake pool stays fixed at one thread.
+        auto st = pools._init_pk_index_execution_thread_pool();
+        ASSERT_TRUE(st.ok()) << st;
+        ASSERT_NE(pools.pk_index_execution_thread_pool(), nullptr);
+        EXPECT_EQ(pools.pk_index_execution_thread_pool()->max_threads(), expected_threads);
+        pools.shutdown();
+    }
+}
+
+TEST(GlobalThreadPoolsTest, LoadSinkCloseKeepsPrestartedWorker) {
+    CpuInfo::init();
+    runtime_env_test::set_small_thread_pool_configs();
+
+    MetricRegistry metrics("load_sink_close_idle_test");
+    GlobalThreadPools pools;
+    ASSERT_TRUE(pools.init_execution_thread_pools(&metrics).ok());
+    auto* pool = pools.load_sink_close_thread_pool();
+    ASSERT_NE(nullptr, pool);
+    // The first worker must start during initialization, before a poller submits any close.
+    ASSERT_TRUE(Awaitility().timeout(5000000).until([&]() { return pool->num_threads() == 1; }));
+
+    // Stay idle beyond the 500 ms timeout: submitting the next close must not need a cold worker.
+    std::this_thread::sleep_for(std::chrono::milliseconds(750));
+    ASSERT_EQ(1, pool->num_threads());
+    ASSERT_TRUE(pool->submit_func([]() {}).ok());
+    pool->wait();
+    EXPECT_EQ(1, pool->num_threads());
+    pools.shutdown();
 }
 
 } // namespace starrocks

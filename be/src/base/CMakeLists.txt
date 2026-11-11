@@ -14,6 +14,7 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/base")
 
+
 ADD_BE_LIB(Base
   bthreads/future_impl.cpp
   bit/frame_of_reference_coding.cpp
@@ -45,6 +46,7 @@ ADD_BE_LIB(Base
   gc/gc_helper_smoothstep.cpp
   hash/crc32c.cpp
   hash/crc32c_sse_simd.cpp
+  hash/crc32c_arm_simd.cpp
   hash/hash_util.cpp
   hash/murmur_hash3.cpp
   failpoint/fail_point.cpp

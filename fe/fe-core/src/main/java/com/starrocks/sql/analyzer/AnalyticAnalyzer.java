@@ -67,6 +67,15 @@ public class AnalyticAnalyzer {
         }
 
         FunctionCallExpr analyticFunction = analyticExpr.getFnCall();
+        if (FunctionSet.ST_COVERAGE_SIMPLIFY.equalsIgnoreCase(analyticFunction.getFunctionName())) {
+            if (!analyticExpr.getOrderByElements().isEmpty() || analyticExpr.getWindow() != null ||
+                    analyticFunction.getIgnoreNulls()) {
+                throw new SemanticException("ST_CoverageSimplify requires the full partition without ORDER BY or a frame");
+            }
+            if (analyticExpr.getSkewHint() != null || analyticExpr.getPartitionHint() != null) {
+                throw new SemanticException("ST_CoverageSimplify does not support window partition hints");
+            }
+        }
         if (analyticFunction.getParams().isDistinct() && !isWindowSupportDistinctAggregations(analyticExpr)) {
             throw new SemanticException("DISTINCT not allowed in analytic function: " + ExprToSql.toSql(analyticFunction),
                     analyticExpr.getPos());

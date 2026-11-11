@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include <algorithm>
+#include <charconv>
 #include <map>
 #include <utility>
 
@@ -36,29 +37,64 @@ namespace starrocks {
 
 static const std::string kCountOptColumnName = "___count___";
 
-static Status fill_default_value_for_not_existed_slot(SlotDescriptor* slot_desc, const std::string& default_value,
-                                                      size_t row_count, Column* column) {
-    auto type_info = get_type_info(slot_desc->type());
-    if (type_info == nullptr) {
-        return Status::InternalError(fmt::format("failed to get type info for slot {}", slot_desc->col_name()));
+// Parses "HH:MM[:SS[.ffffff]]" (Java LocalTime#toString) into seconds, dropping the fraction.
+static StatusOr<double> parse_time_of_day(const std::string& value) {
+    std::vector<std::string> parts;
+    boost::split(parts, value, boost::is_any_of(":"));
+    if (parts.size() == 3) {
+        // the fraction is dropped, as Int64ToTimeConverter drops it for values stored in the file
+        parts[2] = parts[2].substr(0, parts[2].find('.'));
+    } else if (parts.size() != 2) {
+        return Status::InvalidArgument(fmt::format("invalid TIME default value: {}", value));
     }
-    if (default_value.empty() && !slot_desc->type().is_string_type()) {
-        return Status::InvalidArgument(fmt::format(
-                "empty default value is only supported for string-like columns, col_name={}", slot_desc->col_name()));
+    int fields[3] = {0, 0, 0};
+    for (size_t i = 0; i < parts.size(); ++i) {
+        const auto& part = parts[i];
+        auto [ptr, ec] = std::from_chars(part.data(), part.data() + part.size(), fields[i]);
+        if (part.empty() || ec != std::errc() || ptr != part.data() + part.size()) {
+            return Status::InvalidArgument(fmt::format("invalid TIME default value: {}", value));
+        }
     }
+    if (fields[0] < 0 || fields[0] > 23 || fields[1] < 0 || fields[1] > 59 || fields[2] < 0 || fields[2] > 59) {
+        return Status::InvalidArgument(fmt::format("invalid TIME default value: {}", value));
+    }
+    return fields[0] * 3600.0 + fields[1] * 60.0 + fields[2];
+}
 
+StatusOr<MutableColumnPtr> FormatScanContext::create_initial_default_column(const TypeDescriptor& type, bool nullable,
+                                                                            const std::string& value) {
     // Parse default value into Datum using TypeInfo::from_string
     // This handles all basic types: INT, BIGINT, FLOAT, DOUBLE, BOOLEAN, STRING, DATE, TIMESTAMP
     MemPool mem_pool;
     TypeInfoAllocator type_info_allocator = make_type_info_allocator(&mem_pool);
     Datum datum;
-    RETURN_IF_ERROR(datum_from_string(type_info.get(), &datum, default_value, &type_info_allocator));
-
-    // Fill column with the default value
-    for (size_t i = 0; i < row_count; ++i) {
-        column->append_datum(datum);
+    if (type.type == TYPE_TIME) {
+        // TIME has no TypeInfo; its column holds seconds as a double.
+        ASSIGN_OR_RETURN(double seconds, parse_time_of_day(value));
+        datum.set_double(seconds);
+    } else {
+        auto type_info = get_type_info(type);
+        if (type_info == nullptr) {
+            return Status::NotSupported(fmt::format("unsupported default value type {}", type.debug_string()));
+        }
+        RETURN_IF_ERROR(datum_from_string(type_info.get(), &datum, value, &type_info_allocator));
     }
 
+    // append_datum copies a string datum, so the column outlives mem_pool.
+    auto column = ColumnHelper::create_column(type, nullable);
+    column->append_datum(datum);
+    return column;
+}
+
+static Status fill_default_value_for_not_existed_slot(SlotDescriptor* slot_desc, const std::string& default_value,
+                                                      size_t row_count, Column* column) {
+    if (default_value.empty() && !slot_desc->type().is_string_type()) {
+        return Status::InvalidArgument(fmt::format(
+                "empty default value is only supported for string-like columns, col_name={}", slot_desc->col_name()));
+    }
+    ASSIGN_OR_RETURN(auto default_column, FormatScanContext::create_initial_default_column(
+                                                  slot_desc->type(), slot_desc->is_nullable(), default_value));
+    column->append_value_multiple_times(*default_column, 0, row_count);
     return Status::OK();
 }
 
@@ -276,12 +312,22 @@ MutableColumnPtr FormatScanContext::create_min_max_value_column(SlotDescriptor* 
     if (!is_first_split) {
         std::reverse(data.begin(), data.end());
     }
-    for (int i = 0; i < data.size() && row_count > 0; i++) {
+    // A batch too small to hold every value (chunk_size <= 2, or a tiny row group) continues where the previous
+    // small batch stopped, so consecutive small batches still emit null/min/max all: always starting over from the
+    // first value would never emit the last one, e.g. the max.
+    size_t start = 0;
+    if (!data.empty() && row_count < data.size()) {
+        size_t& cursor = min_max_value_cursors[slot_desc->id()];
+        start = cursor % data.size();
+        cursor += row_count;
+    }
+    for (size_t i = 0; i < data.size() && row_count > 0; i++) {
         row_count -= 1;
-        if (data[i].is_null()) {
+        const Datum& datum = data[(start + i) % data.size()];
+        if (datum.is_null()) {
             col->append_nulls(1);
         } else {
-            col->append_datum(data[i]);
+            col->append_datum(datum);
         }
     }
     if (row_count > 0) {
@@ -345,9 +391,13 @@ Status FormatScanContext::evaluate_all_predicates(ChunkPtr* chunk) {
 StatusOr<bool> FormatScanContext::should_skip_by_evaluating_not_existed_slots() {
     if (not_existed_slots.size() == 0) return false;
 
-    // build chunk for evaluation.
+    // build chunk for evaluation. It is thrown away, so it must not consume min/max values the output batches still
+    // have to emit.
+    auto saved_min_max_value_cursors = min_max_value_cursors;
     ChunkPtr chunk = std::make_shared<Chunk>();
-    RETURN_IF_ERROR(append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    Status st = append_or_update_not_existed_columns_to_chunk(&chunk, 1);
+    min_max_value_cursors = std::move(saved_min_max_value_cursors);
+    RETURN_IF_ERROR(st);
     // do evaluation.
     {
         SCOPED_RAW_TIMER(&stats->expr_filter_ns);

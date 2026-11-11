@@ -26,6 +26,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
@@ -42,8 +43,10 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
@@ -84,6 +87,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RangePartitionDesc;
@@ -118,6 +122,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PListCell;
@@ -128,6 +133,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -140,6 +146,7 @@ import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.SnapshotRef;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1044,8 +1051,10 @@ public class AnalyzerUtils {
      * copyOnlyForQuery, unless one carries more related MVs than skip_whole_phase_lock_mv_limit and the
      * statement gives that limit a reason to apply -- see {@link CopyUnsafeTablesCollector}.
      * <p>
-     * A lock target with no snapshot to plan against -- ENGINE=MYSQL / ELASTICSEARCH, ExternalOlapTable, and
-     * resource-mapping external tables -- is copy-unsafe and does hold the lock for the whole phase.
+     * A lock target with no snapshot to plan against is copy-unsafe and does hold the lock for the whole phase.
+     * No table kind is one any more -- MYSQL, ELASTICSEARCH, resource JDBC, ExternalOlapTable and the
+     * resource-mapping tables all answer isMetaLockTarget() false -- but a kind nobody has classified yet would
+     * be, which keeps the rule fail-closed.
      */
     public static boolean areTablesCopySafe(StatementBase statementBase) {
         CopyUnsafeTablesCollector collector = new CopyUnsafeTablesCollector();
@@ -1069,7 +1078,14 @@ public class AnalyzerUtils {
     }
 
     public static void copyOlapTable(StatementBase statementBase, Set<OlapTable> olapTables) {
-        new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
+        new AnalyzerUtils.OlapTableCollector(olapTables, true).visit(statementBase);
+    }
+
+    /** The olap tables {@link #copyOlapTable} would copy, left in place. */
+    public static Set<OlapTable> collectOlapTablesToCopy(StatementBase statementBase) {
+        Set<OlapTable> olapTables = new HashSet<>();
+        new AnalyzerUtils.OlapTableCollector(olapTables, false).visit(statementBase);
+        return olapTables;
     }
 
     public static void collectSourceTables(StatementBase statementBase, List<Table> sourceTables) {
@@ -1258,8 +1274,8 @@ public class AnalyzerUtils {
             } else if (target.isNativeTableOrMaterializedView()) {
                 snapshotableWriteTarget.put(targetName, target);
             } else {
-                // A lock target with no snapshot to plan against: ENGINE=MYSQL, ExternalOlapTable, and
-                // resource-mapping external tables. Unchanged -- the lock has to stay for the whole phase.
+                // A lock target with no snapshot to plan against, i.e. a kind nobody has classified yet (see
+                // areTablesCopySafe). The lock has to stay for the whole phase.
                 tables.put(targetName, target);
             }
         }
@@ -1310,9 +1326,11 @@ public class AnalyzerUtils {
                 return null;
             }
             // A table the meta lock cannot protect has no say in how long that lock is held. Tables in an
-            // external catalog are exactly that set -- PlannerMetaLocker.resolveTable never puts them in the
-            // lock set -- so they abstain. Letting them vote only made the planner hold the *lockable* tables'
-            // locks across connector RPCs while giving the voter itself zero protection: an external table's
+            // external catalog are that set, and so are the internal-database tables whose data lives elsewhere
+            // (resource-mapping HIVE/ICEBERG/HUDI, FILE, MYSQL, JDBC, ELASTICSEARCH, ExternalOlapTable; see
+            // Table.isMetaLockTarget) -- PlannerMetaLocker.resolveTable never puts them in the lock set -- so
+            // they abstain. Letting them vote only made the planner hold the *lockable* tables' locks across
+            // connector RPCs while giving the voter itself zero protection: an external table's
             // planning-phase stability comes from the query-scoped ConnectorMetadata
             // (MetadataMgr.QueryMetadatas), never from the meta lock.
             //
@@ -1350,10 +1368,13 @@ public class AnalyzerUtils {
     private static class OlapTableCollector extends TableCollector {
         private Set<OlapTable> olapTables;
         private Map<TableIndexId, OlapTable> idMap;
+        // false to only collect the originals, leaving the statement on them
+        private final boolean copy;
 
-        public OlapTableCollector(Set<OlapTable> tables) {
+        public OlapTableCollector(Set<OlapTable> tables, boolean copy) {
             this.olapTables = tables;
             this.idMap = new HashMap<>();
+            this.copy = copy;
         }
 
         /**
@@ -1438,10 +1459,17 @@ public class AnalyzerUtils {
         }
 
         private Table copyTable(Table originalTable) {
-            if (!(originalTable instanceof OlapTable)) {
+            // An external OLAP target is already a private copy, synced from its cluster before the lock was
+            // taken (StatementPlanner.beginTransaction); a shadow copy would turn it into a plain OlapTable and
+            // lose everything that sync brought in.
+            if (!(originalTable instanceof OlapTable) || originalTable.isOlapExternalTable()) {
                 return null;
             }
             OlapTable table = (OlapTable) originalTable;
+            if (!copy) {
+                olapTables.add(table);
+                return null;
+            }
             TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexMetaId());
             OlapTable existed = idMap.get(tableIndexId);
             if (existed != null) {
@@ -1881,8 +1909,10 @@ public class AnalyzerUtils {
             ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
             PartitionMeasure measure = checkAndGetPartitionMeasure(expressionPartitionDesc.getExpr());
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            // The caller supplies the granularity here (partition merge builds its target partition this
+            // way), so the existing partitions are exactly what it intends to replace — never adopt them.
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
-                    distributionDesc, (ExpressionRangePartitionInfo) partitionInfo);
+                    distributionDesc, (ExpressionRangePartitionInfo) partitionInfo, false);
         } else {
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             throw new AnalysisException("Unsupported partition type " + partitionInfo.getType());
@@ -1903,8 +1933,11 @@ public class AnalyzerUtils {
             }
             Expr expr = partitionExprs.get(0);
             PartitionMeasure measure = checkAndGetPartitionMeasure(expr);
+            // Granularity comes from the table's own expression, so an existing partition may legitimately
+            // be coarser than it (partition merge is scoped by BETWEEN and leaves the expression alone).
+            // A temporary partition is swapped into this table, so it must not contradict what is there.
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
-                    null, expressionRangePartitionInfo);
+                    null, expressionRangePartitionInfo, isTemp);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
             DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
@@ -2016,7 +2049,8 @@ public class AnalyzerUtils {
             String partitionPrefix,
             PartitionMeasure measure,
             DistributionDesc distributionDesc,
-            ExpressionRangePartitionInfo expressionRangePartitionInfo) throws AnalysisException {
+            ExpressionRangePartitionInfo expressionRangePartitionInfo,
+            boolean adoptCoveringPartition) throws AnalysisException {
         String granularity = measure.getGranularity();
         long interval = measure.getInterval();
         Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())
@@ -2054,6 +2088,20 @@ public class AnalyzerUtils {
                 PartitionKeyDesc partitionKeyDesc =
                         createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
 
+                // A partition may be coarser than the table's partition expression: ALTER TABLE ...
+                // PARTITION BY <coarser expr> BETWEEN a AND b merges a range of partitions and, being
+                // scoped by BETWEEN, deliberately leaves the expression alone. A temporary partition is
+                // swapped into this table afterwards, so computing its bounds from the expression would
+                // re-introduce the finer partitions the merge had removed.
+                if (adoptCoveringPartition) {
+                    Pair<String, PartitionKeyDesc> covering =
+                            findCoveringPartition(olapTable, expressionRangePartitionInfo, partitionItem);
+                    if (covering != null) {
+                        partitionName = covering.first;
+                        partitionKeyDesc = covering.second;
+                    }
+                }
+
                 if (partitionPrefix != null) {
                     if (partitionPrefix.contains(PARTITION_NAME_PREFIX_SPLIT)) {
                         throw new AnalysisException("partition name prefix can not contain " + PARTITION_NAME_PREFIX_SPLIT);
@@ -2077,6 +2125,57 @@ public class AnalyzerUtils {
         rangePartitionDesc.setPartitionNames(partitionNames);
         rangePartitionDesc.setSystem(true);
         return new AddPartitionClause(rangePartitionDesc, distributionDesc, partitionProperties, isTemp);
+    }
+
+    /**
+     * The existing (non-temporary) partition whose range covers {@code partitionItem}, as
+     * (partition name, its bounds), or null when no partition covers the value.
+     *
+     * <p>Returning the partition's own name matters as much as its bounds: several values in one
+     * request may fall into the same covering partition, and they must collapse into a single
+     * partition desc instead of producing overlapping ranges under different names.
+     *
+     * <p>One O(log n) lookup in the table's range index per value, with nothing copied or sorted:
+     * the RPC holds the table READ lock while it goes through every value of a request, and tablet
+     * pre-split analyzes each sampled value as a request of its own, without the table lock.
+     */
+    private static Pair<String, PartitionKeyDesc> findCoveringPartition(
+            OlapTable olapTable, ExpressionRangePartitionInfo partitionInfo, String partitionItem)
+            throws AnalysisException {
+        PartitionKey key;
+        try {
+            key = PartitionKey.createPartitionKey(
+                    Collections.singletonList(new PartitionValue(partitionItem)),
+                    partitionInfo.getPartitionColumns(olapTable.getIdToColumn()));
+        } catch (AnalysisException e) {
+            // Not fatal: fall back to the partition expression, which is what this path did before.
+            LOG.warn("failed to look up the partition covering value {}", partitionItem, e);
+            return null;
+        }
+        Map.Entry<Long, Range<PartitionKey>> covering = partitionInfo.getFormalPartitionContaining(key);
+        if (covering == null) {
+            return null;
+        }
+        Partition partition = olapTable.getPartition(covering.getKey());
+        if (partition == null) {
+            // Only possible without the table lock (pre-split): the partition went away after the lookup.
+            // The bounds the expression gives are known to be wrong for this value, so reject the value
+            // instead of falling back to them.
+            throw new AnalysisException("partition " + covering.getKey() + " covering partition value "
+                    + partitionItem + " no longer exists");
+        }
+        return Pair.create(partition.getName(), toPartitionKeyDesc(covering.getValue()));
+    }
+
+    private static PartitionKeyDesc toPartitionKeyDesc(Range<PartitionKey> range) {
+        PartitionKey upper = range.upperEndpoint();
+        PartitionValue upperValue = upper.isMaxValue()
+                ? PartitionValue.MAX_VALUE
+                : new PartitionValue(upper.getKeys().get(0).getStringValue());
+        return new PartitionKeyDesc(
+                Collections.singletonList(
+                        new PartitionValue(range.lowerEndpoint().getKeys().get(0).getStringValue())),
+                Collections.singletonList(upperValue));
     }
 
     private static PartitionKeyDesc createPartitionKeyDesc(Type partitionType, LocalDateTime beginTime,
@@ -2187,12 +2286,45 @@ public class AnalyzerUtils {
     }
 
     public static void checkNondeterministicFunction(ParseNode node) {
+        findFunctionCall(node, FunctionCallExpr::isNondeterministicBuiltinFnName).ifPresent(expr -> {
+            throw new SemanticException("Materialized view query statement select item " +
+                    ExprToSql.toSql(expr) + " not supported nondeterministic function", expr.getPos());
+        });
+    }
+
+    public static Optional<FunctionCallExpr> findCurrentTimeFunction(ParseNode node) {
+        return findFunctionCall(node, AnalyzerUtils::readsCurrentTime);
+    }
+
+    private static boolean readsCurrentTime(FunctionCallExpr expr) {
+        Function fn = expr.getFn();
+        if (fn instanceof SqlFunction sqlFunction) {
+            return sqlFunction.getAnalyzeExpr() != null
+                    && findCurrentTimeFunction(sqlFunction.getAnalyzeExpr()).isPresent();
+        }
+        // A UDF may share a time function's name with another signature.
+        if (fn != null && fn.getBinaryType() != TFunctionBinaryType.BUILTIN) {
+            return false;
+        }
+        String functionName = expr.getFunctionName();
+        if (!FunctionSet.nonDeterministicTimeFunctions.contains(functionName)) {
+            return false;
+        }
+        // unix_timestamp(x) converts its argument; only the no-argument form reads the clock.
+        return !FunctionSet.UNIX_TIMESTAMP.equals(functionName) || expr.getChildren().isEmpty();
+    }
+
+    private static Optional<FunctionCallExpr> findFunctionCall(ParseNode node, Predicate<FunctionCallExpr> predicate) {
+        List<FunctionCallExpr> matches = new ArrayList<>();
         new AstTraverser<Void, Void>() {
             @Override
             public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
-                if (expr.isNondeterministicBuiltinFnName()) {
-                    throw new SemanticException("Materialized view query statement select item " +
-                            ExprToSql.toSql(expr) + " not supported nondeterministic function", expr.getPos());
+                if (!matches.isEmpty()) {
+                    return null;
+                }
+                if (predicate.apply(expr)) {
+                    matches.add(expr);
+                    return null;
                 }
                 return super.visitFunctionCall(expr, context);
             }
@@ -2218,6 +2350,7 @@ public class AnalyzerUtils {
                 return null;
             }
         }.visit(node);
+        return matches.stream().findFirst();
     }
 
     static class NonDeterministicAnalyzeVisitor extends AstTraverser<Void, Void> {
@@ -2479,6 +2612,44 @@ public class AnalyzerUtils {
         }
 
         return order1 > order2;
+    }
+
+    /**
+     * The table an UPDATE, DELETE or MERGE writes to. An external target was resolved before the meta lock was
+     * taken, because the lock covers nothing about it (see {@link PreResolvedState#WRITE_TARGET}); a miss -- an
+     * internal target, or a pre-resolve that did not succeed -- resolves it here, the way it always was.
+     */
+    public static Table resolveWriteTarget(ConnectContext session, TableName tableName) {
+        return session.getPreResolvedState().takeOrResolve(PreResolvedState.WRITE_TARGET, tableName, () -> {
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(session, tableName.getCatalog(), tableName.getDb());
+            if (db == null) {
+                throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+            }
+            return MetaUtils.getSessionAwareTable(session, null, tableName);
+        });
+    }
+
+    /**
+     * Points the target relation of an UPDATE, DELETE or MERGE on an Iceberg branch at that branch, so the
+     * statement reads the rows it rewrites from the branch. The commit goes to the same branch. Like Iceberg, the
+     * branch is read and written with the table's current schema.
+     */
+    public static void setIcebergWriteBranch(TableRelation targetRelation, Table table, String branch) {
+        if (branch == null) {
+            return;
+        }
+        if (!(table instanceof IcebergTable icebergTable)) {
+            throw new SemanticException("Only an Iceberg table can be written on a branch");
+        }
+        SnapshotRef snapshotRef = icebergTable.getNativeTable().refs().get(branch);
+        if (snapshotRef == null) {
+            throw new SemanticException("Cannot find snapshot with reference name: %s", branch);
+        }
+        if (!snapshotRef.isBranch()) {
+            throw new SemanticException("%s is a tag, not a branch", branch);
+        }
+        targetRelation.setQueryPeriod(new QueryPeriod(QueryPeriod.PeriodType.VERSION, new StringLiteral(branch)));
     }
 
     public static TableRef normalizedTableRef(TableRef tableRef, ConnectContext context) {

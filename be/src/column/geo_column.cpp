@@ -33,7 +33,6 @@ namespace {
 
 Status check_transport_descriptor(const GeoColumnDescriptor& descriptor) {
     const auto& type = descriptor.type;
-    const auto& storage = descriptor.storage;
     const bool geography = type.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY &&
                            type.coordinate_system == GEO_COORDINATE_SYSTEM_SPHERICAL &&
                            GeoEdgeAlgorithmPB_IsValid(type.edge_algorithm) &&
@@ -42,9 +41,7 @@ Status check_transport_descriptor(const GeoColumnDescriptor& descriptor) {
     const bool geometry = type.logical_type == GEO_LOGICAL_TYPE_GEOMETRY &&
                           type.coordinate_system == GEO_COORDINATE_SYSTEM_CARTESIAN &&
                           type.edge_algorithm == GEO_EDGE_ALGORITHM_PLANAR;
-    if ((!geography && !geometry) || type.crs.empty() || type.crs.size() > 65536 ||
-        storage.encoding != GEO_ENCODING_WKB || !GeoDimensionPB_IsValid(storage.dimension) ||
-        !GeoValidationStatePB_IsValid(storage.validation_state)) {
+    if ((!geography && !geometry) || type.crs.empty() || type.crs.size() > 65536) {
         return Status::NotSupported("Unsupported GEO transport descriptor");
     }
     return Status::OK();
@@ -52,21 +49,14 @@ Status check_transport_descriptor(const GeoColumnDescriptor& descriptor) {
 
 } // namespace
 
-GeoColumn::GeoColumn(size_t size)
-        : GeoColumn(GeoColumnDescriptor{{},
-                                        {GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED}}) {
+GeoColumn::GeoColumn(size_t size) : GeoColumn(GeoColumnDescriptor{}) {
     resize(size);
 }
 
-GeoColumn::GeoColumn(GeoColumnDescriptor descriptor, GeoWkbLimits limits)
-        : _descriptor(std::move(descriptor)), _limits(limits) {
-    if (_descriptor.storage.encoding != GEO_ENCODING_WKB)
-        throw std::invalid_argument("GeoColumn requires WKB encoding");
-}
+GeoColumn::GeoColumn(GeoColumnDescriptor descriptor) : _descriptor(std::move(descriptor)) {}
 
 GeoColumn::GeoColumn(const TypeDescriptor& type, size_t size)
-        : GeoColumn(GeoColumnDescriptor{type.geo_type.value_or(GeoTypeDescriptor{}),
-                                        {GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED}}) {
+        : GeoColumn(GeoColumnDescriptor{type.geo_type.value_or(GeoTypeDescriptor{})}) {
     if (type.geo_type && type.geo_type->logical_type != GEO_LOGICAL_TYPE_UNKNOWN &&
         ((type.type == TYPE_GEOGRAPHY) != (type.geo_type->logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY))) {
         throw std::invalid_argument("GeoColumn primitive/descriptor mismatch");
@@ -75,14 +65,13 @@ GeoColumn::GeoColumn(const TypeDescriptor& type, size_t size)
 }
 
 const GeoColumn& GeoColumn::_source(const Column& src) const {
-    // Column's copy API requires an identical physical type; do not introduce SQL type dispatch here.
     const auto& geo = down_cast<const GeoColumn&>(src);
-    if (_descriptor != geo._descriptor) throw std::invalid_argument("GeoColumn descriptor mismatch");
+    // Only the semantic type must match; kernels check each row's own WKB.
+    if (_descriptor.type != geo._descriptor.type) throw std::invalid_argument("GeoColumn descriptor mismatch");
     return geo;
 }
 
 void GeoColumn::append_wkb(Slice wkb) {
-    clear_wkb_cache();
     // BinaryColumn may reallocate its buffer. Own a copy when appending a slice from ourselves.
     // External ingestion should use batch column copies once a GeoColumn exists.
     const auto begin = reinterpret_cast<uintptr_t>(_data->get_string_begin());
@@ -95,69 +84,70 @@ void GeoColumn::append_wkb(Slice wkb) {
     }
 }
 
-StatusOr<GeoWkbInfo> GeoColumn::inspect_wkb(size_t row) {
+StatusOr<GeoWkbInfo> GeoColumn::inspect_wkb(size_t row) const {
     if (row >= size()) return Status::InvalidArgument("GeoColumn row out of range");
-    if (_cache && _cache->row == row) return _cache->info;
-    ASSIGN_OR_RETURN(auto info, inspect_geo_wkb(get_wkb(row), _limits));
-    _cache = CachedWkb{row, info};
-    return info;
+    return inspect_geo_wkb(get_wkb(row));
 }
 
 void GeoColumn::append_wkb_batch(const Slice* values, size_t count) {
-    clear_wkb_cache();
     (void)_data->append_strings(values, count);
 }
 
 void GeoColumn::append_wkb_column(const BinaryColumn& source) {
-    clear_wkb_cache();
     _data->append(source, 0, source.size());
 }
 
 void GeoColumn::resize(size_t count) {
-    clear_wkb_cache();
     _data->resize(count);
 }
 
 void GeoColumn::assign(size_t count, size_t row) {
-    clear_wkb_cache();
     _data->assign(count, row);
 }
 
 void GeoColumn::remove_first_n_values(size_t count) {
-    clear_wkb_cache();
     _data->remove_first_n_values(count);
 }
 
 void GeoColumn::append(const Column& src, size_t offset, size_t count) {
+    if (count == 0) {
+        _source(src);
+        return;
+    }
     if (&src == this) {
         auto copy = clone();
         append(*copy, offset, count);
         return;
     }
     const auto& geo = _source(src);
-    clear_wkb_cache();
     _data->append(*geo._data, offset, count);
 }
 
 void GeoColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t count) {
+    if (count == 0) {
+        _source(src);
+        return;
+    }
     if (&src == this) {
         auto copy = clone();
         append_selective(*copy, indexes, from, count);
         return;
     }
     const auto& geo = _source(src);
-    clear_wkb_cache();
     _data->append_selective(*geo._data, indexes, from, count);
 }
 
 void GeoColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t count) {
+    if (count == 0) {
+        _source(src);
+        return;
+    }
     if (&src == this) {
         auto copy = clone();
         append_value_multiple_times(*copy, index, count);
         return;
     }
     const auto& geo = _source(src);
-    clear_wkb_cache();
     _data->append_value_multiple_times(*geo._data, index, count);
 }
 
@@ -165,43 +155,39 @@ void GeoColumn::append_value_multiple_times(const void* value, size_t count) {
     // Own the source slice before the first append in case it aliases this column.
     const auto slice = *static_cast<const Slice*>(value);
     const std::string copy(slice.data, slice.size);
-    clear_wkb_cache();
     const Slice owned(copy);
     _data->append_value_multiple_times(&owned, count);
 }
 
 void GeoColumn::append_default(size_t count) {
-    clear_wkb_cache();
     _data->append_default(count);
 }
 
 void GeoColumn::fill_default(const Filter& filter) {
-    clear_wkb_cache();
     _data->fill_default(filter);
 }
 
 void GeoColumn::update_rows(const Column& src, const uint32_t* indexes) {
+    if (src.size() == 0) return;
     if (&src == this) {
         auto copy = clone();
         update_rows(*copy, indexes);
         return;
     }
     const auto& geo = _source(src);
-    clear_wkb_cache();
     _data->update_rows(*geo._data, indexes);
 }
 
 size_t GeoColumn::filter_range(const Filter& filter, size_t from, size_t to) {
-    clear_wkb_cache();
     return _data->filter_range(filter, from, to);
 }
 
 MutableColumnPtr GeoColumn::clone_empty() const {
-    return create(_descriptor, _limits);
+    return create(_descriptor);
 }
 
 MutableColumnPtr GeoColumn::clone() const {
-    auto result = create(_descriptor, _limits);
+    auto result = create(_descriptor);
     result->_data->append(*_data, 0, size());
     result->_delete_state = _delete_state;
     return result;
@@ -211,26 +197,17 @@ void GeoColumn::swap_column(Column& rhs) {
     auto& geo = down_cast<GeoColumn&>(rhs);
     using std::swap;
     swap(_descriptor, geo._descriptor);
-    swap(_limits, geo._limits);
     swap(_data, geo._data);
     swap(_delete_state, geo._delete_state);
-    clear_wkb_cache();
-    geo.clear_wkb_cache();
 }
 
 void GeoColumn::reset_column() {
     Column::reset_column();
-    clear_wkb_cache();
     _data->reset_column();
 }
 
 size_t GeoColumn::container_memory_usage() const {
-    return _data->memory_usage() + _descriptor.type.crs.capacity() + 1 + sizeof(_cache);
-}
-
-StatusOr<MutableColumnPtr> GeoColumn::upgrade_if_overflow() {
-    RETURN_IF_ERROR(capacity_limit_reached());
-    return MutableColumnPtr{};
+    return _data->memory_usage() + _descriptor.type.crs.capacity() + 1;
 }
 
 GeoColumn::ImmContainer GeoColumn::immutable_data() const {
@@ -266,9 +243,8 @@ int64_t GeoColumn::xor_checksum(uint32_t, uint32_t) const {
     unsupported("checksum");
 }
 void GeoColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t row, bool) const {
-    if (_descriptor.type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY ||
-        _descriptor.storage.encoding != GEO_ENCODING_WKB) {
-        unsupported("MySQL output for non-GEOGRAPHY or non-WKB columns");
+    if (_descriptor.type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY) {
+        unsupported("MySQL output for non-GEOGRAPHY columns");
     }
     const auto wkb = get_wkb(row);
     buf->push_binary(wkb.data, wkb.size);
@@ -345,13 +321,13 @@ StatusOr<const uint8_t*> GeoColumn::deserialize_column(const uint8_t* src, const
         return Status::Corruption("Invalid GEO transport lengths");
     }
     GeoColumnDescPB pb;
-    if (!pb.ParseFromArray(src, descriptor_size) || !pb.has_type() || !pb.has_storage() ||
-        !pb.unknown_fields().empty() || !pb.type().unknown_fields().empty() || !pb.storage().unknown_fields().empty()) {
+    if (!pb.ParseFromArray(src, descriptor_size) || !pb.has_type() || !pb.unknown_fields().empty() ||
+        !pb.type().unknown_fields().empty()) {
         return Status::Corruption("Invalid or unsupported GEO transport metadata");
     }
     auto descriptor = GeoColumnDescriptor::from_protobuf(pb);
     RETURN_IF_ERROR(check_transport_descriptor(descriptor));
-    // The receiving plan owns semantic identity; only storage metadata comes from the wire.
+    // The receiving plan owns semantic identity; the wire descriptor must match it exactly.
     if (_descriptor.type != descriptor.type) {
         return Status::Corruption("GEO transport descriptor does not match the receiving type");
     }
@@ -383,7 +359,6 @@ StatusOr<const uint8_t*> GeoColumn::deserialize_column(const uint8_t* src, const
     if (bytes_size != 0) memcpy(data.data(), bytes, bytes_size);
     _data->get_offset().set_small_buffer(std::move(decoded_offsets));
     _descriptor = std::move(descriptor);
-    clear_wkb_cache();
     return src + total_size;
 }
 

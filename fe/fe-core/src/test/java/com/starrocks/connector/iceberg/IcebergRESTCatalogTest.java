@@ -24,12 +24,14 @@ import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.Version;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
@@ -48,6 +50,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.SessionCatalog;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.rest.RESTSessionCatalog;
 import org.apache.iceberg.types.Types;
@@ -57,6 +60,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -159,6 +163,29 @@ public class IcebergRESTCatalogTest {
                 "rest_native_catalog", new Configuration(), icebergProperties);
         List<String> dbs = icebergRESTCatalog.listAllDatabases(connectContext);
         Assertions.assertEquals(Arrays.asList("db1", "db1.ns1", "db1.ns1.ns2"), dbs);
+    }
+
+    @Test
+    public void testListAllDatabasesWhenChildNamespaceDroppedConcurrently(@Mocked RESTSessionCatalog restCatalog) {
+        new Expectations() {
+            {
+                restCatalog.listNamespaces((SessionContext) any, Namespace.empty());
+                result = ImmutableList.of(Namespace.of("db1"), Namespace.of("db_dropped"), Namespace.of("db2"));
+
+                restCatalog.listNamespaces((SessionContext) any, Namespace.of("db1"));
+                result = ImmutableList.of(Namespace.of("db1", "ns1"));
+
+                restCatalog.listNamespaces((SessionContext) any, Namespace.of("db_dropped"));
+                result = new NoSuchNamespaceException("Namespace does not exist: db_dropped");
+            }
+        };
+
+        Map<String, String> icebergProperties = ImmutableMap.of(
+                "iceberg.catalog.rest.nested-namespace-enabled", "true");
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "rest_native_catalog", new Configuration(), icebergProperties);
+        List<String> dbs = icebergRESTCatalog.listAllDatabases(connectContext);
+        Assertions.assertEquals(Arrays.asList("db1", "db1.ns1", "db_dropped", "db2"), dbs);
     }
 
     @Test
@@ -751,5 +778,24 @@ public class IcebergRESTCatalogTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Failed to load table metadata using REST Catalog",
                 () -> icebergRESTCatalog.loadNamespaceMetadata(connectContext, Namespace.of("db")));
+    }
+
+    @Test
+    public void testCreateOnCheckpointThread(@Mocked RESTSessionCatalog restCatalog) throws Exception {
+        // The checkpoint thread replays the journal into its own GlobalStateMgr, whose NodeMgr has no self node.
+        Field checkpointThreadId = GlobalStateMgr.class.getDeclaredField("checkpointThreadId");
+        checkpointThreadId.setAccessible(true);
+        long previous = checkpointThreadId.getLong(null);
+        checkpointThreadId.setLong(null, Thread.currentThread().getId());
+        try {
+            Assertions.assertTrue(GlobalStateMgr.isCheckpointThread());
+            IcebergRESTCatalog catalog = new IcebergRESTCatalog("rest_native_catalog", new Configuration(), new HashMap<>());
+            Map<String, String> properties = Deencapsulation.getField(catalog, "restCatalogProperties");
+            assertEquals("StarRocks-Iceberg-Connector/" + Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH,
+                    properties.get(IcebergRESTCatalog.USER_AGENT));
+        } finally {
+            checkpointThreadId.setLong(null, previous);
+            GlobalStateMgr.destroyCheckpoint();
+        }
     }
 }

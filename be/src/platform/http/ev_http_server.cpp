@@ -475,9 +475,11 @@ int EvHttpServer::on_header(struct evhttp_request* ev_req) {
         auto failure = _auth_verifier(request.get(), handler->required_privilege());
         if (failure.has_value()) {
             evhttp_remove_header(evhttp_request_get_input_headers(ev_req), HttpHeaders::EXPECT);
-            if (!failure->www_authenticate.empty()) {
-                evhttp_add_header(evhttp_request_get_output_headers(ev_req), "WWW-Authenticate",
-                                  failure->www_authenticate.c_str());
+            // One header line per challenge rather than a comma-joined list: RFC 7235 lets a
+            // single line carry several challenges, but the comma also separates auth-params
+            // and some clients get that wrong; separate lines are unambiguous.
+            for (const auto& challenge : failure->www_authenticate) {
+                evhttp_add_header(evhttp_request_get_output_headers(ev_req), "WWW-Authenticate", challenge.c_str());
             }
             HttpChannel::send_reply_json(request.get(), failure->http_status, failure->body);
             return 0;

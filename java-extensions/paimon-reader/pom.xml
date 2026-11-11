@@ -23,6 +23,12 @@
         </dependency>
 
         <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>hadoop-ext</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-hdfs-client</artifactId>
         </dependency>
@@ -114,6 +120,53 @@
     <build>
         <finalName>starrocks-paimon-reader</finalName>
         <plugins>
+            <!-- Reuse the FE's Hive client adaptations for the BE's isolated class loader. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-compatible-hive-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/generated-sources/hive-compat</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/../../fe/fe-core/src/main/java</directory>
+                                    <includes>
+                                        <include>org/apache/hadoop/hive/metastore/HiveMetaStoreClient.java</include>
+                                        <include>org/apache/hadoop/hive/metastore/security/TFilterTransport.java</include>
+                                    </includes>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>1.7</version>
+                <executions>
+                    <execution>
+                        <id>add-compatible-hive-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.build.directory}/generated-sources/hive-compat</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- copy all dependency libs to target lib dir -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

@@ -9,6 +9,7 @@
 #include "base/coding.h"
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
+#include "base/phmap/btree.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "storage/lake/tablet_manager.h"
@@ -313,7 +314,7 @@ template <class ForwardIt>
 Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt begin, ForwardIt end,
                        std::vector<std::string>* values) {
     Status s;
-    Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
+    std::unique_ptr<Iterator> iiter(rep_->index_block->NewIterator(rep_->options.comparator));
     std::unique_ptr<Iterator> current_block_itr_ptr;
 
     // return true if find k
@@ -373,7 +374,6 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     if (s.ok()) {
         s = iiter->status();
     }
-    delete iiter;
     TRACE_COUNTER_INCREMENT("continue_block_read_cnt", continue_block_read_cnt);
     TRACE_COUNTER_INCREMENT("sst_bloom_filter_rows", sst_bloom_filter_rows);
     TRACE_COUNTER_INCREMENT("multiget_t1_us", multiget_t1_us);
@@ -382,10 +382,16 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     return s;
 }
 
+size_t Table::index_block_memory_usage() const {
+    return (rep_->index_block != nullptr) ? rep_->index_block->size() : 0;
+}
+
+size_t Table::filter_memory_usage() const {
+    return rep_->filter_data_size;
+}
+
 size_t Table::memory_usage() const {
-    const size_t index_block_sz = (rep_->index_block != nullptr) ? rep_->index_block->size() : 0;
-    const size_t filter_data_sz = rep_->filter_data_size;
-    return index_block_sz + filter_data_sz;
+    return index_block_memory_usage() + filter_memory_usage();
 }
 
 // If new container wants to be supported in MultiGet, the initialization can be added here.
@@ -393,5 +399,8 @@ template Status Table::MultiGet<std::set<size_t>::iterator>(const ReadOptions& o
                                                             std::set<size_t>::iterator begin,
                                                             std::set<size_t>::iterator end,
                                                             std::vector<std::string>* values);
+template Status Table::MultiGet<phmap::btree_set<size_t>::const_iterator>(
+        const ReadOptions& options, const Slice* keys, phmap::btree_set<size_t>::const_iterator begin,
+        phmap::btree_set<size_t>::const_iterator end, std::vector<std::string>* values);
 
 } // namespace starrocks::sstable

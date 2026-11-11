@@ -35,7 +35,6 @@ public:
     virtual Status visit(MapColumn* column);
     virtual Status visit(StructColumn* column);
     virtual Status visit(BinaryColumn* column);
-    virtual Status visit(LargeBinaryColumn* column);
     virtual Status visit(Int8Column* column);
     virtual Status visit(UInt8Column* column);
     virtual Status visit(Int16Column* column);

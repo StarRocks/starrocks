@@ -53,6 +53,8 @@ public:
     FileColumn();
     // Sub-columns holding `size` NULL rows.
     explicit FileColumn(size_t size);
+    // Shares six non-constant nullable fields in FileField order. Use Column::mutate() before writing.
+    explicit FileColumn(std::array<ColumnPtr, NUM_FIELDS>&& fields);
     DISALLOW_COPY(FileColumn);
     FileColumn(FileColumn&& rhs) noexcept : _fields(std::move(rhs._fields)) {}
 
@@ -69,9 +71,6 @@ public:
     size_t byte_size(size_t from, size_t size) const override;
     void reserve(size_t n) override;
     void resize(size_t n) override;
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-    StatusOr<MutableColumnPtr> downgrade() override;
-    bool has_large_column() const override;
     void assign(size_t n, size_t idx) override;
     void append_datum(const Datum& datum) override;
     void remove_first_n_values(size_t count) override;

@@ -477,8 +477,19 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
             return Status::InvalidArgument(fmt::format("Unknown envelope type: {}", envelope_str));
         }
     }
-    if (http_req->header(HTTP_PARTIAL_UPDATE) == "true") {
-        request.__set_partial_update(true);
+    // Match the regular stream load endpoint: accept "true"/"false" case-insensitively and
+    // reject anything else. This endpoint used to compare the header byte-exactly against
+    // "true", so "TRUE" (the casing the docs list as valid) or any other casing of true silently
+    // degraded into a full upsert that overwrote every column the columns header did not list
+    // with NULL or its default value.
+    if (!http_req->header(HTTP_PARTIAL_UPDATE).empty()) {
+        if (boost::iequals(http_req->header(HTTP_PARTIAL_UPDATE), "false")) {
+            request.__set_partial_update(false);
+        } else if (boost::iequals(http_req->header(HTTP_PARTIAL_UPDATE), "true")) {
+            request.__set_partial_update(true);
+        } else {
+            return Status::InvalidArgument("Invalid partial update flag format. Must be bool type");
+        }
     } else {
         request.__set_partial_update(false);
     }

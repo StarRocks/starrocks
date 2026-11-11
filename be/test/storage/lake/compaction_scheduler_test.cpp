@@ -411,8 +411,8 @@ TEST_F(LakeCompactionSchedulerTest, test_abort_with_not_write_txnlog) {
     SyncPoint::GetInstance()->DisableProcessing();
 
     // A task that failed before producing a txn log must not leave anything behind in the metacache.
-    EXPECT_EQ(nullptr,
-              _tablet_mgr->metacache()->lookup_txn_log(_tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id)));
+    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(
+                               MetacacheKey::txn_log(_tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id))));
 }
 
 // skip_write_txnlog is the aggregate/file-bundling path: the compaction worker returns the txn log
@@ -432,7 +432,7 @@ TEST_F(LakeCompactionSchedulerTest, test_skip_write_txnlog_fills_metacache) {
     request.set_skip_write_txnlog(true);
 
     auto log_path = _tablet_mgr->txn_log_location(_tablet_metadata->id(), txn_id);
-    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(log_path));
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(log_path)));
 
     auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
     _compaction_scheduler.compact(nullptr, &request, &response, cb);
@@ -444,7 +444,7 @@ TEST_F(LakeCompactionSchedulerTest, test_skip_write_txnlog_fills_metacache) {
     // The log was not written to object storage ...
     EXPECT_FALSE(fs::path_exist(log_path));
     // ... but the publish path can still find it without a remote read.
-    auto cached = _tablet_mgr->metacache()->lookup_txn_log(log_path);
+    auto cached = _tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(log_path));
     ASSERT_NE(nullptr, cached);
     EXPECT_EQ(_tablet_metadata->id(), cached->tablet_id());
     EXPECT_EQ(txn_id, cached->txn_id());

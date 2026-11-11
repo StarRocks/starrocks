@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.junit.jupiter.api.Assertions;
@@ -173,23 +176,19 @@ public class QueryDumpExternalCatalogReplayTest extends ReplayFromDumpTestBase {
         // identity spec), unaffected by the per-partition record counts.
         Assertions.assertTrue(plan.contains("partitions=2/3"),
                 "expected partition pruning 2/3, plan:\n" + plan);
-        // (4) The ANALYZEd column statistics round-trip to the planner UNCLAMPED -- the heart of the fix. Both
-        // columns show their real captured statistic (NDV 3, full ranges), not the [-inf,inf]/UNKNOWN the dump
-        // fed before the row count + stats were captured.
-        Assertions.assertTrue(plan.contains("dt-->[2.0240101E7, 2.0240103E7, 0.0, 4.0, 3.0]"),
+        // (4) The ANALYZEd column statistics round-trip to the planner UNCLAMPED -- the heart of the fix. The
+        // captured dt statistic (NDV 3, range [20240101, 20240103]) is narrowed by the dt >= 20240102 predicate,
+        // and k keeps its real captured statistic, not the [-inf,inf]/UNKNOWN the dump fed before the row count
+        // + stats were captured.
+        Assertions.assertTrue(plan.contains("dt-->[2.0240102E7, 2.0240103E7, 0.0, 4.0, 3.0]"),
                 "expected the captured dt statistic on the scan, plan:\n" + plan);
         Assertions.assertTrue(plan.contains("k-->[1.0, 3.0, 0.0, 4.0, 3.0]"),
                 "expected the captured k statistic on the scan, plan:\n" + plan);
-        // (5) The scan cardinality is the real captured total (1000), not the old "1" fallback that clamped
-        // everything. NOTE: the cluster itself estimates 500 here, by applying the dt range-predicate
-        // selectivity (0.5) on top of the total. Replay serves external stats through the connector path (as
-        // all external-table replay does -- FeConstants.runningUnitTest disables the internal-statistics
-        // path), so StatisticsCalculator.removePartitionPredicate drops the partition-column predicate before
-        // selectivity and the scan keeps the full total. That divergence is a pre-existing property of
-        // external-table replay, independent of this change; what this test locks down is that the real total
-        // (1000), not 1, now reaches the planner.
-        Assertions.assertTrue(plan.contains("cardinality=1000"),
-                "expected the captured total row count (1000) as the scan cardinality, plan:\n" + plan);
+        // (5) The scan cardinality is derived from the real captured total (1000), not the old "1" fallback that
+        // clamped everything. Replay serves the whole-table row count (not one pruned by the scan predicate), so
+        // the dt range-predicate selectivity (0.5) still applies, giving 500 like the cluster does.
+        Assertions.assertTrue(plan.contains("cardinality=500"),
+                "expected the dt selectivity on the captured total row count (1000), plan:\n" + plan);
     }
 
     // A TWO-column-partitioned iceberg table (iceberg_test_rd.qd_test.part_multi): identity partitions on
@@ -220,12 +219,11 @@ public class QueryDumpExternalCatalogReplayTest extends ReplayFromDumpTestBase {
         // 3 of 5 partitions survive dt >= 20240102: (20240102,bj),(20240102,sh),(20240103,bj).
         Assertions.assertTrue(plan.contains("partitions=3/5"),
                 "expected multi-column partition pruning 3/5, plan:\n" + plan);
-        Assertions.assertTrue(plan.contains("dt-->[2.0240101E7, 2.0240103E7, 0.0, 4.0, 3.0]"),
+        Assertions.assertTrue(plan.contains("dt-->[2.0240102E7, 2.0240103E7, 0.0, 4.0, 3.0]"),
                 "expected the captured dt statistic on the scan, plan:\n" + plan);
-        // Cardinality is the full captured total (see the single-column test for why the partition-column
-        // predicate is not selectivized in the replay env).
-        Assertions.assertTrue(plan.contains("cardinality=1000"),
-                "expected the captured total row count (1000) as the scan cardinality, plan:\n" + plan);
+        // The dt selectivity on the captured total (see the single-column test).
+        Assertions.assertTrue(plan.contains("cardinality=500"),
+                "expected the dt selectivity on the captured total row count (1000), plan:\n" + plan);
     }
 
     // A day()-TRANSFORM-partitioned iceberg table (iceberg_test_rd.qd_test.part_tf): partitioned by day(ts)
@@ -263,10 +261,10 @@ public class QueryDumpExternalCatalogReplayTest extends ReplayFromDumpTestBase {
                 "expected day() transform partition pruning 2/4, plan:\n" + plan);
         Assertions.assertTrue(plan.contains("k-->[1.0, 4.0, 0.0, 4.0, 4.0]"),
                 "expected the captured k statistic on the scan, plan:\n" + plan);
-        // Cardinality is the full captured total (see the single-column identity test for why the
-        // partition-column predicate is not selectivized in the replay env).
-        Assertions.assertTrue(plan.contains("cardinality=1000"),
-                "expected the captured total row count (1000) as the scan cardinality, plan:\n" + plan);
+        // The ts selectivity on the captured total (see the single-column identity test). A day() transform
+        // prunes whole days only, so the ts predicate is never dropped from the selectivity anyway.
+        Assertions.assertTrue(plan.contains("cardinality=472"),
+                "expected the ts selectivity on the captured total row count (1000), plan:\n" + plan);
     }
 
     @Test
@@ -385,5 +383,27 @@ public class QueryDumpExternalCatalogReplayTest extends ReplayFromDumpTestBase {
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/mv_base_iceberg"));
         Assertions.assertTrue(replayPair.second.contains("OlapScanNode"));
         Assertions.assertTrue(replayPair.second.contains("table: mv_denorm_issue_cd_info_complete"));
+    }
+
+    @Test
+    public void testDumpRoundTripsAnalyzedRowCountsAndFormatVersion() {
+        // external_column_row_count and external_table_format_version survive serialize -> deserialize, which is
+        // what lets replay recompute an ANALYZE-sourced iceberg scan row count and rebuild a V3 table.
+        QueryDumpInfo dumpInfo = new QueryDumpInfo(connectContext);
+        dumpInfo.setOriginStmt("select 1");
+        dumpInfo.addExternalColumnRowCount("tpcds.store_sales", "ss_item_sk", 3612656355L);
+        dumpInfo.addExternalColumnRowCount("tpcds.store_sales", "ss_sold_date_sk", 2879987999L);
+        dumpInfo.addExternalTableFormatVersion("tpcds.store_sales", 3);
+
+        String json = GsonUtils.GSON.toJson(dumpInfo, QueryDumpInfo.class);
+        JsonObject dump = JsonParser.parseString(json).getAsJsonObject();
+        Assertions.assertEquals(3612656355L, dump.getAsJsonObject("external_column_row_count")
+                .getAsJsonObject("tpcds.store_sales").get("ss_item_sk").getAsLong(), json);
+        Assertions.assertEquals(3, dump.getAsJsonObject("external_table_format_version")
+                .get("tpcds.store_sales").getAsInt(), json);
+
+        QueryDumpInfo replayed = getDumpInfoFromJson(json);
+        Assertions.assertEquals(dumpInfo.getExternalColumnRowCountMap(), replayed.getExternalColumnRowCountMap());
+        Assertions.assertEquals(dumpInfo.getExternalTableFormatVersionMap(), replayed.getExternalTableFormatVersionMap());
     }
 }

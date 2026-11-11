@@ -29,12 +29,19 @@ import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.collections.CollectionUtils;
@@ -49,6 +56,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.scheduler.TaskRun.PARTITION_END;
 import static com.starrocks.scheduler.TaskRun.PARTITION_START;
@@ -119,6 +128,86 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
                         ")\n" +
                         "AS SELECT t1.c1, t1.c2, par_col, t1_par.par_date FROM `hive0`.`partitioned_db`.`t1` join " +
                         "`hive0`.`partitioned_db`.`t1_par` using (par_col)");
+    }
+
+    @Test
+    public void testPlanningReacquiresTheLockWithinTheRefreshTimeout() throws Exception {
+        // An MV reading a connector plans its INSERT off copies: the planner lets go of the meta lock and takes it
+        // back before validating. That second acquisition used to block with no bound, unlike the first.
+        starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_relock_mv`\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\"replication_num\" = \"1\")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate` FROM `hive0`.`partitioned_db`.`lineitem_par`;");
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "hive_relock_mv");
+
+        AtomicInteger tryLocks = new AtomicInteger();
+        new MockUp<PlannerMetaLocker>() {
+            @Mock
+            public boolean tryLock(Invocation invocation, long timeout, TimeUnit unit) {
+                // The 2nd acquisition is the first attempt's re-acquire: let it time out once.
+                if (tryLocks.incrementAndGet() == 2) {
+                    return false;
+                }
+                return invocation.proceed();
+            }
+        };
+        try {
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+            initAndExecuteTaskRun(taskRun);
+            // initial + timed-out re-acquire, then the retried attempt's initial + re-acquire. With an unbounded
+            // re-acquire there is a single tryLock, the one going in.
+            Assertions.assertEquals(4, tryLocks.get());
+            Assertions.assertEquals(2, mv.getPartitions().iterator().next().getDefaultPhysicalPartition()
+                    .getVisibleVersion(), "the retried refresh did not land");
+        } finally {
+            starRocksAssert.dropMaterializedView("hive_relock_mv");
+        }
+    }
+
+    @Test
+    public void testPlanningFailureSurvivesARelockTimeout() throws Exception {
+        starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_relock_fail_mv`\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\"replication_num\" = \"1\")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate` FROM `hive0`.`partitioned_db`.`lineitem_par`;");
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "hive_relock_fail_mv");
+
+        // Planning fails while the lock is released, and taking the lock back times out as well.
+        AtomicInteger tryLocks = new AtomicInteger();
+        AtomicInteger relockTimeouts = new AtomicInteger();
+        new MockUp<PlannerMetaLocker>() {
+            @Mock
+            public boolean tryLock(Invocation invocation, long timeout, TimeUnit unit) {
+                if (tryLocks.incrementAndGet() % 2 == 0) {
+                    relockTimeouts.incrementAndGet();
+                    return false;
+                }
+                return invocation.proceed();
+            }
+        };
+        new MockUp<RelationTransformer>() {
+            @Mock
+            public LogicalPlan transform(Invocation invocation, Relation relation) {
+                throw new StarRocksPlannerException("planning blew up", ErrorType.INTERNAL_ERROR);
+            }
+        };
+        try {
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+            Exception e = Assertions.assertThrows(Exception.class, () -> initAndExecuteTaskRun(taskRun));
+            Assertions.assertTrue(relockTimeouts.get() > 0, "the re-acquire never timed out");
+            // The task run reports the planning failure, not a lock timeout it would only retry.
+            Assertions.assertTrue(e.getMessage().contains("planning blew up"), e.getMessage());
+        } finally {
+            starRocksAssert.dropMaterializedView("hive_relock_fail_mv");
+        }
     }
 
     @Test
@@ -881,7 +970,12 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
-            Assertions.assertNull(execPlan);
+            // part_tbl2 still has par_date=2020-01-05, so the mv partition survives holding rows joined against a
+            // part_tbl1 partition that is gone: it must be recomputed, and the join now yields nothing.
+            Assertions.assertNotNull(execPlan);
+            Assertions.assertEquals(Sets.newHashSet("p20200105"),
+                    mvContext.getRefreshScope().getMvPartitionsToRefresh().getPartitionNames());
+            PlanTestBase.assertContains(execPlan.getExplainString(TExplainLevel.NORMAL), "0:EMPTYSET");
         }
 
         // run 5
@@ -1374,6 +1468,59 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         } catch (Exception e) {
             Assertions.assertTrue(e.getMessage().contains("The current partition expr maps size 2 should be equal " +
                     "to the size of the first partition expr maps: 1."));
+        }
+    }
+
+    /** An external ref base table's version map is pruned on its own path, so it must keep drop evidence too. */
+    @Test
+    public void testBatchedRefreshDoesNotLoseDropEvidenceOfExternalTable() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test.hive_orders_by_year\n" +
+                "partition by date_trunc('year', o_orderdate)\n" +
+                "distributed by hash(o_orderkey) buckets 3\n" +
+                "refresh deferred manual\n" +
+                "properties('replication_num' = '1', 'partition_refresh_number' = '1',\n" +
+                "'partition_refresh_strategy' = 'strict')\n" +
+                "as select o_orderkey, o_orderdate from hive0.partitioned_db.orders;");
+        MockedHiveMetadata mockedHiveMetadata =
+                (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                        getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
+        List<String> droppedDays = List.of("o_orderdate=1991-01-01", "o_orderdate=1992-01-01");
+        try {
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable("test", "hive_orders_by_year");
+            Task task = TaskBuilder.buildMvTask(mv, "test");
+            task.getProperties().put(TaskRun.IS_TEST, "true");
+            executeAllBatches(TaskRunBuilder.newBuilder(task).build());
+
+            Map<String, Long> versionsBeforeDrop = Maps.newHashMap();
+            for (String mvPartition : mv.getVisiblePartitionNames()) {
+                versionsBeforeDrop.put(mvPartition,
+                        mv.getPartition(mvPartition).getDefaultPhysicalPartition().getVisibleVersion());
+            }
+            droppedDays.forEach(day -> mockedHiveMetadata.dropPartition("partitioned_db", "orders", day));
+
+            TaskRun firstBatch = TaskRunBuilder.newBuilder(task).build();
+            initAndExecuteTaskRun(firstBatch);
+            TaskRun secondBatch = getPartitionBasedRefreshProcessor(firstBatch).getNextTaskRun();
+            Assertions.assertNotNull(secondBatch);
+            Assertions.assertEquals(1, getPartitionNamesToRefreshForMv(mv).size());
+            executeAllBatches(secondBatch);
+
+            for (String year : List.of("1991", "1992")) {
+                String mvPartition = mv.getVisiblePartitionNames().stream()
+                        .filter(n -> n.startsWith("p" + year)).findFirst().orElseThrow();
+                long after = mv.getPartition(mvPartition).getDefaultPhysicalPartition().getVisibleVersion();
+                Assertions.assertTrue(after > versionsBeforeDrop.get(mvPartition),
+                        mvPartition + " was not recomputed after its base partition was dropped: version stayed at "
+                                + after);
+            }
+
+            TaskRun steadyRun = TaskRunBuilder.newBuilder(task).build();
+            initAndExecuteTaskRun(steadyRun);
+            Assertions.assertNull(getPartitionBasedRefreshProcessor(steadyRun).getMvContext().getExecPlan());
+        } finally {
+            droppedDays.forEach(day -> mockedHiveMetadata.addPartition("partitioned_db", "orders", day));
+            starRocksAssert.dropMaterializedView("hive_orders_by_year");
         }
     }
 }

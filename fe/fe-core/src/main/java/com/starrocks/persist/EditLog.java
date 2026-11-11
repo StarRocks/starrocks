@@ -185,6 +185,11 @@ public class EditLog {
                             .initTransactionId(idInfo.getTxnId() + 1);
                     break;
                 }
+                case OperationType.OP_SAVE_GTID: {
+                    GtidInfo info = (GtidInfo) journal.data();
+                    globalStateMgr.getGtidGenerator().init(info.getBatchEndGtid());
+                    break;
+                }
                 case OperationType.OP_SAVE_AUTO_INCREMENT_ID:
                 case OperationType.OP_DELETE_AUTO_INCREMENT_ID: {
                     AutoIncrementInfo info = (AutoIncrementInfo) journal.data();
@@ -301,6 +306,11 @@ public class EditLog {
                     LOG.info("Begin to unprotect modify partition. db = " + info.getDbId()
                             + " table = " + info.getTableId() + " partitionId = " + info.getPartitionId());
                     globalStateMgr.getAlterJobMgr().replayModifyPartition(info);
+                    break;
+                }
+                case OperationType.OP_MODIFY_PARTITION_VACUUM_STATE: {
+                    PartitionVacuumStateInfo info = (PartitionVacuumStateInfo) journal.data();
+                    globalStateMgr.getLocalMetastore().replayModifyPartitionVacuumState(info);
                     break;
                 }
                 case OperationType.OP_BATCH_MODIFY_PARTITION: {
@@ -855,6 +865,11 @@ public class EditLog {
                         default:
                             break;
                     }
+                    break;
+                }
+                case OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA: {
+                    ReleaseAlterJobHistorySchemaLog log = (ReleaseAlterJobHistorySchemaLog) journal.data();
+                    globalStateMgr.getSchemaChangeHandler().replayReleaseHistorySchema(log);
                     break;
                 }
                 case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
@@ -1448,6 +1463,27 @@ public class EditLog {
         }
     }
 
+    /** Keeps provisional metadata changes and their commit/rollback inside the existing WAL fence. */
+    public final class WalScope implements AutoCloseable {
+        private boolean closed;
+
+        private WalScope() {
+            enterGate();
+        }
+
+        @Override
+        public void close() {
+            if (!closed) {
+                closed = true;
+                exitGate();
+            }
+        }
+    }
+
+    public WalScope openWalScope() {
+        return new WalScope();
+    }
+
     private void exitGate() {
         synchronized (editLogFenceLock) {
             if (inFlight <= 0) {
@@ -1671,6 +1707,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_SAVE_TRANSACTION_ID_V2, new TransactionIdInfo(transactionId), walApplier);
     }
 
+    public void logSaveGtid(long batchEndGtid, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_SAVE_GTID, new GtidInfo(batchEndGtid), walApplier);
+    }
+
     public void logSaveAutoIncrementId(AutoIncrementInfo info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_SAVE_AUTO_INCREMENT_ID, info, walApplier);
     }
@@ -1762,6 +1802,10 @@ public class EditLog {
 
     public void logModifyPartition(ModifyPartitionInfo info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info, walApplier);
+    }
+
+    public void logModifyPartitionVacuumState(PartitionVacuumStateInfo info) {
+        logJsonObject(OperationType.OP_MODIFY_PARTITION_VACUUM_STATE, info);
     }
 
     public void logBatchModifyPartition(BatchModifyPartitionsInfo info, WALApplier walApplier) {
@@ -2134,6 +2178,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_REMOVE_ALTER_JOB_V2, log, walApplier);
     }
 
+    public void logReleaseAlterJobHistorySchema(ReleaseAlterJobHistorySchemaLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA, log, walApplier);
+    }
+
     public void logAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, log, walApplier);
     }
@@ -2482,6 +2530,10 @@ public class EditLog {
 
     public void logUpdateTabletReshardJob(TabletReshardJob job) {
         logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, job);
+    }
+
+    public void logUpdateTabletReshardJob(TabletReshardJob snapshot, WALApplier applier) {
+        logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, snapshot, applier);
     }
 
     public void logRemoveTabletReshardJob(long jobId, WALApplier walApplier) {

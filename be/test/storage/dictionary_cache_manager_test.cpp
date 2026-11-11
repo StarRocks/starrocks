@@ -107,7 +107,7 @@ public:
                 down_cast<Int64Column*>(chunk->get_column_raw_ptr_by_index(i))->append(i);
             } else {
                 std::string s(60000, 'a');
-                down_cast<BinaryColumnBase<uint32_t>*>(chunk->get_column_raw_ptr_by_index(i))->append_string(s);
+                down_cast<BinaryColumn*>(chunk->get_column_raw_ptr_by_index(i))->append_string(s);
             }
         }
 
@@ -214,7 +214,7 @@ public:
                 down_cast<Int64Column*>(chunk->get_column_raw_ptr_by_index(i))->append(i);
             } else {
                 std::string s(60000, 'a');
-                down_cast<BinaryColumnBase<uint32_t>*>(chunk->get_column_raw_ptr_by_index(i))->append_string(s);
+                down_cast<BinaryColumn*>(chunk->get_column_raw_ptr_by_index(i))->append_string(s);
             }
         }
         std::vector<ColumnId> kids{0};
@@ -276,8 +276,7 @@ public:
 
         auto dictionary_get_expr = std::make_unique<DictionaryGetExpr>(node);
 
-        TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
-        type_varchar.len = 100;
+        TypeDescriptor type_varchar = TypeDescriptor::create_varchar_type(100);
         std::string dictionary_name("dictionary_name");
         Slice slice(dictionary_name);
         dictionary_get_expr->add_child(
@@ -299,7 +298,7 @@ TEST_F(DictionaryCacheManagerTest, precheck_value_encode_resets_non_normal_flags
     auto schema = std::make_shared<Schema>(std::move(fields));
     auto chunk = ChunkFactory::new_chunk(*schema, 4);
 
-    auto* column = down_cast<BinaryColumnBase<uint32_t>*>(chunk->get_column_raw_ptr_by_index(0));
+    auto* column = down_cast<BinaryColumn*>(chunk->get_column_raw_ptr_by_index(0));
     const std::string with_zero("a\0b", 3);
     column->append_string(with_zero);
     column->append_string(with_zero);

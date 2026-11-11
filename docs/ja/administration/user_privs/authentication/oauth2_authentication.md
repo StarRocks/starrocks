@@ -93,3 +93,9 @@ JDBC OAuth2 プラグインのサンプルコードについては、[starrocks-
 - 最初にStarRocksに接続すると、URL が返されます。
 - このURLにブラウザでアクセスし、認証を完了する必要があります。
 - 認証が完了すると、StarRocksとやりとりできるようになります。
+
+## HTTP または Arrow Flight から OAuth 2.0 で接続する
+
+OAuth 2.0 プロバイダーが発行したアクセストークンも、`Authorization: Bearer <token>` ヘッダーとして HTTP API と Arrow Flight SQL に送ることができます。StarRocks は OAuth 2.0 セキュリティインテグレーションの `jwks_url`、`required_issuer`、`required_audience` でトークンを検証し、ブラウザとのやりとりは不要です。[HTTP と Arrow Flight から接続する](./security_integration.md#http-と-arrow-flight-から接続する) を参照してください。
+
+> `IDENTIFIED WITH authentication_oauth2` で作成したユーザーがブラウザフローを完了できるのは MySQL プロトコルだけです。HTTP API や Arrow Flight SQL でアクセストークンを受け付けるには、Resource Server として動作する OAuth 2.0 [セキュリティインテグレーション](./security_integration.md)を作成し、[各認証方式が使えるエントリポイント](./authentication.mdx#各認証方式が使えるエントリポイント)を参照してください。

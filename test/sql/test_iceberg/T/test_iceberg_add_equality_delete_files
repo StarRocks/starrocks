@@ -1,0 +1,93 @@
+-- name: test_iceberg_add_equality_delete_files
+-- The delete files are written by hive tables: only the equality column, partition values in p=<value> directories.
+
+create external catalog iceberg_add_eq_del_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create external catalog hive_add_eq_del_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+
+create database iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0};
+
+-- partitioned table: each delete applies to its own partition
+create table iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_part(
+    id int,
+    v string,
+    p string
+) partition by(p) properties ("format-version" = "2");
+
+insert into iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_part values (1, 'a1', 'a'), (2, 'a2', 'a'), (3, 'b3', 'b'), (4, 'b4', 'b');
+
+create table hive_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.hive_part_deletes(
+    id int,
+    p string
+) partition by(p) properties ("location" = "oss://${oss_bucket}/add_eq_del_db_${uuid0}/hive_part_deletes");
+
+insert into hive_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.hive_part_deletes values (1, 'a'), (4, 'b');
+
+alter table iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_part execute add_equality_delete_files(location="oss://${oss_bucket}/add_eq_del_db_${uuid0}/hive_part_deletes", file_format="parquet", equality_columns="id");
+
+select content, record_count, equality_ids, regexp_extract(file_path, 'p=[a-z]+', 0) from iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_part$files where content = 2 order by 4;
+
+select * from iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_part order by id;
+
+-- unpartitioned table: the deletes apply to the whole table, but not to rows written after them
+create table iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_unpart(
+    id int,
+    v string
+) properties ("format-version" = "2");
+
+insert into iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_unpart values (1, 'x'), (2, 'y'), (3, 'z');
+
+create table hive_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.hive_unpart_deletes(
+    id int
+) properties ("location" = "oss://${oss_bucket}/add_eq_del_db_${uuid0}/hive_unpart_deletes");
+
+insert into hive_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.hive_unpart_deletes values (2), (3);
+
+alter table iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_unpart execute add_equality_delete_files(location="oss://${oss_bucket}/add_eq_del_db_${uuid0}/hive_unpart_deletes", file_format="parquet", equality_columns="id");
+
+select * from iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_unpart order by id;
+
+insert into iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_unpart values (2, 'y2');
+
+select * from iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_unpart order by id;
+
+-- an equality delete file written by the Iceberg Java writer (field ids in the parquet schema), deleting id = 1;
+-- uploaded under p=a so that it belongs to partition a
+create table iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_written(
+    id int,
+    v string,
+    p string
+) partition by(p) properties ("format-version" = "2");
+
+insert into iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_written values (1, 'a1', 'a'), (2, 'a2', 'a'), (3, 'b3', 'b');
+
+shell: ossutil64 cp ./sql/test_iceberg/data/add_equality_delete_files/eq_delete_id_1.parquet oss://${oss_bucket}/add_eq_del_db_${uuid0}/iceberg_written/p=a/eq_delete_id_1.parquet > /dev/null
+
+alter table iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_written execute add_equality_delete_files(location="oss://${oss_bucket}/add_eq_del_db_${uuid0}/iceberg_written", file_format="parquet", equality_columns="id");
+
+select * from iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_written order by id;
+
+-- the equality column must exist in the table
+alter table iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_unpart execute add_equality_delete_files(location="oss://${oss_bucket}/add_eq_del_db_${uuid0}/hive_unpart_deletes", file_format="parquet", equality_columns="no_such");
+
+drop table iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_part force;
+drop table iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_unpart force;
+drop table iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.ice_written force;
+drop table hive_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.hive_part_deletes force;
+drop table hive_add_eq_del_${uuid0}.add_eq_del_db_${uuid0}.hive_unpart_deletes force;
+drop database iceberg_add_eq_del_${uuid0}.add_eq_del_db_${uuid0};
+drop catalog iceberg_add_eq_del_${uuid0};
+drop catalog hive_add_eq_del_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/add_eq_del_db_${uuid0} >/dev/null || echo "exit 0" >/dev/null

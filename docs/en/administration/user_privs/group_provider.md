@@ -15,6 +15,12 @@ Enable Group Provider in StarRocks to authenticate, and authorize user groups fr
 
 From v3.5.0 onwards, StarRocks supports Group Provider to collect group information from external authentication systems for user group management.
 
+:::note A group provider is not the only source of groups
+
+A security integration can also take a login's groups from the identity provider that authenticated it, without any group provider: an LDAP integration from the group membership attribute of the user's own entry, and a JWT or OAuth 2.0 integration from a claim of the verified token. Set `group_source` on the integration; see [Authenticate with Security Integration](./authentication/security_integration.md). Groups resolved that way are used for exactly the same things as the groups of a group provider.
+
+:::
+
 ## Overview
 
 To deepen its integration with external user authentication and authorization systems, such as LDAP and Apache Ranger, StarRocks supports collecting user group information for a better experience on the collective user management.
@@ -386,6 +392,11 @@ The following example grants the role `example_role` to the user group `analysts
 ```SQL
 GRANT example_role TO EXTERNAL GROUP analysts;
 ```
+
+Roles granted to an external group also apply to tasks that run as the user who created them, such as asynchronous materialized view refreshes and tasks submitted with [SUBMIT TASK](../../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md). Each time such a task runs, StarRocks resolves the creator's groups again. Note the following points:
+
+- Groups that only a login credential carries, such as groups read from a claim of a JWT or OAuth 2.0 token, cannot be resolved for a task.
+- For a user who logs in through a JWT or OAuth 2.0 security integration, a task consults the group providers in the FE configuration item `group_provider`, not the `group_provider` property of the integration.
 
 ## Combine group provider with external authorization system (Apache Ranger)
 

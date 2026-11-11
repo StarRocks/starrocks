@@ -85,7 +85,7 @@ public:
 
     ChunkPtr get_next() {
         ChunkPtr chunk = std::make_shared<Chunk>();
-        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+        auto col = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
         for (size_t i = 0; i < _chunk_size; i++) {
             col->append_datum(Datum(_next_value++));
         }

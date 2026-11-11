@@ -168,7 +168,8 @@ StatusOr<AIProjectOperatorFactories> AIProjectFactory::create(PipelineBuilderCon
                                                                   static_cast<int64_t>(buffer_memory_limit)));
         ASSIGN_OR_RETURN(auto submitter,
                          AIProjectDispatcherSubmitter::create(state, projection_spec.model_configs(), config));
-        ASSIGN_OR_RETURN(auto projection, AIProjectExpressionProjection::create(std::move(projection_spec)));
+        ASSIGN_OR_RETURN(auto projection, AIProjectExpressionProjection::create(std::move(projection_spec),
+                                                                                config.max_input_file_bytes));
         ASSIGN_OR_RETURN(auto processor, AIProjectProcessor::create(std::move(input_buffer), std::move(projection),
                                                                     std::move(submitter), config));
 

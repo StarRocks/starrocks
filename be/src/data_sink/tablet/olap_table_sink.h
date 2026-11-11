@@ -39,6 +39,7 @@
 #include "common/statusor.h"
 #include "data_sink/tablet/tablet_sink_sender.h"
 #include "exec_primitive/async_data_sink.h"
+#include "gen_cpp/olap_file.pb.h"
 
 namespace starrocks {
 
@@ -209,6 +210,10 @@ private:
     size_t _multi_node_write_node_num = 1;
     bool _enable_data_file_bundling = false;
     bool _is_multi_statements_txn = false;
+    // The destination table's flat_json.* properties (TOlapTableSink.flat_json_config), forwarded to
+    // every lake tablet writer this sink opens. Unset when the table has none.
+    bool _has_flat_json_config = false;
+    FlatJsonConfigPB _flat_json_config;
     bool _enable_lake_per_partition_coordinator_txn_log = false;
 
     TKeysType::type _keys_type;

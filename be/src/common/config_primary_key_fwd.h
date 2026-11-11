@@ -38,9 +38,21 @@ CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 // This config controls max memory that we can use for partial update.
 CONF_mInt64(partial_update_memory_limit_per_worker, "2147483648"); // 2GB
 
+// Rows per chunk when a primary key table reads segments to apply a load or a compaction, in both shared-data
+// and shared-nothing mode: the primary keys of the loaded rowset, the columns that partial updates read, and the
+// primary keys of a compaction output. Kept apart from vector_chunk_size so the apply batch can be tuned without
+// touching query execution. A value <= 0 falls back to 4096 and a value above 65535 is capped at 65535. Rebuilding
+// the primary key index from segments does not use it.
+CONF_mInt32(pk_vector_chunk_size, "4096");
+
 // The minimum threshold of data size for enabling pk index eager build.
 // Default is 100MB.
 CONF_mInt64(pk_index_eager_build_threshold_bytes, "104857600");
+
+// A delete file holding at least this many rows also gets its tombstone sstable built at import time, in addition
+// to the pk_index_eager_build_threshold_bytes trigger, so publish ingests the sstable instead of writing every
+// deleted key into the primary key index memtable. Not positive disables the row trigger.
+CONF_mInt64(pk_index_del_sst_min_rows, "1000000");
 
 // Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
 CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "0");
@@ -117,7 +129,8 @@ CONF_mInt64(pk_index_sstable_sample_interval_bytes, "16777216");
 // Default: false (conservative, validates all conditions even within same transaction)
 CONF_mBool(ignore_merge_condition_inside_same_transaction, "false");
 
-CONF_Int32(update_memory_limit_percent, "60");
+// Percentage of the process memory limit used by the update (primary key) mem tracker and index cache.
+CONF_mInt32(update_memory_limit_percent, "60");
 
 // If enable_retry_apply is set to true, the system will attempt retries when apply fails.
 // Retry scenarios for apply operations include the following cases:
@@ -156,8 +169,21 @@ CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "true");
 
 CONF_mBool(enable_primary_key_recover, "false");
 
-// Used for control memory usage of update state cache and compaction state cache
+// Used for control memory usage of update state cache and compaction state cache in shared-data mode
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
+
+// Upper bound of the shared-data primary key index cache, as a percentage of its capacity, checked after every
+// publish that does not fail on the update memory limit. A backstop for when the background evict thread has
+// not yet brought the cache down to primary_key_index_memory_high_percent.
+CONF_mInt32(primary_key_index_memory_urgent_percent, "85");
+
+// The background update cache evict thread shrinks the shared-data primary key index cache to this percentage
+// of its capacity whenever it holds more.
+CONF_mInt32(primary_key_index_memory_high_percent, "75");
+
+// When a shared-data primary key publish fails because it exceeds the update memory limit, the primary key
+// index cache is shrunk to this percentage of its capacity, so that the retry has memory to work with.
+CONF_mInt32(primary_key_index_memory_middle_percent, "50");
 
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
 
@@ -171,7 +197,8 @@ CONF_mInt32(lake_pk_index_sst_max_compaction_versions, "100");
 // ever becomes a concern on a hot read path.
 CONF_mBool(lake_pk_index_sst_verify_checksum, "true");
 
-CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
+// Capacity of the shared-data primary key index sstable block cache, as a percentage of the update mem limit.
+CONF_mInt32(lake_pk_index_block_cache_limit_percent, "10");
 
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
@@ -203,6 +230,10 @@ CONF_mInt64(l0_max_mem_usage, "104857600");
 CONF_mInt64(max_tmp_l1_num, "10");
 
 CONF_mBool(enable_parallel_get_and_bf, "false");
+
+// Skip duplicate-key checks in immutable L1/L2 files during local persistent-index inserts.
+// L0 (memtable) duplicate-key checks are always performed.
+CONF_mBool(skip_pindex_l1_l2_check_in_insert, "true");
 
 // Control if using the minor compaction strategy
 CONF_Bool(enable_pindex_minor_compaction, "true");

@@ -15,6 +15,12 @@ import GroupProviderRangerLink from '../../_assets/user_priv/group_provider_rang
 
 从 v3.5.0 开始，StarRocks 支持 Group Provider 从外部认证系统收集组信息以进行用户组管理。
 
+:::note 用户组不只能来自 Group Provider
+
+安全集成也可以直接从完成认证的身份提供方取得用户组，完全不需要 Group Provider：LDAP 安全集成从用户自身条目上的组成员属性取，JWT 与 OAuth 2.0 安全集成从已验签 token 的某个 claim 取。在安全集成上设置 `group_source` 即可，详见[使用安全集成认证](./authentication/security_integration.md)。这样解析出的用户组，用途与 Group Provider 解析出的用户组完全相同。
+
+:::
+
 ## 概述
 
 为了加深与外部用户认证和授权系统（如 LDAP 和 Apache Ranger）的集成，StarRocks 支持收集用户组信息，以便在集体用户管理上提供更好的体验。
@@ -381,6 +387,11 @@ ALTER SECURITY INTEGRATION LDAP SET
 ```SQL
 GRANT example_role TO EXTERNAL GROUP analysts;
 ```
+
+授予用户组的角色同样作用于以创建者身份运行的任务，例如异步物化视图的刷新，以及通过 [SUBMIT TASK](../../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) 提交的任务。此类任务每次运行时，StarRocks 都会重新解析创建者所属的用户组。注意以下几点：
+
+- 只有登录凭据才携带的用户组（例如从 JWT 或 OAuth 2.0 令牌的 claim 中读取的用户组）无法在任务中解析。
+- 对于通过 JWT 或 OAuth 2.0 安全集成登录的用户，任务查询的是 FE 配置项 `group_provider` 中的 Group Provider，而不是该安全集成的 `group_provider` 属性。
 
 ## 将 Group Provider 与外部授权系统（Apache Ranger）结合
 

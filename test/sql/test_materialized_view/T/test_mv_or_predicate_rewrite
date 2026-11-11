@@ -1,4 +1,4 @@
-
+-- name: test_mv_or_predicate_rewrite
 CREATE TABLE IF NOT EXISTS `lineorder` (
   `lo_orderkey` int(11) NULL,
   `lo_linenumber` int(11) NOT NULL COMMENT "",
@@ -26,9 +26,7 @@ where lo_orderkey > 10003 or lo_orderkey < 10002;
 
 refresh materialized view mv_lineorder_1 with sync mode;
 
-[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
-from lineorder
-where lo_orderkey > 10004;
+function: assert_explain_matches("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey from lineorder where lo_orderkey > 10004", "TABLE: mv_lineorder_1", "PREDICATES: \\d+: lo_orderkey > 10004\\b")
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
 from lineorder
@@ -36,9 +34,7 @@ where lo_orderkey > 10004
 order by lo_orderkey;
 
 
-[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
-from lineorder
-where lo_orderkey < 10002;
+function: assert_explain_matches("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey from lineorder where lo_orderkey < 10002", "TABLE: mv_lineorder_1", "PREDICATES: \\d+: lo_orderkey < 10002\\b")
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
 from lineorder
@@ -46,9 +42,7 @@ where lo_orderkey < 10002
 order by lo_orderkey;
 
 
-[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
-from lineorder
-where lo_orderkey = 10004;
+function: assert_explain_matches("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey from lineorder where lo_orderkey = 10004", "TABLE: mv_lineorder_1", "PREDICATES: \\d+: lo_orderkey = 10004\\b")
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
 from lineorder
@@ -68,18 +62,14 @@ where lo_orderkey > 10003 or lo_linenumber < 2;
 
 refresh materialized view mv_lineorder_2 with sync mode;
 
-[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
-from lineorder
-where lo_linenumber < 2;
+function: assert_explain_matches("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey from lineorder where lo_linenumber < 2", "TABLE: mv_lineorder_2", "PREDICATES: \\d+: lo_linenumber < 2\\b")
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
 from lineorder
 where lo_linenumber < 2 order by lo_orderkey;
 
 
-[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
-from lineorder
-where lo_orderkey > 10003 or lo_linenumber < 2;
+function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey from lineorder where lo_orderkey > 10003 or lo_linenumber < 2", "TABLE: mv_lineorder_2")
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
 from lineorder
@@ -87,9 +77,7 @@ where lo_orderkey > 10003 or lo_linenumber < 2
 order by lo_orderkey;
 
 
-[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
-from lineorder
-where lo_orderkey = 10004;
+function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey from lineorder where lo_orderkey = 10004", "TABLE: mv_lineorder_2")
 
 drop materialized view mv_lineorder_2;
 
@@ -104,27 +92,21 @@ where (lo_orderkey > 10003 and lo_linenumber > 2) or (lo_orderkey < 10002 and lo
 
 refresh materialized view mv_lineorder_3 with sync mode;
 
-[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
-from lineorder
-where lo_orderkey > 10003 and lo_linenumber > 2;
+function: assert_explain_matches("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey from lineorder where lo_orderkey > 10003 and lo_linenumber > 2", "TABLE: mv_lineorder_3", "PREDICATES: \\d+: lo_orderkey > 10003, \\d+: lo_linenumber > 2\\b")
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
 from lineorder
 where lo_orderkey > 10003 and lo_linenumber > 2
 order by lo_orderkey;
 
-[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
-from lineorder
-where lo_orderkey < 10002 and lo_linenumber < 2;
+function: assert_explain_matches("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey from lineorder where lo_orderkey < 10002 and lo_linenumber < 2", "TABLE: mv_lineorder_3", "PREDICATES: \\d+: lo_orderkey < 10002, \\d+: lo_linenumber < 2\\b")
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
 from lineorder
 where lo_orderkey < 10002 and lo_linenumber < 2
 order by lo_orderkey;
 
-[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
-from lineorder
-where lo_orderkey > 10004 and lo_linenumber > 3;
+function: assert_explain_matches("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey from lineorder where lo_orderkey > 10004 and lo_linenumber > 3", "TABLE: mv_lineorder_3", "PREDICATES: \\d+: lo_orderkey > 10004, \\d+: lo_linenumber > 3\\b")
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
 from lineorder
@@ -143,10 +125,7 @@ where (lo_orderkey > 10003 or lo_linenumber > 2) and (lo_orderkey < 10002 or lo_
 
 refresh materialized view mv_lineorder_4 with sync mode;
 
-explain
-select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
-from lineorder
-where lo_orderkey > 10003 and lo_linenumber < 2;
+function: assert_explain_matches("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey from lineorder where lo_orderkey > 10003 and lo_linenumber < 2", "TABLE: mv_lineorder_4", "PREDICATES: \\d+: lo_orderkey > 10003, \\d+: lo_linenumber < 2\\b")
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
 from lineorder
@@ -167,10 +146,7 @@ where (lo_orderkey > 10003 or lo_orderkey < 10002) and (lo_linenumber < 2 or lo_
 
 refresh materialized view mv_lineorder_5 with sync mode;
 
-explain
-select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey
-from lineorder
-where lo_orderkey > 10003 and lo_linenumber < 2;
+function: assert_explain_matches("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey from lineorder where lo_orderkey > 10003 and lo_linenumber < 2", "TABLE: mv_lineorder_5", "PREDICATES: \\d+: lo_orderkey > 10003, \\d+: lo_linenumber < 2\\b")
 
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey

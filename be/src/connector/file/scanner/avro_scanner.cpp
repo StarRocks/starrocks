@@ -532,7 +532,7 @@ static TypeDescriptor construct_avro_type(const TypeDescriptor& slot_type) {
         } else if (key_type.type == TYPE_VARCHAR) {
             avro_type.children.emplace_back(TypeDescriptor::create_varchar_type(key_type.len));
         } else {
-            avro_type.children.emplace_back(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+            avro_type.children.emplace_back(TYPE_VARCHAR_DESC);
         }
         avro_type.children.emplace_back(construct_avro_type(slot_type.children[1]));
         return avro_type;
@@ -567,7 +567,7 @@ static TypeDescriptor construct_avro_type(const TypeDescriptor& slot_type) {
 
     // Treat other types as VARCHAR.
     default:
-        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        return TYPE_VARCHAR_DESC;
     }
 }
 

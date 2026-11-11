@@ -16,10 +16,15 @@
 
 #include <cctz/time_zone.h>
 
+#include <algorithm>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "base/coding.h"
+#include "base/simd/simd.h"
+#include "base/status.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -205,16 +210,36 @@ StatusOr<VariantColumn::EncodedVariantResult> VariantColumn::encode_typed_row_as
     return EncodedVariantResult{.state = EncodedVariantState::kValue, .value = std::move(encoded).value()};
 }
 
-static bool collect_typed_overlays(const VariantColumn* column, size_t row,
+// Returns the fallback cell of `fallback_column` at `row` when it is non-null.
+static bool get_fallback_slice(const Column* fallback_column, size_t row, Slice* out) {
+    if (fallback_column == nullptr) {
+        return false;
+    }
+    const size_t fallback_row = fallback_column->is_constant() ? 0 : row;
+    if (fallback_column->is_null(fallback_row)) {
+        return false;
+    }
+    const auto* data = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(fallback_column));
+    *out = data->get_slice(fallback_row);
+    return out->size > 0;
+}
+
+// `metadata_raw` is the row's metadata, used to decode fallback values; it is empty for typed-only rows, which
+// cannot have fallback values.
+static bool collect_typed_overlays(const VariantColumn* column, size_t row, std::string_view metadata_raw,
                                    std::vector<VariantBuilder::Overlay>* overlays) {
     if (column == nullptr || overlays == nullptr) {
         return false;
     }
     overlays->clear();
     overlays->reserve(column->typed_columns().size());
+    const std::vector<VariantPath>& cached = column->parsed_shredded_paths();
     for (size_t i = 0; i < column->typed_columns().size(); ++i) {
         const Column* typed_column = column->typed_column_by_index(i);
         if (typed_column == nullptr) {
+            return false;
+        }
+        if (i >= cached.size()) {
             return false;
         }
         size_t typed_row = typed_column->is_constant() ? 0 : row;
@@ -225,19 +250,27 @@ static bool collect_typed_overlays(const VariantColumn* column, size_t row,
         }
         auto value = std::move(typed_read).value();
         if (value.state == VariantColumn::EncodedVariantState::kNull) {
-            // Typed null is tombstone semantics: suppress this path in the output object.
-            // By invariant, typed paths are exclusive with remain, so nothing to do.
+            // The value is either in the fallback column or missing. By invariant, typed paths are exclusive
+            // with remain, so a missing value needs nothing (tombstone semantics).
+            Slice fallback;
+            if (!metadata_raw.empty() && get_fallback_slice(column->fallback_column_by_index(i), row, &fallback)) {
+                overlays->emplace_back(VariantBuilder::Overlay{
+                        .path = cached[i],
+                        .value = VariantRowValue(metadata_raw, std::string_view(fallback.data, fallback.size)),
+                });
+            }
             continue;
-        }
-        const std::vector<VariantPath>& cached = column->parsed_shredded_paths();
-        if (i >= cached.size()) {
-            return false;
         }
         overlays->emplace_back(VariantBuilder::Overlay{
                 .path = cached[i],
                 .value = std::move(value.value),
         });
     }
+    // An overlay replaces the subtree at its path, so a path must be applied before its descendants: the residual
+    // of a partially shredded object (its fallback) is the base its shredded children are applied on.
+    std::stable_sort(overlays->begin(), overlays->end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.path.segments.size() < rhs.path.segments.size();
+    });
     return true;
 }
 
@@ -263,7 +296,7 @@ static bool rebuild_row_from_typed_columns(const VariantColumn* column, size_t r
         return false;
     }
     std::vector<VariantBuilder::Overlay> overlays;
-    if (!collect_typed_overlays(column, row, &overlays)) {
+    if (!collect_typed_overlays(column, row, std::string_view(), &overlays)) {
         return false;
     }
     return rebuild_row_with_optional_base(nullptr, std::move(overlays), output);
@@ -279,7 +312,7 @@ static bool rebuild_row_from_base_shredded(const VariantColumn* column, size_t r
     VariantRowValue base_row(metadata_raw, remain_raw);
 
     std::vector<VariantBuilder::Overlay> overlays;
-    if (!collect_typed_overlays(column, row, &overlays)) {
+    if (!collect_typed_overlays(column, row, metadata_raw, &overlays)) {
         return false;
     }
     return rebuild_row_with_optional_base(&base_row, std::move(overlays), output);
@@ -300,6 +333,15 @@ static void append_null_base_payload_rows(BinaryColumn::MutablePtr& metadata_col
     }
 }
 
+static MutableColumns clone_fallback_columns(const MutableColumns& src) {
+    MutableColumns cloned;
+    cloned.reserve(src.size());
+    for (const auto& col : src) {
+        cloned.emplace_back(col != nullptr ? col->clone() : nullptr);
+    }
+    return cloned;
+}
+
 // Do not use VariantColumn::clone() in append-prepare path:
 // BaseClass::clone() clones by calling append(), and append() may re-enter
 // _prepare_append_source(), causing recursive append-prepare on shredded inputs.
@@ -316,7 +358,8 @@ MutableColumnPtr VariantColumn::deep_copy_shredded(const VariantColumn& src) {
     BinaryColumn::MutablePtr remain =
             src.has_remain_value() ? BinaryColumn::static_pointer_cast(src.remain_value_column()->clone()) : nullptr;
     copied->set_shredded_columns(src.shredded_paths(), src.shredded_types(), std::move(typed_columns),
-                                 std::move(metadata), std::move(remain));
+                                 clone_fallback_columns(src.fallback_columns()), std::move(metadata),
+                                 std::move(remain));
     return std::move(copied);
 }
 
@@ -334,6 +377,7 @@ MutableColumnPtr VariantColumn::clone() const {
     for (const auto& column : _typed_columns) {
         variant_cloned->_typed_columns.emplace_back(column->clone());
     }
+    variant_cloned->_fallback_columns = clone_fallback_columns(_fallback_columns);
     if (_metadata_column != nullptr) {
         variant_cloned->_metadata_column = BinaryColumn::static_pointer_cast(_metadata_column->clone());
     }
@@ -439,6 +483,61 @@ const Column* VariantColumn::typed_column_by_index(size_t idx) const {
         return nullptr;
     }
     return _typed_columns[idx].get();
+}
+
+const Column* VariantColumn::fallback_column_by_index(size_t idx) const {
+    if (idx >= _fallback_columns.size()) {
+        return nullptr;
+    }
+    return _fallback_columns[idx].get();
+}
+
+bool VariantColumn::has_fallback_value(size_t idx, size_t row) const {
+    Slice unused;
+    return get_fallback_slice(fallback_column_by_index(idx), row, &unused);
+}
+
+bool VariantColumn::has_any_fallback_value(size_t idx) const {
+    const Column* fallback = fallback_column_by_index(idx);
+    if (fallback == nullptr || fallback->empty()) {
+        return false;
+    }
+    if (fallback->is_constant()) {
+        return !fallback->is_null(0);
+    }
+    const auto* nullable = down_cast<const NullableColumn*>(fallback);
+    if (!nullable->has_null()) {
+        return true;
+    }
+    return SIMD::count_zero(nullable->null_column_data()) > 0;
+}
+
+StatusOr<VariantRowValue> VariantColumn::fallback_value(size_t idx, size_t row) const {
+    Slice fallback;
+    if (!get_fallback_slice(fallback_column_by_index(idx), row, &fallback)) {
+        return Status::NotFound("no fallback value at this row");
+    }
+    Slice metadata;
+    if (!has_metadata_column() || !ColumnHelper::get_binary_slice_at(_metadata_column.get(), row, &metadata) ||
+        metadata.size == 0) {
+        return Status::InternalError("fallback value without row metadata");
+    }
+    return VariantRowValue(std::string_view(metadata.data, metadata.size),
+                           std::string_view(fallback.data, fallback.size));
+}
+
+MutableColumnPtr VariantColumn::create_fallback_column() {
+    return NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+}
+
+Column* VariantColumn::ensure_fallback_column(size_t idx) {
+    DCHECK_LT(idx, _fallback_columns.size());
+    if (_fallback_columns[idx] == nullptr) {
+        auto col = create_fallback_column();
+        col->append_nulls(_shredded_num_rows());
+        _fallback_columns[idx] = std::move(col);
+    }
+    return _fallback_columns[idx].get();
 }
 
 void VariantColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
@@ -560,6 +659,11 @@ void VariantColumn::append_shredded(Slice metadata, Slice remain_value) {
     for (auto& col : _typed_columns) {
         col->append_nulls(1);
     }
+    for (auto& col : _fallback_columns) {
+        if (col != nullptr) {
+            col->append_nulls(1);
+        }
+    }
 }
 
 void VariantColumn::append_shredded_null() {
@@ -597,6 +701,11 @@ bool VariantColumn::append_nulls(size_t count) {
     for (auto& col : _typed_columns) {
         col->append_nulls(count);
     }
+    for (auto& col : _fallback_columns) {
+        if (col != nullptr) {
+            col->append_nulls(count);
+        }
+    }
     return true;
 }
 
@@ -606,6 +715,68 @@ void VariantColumn::append_default() {
 
 void VariantColumn::append_default(size_t count) {
     append_nulls(count);
+}
+
+// ObjectColumn implements the members below against the inherited `_pool`, which a VariantColumn
+// never writes to - its rows live in the metadata/remain base payload and the shredded typed
+// columns. Every one of them therefore has to be taken over here, the way JsonColumn took over the
+// same family when flat JSON moved its rows out of the pool. Left inherited they do not merely lose
+// an optimization: `_pool` is empty while size() reports the real row count, so the inherited
+// bodies index out of bounds or write rows that nothing can ever read back.
+
+// ObjectColumn::append_strings appends into `_pool` - rows that size() does not count and no reader
+// can reach. Decode each slice and go through the normal append path instead. Slice layout is
+// VariantRowValue's own: [uint32 total size][metadata][value].
+bool VariantColumn::append_strings(const Slice* data, size_t size) {
+    for (size_t i = 0; i < size; i++) {
+        auto row = VariantRowValue::create(data[i]);
+        if (!row.ok()) {
+            LOG(WARNING) << "Failed to create VariantRowValue from Slice: " << row.status().to_string();
+            return false;
+        }
+        append(row.value());
+    }
+    return true;
+}
+
+// A variant row is variable length in two separate BinaryColumns, so there is no in-place update.
+// Rebuild the way BinaryColumnBase::update_rows does when the replacement lengths differ, and let
+// append() reconcile a source whose shredded schema is not ours.
+void VariantColumn::update_rows(const Column& src, const uint32_t* indexes) {
+    const size_t replace_num = src.size();
+    if (replace_num == 0) {
+        return;
+    }
+    const size_t num_rows = size();
+    auto rebuilt = VariantColumn::create();
+    size_t idx_begin = 0;
+    for (size_t i = 0; i < replace_num; i++) {
+        DCHECK_LT(indexes[i], num_rows);
+        if (indexes[i] > idx_begin) {
+            rebuilt->append(*this, idx_begin, indexes[i] - idx_begin);
+        }
+        rebuilt->append(src, i, 1);
+        idx_begin = indexes[i] + 1;
+    }
+    if (num_rows > idx_begin) {
+        rebuilt->append(*this, idx_begin, num_rows - idx_begin);
+    }
+    swap_column(*rebuilt);
+}
+
+void VariantColumn::fill_default(const Filter& filter) {
+    std::vector<uint32_t> indexes;
+    for (size_t i = 0; i < filter.size(); i++) {
+        if (filter[i] == 1) {
+            indexes.push_back(static_cast<uint32_t>(i));
+        }
+    }
+    if (indexes.empty()) {
+        return;
+    }
+    auto default_column = clone_empty();
+    default_column->append_default(indexes.size());
+    update_rows(*default_column, indexes.data());
 }
 
 size_t VariantColumn::size() const {
@@ -623,7 +794,71 @@ size_t VariantColumn::capacity() const {
     for (const auto& col : _typed_columns) {
         cap += col->capacity();
     }
+    for (const auto& col : _fallback_columns) {
+        if (col != nullptr) {
+            cap += col->capacity();
+        }
+    }
     return cap;
+}
+
+// ObjectColumn reports `_pool.capacity() * type_size()`, which is always 0 for a variant and hides
+// the rows held in the base payload. Report the storage that actually holds
+// the rows, matching what capacity() and byte_size() already sum over.
+size_t VariantColumn::container_memory_usage() const {
+    size_t usage = 0;
+    if (_metadata_column != nullptr) {
+        usage += _metadata_column->container_memory_usage();
+    }
+    if (_remain_value_column != nullptr) {
+        usage += _remain_value_column->container_memory_usage();
+    }
+    for (const auto& col : _typed_columns) {
+        usage += col->container_memory_usage();
+    }
+    return usage;
+}
+
+// container_memory_usage() and reference_memory_usage() split a column's memory between the buffers
+// it owns and the memory those buffers only point at, and Column::memory_usage() adds the two. The
+// pair has to be taken over together: ObjectColumn's reference half reports byte_size(), which for
+// a variant is the bytes already counted inside the base payload's own containers, so overriding
+// only the container half would report them twice and trip query memory limits early. Split it the
+// way StructColumn does over its row-aligned fields - the base payload is BinaryColumn, whose
+// referenced memory is zero because every byte it holds is in its container.
+size_t VariantColumn::reference_memory_usage() const {
+    return reference_memory_usage(0, size());
+}
+
+size_t VariantColumn::reference_memory_usage(size_t from, size_t sz) const {
+    DCHECK_LE(from + sz, size()) << "Range error";
+    size_t usage = 0;
+    if (_metadata_column != nullptr) {
+        usage += _metadata_column->reference_memory_usage(from, sz);
+    }
+    if (_remain_value_column != nullptr) {
+        usage += _remain_value_column->reference_memory_usage(from, sz);
+    }
+    for (const auto& col : _typed_columns) {
+        usage += col->reference_memory_usage(from, sz);
+    }
+    return usage;
+}
+
+// Datum carries a non-owning `VariantRowValue*`, and a VariantColumn has no VariantRowValue to hand
+// out: a row is metadata and value bytes in two separate BinaryColumns, plus any typed overlay, and
+// only becomes a VariantRowValue when materialized into a buffer the caller owns. ObjectColumn's
+// inherited body returns `&_pool[n]` into the empty pool - a wild pointer that the one consumer of
+// such a Datum, append_datum(), then dereferences.
+//
+// A column-owned scratch buffer cannot rescue it either: ArrayColumn::get() builds a DatumArray by
+// calling get() once per element of the same elements column, so every Datum in an ARRAY<VARIANT>
+// row would alias the one buffer. Refuse instead of corrupting, and read rows with
+// get_row_value()/try_get_row_ref(), which take the buffer from the caller.
+// Deliberately a bare throw rather than the DCHECK-then-throw used elsewhere: the failure is then
+// identical in every build, so a test can pin it and a release build cannot silently corrupt.
+Datum VariantColumn::get(size_t n) const {
+    throw std::runtime_error("VariantColumn::get() is not supported; use get_row_value() or try_get_row_ref()");
 }
 
 size_t VariantColumn::byte_size(size_t from, size_t sz) const {
@@ -637,7 +872,37 @@ size_t VariantColumn::byte_size(size_t from, size_t sz) const {
     for (const auto& col : _typed_columns) {
         bytes += col->byte_size(from, sz);
     }
+    for (const auto& col : _fallback_columns) {
+        if (col != nullptr) {
+            bytes += col->byte_size(from, sz);
+        }
+    }
     return bytes;
+}
+
+// A VariantColumn never writes to the `_pool` it inherits from ObjectColumn: rows live in the
+// metadata/remain base payload and in the shredded typed columns, which is also the set that
+// size(), capacity() and byte_size() report on. Left inherited, reserve(n) would allocate
+// n * sizeof(VariantRowValue) for a vector that stays empty while the columns that do receive the
+// rows still grow geometrically - the cost of the reservation without any of its benefit.
+//
+// Only the base payload is reserved here. It is the fixed part of the layout, and both of its
+// columns are BinaryColumn, whose reserve sizes the offsets alone, so the cost is exactly the row
+// count the caller asked for. The shredded typed columns are deliberately left out: how many there
+// are and what they hold comes from how the data was shredded, not from anything the caller can
+// see, so fanning out would make reserve(n) cost O(shredded paths * n) with a shape no caller can
+// predict - and a typed field of ARRAY/MAP/STRUCT type reserves n inner elements per level on top
+// of that, which is not proportional to what the rows will actually contain. JsonColumn declines
+// to reserve its flat columns for the same reason. Nothing is lost on the paths that pre-size a
+// variant result: clone_empty() returns an unshredded column, whose whole storage is the base
+// payload.
+void VariantColumn::reserve(size_t n) {
+    if (_metadata_column != nullptr) {
+        _metadata_column->reserve(n);
+    }
+    if (_remain_value_column != nullptr) {
+        _remain_value_column->reserve(n);
+    }
 }
 
 void VariantColumn::resize(size_t n) {
@@ -650,6 +915,11 @@ void VariantColumn::resize(size_t n) {
     for (auto& col : _typed_columns) {
         col->resize(n);
     }
+    for (auto& col : _fallback_columns) {
+        if (col != nullptr) {
+            col->resize(n);
+        }
+    }
 }
 
 void VariantColumn::assign(size_t n, size_t idx) {
@@ -661,6 +931,11 @@ void VariantColumn::assign(size_t n, size_t idx) {
     }
     for (auto& col : _typed_columns) {
         col->assign(n, idx);
+    }
+    for (auto& col : _fallback_columns) {
+        if (col != nullptr) {
+            col->assign(n, idx);
+        }
     }
 }
 
@@ -685,6 +960,11 @@ void VariantColumn::remove_first_n_values(size_t count) {
     }
     for (auto& col : _typed_columns) {
         col->remove_first_n_values(count);
+    }
+    for (auto& col : _fallback_columns) {
+        if (col != nullptr) {
+            col->remove_first_n_values(count);
+        }
     }
     DCHECK(_is_shredded_row_aligned());
 }
@@ -711,6 +991,12 @@ size_t VariantColumn::filter_range(const Filter& filter, size_t from, size_t to)
             initialized = true;
         } else {
             DCHECK_EQ(result_size, r);
+        }
+    }
+    for (auto& col : _fallback_columns) {
+        if (col != nullptr) {
+            [[maybe_unused]] size_t r = col->filter_range(filter, from, to);
+            DCHECK(!initialized || result_size == r);
         }
     }
     if (!initialized) {
@@ -807,6 +1093,7 @@ void VariantColumn::swap_column(Column& rhs) {
     std::swap(_parsed_shredded_paths, other._parsed_shredded_paths);
     std::swap(_shredded_types, other._shredded_types);
     std::swap(_typed_columns, other._typed_columns);
+    std::swap(_fallback_columns, other._fallback_columns);
     std::swap(_metadata_column, other._metadata_column);
     std::swap(_remain_value_column, other._remain_value_column);
 }
@@ -814,6 +1101,26 @@ void VariantColumn::swap_column(Column& rhs) {
 void VariantColumn::reset_column() {
     BaseClass::reset_column();
     clear_shredded_columns();
+}
+
+// ObjectColumn's version guards `_pool.size()`, which is always 0 here, so the limit never fires.
+// Guard the real row count and let the base payload report its own byte-level limits: a variant
+// column reaches BinaryColumn's byte ceiling long before it reaches MAX_CAPACITY_LIMIT rows.
+Status VariantColumn::capacity_limit_reached() const {
+    if (size() > Column::MAX_CAPACITY_LIMIT) {
+        return Status::CapacityLimitExceed(strings::Substitute("row count of variant column exceed the limit: $0",
+                                                               std::to_string(Column::MAX_CAPACITY_LIMIT)));
+    }
+    if (_metadata_column != nullptr) {
+        RETURN_IF_ERROR(_metadata_column->capacity_limit_reached());
+    }
+    if (_remain_value_column != nullptr) {
+        RETURN_IF_ERROR(_remain_value_column->capacity_limit_reached());
+    }
+    for (const auto& col : _typed_columns) {
+        RETURN_IF_ERROR(col->capacity_limit_reached());
+    }
+    return Status::OK();
 }
 
 void VariantColumn::check_or_die() const {
@@ -827,6 +1134,11 @@ void VariantColumn::check_or_die() const {
     }
     for (const auto& col : _typed_columns) {
         col->check_or_die();
+    }
+    for (const auto& col : _fallback_columns) {
+        if (col != nullptr) {
+            col->check_or_die();
+        }
     }
 }
 
@@ -858,15 +1170,23 @@ static bool has_non_null_typed_overlay(const VariantColumn* column, size_t row) 
             return true;
         }
     }
+    // A fallback value is also kept outside remain, so the base payload alone is not the full row.
+    for (size_t i = 0; i < column->fallback_columns().size(); ++i) {
+        if (column->has_fallback_value(i, row)) {
+            return true;
+        }
+    }
     return false;
 }
 
-static bool try_materialize_from_typed_only_overlays(const VariantColumn* column, size_t row, VariantRowValue* output) {
+// `metadata_raw` is the row's metadata when it has one (needed for fallback values), empty otherwise.
+static bool try_materialize_from_typed_only_overlays(const VariantColumn* column, size_t row,
+                                                     std::string_view metadata_raw, VariantRowValue* output) {
     if (column == nullptr || output == nullptr || column->typed_columns().empty()) {
         return false;
     }
     std::vector<VariantBuilder::Overlay> overlays;
-    if (!collect_typed_overlays(column, row, &overlays)) {
+    if (!collect_typed_overlays(column, row, metadata_raw, &overlays)) {
         return false;
     }
     return rebuild_row_with_optional_base(nullptr, std::move(overlays), output);
@@ -916,7 +1236,7 @@ bool VariantColumn::try_materialize_row(size_t idx, VariantRowValue* output) con
         bool has_metadata = ColumnHelper::get_binary_slice_at(_metadata_column.get(), idx, &metadata_slice);
         bool has_remain = ColumnHelper::get_binary_slice_at(_remain_value_column.get(), idx, &remain_slice);
         if (!has_metadata || !has_remain) {
-            if (try_materialize_from_typed_only_overlays(this, idx, output)) {
+            if (try_materialize_from_typed_only_overlays(this, idx, std::string_view(), output)) {
                 return true;
             }
             *output = VariantRowValue::from_null();
@@ -926,7 +1246,8 @@ bool VariantColumn::try_materialize_row(size_t idx, VariantRowValue* output) con
         // For rows with typed overlays, still try typed reconstruction first.
         // This preserves typed-only promotion semantics where base payload can be empty.
         if (metadata_slice.size == 0 || remain_slice.size == 0) {
-            if (try_materialize_from_typed_only_overlays(this, idx, output)) {
+            if (try_materialize_from_typed_only_overlays(
+                        this, idx, std::string_view(metadata_slice.data, metadata_slice.size), output)) {
                 return true;
             }
             *output = VariantRowValue::from_null();
@@ -953,13 +1274,27 @@ bool VariantColumn::try_materialize_row(size_t idx, VariantRowValue* output) con
 void VariantColumn::set_shredded_columns(std::vector<std::string> paths, std::vector<TypeDescriptor> type_descs,
                                          MutableColumns columns, BinaryColumn::MutablePtr metadata_column,
                                          BinaryColumn::MutablePtr remain_value_column) {
+    set_shredded_columns(std::move(paths), std::move(type_descs), std::move(columns), MutableColumns(),
+                         std::move(metadata_column), std::move(remain_value_column));
+}
+
+void VariantColumn::set_shredded_columns(std::vector<std::string> paths, std::vector<TypeDescriptor> type_descs,
+                                         MutableColumns columns, MutableColumns fallback_columns,
+                                         BinaryColumn::MutablePtr metadata_column,
+                                         BinaryColumn::MutablePtr remain_value_column) {
     auto schema_st = validate_shredded_schema(paths, type_descs, columns, metadata_column, remain_value_column);
     DCHECK(schema_st.ok()) << "Invalid shredded schema in VariantColumn: " << schema_st;
+    DCHECK(fallback_columns.empty() || fallback_columns.size() == columns.size());
 
     _shredded_paths = std::move(paths);
     _rebuild_path_index();
     _shredded_types = std::move(type_descs);
     _typed_columns = std::move(columns);
+    _fallback_columns = std::move(fallback_columns);
+    _fallback_columns.resize(_typed_columns.size());
+    DCHECK(metadata_column != nullptr ||
+           std::all_of(_fallback_columns.begin(), _fallback_columns.end(), [](const auto& c) { return c == nullptr; }))
+            << "fallback values require the metadata column";
     _metadata_column = std::move(metadata_column);
     _remain_value_column = std::move(remain_value_column);
 
@@ -1014,6 +1349,7 @@ void VariantColumn::clear_shredded_columns() {
     _parsed_shredded_paths.clear();
     _shredded_types.clear();
     _typed_columns.clear();
+    _fallback_columns.clear();
     _metadata_column = BinaryColumn::create();
     _remain_value_column = BinaryColumn::create();
 }
@@ -1030,6 +1366,12 @@ void VariantColumn::_init_schema_from(const VariantColumn& other) {
     for (const auto& col : other._typed_columns) {
         _typed_columns.emplace_back(col->clone_empty());
     }
+    _fallback_columns.clear();
+    _fallback_columns.reserve(other._fallback_columns.size());
+    for (const auto& col : other._fallback_columns) {
+        _fallback_columns.emplace_back(col != nullptr ? col->clone_empty() : nullptr);
+    }
+    _fallback_columns.resize(_typed_columns.size());
 
     _metadata_column = other._metadata_column != nullptr ? BinaryColumn::create() : nullptr;
     _remain_value_column = other._remain_value_column != nullptr ? BinaryColumn::create() : nullptr;
@@ -1045,6 +1387,15 @@ void VariantColumn::_append_container_rows_impl(const VariantColumn& src, size_t
     DCHECK_EQ(has_metadata_column(), has_remain_value());
     DCHECK_EQ(src.has_metadata_column(), src.has_remain_value());
 
+    // Fallback columns are created lazily: a destination without one gets an all-null column for its existing
+    // rows when the source has fallback values. Create them before appending anything, so the row count is the
+    // destination's own.
+    for (size_t i = 0; i < src._typed_columns.size(); ++i) {
+        if (src.fallback_column_by_index(i) != nullptr && _fallback_columns[i] == nullptr) {
+            ensure_fallback_column(i);
+        }
+    }
+
     if (has_metadata_column()) {
         DCHECK(has_remain_value());
         if (src.has_metadata_column()) {
@@ -1058,10 +1409,18 @@ void VariantColumn::_append_container_rows_impl(const VariantColumn& src, size_t
     }
 
     for (size_t i = 0; i < _typed_columns.size(); ++i) {
+        const Column* src_fallback = i < src._typed_columns.size() ? src.fallback_column_by_index(i) : nullptr;
         if (i < src._typed_columns.size()) {
             append_func(_typed_columns[i].get(), *src._typed_columns[i]);
         } else {
             _typed_columns[i]->append_nulls(count);
+        }
+        if (_fallback_columns[i] != nullptr) {
+            if (src_fallback != nullptr) {
+                append_func(_fallback_columns[i].get(), *src_fallback);
+            } else {
+                _fallback_columns[i]->append_nulls(count);
+            }
         }
     }
 
@@ -1119,6 +1478,14 @@ bool VariantColumn::_is_shredded_row_aligned() const {
     }
     for (const auto& column : _typed_columns) {
         if (column->size() != rows) {
+            return false;
+        }
+    }
+    if (_fallback_columns.size() != _typed_columns.size()) {
+        return false;
+    }
+    for (const auto& column : _fallback_columns) {
+        if (column != nullptr && column->size() != rows) {
             return false;
         }
     }
@@ -1224,6 +1591,8 @@ bool VariantColumn::align_schema_from(const VariantColumn& src) {
     size_t dst_rows = _shredded_num_rows();
     std::vector<std::string> old_paths = std::move(_shredded_paths);
     MutableColumns old_typed_columns = std::move(_typed_columns);
+    MutableColumns old_fallback_columns = std::move(_fallback_columns);
+    old_fallback_columns.resize(old_typed_columns.size());
 
     std::unordered_map<std::string_view, size_t> old_index_by_path;
     old_index_by_path.reserve(old_paths.size());
@@ -1236,11 +1605,14 @@ bool VariantColumn::align_schema_from(const VariantColumn& src) {
     _shredded_types = std::move(target_types);
     _typed_columns.clear();
     _typed_columns.reserve(_shredded_paths.size());
+    _fallback_columns.clear();
+    _fallback_columns.reserve(_shredded_paths.size());
 
     for (size_t i = 0; i < _shredded_paths.size(); ++i) {
         auto old_it = old_index_by_path.find(_shredded_paths[i]);
         if (old_it != old_index_by_path.end()) {
             _typed_columns.emplace_back(std::move(old_typed_columns[old_it->second]));
+            _fallback_columns.emplace_back(std::move(old_fallback_columns[old_it->second]));
             continue;
         }
 
@@ -1249,6 +1621,7 @@ bool VariantColumn::align_schema_from(const VariantColumn& src) {
             new_column->append_nulls(dst_rows);
         }
         _typed_columns.emplace_back(std::move(new_column));
+        _fallback_columns.emplace_back(nullptr);
     }
 
     return _is_shredded_schema_valid() && _is_shredded_row_aligned();

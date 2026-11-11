@@ -457,10 +457,10 @@ v3.3.3 以降、Delta Lake Catalog は [Metadata Local Cache and Retrieval](#app
 | enable_deltalake_table_cache                       | -        | true         | Delta Lake のメタデータキャッシュで Table Cache を有効にするかどうか。 |
 | enable_deltalake_json_meta_cache                   | -        | true         | Delta Log JSON ファイルのキャッシュを有効にするかどうか。 |
 | deltalake_json_meta_cache_ttl_sec                  | Second   | 48 * 60 * 60 | Delta Log JSON ファイルキャッシュの有効期限 (TTL)。 |
-| deltalake_json_meta_cache_memory_usage_ratio       | -        | 0.1          | Delta Log JSON ファイルキャッシュが占める JVM ヒープサイズの最大比率。 |
+| deltalake_json_meta_cache_memory_usage_ratio       | -        | 0.1          | Delta Log JSON ファイルキャッシュが占める JVM ヒープサイズの最大比率。FE 設定項目 `deltalake_json_meta_cache_global_memory_ratio` が `0` より大きい場合は無視されます。 |
 | enable_deltalake_checkpoint_meta_cache             | -        | true         | Delta Log Checkpoint ファイルのキャッシュを有効にするかどうか。 |
 | deltalake_checkpoint_meta_cache_ttl_sec            | Second   | 48 * 60 * 60 | Delta Log Checkpoint ファイルキャッシュの有効期限 (TTL)。  |
-| deltalake_checkpoint_meta_cache_memory_usage_ratio | -        | 0.1          | Delta Log Checkpoint ファイルキャッシュが占める JVM ヒープサイズの最大比率。 |
+| deltalake_checkpoint_meta_cache_memory_usage_ratio | -        | 0.1          | Delta Log Checkpoint ファイルキャッシュが占める JVM ヒープサイズの最大比率。FE 設定項目 `deltalake_checkpoint_meta_cache_global_memory_ratio` が `0` より大きい場合は無視されます。 |
 
 ### 例
 

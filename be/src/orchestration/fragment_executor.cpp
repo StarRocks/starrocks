@@ -37,8 +37,6 @@
 #include "compute_env/workgroup/work_group_manager.h"
 #include "connector_primitive/data_source_provider.h"
 #include "data_sink/exchange/data_stream_sender.h"
-#include "data_sink/result/result_sink.h"
-#include "data_sink/tablet/olap_table_sink.h"
 #include "data_workflows/load/batch_write/batch_write_mgr.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
@@ -47,7 +45,6 @@
 #include "exec/exec_factory.h"
 #include "exec/hash_join_node.h"
 #include "exec/lookup_node.h"
-#include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/collect_stats_event.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -818,6 +815,10 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         }
     });
 
+    // Pipeline preparation determines total_dop. Reserve the budget before allocating drivers and operators.
+    ASSIGN_OR_RETURN(auto driver_token,
+                     exec_env->compute_env()->driver_limiter()->try_acquire(_fragment_ctx->total_dop()));
+
     // collect unready pipeline groups and instantiate ready drivers
     PipelineGroupMap unready_pipeline_groups;
     _fragment_ctx->iterate_pipeline([&unready_pipeline_groups, fragment_ctx = _fragment_ctx.get()](Pipeline* pipeline) {
@@ -834,11 +835,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         create_adaptive_group_initialize_events(runtime_state, _wg.get(), std::move(unready_pipeline_groups));
     }
 
-    // Acquire driver token to avoid overload
-    ASSIGN_OR_RETURN(auto driver_token,
-                     exec_env->compute_env()->driver_limiter()->try_acquire(_fragment_ctx->total_dop()));
+    // Keep the reservation local during instantiation so cancellation cannot release it prematurely.
     _fragment_ctx->set_driver_token(std::move(driver_token));
-
     return Status::OK();
 }
 
@@ -1042,11 +1040,12 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
     }
 }
 
-Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
+Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, TExecPlanFragmentParams&& request,
                                                         TExecPlanFragmentResult* response) {
     DCHECK(!request.__isset.fragment);
     DCHECK(request.__isset.params);
-    const TPlanFragmentExecParams& params = request.params;
+    // The scan ranges are moved into the morsels below.
+    TPlanFragmentExecParams& params = request.params;
     const TUniqueId& query_id = params.query_id;
     const TUniqueId& instance_id = params.fragment_instance_id;
 
@@ -1066,7 +1065,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     std::unordered_set<int> notify_ids;
     std::vector<int32_t> closed_scan_nodes;
 
-    for (const auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
+    for (auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
         if (scan_ranges.size() == 0) continue;
         auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
         if (iter == fragment_ctx->morsel_queue_factories().end()) {
@@ -1084,7 +1083,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         RETURN_IF_ERROR(FragmentExecutor::add_scan_ranges_partition_values(runtime_state, scan_ranges));
         pipeline::Morsels morsels;
         bool has_more_morsel = false;
-        pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
+        pipeline::ScanMorsel::build_scan_morsels(node_id, std::move(scan_ranges), true, &morsels, &has_more_morsel);
         RETURN_IF_ERROR(morsel_queue_factory->append_morsels(0, std::move(morsels)));
         morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);
         notify_ids.insert(node_id);
@@ -1095,7 +1094,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     }
 
     if (params.__isset.node_to_per_driver_seq_scan_ranges) {
-        for (const auto& [node_id, per_driver_scan_ranges] : params.node_to_per_driver_seq_scan_ranges) {
+        for (auto& [node_id, per_driver_scan_ranges] : params.node_to_per_driver_seq_scan_ranges) {
             auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
             if (iter == fragment_ctx->morsel_queue_factories().end()) {
                 return Status::InternalError(
@@ -1110,12 +1109,13 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
             }
 
             bool has_more_morsel = has_more_per_driver_seq_scan_ranges(per_driver_scan_ranges);
-            for (const auto& [driver_seq, scan_ranges] : per_driver_scan_ranges) {
+            for (auto& [driver_seq, scan_ranges] : per_driver_scan_ranges) {
                 if (scan_ranges.size() == 0) continue;
                 RETURN_IF_ERROR(FragmentExecutor::add_scan_ranges_partition_values(runtime_state, scan_ranges));
                 pipeline::Morsels morsels;
                 [[maybe_unused]] bool local_has_more;
-                pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &local_has_more);
+                pipeline::ScanMorsel::build_scan_morsels(node_id, std::move(scan_ranges), true, &morsels,
+                                                         &local_has_more);
                 RETURN_IF_ERROR(morsel_queue_factory->append_morsels(driver_seq, std::move(morsels)));
             }
             morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);

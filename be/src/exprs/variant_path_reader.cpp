@@ -90,16 +90,20 @@ static VariantReadResult drill_down_column(const Column* col, size_t row, const 
                                  seg_offset + 1);
     }
 
-    // Scalar / other complex types: encode datum and seek any remaining suffix.
-    Datum datum = col->get(row);
-    auto encoded = VariantEncoder::encode_datum(datum, type_desc);
+    // Scalar / other complex types: encode the cell and seek any remaining suffix. Encode from the columns rather
+    // than a Datum: an ARRAY<VARIANT> cell (a shredded array) holds a VariantColumn, which a Datum cannot read.
+    auto encoded = VariantColumn::encode_typed_row_as_variant(col, row, type_desc);
     if (!encoded.ok()) return VariantReadResult{.state = VariantReadState::kMissing};
-    auto val = std::move(encoded).value();
+    if (encoded.value().state == VariantColumn::EncodedVariantState::kNull) {
+        return VariantReadResult{.state = VariantReadState::kNull};
+    }
+    auto val = std::move(encoded.value().value);
     if (suffix_empty) return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(val)};
     VariantRowRef val_ref = val.as_ref();
     DCHECK(suffix != nullptr);
     auto field = VariantPath::seek_view(val_ref, *suffix, seg_offset);
-    if (!field.ok() || field.value().is_null()) return VariantReadResult{.state = VariantReadState::kMissing};
+    // NotFound means the path does not exist; a JSON null at the path is a value.
+    if (!field.ok()) return VariantReadResult{.state = VariantReadState::kMissing};
     return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(field).value().to_owned()};
 }
 
@@ -120,7 +124,9 @@ void VariantPathReader::prepare(const VariantColumn* col, const VariantPath* pat
 }
 
 bool VariantPathReader::is_typed_exact() const {
-    return _match_index >= 0 && _suffix.segments.empty();
+    // Callers of the exact match read the typed column in bulk, which only holds the values that fit its type.
+    // A path with fallback values goes through read_row(), which also reads the fallback column.
+    return _match_index >= 0 && _suffix.segments.empty() && !_col->has_any_fallback_value(_match_index);
 }
 
 LogicalType VariantPathReader::typed_type() const {
@@ -166,6 +172,32 @@ void VariantPathReader::_try_match_typed(const VariantPath* path) {
         int idx = _col->find_shredded_path(*typed_key);
         if (idx < 0) continue;
 
+        // The matched path may be a partially shredded object whose residual is its fallback, with shredded
+        // descendants as their own typed paths. When the query path leads to such a descendant (the query's
+        // object keys are a prefix of it), the matched column alone misses those values: materialize instead.
+        // A query that leaves the descendants (e.g. a residual field) is answered by the matched column.
+        bool covers_typed_descendant = false;
+        for (const auto& sp : _col->parsed_shredded_paths()) {
+            if (sp.segments.size() <= object_keys.size()) {
+                continue;
+            }
+            bool is_prefix = true;
+            for (size_t i = 0; i < object_keys.size(); ++i) {
+                if (!sp.segments[i].is_object() || sp.segments[i].get_key() != object_keys[i]) {
+                    is_prefix = false;
+                    break;
+                }
+            }
+            if (is_prefix) {
+                covers_typed_descendant = true;
+                break;
+            }
+        }
+        if (covers_typed_descendant) {
+            _has_typed_child = true;
+            return;
+        }
+
         _match_index = idx;
         const size_t suffix_start = _seg_offset + prefix_len;
         if (suffix_start < path->segments.size()) {
@@ -178,7 +210,7 @@ void VariantPathReader::_try_match_typed(const VariantPath* path) {
 
     // No typed match. Check whether the leading object-key prefix of the query
     // path is a strict parent of any shredded path.  If so, the remain at that
-    // prefix is incomplete (typed children were shredded out), and _seek_base
+    // prefix is incomplete (typed children were shredded out), and _seek_base_view
     // would return stale/partial data — Layer 2 must be skipped.
     //
     // This check applies regardless of whether array segments follow the object-key
@@ -210,10 +242,25 @@ VariantReadResult VariantPathReader::_read_typed_row(size_t row) {
     size_t typed_row = typed_col->is_constant() ? 0 : row;
     const TypeDescriptor& type_desc = _col->shredded_types()[_match_index];
     const VariantPath* suffix = _suffix.segments.empty() ? nullptr : &_suffix;
+    if (typed_col->is_null(typed_row) && _col->has_fallback_value(_match_index, row)) {
+        // The value at this path does not fit the typed column: it is kept as variant bytes in the fallback column.
+        auto fallback = _col->fallback_value(_match_index, row);
+        if (!fallback.ok()) {
+            return VariantReadResult{.state = VariantReadState::kMissing};
+        }
+        if (suffix == nullptr) {
+            return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(fallback).value()};
+        }
+        auto field = VariantPath::seek_view(fallback.value().as_ref(), *suffix, 0);
+        if (!field.ok()) {
+            return VariantReadResult{.state = VariantReadState::kMissing};
+        }
+        return VariantReadResult{.state = VariantReadState::kValue, .value = field.value().to_owned()};
+    }
     return drill_down_column(typed_col, typed_row, type_desc, suffix);
 }
 
-bool VariantPathReader::_seek_base(size_t row, VariantRowValue* out) {
+bool VariantPathReader::_seek_base_view(size_t row, VariantRowRef* out) {
     if (!_col->has_metadata_column() || !_col->has_remain_value()) {
         return false;
     }
@@ -235,65 +282,73 @@ bool VariantPathReader::_seek_base(size_t row, VariantRowValue* out) {
     if (!field.ok()) {
         return false;
     }
-    *out = std::move(field).value().to_owned();
+    *out = std::move(field).value();
     return true;
 }
 
-VariantReadResult VariantPathReader::_read_full(size_t row) {
+VariantReadState VariantPathReader::_read_full_view(size_t row, VariantRowRef* out, VariantRowValue* buffer) {
     VariantRowRef variant_ref;
-    if (_col->try_get_row_ref(row, &variant_ref)) {
-        DCHECK(_path != nullptr);
-        auto field = VariantPath::seek_view(variant_ref, *_path, _seg_offset);
-        if (!field.ok()) {
-            return VariantReadResult{.state = VariantReadState::kMissing};
+    if (!_col->try_get_row_ref(row, &variant_ref)) {
+        const VariantRowValue* variant = _col->get_row_value(row, buffer);
+        if (variant == nullptr) {
+            return VariantReadState::kMissing;
         }
-        return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(field).value().to_owned()};
+        variant_ref = variant->as_ref();
     }
-
-    VariantRowValue variant_buffer;
-    const VariantRowValue* variant = _col->get_row_value(row, &variant_buffer);
-    if (variant == nullptr) {
-        return VariantReadResult{.state = VariantReadState::kMissing};
-    }
-    variant_ref = variant->as_ref();
     DCHECK(_path != nullptr);
     auto field = VariantPath::seek_view(variant_ref, *_path, _seg_offset);
     if (!field.ok()) {
-        return VariantReadResult{.state = VariantReadState::kMissing};
+        return VariantReadState::kMissing;
     }
-    return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(field).value().to_owned()};
+    *out = std::move(field).value();
+    return VariantReadState::kValue;
 }
 
-VariantReadResult VariantPathReader::read_row(size_t row) {
+VariantReadState VariantPathReader::read_row_view(size_t row, VariantRowRef* out, VariantRowValue* buffer) {
     DCHECK(_path != nullptr);
 
     if (_match_index >= 0) {
-        return _read_typed_row(row);
+        // A typed value has to be encoded into variant bytes anyway, so it is always owned.
+        VariantReadResult typed = _read_typed_row(row);
+        if (typed.state == VariantReadState::kValue) {
+            *buffer = std::move(typed.value);
+            *out = buffer->as_ref();
+        }
+        return typed.state;
     }
 
     // Root path ("$"): the remain payload is always incomplete because typed columns
     // were shredded out.  Skip Layer 2 and go directly to full materialisation.
     if (_seg_offset >= _path->segments.size()) {
-        return _read_full(row);
+        return _read_full_view(row, out, buffer);
     }
 
     // Layer 2: base remain-payload seek.
     // When no shredded path is a child of the query path, the remain is the sole
-    // source for this path.  _seek_base success → return the value; failure →
+    // source for this path.  _seek_base_view success → return the value; failure →
     // the path simply does not exist (no typed column can contribute it either).
     // When a shredded path IS a child of the query path (_has_typed_child), the
     // remain at this prefix is incomplete, so skip Layer 2 and fall through to
     // full materialisation which merges typed columns and remain correctly.
     if (!_has_typed_child) {
-        VariantRowValue base_field;
-        if (_seek_base(row, &base_field)) {
-            return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(base_field)};
-        }
-        return VariantReadResult{.state = VariantReadState::kMissing};
+        return _seek_base_view(row, out) ? VariantReadState::kValue : VariantReadState::kMissing;
     }
 
     // Layer 3: full row materialisation + seek.
-    return _read_full(row);
+    return _read_full_view(row, out, buffer);
+}
+
+VariantReadResult VariantPathReader::read_row(size_t row) {
+    if (_match_index >= 0) {
+        return _read_typed_row(row);
+    }
+    VariantRowRef field;
+    VariantRowValue buffer;
+    VariantReadState state = read_row_view(row, &field, &buffer);
+    if (state != VariantReadState::kValue) {
+        return VariantReadResult{.state = state};
+    }
+    return VariantReadResult{.state = VariantReadState::kValue, .value = field.to_owned()};
 }
 
 } // namespace starrocks

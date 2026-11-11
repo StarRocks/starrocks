@@ -15,6 +15,12 @@ StarRocks で Group Provider を有効にして、外部認証システムから
 
 v3.5.0 以降、StarRocks は Group Provider をサポートしており、外部認証システムからグループ情報を収集してユーザーグループ管理を行います。
 
+:::note グループの取得元は Group Provider だけではありません
+
+セキュリティインテグレーションは、Group Provider なしで、認証を行った ID プロバイダーからログインのグループを取得することもできます。LDAP インテグレーションはユーザー自身のエントリーのグループメンバーシップ属性から、JWT および OAuth 2.0 インテグレーションは検証済みトークンの claim から取得します。インテグレーションに `group_source` を設定してください。詳細は [セキュリティインテグレーションによる認証](./authentication/security_integration.md) を参照してください。この方法で解決されたグループは、Group Provider のグループとまったく同じ用途で使用されます。
+
+:::
+
 ## 概要
 
 LDAP、Apache Ranger などの外部ユーザー認証および認可システムとの統合を深めるために、StarRocks はユーザーグループ情報を収集し、集団的なユーザー管理をより良い体験にします。
@@ -382,6 +388,11 @@ ALTER SECURITY INTEGRATION LDAP SET
 ```SQL
 GRANT example_role TO EXTERNAL GROUP analysts;
 ```
+
+外部グループに付与したロールは、作成したユーザーとして実行されるタスク（非同期マテリアライズドビューのリフレッシュや、[SUBMIT TASK](../../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) で送信したタスクなど）にも適用されます。このようなタスクを実行するたびに、StarRocks は作成者のグループを改めて解決します。次の点に注意してください：
+
+- ログイン時の認証情報だけが持つグループ（JWT や OAuth 2.0 トークンのクレームから読み取ったグループなど）は、タスクでは解決できません。
+- JWT または OAuth 2.0 のセキュリティインテグレーションでログインするユーザーの場合、タスクはインテグレーションの `group_provider` プロパティではなく、FE 設定項目 `group_provider` の Group Provider を参照します。
 
 ## Group Provider を外部認可システム (Apache Ranger) と組み合わせる
 

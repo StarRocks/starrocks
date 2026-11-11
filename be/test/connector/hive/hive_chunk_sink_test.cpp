@@ -55,7 +55,7 @@ TEST_F(HiveChunkSinkTest, test_callback) {
     {
         std::vector<std::string> partition_column_names = {"k1"};
         std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators =
-                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
+                ColumnSlotIdEvaluator::from_types({TYPE_VARCHAR_DESC});
         auto mock_writer_factory = std::make_shared<MockFileWriterFactory>();
         auto location_provider = std::make_shared<LocationProvider>("base_path", "ffffff", 0, 0, "parquet");
         auto partition_chunk_writer_ctx = std::make_shared<BufferPartitionChunkWriterContext>(
@@ -88,10 +88,8 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->path = "/path/to/directory/";
         sink_ctx->data_column_names = {"k1"};
         sink_ctx->partition_column_names = {"k2"};
-        sink_ctx->data_column_evaluators =
-                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
-        sink_ctx->partition_column_evaluators =
-                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
+        sink_ctx->data_column_evaluators = ColumnSlotIdEvaluator::from_types({TYPE_VARCHAR_DESC});
+        sink_ctx->partition_column_evaluators = ColumnSlotIdEvaluator::from_types({TYPE_INT_DESC});
         sink_ctx->executor = nullptr;
         sink_ctx->format = formats::PARQUET;
         sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
@@ -112,10 +110,8 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->path = "/path/to/directory/";
         sink_ctx->data_column_names = {"k1"};
         sink_ctx->partition_column_names = {"k2"};
-        sink_ctx->data_column_evaluators =
-                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
-        sink_ctx->partition_column_evaluators =
-                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
+        sink_ctx->data_column_evaluators = ColumnSlotIdEvaluator::from_types({TYPE_VARCHAR_DESC});
+        sink_ctx->partition_column_evaluators = ColumnSlotIdEvaluator::from_types({TYPE_INT_DESC});
         sink_ctx->executor = nullptr;
         sink_ctx->format = formats::ORC;
         sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;
@@ -136,10 +132,8 @@ TEST_F(HiveChunkSinkTest, test_factory) {
         sink_ctx->path = "/path/to/directory/";
         sink_ctx->data_column_names = {"k1"};
         sink_ctx->partition_column_names = {"k2"};
-        sink_ctx->data_column_evaluators =
-                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
-        sink_ctx->partition_column_evaluators =
-                ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
+        sink_ctx->data_column_evaluators = ColumnSlotIdEvaluator::from_types({TYPE_VARCHAR_DESC});
+        sink_ctx->partition_column_evaluators = ColumnSlotIdEvaluator::from_types({TYPE_INT_DESC});
         sink_ctx->executor = nullptr;
         sink_ctx->format = "unknown";
         sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;

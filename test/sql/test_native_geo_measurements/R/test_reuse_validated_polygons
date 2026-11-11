@@ -1,0 +1,49 @@
+-- name: test_geography_measurements_reuse_validated_polygons
+CREATE DATABASE geog_measure_${uuid0};
+-- result:
+-- !result
+USE geog_measure_${uuid0};
+-- result:
+-- !result
+CREATE TABLE shapes (id INT, wkt STRING) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO shapes VALUES
+(0,'POLYGON ((0 0,1 0,1 1,0 1,0 0))'),
+(1,'POLYGON ((0 0,0 1,1 1,1 0,0 0))'),
+(2,'POLYGON ((0 0,10 0,10 10,0 10,0 0),(1 1,2 1,2 2,1 2,1 1),(6 6,8 6,8 8,6 8,6 6))'),
+(3,'MULTIPOLYGON (EMPTY,((0 0,1 0,1 1,0 1,0 0)),EMPTY,((20 10,21 10,21 11,20 11,20 10)),EMPTY)'),
+(4,'POLYGON EMPTY'),(5,'MULTIPOLYGON EMPTY'),(6,NULL),
+(7,'POLYGON ((179 -1,-179 -1,-179 1,179 1,179 -1))');
+-- result:
+-- !result
+[ORDER] SELECT id, ST_Area(ST_GeogFromText(wkt)), ST_Perimeter(ST_GeogFromText(wkt)), ST_IsValid(ST_GeogFromText(wkt)), hex(ST_AsBinary(ST_Centroid(ST_GeogFromText(wkt)))) FROM shapes ORDER BY id;
+-- result:
+0	12364036567.076408	444763.46872762055	1	0101000000BCF7FFFFFFFFDF3FE612024D0D00E03F
+1	12364036567.076418	444763.46872762055	1	0101000000BEF7FFFFFFFFDF3FE712024D0D00E03F
+2	1171753410573.6272	5761742.6157903215	1	0101000000456C51F954D013405B71CE930ED61340
+3	24521468442.943996	885811.5104483411	1	01010000007A1B5276D9A8244095B77E0C7A2A1640
+4	0.0	0.0	1	0101000000000000000000F87F000000000000F87F
+5	0.0	0.0	1	0101000000000000000000F87F000000000000F87F
+6	None	None	None	None
+7	49459911899.77264	889493.060332138	1	010100000000000000008066400000000000000000
+-- !result
+SELECT ST_Area(ST_GeogFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0))')), ST_Perimeter(ST_GeogFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0))'));
+-- result:
+12364036567.076408	444763.46872762055
+-- !result
+SELECT ST_Area(ST_GeomFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0))')), ST_Perimeter(ST_GeomFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0))'));
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 65. Detail message: No matching function with signature: st_area(varchar).')
+-- !result
+function: assert_query_error_contains("SELECT ST_Area(ST_GeogFromText('MULTIPOLYGON (((0 0,1 0,1 1,0 1,0 0)),((10 10,12 12,10 12,12 10,10 10)))'))", "Measurement requires a valid GEOGRAPHY")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("SELECT ST_Perimeter(ST_GeogFromText('POLYGON ((0 0,1 0,1 1,0 1,0 0),(2 2,3 2,3 3,2 3,2 2))'))", "Measurement requires a valid GEOGRAPHY")
+-- result:
+None
+-- !result
+DROP DATABASE geog_measure_${uuid0};
+-- result:
+-- !result

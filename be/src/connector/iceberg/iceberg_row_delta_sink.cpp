@@ -147,6 +147,12 @@ bool IcebergRowDeltaSink::is_finished() {
     return _delete_sink->is_finished() && _data_sink->is_finished();
 }
 
+Status IcebergRowDeltaSink::status() {
+    RETURN_IF_ERROR(PartitionedConnectorChunkSink::status());
+    RETURN_IF_ERROR(_delete_sink->status());
+    return _data_sink->status();
+}
+
 StatusOr<std::unique_ptr<ConnectorSink>> IcebergRowDeltaSinkProvider::create_sink(int32_t driver_id) {
     auto ctx = _ctx;
     if (ctx == nullptr) {

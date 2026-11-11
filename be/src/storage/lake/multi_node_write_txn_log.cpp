@@ -75,7 +75,7 @@ Status check_txn_meta_agreement(const TxnLogPB& dst, const TxnLogPB& src) {
     return Status::OK();
 }
 
-// ssts are indexed BY SEGMENT at publish time (update_manager reads op_write.ssts(segment_id) and
+// ssts are indexed BY SEGMENT at publish time (primary_key_manager reads op_write.ssts(segment_id) and
 // stamps the ingested sstable's rssid from that index), so a log either carries one sst per segment
 // or none at all. A mix across nodes would shift every sst onto the wrong segment, corrupting the
 // primary key index without any visible error, so reject it here.

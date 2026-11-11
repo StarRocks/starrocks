@@ -79,6 +79,8 @@ public:
     Status apply_dict_filter_eval_cache(const std::unordered_map<SlotId, FilterPtr>& dict_filter_eval_cache,
                                         Filter* filter);
     size_t get_cvb_size();
+    // File-level row number of the first row of the batch read last.
+    int64_t current_row_number() const { return _row_reader->getRowNumber(); }
     int64_t tzoffset_in_seconds() { return _tzoffset_in_seconds; }
     const cctz::time_zone& tzinfo() { return _tzinfo; }
     void drop_nanoseconds_in_datetime() { _drop_nanoseconds_in_datetime = true; }
@@ -105,6 +107,7 @@ public:
         }
     }
     void set_case_sensitive(bool case_sensitive) { _case_sensitive = case_sensitive; }
+    void set_iceberg_schema(const TIcebergSchema* schema) { _orc_mapping_options.iceberg_schema = schema; }
     void set_invalid_as_null(bool invalid_as_null) { _invalid_as_null = invalid_as_null; }
 
     static void build_column_name_set(std::unordered_set<std::string>* name_set,

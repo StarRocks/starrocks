@@ -20,9 +20,18 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.reshard.ColocateChecker;
+import com.starrocks.alter.reshard.TabletReshardUtils;
+import com.starrocks.alter.reshard.presplit.BoundaryPlanner;
+import com.starrocks.alter.reshard.presplit.BoundaryPlannerResult;
+import com.starrocks.alter.reshard.presplit.DefaultPreSplitPipeline;
 import com.starrocks.alter.reshard.presplit.Estimates;
+import com.starrocks.alter.reshard.presplit.SampleSet;
 import com.starrocks.alter.reshard.presplit.TabletPreSplitCoordinator;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.ColocateRange;
+import com.starrocks.catalog.ColocateRangeUtils;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -34,20 +43,26 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Range;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
+import com.starrocks.planner.RangeColocateScanDispatch;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
@@ -80,6 +95,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -109,6 +125,9 @@ public abstract class LakeOnlineRewriteJobBase
         extends LakeTableSchemaChangeJobBase {
     private static final Logger LOG = LogManager.getLogger(LakeOnlineRewriteJobBase.class);
 
+    // Prefix of the retry diagnostic published while settleBeforeFinishingRewrite keeps the job RUNNING.
+    private static final String FINISH_WAIT_DIAGNOSTIC_PREFIX = "every partition is rewritten, waiting for ";
+
     // The shadow index meta id shared across all physical partitions (one new index per table).
     @SerializedName(value = "shadowIndexMetaId")
     protected long shadowIndexMetaId = -1;
@@ -125,6 +144,13 @@ public abstract class LakeOnlineRewriteJobBase
     // reused by runRunningJob. DB rename is not supported during an ALTER, so the name is
     // stable for the job's lifetime. Not serialized; re-resolved after replay on first tick.
     private transient String cachedDbName;
+
+    // The ColocateRanges and the colocate column count of the table's range colocate group, captured at the start
+    // of each PENDING run; the shadow tablets of every partition are planned and checked against them. Null ranges
+    // when the table is in no range colocate group, and once that check has passed. Not serialized: replay rebuilds
+    // the shadow from the boundaries.
+    private transient List<ColocateRange> colocateRanges;
+    private transient int colocateColumnCount;
 
     // Transient: how much wall-clock time each physical partition's own retry episode has already
     // consumed - summed, over its consecutive failed attempts, as how long the attempt ran plus the one
@@ -143,8 +169,8 @@ public abstract class LakeOnlineRewriteJobBase
     //     the window in roughly the configured time instead of spinning until the job's own deadline.
     //
     // Not serialized: the job's absolute deadline (createTimeMs + timeoutMs) is already durable, so a
-    // replayed job simply starts its window over - which is the right behavior, since a failover re-runs
-    // the partition anyway.
+    // replayed job simply starts its window over for unfinished partitions, which may be re-run after
+    // failover. Durably completed partitions keep their progress.
     private final transient Map<Long, Long> rewriteRetrySpentMs = Maps.newHashMap();
 
     @Override
@@ -161,8 +187,8 @@ public abstract class LakeOnlineRewriteJobBase
     /**
      * Durable per-partition state of the rewrite, journaled inside {@link #partitionStates}. Built
      * incrementally: shadowIndex/tabletCount/boundaries in PENDING, watershedVersion in WAITING_TXN,
-     * rewriteTxnId in RUNNING, commitVersion at the flip. The version/txn fields are boxed (null = not
-     * yet set) to preserve the absent-key semantics the six maps had.
+     * rewriteTxnId/rewriteFinished/sourceEmpty in RUNNING, commitVersion at the flip. The version/txn fields
+     * are boxed (null = not yet set) to preserve the absent-key semantics the six maps had.
      */
     static final class PartitionRewriteState {
         @SerializedName(value = "shadowIndex")
@@ -178,10 +204,13 @@ public abstract class LakeOnlineRewriteJobBase
         @SerializedName(value = "commitVersion")
         Long commitVersion;
         // True when the rewrite INSERT wrote no source op_write because the partition was empty at the
-        // watershed (zero tablet commit infos). Drives the flip's shadow_rewrite_source_empty so BE
+        // watershed (zero loaded rows). Drives the flip's shadow_rewrite_source_empty so BE
         // synthesizes an empty op_schema_change@W for ANY W (null = not yet determined).
         @SerializedName(value = "sourceEmpty")
         Boolean sourceEmpty;
+        // Set only after a matching VISIBLE rewrite and its empty-source fact are durably journaled.
+        @SerializedName(value = "rewriteFinished")
+        boolean rewriteFinished;
 
         PartitionRewriteState() {}
 
@@ -193,6 +222,7 @@ public abstract class LakeOnlineRewriteJobBase
             this.rewriteTxnId = other.rewriteTxnId;
             this.commitVersion = other.commitVersion;
             this.sourceEmpty = other.sourceEmpty;
+            this.rewriteFinished = other.rewriteFinished;
         }
     }
 
@@ -282,12 +312,6 @@ public abstract class LakeOnlineRewriteJobBase
 
     // ---- Abstract hooks: the rewrite-flavor specifics ---------------------------------------------
 
-    /** Plan one partition's shadow layout and build its shadow MaterializedIndex (runPendingJob stage 2,
-     *  lock-free). Sets plan.boundaries/shadowTabletCount/shadowIndex. Range rewrite samples by the new sort key;
-     *  a future optimize derives layout from the new distribution. */
-    protected abstract void planPartitionShadow(PendingPartitionPlan plan, OlapTable table, String dbName)
-            throws AlterCancelException;
-
     /** Register the shadow index's MaterializedIndexMeta (PENDING stage 3, under the write lock).
      *  Idempotent (re-runnable on replay). */
     protected abstract void registerShadowIndexMeta(OlapTable table);
@@ -318,8 +342,11 @@ public abstract class LakeOnlineRewriteJobBase
      *  before stage 1 — the base cannot see subclass config fields. */
     protected abstract void validateRewriteConfig() throws AlterCancelException;
 
-    protected int selectRequestedTabletCount(PendingPartitionPlan plan, int activeComputeNodeCount) {
-        long targetSize = Config.tablet_reshard_target_size;
+    /**
+     * Tablet count for the rewritten partition, sized against {@code targetSize}, the table's target
+     * ({@link OlapTable#getTabletReshardTargetSize()}). A zero target preserves the base tablet count.
+     */
+    protected int selectRequestedTabletCount(PendingPartitionPlan plan, int activeComputeNodeCount, long targetSize) {
         if (targetSize == 0) {
             int tabletCount = Math.max(1, plan.baseIndex.getTablets().size());
             LOG.debug("online rewrite job {} preserves {} tablets for partition {} "
@@ -385,6 +412,245 @@ public abstract class LakeOnlineRewriteJobBase
      * Must be idempotent: runPendingJob may re-run on retry/replay.
      */
     protected void beforeShadowBuild() throws AlterCancelException {
+    }
+
+    /**
+     * Captures, in {@link #runPendingJob} stage 1 under the table READ lock and before any partition is planned, the
+     * ColocateRanges of the table's range colocate group, if it is in one, so that every partition is planned against
+     * the same snapshot.
+     */
+    protected void capturePlanningInputs(OlapTable table) throws AlterCancelException {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId groupId = colocateTableIndex.getRangeColocateGroupId(tableId);
+        if (groupId == null) {
+            colocateRanges = null;
+            return;
+        }
+        List<ColocateRange> ranges = colocateTableIndex.getColocateRanges(groupId.grpId);
+        if (ranges.isEmpty()) {
+            throw new AlterCancelException("colocate range metadata is missing for the colocate group of table "
+                    + table.getName());
+        }
+        colocateRanges = ranges;
+        colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
+    }
+
+    /**
+     * Seam invoked in {@link #runPendingJob} stage 3, under the table WRITE lock, after the partition set was
+     * re-validated and before the WAITING_TXN journal. Applies the colocate prefix rule again, and checks that the
+     * shadow index of every partition is aligned with the ColocateRanges it was planned against. A misaligned shadow
+     * index is a planning defect; it must never be installed. The table stays in its job state from here until the
+     * flip, so the rule holds for the rest of the job and no later stage checks it again. An AlterCancelException
+     * here cancels the job before the WAITING_TXN entry is journaled, and the shards built in stage 2 are dropped.
+     */
+    protected void validateShadowBeforeCommit(OlapTable table, List<PendingPartitionPlan> plans)
+            throws AlterCancelException {
+        checkShadowColocatePrefix(table);
+        if (colocateRanges == null) {
+            return;
+        }
+        for (PendingPartitionPlan plan : plans) {
+            if (!RangeColocateScanDispatch.isTabletRangesAligned(plan.shadowIndex, getShadowRangeColumns(),
+                    colocateRanges, colocateColumnCount)) {
+                throw new AlterCancelException("the shadow index of partition " + plan.physicalPartitionId
+                        + " is not aligned with the colocate ranges of its group");
+            }
+        }
+        // The captured ranges are not needed past this check: a PENDING retry captures them again, and the PACK
+        // placement reads the current ones.
+        colocateRanges = null;
+    }
+
+    /**
+     * Seam invoked on the leader by {@link #runRunningJob} once every partition's rewrite has published, before the
+     * FINISHED_REWRITING journal: the job is still cancellable and no commit version is reserved yet, so waiting here
+     * holds back no load. Places every shadow tablet of a table in a range colocate group into the PACK shard group
+     * of its ColocateRange, so that the new index keeps the host locality of colocate joins after the flip; the shards
+     * were created in the partition's shard group only. Checks against the current ColocateRanges: a tablet that a
+     * split of a peer table has since made cross a new bound is left to the colocate checker, which aligns the table
+     * after the flip. StarMgr journals the membership itself. A round that moves a tablet waits, and the next round
+     * confirms the placement.
+     *
+     * <p>A non-null return says what the job still waits for; the job stays RUNNING, publishes it as the retry
+     * diagnostic and calls this again on the next tick. A leader failover re-runs RUNNING, so this must be
+     * idempotent, and it must not write the journal. An AlterCancelException cancels the job.
+     */
+    protected String settleBeforeFinishingRewrite() throws AlterCancelException {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId groupId = colocateTableIndex.getRangeColocateGroupId(tableId);
+        if (groupId == null) {
+            return null;
+        }
+        Map<Long, Range<Tuple>> shadowTabletRanges = new HashMap<>();
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+            getTableOrThrow();
+            for (PartitionRewriteState partitionState : partitionStates.values()) {
+                for (Tablet tablet : partitionState.shadowIndex.getTablets()) {
+                    shadowTabletRanges.put(tablet.getId(), tablet.getRange().getRange());
+                }
+            }
+        }
+        List<ColocateRange> currentRanges = colocateTableIndex.getColocateRanges(groupId.grpId);
+        int groupColocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
+        int shadowTabletCount = shadowTabletRanges.size();
+        shadowTabletRanges.values().removeIf(range -> !ColocateRangeUtils.isContainedInOwningColocateRange(
+                range, currentRanges, getShadowRangeColumns(), groupColocateColumnCount));
+        if (shadowTabletRanges.size() < shadowTabletCount) {
+            LOG.info("{} {}: {} of {} shadow tablets cross a colocate range bound added after planning, the colocate "
+                            + "checker aligns them after the flip", rangeJobLogPrefix(), jobId,
+                    shadowTabletCount - shadowTabletRanges.size(), shadowTabletCount);
+        }
+        if (ColocateChecker.reconcileTabletPackPlacement(shadowTabletRanges, currentRanges,
+                groupColocateColumnCount, rangeJobLogPrefix() + " " + jobId)) {
+            return null;
+        }
+        return "PACK placement of " + shadowTabletRanges.size() + " shadow tablets";
+    }
+
+    // ---- Range shadow layout: the K-tablet planning shared by the range rewrite jobs ----------------
+
+    /** The sort-key columns the shadow index is sampled, planned and (in a colocate group) aligned by. */
+    protected abstract List<Column> getShadowRangeColumns();
+
+    /** Samples the partition's base data by the shadow index's sort key. Runs lock-free. */
+    protected abstract SampleSet sampleShadowSortKey(OlapTable table, String dbName, PendingPartitionPlan plan)
+            throws StarRocksException;
+
+    /** Applies the colocate prefix rule to the shadow index's routing columns; a no-op outside a range colocate
+     *  group. Called under the table WRITE lock, once the table is in the job's state. */
+    protected abstract void checkShadowColocatePrefix(OlapTable table) throws AlterCancelException;
+
+    /** The job's name in the log lines of the range shadow planning, e.g. "range-rewrite schema change job". */
+    protected abstract String rangeJobLogPrefix();
+
+    /** What the shadow index is called in the error raised when it cannot be built. */
+    protected String shadowIndexNoun() {
+        return "shadow index";
+    }
+
+    /**
+     * Plan one partition's K-tablet shadow layout lock-free using the shared tablet-count policy: a zero
+     * target preserves the latest base-index {@code K}, while a nonzero target derives {@code K}
+     * adaptively from the base data size and active compute-node count. When {@code K > 1}, sample by the
+     * shadow sort key and plan the boundaries; {@code K == 1} skips sampling. A table in a range colocate group
+     * gets at least one tablet per ColocateRange instead (see {@link #planColocateBoundaries}). Build the shadow
+     * {@link MaterializedIndex} via the StarOS createShards RPC. NO db lock is held here.
+     */
+    protected void planPartitionShadow(PendingPartitionPlan plan, OlapTable table, String dbName)
+            throws AlterCancelException {
+        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
+        long targetSize = table.getTabletReshardTargetSize();
+        int requestedTabletCount = selectRequestedTabletCount(plan, activeComputeNodeCount, targetSize);
+        List<Tuple> boundaries;
+        if (colocateRanges == null) {
+            boundaries = requestedTabletCount == 1
+                    ? List.of()
+                    : planBoundaries(table, dbName, plan, requestedTabletCount);
+        } else {
+            RangeColocateRewriteLayout layout =
+                    new RangeColocateRewriteLayout(colocateRanges, getShadowRangeColumns(), colocateColumnCount);
+            boundaries = planColocateBoundaries(layout, plan, table, dbName, requestedTabletCount, targetSize);
+            LOG.info("{} {}: partition {} plans {} shadow tablets over {} colocate "
+                            + "ranges, tablets per colocate range: {}", rangeJobLogPrefix(), jobId,
+                    plan.physicalPartitionId, boundaries.size() + 1, colocateRanges.size(),
+                    Arrays.toString(layout.tabletCountsOf(boundaries)));
+        }
+        // Outside a range colocate group, K may collapse to 1 (sampling failure / no-distinction): a single
+        // full-range tablet.
+        int shadowTabletCount = boundaries.size() + 1;
+        List<TabletRange> ranges = buildTabletRanges(boundaries);
+        MaterializedIndex shadowIndex;
+        try {
+            shadowIndex = LakeTableAlterJobV2Builder.buildRangeShadowIndex(
+                    dbId, table, plan.physicalPartition, shadowIndexMetaId, shadowTabletCount, ranges,
+                    plan.shardGroupId, computeResource);
+        } catch (DdlException e) {
+            throw new AlterCancelException("failed to build " + shadowIndexNoun() + " for partition "
+                    + plan.physicalPartitionId + ": " + e.getMessage());
+        }
+        plan.boundaries = boundaries;
+        plan.shadowTabletCount = shadowTabletCount;
+        plan.shadowIndex = shadowIndex;
+    }
+
+    /**
+     * Sample the partition by the shadow sort key and plan {@code K-1} boundaries. A sampling failure or
+     * a no-distinction sample (empty sample / all-equal keys → planner NO_SPLIT) degrades to an empty
+     * boundary list = a single full-range tablet (K=1 fallback). All inputs are captured snapshots so
+     * this runs lock-free (the sampler itself re-acquires a read lock for its SQL round-trip).
+     */
+    protected List<Tuple> planBoundaries(OlapTable table, String dbName, PendingPartitionPlan plan,
+                                         int requestedTabletCount) {
+        try {
+            SampleSet sampleSet = sampleShadowSortKey(table, dbName, plan);
+            if (sampleSet.isEmpty()) {
+                return List.of();
+            }
+            BoundaryPlannerResult planResult = BoundaryPlanner.planRowQuantileBoundaries(
+                    sampleSet, requestedTabletCount, getShadowRangeColumns());
+            if (planResult.isNoSplit()) {
+                return List.of();
+            }
+            return planResult.getBoundaries();
+        } catch (StarRocksException | RuntimeException e) {
+            // Sampling / planning failure must not fail the alter: fall back to a single full-range
+            // shadow tablet (the rewrite still re-sorts by the new key; it just isn't split).
+            LOG.warn("{} {}: sampling/planning failed for partition {}, "
+                    + "falling back to a single full-range shadow tablet", rangeJobLogPrefix(), jobId,
+                    plan.physicalPartitionId, e);
+            return List.of();
+        }
+    }
+
+    /**
+     * Plan the boundaries of one partition of a table in a range colocate group: the ColocateRange bounds plus
+     * sampled cuts inside the ColocateRanges (see {@link RangeColocateRewriteLayout}). A zero
+     * {@code targetSize} (the table's target) keeps the base tablet count of each ColocateRange; otherwise the requested
+     * count is shared among the ColocateRanges by their share of the sample. A sampling failure or an empty
+     * sample (an empty partition) gives one tablet per ColocateRange. So does a requested count of one, without
+     * sampling: no ColocateRange can get a second tablet.
+     */
+    private List<Tuple> planColocateBoundaries(RangeColocateRewriteLayout layout, PendingPartitionPlan plan,
+                                               OlapTable table, String dbName, int requestedTabletCount,
+                                               long targetSize) {
+        if (requestedTabletCount <= 1 || !layout.usesSampledCuts()) {
+            return layout.colocateBoundaries();
+        }
+        try {
+            int[] baseTabletCounts = null;
+            if (targetSize == 0) {
+                baseTabletCounts = layout.tabletCountsOfBaseTablets(plan.baseIndex.getTablets());
+                if (Arrays.stream(baseTabletCounts).allMatch(count -> count == 1)) {
+                    return layout.colocateBoundaries();
+                }
+            }
+            SampleSet sampleSet = sampleShadowSortKey(table, dbName, plan);
+            List<List<Tuple>> samplesByRange = layout.bucketByColocateRange(sampleSet.getTuples());
+            int[] tabletCounts = baseTabletCounts != null
+                    ? baseTabletCounts
+                    : layout.tabletCountsBySampleShare(samplesByRange, requestedTabletCount);
+            return layout.planBoundaries(samplesByRange, tabletCounts);
+        } catch (StarRocksException | RuntimeException e) {
+            LOG.warn("{} {}: sampling/planning failed for partition {}, "
+                    + "falling back to one shadow tablet per colocate range", rangeJobLogPrefix(), jobId,
+                    plan.physicalPartitionId, e);
+            return layout.colocateBoundaries();
+        }
+    }
+
+    /**
+     * Tile {@code (-inf, +inf)} with one {@link TabletRange} per tablet given the {@code K-1}
+     * sorted boundaries: {@code (-inf, c1), [c1, c2), ..., [c_{K-1}, +inf)}. An empty boundary list
+     * yields a single full-range tablet (K=1 case).
+     */
+    @VisibleForTesting
+    static List<TabletRange> buildTabletRanges(List<Tuple> boundaries) {
+        if (boundaries.isEmpty()) {
+            List<TabletRange> singleRange = new ArrayList<>(1);
+            singleRange.add(new TabletRange(Range.all()));
+            return singleRange;
+        }
+        return DefaultPreSplitPipeline.buildTabletRanges(boundaries);
     }
 
     /**
@@ -565,6 +831,7 @@ public abstract class LakeOnlineRewriteJobBase
                     table.getState());
             cachedDbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId).getFullName();
             String tableName = table.getName();
+            capturePlanningInputs(table);
 
             for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
                 long physicalPartitionId = physicalPartition.getId();
@@ -629,6 +896,7 @@ public abstract class LakeOnlineRewriteJobBase
                     throw new AlterCancelException(
                             "partition set changed while building the range-rewrite shadow index");
                 }
+                validateShadowBeforeCommit(committedTable, pendingPlans);
 
                 for (PendingPartitionPlan plan : pendingPlans) {
                     PartitionRewriteState partitionState = stateOf(plan.physicalPartitionId);
@@ -779,8 +1047,7 @@ public abstract class LakeOnlineRewriteJobBase
      * <p>On the first run ({@code watershedTxnId == -1}) it allocates the watershed transaction id,
      * exposes each partition's shadow {@link MaterializedIndex} to the catalog with
      * {@code visibleTxnId = watershedTxnId} (so loads after the watershed double-write base+shadow
-     * while loads before it ignore the shadow), runs the next-txn guard, and re-journals
-     * {@code WAITING_TXN}.
+     * while loads before it ignore the shadow) and re-journals {@code WAITING_TXN}.
      *
      * <p>On each subsequent run it waits until every transaction before the watershed has finished;
      * only then does it capture each physical partition's visible version as the per-partition
@@ -837,28 +1104,28 @@ public abstract class LakeOnlineRewriteJobBase
     /**
      * First {@code WAITING_TXN} run: allocate the watershed transaction id and expose every
      * partition's shadow index to the catalog so post-watershed loads double-write it. Mirrors the
-     * standard lake schema-change watershed, including the next-txn guard that detects a transaction
-     * sneaking in between allocating the watershed and exposing the shadow.
+     * standard lake schema-change watershed; a writer that resolved tablets before the exposure is
+     * rejected at commit by LakeTableTxnStateListener rather than detected here.
      */
     private void allocateWatershedAndExposeShadow() throws AlterCancelException {
+        long nextTxnId;
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
             OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == jobTableState(), table.getState());
             watershedTxnId = getNextTransactionId();
-            watershedGtid = getNextGtid();
+            // Only for an older FE taking the job over after a downgrade; this FE redraws it when reserving versions.
+            commitGtid = getNextGtid();
             exposeShadowIndexToCatalog(table);
 
-            // Getting the watershed and exposing the shadow are not atomic. A transaction beginning in
-            // between is safe as long as it gets the tablet list (under the database lock) after
-            // beginTransaction(), so it sees the shadow and writes to it; all import transactions do
-            // this. beginTransaction()-first is a convention not a requirement, so guard against a new
-            // beginTransaction() succeeding in the window, which would let a txn > watershedTxnId miss
-            // the shadow.
-            long nextTxnId = peekNextTransactionId();
-            if (nextTxnId != watershedTxnId + 1) {
-                throw new AlterCancelException(
-                        "concurrent transaction detected while adding shadow index, please re-run the alter table command");
-            }
+            // Getting the watershed and exposing the shadow are not atomic, and the id generator is shared
+            // by the whole cluster, so other ids are routinely drawn in between. That is safe without a
+            // check here: a writer that begins its transaction before resolving tablets does so under the
+            // table READ lock, which this WRITE lock excludes, so any such transaction with an id above the
+            // watershed sees the shadow and writes it. A writer that resolves tablets first (replication, a
+            // bypass-write client with cached metadata) is rejected at commit by
+            // LakeTableTxnStateListener#checkShadowIndexesLoaded if it misses the shadow and commits before
+            // this job makes the shadow NORMAL. The next id is kept only as a breadcrumb for the log line below.
+            nextTxnId = peekNextTransactionId();
 
             // Re-journal WAITING_TXN so the allocated watershed and the exposure are durable; the
             // exposure is idempotent, so a leader transfer re-runs it harmlessly.
@@ -869,8 +1136,8 @@ public abstract class LakeOnlineRewriteJobBase
             span.setAttribute("watershedTxnId", this.watershedTxnId);
             span.addEvent("exposeShadow");
         }
-        LOG.info("online rewrite job {} allocated watershed txn id {} and exposed shadow index",
-                jobId, watershedTxnId);
+        LOG.info("online rewrite job {} allocated watershed txn id {} and exposed shadow index, next txn id"
+                + " after exposing it: {}", jobId, watershedTxnId, nextTxnId);
     }
 
     /**
@@ -895,6 +1162,7 @@ public abstract class LakeOnlineRewriteJobBase
             Preconditions.checkState(shadowIndex.getState() == MaterializedIndex.IndexState.SHADOW,
                     shadowIndex.getState());
             shadowIndex.setVisibleTxnId(watershedTxnId);
+            shadowIndex.setShadowWatershedTxnId(watershedTxnId);
             physicalPartition.createRollupIndex(shadowIndex);
         }
     }
@@ -924,8 +1192,9 @@ public abstract class LakeOnlineRewriteJobBase
      * The shadow tablets are never dropped/rebuilt on resume: post-watershed double-writes have
      * already published into them, so dropping would lose data.
      *
-     * <p>When every partition's rewrite has published, the job transitions to
-     * {@code FINISHED_REWRITING}; the atomic flip is performed there (a later phase).
+     * <p>When every partition's rewrite has published and {@link #settleBeforeFinishingRewrite} has nothing
+     * left to wait for, the job transitions to {@code FINISHED_REWRITING}; the atomic flip is performed there
+     * (a later phase).
      */
     @Override
     protected void runRunningJob() throws AlterCancelException {
@@ -971,7 +1240,7 @@ public abstract class LakeOnlineRewriteJobBase
         }
 
         for (RewritePlan plan : plans) {
-            switch (classifyRewrite(plan.physicalPartitionId)) {
+            switch (recordRewriteProgress(plan.physicalPartitionId)) {
                 case DONE:
                     // This partition's rewrite has published. Drop its failure streak and its retry
                     // diagnostic: errMsg is persisted, so a message journaled before a leader failover
@@ -996,34 +1265,19 @@ public abstract class LakeOnlineRewriteJobBase
             }
         }
 
-        // All partitions' rewrites have published (every partition's rewrite txn is VISIBLE here).
-        // Record whether each rewrite produced a source op_write: a partition empty at the watershed
-        // rewrites zero rows, so there is no source op_write on object storage. The flip passes this to BE
-        // (shadow_rewrite_source_empty) so it synthesizes an empty op_schema_change@W instead of 404ing on
-        // the absent source -- this is the empty-at-W>1 case (a repeat online rewrite of an empty range
-        // partition; W==1 empty is already handled by BE). Read from the rewrite txn's (persisted)
-        // InsertTxnCommitAttachment, the same attachment classifyRewrite already relies on, so a leader
-        // failover that re-runs this recovers it; and journaled by the persist below.
-        for (long physicalPartitionId : partitionStates.keySet()) {
-            PartitionRewriteState state = partitionStates.get(physicalPartitionId);
-            if (state.sourceEmpty == null && state.rewriteTxnId != null) {
-                TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                        .getTransactionState(dbId, state.rewriteTxnId);
-                if (txnState != null) {
-                    state.sourceEmpty = rewriteSourceEmpty(txnState);
-                } else {
-                    // The rewrite txn just went VISIBLE (classifyRewrite returned DONE this tick), so it is
-                    // normally still present; a replay that finds it evicted re-runs the rewrite instead of
-                    // reaching here. If it is nonetheless unavailable, leave sourceEmpty unset (treated as
-                    // false at the flip -> BE loads the source). That is safe for a non-empty partition; an
-                    // empty-at-W>1 partition would fall back to the pre-fix flip-publish retry until
-                    // recovered. Log it so the rare degradation is diagnosable rather than silent.
-                    LOG.warn("online rewrite job {}: rewrite txn {} state unavailable while recording "
-                            + "sourceEmpty for partition {}; leaving it unset", jobId, state.rewriteTxnId,
-                            physicalPartitionId);
-                }
-            }
+        String waitingFor = settleBeforeFinishingRewrite();
+        if (waitingFor != null) {
+            LOG.info("online rewrite job {}: every partition is rewritten, waiting for {}", jobId, waitingFor);
+            setRetryDiagnostic(FINISH_WAIT_DIAGNOSTIC_PREFIX + waitingFor);
+            return;
         }
+        if (errMsg != null && errMsg.startsWith(FINISH_WAIT_DIAGNOSTIC_PREFIX)) {
+            // Cleared in the FINISHED_REWRITING entry journaled below.
+            errMsg = "";
+        }
+
+        // Every partition has durably recorded completion and its empty-source fact. The flip uses
+        // those saved flags even if transaction history has since been evicted.
         this.finishedTimeMs = System.currentTimeMillis();
         persistStateChange(this, JobState.FINISHED_REWRITING);
 
@@ -1035,15 +1289,16 @@ public abstract class LakeOnlineRewriteJobBase
     }
 
     protected enum RewriteStatus {
-        DONE,        // the journaled rewrite txn published (op_schema_change@W converted) -> skip
+        DONE,        // durably completed or a verified published rewrite (op_schema_change@W converted) -> skip
         IN_FLIGHT,   // committed but not yet visible -> wait for the next tick
         NEEDS_RUN    // never started / dropped / aborted -> (re-)run the watershed-pinned INSERT
     }
 
     /**
-     * Classify a partition's rewrite by the status of its journaled rewrite txn id. A missing journaled
-     * id, a txn the manager no longer knows about, or an ABORTED txn all mean "(re-)run". Never reuse an
-     * aborted txn id (BE forbids it), so the next attempt journals a fresh id.
+     * Classify a partition's rewrite without changing progress. Durable completion remains DONE after
+     * transaction-history eviction. Otherwise a missing journaled id, a txn the manager no longer knows
+     * about, or an ABORTED txn all mean "(re-)run". Never reuse an aborted txn id (BE forbids it), so the
+     * next attempt journals a fresh id.
      *
      * <p>The journaled id is the next-txn-id <em>peeked</em> before the INSERT began, then reconciled to
      * the actual id only after {@code execute()} returns. A concurrent txn slipping into the peek-&gt;begin
@@ -1056,15 +1311,28 @@ public abstract class LakeOnlineRewriteJobBase
      * shadow and the real rewrite is re-issued under a fresh id.
      */
     protected RewriteStatus classifyRewrite(long physicalPartitionId) {
-        PartitionRewriteState partitionState = partitionStates.get(physicalPartitionId);
+        return classifyRewrite(partitionStates.get(physicalPartitionId));
+    }
+
+    private RewriteStatus classifyRewrite(PartitionRewriteState partitionState) {
+        if (partitionState != null && partitionState.rewriteFinished) {
+            return RewriteStatus.DONE;
+        }
         Long txnId = (partitionState == null) ? null : partitionState.rewriteTxnId;
         if (txnId == null) {
             return RewriteStatus.NEEDS_RUN;
         }
         TransactionState txnState =
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, txnId);
+        return classifyRewrite(partitionState, txnState);
+    }
+
+    private RewriteStatus classifyRewrite(PartitionRewriteState partitionState, TransactionState txnState) {
+        if (partitionState != null && partitionState.rewriteFinished) {
+            return RewriteStatus.DONE;
+        }
         if (txnState == null) {
-            // The manager no longer has this txn (never committed, or expired before publish): re-run.
+            // Completion was never observed durably before txn eviction: safely re-run.
             return RewriteStatus.NEEDS_RUN;
         }
         TransactionStatus status = txnState.getTransactionStatus();
@@ -1086,6 +1354,36 @@ public abstract class LakeOnlineRewriteJobBase
         }
         // PREPARE / PREPARED / COMMITTED: in flight, wait.
         return RewriteStatus.IN_FLIGHT;
+    }
+
+    /** Record newly verified completion before yielding to an unfinished sibling. */
+    private RewriteStatus recordRewriteProgress(long physicalPartitionId) {
+        PartitionRewriteState state = partitionStates.get(physicalPartitionId);
+        if (state.rewriteFinished) {
+            return RewriteStatus.DONE;
+        }
+        TransactionState txnState = state.rewriteTxnId == null ? null
+                : GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getTransactionState(dbId, state.rewriteTxnId);
+        RewriteStatus status = classifyRewrite(state, txnState);
+        if (status != RewriteStatus.DONE) {
+            return status;
+        }
+
+        // Verify identity and capture loadedRows from the SAME transaction snapshot: a second lookup
+        // could lose the empty-at-W>1 fact to transaction-history eviction.
+        boolean sourceEmpty = rewriteSourceEmpty(txnState);
+        LakeOnlineRewriteJobBase snapshot = (LakeOnlineRewriteJobBase) copyForPersist();
+        PartitionRewriteState persistedState = snapshot.partitionStates.get(physicalPartitionId);
+        persistedState.sourceEmpty = sourceEmpty;
+        persistedState.rewriteFinished = true;
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(snapshot, wal -> {
+            // Publish completion last, and only after durable commit. A rejected write leaves both live
+            // fields untouched, allowing the next scheduler tick to retry recording progress.
+            state.sourceEmpty = sourceEmpty;
+            state.rewriteFinished = true;
+        });
+        return RewriteStatus.DONE;
     }
 
     /**
@@ -1256,7 +1554,7 @@ public abstract class LakeOnlineRewriteJobBase
         // ADMIN SET FRONTEND CONFIG landing mid-decision make the gate below, the window the charge is
         // compared against, and the window the message reports all disagree - so a value dropped to 0
         // after the gate had passed could still grant the retry the operator just disabled. Same rule as
-        // selectRequestedTabletCount above and TabletReshardUtils.adaptiveSplitBound.
+        // the single target-size read in planPartitionShadow above and TabletReshardUtils.adaptiveSplitBound.
         int retryWindowSecond = Config.lake_online_rewrite_partition_retry_timeout_second;
         if (retryWindowSecond <= 0) {
             LOG.warn("online rewrite job {}: rewrite INSERT failed for partition {} and retrying is "
@@ -1544,6 +1842,9 @@ public abstract class LakeOnlineRewriteJobBase
         }
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
             OlapTable table = getTableOrThrow();
+            // Same lock as the version reservation, so the gtid falls between those of commits before and after.
+            // Drawn first: a recorded commit version marks the reservation as done.
+            commitGtid = getNextGtid();
             for (long physicalPartitionId : partitionStates.keySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkNotNull(physicalPartition, physicalPartitionId);
@@ -1620,7 +1921,7 @@ public abstract class LakeOnlineRewriteJobBase
                 Long watershedVersion = state.watershedVersion;
                 Preconditions.checkState(watershedVersion != null,
                         "watershed version not captured for partition " + physicalPartitionId);
-                publishInfos.add(new PartitionPublishInfo(shadowTablets, originTablets,
+                publishInfos.add(new PartitionPublishInfo(physicalPartitionId, shadowTablets, originTablets,
                         commitVersion, rewriteTxnId, watershedVersion, Boolean.TRUE.equals(state.sourceEmpty)));
             }
         } catch (AlterCancelException e) {
@@ -1630,12 +1931,8 @@ public abstract class LakeOnlineRewriteJobBase
 
         try {
             // txnId == -1 means BE does nothing, just upgrades the tablet_meta version (no-op publish).
-            TxnInfoPB originTxnInfo = new TxnInfoPB();
-            originTxnInfo.txnId = -1L;
-            originTxnInfo.combinedTxnLog = false;
-            originTxnInfo.commitTime = finishedTimeMs / 1000;
-            originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
-            originTxnInfo.gtid = watershedGtid;
+            TxnInfoPB originTxnInfo = TxnInfoHelper.forJobPublish(-1L, TxnTypePB.TXN_EMPTY, finishedTimeMs,
+                    commitGtid);
 
             for (PartitionPublishInfo info : publishInfos) {
                 // The shadow tablets publish through the ordinary tablet_ids path (base_version 1); the
@@ -1643,26 +1940,25 @@ public abstract class LakeOnlineRewriteJobBase
                 // op_schema_change@watershedVersion and replay the post-watershed double-writes. So this
                 // reuses the same Utils.publishVersion / createSubRequestForAggregatePublish as any publish,
                 // just with a shadow-rewrite TxnInfoPB.
-                TxnInfoPB shadowTxnInfo = new TxnInfoPB();
-                shadowTxnInfo.txnId = info.rewriteTxnId;
-                shadowTxnInfo.txnType = TxnTypePB.TXN_SHADOW_REWRITE;
-                shadowTxnInfo.combinedTxnLog = false;
-                shadowTxnInfo.commitTime = finishedTimeMs / 1000;
-                shadowTxnInfo.gtid = watershedGtid;
+                TxnInfoPB shadowTxnInfo = TxnInfoHelper.forJobPublish(info.rewriteTxnId,
+                        TxnTypePB.TXN_SHADOW_REWRITE, finishedTimeMs, commitGtid);
                 shadowTxnInfo.shadowRewriteAlterVersion = info.watershedVersion;
                 // Empty at the watershed: BE synthesizes an empty op_schema_change@W with no source load.
                 shadowTxnInfo.shadowRewriteSourceEmpty = info.sourceEmpty;
+                // A retry lets the tablets an earlier attempt already published answer from storage.
+                boolean isRetryPublish = getAndMarkLakePublishSent(info.physicalPartitionId);
                 if (!isFileBundling) {
                     Utils.publishVersion(info.shadowTablets, shadowTxnInfo, 1, info.commitVersion,
-                            computeResource, false);
+                            computeResource, false, isRetryPublish);
                     Utils.publishVersion(info.originTablets, originTxnInfo, info.commitVersion - 1,
-                            info.commitVersion, computeResource, false);
+                            info.commitVersion, computeResource, false, isRetryPublish);
                 } else {
                     AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
                     Utils.createSubRequestForAggregatePublish(info.shadowTablets, Lists.newArrayList(shadowTxnInfo),
-                            1, info.commitVersion, null, computeResource, request);
+                            1, info.commitVersion, null, computeResource, request, false, isRetryPublish);
                     Utils.createSubRequestForAggregatePublish(info.originTablets, Lists.newArrayList(originTxnInfo),
-                            info.commitVersion - 1, info.commitVersion, null, computeResource, request);
+                            info.commitVersion - 1, info.commitVersion, null, computeResource, request, false,
+                            isRetryPublish);
                     List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
                     Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null,
                             vectorIndexBuildInfos);
@@ -1677,6 +1973,7 @@ public abstract class LakeOnlineRewriteJobBase
     }
 
     private static final class PartitionPublishInfo {
+        final long physicalPartitionId;
         final List<Tablet> shadowTablets;
         final List<Tablet> originTablets;
         final long commitVersion;
@@ -1684,8 +1981,9 @@ public abstract class LakeOnlineRewriteJobBase
         final long watershedVersion;
         final boolean sourceEmpty;
 
-        PartitionPublishInfo(List<Tablet> shadowTablets, List<Tablet> originTablets,
+        PartitionPublishInfo(long physicalPartitionId, List<Tablet> shadowTablets, List<Tablet> originTablets,
                              long commitVersion, long rewriteTxnId, long watershedVersion, boolean sourceEmpty) {
+            this.physicalPartitionId = physicalPartitionId;
             this.shadowTablets = shadowTablets;
             this.originTablets = originTablets;
             this.commitVersion = commitVersion;
@@ -1731,7 +2029,7 @@ public abstract class LakeOnlineRewriteJobBase
                 }
             }
         }
-        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid,
+        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, commitGtid,
                 commitVersionMapView(), tabletsByPartition, computeResource, useAggregatePublish);
     }
 
@@ -1849,6 +2147,7 @@ public abstract class LakeOnlineRewriteJobBase
         // and new loads do not queue forever waiting for the cancelled alter's missing version.
         boolean advanceVersionForForce = force && jobState == JobState.FINISHED_REWRITING && tableExists();
         if (advanceVersionForForce) {
+            markLakeNoOpPublishSent();
             if (!lakePublishVersionWithSkip(errMsg)) {
                 return false;
             }
@@ -1955,18 +2254,30 @@ public abstract class LakeOnlineRewriteJobBase
 
     // ---- SHOW / replay ---------------------------------------------------------------------------
 
+    /**
+     * Drops the per-partition rewrite state of a done job, which stays in memory only for SHOW ALTER. Each state
+     * holds a shadow index with its tablets; getInfo reads none of them once the job is done. The map is replaced,
+     * not cleared: replay shares it with the journal entry it came from.
+     */
+    @Override
+    public void pruneMeta() {
+        partitionStates = Maps.newHashMap();
+    }
+
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
         // Progress: partitions whose rewrite has published / total. Only meaningful while RUNNING.
+        // Read once: this runs without the job lock, and pruning the done job replaces the map.
+        Map<Long, PartitionRewriteState> states = partitionStates;
         String progress = FeConstants.NULL_STRING;
-        if (jobState == JobState.RUNNING && !partitionStates.isEmpty()) {
+        if (jobState == JobState.RUNNING && !states.isEmpty()) {
             int published = 0;
-            for (long physicalPartitionId : partitionStates.keySet()) {
-                if (classifyRewrite(physicalPartitionId) == RewriteStatus.DONE) {
+            for (PartitionRewriteState state : states.values()) {
+                if (classifyRewrite(state) == RewriteStatus.DONE) {
                     published++;
                 }
             }
-            progress = published + "/" + partitionStates.size();
+            progress = published + "/" + states.size();
         }
 
         // One display row for the single shadow index this job builds.
@@ -2020,7 +2331,7 @@ public abstract class LakeOnlineRewriteJobBase
             this.shadowIndexName = other.shadowIndexName;
             this.partitionStates = other.partitionStates;
             this.watershedTxnId = other.watershedTxnId;
-            this.watershedGtid = other.watershedGtid;
+            this.commitGtid = other.commitGtid;
             this.forceSkippedAtCommitted = other.forceSkippedAtCommitted;
         }
 
@@ -2100,10 +2411,9 @@ public abstract class LakeOnlineRewriteJobBase
      * once the watershed has been allocated, the catalog exposure of the shadow index. Every step is
      * guarded so a second replay is a no-op (no double-add of meta, tablets or the exposed index).
      *
-     * <p>The catalog state in RUNNING is identical to WAITING_TXN; the only RUNNING-specific state is
-     * the in-flight rewrite txns, which are resumed by the live scheduler's three-state resume
-     * ({@code rewriteTxnId} is journaled) after the leader takes over — never by replay, which must not
-     * re-run the rewrite INSERT. The caller holds the database write lock.
+     * <p>The catalog state in RUNNING is identical to WAITING_TXN. RUNNING also tracks rewrite txn ids
+     * and durable partition completion, which the live scheduler resumes or skips after leader takeover.
+     * Replay must not re-run the rewrite INSERT. The caller holds the database write lock.
      */
     private void reconstructShadowCatalogState(@NotNull OlapTable table) {
         registerShadowIndexMeta(table);

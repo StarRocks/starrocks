@@ -1,0 +1,51 @@
+-- name: test_range_rollup_schema_change @cloud
+-- SQL integration: a schema change on a range-distributed table keeps a range rollup's own sort key together
+-- with its tablet ranges, so the rollup stays readable and loadable afterwards; a column in a rollup's sort key
+-- can be neither dropped nor retyped. Rollup reads are forced with the index hint; base reads disable rewrites.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (k1 int not null, k2 int not null, v1 int)
+duplicate key(k1, k2)
+order by(k1, k2)
+properties('replication_num' = '1');
+
+-- Enough distinct (k2, k1) values for the rollup to be cut into two or more tablets.
+insert into t select x, x % 50, x % 97 from table(generate_series(1, 2000)) as g(x);
+
+-- r_dup's DUPLICATE KEY (k2) is a strict prefix of its sort key (k2, k1); its tablets are cut on both columns.
+alter table t add rollup r_dup(k2, k1, v1) duplicate key(k2) order by (k2, k1);
+function: wait_alter_table_finish("ROLLUP", 8)
+
+-- The rollup has more than one tablet and its bounds are (k2, k1) pairs.
+show tablet from t where IndexName = 'r_dup';
+
+set enable_materialized_view_rewrite = false;
+set enable_sync_materialized_view_rewrite = false;
+select k2, count(*), sum(k1), sum(v1) from t where k2 = 7 group by k2;
+select k2, count(*), sum(k1), sum(v1) from r_dup [_SYNC_MV_] where k2 = 7 group by k2;
+
+-- A type change of a column outside every sort key keeps the rollup's sort key and its tablet ranges.
+alter table t modify column v1 bigint;
+function: wait_alter_table_finish()
+
+-- Loads still route into the rollup's tablets.
+insert into t select x, x % 50, x % 97 from table(generate_series(2001, 2100)) as g(x);
+
+show tablet from t where IndexName = 'r_dup';
+select k2, count(*), sum(k1), sum(v1) from t where k2 = 7 group by k2;
+select k2, count(*), sum(k1), sum(v1) from r_dup [_SYNC_MV_] where k2 = 7 group by k2;
+select count(*) from t;
+select count(*) from r_dup [_SYNC_MV_];
+
+-- v1 leads the sort key of r_v but is not in the base sort key: it can be neither dropped nor retyped.
+alter table t add rollup r_v(v1, k1) order by (v1, k1);
+function: wait_alter_table_finish("ROLLUP", 8)
+alter table t drop column v1;
+alter table t modify column v1 varchar(32);
+select count(*) from t;
+select count(*) from r_v [_SYNC_MV_];
+
+drop database db_${uuid0} force;

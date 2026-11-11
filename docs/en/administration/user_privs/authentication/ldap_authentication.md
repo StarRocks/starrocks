@@ -131,7 +131,7 @@ There is no single answer for the whole LDAP configuration - some values are com
 | `authentication_ldap_simple_group_source` | the FE | **No.** Surrounding blanks are ignored too. An unrecognized value is refused by `CREATE` / `ALTER SECURITY INTEGRATION`, and falls back to `group_provider` with an ERROR in the log when it arrives through the FE configuration. |
 | DN values: `authentication_ldap_simple_bind_root_dn`, `..._bind_base_dn`, `..._bind_dn_pattern` | the directory | **Decided by the directory.** The attribute types in a DN (`cn=`, `ou=`, `dc=`) are always case-insensitive; whether their values are depends on the matching rule of each attribute, which for the usual `cn` / `ou` / `dc` is case-insensitive. |
 | The login name | the FE, before the directory sees it | **No.** It is lower-cased before it is put into the search filter or substituted into the bind DN pattern, which matches how Active Directory treats account names. |
-| Group names | the FE | **No for matching, yes for what you see.** `GRANT ... TO EXTERNAL GROUP` and `permitted_groups` are matched ignoring case, but the name itself is never rewritten: `current_group()` and the group set handed to Apache Ranger keep exactly the spelling the directory returned. Ranger matches group names case-sensitively, so its policies must use the directory's spelling. |
+| Group names | the FE | **No for matching, yes for what you see.** `GRANT ... TO EXTERNAL GROUP` and `permitted_groups` are matched ignoring case by default (FE configuration item `authentication_group_case_insensitive`; set it to `false` for exact matching), but the name itself is never rewritten: `current_group()` and the group set handed to Apache Ranger keep exactly the spelling the directory returned. Ranger matches group names case-sensitively, so its policies must use the directory's spelling. |
 
 ## Create a user with LDAP
 
@@ -197,3 +197,13 @@ properties.put("disabledAuthenticationPlugins", "com.mysql.cj.protocol.a.authent
 - **ODBC**
 
 Add `default\_auth=mysql_clear_password` and `ENABLE_CLEARTEXT\_PLUGIN=1` in the DSN of ODBC: , along with username and password.
+
+### Connect over HTTP or Arrow Flight with LDAP
+
+A clear-text password is what the HTTP API and Arrow Flight SQL send anyway, so an LDAP-bound user needs nothing special there: HTTP Basic authentication and the Arrow Flight user name and password both end in the same LDAP bind. This works for a user created with `IDENTIFIED WITH authentication_ldap_simple` and for a user of an LDAP [security integration](./security_integration.md) alike. See [Where each authentication method works](./authentication.mdx#where-each-authentication-method-works).
+
+```Bash
+curl -u tom:<password> -H 'Content-Type: application/json' -XPOST \
+    http://<fe_host>:<fe_http_port>/api/v1/catalogs/default_catalog/databases/<db>/sql \
+    -d '{"query": "select current_user()"}'
+```
