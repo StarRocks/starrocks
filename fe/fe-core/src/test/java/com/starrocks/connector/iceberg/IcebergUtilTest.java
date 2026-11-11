@@ -301,6 +301,136 @@ public class IcebergUtilTest {
         }
     }
 
+    // At the 2024-11-03 fall-back in New York, 05:30 UTC is 01:30 EDT and 06:10 UTC is 01:10 EST: converting the two
+    // ends gives a minimum above a value of the file, while the widened bounds cover it.
+    @Test
+    public void testWidenedTimestampTzBoundsCoverOffsetChanges() {
+        Schema schema = new Schema(required(5, "ts_tz", Types.TimestampType.withZone()));
+        List<SlotDescriptor> slots = List.of(new SlotDescriptor(new SlotId(5), "ts_tz", DateType.DATETIME, true));
+        slots.get(0).setColumn(new Column("ts_tz", DateType.DATETIME, true));
+        long low = java.time.Instant.parse("2024-11-03T05:30:00Z").getEpochSecond() * 1_000_000L;
+        long high = java.time.Instant.parse("2024-11-03T06:10:00Z").getEpochSecond() * 1_000_000L;
+        Map<Integer, ByteBuffer> lowerBounds = Map.of(5, Conversions.toByteBuffer(Types.TimestampType.withZone(), low));
+        Map<Integer, ByteBuffer> upperBounds =
+                Map.of(5, Conversions.toByteBuffer(Types.TimestampType.withZone(), high));
+        Map<Integer, Long> nullValueCounts = Map.of(5, 0L);
+        Map<Integer, Long> valueCounts = Map.of(5, 2L);
+        long localOfHigh = java.time.LocalDateTime.parse("2024-11-03T01:10:00")
+                .toEpochSecond(java.time.ZoneOffset.UTC) * 1_000_000L;
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.setThreadLocalInfo();
+        try {
+            ctx.getSessionVariable().setTimeZone("America/New_York");
+            // the endpoint conversion would put min above a value of the file, so the min/max optimization gives up
+            Assertions.assertTrue(IcebergUtil.parseMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots, false).isEmpty());
+
+            IcebergUtil.MinMaxValue widened = IcebergUtil.parseMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots, true).get(5);
+            // the range crosses the fall-back at 06:00Z: low + EST (-5h) .. high + EDT (-4h)
+            long hour = 3600 * 1_000_000L;
+            assertEquals(low - 5 * hour, widened.minValue);
+            assertEquals(high - 4 * hour, widened.maxValue);
+            Assertions.assertTrue((Long) widened.minValue <= localOfHigh);
+            Map<Integer, TExprMinMaxValue> thrift = IcebergUtil.toThriftMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots, true);
+            assertEquals(low - 5 * hour, thrift.get(5).min_int_value);
+            assertEquals(high - 4 * hour, thrift.get(5).max_int_value);
+
+            // every local value of every instant in a range lies within the bounds
+            java.time.ZoneId zone = java.time.ZoneId.of("America/New_York");
+            java.time.Instant start = java.time.Instant.parse("2024-03-09T00:00:00Z");
+            for (int i = 0; i < 400; i++) {
+                for (int len : new int[] {0, 7, 61, 130, 1500}) {
+                    java.time.Instant a = start.plusSeconds(i * 1800L);
+                    java.time.Instant b = a.plusSeconds(len * 60L);
+                    long[] bounds = IcebergUtil.widenedSessionTzBounds(a.getEpochSecond() * 1_000_000L,
+                            b.getEpochSecond() * 1_000_000L);
+                    for (java.time.Instant t = a; !t.isAfter(b); t = t.plusSeconds(300)) {
+                        long local = java.time.LocalDateTime.ofInstant(t, zone)
+                                .toEpochSecond(java.time.ZoneOffset.UTC) * 1_000_000L;
+                        Assertions.assertTrue(bounds[0] <= local && local <= bounds[1], a + ".." + b + " " + t);
+                    }
+                }
+                if (i == 199) {
+                    start = java.time.Instant.parse("2024-11-02T00:00:00Z").minusSeconds(200 * 1800L);
+                }
+            }
+
+            // a fixed offset converts exactly
+            ctx.getSessionVariable().setTimeZone("+08:00");
+            IcebergUtil.MinMaxValue fixed = IcebergUtil.parseMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots, true).get(5);
+            assertEquals(low + 8 * 3600 * 1_000_000L, fixed.minValue);
+            assertEquals(high + 8 * 3600 * 1_000_000L, fixed.maxValue);
+
+            ctx.getSessionVariable().setTimeZone("America/New_York");
+            // saturates at the long range, and falls back to the widest offset over centuries of transitions
+            long[] extreme = IcebergUtil.widenedSessionTzBounds(Long.MIN_VALUE + 1, Long.MAX_VALUE - 1);
+            assertEquals(Long.MIN_VALUE, extreme[0]);
+            assertEquals(Long.MAX_VALUE, extreme[1]);
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testMinMaxOptGivesUpTimestampTzFileAcrossFallBack() {
+        Schema schema = new Schema(required(5, "ts_tz", Types.TimestampType.withZone()));
+        List<SlotDescriptor> slots = List.of(new SlotDescriptor(new SlotId(5), "ts_tz", DateType.DATETIME, true));
+        slots.get(0).setColumn(new Column("ts_tz", DateType.DATETIME, true));
+        java.util.function.BiFunction<String, String, Map<Integer, IcebergUtil.MinMaxValue>> parse = (lo, hi) -> {
+            long low = java.time.Instant.parse(lo).getEpochSecond() * 1_000_000L;
+            long high = java.time.Instant.parse(hi).getEpochSecond() * 1_000_000L;
+            return IcebergUtil.parseMinMaxValueBySlots(schema,
+                    Map.of(5, Conversions.toByteBuffer(Types.TimestampType.withZone(), low)),
+                    Map.of(5, Conversions.toByteBuffer(Types.TimestampType.withZone(), high)),
+                    Map.of(5, 0L), Map.of(5, 2L), slots, false);
+        };
+        ConnectContext ctx = new ConnectContext();
+        ctx.setThreadLocalInfo();
+        try {
+            ctx.getSessionVariable().setTimeZone("America/New_York");
+            // New York falls back at 2024-11-03 06:00Z: 01:10 EDT .. 01:20 EST may hold 01:00 EST, below 01:10
+            Assertions.assertTrue(parse.apply("2024-11-03T05:10:00Z", "2024-11-03T06:20:00Z").isEmpty());
+            // 00:30 EDT .. 01:30 EST may hold 01:59 EDT, above 01:30
+            Assertions.assertTrue(parse.apply("2024-11-03T04:30:00Z", "2024-11-03T06:30:00Z").isEmpty());
+            // a fall-back far from both ends cannot reach past them
+            IcebergUtil.MinMaxValue wide = parse.apply("2024-11-02T00:00:00Z", "2024-11-04T00:00:00Z").get(5);
+            assertEquals(java.time.LocalDateTime.parse("2024-11-01T20:00:00").toEpochSecond(java.time.ZoneOffset.UTC)
+                    * 1_000_000L, wide.minValue);
+            // spring-forward keeps the order
+            Assertions.assertFalse(parse.apply("2024-03-10T06:30:00Z", "2024-03-10T07:30:00Z").isEmpty());
+
+            // the endpoints are the local min and max exactly when kept
+            java.time.ZoneId zone = java.time.ZoneId.of("America/New_York");
+            java.time.Instant base = java.time.Instant.parse("2024-11-03T02:00:00Z");
+            for (int start = 0; start <= 300; start += 10) {
+                for (int len : new int[] {0, 20, 50, 70, 130, 300}) {
+                    java.time.Instant a = base.plusSeconds(start * 60L);
+                    java.time.Instant b = a.plusSeconds(len * 60L);
+                    long localA = java.time.LocalDateTime.ofInstant(a, zone).toEpochSecond(java.time.ZoneOffset.UTC);
+                    long localB = java.time.LocalDateTime.ofInstant(b, zone).toEpochSecond(java.time.ZoneOffset.UTC);
+                    // the ends and the half minutes between them, which reach past a shift on the minute grid
+                    boolean inside = true;
+                    for (java.time.Instant t = a.plusSeconds(30); t.isBefore(b); t = t.plusSeconds(60)) {
+                        long local = java.time.LocalDateTime.ofInstant(t, zone).toEpochSecond(java.time.ZoneOffset.UTC);
+                        inside &= localA <= local && local <= localB;
+                    }
+                    assertEquals(inside, IcebergUtil.sessionTzEndpointsExact(a.getEpochSecond() * 1_000_000L,
+                            b.getEpochSecond() * 1_000_000L), a + ".." + b);
+                }
+            }
+
+            // a fixed offset never gives up
+            ctx.getSessionVariable().setTimeZone("+08:00");
+            Assertions.assertFalse(parse.apply("2024-11-03T05:10:00Z", "2024-11-03T06:20:00Z").isEmpty());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
     private static org.apache.iceberg.Table tableWithProperty(String key, String value) {
         org.apache.iceberg.Table table = org.mockito.Mockito.mock(org.apache.iceberg.Table.class);
         Map<String, String> props = new HashMap<>();

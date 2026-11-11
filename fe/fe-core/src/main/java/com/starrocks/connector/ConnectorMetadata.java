@@ -26,6 +26,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -275,6 +276,18 @@ public interface ConnectorMetadata {
                                           long limit,
                                           TvrVersionRange tableVersionRange) {
         return Statistics.builder().build();
+    }
+
+    /**
+     * The value range each partition source column covers in the given table version, read from table metadata
+     * without scanning data. Used to widen ANALYZE min/max that predate later ingestion. Values are in the
+     * optimizer's statistics domain (see {@link com.starrocks.statistic.StatisticUtils#convertStatisticsToDouble}).
+     *
+     * @return lower-cased column name to [min, max]; empty when unknown or unsupported
+     */
+    default Map<String, Pair<Double, Double>> getPartitionSourceColumnRanges(Table table,
+                                                                          TvrVersionRange tableVersionRange) {
+        return Map.of();
     }
 
     default boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {

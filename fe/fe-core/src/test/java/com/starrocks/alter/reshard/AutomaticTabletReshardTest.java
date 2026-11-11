@@ -32,6 +32,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -98,10 +100,7 @@ public class AutomaticTabletReshardTest {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
                     throws StarRocksException {
-                TabletReshardJobMgrTest.TestNormalTabletReshardJob job =
-                        new TabletReshardJobMgrTest.TestNormalTabletReshardJob(1L, TabletReshardJob.JobType.SPLIT_TABLET);
-                job.setTableId(table.getId());
-                return job;
+                return new SplitTabletJob(1L, db.getId(), table.getId(), Map.of());
             }
         };
 
@@ -178,7 +177,7 @@ public class AutomaticTabletReshardTest {
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table, SplitTabletClause splitTabletClause)
                     throws StarRocksException {
                 splitCalled[0] = true;
-                return new TabletReshardJobMgrTest.TestNormalTabletReshardJob(2L, TabletReshardJob.JobType.SPLIT_TABLET);
+                return new SplitTabletJob(2L, db.getId(), table.getId(), Map.of());
             }
         };
 
@@ -262,11 +261,7 @@ public class AutomaticTabletReshardTest {
             @Mock
             public TabletReshardJob createTabletReshardJob(Database db, OlapTable table,
                     SplitTabletClause clause) {
-                TabletReshardJobMgrTest.TestNormalTabletReshardJob job =
-                        new TabletReshardJobMgrTest.TestNormalTabletReshardJob(
-                                1L, TabletReshardJob.JobType.SPLIT_TABLET);
-                job.setTableId(table.getId());
-                return job;
+                return new SplitTabletJob(1L, db.getId(), table.getId(), Map.of());
             }
         };
 

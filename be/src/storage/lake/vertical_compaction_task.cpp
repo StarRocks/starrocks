@@ -184,13 +184,6 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         SCOPED_RAW_TIMER(&_context->stats->txn_log_write_ns);
         RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     }
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        // preload primary key table's compaction state
-        SCOPED_RAW_TIMER(&_context->stats->preload_compaction_state_ns);
-        Tablet t(_tablet.tablet_manager(), _tablet.id());
-        _tablet.tablet_manager()->primary_key_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
-    }
-
     if (config::enable_tablet_write_log) {
         SCOPED_RAW_TIMER(&_context->stats->tablet_write_log_ns);
         int64_t begin_time = _context->start_time.load(std::memory_order_relaxed) * 1000; // Convert to ms
@@ -358,7 +351,8 @@ Status VerticalCompactionTask::compact_column_group(
     VLOG(3) << "Compact column group. tablet: " << _tablet.id() << ", column group: " << column_group_index
             << ", reader chunk size: " << chunk_size;
 
-    const bool enable_light_pk_compaction_publish = StorageEngine::instance()->enable_light_pk_compaction_publish();
+    // Collect rssid & rowid only when compact primary key columns
+    const bool collect_rssid_rowids = _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && is_key;
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
             return Status::Aborted("background worker stopped");
@@ -373,9 +367,7 @@ Status VerticalCompactionTask::compact_column_group(
             auto st = Status::OK();
             {
                 SCOPED_RAW_TIMER(&_context->stats->reader_get_next_ns);
-                // Collect rssid & rowid only when compact primary key columns
-                if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && is_key &&
-                    enable_light_pk_compaction_publish) {
+                if (collect_rssid_rowids) {
                     st = reader.get_next(chunk.get(), source_masks, &rssid_rowids);
                 } else {
                     st = reader.get_next(chunk.get(), source_masks);

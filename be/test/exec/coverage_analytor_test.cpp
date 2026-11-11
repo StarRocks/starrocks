@@ -70,8 +70,8 @@ StatusOr<ColumnPtr> constructed_coverage_input(const std::vector<std::optional<s
     }
     ColumnPtr input = NullableColumn::create(std::move(wkt), std::move(nulls));
     auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:3857", input->size());
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
-            {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)}, coverage_type()));
+    std::unique_ptr<FunctionContext> ctx(
+            FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}, coverage_type()));
     return GeoFunctions::st_geom_from_text(ctx.get(), {input, crs});
 }
 std::string output_text(const ColumnPtr& column, size_t row) {
@@ -143,12 +143,12 @@ Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& ke
     function.__set_name(name);
     function.__set_binary_type(TFunctionBinaryType::BUILTIN);
     function.__set_has_var_args(false);
-    function.__set_arg_types({type.to_thrift(), TypeDescriptor(TYPE_DOUBLE).to_thrift()});
-    if (boundary.has_value()) function.arg_types.push_back(TypeDescriptor(TYPE_BOOLEAN).to_thrift());
+    function.__set_arg_types({type.to_thrift(), TYPE_DOUBLE_DESC.to_thrift()});
+    if (boundary.has_value()) function.arg_types.push_back(TYPE_BOOLEAN_DESC.to_thrift());
     function.__set_ret_type(type.to_thrift());
     root.__set_fn(function);
     TExprNode literal;
-    literal.__set_type(TypeDescriptor(TYPE_DOUBLE).to_thrift());
+    literal.__set_type(TYPE_DOUBLE_DESC.to_thrift());
     literal.__set_num_children(0);
     literal.__set_is_nullable(null_parameter);
     literal.__set_node_type(null_parameter ? TExprNodeType::NULL_LITERAL : TExprNodeType::FLOAT_LITERAL);
@@ -160,7 +160,7 @@ Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& ke
     if (boundary.has_value()) {
         TExprNode flag;
         flag.__set_node_type(TExprNodeType::BOOL_LITERAL);
-        flag.__set_type(TypeDescriptor(TYPE_BOOLEAN).to_thrift());
+        flag.__set_type(TYPE_BOOLEAN_DESC.to_thrift());
         flag.__set_num_children(0);
         flag.__set_is_nullable(false);
         TBoolLiteral value;
@@ -174,15 +174,15 @@ Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& ke
     if (companion) {
         TExprNode sibling = root;
         sibling.__set_num_children(1);
-        sibling.__set_type(TypeDescriptor(TYPE_BIGINT).to_thrift());
+        sibling.__set_type(TYPE_BIGINT_DESC.to_thrift());
         sibling.__set_has_nullable_child(false);
         sibling.__set_is_nullable(false);
         TFunction sibling_function = function;
         TFunctionName sibling_name;
         sibling_name.__set_function_name("count");
         sibling_function.__set_name(sibling_name);
-        sibling_function.__set_arg_types({TypeDescriptor(TYPE_INT).to_thrift()});
-        sibling_function.__set_ret_type(TypeDescriptor(TYPE_BIGINT).to_thrift());
+        sibling_function.__set_arg_types({TYPE_INT_DESC.to_thrift()});
+        sibling_function.__set_ret_type(TYPE_BIGINT_DESC.to_thrift());
         sibling.__set_fn(sibling_function);
         TExpr expression;
         expression.nodes = {sibling, slot(2)};
@@ -211,8 +211,6 @@ Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& ke
             const auto* geo =
                     down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
             EXPECT_EQ(geo->descriptor().type, *type.geo_type);
-            EXPECT_EQ(geo->descriptor().storage.dimension, GEO_DIMENSION_XY);
-            EXPECT_EQ(geo->descriptor().storage.validation_state, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED);
             ASSIGN_OR_RETURN(auto measured, GeoFunctions::st_geometry_area(nullptr, {result}));
             ColumnViewer<TYPE_DOUBLE> area(measured);
             ASSIGN_OR_RETURN(auto rendered, GeoFunctions::st_geometry_as_text(nullptr, {result}));

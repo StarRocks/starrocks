@@ -215,7 +215,7 @@ TEST(RuntimeFilterCoreTest, ComputePartitionIndexForBucketAwareLayout) {
     std::vector<uint32_t> expected_round_ids;
     BucketAwarePartitionCtx bctx(layout.bucket_properties(), expected_hash_values, expected_round_hashes,
                                  expected_bucket_ids, expected_round_ids);
-    calc_hash_values_and_bucket_ids({col.get()}, bctx);
+    compute_hash_values_and_bucket_ids({col.get()}, bctx);
 
     ASSERT_EQ(ctx.bucket_ids, expected_bucket_ids);
     ASSERT_EQ(ctx.hash_values.size(), expected_bucket_ids.size());

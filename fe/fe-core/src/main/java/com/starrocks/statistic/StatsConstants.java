@@ -42,10 +42,8 @@ public class StatsConstants {
     // Same per-column aggregate as V2, plus the number of partitions it covers and the per-partition
     // distinct counts added up, so the read path can size and scale the result from the rows themselves.
     public static final int STATISTIC_EXTERNAL_QUERY_V3_VERSION = 21;
-    // Reserved, not produced here: the enterprise build uses 22 for an external-statistics query that
-    // additionally reports the distinct counts of two nested subsets of the partitions it covers. Declared
-    // so the number cannot be handed to a different result shape on this side. Left out of
-    // STATISTIC_SUPPORTED_VERSION: nothing here knows how to read that shape.
+    // Same as V3, plus the merged distinct counts and partition counts of two nested subsets of the covered
+    // partitions, so the read path can see how the distinct count grows as partitions are added.
     public static final int STATISTIC_EXTERNAL_QUERY_V4_VERSION = 22;
 
 
@@ -68,6 +66,7 @@ public class StatsConstants {
                     .add(STATISTIC_QUERY_MULTI_COLUMN_VERSION)
                     .add(STATISTIC_PARTITION_VERSION_V2)
                     .add(STATISTIC_EXTERNAL_QUERY_V3_VERSION)
+                    .add(STATISTIC_EXTERNAL_QUERY_V4_VERSION)
                     .build();
 
     public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;

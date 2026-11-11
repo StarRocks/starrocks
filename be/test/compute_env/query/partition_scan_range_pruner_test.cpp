@@ -33,7 +33,7 @@ namespace {
 TExpr make_int_literal(int32_t value) {
     TExprNode node;
     node.__set_node_type(TExprNodeType::INT_LITERAL);
-    node.__set_type(TypeDescriptor(TYPE_INT).to_thrift());
+    node.__set_type(TYPE_INT_DESC.to_thrift());
     node.__set_num_children(0);
     TIntLiteral literal;
     literal.__set_value(value);
@@ -46,7 +46,7 @@ TExpr make_int_literal(int32_t value) {
 TExpr make_int_null_literal() {
     TExprNode node;
     node.__set_node_type(TExprNodeType::NULL_LITERAL);
-    node.__set_type(TypeDescriptor(TYPE_INT).to_thrift());
+    node.__set_type(TYPE_INT_DESC.to_thrift());
     node.__set_num_children(0);
     node.__set_is_nullable(true);
     TExpr expr;
@@ -59,12 +59,12 @@ TExpr make_int_eq_predicate(TTupleId tuple_id, TSlotId slot_id, int32_t value) {
     predicate.__set_node_type(TExprNodeType::BINARY_PRED);
     predicate.__set_opcode(TExprOpcode::EQ);
     predicate.__set_child_type(TPrimitiveType::INT);
-    predicate.__set_type(TypeDescriptor(TYPE_BOOLEAN).to_thrift());
+    predicate.__set_type(TYPE_BOOLEAN_DESC.to_thrift());
     predicate.__set_num_children(2);
 
     TExprNode slot;
     slot.__set_node_type(TExprNodeType::SLOT_REF);
-    slot.__set_type(TypeDescriptor(TYPE_INT).to_thrift());
+    slot.__set_type(TYPE_INT_DESC.to_thrift());
     slot.__set_num_children(0);
     TSlotRef slot_ref;
     slot_ref.__set_tuple_id(tuple_id);

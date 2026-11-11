@@ -19,6 +19,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/phmap/phmap_fwd_decl.h"
+
 namespace starrocks {
 class RowsetReadOptions;
 class Segment;
@@ -56,7 +58,10 @@ using DeletesMap = std::unordered_map<uint32_t, std::vector<segment_rowid_t>>;
 using DelVectorPtr = std::shared_ptr<DelVector>;
 
 using KeyIndex = size_t;
-using KeyIndexSet = std::set<KeyIndex>;
+// Ascending positions into a key array. A B-tree node holds dozens of positions, so building or tearing down
+// the set for a batch of keys costs one allocation per node rather than one per key -- a publish can
+// reverse-look-up millions of keys, and per-key node allocations used to dominate that lookup.
+using KeyIndexSet = phmap::btree_set<KeyIndex>;
 
 using PersistentIndexSstableUniquePtr = std::unique_ptr<PersistentIndexSstable>;
 using PersistentIndexSstablePtr = std::shared_ptr<PersistentIndexSstable>;

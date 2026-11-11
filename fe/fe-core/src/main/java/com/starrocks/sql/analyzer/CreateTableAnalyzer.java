@@ -116,7 +116,9 @@ public class CreateTableAnalyzer {
         }
         if (statement instanceof CreateTemporaryTableStmt) {
             analyzeTemporaryTable(statement, context, catalogName, dbObj, tableName);
-        } else {
+        } else if (!ConnectorType.PAIMON.getName().equalsIgnoreCase(
+                GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalogName))) {
+            // Paimon creation checks the native catalog; a cached positive may refer to an externally dropped table.
             boolean tableExists = preResolved != null ? preResolved.tableExists()
                     : GlobalStateMgr.getCurrentState().getMetadataMgr().tableExists(context, catalogName, db, tableName);
             if (tableExists && !statement.isSetIfNotExists()) {
@@ -199,6 +201,10 @@ public class CreateTableAnalyzer {
             throw new SemanticException("temporary table only support olap engine");
         }
 
+        if (engineName.equalsIgnoreCase(Table.TableType.PAIMON.name())) {
+            PaimonCreateTableAnalyzer.analyzeProperties(stmt);
+        }
+
         stmt.setEngineName(engineName.toLowerCase());
     }
 
@@ -244,6 +250,7 @@ public class CreateTableAnalyzer {
 
     private static void analyzeColumnRef(CreateTableStmt statement, String catalogName) {
         String engineName = statement.getEngineName();
+        boolean isPaimon = engineName.equalsIgnoreCase(Table.TableType.PAIMON.name());
         KeysDesc keysDesc = statement.getKeysDesc();
         List<ColumnDef> columnDefs = statement.getColumnDefs();
 
@@ -254,6 +261,9 @@ public class CreateTableAnalyzer {
 
         List<Column> columns = new ArrayList<>();
         for (ColumnDef columnDef : columnDefs) {
+            if (isPaimon) {
+                PaimonCreateTableAnalyzer.analyzeColumnDef(columnDef);
+            }
             try {
                 String name = columnDef.getName();
                 boolean isAllowNull = columnDef.isAllowNull();
@@ -282,7 +292,8 @@ public class CreateTableAnalyzer {
                 throw new SemanticException(engineName + " external table don't support complex type", columnDef.getPos());
             }
 
-            if (!statement.isOlapEngine() && !engineName.equalsIgnoreCase(Table.TableType.HIVE.name())) {
+            if (!statement.isOlapEngine() && !engineName.equalsIgnoreCase(Table.TableType.HIVE.name())
+                    && !isPaimon) {
                 columnDef.setIsKey(true);
             }
 
@@ -317,6 +328,10 @@ public class CreateTableAnalyzer {
 
     private static void analyzeKeysDesc(CreateTableStmt stmt) {
         KeysDesc keysDesc = stmt.getKeysDesc();
+        if (stmt.getEngineName().equalsIgnoreCase(Table.TableType.PAIMON.name())) {
+            PaimonCreateTableAnalyzer.analyzeKeysDesc(stmt);
+            return;
+        }
         if (!stmt.isOlapEngine()) {
             // mysql, broker, iceberg, hudi and hive do not need key desc
             if (keysDesc != null) {
@@ -452,6 +467,9 @@ public class CreateTableAnalyzer {
 
     // analyzeSortKeys must be called after analyzeDistributionDesc
     private static void analyzeSortKeys(CreateTableStmt stmt) {
+        if (stmt.getEngineName().equalsIgnoreCase(Table.TableType.PAIMON.name())) {
+            PaimonCreateTableAnalyzer.analyzeSortKeys(stmt);
+        }
         if (!stmt.isOlapEngine() || stmt.getOrderByElements() == null) {
             return;
         }
@@ -627,6 +645,11 @@ public class CreateTableAnalyzer {
         if (multiDescList == null || multiDescList.isEmpty()) {
             return;
         }
+        // Leave unsupported Paimon expressions intact for analyzePartitionDesc instead of generating columns.
+        if (stmt.getEngineName().equalsIgnoreCase(Table.TableType.PAIMON.name())
+                && multiDescList.stream().anyMatch(node -> !(node instanceof Identifier))) {
+            return;
+        }
         List<ColumnDef> columnDefs = stmt.getColumnDefs();
         List<String> partitionColumnList = Lists.newArrayList();
         List<PartitionDesc> partitionDescList = Lists.newArrayList();
@@ -723,7 +746,9 @@ public class CreateTableAnalyzer {
                 }
             }
         } else {
-            if (engineName.equalsIgnoreCase(Table.TableType.ELASTICSEARCH.name())) {
+            if (engineName.equalsIgnoreCase(Table.TableType.PAIMON.name())) {
+                PaimonCreateTableAnalyzer.analyzePartitionDesc(stmt);
+            } else if (engineName.equalsIgnoreCase(Table.TableType.ELASTICSEARCH.name())) {
                 EsUtil.analyzePartitionDesc(partitionDesc);
             } else if (engineName.equalsIgnoreCase(Table.TableType.ICEBERG.name())
                     || engineName.equalsIgnoreCase(Table.TableType.HIVE.name())) {
@@ -954,6 +979,9 @@ public class CreateTableAnalyzer {
     }
 
     public static void analyzeIndexDefs(CreateTableStmt statement) {
+        if (statement.getEngineName().equalsIgnoreCase(Table.TableType.PAIMON.name())) {
+            PaimonCreateTableAnalyzer.analyzeRollup(statement);
+        }
         List<IndexDef> indexDefs = statement.getIndexDefs();
 
         List<Column> columns = statement.getColumns();

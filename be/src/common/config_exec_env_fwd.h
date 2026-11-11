@@ -162,6 +162,16 @@ CONF_Int64(pipeline_scan_thread_pool_thread_num, "0");
 
 CONF_mDouble(pipeline_connector_scan_thread_num_per_cpu, "8");
 
+// Threads in Arrow's process-wide IO pool, which runs Arrow async IO (for example Parquet pre-buffer
+// reads through a file without its own ReadAsync). No BE read path uses this pool today: Parquet
+// pre-buffer reads run on the scan thread (ParquetChunkFile::ReadAsync). The setting stays as a
+// safety valve in case some IO falls into the pool by accident again, such as a new Arrow reader
+// over a file without a ReadAsync override. Applied at startup and on every update, so it can be
+// changed without a restart. 0 keeps the size Arrow chose for itself: the ARROW_IO_THREADS
+// environment variable when it holds a positive integer, 8 otherwise. A value > 0 overrides that.
+// Accepted range: [0, 32768].
+CONF_mInt32(arrow_io_thread_pool_size, "0");
+
 // The number of execution threads for pipeline engine.
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 
@@ -196,7 +206,14 @@ CONF_Int32(hdfs_client_hedged_read_threadpool_size, "128");
 CONF_String(starlet_cache_dir, "");
 
 #endif
-CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
+// Capacity of the shared-data tablet metadata cache, as a percentage of the process memory limit, clamped to
+// [0, 100]. The cache holds tablet metadata and txn logs, apart from the segment metadata cache, so that segments
+// loaded by queries and compactions cannot evict them. Set to 0 to disable the cache.
+CONF_mInt32(lake_tablet_metadata_cache_limit_percent, "10");
+
+// Capacity of the shared-data segment metadata cache, as a percentage of the process memory limit, clamped to
+// [0, 100]. The cache holds opened segments, delete vectors and tablet schemas. Set to 0 to disable the cache.
+CONF_mInt32(lake_segment_metadata_cache_limit_percent, "20");
 
 // max loop count when be waiting its fragments to finish. It has no effect if the var is configured with value <= 0.
 CONF_mInt64(loop_count_wait_fragments_finish, "2");

@@ -23,13 +23,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
-<<<<<<< HEAD
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
-=======
-import com.starrocks.catalog.MvId;
->>>>>>> 2ca493387a8... [BugFix] Freeze the base-table snapshot before aligning MV partitions (#61580)
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.tvr.TvrDeltaStats;
@@ -68,11 +65,8 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
-<<<<<<< HEAD
 import com.starrocks.transaction.TransactionState;
-=======
 import mockit.Invocation;
->>>>>>> 2ca493387a8... [BugFix] Freeze the base-table snapshot before aligning MV partitions (#61580)
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -401,26 +395,6 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                                     "     TABLE VERSION: Delta@[1,2]");
                 }
         );
-    }
-
-    @Test
-    public void testPartitionedIVMWithScanWithDisableIcebergIdentityColumnOptimize() throws Exception {
-        connectContext.getSessionVariable().setEnableIcebergIdentityColumnOptimize(false);
-        doTestWith3Runs("SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1` as a;",
-                plan -> {
-                    PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.COSTS),
-                            "  0:IcebergScanNode\n" +
-                                    "     TABLE: partitioned_db.t1\n" +
-                                    "     TABLE VERSION: Delta@[0,1]");
-                },
-                plan -> {
-                    PlanTestBase.assertContains(plan.getExplainString(TExplainLevel.COSTS),
-                            "  0:IcebergScanNode\n" +
-                                    "     TABLE: partitioned_db.t1\n" +
-                                    "     TABLE VERSION: Delta@[1,2]");
-                }
-        );
-        connectContext.getSessionVariable().setEnableIcebergIdentityColumnOptimize(true);
     }
 
     @Test

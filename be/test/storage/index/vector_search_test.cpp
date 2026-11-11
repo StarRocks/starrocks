@@ -2092,7 +2092,7 @@ protected:
         ObjectPool rf_pool;
         RuntimeState rf_state;
         OlapPredicateParser rf_parser(rschema);
-        SlotDescriptor rf_slot(0, "filter_col", TypeDescriptor(TYPE_INT));
+        SlotDescriptor rf_slot(0, "filter_col", TYPE_INT_DESC);
         std::shared_ptr<RuntimeFilterProbeDescriptor> rf_desc;
         UnarrivedRuntimeFilterList rf_list;
         RuntimeScanRangePruner rf_pruner;

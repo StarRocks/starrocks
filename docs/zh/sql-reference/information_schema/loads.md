@@ -7,6 +7,8 @@ description: "loads 提供导入作业的结果信息。"
 
 提供导入作业的结果信息。此视图自 StarRocks v3.1 版本起支持。
 
+对导入作业的每一张目标表都拥有至少一项权限，或者拥有 OPERATE 权限的用户，可以在 `loads` 中看到该作业。如果没有每一张目标表的 SELECT 权限，可能暴露导入数据的字段会被隐藏：`TRACKING_SQL`、`REJECTED_RECORD_PATH` 和 `PROPERTIES` 为 NULL；`ERROR_MSG` 对 Broker Load 和 INSERT 作业只保留失败类型（例如 `type:ETL_QUALITY_UNSATISFIED`），对其他作业为 NULL；`RUNTIME_DETAILS` 不含导入 ID、BE 节点和事务错误信息。`root` 用户可以看到所有导入作业的完整信息。目标表已被删除的导入作业，只有 `root` 用户能看到完整信息，拥有 OPERATE 权限的用户看到的是隐藏上述字段后的信息。
+
 `loads` 提供以下字段：
 
 | 字段                | 描述                                                      |

@@ -37,6 +37,7 @@ public:
     StatusOr<bool> fill_filter(uint64_t start, uint64_t end, Filter& filter);
     uint64_t get_range_cardinality(uint64_t start, uint64_t end) const;
     void add_value(uint64_t val);
+    void add_values(const uint64_t* vals, size_t n);
     uint64_t get_cardinality() const;
     void to_array(std::vector<uint64_t>& array) const;
 

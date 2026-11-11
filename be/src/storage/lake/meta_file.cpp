@@ -196,15 +196,6 @@ StatusOr<std::string> read_and_verify_del_file(RandomAccessFile* rf, const Delfi
     return do_read_and_verify_del_file(rf, del_meta, tablet_id);
 }
 
-static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page) {
-    DelvecCacheKeyPB cache_key_pb;
-    cache_key_pb.set_id(tablet_id);
-    cache_key_pb.mutable_delvec_page()->CopyFrom(page);
-    // Do not include crc32c_gen_version in cache key
-    cache_key_pb.mutable_delvec_page()->clear_crc32c_gen_version();
-    return cache_key_pb.SerializeAsString();
-}
-
 // Collect rssids that belong to this rowset.
 // Rowset without segments still occupies one rssid (rowset.id()) for delete-file operation.
 static void collect_rowset_rssids(const RowsetMetadataPB& rowset_meta, std::unordered_set<uint32_t>* rssids) {
@@ -241,6 +232,10 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
     DeltaColumnGroupVerPB& dcg_ver = (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid];
     DeltaColumnGroupVerPB new_dcg_ver;
     std::unordered_set<ColumnUID> need_to_remove_cuids_filter;
+    // Keep shared_files 1:1 with column_files when the segment records it: a new file is private, and a kept file
+    // keeps its flag. After a range split a kept file can still be read by the sibling tablet, so losing the flag
+    // would let vacuum delete it once a later update orphans it.
+    const bool record_shared_files = dcg_ver.shared_files_size() > 0;
 
     // 1. append new dcgs
     DCHECK(file_with_encryption_metas.size() == unique_column_id_list.size());
@@ -260,6 +255,9 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
         }
         new_dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
         new_dcg_ver.add_versions(_tablet_meta->version());
+        if (record_shared_files) {
+            new_dcg_ver.add_shared_files(false);
+        }
     }
     // 2. remove old dcgs
     DCHECK(dcg_ver.unique_column_ids_size() == dcg_ver.column_files_size());
@@ -278,6 +276,9 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
             new_dcg_ver.add_versions(dcg_ver.versions(i));
             if (i < dcg_ver.encryption_metas_size()) {
                 new_dcg_ver.add_encryption_metas(dcg_ver.encryption_metas(i));
+            }
+            if (record_shared_files) {
+                new_dcg_ver.add_shared_files(i < dcg_ver.shared_files_size() && dcg_ver.shared_files(i));
             }
         } else {
             // Put this `.cols` files into orphan files
@@ -402,12 +403,15 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
     }
     // if rowset don't contain segment files, still inc next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + get_rowset_id_step(*rowset));
-    // collect trash files: replaced partial-update segments and their segment-name-keyed .vi files
+    // collect trash files: replaced partial-update segments, their segment-name-keyed .vi files, and the
+    // tombstone sstables an index that is not cloud-native did not ingest (PrimaryKeyManager::_do_delete)
     for (const auto& orphan_file : orphan_files) {
-        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
+        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()) || is_sst(orphan_file.name()))
+                << orphan_file.name();
         auto* added_orphan = _tablet_meta->mutable_orphan_files()->Add();
         added_orphan->CopyFrom(orphan_file);
-        // These replaced segment/.vi files are produced by this txn's partial-update rewrite, so
+        // These files are produced by this txn -- the replaced segment/.vi files by its partial-update
+        // rewrite, a tombstone sstable by its load -- and no visible metadata ever referenced them, so
         // their creation version is the metadata version being built. Respect an accurate version if
         // the producer already set one.
         if (!added_orphan->has_version()) {
@@ -988,7 +992,8 @@ void MetaFileBuilder::remove_lcrm_file(const TxnLogPB_OpCompaction& op_compactio
 }
 
 Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
-                                           uint32_t max_compact_input_rowset_id, int64_t output_rowset_schema_id) {
+                                           uint32_t max_compact_input_rowset_id, int64_t output_rowset_schema_id,
+                                           bool index_persisted) {
     // delete input rowsets
     std::stringstream del_range_ss;
     std::unordered_set<uint32_t> delete_delvec_sids;
@@ -1017,8 +1022,10 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
                 delete_delvec_sids.insert(rssid);
                 del_range_ss << rssid << " ";
             }
-            // Collect del files.
-            _collect_del_files_above_rebuild_point(&(*it), &collect_del_files);
+            // Collect del files, unless the index already holds every delete.
+            if (!index_persisted) {
+                _collect_del_files_above_rebuild_point(&(*it), &collect_del_files);
+            }
             // Drop the delete_predicate before archiving the input rowset into compaction_inputs.
             // compaction_inputs is consumed only by vacuum/file cleanup, never by readers, so the
             // predicate is pure metadata bloat once the rowset is compacted away.
@@ -1307,7 +1314,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
             each_delvec.second.set_crc32c(iter->second.crc32c());
             each_delvec.second.set_crc32c_gen_version(version);
             // record from cache key to segment id, so we can fill up cache later
-            _cache_key_to_segment_id[delvec_cache_key(_tablet_meta->id(), each_delvec.second)] = iter->first;
+            _cache_key_to_segment_id[MetacacheKey::delvec(_tablet_meta->id(), each_delvec.second)] = iter->first;
             _delvecs.erase(iter);
         }
     }
@@ -1318,7 +1325,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
         each_delvec.second.set_crc32c_gen_version(version);
         (*_tablet_meta->mutable_delvec_meta()->mutable_delvecs())[each_delvec.first] = each_delvec.second;
         // record from cache key to segment id, so we can fill up cache later
-        _cache_key_to_segment_id[delvec_cache_key(_tablet_meta->id(), each_delvec.second)] = each_delvec.first;
+        _cache_key_to_segment_id[MetacacheKey::delvec(_tablet_meta->id(), each_delvec.second)] = each_delvec.first;
     }
 
     // 3. write to delvec file
@@ -1447,7 +1454,7 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
     std::string buf;
     raw::stl_string_resize_uninitialized(&buf, delvec_page.size());
     // find in cache
-    std::string cache_key = delvec_cache_key(metadata.id(), delvec_page);
+    auto cache_key = MetacacheKey::delvec(metadata.id(), delvec_page);
     auto cached_delvec = tablet_mgr->metacache()->lookup_delvec(cache_key);
     if (cached_delvec != nullptr) {
         delvec->copy_from(*cached_delvec);
@@ -1822,6 +1829,7 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb,
                                  const std::map<int, SegmentFileInfo>& replace_segments,
                                  const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels,
                                  const std::vector<int64_t>& del_op_offsets, const std::vector<int64_t>& del_num_rows) {
+    const int segment_pos_base = _pending_rowset_data.rowset_pb.segment_metas_size();
     // If this is the first call, copy rowset_pb directly
     if (_pending_rowset_data.rowset_pb.segment_metas_size() == 0) {
         _pending_rowset_data.rowset_pb.CopyFrom(rowset_pb);
@@ -1852,9 +1860,20 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb,
         }
     }
 
-    // Merge replace_segments
-    for (const auto& replace_seg : replace_segments) {
-        _pending_rowset_data.replace_segments[replace_seg.first] = replace_seg.second;
+    // Merge replace_segments. A row-mode partial update keys its rewrites by the segment's position
+    // in its OWN op_write (RowsetUpdateState::rewrite_segment), and set_final_rowset() applies each
+    // entry at that position of the MERGED rowset, so shift the key by the position this op_write's
+    // segments were appended at above. Merging the key as-is let a later statement's rewrite of its
+    // segment 0 overwrite an earlier statement's, and set_final_rowset() then put that file at the
+    // earlier statement's segment and left the later statement's own segment as the partial file
+    // (only the updated columns): the earlier statement's rows were lost and the later statement's
+    // rows read back defaults for every column it did not write. The base is a segment POSITION, not
+    // assigned_segment_idx: that counts rssid slots, and an op_write without segments (a statement
+    // that routed no row to this tablet) reserves a slot but adds no position.
+    for (const auto& [segment_pos, file_info] : replace_segments) {
+        DCHECK(segment_pos >= 0 && segment_pos < rowset_pb.segment_metas_size())
+                << "replace segment position " << segment_pos << " out of " << rowset_pb.segment_metas_size();
+        _pending_rowset_data.replace_segments[segment_pos_base + segment_pos] = file_info;
     }
 
     // Merge orphan_files
@@ -1901,16 +1920,28 @@ Status MetaFileBuilder::set_final_rowset() {
         return Status::OK(); // Nothing to do
     }
 
+    // add_rowset() keyed every rewrite by its position in the merged rowset. Check them before touching
+    // the metadata: an entry outside that range would index past segment_metas.
+    for (const auto& replace_seg : _pending_rowset_data.replace_segments) {
+        if (replace_seg.first < 0 || replace_seg.first >= _pending_rowset_data.rowset_pb.segment_metas_size()) {
+            return Status::InternalError(fmt::format(
+                    "tablet {} replace segment position {} is out of the merged rowset's {} segments",
+                    _tablet_meta->id(), replace_seg.first, _pending_rowset_data.rowset_pb.segment_metas_size()));
+        }
+    }
+
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(_pending_rowset_data.rowset_pb);
-    // The op_writes folded here may come from different statements, some bundled and some standalone.
-    give_standalone_segments_a_bundle_offset(rowset);
 
     // Apply replace_segments
     for (const auto& replace_seg : _pending_rowset_data.replace_segments) {
         auto* segment_meta = rowset->mutable_segment_metas(replace_seg.first);
         segment_meta->set_filename(replace_seg.second.path);
         segment_meta->set_size(replace_seg.second.size.value());
+        // A rewrite is standalone. Preserve other statements' real bundle offsets and clear only
+        // this segment's old offset and synthetic marker before normalizing the merged rowset below.
+        segment_meta->clear_bundle_file_offset();
+        segment_meta->clear_synthetic_bundle_file_offset();
         // See apply_opwrite: a filtered rewrite's own row count and sort-key fields replace the ones
         // copied from op_write, keyed on the flag so a legitimate zero-row output is not read as
         // "unfiltered".
@@ -1939,11 +1970,6 @@ Status MetaFileBuilder::set_final_rowset() {
         }
     }
     if (!_pending_rowset_data.replace_segments.empty()) {
-        // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
-        for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
-            segment_metadata.clear_bundle_file_offset();
-            segment_metadata.clear_synthetic_bundle_file_offset();
-        }
         // The batch-merged rowset keeps the first contributing op_write's uid (carried by the
         // initial CopyFrom in add_rowset) so cross-published children converge on the same
         // identity. If any segment was physically rewritten, the data is now private to this
@@ -1951,6 +1977,9 @@ Status MetaFileBuilder::set_final_rowset() {
         tablet_reshard_helper::set_rowset_uid(rowset);
     }
 
+    // Normalize after rewrites: a new standalone rewrite can sit beside another statement's bundled
+    // segment. The synthetic zero offset keeps the merged rowset compatible with the flat offset array.
+    give_standalone_segments_a_bundle_offset(rowset);
     rowset->set_id(_tablet_meta->next_rowset_id());
     rowset->set_version(_tablet_meta->version());
 
@@ -1991,12 +2020,15 @@ Status MetaFileBuilder::set_final_rowset() {
     // If rowset doesn't contain segment files, still increment next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + get_rowset_id_step(*rowset));
 
-    // Collect orphan files: replaced partial-update segments and their segment-name-keyed .vi files
+    // Collect orphan files: replaced partial-update segments, their segment-name-keyed .vi files, and the
+    // tombstone sstables an index that is not cloud-native did not ingest (PrimaryKeyManager::_do_delete)
     for (const auto& orphan_file : _pending_rowset_data.orphan_files) {
-        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
+        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()) || is_sst(orphan_file.name()))
+                << orphan_file.name();
         auto* added_orphan = _tablet_meta->mutable_orphan_files()->Add();
         added_orphan->CopyFrom(orphan_file);
-        // These replaced segment/.vi files are produced by this txn's partial-update rewrite, so
+        // These files are produced by this txn -- the replaced segment/.vi files by its partial-update
+        // rewrite, a tombstone sstable by its load -- and no visible metadata ever referenced them, so
         // their creation version is the metadata version being built. Respect an accurate version if
         // the producer already set one.
         if (!added_orphan->has_version()) {

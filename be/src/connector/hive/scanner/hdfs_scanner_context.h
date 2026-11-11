@@ -60,6 +60,7 @@ struct HdfsScannerProfile {
     RuntimeProfile::Counter* parquet_lazy_full_trigger_count_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_size = nullptr;
+    RuntimeProfile::Counter* scan_ranges_pruned_by_file_stats_counter = nullptr;
 
     RuntimeProfile::Counter* reader_init_timer = nullptr;
     RuntimeProfile::Counter* open_file_timer = nullptr;
@@ -76,6 +77,7 @@ struct HdfsScannerProfile {
     RuntimeProfile::Counter* datacache_skip_write_bytes = nullptr;
     RuntimeProfile::Counter* datacache_skip_read_counter = nullptr;
     RuntimeProfile::Counter* datacache_skip_read_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_error_counter = nullptr;
     RuntimeProfile::Counter* datacache_read_peer_counter = nullptr;
     RuntimeProfile::Counter* datacache_read_peer_bytes = nullptr;
     RuntimeProfile::Counter* datacache_read_peer_timer = nullptr;
