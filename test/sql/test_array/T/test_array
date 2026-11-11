@@ -74,6 +74,12 @@ select array_generate("2025-10-01 14:28:34", "2025-10-01 14:28:31",interval 500 
 select array_generate("2025-10-01 14:28:32.800000", "2025-10-01 14:28:31",interval 500000 MICROSECOND);
 select array_generate("2025-10-05", "2025-10-01",interval -1 day);
 select array_generate("2025-10-01 14:28:32.800000", "2025-10-01 14:28:31",NULL);
+select array_generate("2024-01-31", "2024-04-30",interval 1 MONTH);
+select array_generate("2024-05-31", "2024-02-01",interval 1 MONTH);
+select array_generate("2024-11-30", "2025-09-01",interval 1 QUARTER);
+select array_generate(DATE"2024-02-29", DATE"2028-03-01",interval 1 year);
+select array_generate(a, b) from (select 5 as a, 1 as b) t;
+select array_generate(a, b) from (select 1 as a, 3 as b) t;
 
 -- name: test_null_or_empty
 select null_or_empty([1, 2]);

@@ -15,17 +15,22 @@
 package com.starrocks.connector.parser.trino;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.CollectionElementExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
@@ -33,9 +38,11 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.type.AnyMapType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 
 import java.util.Collections;
+import java.util.Map;
 
 public class ComplexFunctionCallTransformer {
     public static Expr transform(String functionName, Expr... args) {
@@ -137,7 +144,101 @@ public class ComplexFunctionCallTransformer {
                 throw new SemanticException("date function must have 1 argument");
             }
             return new CastExpr(DateType.DATE, args[0]);
+        } else if (functionName.equalsIgnoreCase("sequence") && (args.length == 2 || args.length == 3)) {
+            return transformSequence(args);
         }
         return null;
+    }
+
+    // HOUR, MINUTE and SECOND counts per day, for whole-day interval steps
+    private static final Map<String, Long> UNITS_PER_DAY = ImmutableMap.of("hour", 24L, "minute", 1440L, "second", 86400L);
+
+    // sequence(start, stop[, step]) -> array_generate(start, stop[, step]). For dates and timestamps Trino's step is
+    // an interval, while array_generate takes a constant non-negative INT count and a unit name, and takes the
+    // direction from start and stop; calendar units are added to start, so month-end starts don't drift. Trino rejects
+    // a zero step and a step whose sign disagrees with start and stop, so check both: a zero step here, and the
+    // direction when the query runs.
+    private static Expr transformSequence(Expr[] args) {
+        if (args.length == 2) {
+            return new FunctionCallExpr(FunctionSet.ARRAY_GENERATE, ImmutableList.copyOf(args));
+        }
+        Expr start = args[0];
+        Expr stop = args[1];
+        // the step, or null for a step expression such as -1 (an ArithmeticExpr in this dialect), checked when it runs
+        Long step;
+        Expr generate;
+        if (args[2] instanceof IntervalLiteral) {
+            IntervalLiteral interval = (IntervalLiteral) args[2];
+            if (!(interval.getValue() instanceof StringLiteral)) {
+                return null;
+            }
+            try {
+                step = Long.parseLong(((StringLiteral) interval.getValue()).getStringValue().trim());
+            } catch (NumberFormatException e) {
+                // e.g. INTERVAL '1 12' DAY TO HOUR, which array_generate can't express
+                return null;
+            }
+            String unit = interval.getUnitIdentifier().getDescription().toLowerCase();
+            // Trino accepts whole-day steps such as INTERVAL '24' HOUR for dates. A day is the same span for a
+            // StarRocks DATETIME, which has no time zone, so use days for both.
+            Long unitsPerDay = UNITS_PER_DAY.get(unit);
+            if (unitsPerDay != null && step % unitsPerDay == 0) {
+                step /= unitsPerDay;
+                unit = "day";
+            }
+            if (Math.abs(step) > Integer.MAX_VALUE) {
+                return null;
+            }
+            generate = new FunctionCallExpr(FunctionSet.ARRAY_GENERATE, ImmutableList.of(start, stop,
+                    new IntLiteral(Math.abs(step), IntegerType.INT), new StringLiteral(unit)));
+        } else {
+            step = args[2] instanceof IntLiteral ? ((IntLiteral) args[2]).getValue() : null;
+            generate = new FunctionCallExpr(FunctionSet.ARRAY_GENERATE, ImmutableList.copyOf(args));
+        }
+        // The checks repeat start, stop and the step, which would evaluate a non-deterministic one twice
+        for (Expr arg : args) {
+            if (AnalyzerUtils.containsNonDeterministicFunction(arg).first) {
+                return generate;
+            }
+        }
+        // Trino returns NULL for a NULL argument before checking the step, so NULL passes both checks, and
+        // array_generate returns NULL for it
+        Expr result = generate;
+        if (step == null || step != 0) {
+            Expr ascending = new BinaryPredicate(BinaryType.LE, start.clone(), stop.clone());
+            Expr descending = new BinaryPredicate(BinaryType.GE, start.clone(), stop.clone());
+            Expr inDirection;
+            if (step != null) {
+                inDirection = step > 0 ? ascending : descending;
+            } else {
+                // if(NULL > 0, ...) would pick descending, so pass a NULL step explicitly
+                inDirection = new FunctionCallExpr(FunctionSet.IF, ImmutableList.of(
+                        new IsNullPredicate(args[2].clone(), false), new BoolLiteral(true),
+                        new FunctionCallExpr(FunctionSet.IF, ImmutableList.of(
+                                new BinaryPredicate(BinaryType.GT, args[2].clone(), new IntLiteral(0)), ascending,
+                                descending))));
+            }
+            result = new FunctionCallExpr(FunctionSet.IF, ImmutableList.of(assertTrue(inDirection,
+                    "sequence stop value should be greater than or equal to start value if step is greater than " +
+                            "zero otherwise stop should be less than or equal to start"), result, new NullLiteral()));
+        }
+        if (step == null || step == 0) {
+            // a zero step fails unless start or stop is NULL
+            Expr nonZero = step == null ?
+                    new BinaryPredicate(BinaryType.NE, args[2].clone(), new IntLiteral(0)) : new BoolLiteral(false);
+            Expr nullBound = new CompoundPredicate(CompoundPredicate.Operator.OR,
+                    new IsNullPredicate(start.clone(), false), new IsNullPredicate(stop.clone(), false));
+            result = new FunctionCallExpr(FunctionSet.IF, ImmutableList.of(assertTrue(
+                    new CompoundPredicate(CompoundPredicate.Operator.OR, nullBound, nonZero),
+                    "step must not be zero"), result, new NullLiteral()));
+        }
+        return result;
+    }
+
+    // assert_true(coalesce(condition, true), message): fails the query when the condition is false, passes NULL
+    private static Expr assertTrue(Expr condition, String message) {
+        return new FunctionCallExpr("assert_true", ImmutableList.of(
+                new FunctionCallExpr("coalesce", ImmutableList.of(condition, new BoolLiteral(true))),
+                new StringLiteral(message)));
     }
 }

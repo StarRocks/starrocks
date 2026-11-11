@@ -1207,6 +1207,27 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testStandaloneUnnest() throws Exception {
+        // a date spine: UNNEST(sequence(...)) as the only relation in FROM
+        String sql = "select d from unnest(sequence(date '2024-11-03', date '2024-11-05', interval '1' day)) as t(d)";
+        assertPlanContains(sql, "tableFunctionName: unnest", "array_generate('2024-11-03', '2024-11-05', 1, 'day')");
+
+        // only the UNNEST columns are visible, not the one-row relation it is joined to
+        sql = "select * from unnest(array[1, 2]) as t(x)";
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        Assertions.assertEquals(List.of("x"), statement.getQueryRelation().getColumnOutputNames());
+
+        // UNNEST on the left side of a join
+        sql = "select t.x, t0.v2 from unnest(array[1, 2]) as t(x) join t0 on t.x = t0.v1";
+        assertPlanContains(sql, "tableFunctionName: unnest");
+
+        // UNNEST in a CTE, as date-spine queries use
+        sql = "with days as (select d from unnest(sequence(date '2024-01-01', date '2024-06-01', interval '1' month)) " +
+                "as t(d)) select count(*) from days";
+        assertPlanContains(sql, "array_generate('2024-01-01', '2024-06-01', 1, 'month')");
+    }
+
+    @Test
     public void testRandom() throws Exception {
         String sql = "select rand();";
         assertPlanContains(sql, "<slot 2> : rand()");
