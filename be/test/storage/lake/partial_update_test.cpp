@@ -555,7 +555,7 @@ TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_seg
     ASSERT_OK(delta_writer->finish_with_txnlog());
     delta_writer->close();
 
-    ConfigResetGuard<int32_t> chunk_size_guard(&config::vector_chunk_size, 4);
+    ConfigResetGuard<int32_t> chunk_size_guard(&config::pk_vector_chunk_size, 4);
     ConfigResetGuard<int64_t> memory_limit_guard(&config::partial_update_memory_limit_per_worker, 80);
     int64_t upt_memory_usage_per_row = 0;
     std::vector<std::pair<uint32_t, uint32_t>> emitted_ranges;
