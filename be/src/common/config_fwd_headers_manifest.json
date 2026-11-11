@@ -795,6 +795,7 @@
         "transaction_apply_worker_idle_time_ms",
         "update_compaction_per_tablet_min_interval_seconds",
         "partial_update_memory_limit_per_worker",
+        "pk_vector_chunk_size",
         "pk_index_eager_build_threshold_bytes",
         "pk_index_del_sst_min_rows",
         "pk_index_parallel_compaction_threadpool_max_threads",

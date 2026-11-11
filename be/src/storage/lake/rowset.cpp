@@ -775,7 +775,8 @@ StatusOr<size_t> Rowset::get_read_iterator_num() {
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const Schema& schema, bool file_data_cache,
-                                                                          OlapReaderStatistics* stats) {
+                                                                          OlapReaderStatistics* stats,
+                                                                          size_t chunk_size) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_us");
     std::vector<LoadedSegment> segments;
     RETURN_IF_ERROR(load_segments(&segments, file_data_cache));
@@ -790,6 +791,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
     seg_options.stats = stats;
+    if (chunk_size > 0) {
+        seg_options.chunk_size = chunk_size;
+    }
 
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
