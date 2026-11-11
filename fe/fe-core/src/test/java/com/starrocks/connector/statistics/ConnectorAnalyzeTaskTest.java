@@ -20,6 +20,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendServiceImpl;
@@ -196,6 +197,50 @@ public class ConnectorAnalyzeTaskTest {
         Assertions.assertTrue(result.get() instanceof ExternalAnalyzeStatus);
         ExternalAnalyzeStatus externalAnalyzeStatusResult = (ExternalAnalyzeStatus) result.get();
         Assertions.assertEquals(2, externalAnalyzeStatusResult.getColumns().size());
+    }
+
+    @Test
+    public void testIncrementalFullRunIsCommittedAsSample() {
+        // A FULL run that refreshes only the updated partitions records SAMPLE over the table's partition count,
+        // taken from the partition list the task already fetched.
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
+                "partitioned_db", "orders");
+        int tablePartitions = ConnectorPartitionTraits.build(table).getPartitionNames().size();
+        Assertions.assertTrue(tablePartitions > 2);
+        Triple<String, Database, Table> tableTriple = StatisticsUtils.getTableTripleByUUID(ctx, table.getUUID());
+        ConnectorAnalyzeTask task = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_orderkey"));
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+                // do nothing
+            }
+        };
+        int oldLimit = Config.statistic_sample_collect_partition_size;
+        Config.statistic_sample_collect_partition_size = 2000;
+        try {
+            Optional<AnalyzeStatus> result = task.run();
+            Assertions.assertTrue(result.isPresent());
+            ColumnStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                    .getExternalTableBasicStatsMeta("hive0", "partitioned_db", "orders").getColumnStatsMeta("o_orderkey");
+            // every partition counts as updated on the first run: the whole table was scanned
+            Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, meta.getType());
+
+            new MockUp<StatisticUtils>() {
+                @Mock
+                Set<String> getUpdatedPartitionNames(Table table, LocalDateTime checkTime) {
+                    return Sets.newHashSet("o_orderdate=1992-04-19", "o_orderdate=1992-04-18");
+                }
+            };
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeStatusMap().clear();
+            task.executeAnalyze(LocalDateTime.MIN);
+            meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                    .getExternalTableBasicStatsMeta("hive0", "partitioned_db", "orders").getColumnStatsMeta("o_orderkey");
+            Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, meta.getType());
+            Assertions.assertEquals(tablePartitions, meta.getAllPartitionSize());
+            Assertions.assertTrue(meta.getSampledPartitionsHashValue().isEmpty());
+        } finally {
+            Config.statistic_sample_collect_partition_size = oldLimit;
+        }
     }
 
     @Test
