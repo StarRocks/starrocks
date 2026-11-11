@@ -1335,23 +1335,28 @@ public class MvUtils {
                         .entrySet()
                         .stream()
                         .collect(Collectors.toMap(e -> (ColumnRefOperator) e.getValue(), e -> e.getKey()));
-                if (inlineViewOp.getProjection() != null) {
-                    // if inline view's projection is not null, also need to rewrite inline view's projection
-                    reverseColumnRefMap = Utils.mergeWithProject(reverseColumnRefMap, inlineViewOp.getProjection());
-                }
                 ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(reverseColumnRefMap);
 
                 Operator.Builder builder = OperatorBuilderFactory.build(inlineViewOp);
                 builder.withOperator(inlineViewOp);
+                Projection inlineProjection = inlineViewOp.getProjection();
+                if (inlineProjection != null) {
+                    builder.setProjection(null);
+                }
+                OptExpression newInlineViewPlan = OptExpression.create(builder.build(), inlineViewPlan.getInputs());
+                if (inlineProjection != null) {
+                    newInlineViewPlan = OptExpression.create(
+                            new LogicalProjectOperator(inlineProjection.getColumnRefMap()), newInlineViewPlan);
+                }
                 if (viewScanOperator.getPredicate() != null) {
-                    // If viewScanOperator contains predicate, we need to rewrite them, otherwise predicate will be
-                    // lost.
+                    // Keep the view predicate as a Filter between the view's output and the caller's projection.
+                    // Existing pushdown and pruning rules then preserve its dependencies for any inline root.
                     ScalarOperator rewrittenPredicate = rewriter.rewrite(viewScanOperator.getPredicate());
-                    builder.setPredicate(rewrittenPredicate);
+                    newInlineViewPlan = OptExpression.create(
+                            new LogicalFilterOperator(rewrittenPredicate), newInlineViewPlan);
                 }
                 // rewrite projection
                 if (viewScanOperator.getProjection() != null) {
-                    // merge inline view's projection with view scan's projection
                     Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = Maps.newHashMap();
                     viewScanOperator
                             .getProjection().getColumnRefMap()
@@ -1359,10 +1364,10 @@ public class MvUtils {
                             .stream()
                             .map(e -> Maps.immutableEntry(e.getKey(), rewriter.rewrite(e.getValue())))
                             .forEach(e -> newColumnRefMap.put(e.getKey(), e.getValue()));
-                    builder.setProjection(new Projection(newColumnRefMap));
+                    newInlineViewPlan = OptExpression.create(
+                            new LogicalProjectOperator(newColumnRefMap), newInlineViewPlan);
                 }
-                Operator newInlineViewPlanOp = builder.build();
-                parent.setChild(index, OptExpression.create(newInlineViewPlanOp, inlineViewPlan.getInputs()));
+                parent.setChild(index, newInlineViewPlan);
             } else {
                 parent.setChild(index, inlineViewPlan);
             }
