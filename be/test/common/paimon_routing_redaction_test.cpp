@@ -20,7 +20,6 @@
 
 namespace starrocks {
 
-
 TEST(PaimonRoutingRedactionTest, MasksNativeSinkCredentialsAndPreservesTransmissionCopy) {
     TCloudConfiguration cloud;
     cloud.__set_cloud_properties({{"access_key", "secret-key"}});

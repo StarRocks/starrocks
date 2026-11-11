@@ -589,10 +589,10 @@ StatusOr<std::shared_ptr<arrow::Field>> bucket_field(const std::string& name, co
                 (precision != 0 && precision != 3 && precision != 6 && precision != 9)) {
                 return Status::InvalidArgument("Invalid Paimon bucket timestamp precision");
             }
-            auto unit = precision == 0   ? arrow::TimeUnit::SECOND
-                        : precision == 3 ? arrow::TimeUnit::MILLI
-                        : precision == 6 ? arrow::TimeUnit::MICRO
-                                         : arrow::TimeUnit::NANO;
+            auto unit = precision == 0
+                                ? arrow::TimeUnit::SECOND
+                                : precision == 3 ? arrow::TimeUnit::MILLI
+                                                 : precision == 6 ? arrow::TimeUnit::MICRO : arrow::TimeUnit::NANO;
             result = arrow::timestamp(unit, kind == "TIMESTAMP_LTZ" ? "UTC" : "");
         } else {
             return Status::NotSupported("Unsupported Paimon bucket key type");
