@@ -29,7 +29,7 @@ namespace starrocks::pipeline {
 
 namespace {
 // Leave headroom for runtime charged by concurrent executors before the next scheduling operation.
-constexpr int64_t kAccuTimeRebaseThreshold = std::numeric_limits<int64_t>::max() / 4;
+constexpr double kAccuTimeRebaseThreshold = static_cast<double>(std::numeric_limits<int64_t>::max() / 4);
 } // namespace
 
 /// QuerySharedDriverQueue.

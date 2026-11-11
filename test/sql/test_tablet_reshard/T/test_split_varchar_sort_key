@@ -44,7 +44,7 @@ SELECT count(*) FROM t_varchar_sort_key;
 --
 -- The pre-split tablet is EXCLUDED by id. It keeps appearing in information_schema.be_tablets --
 -- with STATE 'RUNNING', so state cannot filter it -- until vacuum removes the physical tablet,
--- even though the query path already rejects it ("Invalid tablet id ... may have been dropped").
+-- even though the query path already rejects it ("Invalid tablet id ... has no such tablet").
 -- ${tablet_id} is that parent, captured by set_first_tablet_id above, so excluding it needs no
 -- information the case does not already hold.
 SELECT count(*) FROM information_schema.be_tablets t, information_schema.tables_config c

@@ -1,0 +1,276 @@
+-- name: test_paimon_catalog_ddl_lifecycle
+function: create_paimon_ddl_catalog("paimon_ddl_${uuid0}", "${uuid0}")
+-- result:
+None
+-- !result
+create database paimon_ddl_${uuid0}.ddl_db;
+-- result:
+-- !result
+create database if not exists paimon_ddl_${uuid0}.ddl_db;
+-- result:
+-- !result
+function: assert_query_error_contains("create database paimon_ddl_${uuid0}.ddl_db", "database exists")
+-- result:
+None
+-- !result
+create table paimon_ddl_${uuid0}.ddl_db.append_demo (id bigint not null, payload varchar(17) default null comment 'payload comment', dt date) comment 'append schema' partition by (dt) properties ('bucket'='-1', 'file.format'='parquet');
+-- result:
+-- !result
+create table if not exists paimon_ddl_${uuid0}.ddl_db.append_demo (ignored int);
+-- result:
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.append_demo (ignored int)", "already exists")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+select count(*) from paimon_ddl_${uuid0}.ddl_db.append_demo;
+-- result:
+0
+-- !result
+function: create_paimon_ddl_catalog("paimon_ddl_reader_${uuid0}", "${uuid0}")
+-- result:
+None
+-- !result
+select get_json_string(fields, '$[0].name'), get_json_string(fields, '$[0].type'), get_json_string(fields, '$[1].type'), get_json_string(fields, '$[1].description'), get_json_string(fields, '$[2].type'), partition_keys, primary_keys, get_json_string(options, '$.bucket'), comment from paimon_ddl_reader_${uuid0}.ddl_db.`append_demo$schemas`;
+-- result:
+id	BIGINT NOT NULL	VARCHAR(17)	payload comment	DATE	["dt"]	[]	-1	append schema
+-- !result
+function: assert_query_error_contains("drop database paimon_ddl_${uuid0}.ddl_db", "nonempty")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("drop database paimon_ddl_${uuid0}.ddl_db force", "nonempty")
+-- result:
+None
+-- !result
+select count(*) from paimon_ddl_${uuid0}.ddl_db.append_demo;
+-- result:
+0
+-- !result
+drop table paimon_ddl_${uuid0}.ddl_db.append_demo;
+-- result:
+-- !result
+drop table if exists paimon_ddl_${uuid0}.ddl_db.append_demo;
+-- result:
+-- !result
+create table paimon_ddl_${uuid0}.ddl_db.append_demo (replacement int);
+-- result:
+-- !result
+select get_json_string(fields, '$[0].name'), get_json_string(fields, '$[0].type'), json_length(fields) from paimon_ddl_${uuid0}.ddl_db.`append_demo$schemas`;
+-- result:
+replacement	INT	1
+-- !result
+drop table paimon_ddl_${uuid0}.ddl_db.append_demo;
+-- result:
+-- !result
+drop database paimon_ddl_${uuid0}.ddl_db;
+-- result:
+-- !result
+drop database if exists paimon_ddl_${uuid0}.ddl_db;
+-- result:
+-- !result
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.append_demo;
+  drop database if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db;
+  drop catalog if exists paimon_ddl_reader_${paimon_ddl_warehouse_id};
+  drop catalog if exists paimon_ddl_${paimon_ddl_warehouse_id};
+} END CLEANUP
+
+-- name: test_paimon_catalog_ddl_primary_keys
+function: create_paimon_ddl_catalog("paimon_ddl_${uuid0}", "${uuid0}")
+-- result:
+None
+-- !result
+create database paimon_ddl_${uuid0}.ddl_db;
+-- result:
+-- !result
+create table paimon_ddl_${uuid0}.ddl_db.pk_sql (payload varchar(17), Id bigint, dt date) primary key (Id, dt) partition by (DT) properties ('bucket'='4', 'bucket-key'='Id');
+-- result:
+-- !result
+create table paimon_ddl_${uuid0}.ddl_db.pk_property (payload int, Id bigint) properties ('primary-key'='ID', 'bucket'='2');
+-- result:
+-- !result
+create table paimon_ddl_${uuid0}.ddl_db.pk_explicit (Id bigint not null) primary key (Id);
+-- result:
+-- !result
+create table paimon_ddl_${uuid0}.ddl_db.pk_property_composite (payload int, Id bigint, dt date) partition by (dt) properties ('primary-key'=' ID, dt ', 'bucket'='2', 'bucket-key'='Id');
+-- result:
+-- !result
+create table paimon_ddl_${uuid0}.ddl_db.pk_both (payload int, Id bigint, dt date) primary key (Id, dt) properties ('primary-key'='ID,DT');
+-- result:
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_key (Id bigint, dt date) primary key(Id, dt) properties ('primary-key'='dt,Id')", "same columns in order")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_key (Id bigint, dt date) primary key(Id) properties ('primary-key'='dt')", "same columns in order")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_key (Id bigint) properties ('primary-key'='missing')", "does not exist")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_key (Id bigint) properties ('primary-key'='Id,ID')", "Duplicate")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_sql (id bigint null) primary key(id)", "cannot be nullable")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_property (id bigint null) properties ('primary-key'='id')", "cannot be nullable")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_default_sql (id bigint default null) primary key(id)", "Invalid default value")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_default_property (id bigint default null) properties ('primary-key'='id')", "Invalid default value")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_default (id int default '1')", "Paimon only supports DEFAULT NULL")
+-- result:
+None
+-- !result
+[ORDER]show tables from paimon_ddl_${uuid0}.ddl_db;
+-- result:
+pk_both
+pk_explicit
+pk_property
+pk_property_composite
+pk_sql
+-- !result
+function: create_paimon_ddl_catalog("paimon_ddl_reader_${uuid0}", "${uuid0}")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+select get_json_string(fields, '$[0].type'), get_json_string(fields, '$[1].type'), get_json_string(fields, '$[2].type'), primary_keys, partition_keys from paimon_ddl_reader_${uuid0}.ddl_db.`pk_sql$schemas`;
+-- result:
+VARCHAR(17)	BIGINT NOT NULL	DATE NOT NULL	["Id","dt"]	["dt"]
+-- !result
+select get_json_string(fields, '$[0].type'), get_json_string(fields, '$[1].type'), primary_keys from paimon_ddl_reader_${uuid0}.ddl_db.`pk_property$schemas`;
+-- result:
+INT	BIGINT NOT NULL	["Id"]
+-- !result
+select get_json_string(fields, '$[0].type'), primary_keys from paimon_ddl_reader_${uuid0}.ddl_db.`pk_explicit$schemas`;
+-- result:
+BIGINT NOT NULL	["Id"]
+-- !result
+select get_json_string(fields, '$[0].type'), get_json_string(fields, '$[1].name'), get_json_string(fields, '$[1].type'), get_json_string(fields, '$[2].name'), get_json_string(fields, '$[2].type'), primary_keys, partition_keys from paimon_ddl_reader_${uuid0}.ddl_db.`pk_property_composite$schemas`;
+-- result:
+INT	Id	BIGINT NOT NULL	dt	DATE NOT NULL	["Id","dt"]	["dt"]
+-- !result
+select get_json_string(fields, '$[0].type'), get_json_string(fields, '$[1].type'), get_json_string(fields, '$[2].type'), primary_keys from paimon_ddl_reader_${uuid0}.ddl_db.`pk_both$schemas`;
+-- result:
+INT	BIGINT NOT NULL	DATE NOT NULL	["Id","dt"]
+-- !result
+[ORDER]show tables from paimon_ddl_reader_${uuid0}.ddl_db;
+-- result:
+pk_both
+pk_explicit
+pk_property
+pk_property_composite
+pk_sql
+-- !result
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.bad_sql;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.bad_property;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.bad_default_sql;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.bad_default_property;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.bad_default;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.pk_sql;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.pk_property;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.pk_explicit;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.pk_property_composite;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.pk_both;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.bad_key;
+  drop database if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db;
+  drop catalog if exists paimon_ddl_reader_${paimon_ddl_warehouse_id};
+  drop catalog if exists paimon_ddl_${paimon_ddl_warehouse_id};
+} END CLEANUP
+
+-- name: test_paimon_catalog_ddl_types_and_rejections
+function: create_paimon_ddl_catalog("paimon_ddl_${uuid0}", "${uuid0}")
+-- result:
+None
+-- !result
+create database paimon_ddl_${uuid0}.ddl_db;
+-- result:
+-- !result
+create table paimon_ddl_${uuid0}.ddl_db.type_demo (amount decimal(20, 6), event_time datetime, numbers array<int>, attributes map<varchar(12), decimal(10, 2)>, detail struct<code int, labels array<varchar(9)>>) properties ('file.format'='parquet');
+-- result:
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_definition (dt date) partition by days(dt)", "partition expressions")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_definition (id int) properties ('unknown-option'='value')", "Unknown Paimon table property")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_definition (id int) properties ('bucket'='not-an-integer')", "Invalid value")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_definition (id int) properties ('bucket'='0')", "bucket")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_definition (id int) properties ('write-only'='not-a-boolean')", "Invalid value")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_definition (id int) properties ('snapshot.time-retained'='not-a-duration')", "Invalid value")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_definition (id int) properties ('path'='hidden')", "schema override")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_definition (id int, v int) primary key(id) properties ('merge-engine'='aggregation', 'fields.v.aggregate-function'='sum')", "Unknown Paimon table property")
+-- result:
+None
+-- !result
+function: create_paimon_ddl_catalog("paimon_ddl_reader_${uuid0}", "${uuid0}")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+select get_json_string(fields, '$[0].type'), get_json_string(fields, '$[1].type') from paimon_ddl_reader_${uuid0}.ddl_db.`type_demo$schemas`;
+-- result:
+DECIMAL(20, 6)	TIMESTAMP(6)
+-- !result
+select get_json_string(fields, '$[2].type.type'), get_json_string(fields, '$[2].type.element'), get_json_string(fields, '$[3].type.type'), get_json_string(fields, '$[3].type.key'), get_json_string(fields, '$[3].type.value') from paimon_ddl_reader_${uuid0}.ddl_db.`type_demo$schemas`;
+-- result:
+ARRAY	INT	MAP	VARCHAR(12)	DECIMAL(10, 2)
+-- !result
+select get_json_string(fields, '$[4].type.type'), get_json_string(fields, '$[4].type.fields[0].name'), get_json_string(fields, '$[4].type.fields[0].type'), get_json_string(fields, '$[4].type.fields[1].name'), get_json_string(fields, '$[4].type.fields[1].type.type'), get_json_string(fields, '$[4].type.fields[1].type.element') from paimon_ddl_reader_${uuid0}.ddl_db.`type_demo$schemas`;
+-- result:
+ROW	code	INT	labels	ARRAY	VARCHAR(9)
+-- !result
+[ORDER]show tables from paimon_ddl_reader_${uuid0}.ddl_db;
+-- result:
+type_demo
+-- !result
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.bad_definition;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.type_demo;
+  drop database if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db;
+  drop catalog if exists paimon_ddl_reader_${paimon_ddl_warehouse_id};
+  drop catalog if exists paimon_ddl_${paimon_ddl_warehouse_id};
+} END CLEANUP

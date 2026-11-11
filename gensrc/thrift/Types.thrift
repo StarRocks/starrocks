@@ -141,27 +141,6 @@ enum TGeoEdgeAlgorithm {
     PLANAR = 6
 }
 
-enum TGeoEncoding {
-    UNKNOWN = 0,
-    WKB = 1
-}
-
-enum TGeoDimension {
-    UNKNOWN = 0,
-    XY = 1,
-    XYZ = 2,
-    XYM = 3,
-    XYZM = 4,
-    MIXED = 5
-}
-
-enum TGeoValidationState {
-    UNKNOWN = 0,
-    UNVALIDATED = 1,
-    STRUCTURALLY_VALIDATED = 2,
-    SEMANTICALLY_VALIDATED = 3
-}
-
 // Semantic and physical metadata for native geo types.
 struct TGeoTypeDesc {
     1: optional TGeoLogicalType logical_type
@@ -169,17 +148,6 @@ struct TGeoTypeDesc {
     3: optional TGeoEdgeAlgorithm edge_algorithm
     4: optional string crs
     5: optional i32 srid
-}
-
-struct TGeoStorageDesc {
-    1: optional TGeoEncoding encoding
-    2: optional TGeoDimension dimension
-    3: optional TGeoValidationState validation_state
-}
-
-struct TGeoColumnDesc {
-    1: optional TGeoTypeDesc type
-    2: optional TGeoStorageDesc storage
 }
 
 struct TScalarType {
@@ -377,11 +345,6 @@ enum TFunctionBinaryType {
   AI
 }
 
-enum TAIModelSource {
-  SYSTEM = 0,
-  PROVIDER = 1
-}
-
 // Represents a fully qualified function name.
 struct TFunctionName {
   // Name of the function's parent database. Not set if in global
@@ -483,7 +446,6 @@ struct TFunction {
   // For Python UDFs: user-provided Arrow Flight worker service URL. When set, the BE connects
   // to this external worker instead of spawning a local one (see CREATE FUNCTION "service_url").
   38: optional string service_url
-  39: optional TAIModelSource ai_model_source
 }
 
 enum TLoadJobState {
@@ -625,6 +587,9 @@ struct TUserIdentity {
     3: optional bool is_domain
     4: optional bool is_ephemeral
     5: optional TUserRoles current_role_ids
+    // The groups of the session (directory memberOf, token claims, group providers), so that an FE rebuilding the
+    // caller from this identity also grants the roles mapped to those groups.
+    6: optional list<string> groups
 }
 
 const i32 TSNAPSHOT_REQ_VERSION1 = 3; // corresponding to alpha rowset

@@ -53,7 +53,7 @@ TypeDescriptor JsonUtils::construct_json_type(const TypeDescriptor& src_type) {
     }
     default:
         // Treat other types as VARCHAR.
-        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        return TYPE_VARCHAR_DESC;
     }
 }
 } // namespace starrocks

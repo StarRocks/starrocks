@@ -19,9 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.ProfileManager;
-import com.starrocks.memory.estimate.ByteBufferEstimator;
 import com.starrocks.memory.estimate.Estimator;
-import com.starrocks.memory.estimate.StringEstimator;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.persist.gson.GsonUtils;
@@ -37,7 +35,6 @@ import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -65,8 +62,7 @@ public class MemoryUsageTracker extends FrontendDaemon {
     }
 
     private void initMemoryTracker() {
-        registerCustomEstimators();
-        registerShallowMemoryClasses();
+        Estimator.registerDefaultEstimators();
 
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
 
@@ -295,22 +291,5 @@ public class MemoryUsageTracker extends FrontendDaemon {
         if (Config.memory_tracker_enable) {
             trackMemory();
         }
-    }
-
-    private void registerCustomEstimators() {
-        Estimator.registerCustomEstimator(String.class, new StringEstimator());
-        Estimator.registerCustomEstimator(ByteBuffer.class, new ByteBufferEstimator());
-        Estimator.registerCustomEstimator("java.nio.HeapByteBuffer", new ByteBufferEstimator());
-    }
-
-    private void registerShallowMemoryClasses() {
-        Estimator.registerShallowMemoryClass(Boolean.class);
-        Estimator.registerShallowMemoryClass(Byte.class);
-        Estimator.registerShallowMemoryClass(Character.class);
-        Estimator.registerShallowMemoryClass(Short.class);
-        Estimator.registerShallowMemoryClass(Integer.class);
-        Estimator.registerShallowMemoryClass(Long.class);
-        Estimator.registerShallowMemoryClass(Float.class);
-        Estimator.registerShallowMemoryClass(Double.class);
     }
 }

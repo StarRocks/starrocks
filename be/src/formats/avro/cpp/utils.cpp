@@ -69,18 +69,26 @@ DateValue AvroUtils::int_to_date_value(int32_t from) {
 }
 
 StatusOr<TimestampValue> AvroUtils::long_to_timestamp_value(const avro::GenericDatum& datum,
-                                                            const cctz::time_zone& timezone) {
+                                                            const cctz::time_zone& timezone,
+                                                            TzOffsetCache* offset_cache) {
     const auto& from = datum.value<int64_t>();
 
+    auto from_unixtime = [&](TimestampValue* to, int64_t second, int64_t microsecond) {
+        if (offset_cache != nullptr) {
+            to->from_unixtime_with_offset(second, microsecond, offset_cache->offset_in_bound_zone(second));
+        } else {
+            to->from_unixtime(second, microsecond, timezone);
+        }
+    };
     TimestampValue to{};
     switch (datum.logicalType().type()) {
     case avro::LogicalType::TIMESTAMP_MILLIS: {
-        to.from_unixtime(from / 1000, (from % 1000) * 1000, timezone);
+        from_unixtime(&to, from / 1000, (from % 1000) * 1000);
         return to;
     }
 
     case avro::LogicalType::TIMESTAMP_MICROS: {
-        to.from_unixtime(from / 1000000, (from % 1000000), timezone);
+        from_unixtime(&to, from / 1000000, (from % 1000000));
         return to;
     }
 

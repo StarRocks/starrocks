@@ -14,11 +14,16 @@
 
 #include "connector/hive/scanner/hdfs_scanner.h"
 
+#include <bvar/bvar.h>
+
 #include <algorithm>
+#include <optional>
+#include <unordered_map>
 
 #include "base/compression/compression_utils.h"
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "cache/scan/shared_buffered_input_stream.h"
+#include "common/config_cache_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/runtime_range_pruner.hpp"
@@ -29,8 +34,16 @@
 #include "fs/hdfs_metrics.h"
 #include "runtime/runtime_state.h"
 #include "storage_primitive/predicate_parser.h"
+#include "storage_primitive/zone_map_detail.h"
+#include "types/date_value.h"
+#include "types/timestamp_value.h"
 
 namespace starrocks {
+
+// Files whose corrupted datacache is dropped.
+static bvar::Adder<int64_t> g_datacache_corruption_removed("datacache_corruption_removed_files");
+// Files read again bypassing their corrupted datacache.
+static bvar::Adder<int64_t> g_datacache_corruption_retried("datacache_corruption_retried_files");
 
 Status HdfsScanner::init(RuntimeState* runtime_state, HdfsScannerContext* scanner_ctx) {
     SCOPED_RAW_TIMER(&_total_running_time);
@@ -59,6 +72,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.format_scan_context.is_first_split = false;
     ctx.format_scan_context.first_row_id.reset();
     ctx.format_scan_context.min_max_values.clear();
+    ctx.format_scan_context.min_max_value_cursors.clear();
     ctx.format_scan_context.extended_column_exprs.clear();
     ctx.format_scan_context.predicate_tree = nullptr;
     ctx.format_scan_context.runtime_filter_scan_range_pruner = nullptr;
@@ -74,6 +88,8 @@ Status HdfsScanner::_build_scanner_context() {
     if (ctx.scan_range->__isset.first_row_id) {
         ctx.format_scan_context.first_row_id = ctx.scan_range->first_row_id;
     }
+    ctx.format_scan_context.parquet_encryption_info =
+            ctx.scan_range->__isset.parquet_encryption_info ? &ctx.scan_range->parquet_encryption_info : nullptr;
 
     Columns& partition_values = ctx.format_scan_context.partition_values;
 
@@ -199,6 +215,136 @@ Status HdfsScanner::_build_scanner_context() {
     return Status::OK();
 }
 
+namespace {
+
+using FileZoneMaps = std::unordered_map<ColumnId, ZoneMapDetail>;
+
+TimestampValue timestamp_from_unix_micros(int64_t micros) {
+    constexpr int64_t kMicrosPerSecond = 1000000L;
+    int64_t seconds = micros / kMicrosPerSecond;
+    int64_t microseconds = micros % kMicrosPerSecond;
+    if (microseconds < 0) {
+        microseconds += kMicrosPerSecond;
+        --seconds;
+    }
+    TimestampValue ts;
+    ts.from_unix_second(seconds, microseconds);
+    return ts;
+}
+
+// The file-level zone map of a slot from its min/max values. Only integer, date and datetime slots: float bounds
+// leave out NaN. Datetime only when the FE chose the slots (`with_datetime`): it widens timestamptz bounds there to
+// surely cover the file in the session time zone, while the min/max optimization sends them converted at the two
+// ends only, which is not exact across offset changes (DST).
+std::optional<ZoneMapDetail> file_zone_map(const SlotDescriptor& slot, const TExprMinMaxValue& value,
+                                           bool with_datetime) {
+    if (value.all_null || value.type != TExprNodeType::INT_LITERAL) {
+        return std::nullopt;
+    }
+    Datum min;
+    Datum max;
+    switch (slot.type().type) {
+    case TYPE_TINYINT:
+        min = static_cast<int8_t>(value.min_int_value);
+        max = static_cast<int8_t>(value.max_int_value);
+        break;
+    case TYPE_SMALLINT:
+        min = static_cast<int16_t>(value.min_int_value);
+        max = static_cast<int16_t>(value.max_int_value);
+        break;
+    case TYPE_INT:
+        min = static_cast<int32_t>(value.min_int_value);
+        max = static_cast<int32_t>(value.max_int_value);
+        break;
+    case TYPE_BIGINT:
+        min = static_cast<int64_t>(value.min_int_value);
+        max = static_cast<int64_t>(value.max_int_value);
+        break;
+    case TYPE_DATE:
+        min = DateValue::from_days_since_unix_epoch(value.min_int_value);
+        max = DateValue::from_days_since_unix_epoch(value.max_int_value);
+        break;
+    case TYPE_DATETIME:
+        if (!with_datetime) {
+            return std::nullopt;
+        }
+        min = timestamp_from_unix_micros(value.min_int_value);
+        max = timestamp_from_unix_micros(value.max_int_value);
+        break;
+    default:
+        return std::nullopt;
+    }
+    return ZoneMapDetail(std::move(min), std::move(max), value.has_null);
+}
+
+// Whether a row satisfying `pred` may be in a file with zone map `zm`. An expression predicate always may: it is
+// judged by evaluating the expression at the bounds, which is only sound for a range as narrow as a row group's
+// (e.g. an integer expression that overflows inside the file's range).
+bool file_may_satisfy_pred(const ColumnPredicate* pred, const ZoneMapDetail& zm) {
+    return pred->type() == PredicateType::kExpr || pred->zone_map_filter(zm);
+}
+
+// Whether a row of the file may satisfy `node`, judged by the file-level zone maps only. A column without a zone
+// map, and a predicate that cannot use one, may always be satisfied.
+template <CompoundNodeType Type>
+bool file_may_satisfy(const PredicateTree& tree, const PredicateCompoundNode<Type>& node, const FileZoneMaps& zms) {
+    const auto& cid_to_col_preds = tree.compound_node_context(node.id()).cid_to_col_preds(node);
+    if constexpr (Type == CompoundNodeType::AND) {
+        for (const auto& [cid, col_preds] : cid_to_col_preds) {
+            auto it = zms.find(cid);
+            if (it != zms.end() && !std::ranges::all_of(col_preds, [&](const ColumnPredicate* pred) {
+                    return file_may_satisfy_pred(pred, it->second);
+                })) {
+                return false;
+            }
+        }
+        return std::ranges::all_of(node.compound_children(),
+                                   [&](const auto& child) { return file_may_satisfy(tree, child, zms); });
+    } else {
+        if (node.empty()) {
+            return true;
+        }
+        for (const auto& [cid, col_preds] : cid_to_col_preds) {
+            auto it = zms.find(cid);
+            if (it == zms.end() || std::ranges::any_of(col_preds, [&](const ColumnPredicate* pred) {
+                    return file_may_satisfy_pred(pred, it->second);
+                })) {
+                return true;
+            }
+        }
+        return std::ranges::any_of(node.compound_children(),
+                                   [&](const auto& child) { return file_may_satisfy(tree, child, zms); });
+    }
+}
+
+} // namespace
+
+// The scan range carries the file's min/max values of the slots probed by join runtime filters. The predicate
+// tree holds the conjuncts and the runtime filters that have arrived, so a file none of whose rows can pass is
+// skipped before it is opened.
+bool HdfsScanner::_pruned_by_file_stats() const {
+    const auto& fsc = _scanner_ctx->format_scan_context;
+    if (!support_file_stats_pruning() || !fsc.options.enable_dynamic_prune_scan_range || fsc.min_max_values.empty()) {
+        return false;
+    }
+    const PredicateTree& tree = _scanner_ctx->predicates.predicate_tree;
+    if (tree.empty()) {
+        return false;
+    }
+    FileZoneMaps zms;
+    for (const auto& [slot_id, value] : fsc.min_max_values) {
+        const SlotDescriptor* slot = _scanner_ctx->tuple_desc->get_slot_by_id(slot_id);
+        if (slot == nullptr) {
+            continue;
+        }
+        if (auto zm = file_zone_map(*slot, value, !fsc.options.min_max_values_of_all_slots); zm.has_value()) {
+            // ConnectorPredicateParser::column_id() is the slot id.
+            zms.emplace(static_cast<ColumnId>(slot_id), std::move(*zm));
+        }
+    }
+    return !zms.empty() && !file_may_satisfy(tree, tree.root(), zms);
+}
+
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_total_running_time);
     RETURN_IF_CANCELLED(_runtime_state);
@@ -236,6 +382,18 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
 
     RETURN_IF_ERROR(_runtime_state->check_mem_limit("get chunk from scanner"));
     Status status = do_get_next(runtime_state, chunk);
+    if (!status.ok() && !status.is_end_of_file()) {
+        status = _handle_datacache_error(runtime_state, status, [&]() {
+            // Only empty chunks were returned before the error, so read until some rows or EOF to pass it.
+            Status st;
+            do {
+                RETURN_IF_CANCELLED(_runtime_state);
+                (*chunk)->reset();
+                st = do_get_next(runtime_state, chunk);
+            } while (st.ok() && (*chunk)->num_rows() == 0);
+            return st;
+        });
+    }
     if (status.ok()) {
     } else if (status.is_end_of_file()) {
         // do nothing.
@@ -259,7 +417,20 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         _scanner_ctx->format_scan_context.can_use_min_max_optimization()) {
         return Status::OK();
     }
-    RETURN_IF_ERROR(do_open(runtime_state));
+    if (_pruned_by_file_stats()) {
+        _skipped_by_file_stats = true;
+        _scanner_ctx->no_more_chunks = true;
+        if (_scanner_ctx->profile.scan_ranges_pruned_by_file_stats_counter != nullptr) {
+            COUNTER_UPDATE(_scanner_ctx->profile.scan_ranges_pruned_by_file_stats_counter, 1);
+        }
+        return Status::OK();
+    }
+    Status status = do_open(runtime_state);
+    if (!status.ok()) {
+        // Reopening runs do_open() again, nothing else to redo.
+        status = _handle_datacache_error(runtime_state, status, [] { return Status::OK(); });
+    }
+    RETURN_IF_ERROR(status);
     VLOG_FILE << "open file success: " << _scanner_ctx->file_path << ", scan range = ["
               << _scanner_ctx->scan_range->offset << ","
               << (_scanner_ctx->scan_range->length + _scanner_ctx->scan_range->offset)
@@ -275,6 +446,15 @@ void HdfsScanner::close() noexcept {
     // short circuit for min/max optimization.
     if (_scanner_ctx->format_scan_context.can_use_count_optimization() ||
         _scanner_ctx->format_scan_context.can_use_min_max_optimization()) {
+        return;
+    }
+    // A file skipped by its min/max values has no reader to close, but still reports the work done before the
+    // skip, e.g. the delete files the parquet scanner builds in do_init().
+    if (_skipped_by_file_stats) {
+        bool expect = false;
+        if (_closed.compare_exchange_strong(expect, true)) {
+            update_counter();
+        }
         return;
     }
     VLOG_FILE << "close file success: " << _scanner_ctx->file_path << ", scan range = ["
@@ -304,6 +484,83 @@ Status HdfsScanner::open_random_access_file() {
         _cache_input_stream->set_peer_cache_node(_scanner_ctx->scan_range->candidate_node);
     }
     return Status::OK();
+}
+
+bool HdfsScanner::_may_be_caused_by_datacache(const Status& status) {
+    if (!config::external_table_clear_corrupted_cache_data || _datacache_error_handled) {
+        return false;
+    }
+    if (_cache_input_stream == nullptr || _scanner_ctx->datacache_options.enable_cache_select) {
+        return false;
+    }
+    // Errors of decoding a corrupted copy, e.g. InvalidArgument of a failed decompression.
+    if (!status.is_corruption() && !status.is_internal_error() && !status.is_not_supported() &&
+        !status.is_invalid_argument()) {
+        return false;
+    }
+    // Some content must come from the datacache, peers included since their blocks are populated locally.
+    const auto& stats = _cache_input_stream->stats();
+    return stats.read_block_cache_bytes + stats.read_peer_cache_bytes > 0;
+}
+
+Status HdfsScanner::_handle_datacache_error(RuntimeState* runtime_state, const Status& status,
+                                            const std::function<Status()>& redo) {
+    if (!_may_be_caused_by_datacache(status)) {
+        return status;
+    }
+    _datacache_error_handled = true;
+    std::shared_ptr<CacheInputStream> cache_input_stream = _cache_input_stream;
+    // A reopened file is read from its start, so reopen only if no row is returned yet.
+    if (!support_reopen_without_datacache() || _app_stats.rows_read > 0) {
+        // The corruption cannot be verified, drop the copy anyway so that the next read recovers.
+        _drop_datacache(cache_input_stream.get(), status, false);
+        return status;
+    }
+    Status st = _reopen_without_datacache(runtime_state);
+    if (st.ok()) {
+        st = redo();
+    }
+    if (st.ok() || st.is_end_of_file()) {
+        // The file is read correctly bypassing the datacache, so its cached copy is corrupted.
+        _drop_datacache(cache_input_stream.get(), status, true);
+        return st;
+    }
+    // Not caused by the datacache, keep it. Return the new error, e.g. a 404 lets the FE refresh and retry.
+    LOG(WARNING) << "read file again bypassing datacache still fails, keep its datacache: " << _scanner_ctx->file_path
+                 << ", error: " << st << ", datacache read error: " << status;
+    return st;
+}
+
+void HdfsScanner::_drop_datacache(CacheInputStream* cache_input_stream, const Status& status, bool verified) {
+    size_t removed_blocks = cache_input_stream->remove_cached_blocks();
+    if (removed_blocks > 0) {
+        g_datacache_corruption_removed << 1;
+    }
+    const auto& stats = cache_input_stream->stats();
+    LOG(WARNING) << "drop corrupted datacache of file: " << _scanner_ctx->file_path
+                 << ", file_size: " << _scanner_ctx->file_size
+                 << ", modification_time: " << _scanner_ctx->datacache_options.modification_time
+                 << ", verified: " << verified << ", removed_blocks: " << removed_blocks
+                 << ", read_local_cache_bytes: " << stats.read_block_cache_bytes
+                 << ", read_peer_cache_bytes: " << stats.read_peer_cache_bytes
+                 << ", rows_read: " << _app_stats.rows_read << ", error: " << status;
+}
+
+Status HdfsScanner::_reopen_without_datacache(RuntimeState* runtime_state) {
+    // Close the reader first, it holds raw pointers to the file and streams.
+    do_close(runtime_state);
+    _file.reset();
+    _shared_buffered_input_stream.reset();
+    // Keep the first stream for its profile counters.
+    _bypassed_cache_input_stream = std::move(_cache_input_stream);
+    // Bypass all caches of the file, and rebuild the context changed by the first open.
+    _scanner_ctx->datacache_options.enable_datacache = false;
+    _scanner_ctx->format_scan_context.options.use_file_metacache = false;
+    _scanner_ctx->format_scan_context.options.use_file_pagecache = false;
+    RETURN_IF_ERROR(_build_scanner_context());
+    g_datacache_corruption_retried << 1;
+    LOG(WARNING) << "read file again bypassing datacache: " << _scanner_ctx->file_path;
+    return do_open(runtime_state);
 }
 
 void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, const std::string& parent_name) {
@@ -429,8 +686,10 @@ void HdfsScanner::update_counter() {
     DataCacheHitRateCounter::instance()->update_page_cache_stat(_app_stats.page_cache_read_counter,
                                                                 _app_stats.page_read_counter);
 
-    if (_scanner_ctx->datacache_options.enable_datacache && _cache_input_stream) {
-        const CacheInputStream::Stats& stats = _cache_input_stream->stats();
+    // Report the datacache counters of the first read if the file is read again.
+    const auto& cache_input_stream = _cache_input_stream ? _cache_input_stream : _bypassed_cache_input_stream;
+    if (cache_input_stream) {
+        const CacheInputStream::Stats& stats = cache_input_stream->stats();
         COUNTER_UPDATE(profile->datacache_read_counter, stats.read_block_cache_count);
         COUNTER_UPDATE(profile->datacache_read_bytes, stats.read_block_cache_bytes);
         COUNTER_UPDATE(profile->datacache_read_mem_bytes, stats.read_mem_cache_bytes);
@@ -438,6 +697,7 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->datacache_read_timer, stats.read_block_cache_ns);
         COUNTER_UPDATE(profile->datacache_skip_read_counter, stats.skip_read_cache_count);
         COUNTER_UPDATE(profile->datacache_skip_read_bytes, stats.skip_read_cache_bytes);
+        COUNTER_UPDATE(profile->datacache_read_error_counter, stats.read_cache_error_count);
         COUNTER_UPDATE(profile->datacache_read_peer_bytes, stats.read_peer_cache_bytes);
         COUNTER_UPDATE(profile->datacache_read_peer_counter, stats.read_peer_cache_count);
         COUNTER_UPDATE(profile->datacache_read_peer_timer, stats.read_peer_cache_ns);

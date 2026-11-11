@@ -63,6 +63,15 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to restrict who can read cached query profiles. When set to `true`, SHOW PROFILELIST, ANALYZE PROFILE, the `get_query_profile` function, the `/api/profile` and `/api/query/progress` HTTP endpoints, and the `/query` and `/query_profile` Web UI pages return a profile only to the user who ran the query or to a user with the SYSTEM-level OPERATE privilege. Profiles that record no user (for example, EXPORT jobs and stream loads) are readable only with OPERATE. The `/api/query_detail` and `/api/v2/query_detail` endpoints keep listing every query but omit the `profile` field, and the `explain` field when it holds a plan rendered from that profile, under the same rule. When `authorization_enable_admin_user_protection` is also enabled, profiles of queries run by `root` are readable only by `root`. When set to `false` (the default), every authenticated user can read every profile, which is the behavior of earlier versions. Each FE enforces the check for the profiles it holds, so to restrict access cluster-wide, set this item in `fe.conf` on every FE after all FEs have been upgraded to a version that supports it. Enabling it has two further consequences to plan for: `/api/query/progress` stops accepting anonymous requests, because the rule needs a caller identity, so an existing anonymous poller of that endpoint starts receiving `401`; and `get_query_profile()` requires the OPERATE privilege for a `query_id` whose profile is not cached on the FE the session is connected to, because the RPC that fetches it from the other FEs carries no caller identity to authorize there, which restricts the cross-FE lookup to OPERATE holders while the check is on.
 - Introduced in: v4.1
 
+### `enable_new_load_job_privilege_check`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether load jobs are shown according to the privileges on their target tables. When set to `true` (the default), `information_schema.loads`, `load_tracking_logs`, `routine_load_jobs` and `stream_loads`, SHOW LOAD, SHOW STREAM LOAD, SHOW ROUTINE LOAD, their SHOW PROC nodes, and the `/api/{db}/_load_info` HTTP endpoint show a load job only to users who hold at least one privilege on each of its target tables, or the OPERATE privilege, and show the rejected rows, error-log URLs, error messages and properties only to users who hold the SELECT privilege on each of them. Set it to `false` to roll this back without restarting FE: every one of these places returns to the checks it had before, that is, the four `information_schema` views, SHOW LOAD and SHOW PROC check no privilege, SHOW STREAM LOAD and SHOW ROUTINE LOAD require the INSERT privilege on the target table, and `/api/{db}/_load_info` requires the INSERT privilege in the database, and all of them show every field. In that mode, the rejected rows and error-log URLs of a load job are again exposed to users who hold no SELECT privilege on its target tables. The random part of error-log file names does not depend on this item.
+- Introduced in: -
+
 ### `enable_task_info_mask_credential`
 
 - Default: true
@@ -109,62 +118,6 @@ This topic introduces the following types of FE configurations:
 - Introduced in: v4.2
 
 ## Query engine
-
-### `ai_default_chat_endpoint`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: The complete HTTPS POST URL used by SYSTEM `ai_complete` calls. The URL must include a host and cannot contain user information, a query string, a fragment, or control characters. When the port is omitted, HTTPS uses its default port. An explicitly specified port must be in the range 1 through 65535. An empty value disables SYSTEM `ai_complete` analysis until the endpoint is configured. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning. The API key is not an FE configuration item; each BE reads `AI_FUNCTION_MODEL_API_KEY` locally, and FE does not send the key in the query plan. Every BE that executes AI queries must set `AI_FUNCTION_MODEL_ENDPOINT` to exactly this URL so the BE can bind its local credential to the administrator-approved endpoint. Changing the FE endpoint therefore also requires updating this environment variable and restarting each affected BE before new AI queries run there.
-- Introduced in: -
-
-### `ai_default_chat_model`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: The default model used by SYSTEM `ai_complete` calls without an explicit model, including FILE overloads. The value cannot contain C0 control characters (`U+0000` through `U+001F`) or DEL (`U+007F`). It may remain empty when every call supplies an explicit, non-blank model. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
-- Introduced in: -
-
-### `ai_default_chat_provider`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Valid values: `openai_compatible`, `qwen_compatible`
-- Is mutable: Yes
-- Description: The provider protocol used by SYSTEM `ai_complete`. The value must be exactly `openai_compatible` or `qwen_compatible`; empty or unrecognized values cause analysis to fail. Both protocols support text and inline image FILE inputs; only `qwen_compatible` supports inline MP4 video. The selected model must support the input modality. The protocol is not inferred from the endpoint or model name. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
-- Introduced in: -
-
-### `ai_default_embedding_endpoint`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: Complete HTTPS POST URL for SYSTEM `ai_embed` calls. Required independently of the chat endpoint. It must contain a host, with no user information, query string, fragment, or control characters; an explicit port must be 1 through 65535. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot. Every executing BE must bind `AI_FUNCTION_EMBEDDING_ENDPOINT` to exactly this URL and provision `AI_FUNCTION_EMBEDDING_API_KEY` locally. Changing either BE environment variable requires restarting that BE. Credentials are not FE configuration and are not sent in plans. See [ai_embed](../../../sql-reference/sql-functions/ai-functions/ai_embed.md).
-- Introduced in: -
-
-### `ai_default_embedding_model`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Is mutable: Yes
-- Description: Default model for SYSTEM `ai_embed` calls without an explicit model. Must be nonblank for those calls and must not contain C0 control characters or DEL. It may remain empty when every embedding call supplies a model. There is no fallback to the chat default model. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot.
-- Introduced in: -
-
-### `ai_default_embedding_provider`
-
-- Default: Empty string
-- Type: String
-- Unit: -
-- Valid values: `openai_compatible`, `dashscope_multimodal`
-- Is mutable: Yes
-- Description: Provider protocol for SYSTEM `ai_embed`. Must be exactly `openai_compatible` for text or `dashscope_multimodal` for text and inline JPEG, PNG, or WebP image FILE inputs. The selected model must support the input modality. Video FILE embedding is unsupported. The empty default prevents SYSTEM embedding calls until configured. Chat provider configuration is not reused, and the protocol is not inferred from the endpoint or model name. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot.
-- Introduced in: -
 
 ### `brpc_send_plan_fragment_timeout_ms`
 
@@ -227,6 +180,24 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The least fraction of the partitions an external-table statistics collection asked for that must actually be collected before a column's statistics are recorded. A collection that is cut short - some queries tolerated away, or the job failing partway - still writes rows for the partitions it read and records how many that was, so the read path scales them correctly. Below some coverage that stops being worthwhile: row counts extrapolate from the partitions collected, but NDV does not, and NDV is what join cardinality estimates are most sensitive to. A column collected from a twentieth of its partitions would hand the optimizer an NDV roughly twenty times too small, presented as fact. A column below this ratio is left without metadata instead, so the optimizer falls back to the connector's own table metadata: an accurate row count and no NDV, which gives a default selectivity rather than a confidently wrong one. Measured against what the collection asked for, not against the table, so a sample is not treated as sparse merely for being a sample. A value of `0` or less records whatever was collected.
 - Introduced in: v4.1
+
+### `connector_table_analyze_dropped_partition_stats_cleanup_interval_second`
+
+- Default: 3600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Interval at which the Leader FE periodically deletes the column statistics of dropped partitions of external tables, independent of statistics collections. The cleanup at the end of a collection misses partitions dropped after the table's last collection, or still within `connector_table_analyze_dropped_partition_stats_grace_second` at that time; the periodic cleanup applies the same rule to a bounded number of tables per round. It only cleans columns whose statistics were last collected by a FULL collection; sampled columns are cleaned by their own next collection. Tables with a pending or running collection are skipped. A value of `0` or less disables the periodic cleanup. The periodic cleanup is also disabled when `connector_table_analyze_dropped_partition_stats_grace_second` is `0` or less.
+- Introduced in: v4.2
+
+### `connector_table_analyze_dropped_partition_stats_grace_second`
+
+- Default: 86400
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How long the column statistics of an external-table partition that no longer exists are kept. At the end of each successful statistics collection, the statistics of partitions missing from the table's current partition list are deleted once none of their rows has been written for longer than this value. Without the cleanup, the statistics of dropped partitions (for example, partitions expired or deleted in Iceberg) keep contributing to the table's row count, NDV, and min/max values. The grace period protects partitions that a concurrent collection has just written but that the current collection's partition list does not include yet. A value of `0` or less disables the cleanup.
+- Introduced in: v4.2
 
 ### `connector_table_analyze_memory_backoff_budget_second`
 
@@ -489,6 +460,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users.
 - Introduced in: v3.1.6
+
+### `enable_mv_automatic_inactive_by_base_table_changes`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to set the asynchronous materialized views on a base table (view) inactive when the base table (view) is dropped, undergoes a Schema Change, or the view is redefined. Renaming or swapping a base table, and renaming a base materialized view, always set the materialized views on it inactive, regardless of this item.
+- Introduced in: v3.3.10, v3.4.1, v3.5.0
 
 ### `enable_mv_automatic_repairing_for_broken_base_tables`
 
@@ -949,7 +929,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The end time of automatic collection. Value range: `00:00:00` - `23:59:59`.
+- Description: The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. Both the start time and the end time are inclusive at second granularity. For example, if the end time is `17:00:00`, collection is allowed until `17:00:00` ends. If the start time is later than the end time, the period spans midnight.
 - Introduced in: -
 
 ### `statistic_auto_analyze_start_time`
@@ -958,7 +938,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The start time of automatic collection. Value range: `00:00:00` - `23:59:59`.
+- Description: The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. Both the start time and the end time are inclusive at second granularity. For example, if the end time is `17:00:00`, collection is allowed until `17:00:00` ends. If the start time is later than the end time, the period spans midnight.
 - Introduced in: -
 
 ### `statistic_auto_collect_ratio`
@@ -1078,6 +1058,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Minimum allowed schedule interval (in seconds) for task schedules checked by the SQL layer. When a task is submitted, TaskAnalyzer converts the schedule period to seconds and rejects the submission with `ERR_INVALID_PARAMETER` if the period is smaller than `task_min_schedule_interval_s`. This prevents creating tasks that run too frequently and protects the scheduler from high-frequency tasks. If a schedule has no explicit start time, TaskAnalyzer sets the start time to the current epoch seconds.
 - Introduced in: v3.3.0, v3.4.0, v3.5.0
 
+### `task_runs_dispatch_interval_ms`
+
+- Default: 1000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Interval at which the Leader FE checks whether running TaskRuns have finished and starts pending TaskRuns. You can change this item with `ADMIN SET FRONTEND CONFIG` without restarting the FE. The new interval takes effect after the current dispatch cycle finishes. A smaller value starts pending TaskRuns sooner and updates completion status faster, at higher FE CPU cost; a larger value reduces overhead but delays starting pending TaskRuns. Negative values are treated as `1000`. `0` is treated as `1`.
+- Introduced in: -
+
 ### `task_runs_timeout_second`
 
 - Default: 4 * 3600
@@ -1133,7 +1122,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable the File Bundling optimization for the cloud-native table. When this feature is enabled (set to `true`), the system automatically bundles the data files generated by loading, Compaction, or Publish operations, thereby reducing the API cost caused by high-frequency access to the external storage system. You can also control this behavior on the table level using the CREATE TABLE property `file_bundling`. For detailed instructions, see CREATE TABLE.
+- Description: Whether to enable the File Bundling optimization for the cloud-native table, and from v26.2 onwards also for the asynchronous materialized view in shared-data clusters. When this feature is enabled (set to `true`), the system automatically bundles the data files generated by loading, Compaction, or Publish operations, thereby reducing the API cost caused by high-frequency access to the external storage system. You can also control this behavior on the table level using the CREATE TABLE property `file_bundling`, or on the materialized view level using the CREATE MATERIALIZED VIEW property `file_bundling`. For detailed instructions, see CREATE TABLE.
 - Introduced in: v4.1
 
 ### `enable_pipeline_routine_load`

@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -45,7 +46,8 @@ import java.util.stream.Collectors;
  * </ul>
  * All of that runs only once a violation has already been established. A conforming lock
  * acquisition never reaches {@link #report}, so counting, resolving the call site and capturing the
- * stack are off the hot path.
+ * stack are off the hot path. On the violation path the call site is found by a lazy walk that stops at
+ * the first qualifying frame; only an emitted log line captures the full stack.
  */
 public class LockInvariantViolations {
     private static final Logger LOG = LogManager.getLogger(LockInvariantViolations.class);
@@ -102,6 +104,14 @@ public class LockInvariantViolations {
             Boolean.getBoolean("starrocks.lock.blocking.strict.in.test");
 
     /**
+     * The same escalation for the snapshot-copy rule ({@link SnapshotCopyValidator}), on its own
+     * property for the same reason. {@code fe-core/pom.xml} sets it from {@code lock.snapshot.strict}
+     * (default {@code true}).
+     */
+    private static final boolean SNAPSHOT_STRICT_IN_TEST =
+            Boolean.getBoolean("starrocks.lock.snapshot.strict.in.test");
+
+    /**
      * Upper bound on distinct call sites tracked. Beyond it every further site shares one bucket:
      * the throttling budget degrades, memory does not.
      */
@@ -110,6 +120,14 @@ public class LockInvariantViolations {
     static final String UNKNOWN_SITE = "<unknown>";
 
     static final String LOCK_PACKAGE = LockInvariantViolations.class.getPackage().getName() + ".";
+
+    /**
+     * Resolves a violation's call site. Walks lazily and stops at the first frame that qualifies, so a violation
+     * costs a few frames rather than a materialised {@code Thread.getStackTrace()} -- which matters in {@code warn},
+     * where a violating site on a hot path pays this on every call even while its log lines are throttled. The
+     * site is still resolved every time: it is the key both the throttle and the per-site counts are kept under.
+     */
+    static final StackWalker STACK_WALKER = StackWalker.getInstance();
 
     /**
      * Leading token on every violation report, in the log and in the exception alike, so one grep
@@ -140,6 +158,7 @@ public class LockInvariantViolations {
      */
     private static final ModeGate LOCK_TARGET_GATE = new ModeGate(STRICT_IN_TEST);
     private static final ModeGate BLOCKING_CALL_GATE = new ModeGate(BLOCKING_STRICT_IN_TEST);
+    private static final ModeGate SNAPSHOT_COPY_GATE = new ModeGate(SNAPSHOT_STRICT_IN_TEST);
 
     private static final class Site {
         private final AtomicLong count = new AtomicLong();
@@ -236,6 +255,28 @@ public class LockInvariantViolations {
     }
 
     /**
+     * The mode the snapshot-copy check ({@link SnapshotCopyValidator}) runs in right now.
+     */
+    public static Mode currentSnapshotCopyMode() {
+        return effectiveSnapshotCopyMode(Config.lock_snapshot_copy_validation_mode);
+    }
+
+    public static Mode effectiveSnapshotCopyMode(String configured) {
+        return SNAPSHOT_COPY_GATE.resolve(configured);
+    }
+
+    /** As {@link #suspendBlockingCallTestEscalation()}, for the snapshot-copy rule. */
+    @VisibleForTesting
+    public static void suspendSnapshotCopyTestEscalation() {
+        SNAPSHOT_COPY_GATE.strictInTest = false;
+    }
+
+    @VisibleForTesting
+    public static void restoreSnapshotCopyTestEscalation() {
+        SNAPSHOT_COPY_GATE.strictInTest = SNAPSHOT_COPY_GATE.armedByProperty;
+    }
+
+    /**
      * Record one violation of {@code kind}.
      *
      * @param kind    the invariant that was broken, as a short snake_case token. It is both the
@@ -328,15 +369,19 @@ public class LockInvariantViolations {
      * Walks the stack, so it is called only once a violation has already been established.
      */
     private static String currentCallSite() {
-        for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {
-            String className = frame.getClassName();
-            if (className.startsWith("java.") || className.startsWith("jdk.")
-                    || className.startsWith(LOCK_PACKAGE)) {
-                continue;
-            }
-            return className + "." + frame.getMethodName() + ":" + frame.getLineNumber();
-        }
-        return UNKNOWN_SITE;
+        return STACK_WALKER.walk(frames -> frames
+                .filter(frame -> !isJdkOrLockLayer(frame.getClassName()))
+                .findFirst()
+                .map(LockInvariantViolations::siteOf)
+                .orElse(UNKNOWN_SITE));
+    }
+
+    static boolean isJdkOrLockLayer(String className) {
+        return className.startsWith("java.") || className.startsWith("jdk.") || className.startsWith(LOCK_PACKAGE);
+    }
+
+    static String siteOf(StackWalker.StackFrame frame) {
+        return frame.getClassName() + "." + frame.getMethodName() + ":" + frame.getLineNumber();
     }
 
     // --------------- Introspection, for tests and for diagnosing a noisy deployment ---------------
@@ -353,5 +398,24 @@ public class LockInvariantViolations {
 
     public static void clearViolations() {
         SITES.clear();
+    }
+
+    /**
+     * Take the per-site counts recorded so far and zero them, one site at a time. Unlike reading
+     * {@link #violationsBySite()} and then calling {@link #clearViolations()}, a violation another
+     * thread records in between is never lost: its increment lands either before the swap, and is
+     * returned here, or after it, and is left for the next drain. Only sites with a non-zero count
+     * are returned.
+     */
+    @VisibleForTesting
+    public static Map<String, Long> drainViolations() {
+        Map<String, Long> drained = new HashMap<>();
+        for (Map.Entry<String, Site> entry : SITES.entrySet()) {
+            long count = entry.getValue().count.getAndSet(0);
+            if (count > 0) {
+                drained.put(entry.getKey(), count);
+            }
+        }
+        return drained;
     }
 }

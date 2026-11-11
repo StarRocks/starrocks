@@ -15,6 +15,7 @@
 
 package com.starrocks.connector;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
@@ -489,7 +490,7 @@ public class PartitionUtil {
                     sb.append("=");
                     String value = partitionField.transform().toHumanString(type,
                             getPartitionValue(partition, i, type.typeId().javaClass()));
-                    sb.append(value);
+                    sb.append(escapeIcebergPartitionValue(value));
                     sb.append("/");
                 }
             }
@@ -498,6 +499,18 @@ public class PartitionUtil {
             return sb.substring(0, sb.length() - 1);
         }
         return ICEBERG_DEFAULT_PARTITION;
+    }
+
+    // Partition names are split on '/' and each value is decoded with unescapePathName (see toPartitionValues),
+    // so a raw value containing '/' (e.g. a URL) breaks the split and a value containing '%XX' gets decoded.
+    // Only '%' and '/' are escaped: full Hive escapePathName would also escape ':' etc. and rename every
+    // timestamp partition, invalidating persisted external statistics and MV partition version maps.
+    @VisibleForTesting
+    static String escapeIcebergPartitionValue(String value) {
+        if (value == null || (value.indexOf('%') < 0 && value.indexOf('/') < 0)) {
+            return value;
+        }
+        return value.replace("%", "%25").replace("/", "%2F");
     }
 
     public static List<String> getIcebergPartitionValues(PartitionSpec spec,

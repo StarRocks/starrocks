@@ -65,6 +65,7 @@
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
@@ -167,7 +168,8 @@ public:
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384);
+        _tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384, 16384);
         // PK index major compaction always runs on the parallel manager, so wire in the process-wide
         // one and point it at this fixture's tablet manager, the same way TestBase does.
         if (auto* parallel_compact_mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
@@ -202,6 +204,15 @@ public:
             fp->setMode(trigger_mode);
         }
     }
+
+    // Lets the PK index flush run, which the fixture skips by default (see SetUp), until the guard goes out of scope.
+    class ScopedPkIndexFlush {
+    public:
+        ScopedPkIndexFlush() { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE); }
+        ~ScopedPkIndexFlush() { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); }
+        ScopedPkIndexFlush(const ScopedPkIndexFlush&) = delete;
+        ScopedPkIndexFlush& operator=(const ScopedPkIndexFlush&) = delete;
+    };
 
 protected:
     std::shared_ptr<TabletMetadataPB> split_source(bool separate_sort = false) {
@@ -256,14 +267,15 @@ protected:
 
     TabletMetadataPtr cache_reshard_metadata(int64_t key_id, int64_t metadata_id, int64_t version, int64_t gtid,
                                              const TabletRangePB* range = nullptr) {
-        _tablet_manager->metacache()->update_capacity(1024 * 1024);
+        _tablet_manager->metacache()->update_tablet_metadata_capacity(1024 * 1024);
         auto metadata = std::make_shared<TabletMetadataPB>();
         metadata->set_id(metadata_id);
         metadata->set_version(version);
         metadata->set_gtid(gtid);
         if (range != nullptr) *metadata->mutable_range() = *range;
-        _tablet_manager->metacache()->cache_tablet_metadata(_tablet_manager->tablet_metadata_location(key_id, version),
-                                                            metadata);
+        _tablet_manager->metacache()->cache_tablet_metadata(
+                lake::MetacacheKey::tablet_metadata(_tablet_manager->tablet_metadata_location(key_id, version)),
+                metadata);
         return metadata;
     }
 
@@ -374,7 +386,7 @@ protected:
         std::vector<ColumnId> pk_columns = {0};
         auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
         auto chunk = std::make_unique<Chunk>();
-        auto column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        auto column = ColumnHelper::create_column(TYPE_INT_DESC, false);
         column->append_datum(Datum(value));
         chunk->append_column(std::move(column), (SlotId)0);
         MutableColumnPtr encoded;
@@ -1866,10 +1878,35 @@ protected:
                                                                int32_t upsert_key, int32_t upsert_value,
                                                                int32_t delete_key, bool include_delete = true,
                                                                bool include_upsert = true) {
+        return publish_followup_upsert_delete_on(_tablet_manager.get(), tablet_id, base_version, upsert_key,
+                                                 upsert_value, delete_key, include_delete, include_upsert);
+    }
+
+    // A second compute node on the same storage: its own primary key index cache and metadata cache. The
+    // primary key manager is declared first so that it outlives the tablet manager that points at it.
+    struct OtherComputeNode {
+        std::unique_ptr<lake::PrimaryKeyManager> primary_key_manager;
+        std::unique_ptr<lake::TabletManager> tablet_manager;
+    };
+
+    OtherComputeNode make_other_compute_node() {
+        OtherComputeNode node;
+        node.primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        node.tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider, node.primary_key_manager.get(), 16384, 16384);
+        return node;
+    }
+
+    // publish_followup_upsert_delete, written and published through |tablet_manager|.
+    StatusOr<TabletMetadataPtr> publish_followup_upsert_delete_on(lake::TabletManager* tablet_manager,
+                                                                  int64_t tablet_id, int64_t base_version,
+                                                                  int32_t upsert_key, int32_t upsert_value,
+                                                                  int32_t delete_key, bool include_delete = true,
+                                                                  bool include_upsert = true) {
         std::vector<SlotDescriptor> slots;
-        slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        slots.emplace_back(2, "__op", TYPE_INT_DESC);
         std::vector<SlotDescriptor*> slot_pointers = {&slots[0], &slots[1], &slots[2]};
         Chunk::SlotHashMap slot_cid_map = {{0, 0}, {1, 1}, {2, 2}};
 
@@ -1888,12 +1925,12 @@ protected:
         Chunk chunk(Columns{std::move(key_column), std::move(value_column), std::move(operation_column)}, slot_cid_map);
         const uint32_t indexes[] = {0, 1};
 
-        ASSIGN_OR_RETURN(auto metadata, _tablet_manager->get_tablet_metadata(tablet_id, base_version));
+        ASSIGN_OR_RETURN(auto metadata, tablet_manager->get_tablet_metadata(tablet_id, base_version));
         auto tablet_schema = TabletSchema::create(metadata->schema());
         RuntimeProfile profile("tablet-merge-lifecycle-dml");
         const int64_t txn_id = next_id();
         ASSIGN_OR_RETURN(auto delta_writer, lake::DeltaWriterBuilder()
-                                                    .set_tablet_manager(_tablet_manager.get())
+                                                    .set_tablet_manager(tablet_manager)
                                                     .set_tablet_id(tablet_id)
                                                     .set_txn_id(txn_id)
                                                     .set_partition_id(next_id())
@@ -1912,8 +1949,8 @@ protected:
         txn_info.set_txn_id(txn_id);
         txn_info.set_txn_type(TXN_NORMAL);
         txn_info.set_commit_time(1);
-        return lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), base_version,
-                                     base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
+        return lake::publish_version(tablet_manager, lake::PublishTabletInfo(tablet_id), base_version, base_version + 1,
+                                     std::span<const TxnInfoPB>(&txn_info, 1), false);
     }
 
     StatusOr<TabletMetadataPtr> publish_followup_delete(int64_t tablet_id, int64_t base_version, int32_t delete_key) {
@@ -1924,9 +1961,9 @@ protected:
     StatusOr<TabletMetadataPtr> publish_followup_deletes(int64_t tablet_id, int64_t base_version,
                                                          const std::vector<int32_t>& delete_keys) {
         std::vector<SlotDescriptor> slots;
-        slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        slots.emplace_back(2, "__op", TYPE_INT_DESC);
         std::vector<SlotDescriptor*> slot_pointers = {&slots[0], &slots[1], &slots[2]};
         Chunk::SlotHashMap slot_cid_map = {{0, 0}, {1, 1}, {2, 2}};
 
@@ -1970,10 +2007,12 @@ protected:
                                      base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
     }
 
-    StatusOr<TabletMetadataPtr> compact_tablet(int64_t tablet_id, int64_t base_version, bool force_base) {
+    StatusOr<TabletMetadataPtr> compact_tablet(int64_t tablet_id, int64_t base_version, bool force_base,
+                                               bool is_unshare = false) {
         const int64_t txn_id = next_id();
-        auto context = std::make_unique<lake::CompactionTaskContext>(txn_id, tablet_id, base_version, force_base,
-                                                                     /*skip_write_txnlog=*/false, nullptr);
+        auto context =
+                std::make_unique<lake::CompactionTaskContext>(txn_id, tablet_id, base_version, force_base,
+                                                              /*skip_write_txnlog=*/false, nullptr, 0, 0, is_unshare);
         ASSIGN_OR_RETURN(auto task, _tablet_manager->compact(context.get()));
         RETURN_IF_ERROR(task->execute(lake::CompactionTask::kNoCancelFn));
         TxnInfoPB txn_info;
@@ -1982,6 +2021,58 @@ protected:
         txn_info.set_commit_time(1);
         return lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), base_version,
                                      base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
+    }
+
+    // Compacts the primary-key index SSTs |candidates| of |tablet_id| at |base_version| (each inner vector one fileset,
+    // in index order) as an index compaction does, and publishes the result as |base_version| + 1; the outputs take the
+    // watermark of the last input. pk_index_parallel_compaction_task_split_threshold_bytes picks the path: with a tiny
+    // threshold, disjoint key ranges become separate tasks and a range one candidate holds alone is moved (its file
+    // name kept, its watermark restamped); with a huge one, a single task rewrites two or more candidates into new
+    // files.
+    StatusOr<TabletMetadataPtr> compact_index_with_candidates(
+            int64_t tablet_id, int64_t base_version,
+            const std::vector<std::vector<PersistentIndexSstablePB>>& candidates, bool merge_base_level) {
+        if (candidates.empty()) return Status::InvalidArgument("no index compaction candidate");
+        for (const auto& candidate : candidates) {
+            if (candidate.empty()) return Status::InvalidArgument("an index compaction candidate is empty");
+        }
+        ASSIGN_OR_RETURN(auto metadata, _tablet_manager->get_tablet_metadata(tablet_id, base_version));
+        std::vector<PersistentIndexSstablePB> outputs;
+        {
+            lake::LakePersistentIndexParallelCompactMgr compact_mgr(_tablet_manager.get());
+            RETURN_IF_ERROR(compact_mgr.init());
+            DeferOp shutdown([&] { compact_mgr.shutdown(); });
+            RETURN_IF_ERROR(compact_mgr.compact(candidates, metadata, merge_base_level, &outputs));
+        }
+        auto log = std::make_shared<TxnLogPB>();
+        log->set_tablet_id(tablet_id);
+        log->set_txn_id(next_id());
+        auto* op_compaction = log->mutable_op_compaction();
+        for (const auto& candidate : candidates) {
+            for (const auto& sstable : candidate) op_compaction->add_input_sstables()->CopyFrom(sstable);
+        }
+        const uint64_t max_rss_rowid =
+                op_compaction->input_sstables(op_compaction->input_sstables_size() - 1).max_rss_rowid();
+        for (const auto& sstable : outputs) {
+            auto* output = op_compaction->add_output_sstables();
+            output->CopyFrom(sstable);
+            output->set_max_rss_rowid(max_rss_rowid);
+        }
+        RETURN_IF_ERROR(_tablet_manager->put_txn_log(log));
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(log->txn_id());
+        txn_info.set_txn_type(TXN_NORMAL);
+        txn_info.set_commit_time(1);
+        return lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), base_version,
+                                     base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
+    }
+
+    // Runs an UNSHARE compaction on `tablet` and publishes it. The input metadata is persisted first because split
+    // children exist only in memory.
+    StatusOr<TabletMetadataPtr> unshare_tablet(const TabletMetadataPtr& tablet) {
+        RETURN_IF_ERROR(put_tablet_metadata(tablet));
+        _primary_key_manager->unload_and_remove_primary_index(tablet->id());
+        return compact_tablet(tablet->id(), tablet->version(), /*force_base=*/false, /*is_unshare=*/true);
     }
 
     StatusOr<TabletMetadataPtr> create_lifecycle_source(int64_t tablet_id, int lower, int upper, int32_t key,
@@ -2001,6 +2092,64 @@ protected:
         metadata->mutable_range()->set_upper_bound_included(false);
         RETURN_IF_ERROR(put_tablet_metadata(metadata));
         return publish_followup_upsert_delete(tablet_id, /*base_version=*/1, key, value, upper - 1, include_delete);
+    }
+
+    // A primary-key tablet over [0, 100) whose index file still maps key 40 to its row, while the delete file of its
+    // newest rowset, which holds nothing else, removes that row. It writes 40, then 20, 30, 60 and 70 (each with a
+    // delete of the next key), flushes its index, and deletes 40; its rows are {20, 200}, {30, 300}, {60, 600} and
+    // {70, 700}. Split it with the index flush skipped, the fixture default, so the children inherit that state.
+    StatusOr<TabletMetadataPtr> create_source_with_an_unflushed_delete(int64_t tablet_id) {
+        ASSIGN_OR_RETURN(auto source, create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/40,
+                                                              /*value=*/400, /*include_delete=*/false));
+        for (int32_t key : {20, 30, 60, 70}) {
+            ASSIGN_OR_RETURN(source,
+                             publish_followup_upsert_delete(tablet_id, source->version(), key, key * 10, key + 1));
+        }
+        auto flushed = [&] {
+            ScopedPkIndexFlush pk_index_flush;
+            return _primary_key_manager->flush_pk_memtable(source, source->version());
+        }();
+        RETURN_IF_ERROR(flushed.status());
+        if ((*flushed)->sstable_meta().sstables_size() == 0) {
+            return Status::InternalError("the index flush wrote no index file");
+        }
+        RETURN_IF_ERROR(put_tablet_metadata(*flushed));
+        return publish_followup_delete(tablet_id, (*flushed)->version(), /*delete_key=*/40);
+    }
+
+    // A primary-key tablet over [0, 100) ordered by c1, so its sort key is not its primary key. It writes 20, then 60
+    // with a delete of 61, and flushes its index; every data, delete and index file is then marked shared, as a split
+    // leaves them. The index flush must be allowed to run (see ScopedPkIndexFlush).
+    StatusOr<TabletMetadataPtr> create_shared_separate_sort_key_tablet() {
+        const int64_t tablet_id = next_id();
+        prepare_tablet_dirs(tablet_id);
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(1);
+        set_two_column_pk_schema(metadata.get(), /*schema_id=*/4001);
+        metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        // ORDER BY c1: a sort key that is not the primary key.
+        metadata->mutable_schema()->add_sort_key_idxes(1);
+        metadata->set_enable_persistent_index(true);
+        metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(0));
+        metadata->mutable_range()->set_lower_bound_included(true);
+        metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(100));
+        metadata->mutable_range()->set_upper_bound_included(false);
+        RETURN_IF_ERROR(put_tablet_metadata(metadata));
+        ASSIGN_OR_RETURN(auto written, publish_followup_upsert_delete(tablet_id, metadata->version(), 20, 200, 0,
+                                                                      /*include_delete=*/false));
+        ASSIGN_OR_RETURN(written, publish_followup_upsert_delete(tablet_id, written->version(), 60, 600, 61));
+        ASSIGN_OR_RETURN(auto flushed, _primary_key_manager->flush_pk_memtable(written, written->version()));
+
+        auto shared = std::make_shared<TabletMetadataPB>(*flushed);
+        for (auto& rowset : *shared->mutable_rowsets()) {
+            for (auto& segment : *rowset.mutable_segment_metas()) segment.set_shared(true);
+            for (auto& del : *rowset.mutable_del_files()) del.set_shared(true);
+        }
+        for (auto& sst : *shared->mutable_sstable_meta()->mutable_sstables()) sst.set_shared(true);
+        return shared;
     }
 
     void append_tombstone_sstable(TabletMetadataPB* metadata, int32_t key, const std::string& filename, bool shared) {
@@ -2211,37 +2360,70 @@ protected:
         return static_cast<uint32_t>(cursor);
     }
 
+    // The watermark a merge gives a carried SST of a primary-key source whose run ends at |end| and moves by |delta|:
+    // one inside the run moves with it, one at or past its end is lowered to the moved end - 1 with every row of it
+    // covered.
+    static uint64_t merge_projected_watermark(uint64_t watermark, uint64_t end, int64_t delta) {
+        const uint64_t high = watermark >> 32;
+        if (high >= end) return (static_cast<uint64_t>(static_cast<int64_t>(end - 1) + delta) << 32) | 0xFFFFFFFFULL;
+        return (static_cast<uint64_t>(static_cast<int64_t>(high) + delta) << 32) | (watermark & 0xFFFFFFFFULL);
+    }
+
     // Whether a merge of the primary-key |sources| has to drop their SSTs and rebuild the index: a source references
-    // RSSIDs its flush could not record as a signed watermark, or one of its SSTs has a watermark or a modern owner
-    // outside its run, or a legacy offset that leaves int32 once translated. Embedded delete-vector pages are not
-    // modeled; the lifecycle sources' SSTs carry none.
+    // RSSIDs its flush could not record as a signed watermark, one of its SSTs is modern with an owner above its
+    // watermark, or one of its SSTs not below its run has a legacy offset that leaves int32 once translated, or a
+    // watermark that lowering makes equal to the different one of an earlier carried SST of the source. SSTs below the
+    // run are left out, watermarks past the run's end are lowered, and modern owners outside the run become 0; none of
+    // these is a reason to rebuild by itself. Embedded delete-vector pages are not modeled; the lifecycle sources' SSTs
+    // carry none.
     static bool merge_drops_source_sstables(const std::vector<TabletMetadataPtr>& sources) {
         std::vector<TabletMetadataPtr> ordered(sources);
         std::sort(ordered.begin(), ordered.end(), [](const auto& a, const auto& b) { return a->id() < b->id(); });
         int64_t cursor = 1;
         for (const auto& source : ordered) {
+            for (const auto& sst : source->sstable_meta().sstables()) {
+                if (sst.has_shared_rssid() && int64_t{sst.shared_rssid()} + sst.rssid_offset() >
+                                                      static_cast<int64_t>(sst.max_rss_rowid() >> 32)) {
+                    return true;
+                }
+            }
             const auto runs = merge_source_runs(*source);
             if (runs.empty()) continue;
             const auto [begin, end] = runs.front();
             if (end > (uint64_t{1} << 31)) return true;
             const int64_t delta = cursor - static_cast<int64_t>(begin);
             cursor += static_cast<int64_t>(end - begin);
-            auto inside = [&](int64_t rssid) {
-                return rssid >= static_cast<int64_t>(begin) && rssid < static_cast<int64_t>(end);
-            };
+            std::optional<std::pair<uint64_t, uint64_t>> previous; // original and projected watermark
             for (const auto& sst : source->sstable_meta().sstables()) {
-                if (!inside(static_cast<int64_t>(sst.max_rss_rowid() >> 32))) return true;
-                if (sst.has_shared_rssid()) {
-                    if (!inside(int64_t{sst.shared_rssid()} + sst.rssid_offset())) return true;
-                } else {
+                const int64_t high = static_cast<int64_t>(sst.max_rss_rowid() >> 32);
+                if (high < static_cast<int64_t>(begin)) continue;
+                if (!sst.has_shared_rssid()) {
                     const int64_t offset = int64_t{sst.rssid_offset()} + delta;
                     if (offset < std::numeric_limits<int32_t>::min() || offset > std::numeric_limits<int32_t>::max()) {
                         return true;
                     }
                 }
+                const uint64_t projected = merge_projected_watermark(sst.max_rss_rowid(), end, delta);
+                if (previous.has_value() && previous->first < sst.max_rss_rowid() && previous->second == projected) {
+                    return true;
+                }
+                previous = std::pair{sst.max_rss_rowid(), projected};
             }
         }
         return false;
+    }
+
+    // The source SSTs a merge of the primary-key |sources| leaves out instead of carrying: those whose watermark lies
+    // below their source's run, and every SST of a source that references no RSSID.
+    static std::set<std::string> merge_left_out_source_sstables(const std::vector<TabletMetadataPtr>& sources) {
+        std::set<std::string> left_out;
+        for (const auto& source : sources) {
+            const auto runs = merge_source_runs(*source);
+            for (const auto& sst : source->sstable_meta().sstables()) {
+                if (runs.empty() || (sst.max_rss_rowid() >> 32) < runs.front().first) left_out.insert(sst.filename());
+            }
+        }
+        return left_out;
     }
 
     void add_repeated_sparse_sidecars(TabletMetadataPB* metadata, int cycle, int child_index, int32_t value,
@@ -2299,10 +2481,12 @@ protected:
 
     // A merge of |sources| into |metadata|: the cursor the packing rule predicts, every target RSSID used once, the
     // del files and the delete vector, DCG and IDG entries of every source carried (each readable, encrypted as the
-    // TDE setting says), and the source SSTs either carried with their source's translation or, when |falls_back|,
-    // all dropped and recorded once as shared orphans.
+    // TDE setting says), and the source SSTs either carried with their source's translation, except the |left_out|
+    // ones, which are recorded once as shared orphans, or, when |falls_back|, all dropped and recorded once as shared
+    // orphans.
     void expect_repeated_merge_pb(const TabletMetadataPtr& metadata, const std::vector<TabletMetadataPtr>& sources,
-                                  uint32_t expected_cursor, bool falls_back, bool enable_tde) {
+                                  uint32_t expected_cursor, bool falls_back, const std::set<std::string>& left_out,
+                                  bool enable_tde) {
         EXPECT_EQ(expected_cursor, metadata->next_rowset_id()) << "independent packing cursor";
         std::set<uint32_t> live_rssids;
         int del_file_count = 0;
@@ -2380,32 +2564,48 @@ protected:
             EXPECT_EQ(source_sstables, sst_orphans);
             return;
         }
-        EXPECT_TRUE(sst_orphans.empty());
+        EXPECT_EQ(left_out, sst_orphans);
         EXPECT_GT(metadata->sstable_meta().sstables_size(), 0);
-        // A source SST keeps its file name; its RSSIDs move by its source's delta. The sources are packed from RSSID 1
-        // in tablet id order, each primary-key source as one run.
+        std::set<std::string> carried;
+        for (const auto& sst : metadata->sstable_meta().sstables()) {
+            EXPECT_FALSE(left_out.contains(sst.filename())) << sst.filename();
+            carried.insert(sst.filename());
+        }
+        for (const auto& filename : source_sstables) {
+            if (!left_out.contains(filename)) EXPECT_TRUE(carried.contains(filename)) << filename;
+        }
+        // A source SST keeps its file name; its RSSIDs move by its source's delta, a watermark past the source's run
+        // is lowered to the run's moved end - 1, and a modern owner outside the run becomes 0. The sources are packed
+        // from RSSID 1 in tablet id order, each primary-key source as one run.
         std::vector<TabletMetadataPtr> ordered(sources);
         std::sort(ordered.begin(), ordered.end(), [](const auto& a, const auto& b) { return a->id() < b->id(); });
-        std::map<std::string, std::pair<const PersistentIndexSstablePB*, int64_t>> projected_from;
+        struct ProjectedFrom {
+            const PersistentIndexSstablePB* sst;
+            int64_t delta;
+            uint64_t begin;
+            uint64_t end;
+        };
+        std::map<std::string, ProjectedFrom> projected_from;
         int64_t cursor = 1;
         for (const auto& source : ordered) {
             const auto runs = merge_source_runs(*source);
             if (runs.empty()) continue;
             const int64_t delta = cursor - static_cast<int64_t>(runs.front().first);
-            for (const auto& sst : source->sstable_meta().sstables()) projected_from[sst.filename()] = {&sst, delta};
+            for (const auto& sst : source->sstable_meta().sstables()) {
+                projected_from[sst.filename()] = {&sst, delta, runs.front().first, runs.front().second};
+            }
             cursor += static_cast<int64_t>(runs.front().second - runs.front().first);
         }
         for (const auto& sst : metadata->sstable_meta().sstables()) {
             auto found = projected_from.find(sst.filename());
             if (found == projected_from.end()) continue; // written by the merge's own source flush
-            const auto& [source_sst, delta] = found->second;
-            EXPECT_EQ(static_cast<int64_t>(source_sst->max_rss_rowid() >> 32) + delta,
-                      static_cast<int64_t>(sst.max_rss_rowid() >> 32))
+            const auto& [source_sst, delta, begin, end] = found->second;
+            EXPECT_EQ(merge_projected_watermark(source_sst->max_rss_rowid(), end, delta), sst.max_rss_rowid())
                     << sst.filename();
             if (source_sst->has_shared_rssid()) {
-                EXPECT_EQ(int64_t{source_sst->shared_rssid()} + source_sst->rssid_offset() + delta,
-                          int64_t{sst.shared_rssid()})
-                        << sst.filename();
+                const int64_t owner = int64_t{source_sst->shared_rssid()} + source_sst->rssid_offset();
+                const bool inside = owner >= static_cast<int64_t>(begin) && owner < static_cast<int64_t>(end);
+                EXPECT_EQ(inside ? owner + delta : 0, int64_t{sst.shared_rssid()}) << sst.filename();
             } else {
                 EXPECT_EQ(int64_t{source_sst->rssid_offset()} + delta, int64_t{sst.rssid_offset()}) << sst.filename();
             }
@@ -2911,17 +3111,20 @@ protected:
         return result;
     }
 
+    // Splits `source` at the given ascending key boundaries: boundaries {0, 5, 100} yield the children [0, 5) and
+    // [5, 100).
     StatusOr<std::vector<TabletMetadataPtr>> try_split_fixed_point_source(const TabletMetadataPtr& source,
-                                                                          int child_count) {
+                                                                          const std::vector<int>& boundaries) {
         RETURN_IF_ERROR(put_tablet_metadata(source));
+        const size_t child_count = boundaries.size() - 1;
         SplittingTabletInfoPB split;
         split.set_old_tablet_id(source->id());
-        for (int i = 0; i < child_count; ++i) {
+        for (size_t i = 0; i < child_count; ++i) {
             split.add_new_tablet_ids(next_id());
             auto* range = split.add_new_tablet_ranges();
-            range->mutable_lower_bound()->CopyFrom(generate_sort_key(i * 100 / child_count));
+            range->mutable_lower_bound()->CopyFrom(generate_sort_key(boundaries[i]));
             range->set_lower_bound_included(true);
-            range->mutable_upper_bound()->CopyFrom(generate_sort_key((i + 1) * 100 / child_count));
+            range->mutable_upper_bound()->CopyFrom(generate_sort_key(boundaries[i + 1]));
             range->set_upper_bound_included(false);
         }
         TxnInfoPB txn;
@@ -2934,6 +3137,19 @@ protected:
         }
         std::vector<TabletMetadataPtr> sources;
         for (auto id : split.new_tablet_ids()) sources.push_back(children.at(id));
+        return sources;
+    }
+
+    StatusOr<std::vector<TabletMetadataPtr>> try_split_fixed_point_source(const TabletMetadataPtr& source,
+                                                                          int child_count) {
+        std::vector<int> boundaries;
+        for (int i = 0; i <= child_count; ++i) boundaries.push_back(i * 100 / child_count);
+        return try_split_fixed_point_source(source, boundaries);
+    }
+
+    std::vector<TabletMetadataPtr> split_fixed_point_source(const TabletMetadataPtr& source,
+                                                            const std::vector<int>& boundaries) {
+        ASSIGN_OR_ABORT(auto sources, try_split_fixed_point_source(source, boundaries));
         return sources;
     }
 

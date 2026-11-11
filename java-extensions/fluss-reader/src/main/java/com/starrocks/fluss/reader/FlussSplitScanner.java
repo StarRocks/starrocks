@@ -162,7 +162,7 @@ public class FlussSplitScanner extends ConnectorScanner {
             }
             SourceSplitSerializer serializer = new SourceSplitSerializer(lakeSource);
             byte[] splitBytes = BASE64_DECODER.decode(splitInfo.getBytes(UTF_8));
-            SourceSplitBase split = serializer.deserialize(0, splitBytes);
+            SourceSplitBase split = serializer.deserialize(serializer.getVersion(), splitBytes);
 
             if (split.isLogSplit()) {
                 delegateScanner = new FlussLogScanner(table, split.asLogSplit(), projectedFields);

@@ -15,7 +15,6 @@
 package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.Config;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.ShowStmtAnalyzer;
 import com.starrocks.sql.ast.StatementBase;
@@ -24,6 +23,7 @@ import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.AIProviderTestUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,14 +60,41 @@ public class SPMPlanBindTest extends PlanTestBase {
     }
 
     @Test
+    public void testSPMComparisonArgumentTypes() {
+        String geography = "ST_GeogFromText('POINT (1 2)')";
+        String geometry = "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')";
+        for (String function : List.of(SPMFunctions.CONST_RANGE_FUNC, SPMFunctions.CONST_ENUM_FUNC)) {
+            String sql = "select v1 from t0 where " + function + "(1, %s, %s) is null";
+            String error = "spm function " + function + " does not support type ";
+            CreateBaselinePlanStmt geogStmt = createBaselinePlanStmt(sql.formatted(geography, geography));
+            CreateBaselinePlanStmt geomStmt = createBaselinePlanStmt(sql.formatted(geometry, geometry));
+            Assertions.assertEquals(error + "GEOGRAPHY", Assertions.assertThrows(SemanticException.class,
+                    () -> new SPMPlanBuilder(connectContext, geogStmt).execute()).getDetailMsg());
+            Assertions.assertEquals(error + "GEOMETRY", Assertions.assertThrows(SemanticException.class,
+                    () -> new SPMPlanBuilder(connectContext, geomStmt).execute()).getDetailMsg());
+
+            for (String value : List.of("PARSE_JSON('1')", "TO_BITMAP(1)", "HLL_HASH('a')")) {
+                CreateBaselinePlanStmt stmt = createBaselinePlanStmt(sql.formatted(value, value));
+                Assertions.assertNotNull(new SPMPlanBuilder(connectContext, stmt).execute());
+            }
+
+            CreateBaselinePlanStmt intStmt = createBaselinePlanStmt(
+                    "select v1 from t0 where v1 = " + function + "(1, cast(1 as int), cast(3 as int))");
+            SPMPlanBuilder builder = new SPMPlanBuilder(connectContext, intStmt);
+            builder.execute();
+            assertContains(builder.getPlanStmtSQL(), function + "(");
+        }
+    }
+
+    @Test
     public void testAIFunctionIsNotSupported() {
-        String oldEndpoint = Config.ai_default_chat_endpoint;
-        String oldModel = Config.ai_default_chat_model;
-        String oldProvider = Config.ai_default_chat_provider;
+        String oldEndpoint = AIProviderTestUtil.chatProperty("endpoint");
+        String oldModel = AIProviderTestUtil.chatProperty("model");
+        String oldProvider = AIProviderTestUtil.chatProperty("protocol");
         try {
-            Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
-            Config.ai_default_chat_model = "default-model";
-            Config.ai_default_chat_provider = "openai_compatible";
+            AIProviderTestUtil.setChatProperty("endpoint", "https://models.example.test/v1/chat/completions");
+            AIProviderTestUtil.setChatProperty("model", "default-model");
+            AIProviderTestUtil.setChatProperty("protocol", "openai");
 
             CreateBaselinePlanStmt aiPlan = createBaselinePlanStmt(
                     "select generated from "
@@ -85,9 +112,9 @@ public class SPMPlanBindTest extends PlanTestBase {
                     () -> assertAIFunctionNotSupported("set-operation ORDER BY", setOperationOrderByAI),
                     () -> assertAIFunctionNotSupported("nested VALUES", valuesNestedAI));
         } finally {
-            Config.ai_default_chat_endpoint = oldEndpoint;
-            Config.ai_default_chat_model = oldModel;
-            Config.ai_default_chat_provider = oldProvider;
+            AIProviderTestUtil.setChatProperty("endpoint", oldEndpoint);
+            AIProviderTestUtil.setChatProperty("model", oldModel);
+            AIProviderTestUtil.setChatProperty("protocol", oldProvider);
         }
     }
 

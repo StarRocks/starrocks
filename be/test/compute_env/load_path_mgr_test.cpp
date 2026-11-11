@@ -79,9 +79,18 @@ TEST(LoadPathMgrTest, RealManagerUsesStoreRootsForLoadErrorAndRejectedRecordPath
     fragment_instance_id.hi = 0xabc;
     fragment_instance_id.lo = 0xdef;
 
+    // The instance id, then a random suffix: the instance id follows from the load's query id, which users can
+    // see, so the name alone must not lead to the rejected rows.
+    const std::string error_file_prefix = "error_log_abc_def_";
     std::string error_file;
     ASSERT_OK(mgr.get_load_error_file_name(fragment_instance_id, &error_file));
-    EXPECT_EQ("error_log_abc_def", error_file);
+    ASSERT_EQ(0, error_file.rfind(error_file_prefix, 0)) << error_file;
+    std::string suffix = error_file.substr(error_file_prefix.size());
+    EXPECT_EQ(32, suffix.size()) << error_file;
+    EXPECT_EQ(std::string::npos, suffix.find_first_not_of("0123456789abcdef")) << error_file;
+    std::string another_error_file;
+    ASSERT_OK(mgr.get_load_error_file_name(fragment_instance_id, &another_error_file));
+    EXPECT_NE(error_file, another_error_file);
     EXPECT_EQ(root1.path() + "/error_log/" + error_file, mgr.get_load_error_absolute_path(error_file));
 
     EXPECT_EQ(root1.path() + "/rejected_record/db1/label1/42/abc_def",

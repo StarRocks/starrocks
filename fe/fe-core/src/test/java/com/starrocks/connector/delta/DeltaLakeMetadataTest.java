@@ -64,6 +64,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class DeltaLakeMetadataTest {
     private HiveMetaClient client;
@@ -279,5 +281,45 @@ public class DeltaLakeMetadataTest {
 
         Assertions.assertEquals(Sets.newHashSet("c2"),
                 DeltaLakeMetadata.identityStringPartitionColumns(table, Sets.newHashSet("c2", "c3")));
+    }
+
+    @Test
+    public void testInvalidateTableForReadDoesNoRemoteLoad() {
+        AtomicInteger snapshotLoads = new AtomicInteger();
+        new MockUp<DeltaLakeMetastore>() {
+            @Mock
+            public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
+                snapshotLoads.incrementAndGet();
+                return new DeltaLakeSnapshot(dbName, tableName, null, null,
+                        new MetastoreTable(dbName, tableName, "s3://bucket/path/to/table", 123));
+            }
+        };
+        new MockUp<DeltaUtils>() {
+            @Mock
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
+                return new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(), Lists.newArrayList(),
+                        null, null, new MetastoreTable("db1", "table1", "s3://bucket/path/to/table", 123));
+            }
+        };
+        HMSBackedDeltaMetastore hmsBackedDeltaMetastore = new HMSBackedDeltaMetastore("delta0",
+                new HiveMetastore(client, "delta0", MetastoreType.HMS), new Configuration(),
+                new DeltaLakeCatalogProperties(Maps.newHashMap()));
+        CachingDeltaLakeMetastore catalogLevel = CachingDeltaLakeMetastore.createCatalogLevelInstance(
+                hmsBackedDeltaMetastore, Executors.newSingleThreadExecutor(), 3600, -1, 100);
+        DeltaMetastoreOperations deltaOps = new DeltaMetastoreOperations(
+                CachingDeltaLakeMetastore.createQueryLevelInstance(catalogLevel, 100), true, MetastoreType.HMS);
+        DeltaLakeMetadata metadata = new DeltaLakeMetadata(new HdfsEnvironment(Maps.newHashMap()), "delta0",
+                deltaOps, new DeltaLakeCacheUpdateProcessor(catalogLevel), new ConnectorProperties(ConnectorType.DELTALAKE));
+
+        Table table = metadata.getTable(new ConnectContext(), "db1", "table1");
+        Assertions.assertEquals(1, snapshotLoads.get());
+
+        // Invalidating for a read only drops the cached snapshot, at both cache levels; it does not read the log.
+        metadata.invalidateTableForRead("db1", table);
+        Assertions.assertEquals(1, snapshotLoads.get());
+
+        // The next read loads the latest snapshot, past the query-level cache too.
+        metadata.getTable(new ConnectContext(), "db1", "table1");
+        Assertions.assertEquals(2, snapshotLoads.get());
     }
 }

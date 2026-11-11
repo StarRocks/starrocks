@@ -73,8 +73,8 @@ public:
         _location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager =
-                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1638400000);
+        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(),
+                                                                1638400000, 1638400000);
     }
 
     void TearDown() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
@@ -205,7 +205,7 @@ protected:
                                 int64_t txn_id, std::unordered_map<int64_t, TabletMetadataPtr>* published_metadatas) {
         CHECK_EQ(2, sources.size());
         auto* split_key = sources[0]->mutable_range()->mutable_upper_bound()->add_values();
-        split_key->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+        split_key->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
         split_key->set_value("0");
         split_key->set_variant_type(VariantTypePB::NORMAL_VALUE);
         sources[0]->mutable_range()->set_upper_bound_included(false);
@@ -1614,6 +1614,58 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
     }
 }
 
+// A compaction moves the delete files of its inputs above the index rebuild point into its output rowset, so a cold
+// index rebuild can still replay them. When the publish has persisted the index first, it moves none: the delete
+// files stay, with their shared flag, on the archived input rowsets.
+TEST_F(MetaFileTest, test_apply_opcompaction_does_not_carry_dels_when_index_persisted) {
+    for (const bool index_persisted : {false, true}) {
+        SCOPED_TRACE(index_persisted);
+        const int64_t tablet_id = next_id();
+        Tablet tablet(_tablet_manager.get(), tablet_id);
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(3);
+        metadata->set_next_rowset_id(3);
+        metadata->set_enable_persistent_index(true);
+        metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto* older = metadata->add_rowsets();
+        older->set_id(1);
+        older->add_segment_metas()->set_filename("older.dat");
+        auto* newer = metadata->add_rowsets();
+        newer->set_id(2);
+        newer->add_segment_metas()->set_filename("newer.dat");
+        auto* del = newer->add_del_files();
+        del->set_name("newer.del");
+        del->set_origin_rowset_id(2);
+        del->set_shared(true);
+        // The index file stops inside rowset 2, so the delete file of rowset 2 is above the rebuild point.
+        metadata->mutable_sstable_meta()->add_sstables()->set_max_rss_rowid(static_cast<uint64_t>(2) << 32);
+
+        MetaFileBuilder builder(tablet, metadata);
+        TxnLogPB_OpCompaction op_compaction;
+        op_compaction.add_input_rowsets(1);
+        op_compaction.add_input_rowsets(2);
+        op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("output.dat");
+        ASSERT_OK(builder.apply_opcompaction(op_compaction, 2, 0, index_persisted));
+
+        ASSERT_EQ(1, metadata->rowsets_size());
+        const auto& output = metadata->rowsets(0);
+        ASSERT_EQ(2, metadata->compaction_inputs_size());
+        const auto& archived = metadata->compaction_inputs(1);
+        ASSERT_EQ(2, archived.id());
+        if (index_persisted) {
+            EXPECT_EQ(0, output.del_files_size());
+            ASSERT_EQ(1, archived.del_files_size());
+            EXPECT_EQ("newer.del", archived.del_files(0).name());
+            EXPECT_TRUE(archived.del_files(0).shared());
+        } else {
+            ASSERT_EQ(1, output.del_files_size());
+            EXPECT_EQ("newer.del", output.del_files(0).name());
+            EXPECT_EQ(0, archived.del_files_size());
+        }
+    }
+}
+
 TEST_F(MetaFileTest, test_clear_delete_predicate_when_compact) {
     // Regression for the metadata-reclaim change: when compaction archives its input
     // rowsets into compaction_inputs, the (potentially large) delete_predicate must be
@@ -2083,6 +2135,63 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_del_num_rows) {
     EXPECT_EQ(100, total); // 70 + 30
 }
 
+// batch path: every op_write of a multi-statement transaction goes into one merged rowset. A row-mode
+// partial update keys its rewritten segments by position in its own op_write, and each rewrite must
+// land on that op_write's segment of the merged rowset -- found by segment POSITION, which an
+// op_write without segments does not advance although it takes an rssid slot.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_places_rewrites_on_their_own_segments) {
+    const int64_t tablet_id = 31012;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(300);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    auto rewrite = [](const std::string& path) {
+        SegmentFileInfo info;
+        info.path = path;
+        info.size = 100;
+        return info;
+    };
+
+    // Statement 1: a row-mode partial update whose only segment is rewritten.
+    TxnLogPB_OpWrite partial1;
+    partial1.mutable_rowset()->add_segment_metas()->set_filename("partial1.dat");
+    builder.batch_apply_opwrite(partial1, {{0, rewrite("rewrite1.dat")}}, {});
+    // Statement 2: nothing for this tablet -- no segment, one rssid slot.
+    TxnLogPB_OpWrite empty;
+    empty.mutable_rowset();
+    builder.batch_apply_opwrite(empty, {}, {});
+    // Statement 3: a plain write, nothing to rewrite.
+    TxnLogPB_OpWrite plain;
+    plain.mutable_rowset()->add_segment_metas()->set_filename("plain3.dat");
+    builder.batch_apply_opwrite(plain, {}, {});
+    // Statement 4: a row-mode partial update of two segments, both rewritten.
+    TxnLogPB_OpWrite partial4;
+    partial4.mutable_rowset()->add_segment_metas()->set_filename("partial4a.dat");
+    partial4.mutable_rowset()->add_segment_metas()->set_filename("partial4b.dat");
+    builder.batch_apply_opwrite(partial4, {{0, rewrite("rewrite4a.dat")}, {1, rewrite("rewrite4b.dat")}}, {});
+
+    ASSERT_OK(builder.set_final_rowset());
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    EXPECT_EQ(300u, rowset.id());
+    ASSERT_EQ(4, rowset.segment_metas_size());
+    // Statement 2 took segment index 1 without adding a position, so positions and indexes part there.
+    EXPECT_EQ("rewrite1.dat", rowset.segment_metas(0).filename());
+    EXPECT_EQ(0u, rowset.segment_metas(0).segment_idx());
+    EXPECT_EQ("plain3.dat", rowset.segment_metas(1).filename());
+    EXPECT_EQ(2u, rowset.segment_metas(1).segment_idx());
+    EXPECT_EQ("rewrite4a.dat", rowset.segment_metas(2).filename());
+    EXPECT_EQ(3u, rowset.segment_metas(2).segment_idx());
+    EXPECT_EQ("rewrite4b.dat", rowset.segment_metas(3).filename());
+    EXPECT_EQ(4u, rowset.segment_metas(3).segment_idx());
+    // The merged rowset takes every statement's slots, the segmentless one's included.
+    EXPECT_EQ(305u, metadata->next_rowset_id());
+}
+
 // The partial-update replace path refreshes segment_vector_index_uid wholesale from the replace
 // FileInfo (apply_replace_segment): a recorded owner overwrites whatever the replaced segment
 // carried, and an unset owner (-1) clears a stale one. Non-replaced segments are carried verbatim.
@@ -2413,6 +2522,345 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
     EXPECT_EQ(1, final_rowset.del_files(0).op_offset());
     EXPECT_EQ(2, final_rowset.del_files(1).op_offset());
     EXPECT_EQ(603, metadata->next_rowset_id());
+}
+
+// A batch can mix physical bundle slices and standalone files. Preserve every physical offset and
+// rssid while assigning the standalone files synthetic offset 0 in the merged rowset.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_merges_bundled_and_standalone_segments) {
+    const int64_t tablet_id = 30004;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(40);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_id(7);
+    (*metadata->mutable_rowset_to_schema())[1] = 7;
+
+    MetaFileBuilder builder(*tablet, metadata);
+    auto set_uid = [](RowsetMetadataPB* rowset, int64_t lo) {
+        rowset->mutable_uid()->set_hi(1);
+        rowset->mutable_uid()->set_lo(lo);
+    };
+
+    // Statement 1 wrote one bundled segment and deletes some keys: rssid slot 0.
+    TxnLogPB_OpWrite op_write1;
+    op_write1.mutable_rowset()->set_num_rows(10);
+    op_write1.mutable_rowset()->set_data_size(100);
+    set_uid(op_write1.mutable_rowset(), 1);
+    {
+        auto* segment = op_write1.mutable_rowset()->add_segment_metas();
+        segment->set_filename("bundle1.dat");
+        segment->set_size(100);
+        segment->set_bundle_file_offset(0);
+    }
+    op_write1.add_dels_meta()->set_name("d1.del");
+    op_write1.add_del_num_rows(1);
+    builder.batch_apply_opwrite(op_write1, {}, {});
+
+    // Statement 2 flushed twice, so its two segments are standalone files: slots 1 and 2.
+    TxnLogPB_OpWrite op_write2;
+    op_write2.mutable_rowset()->set_num_rows(20);
+    op_write2.mutable_rowset()->set_data_size(200);
+    op_write2.mutable_rowset()->set_overlapped(true);
+    set_uid(op_write2.mutable_rowset(), 2);
+    for (const auto* name : {"s1.dat", "s2.dat"}) {
+        auto* segment = op_write2.mutable_rowset()->add_segment_metas();
+        segment->set_filename(name);
+        segment->set_size(100);
+    }
+    builder.batch_apply_opwrite(op_write2, {}, {});
+
+    // Statement 3 only deletes: no segment, slot 3.
+    TxnLogPB_OpWrite op_write3;
+    set_uid(op_write3.mutable_rowset(), 3);
+    op_write3.add_dels_meta()->set_name("d3.del");
+    op_write3.add_del_num_rows(2);
+    builder.batch_apply_opwrite(op_write3, {}, {});
+
+    // Statement 4 wrote one bundled segment again: slot 4.
+    TxnLogPB_OpWrite op_write4;
+    op_write4.mutable_rowset()->set_num_rows(5);
+    op_write4.mutable_rowset()->set_data_size(50);
+    set_uid(op_write4.mutable_rowset(), 4);
+    {
+        auto* segment = op_write4.mutable_rowset()->add_segment_metas();
+        segment->set_filename("bundle2.dat");
+        segment->set_size(50);
+        segment->set_bundle_file_offset(4096);
+    }
+    builder.batch_apply_opwrite(op_write4, {}, {});
+
+    // Deletes the publish marked on the segments of statements 1, 2 and 4.
+    ASSERT_OK(builder.update_num_del_stat({{100, 2}, {102, 3}, {104, 1}}));
+    ASSERT_OK(builder.set_final_rowset());
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    EXPECT_EQ(105, metadata->next_rowset_id()); // last rssid slot 4 + 1
+    const auto& rowset = metadata->rowsets(0);
+    EXPECT_EQ(100, rowset.id());
+    EXPECT_EQ(40, rowset.version());
+    ASSERT_EQ(4, rowset.segment_metas_size());
+    EXPECT_EQ("bundle1.dat", rowset.segment_metas(0).filename());
+    EXPECT_EQ("s1.dat", rowset.segment_metas(1).filename());
+    EXPECT_EQ("s2.dat", rowset.segment_metas(2).filename());
+    EXPECT_EQ("bundle2.dat", rowset.segment_metas(3).filename());
+    const std::vector<uint32_t> rssids{100, 101, 102, 104};
+    for (int pos = 0; pos < rowset.segment_metas_size(); ++pos) {
+        EXPECT_EQ(rssids[pos], get_rssid(rowset, pos));
+        const auto& segment = rowset.segment_metas(pos);
+        ASSERT_TRUE(segment.has_bundle_file_offset());
+        EXPECT_EQ(pos == 3 ? 4096 : 0, segment.bundle_file_offset());
+        EXPECT_EQ(pos == 1 || pos == 2, segment.synthetic_bundle_file_offset());
+    }
+    EXPECT_EQ(35, rowset.num_rows());
+    EXPECT_EQ(350, rowset.data_size());
+    EXPECT_EQ(6, rowset.num_dels());
+    EXPECT_TRUE(rowset.overlapped());
+    EXPECT_EQ(1, rowset.uid().lo());
+    ASSERT_EQ(2, rowset.del_files_size());
+    EXPECT_EQ("d1.del", rowset.del_files(0).name());
+    EXPECT_EQ(100, rowset.del_files(0).origin_rowset_id());
+    EXPECT_EQ(0, rowset.del_files(0).op_offset());
+    EXPECT_EQ(1, rowset.del_files(0).num_rows());
+    // Statement 3's delete follows statement 2's segments and precedes statement 4's slot 4.
+    EXPECT_EQ("d3.del", rowset.del_files(1).name());
+    EXPECT_EQ(100, rowset.del_files(1).origin_rowset_id());
+    EXPECT_EQ(3, rowset.del_files(1).op_offset());
+    EXPECT_EQ(2, rowset.del_files(1).num_rows());
+    ASSERT_EQ(1, metadata->rowset_to_schema().count(100));
+    EXPECT_EQ(7, metadata->rowset_to_schema().at(100));
+    EXPECT_EQ(0, metadata->rowset_to_schema().count(101));
+    EXPECT_EQ(0, metadata->rowset_to_schema().count(104));
+
+    ASSERT_OK(builder.finalize(next_id()));
+    ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, 40));
+    ASSERT_EQ(1, persisted->rowsets_size());
+    EXPECT_EQ(4096, persisted->rowsets(0).segment_metas(3).bundle_file_offset());
+    EXPECT_TRUE(persisted->rowsets(0).segment_metas(1).synthetic_bundle_file_offset());
+}
+
+// A leading pure delete takes an rssid slot without adding a segment; normalization must not move
+// its delete offset or the following statements' segment ids.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_keeps_leading_delete_before_segments) {
+    const int64_t tablet_id = 30005;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(50);
+    metadata->set_next_rowset_id(200);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpWrite op_write1;
+    op_write1.add_dels_meta()->set_name("d1.del");
+    builder.batch_apply_opwrite(op_write1, {}, {});
+
+    TxnLogPB_OpWrite op_write2;
+    op_write2.mutable_rowset()->set_num_rows(3);
+    auto* standalone = op_write2.mutable_rowset()->add_segment_metas();
+    standalone->set_filename("s1.dat");
+    standalone->set_size(100);
+    builder.batch_apply_opwrite(op_write2, {}, {});
+
+    TxnLogPB_OpWrite op_write3;
+    op_write3.mutable_rowset()->set_num_rows(4);
+    {
+        auto* segment = op_write3.mutable_rowset()->add_segment_metas();
+        segment->set_filename("bundle.dat");
+        segment->set_size(100);
+        segment->set_bundle_file_offset(128);
+    }
+    builder.batch_apply_opwrite(op_write3, {}, {});
+
+    ASSERT_OK(builder.set_final_rowset());
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    EXPECT_EQ(200, rowset.id());
+    ASSERT_EQ(2, rowset.segment_metas_size());
+    EXPECT_EQ(201, get_rssid(rowset, 0));
+    EXPECT_EQ(202, get_rssid(rowset, 1));
+    EXPECT_EQ(7, rowset.num_rows());
+    ASSERT_EQ(1, rowset.del_files_size());
+    EXPECT_EQ(200, rowset.del_files(0).origin_rowset_id());
+    EXPECT_EQ(0, rowset.del_files(0).op_offset()); // before statement 2's segment, as applied
+    EXPECT_EQ(0, rowset.segment_metas(0).bundle_file_offset());
+    EXPECT_TRUE(rowset.segment_metas(0).synthetic_bundle_file_offset());
+    EXPECT_EQ(128, rowset.segment_metas(1).bundle_file_offset());
+    EXPECT_FALSE(rowset.segment_metas(1).synthetic_bundle_file_offset());
+    EXPECT_EQ(203, metadata->next_rowset_id());
+}
+
+// Statements that all bundled their segments stay one rowset, offsets and all.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_all_bundled_stays_one_rowset) {
+    const int64_t tablet_id = 30006;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(60);
+    metadata->set_next_rowset_id(300);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    for (int i = 0; i < 2; i++) {
+        TxnLogPB_OpWrite op_write;
+        auto* segment = op_write.mutable_rowset()->add_segment_metas();
+        segment->set_filename(fmt::format("bundle{}.dat", i));
+        segment->set_bundle_file_offset(i * 64);
+        builder.batch_apply_opwrite(op_write, {}, {});
+    }
+    ASSERT_OK(builder.set_final_rowset());
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    EXPECT_EQ(300, rowset.id());
+    ASSERT_EQ(2, rowset.segment_metas_size());
+    EXPECT_EQ(0, rowset.segment_metas(0).bundle_file_offset());
+    EXPECT_EQ(64, rowset.segment_metas(1).bundle_file_offset());
+    EXPECT_EQ(302, metadata->next_rowset_id());
+}
+
+// A row-mode partial update's rewrite is a standalone file, but the other statements' segments of the
+// batch may still live in bundle files. Preserve their physical offsets and assign the rewritten
+// file synthetic offset 0 in the merged rowset.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_rewrite_keeps_other_statements_bundled) {
+    const int64_t tablet_id = 30008;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(80);
+    metadata->set_next_rowset_id(500);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    // Statement 1: a row-mode partial update whose only segment, bundled, is rewritten.
+    TxnLogPB_OpWrite partial;
+    partial.mutable_rowset()->mutable_uid()->set_hi(1);
+    partial.mutable_rowset()->mutable_uid()->set_lo(1);
+    {
+        auto* segment = partial.mutable_rowset()->add_segment_metas();
+        segment->set_filename("partial.dat");
+        segment->set_bundle_file_offset(0);
+    }
+    SegmentFileInfo rewrite;
+    rewrite.path = "rewrite.dat";
+    rewrite.size = 300;
+    builder.batch_apply_opwrite(partial, {{0, rewrite}}, {});
+    // Statement 2: a plain write whose segment lives inside a bundle file.
+    TxnLogPB_OpWrite plain;
+    plain.mutable_rowset()->mutable_uid()->set_hi(1);
+    plain.mutable_rowset()->mutable_uid()->set_lo(2);
+    {
+        auto* segment = plain.mutable_rowset()->add_segment_metas();
+        segment->set_filename("bundle.dat");
+        segment->set_bundle_file_offset(4096);
+    }
+    builder.batch_apply_opwrite(plain, {}, {});
+
+    ASSERT_OK(builder.set_final_rowset());
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    EXPECT_EQ(500, rowset.id());
+    ASSERT_EQ(2, rowset.segment_metas_size());
+    EXPECT_EQ("rewrite.dat", rowset.segment_metas(0).filename());
+    EXPECT_EQ(500, get_rssid(rowset, 0));
+    ASSERT_TRUE(rowset.segment_metas(0).has_bundle_file_offset());
+    EXPECT_EQ(0, rowset.segment_metas(0).bundle_file_offset());
+    EXPECT_TRUE(rowset.segment_metas(0).synthetic_bundle_file_offset());
+    // The rewritten data is private to this tablet, so it no longer shares the op_write's uid.
+    EXPECT_FALSE(rowset.uid().hi() == 1 && rowset.uid().lo() == 1);
+    EXPECT_EQ("bundle.dat", rowset.segment_metas(1).filename());
+    EXPECT_EQ(501, get_rssid(rowset, 1));
+    ASSERT_TRUE(rowset.segment_metas(1).has_bundle_file_offset());
+    EXPECT_EQ(4096, rowset.segment_metas(1).bundle_file_offset());
+    EXPECT_FALSE(rowset.segment_metas(1).synthetic_bundle_file_offset());
+    EXPECT_EQ(502, metadata->next_rowset_id());
+}
+
+// An op_write can itself fold several writers' files. Normalize its standalone segment without
+// changing the physical bundle slice or either segment's rssid.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_normalizes_mixed_op_write) {
+    const int64_t tablet_id = 30007;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(70);
+    metadata->set_next_rowset_id(400);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpWrite op_write;
+    auto* standalone = op_write.mutable_rowset()->add_segment_metas();
+    standalone->set_filename("s1.dat");
+    standalone->set_size(100);
+    {
+        auto* segment = op_write.mutable_rowset()->add_segment_metas();
+        segment->set_filename("bundle.dat");
+        segment->set_size(100);
+        segment->set_bundle_file_offset(128);
+    }
+    builder.batch_apply_opwrite(op_write, {}, {});
+    ASSERT_OK(builder.set_final_rowset());
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(2, rowset.segment_metas_size());
+    EXPECT_EQ(400, get_rssid(rowset, 0));
+    EXPECT_EQ(401, get_rssid(rowset, 1));
+    ASSERT_TRUE(rowset.segment_metas(0).has_bundle_file_offset());
+    EXPECT_EQ(0, rowset.segment_metas(0).bundle_file_offset());
+    EXPECT_TRUE(rowset.segment_metas(0).synthetic_bundle_file_offset());
+    EXPECT_EQ(128, rowset.segment_metas(1).bundle_file_offset());
+    EXPECT_FALSE(rowset.segment_metas(1).synthetic_bundle_file_offset());
+    EXPECT_EQ(402, metadata->next_rowset_id());
+}
+
+// PrimaryKeyManager::_do_delete hands a pre-built tombstone sstable that an index other than the cloud-native one
+// does not ingest to vacuum through the rowset's orphan files, next to the segments a partial update replaced.
+// Both the single and the batch apply path must record it like those: name, size and shared flag kept, and the
+// version being built stamped as its creation version unless the producer set one.
+TEST_F(MetaFileTest, test_apply_opwrite_records_tombstone_sstable_orphan) {
+    const int64_t tablet_id = 30004;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    std::vector<FileMetaPB> orphan_files(3);
+    orphan_files[0].set_name("replaced.dat");
+    orphan_files[0].set_size(10);
+    orphan_files[1].set_name("0000000000000007_tombstone.sst");
+    orphan_files[1].set_size(20);
+    orphan_files[1].set_shared(true);
+    orphan_files[2].set_name("0000000000000008_tombstone.sst");
+    orphan_files[2].set_size(30);
+    orphan_files[2].set_version(5);
+
+    auto check_orphans = [&](const TabletMetadata& metadata) {
+        ASSERT_EQ(orphan_files.size(), metadata.orphan_files_size());
+        for (int i = 0; i < metadata.orphan_files_size(); i++) {
+            const auto& orphan = metadata.orphan_files(i);
+            EXPECT_EQ(orphan_files[i].name(), orphan.name());
+            EXPECT_EQ(orphan_files[i].size(), orphan.size());
+            EXPECT_EQ(orphan_files[i].shared(), orphan.shared());
+            EXPECT_EQ(orphan_files[i].has_version() ? orphan_files[i].version() : metadata.version(), orphan.version())
+                    << orphan.name();
+        }
+    };
+
+    {
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(10);
+        metadata->set_next_rowset_id(110);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->add_segment_metas()->set_filename("a.dat");
+        builder.apply_opwrite(op_write, {}, orphan_files);
+        check_orphans(*metadata);
+    }
+    {
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(11);
+        metadata->set_next_rowset_id(120);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->add_segment_metas()->set_filename("b.dat");
+        builder.batch_apply_opwrite(op_write, {}, orphan_files);
+        ASSERT_OK(builder.set_final_rowset());
+        check_orphans(*metadata);
+    }
 }
 
 TEST_F(MetaFileTest, test_sstable_delvec_integration) {
@@ -4460,6 +4908,59 @@ TEST_F(MetaFileTest, test_apply_drop_index_sentinel_id_respects_type) {
     EXPECT_EQ(BITMAP, schema->table_indices(0).index_type());
     ASSERT_EQ(1, schema->dropped_table_indices_size());
     EXPECT_EQ(NGRAMBF, schema->dropped_table_indices(0).index_type());
+}
+
+// A column-mode update rewrites some columns of a segment and keeps the other `.cols` files of that segment. A kept
+// file keeps its shared flag: after a range split it is still read by the sibling tablet, and a file that lost the flag
+// would be deleted by vacuum once a later update orphans it. A new file is private.
+TEST_F(MetaFileTest, test_append_dcg_keeps_shared_flags_of_kept_files) {
+    const int64_t tablet_id = next_id();
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(11);
+    metadata->set_next_rowset_id(111);
+    // Segment 110 as a split leaves it: both `.cols` files are shared with the sibling.
+    auto& split_dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[110];
+    for (const auto& [file, cuids, size] : std::vector<std::tuple<std::string, std::vector<ColumnUID>, int64_t>>{
+                 {"aaa.cols", {3, 4}, 111}, {"bbb.cols", {6}, 222}}) {
+        split_dcg.add_column_files(file);
+        auto* ids = split_dcg.add_unique_column_ids();
+        for (ColumnUID cuid : cuids) {
+            ids->add_column_ids(cuid);
+        }
+        split_dcg.add_column_file_sizes(size);
+        split_dcg.add_versions(10);
+        split_dcg.add_shared_files(true);
+    }
+    auto shared_flags = [&]() {
+        const auto& dcg = metadata->dcg_meta().dcgs().at(110);
+        EXPECT_EQ(dcg.column_files_size(), dcg.shared_files_size());
+        std::map<std::string, bool> flags;
+        for (int i = 0; i < dcg.column_files_size() && i < dcg.shared_files_size(); ++i) {
+            flags[dcg.column_files(i)] = dcg.shared_files(i);
+        }
+        return flags;
+    };
+
+    MetaFileBuilder builder(*tablet, metadata);
+    // Column 4 moves to ccc.cols; aaa.cols keeps column 3 and bbb.cols column 6.
+    builder.append_dcg(110, {{"ccc.cols", ""}}, {{4}}, {333});
+    EXPECT_EQ((std::map<std::string, bool>{{"aaa.cols", true}, {"bbb.cols", true}, {"ccc.cols", false}}),
+              shared_flags());
+
+    // Column 6 moves to ddd.cols, so bbb.cols becomes an orphan and still records that it is shared.
+    builder.append_dcg(110, {{"ddd.cols", ""}}, {{6}}, {444});
+    EXPECT_EQ((std::map<std::string, bool>{{"aaa.cols", true}, {"ccc.cols", false}, {"ddd.cols", false}}),
+              shared_flags());
+    bool orphaned = false;
+    for (const auto& file : metadata->orphan_files()) {
+        if (file.name() == "bbb.cols") {
+            orphaned = true;
+            EXPECT_TRUE(file.shared());
+        }
+    }
+    EXPECT_TRUE(orphaned);
 }
 
 } // namespace starrocks::lake

@@ -25,9 +25,9 @@ struct RetractMinMaxDispatcher {
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (lt_is_aggregate<lt>) {
             resolver->add_aggregate_mapping<lt, lt, MinAggregateDataRetractable<lt>>(
-                    "retract_min", true, AggregateFactory::MakeRetractMinAggregateFunction<lt>());
+                    "retract_min", kWithWindow, AggregateFactory::MakeRetractMinAggregateFunction<lt>());
             resolver->add_aggregate_mapping<lt, lt, MaxAggregateDataRetractable<lt>>(
-                    "retract_max", true, AggregateFactory::MakeRetractMaxAggregateFunction<lt>());
+                    "retract_max", kWithWindow, AggregateFactory::MakeRetractMaxAggregateFunction<lt>());
         }
     }
 };
