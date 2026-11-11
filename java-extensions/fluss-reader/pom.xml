@@ -84,6 +84,19 @@
             <version>${fluss.version}</version>
         </dependency>
 
+        <!-- The Fluss client reads log segments that Fluss has moved to remote storage itself. -->
+        <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-fs-s3</artifactId>
+            <version>${fluss.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-fs-oss</artifactId>
+            <version>${fluss.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-core</artifactId>

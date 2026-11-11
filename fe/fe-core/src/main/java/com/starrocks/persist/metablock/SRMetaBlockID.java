@@ -110,6 +110,11 @@ public class SRMetaBlockID {
     // AIProviderMgr image block (SQL-managed embedding / rerank providers).
     public static final SRMetaBlockID AI_PROVIDER_MGR = new SRMetaBlockID(38);
 
+    // Placeholder.
+    public static final SRMetaBlockID PLACEHOLDER = new SRMetaBlockID(39);
+
+    public static final SRMetaBlockID GTID_GENERATOR = new SRMetaBlockID(40);
+
     /**
      * NOTICE: SRMetaBlockID cannot use a value exceeding 20000, please follow the above sequence number
      */

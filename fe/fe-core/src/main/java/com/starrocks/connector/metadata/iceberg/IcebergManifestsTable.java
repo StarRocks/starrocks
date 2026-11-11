@@ -43,32 +43,41 @@ public class IcebergManifestsTable extends MetadataTable {
         super(catalogName, id, name, type, baseSchema, originDb, originTable, metadataTableType);
     }
 
-    public static IcebergManifestsTable create(String catalogName, String originDb, String originTable) {
+    // MANIFESTS lists the manifests of the current snapshot; ALL_MANIFESTS those of every snapshot, with the
+    // snapshot in reference_snapshot_id
+    public static IcebergManifestsTable create(String catalogName, String originDb, String originTable,
+                                               MetadataTableType metadataTableType) {
+        Builder builder = builder()
+                .column("path", VarcharType.VARCHAR)
+                .column("length", BIGINT)
+                .column("partition_spec_id", INT)
+                .column("added_snapshot_id", BIGINT)
+                .column("added_data_files_count", INT)
+                .column("added_rows_count", BIGINT)
+                .column("existing_data_files_count", INT)
+                .column("existing_rows_count", BIGINT)
+                .column("deleted_data_files_count", INT)
+                .column("deleted_rows_count", BIGINT)
+                .column("partitions", new ArrayType(
+                        new StructType(Lists.newArrayList(
+                                new StructField("contains_null", VarcharType.VARCHAR),
+                                new StructField("contains_nan", VarcharType.VARCHAR),
+                                new StructField("lower_bound", VarcharType.VARCHAR),
+                                new StructField("upper_bound", VarcharType.VARCHAR)))))
+                // 0 = data manifest, 1 = delete manifest; the *_data_files_count columns of a delete
+                // manifest count its delete files
+                .column("content", INT);
+        if (metadataTableType == MetadataTableType.ALL_MANIFESTS) {
+            builder.column("reference_snapshot_id", BIGINT);
+        }
         return new IcebergManifestsTable(catalogName,
                 ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(),
                 TABLE_NAME,
                 Table.TableType.METADATA,
-                builder()
-                        .column("path", VarcharType.VARCHAR)
-                        .column("length", BIGINT)
-                        .column("partition_spec_id", INT)
-                        .column("added_snapshot_id", BIGINT)
-                        .column("added_data_files_count", INT)
-                        .column("added_rows_count", BIGINT)
-                        .column("existing_data_files_count", INT)
-                        .column("existing_rows_count", BIGINT)
-                        .column("deleted_data_files_count", INT)
-                        .column("deleted_rows_count", BIGINT)
-                        .column("partitions", new ArrayType(
-                                new StructType(Lists.newArrayList(
-                                        new StructField("contains_null", VarcharType.VARCHAR),
-                                        new StructField("contains_nan", VarcharType.VARCHAR),
-                                        new StructField("lower_bound", VarcharType.VARCHAR),
-                                        new StructField("upper_bound", VarcharType.VARCHAR)))))
-                        .build(),
+                builder.build(),
                 originDb,
                 originTable,
-                MetadataTableType.MANIFESTS);
+                metadataTableType);
     }
 
     @Override

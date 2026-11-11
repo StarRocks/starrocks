@@ -159,6 +159,8 @@ public class TabletStatMgr extends FrontendDaemon {
                 // the floor above the bound -- the overlap that lets this scan emit a merge signal and
                 // an adaptive-split signal for the same index.
                 int maxSplitCount = Config.tablet_reshard_max_split_count;
+                long reshardTargetSize = reshardEligible ? olapTable.getTabletReshardTargetSize() : 0;
+                long splitFloor = TabletReshardUtils.adaptiveSplitFloor(reshardTargetSize);
                 int parallelismFloor = computeNodeCount == 0 ? 0
                         : TabletReshardUtils.parallelismFloor(computeNodeCount, maxSplitCount);
                 int adaptiveBound = TabletReshardUtils.adaptiveSplitBound(computeNodeCount, maxSplitCount);
@@ -193,8 +195,12 @@ public class TabletStatMgr extends FrontendDaemon {
                                 // than the warehouse can drive, the steady-state target once it does.
                                 long indexTarget = underProvisioned
                                         ? TabletReshardUtils.adaptiveTargetSize(index.getDataSize(true),
-                                                Config.tablet_reshard_target_size, adaptiveBound)
+                                                reshardTargetSize, adaptiveBound, splitFloor)
                                         : 0;
+                                // While that target is narrowed the planner also fills the slots it leaves
+                                // unspent, down to the floor, so a tablet worth two floors is one it can split.
+                                // A narrowed target implies a positive floor, since both come from one reading.
+                                long splitUnit = indexTarget < reshardTargetSize ? splitFloor : indexTarget;
                                 long prevFreshTabletSize = -1L;
                                 // NOTE: can take a rather long time to iterate lots of tablets
                                 for (Tablet tablet : tablets) {
@@ -202,7 +208,7 @@ public class TabletStatMgr extends FrontendDaemon {
                                     long dataSize = tablet.getDataSize(true);
                                     maxTabletSize = Math.max(maxTabletSize, dataSize);
                                     if (underProvisioned
-                                            && TabletReshardUtils.adaptiveSplitCount(dataSize, indexTarget) > 1) {
+                                            && TabletReshardUtils.adaptiveSplitCount(dataSize, splitUnit) > 1) {
                                         maxAdaptiveSplitTabletSize =
                                                 Math.max(maxAdaptiveSplitTabletSize, dataSize);
                                     }
@@ -219,7 +225,8 @@ public class TabletStatMgr extends FrontendDaemon {
                                 } // end for tablets
                                 indexRowCountMap.put(Pair.create(physicalPartition.getId(), index.getId()),
                                         indexRowCount);
-                                if (!olapTable.isTempPartition(partition.getId())) {
+                                if (!olapTable.isTempPartition(partition.getId())
+                                        && index.getMetaId() == olapTable.getBaseIndexMetaId()) {
                                     totalRowCount += indexRowCount;
                                 }
                             } // end for indices
@@ -372,16 +379,13 @@ public class TabletStatMgr extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
-            // A table being resharded is the window in which an EXISTING tablet can acquire shared
-            // files: split cross-publish keeps applying shared-marked txn logs to the already-created
-            // children until CLEANING unregisters the mapping. A shared-file observation taken here
-            // goes stale the moment the next cross-publish lands, and the merge candidate filter would
-            // then admit an unmergeable group -- which wedges the partition, because there is no
-            // fallback. Size and row-count collection carry no such risk, so only the shared-file
-            // observation is gated on this flag (applied in CollectTabletStatJob.waitResponse);
-            // collection itself must proceed in every table state. Captured under this lock so the
-            // state cannot flip underneath us.
-            boolean isNormal = table.getState() == OlapTable.OlapTableState.NORMAL;
+            // Cross-publish can still add shared files to an occupied partition's existing tablets.
+            // Capture eligibility with the original tablet generation under this snapshot's READ lock.
+            // Other alter states retain the original conservative behavior.
+            boolean canObserveSharedFiles = table.getState() == OlapTable.OlapTableState.NORMAL
+                    || (table.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                    && !GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                            .isPhysicalPartitionReshardingLocked(table, partitionId));
             long visibleVersion = partition.getVisibleVersion();
             long visibleVersionTime = partition.getVisibleVersionTime();
             List<Tablet> tablets = new ArrayList<>();
@@ -396,7 +400,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 tablets.addAll(partition.getLatestBaseIndex().getTablets());
             }
             return new PartitionSnapshot(dbName, tableName, partitionId, visibleVersion, visibleVersionTime, tablets,
-                    isNormal);
+                    canObserveSharedFiles);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
@@ -457,19 +461,19 @@ public class TabletStatMgr extends FrontendDaemon {
         private final long visibleVersion;
         private final long visibleVersionTime;
         private final List<Tablet> tablets;
-        // Whether the table was NORMAL when this snapshot was taken. Gates only the shared-file
+        // Whether this partition could accept shared-file proof at snapshot time. Gates only the
         // observation applied in CollectTabletStatJob.waitResponse, not the collection itself.
-        private final boolean isNormal;
+        private final boolean canObserveSharedFiles;
 
         PartitionSnapshot(String dbName, String tableName, long partitionId, long visibleVersion,
-                          long visibleVersionTime, List<Tablet> tablets, boolean isNormal) {
+                          long visibleVersionTime, List<Tablet> tablets, boolean canObserveSharedFiles) {
             this.dbName = dbName;
             this.tableName = tableName;
             this.partitionId = partitionId;
             this.visibleVersion = visibleVersion;
             this.visibleVersionTime = visibleVersionTime;
             this.tablets = Objects.requireNonNull(tablets);
-            this.isNormal = isNormal;
+            this.canObserveSharedFiles = canObserveSharedFiles;
         }
 
         private String debugName() {
@@ -486,7 +490,7 @@ public class TabletStatMgr extends FrontendDaemon {
         private long collectStatTime = 0;
         private List<Future<TabletStatResponse>> responseList;
         private final ComputeResource computeResource;
-        private final boolean isNormal;
+        private final boolean canObserveSharedFiles;
 
         CollectTabletStatJob(PartitionSnapshot snapshot, ComputeResource computeResource) {
             this.dbName = Objects.requireNonNull(snapshot.dbName, "dbName is null");
@@ -498,7 +502,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 this.tablets.put(tablet.getId(), tablet);
             }
             this.computeResource = computeResource;
-            this.isNormal = snapshot.isNormal;
+            this.canObserveSharedFiles = snapshot.canObserveSharedFiles;
         }
 
         void execute() {
@@ -572,14 +576,11 @@ public class TabletStatMgr extends FrontendDaemon {
                             // so the requested version is exactly what the numbers describe.
                             tablet.setRowCount(stat.numRows, version);
                             tablet.setDataSizeUpdateTime(collectStatTime);
-                            // Only apply the observation while the table was NORMAL when this job's
-                            // snapshot was taken (see PartitionSnapshot.isNormal): a split's children
-                            // become catalog-visible while the table is still TABLET_RESHARD, and an
-                            // observation taken in that window goes stale the moment the next
-                            // cross-publish lands, which could admit an unmergeable merge group.
+                            // Use the original generation's eligibility: an occupied target's next
+                            // cross-publish could invalidate a clean report before merge consumes it.
                             // See LakeTablet#observeSharedFiles(Boolean): an absent field cannot
                             // sustain a previous proof, so it clears it the same as a dirty report.
-                            if (isNormal) {
+                            if (canObserveSharedFiles) {
                                 tablet.observeSharedFiles(stat.hasSharedFiles);
                             }
                         }

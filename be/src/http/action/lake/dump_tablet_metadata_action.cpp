@@ -117,7 +117,7 @@ StatusOr<std::string> prepare_cached_metadata(TabletManager* tablet_manager,
     TRY_CATCH_ALLOC_SCOPE_START()
     const std::string key =
             tablet_manager->tablet_metadata_location(request_context.tablet_id, request_context.version);
-    auto metadata = tablet_manager->metacache()->lookup_tablet_metadata(key);
+    auto metadata = tablet_manager->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(key));
     if (metadata == nullptr) {
         return Status::NotFound(
                 "tablet metadata is not cached on this compute node; this API only inspects the current compute "

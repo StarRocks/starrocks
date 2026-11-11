@@ -22,7 +22,11 @@ import com.starrocks.catalog.RecycleMaterializedIndexInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LeaderLease;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TTabletReshardJobsItem;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -148,6 +152,43 @@ public abstract class TabletReshardJob implements Writable {
     // volatile + concurrent set: written by the submitting session thread, read by the reshard daemon.
     protected volatile Set<Long> cleanupExcludedTransactionIds;
 
+    // Only registered, durable PENDING jobs may be scheduled. Recovery initializes this explicitly.
+    private transient volatile boolean admissionReady;
+    private transient LeaderLease admissionLease;
+    // Published only after the installed replacement layout's CLEANING record is durable.
+    private transient volatile boolean layoutReady;
+    // A failed CLEANING log must be retried without installing indexes or cleaning again.
+    private transient TabletReshardJob pendingCleaningLog;
+
+    public boolean isLayoutReady() {
+        return layoutReady && (jobState == JobState.CLEANING || jobState == JobState.FINISHED);
+    }
+
+    public boolean isAdmissionReady() {
+        return admissionReady;
+    }
+
+    void markAdmissionReady() {
+        admissionReady = true;
+    }
+
+    void initializeAfterRecovery() {
+        admissionReady = true;
+        layoutReady = jobState == JobState.CLEANING || jobState == JobState.FINISHED;
+        pendingCleaningLog = null;
+    }
+
+    public LeaderLease getAdmissionLease() {
+        return admissionLease;
+    }
+
+    void captureAdmissionLease(LeaderLease lease) {
+        if (admissionLease != null) {
+            throw new IllegalStateException("Reshard job already captured its admission lease");
+        }
+        admissionLease = lease;
+    }
+
     public TabletReshardJob(long jobId, JobType jobType) {
         this.jobId = jobId;
         this.jobType = jobType;
@@ -219,19 +260,76 @@ public abstract class TabletReshardJob implements Writable {
     }
 
     protected void setJobState(JobState jobState) {
-        long currentTimeMs = System.currentTimeMillis();
-
         if (jobState.isFinalState()) {
-            this.finishedTimeMs = currentTimeMs;
+            publishFinalState(jobState);
+            return;
         }
-
+        long currentTimeMs = System.currentTimeMillis();
         this.jobState = jobState;
 
         this.stateStartedTimeMs = currentTimeMs;
 
-        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(this);
+        if (jobState == JobState.CLEANING) {
+            pendingCleaningLog = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(this), getClass());
+            retryPendingCleaningLog();
+        } else {
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(this);
+        }
 
         LOG.info("Tablet reshard job set job state. {}", this);
+    }
+
+    private void retryPendingCleaningLog() {
+        if (pendingCleaningLog != null) {
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateTabletReshardJob(pendingCleaningLog);
+            layoutReady = true;
+            pendingCleaningLog = null;
+        }
+    }
+
+    private void publishFinalState(JobState desiredState) {
+        if (isDone()) {
+            return;
+        }
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+        try (EditLog.WalScope ignored = editLog.openWalScope()) {
+            // Use the existing type adapter without ever exposing an uncommitted terminal enum.
+            TabletReshardJob snapshot = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(this), getClass());
+            snapshot.jobState = desiredState;
+            snapshot.finishedTimeMs = System.currentTimeMillis();
+            snapshot.stateStartedTimeMs = snapshot.finishedTimeMs;
+            editLog.logUpdateTabletReshardJob(snapshot, wal ->
+                    ReshardTableFinalizer.withTableWrite(getDbId(), getTableId(), table -> {
+                        if (isDone()) {
+                            return;
+                        }
+                        finishedTimeMs = snapshot.finishedTimeMs;
+                        stateStartedTimeMs = snapshot.stateStartedTimeMs;
+                        jobState = desiredState;
+                        GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                                .refreshTableStateLocked(table, jobId);
+                        recordTerminalMetrics(desiredState);
+                    }));
+        }
+        LOG.info("Tablet reshard job set job state. {}", this);
+    }
+
+    private void recordTerminalMetrics(JobState state) {
+        if (!MetricRepo.hasInit) {
+            return;
+        }
+        if (state == JobState.FINISHED) {
+            if (jobType == JobType.SPLIT_TABLET) {
+                MetricRepo.COUNTER_TABLET_RESHARD_SPLIT_JOB_FINISHED.increase(1L);
+            } else if (jobType == JobType.MERGE_TABLET) {
+                MetricRepo.COUNTER_TABLET_RESHARD_MERGE_JOB_FINISHED.increase(1L);
+            }
+            MetricRepo.HISTO_TABLET_RESHARD_JOB_DURATION.update(finishedTimeMs - createdTimeMs);
+        } else if (jobType == JobType.SPLIT_TABLET) {
+            MetricRepo.COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED.increase(1L);
+        } else if (jobType == JobType.MERGE_TABLET) {
+            MetricRepo.COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED.increase(1L);
+        }
     }
 
     public long getCreatedTimeMs() {
@@ -272,6 +370,7 @@ public abstract class TabletReshardJob implements Writable {
 
     public void run() {
         try {
+            retryPendingCleaningLog();
             JobState prevState = null;
             do {
                 prevState = jobState;
@@ -347,11 +446,15 @@ public abstract class TabletReshardJob implements Writable {
 
     public abstract long getTableId();
 
+    public abstract long getDbId();
+
+    public abstract Map<Long, ReshardingPhysicalPartition> getReshardingPhysicalPartitions();
+
+    protected abstract void initLocked(OlapTable table) throws StarRocksException;
+
     /*
-     * Admission-time reservation. Reserve the table for this job before it is queued in
-     * TabletReshardJobMgr. Must succeed before the job becomes visible to the scheduler, so that
-     * an admitted job is guaranteed runnable and never forced to abort at execution time due to an
-     * unexpected table state. Throws if the table is not reservable (not NORMAL / dropped).
+     * Standalone initialization wrapper retained for focused callers. The manager invokes initLocked
+     * under the same WRITE lock as conflict checking and provisional registration.
      */
     public abstract void init() throws StarRocksException;
 
@@ -389,22 +492,11 @@ public abstract class TabletReshardJob implements Writable {
 
     public abstract TTabletReshardJobsItem getInfo();
 
-    /**
-     * Admission-time reservation body, shared by the split and merge jobs. The caller runs it under
-     * the table WRITE lock: the table must be NORMAL, every index the job is about to reshard must
-     * still be the live version of its index meta, and only then does the table flip to
-     * {@code TABLET_RESHARD}.
-     *
-     * <p>All three steps belong in one lock scope. The job was built from a snapshot the factory took
-     * under a lock it has since released, so the layout can have moved on; and the state flip is what
-     * stops it from moving again, because the factories and this method both require NORMAL, so no
-     * second reshard job can be admitted while this one holds the table. Validating before the flip
-     * and under the same lock is therefore the only point at which "these indexes are live" can be
-     * established and stay true for the rest of the job.
-     */
+    /** Validates the source layout and reserves the aggregate table state under the caller's WRITE lock. */
     protected static void reserveTableForReshard(long dbId, OlapTable olapTable,
             Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) throws StarRocksException {
-        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw new TabletReshardException(
                     "Unexpected table state " + olapTable.getState() + " in table " + olapTable.getName());
         }

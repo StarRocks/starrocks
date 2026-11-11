@@ -37,11 +37,13 @@
 #include "runtime/runtime_state.h"
 #include "runtime/type_info_allocator_adapter.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/flat_json_metrics.h"
 #include "storage/json_path_deriver.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/utils.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/predicate_parser.h"
+#include "storage/query/range_group_task.h"
 #include "storage/query/split_morsel_queue.h"
 #include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/rowid_range_option.h"
@@ -61,6 +63,16 @@
 #include "storage_primitive/union_iterator.h"
 
 namespace starrocks::lake {
+
+// The open loops below can run for minutes on a tablet with many segments, so they stop as soon as the
+// query is cancelled instead of opening the rest. A read without a RuntimeState (compaction, publish) is
+// never cancelled here.
+static Status check_cancelled(const TabletReaderParams& params, int64_t tablet_id) {
+    if (params.runtime_state != nullptr && params.runtime_state->is_cancelled()) {
+        return Status::Cancelled(fmt::format("cancelled while opening tablet:{}", tablet_id));
+    }
+    return Status::OK();
+}
 
 using ConjunctivePredicates = starrocks::ConjunctivePredicates;
 using Datum = starrocks::Datum;
@@ -409,6 +421,18 @@ Status TabletReader::prepare() {
 }
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
+    if (read_params.grouped_range_task != nullptr) {
+        // Grouped roots may plan ordinary physical splits; children retain independent rowid and C clips.
+        // Prepared/reusable state and logical ranges cannot prove the same ownership contract.
+        if ((_need_split && (!_could_split_physically || read_params.rowid_range_option != nullptr)) ||
+            read_params.enable_prepared_physical_split_scan || read_params.prepared_tablet_read_state != nullptr ||
+            read_params.prepared_segment_read_state != nullptr ||
+            read_params.refine_initial_coarse_split_and_append_refined_tasks ||
+            read_params.short_key_ranges_option != nullptr) {
+            return Status::NotSupported("grouped range task does not support prepared or logical split readers");
+        }
+        RETURN_IF_ERROR(validate_range_group_schema(*read_params.grouped_range_task, *_tablet_schema));
+    }
     if (read_params.reader_type != ReaderType::READER_QUERY && read_params.reader_type != ReaderType::READER_CHECKSUM &&
         read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type) &&
         read_params.reader_type != ReaderType::READER_BYPASS_QUERY) {
@@ -463,6 +487,40 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             return init_collector(read_params);
         }
 
+        RowidRangeOptionPtr grouped_candidates;
+        if (read_params.grouped_range_task != nullptr) {
+            // Validate and clip the same memoized segments consumed by physical split planning.
+            // Exact rowids are needed when the short-key index omits a varying group-key suffix.
+            grouped_candidates = std::make_shared<RowidRangeOption>();
+            const std::atomic<bool>* is_cancelled =
+                    read_params.runtime_state != nullptr ? &read_params.runtime_state->cancelled_ref() : nullptr;
+            for (const auto& rowset : _rowsets) {
+                RETURN_IF_ERROR(check_cancelled(read_params, _tablet_metadata->id()));
+                RETURN_IF_ERROR(validate_range_group_schema(*read_params.grouped_range_task, *rowset->tablet_schema()));
+                ASSIGN_OR_RETURN(auto segments,
+                                 rowset->get_segments_checked(read_params.lake_io_opts, &_stats, is_cancelled));
+                for (const auto& segment : segments) {
+                    if (segment != nullptr) {
+                        RETURN_IF_ERROR(
+                                validate_range_group_schema(*read_params.grouped_range_task, segment->tablet_schema()));
+                        RETURN_IF_ERROR(check_cancelled(read_params, _tablet_metadata->id()));
+                        SparseRange<> candidates;
+                        if (segment->num_rows() != 0) {
+                            ASSIGN_OR_RETURN(auto seek, decode_range_group_seek(*read_params.grouped_range_task,
+                                                                                segment->tablet_schema_share_ptr()));
+                            ASSIGN_OR_RETURN(auto rowids, segment_seek_ranges_to_rowid_ranges(
+                                                                  segment, {std::move(seek)}, read_params.lake_io_opts,
+                                                                  &_stats, read_params.use_page_cache, is_cancelled));
+                            RETURN_IF_ERROR(check_cancelled(read_params, _tablet_metadata->id()));
+                            if (rowids.front().has_value()) candidates.add(*rowids.front());
+                        }
+                        grouped_candidates->add(rowset.get(), segment.get(),
+                                                std::make_shared<SparseRange<>>(std::move(candidates)), true);
+                    }
+                }
+            }
+        }
+
         if (_could_split_physically && read_params.enable_prepared_physical_split_scan) {
             auto prepared_tablet_read_state = std::make_shared<PreparedTabletReadState>();
             OlapReaderStatistics prepare_stats;
@@ -496,8 +554,10 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         std::shared_ptr<pipeline::SplitMorselQueue> split_morsel_queue = nullptr;
 
         if (_could_split_physically) {
-            split_morsel_queue = std::make_shared<pipeline::PhysicalSplitMorselQueue>(
+            auto physical_split_morsel_queue = std::make_shared<pipeline::PhysicalSplitMorselQueue>(
                     std::move(morsels), read_params.scan_dop, read_params.splitted_scan_rows);
+            physical_split_morsel_queue->set_candidate_rowid_ranges(std::move(grouped_candidates));
+            split_morsel_queue = std::move(physical_split_morsel_queue);
         } else {
             // logical
             split_morsel_queue = std::make_shared<pipeline::LogicalSplitMorselQueue>(
@@ -512,6 +572,8 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         split_morsel_queue->set_tablet_schema(_tablet_schema);
 
         while (true) {
+            // Every split can load a rowset's segments (PhysicalSplitMorselQueue::_init_segment).
+            RETURN_IF_ERROR(check_cancelled(read_params, _tablet_metadata->id()));
             auto split_status_or = split_morsel_queue->try_get();
             if (UNLIKELY(!split_status_or.ok())) {
                 LOG(WARNING) << "failed to get split morsel: " << split_status_or.status()
@@ -592,6 +654,17 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
                       [&](const auto& segment) { num_readers += segment->num_rows() > 0 ? 1 : 0; });
     }
 
+    std::shared_ptr<FlatJsonConfig> flat_json_config;
+    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_metadata->id());
+        metadata && metadata->has_flat_json_config()) {
+        flat_json_config = std::make_shared<FlatJsonConfig>();
+        flat_json_config->update(metadata->flat_json_config());
+    }
+    // Only a table that flattens JSON writes the output flat; otherwise inputs read flat are merged back.
+    const bool mixed_inputs =
+            config::enable_compaction_flat_json_mixed_inputs &&
+            (flat_json_config != nullptr ? flat_json_config->is_flat_json_enabled() : config::enable_json_flat);
+
     std::vector<const ColumnReader*> readers;
     for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
         const auto& col = _tablet_schema->column(i);
@@ -601,6 +674,7 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
             continue;
         }
         readers.clear();
+        int num_plain = 0;
         for (const auto& rowset : _rowsets) {
             for (const auto& segment : rowset->get_non_null_segments()) {
                 if (segment->num_rows() == 0) {
@@ -610,23 +684,26 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
                 if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON &&
                     nullptr != reader->sub_readers() && !reader->sub_readers()->empty()) {
                     readers.emplace_back(reader);
+                } else if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON) {
+                    num_plain++;
                 }
             }
         }
-        if (readers.size() == num_readers) {
-            // must all be flat json type
+        // Some inputs flat, the others whole JSON: a segment without the column reads as defaults that are
+        // never flat, so it is left to the whole-JSON path.
+        const bool mixed = !readers.empty() && readers.size() + num_plain == num_readers && num_plain > 0;
+        if (readers.size() == num_readers || (mixed && mixed_inputs)) {
             JsonPathDeriver deriver;
-
-            if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_metadata->id());
-                metadata && metadata->has_flat_json_config()) {
-                auto flat_json_config = std::make_shared<FlatJsonConfig>();
-                flat_json_config->update(metadata->flat_json_config());
-                deriver.init_flat_json_config(flat_json_config.get());
-            }
-
+            deriver.init_flat_json_config(flat_json_config.get());
             deriver.derived(readers);
             auto paths = deriver.flat_paths();
             auto types = deriver.flat_types();
+            if (mixed && !paths.empty()) {
+                // A whole-JSON input may hold any value at any path; JSON keeps each as it is, and the value
+                // stats of the JSON sub-columns written let a later compaction type the paths by their values.
+                types.assign(types.size(), LogicalType::TYPE_JSON);
+                FlatJsonMetrics::instance()->flat_json_compaction_mixed_inputs_total.increment(1);
+            }
             VLOG(3) << "Lake Compaction flat json column: " << JsonFlatPath::debug_flat_json(paths, types, true);
             ASSIGN_OR_RETURN(auto res, ColumnAccessPath::create(TAccessPathType::ROOT, std::string(col.name()), i));
             for (size_t j = 0; j < paths.size(); j++) {
@@ -717,10 +794,13 @@ Status TabletReader::build_prepared_tablet_read_state(const TabletReaderParams& 
     rowset_segments.reserve(rowsets.size());
     rowset_prepared_states.reserve(rowsets.size());
     SCOPED_RAW_TIMER(&_stats.lake_prepared_tablet_segment_open_ns);
+    const std::atomic<bool>* is_cancelled =
+            params.runtime_state != nullptr ? &params.runtime_state->cancelled_ref() : nullptr;
     for (const auto& rowset : rowsets) {
+        RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
         // Include the failing rowset's candidate slots even if only some footers can be opened.
         _stats.lake_prepared_tablet_segments += rowset->num_segments();
-        ASSIGN_OR_RETURN(auto segments, rowset->segments(params.lake_io_opts, prepare_stats));
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(params.lake_io_opts, prepare_stats, is_cancelled));
         std::vector<PreparedSegmentReadStatePtr> prepared_states;
         prepared_states.reserve(segments.size());
         for (size_t i = 0; i < segments.size(); ++i) {
@@ -753,6 +833,7 @@ Status TabletReader::init_rowset_read_options(const TabletReaderParams& params, 
         _cached_seek_ranges = std::move(ranges);
     }
     options->ranges = *_cached_seek_ranges;
+    options->grouped_range_task = params.grouped_range_task;
     options->pred_tree = params.pred_tree;
     options->runtime_filter_preds = params.runtime_filter_preds;
     RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, options->pred_tree,
@@ -856,6 +937,8 @@ Status TabletReader::build_initial_coarse_split_tasks(const TabletReaderParams& 
         ASSIGN_OR_RETURN(auto shared_segment_range, rowset->get_seek_range());
 
         for (size_t segment_idx = 0; segment_idx < segments.size(); ++segment_idx) {
+            // Building the coarse range can load the segment's short key index.
+            RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
             const auto& segment = segments[segment_idx];
             if (segment == nullptr || segment->num_rows() == 0) {
                 continue;
@@ -1098,6 +1181,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         }
     });
     for (size_t rowset_idx = 0; rowset_idx < _rowsets.size(); ++rowset_idx) {
+        // Stop opening, and submitting, the remaining rowsets. Rowset::read() checks again per segment.
+        RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
         auto& rowset = _rowsets[rowset_idx];
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
@@ -1300,9 +1385,7 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         if (_is_vertical_merge && !_is_key) {
             _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer, _selection_buffer);
         } else {
-            _collect_iter = new_heap_merge_iterator(
-                    seg_iters,
-                    (keys_type == PRIMARY_KEYS) && StorageEngine::instance()->enable_light_pk_compaction_publish());
+            _collect_iter = new_heap_merge_iterator(seg_iters, keys_type == PRIMARY_KEYS);
         }
     } else if (params.sorted_by_keys_per_tablet && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) &&
                seg_iters.size() > 1) {

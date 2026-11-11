@@ -1,0 +1,327 @@
+-- name: test_range_colocate_orderby @cloud
+set enable_range_distribution = true;
+-- result:
+-- !result
+set enable_tablet_pre_split = false;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1 (
+    k1 int not null,
+    k2 int not null,
+    k3 int not null,
+    v int not null
+)
+duplicate key(k1, k2, k3)
+order by(k1, k2)
+properties('replication_num' = '1', 'colocate_with' = 'grp_main_${uuid0}:k1');
+-- result:
+-- !result
+insert into t1 select x % 10, x, 3001 - x, x from table(generate_series(1, 1000)) as g(x);
+-- result:
+-- !result
+insert into t1 select 10 + x % 10, x, 3001 - x, x from table(generate_series(1001, 2000)) as g(x);
+-- result:
+-- !result
+insert into t1 select 20 + x % 10, x, 3001 - x, x from table(generate_series(2001, 3000)) as g(x);
+-- result:
+-- !result
+function: set_first_tablet_id("t1")
+-- result:
+None
+-- !result
+alter table t1 split tablet (${tablet_id}) properties ('tablet_reshard_target_size' = '-3');
+-- result:
+-- !result
+function: wait_reshard_job_finish("t1", "SPLIT_TABLET", 1, 120)
+-- result:
+None
+-- !result
+shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "grp_main_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
+-- result:
+0
+stable=true
+-- !result
+select buckets from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 't1';
+-- result:
+3
+-- !result
+create table t2 (
+    k1 int not null,
+    k2 int not null,
+    k3 int not null,
+    w int not null
+)
+duplicate key(k1, k2, k3)
+order by(k1, k2)
+properties('replication_num' = '1', 'colocate_with' = 'grp_main_${uuid0}:k1');
+-- result:
+-- !result
+insert into t2 select k1, k2, k3, v * 10 from t1;
+-- result:
+-- !result
+select buckets from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 't2';
+-- result:
+3
+-- !result
+select count(*), sum(v) from t1;
+-- result:
+3000	4501500
+-- !result
+select count(*), sum(w) from t2;
+-- result:
+3000	45015000
+-- !result
+function: assert_explain_contains("select t1.k1, t1.v, t2.w from t1 join t2 on t1.k1 = t2.k1", "INNER JOIN (COLOCATE)")
+-- result:
+None
+-- !result
+alter table t1 order by (k1, k3, k2);
+-- result:
+-- !result
+function: wait_table_schema_change_finish("db_${uuid0}", "t1", "FINISHED")
+-- result:
+FINISHED
+-- !result
+select sort_key from information_schema.tables_config where table_schema = 'db_${uuid0}' and table_name = 't1';
+-- result:
+`k1`, `k3`, `k2`
+-- !result
+select buckets >= 3 from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 't1';
+-- result:
+1
+-- !result
+shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "grp_main_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
+-- result:
+0
+stable=true
+-- !result
+select count(*), sum(v) from t1;
+-- result:
+3000	4501500
+-- !result
+select count(*), sum(w) from t2;
+-- result:
+3000	45015000
+-- !result
+function: assert_explain_contains("select t1.k1, t1.v, t2.w from t1 join t2 on t1.k1 = t2.k1", "INNER JOIN (COLOCATE)")
+-- result:
+None
+-- !result
+select count(*), sum(t1.v), sum(t2.w) from t1 join t2 on t1.k1 = t2.k1;
+-- result:
+300000	450150000	4501500000
+-- !result
+select t1.k1, t1.k2, t1.k3, t2.w from t1 join t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2 where t1.k2 % 300 = 0 order by t1.k2;
+-- result:
+0	300	2701	3000
+0	600	2401	6000
+0	900	2101	9000
+10	1200	1801	12000
+10	1500	1501	15000
+10	1800	1201	18000
+20	2100	901	21000
+20	2400	601	24000
+20	2700	301	27000
+20	3000	1	30000
+-- !result
+set disable_colocate_join = true;
+-- result:
+-- !result
+select count(*), sum(t1.v), sum(t2.w) from t1 join t2 on t1.k1 = t2.k1;
+-- result:
+300000	450150000	4501500000
+-- !result
+select t1.k1, t1.k2, t1.k3, t2.w from t1 join t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2 where t1.k2 % 300 = 0 order by t1.k2;
+-- result:
+0	300	2701	3000
+0	600	2401	6000
+0	900	2101	9000
+10	1200	1801	12000
+10	1500	1501	15000
+10	1800	1201	18000
+20	2100	901	21000
+20	2400	601	24000
+20	2700	301	27000
+20	3000	1	30000
+-- !result
+set disable_colocate_join = false;
+-- result:
+-- !result
+insert into t1 values (15, 3001, 0, 3001);
+-- result:
+-- !result
+select count(*), sum(v) from t1;
+-- result:
+3001	4504501
+-- !result
+select * from t1 where k1 = 15 and k3 = 0;
+-- result:
+15	3001	0	3001
+-- !result
+alter table t1 order by (k3, k1, k2);
+-- result:
+E: (1064, 'The sort key of a table in a range colocate group must start with its colocate columns [k1] (same order and types). Got: [k3, k1, k2]')
+-- !result
+alter table t1 order by (k2, k3);
+-- result:
+E: (1064, 'The sort key of a table in a range colocate group must start with its colocate columns [k1] (same order and types). Got: [k2, k3]')
+-- !result
+alter table t1 drop column k1;
+-- result:
+E: (1064, 'The sort key of a table in a range colocate group must start with its colocate columns [k1] (same order and types). Got: [k3, k2]')
+-- !result
+function: assert_schema_change_job_count("db_${uuid0}", "t1", 1)
+-- result:
+None
+-- !result
+create table t4 (
+    k1 int not null,
+    k2 int not null,
+    k3 int not null,
+    v int not null
+)
+duplicate key(k1, k2, k3)
+order by(k1, k2, k3)
+properties('replication_num' = '1', 'colocate_with' = 'grp_two_${uuid0}:k1,k2');
+-- result:
+-- !result
+insert into t4 values (1, 1, 1, 1), (2, 2, 2, 2);
+-- result:
+-- !result
+alter table t4 order by (k2, k1, k3);
+-- result:
+E: (1064, 'The sort key of a table in a range colocate group must start with its colocate columns [k1, k2] (same order and types). Got: [k2, k1, k3]')
+-- !result
+function: assert_schema_change_job_count("db_${uuid0}", "t4", 0)
+-- result:
+None
+-- !result
+select * from t4 order by k1;
+-- result:
+1	1	1	1
+2	2	2	2
+-- !result
+create table t3 (
+    k1 int not null,
+    k2 int not null,
+    v int not null
+)
+duplicate key(k1, k2)
+order by(k1)
+properties('replication_num' = '1', 'colocate_with' = 'grp_impl_${uuid0}');
+-- result:
+-- !result
+insert into t3 values (1, 10, 100), (2, 20, 200), (3, 30, 300);
+-- result:
+-- !result
+show create table t3;
+-- result:
+[REGEX].*"colocate_with" = "grp_impl_[0-9a-f]+".*
+-- !result
+alter table t3 order by (k1, k2);
+-- result:
+-- !result
+function: wait_table_schema_change_finish("db_${uuid0}", "t3", "FINISHED")
+-- result:
+FINISHED
+-- !result
+show create table t3;
+-- result:
+[REGEX].*"colocate_with" = "grp_impl_[0-9a-f]+:k1".*
+-- !result
+select sort_key from information_schema.tables_config where table_schema = 'db_${uuid0}' and table_name = 't3';
+-- result:
+`k1`, `k2`
+-- !result
+select * from t3 order by k1;
+-- result:
+1	10	100
+2	20	200
+3	30	300
+-- !result
+create table t3_like like t3;
+-- result:
+-- !result
+show create table t3_like;
+-- result:
+[REGEX].*"colocate_with" = "grp_impl_[0-9a-f]+:k1".*
+-- !result
+create table src (
+    k1 int not null,
+    k2 int not null,
+    k3 int not null,
+    v int not null
+)
+duplicate key(k1, k2, k3)
+order by(k1, k2)
+properties('replication_num' = '1');
+-- result:
+-- !result
+insert into src select k1, k2, k3, v from t1;
+-- result:
+-- !result
+create materialized view mv1
+order by (k1, k2)
+refresh deferred manual
+properties('replication_num' = '1', 'colocate_with' = 'grp_main_${uuid0}:k1')
+as select k1, k2, k3, v from src;
+-- result:
+-- !result
+refresh materialized view mv1 with sync mode;
+select buckets from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'mv1';
+-- result:
+3
+-- !result
+alter materialized view mv1 order by (k1, k3);
+-- result:
+-- !result
+function: wait_table_schema_change_finish("db_${uuid0}", "mv1", "FINISHED")
+-- result:
+FINISHED
+-- !result
+select buckets >= 3 from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'mv1';
+-- result:
+1
+-- !result
+select count(*), sum(v) from mv1;
+-- result:
+3001	4504501
+-- !result
+function: assert_explain_contains("select mv1.k1, mv1.v, t2.w from mv1 join t2 on mv1.k1 = t2.k1", "INNER JOIN (COLOCATE)")
+-- result:
+None
+-- !result
+insert into src values (25, 3002, 0, 3002);
+-- result:
+-- !result
+refresh materialized view mv1 with sync mode;
+select count(*), sum(v) from mv1;
+-- result:
+3002	4507503
+-- !result
+select * from mv1 where k1 = 25 and k3 = 0;
+-- result:
+25	3002	0	3002
+-- !result
+alter materialized view mv1 order by (k3, k1);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The sort key of a materialized view in a range colocate group must start with its colocate columns [k1] (same order and types). Got: [k3, k1].')
+-- !result
+function: assert_schema_change_job_count("db_${uuid0}", "mv1", 1)
+-- result:
+None
+-- !result
+shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "grp_main_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
+-- result:
+0
+stable=true
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
