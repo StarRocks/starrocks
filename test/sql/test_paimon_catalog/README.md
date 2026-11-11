@@ -80,6 +80,43 @@ a Catalog requiring cleanup. Tests that generate or modify data must use a
 separate `tmp/<case-name>/<UUID>/` prefix, not this persistent warehouse.
 See [T/test_paimon_reader_modes](T/test_paimon_reader_modes) for an example.
 
+<<<<<<< HEAD
+=======
+`test_paimon_hms_files` also needs HiveServer2 and the Hive metastore. It creates a unique
+temporary Hive database using HiveServer2, then registers the existing `pk_merge_v1` fixture
+directly in HMS as an external Paimon table. This avoids requiring Paimon classes on the
+HiveServer2 classpath. The case reads `$files` through an HMS Paimon catalog with the JNI
+reader. Cleanup drops only the external table metadata and temporary database, leaving the
+fixture data untouched.
+For local HDFS runs, override `paimon_hms_prefix`, `paimon_hms_warehouse`, and
+`paimon_hms_fixture_location` in a private SQL-tester config. This SQL test checks the
+end-to-end path; the Java compatibility tests exercise the Hive/Thrift dependency failure.
+
+## DDL tests
+
+`T/test_paimon_catalog_ddl` creates and drops native databases and tables through SQL.
+Each case uses its own `oss://${oss_bucket}/tmp/paimon_catalog_ddl/${uuid0}/`
+filesystem warehouse; the configured OSS credentials need write/delete permission there.
+Set `paimon_ddl_warehouse_root` under `[replace]` in a private config to use a personal
+OSS prefix instead of the default CI prefix. The case UUID is appended to that root.
+The cases do not use or change the persistent fixtures. A second Catalog reads the
+native `$schemas` system tables to verify persisted column comments, scalar and nested
+types, primary keys, partitions and inferred NOT NULL constraints. Key cases cover
+property-based composite keys, whitespace/case normalization, matching and conflicting
+SQL/property declarations, and missing/duplicate key references. Rejected partition
+expressions and invalid/unsupported options must leave no native table behind. Existing DESC nullability conversion is not used
+as evidence of native nullability.
+
+For local execution, add `paimon_ddl_local_warehouse_root` under `[replace]` in a
+private SQL-tester config and pass it with `--config`. This selects a local filesystem
+warehouse without OSS credentials. The absolute directory must be visible at the same
+path to the test runner, FE and BE. Each case creates its own UUID subdirectory.
+Cases skip if neither local storage nor OSS credentials are configured. CLEANUP
+blocks drop the temporary SQL objects even after an assertion fails. Empty warehouse
+directories or OSS directory markers may remain after SQL cleanup.
+Run `python3 run.py -d sql/test_paimon_catalog/R/test_paimon_catalog_ddl -v`.
+
+>>>>>>> 046dad7 ([BugFix] Fix Hive client compatibility in Paimon JNI reader (#82793))
 ## Reader assertions
 
 ### Signed INT96 fixture
