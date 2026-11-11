@@ -11,6 +11,10 @@ description: "Broker Load、INSERT、Spark Load で作成されたロードジ�
 
 前述のロード方法に加えて、StarRocks は Stream Load および Routine Load を使用してデータをロードすることをサポートしています。Stream Load は同期操作であり、Stream Load ジョブの情報を直接返します。Routine Load は非同期操作であり、[SHOW ROUTINE LOAD](routine_load/SHOW_ROUTINE_LOAD.md) ステートメントを使用して Routine Load ジョブの情報を表示できます。
 
+SHOW LOAD は、ロードジョブのすべてのロード先テーブルに対して少なくとも 1 つの権限を持つ場合、または OPERATE 権限を持つ場合に、そのジョブを表示します。すべてのロード先テーブルに対する SELECT 権限がない場合、`TaskInfo` と `TrackingSQL` は NULL になり、`ErrorMsg` は失敗タイプのみを保持し、`JobDetails` には BE ノードが含まれません。`root` ユーザーはすべてのロードジョブの完全な情報を参照できます。ロード先テーブルが削除されたロードジョブは、`root` ユーザーにのみ完全な情報が表示され、OPERATE 権限を持つユーザーには上記のフィールドを除いた情報が表示されます。
+
+SHOW STREAM LOAD は、Stream Load ジョブのすべてのロード先テーブルに対して少なくとも 1 つの権限を持つ場合、または OPERATE 権限を持つ場合に、そのジョブを表示します。すべてのロード先テーブルに対する SELECT 権限がない場合、`ErrorMsg`、`TrackingURL`、`TrackingSQL` は NULL になります。`root` ユーザーはすべての Stream Load ジョブの完全な情報を参照できます。ロード先テーブルが削除された Stream Load ジョブは、`root` ユーザーにのみ完全な情報が表示され、OPERATE 権限を持つユーザーには上記のフィールドを除いた情報が表示されます。
+
 ## 構文
 
 ```SQL

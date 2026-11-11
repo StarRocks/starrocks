@@ -42,8 +42,7 @@ struct MysqlColumnViewerBuilder {
         // shredded variant rows via try_get_row_ref/get_row_value and uses push_null(false)
         // on serialization failure (so binary-protocol _field_pos is not double-incremented).
         // GEO also owns its output representation; generic scalar access remains unsupported.
-        if constexpr (ltype == TYPE_JSON || ltype == TYPE_VARIANT || ltype == TYPE_GEOGRAPHY ||
-                      ltype == TYPE_GEOMETRY) {
+        if constexpr (lt_is_semi_structured<ltype> || ltype == TYPE_GEOGRAPHY || ltype == TYPE_GEOMETRY) {
             return std::nullopt;
         } else {
             return MysqlColumnViewer(std::in_place_type<ColumnViewer<ltype>>, column);

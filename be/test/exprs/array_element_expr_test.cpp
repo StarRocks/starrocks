@@ -71,9 +71,7 @@ private:
 TEST_F(ArrayElementExprTest, test_one_dim_array) {
     TypeDescriptor type_array_int;
     type_array_int.type = LogicalType::TYPE_ARRAY;
-    type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
-
-    TypeDescriptor type_int(LogicalType::TYPE_INT);
+    type_array_int.children.emplace_back(TYPE_INT_DESC);
 
     auto array = ColumnHelper::create_column(type_array_int, true);
     array->append_datum(DatumArray{Datum((int32_t)1)});                    // [1]
@@ -101,25 +99,14 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
     //   NULL
     //   NULL
     {
-        std::unique_ptr<Expr> expr = create_array_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_array_element_expr(TYPE_INT_DESC);
 
         expr->add_child(new_fake_const_expr(array->clone(), type_array_int));
-        expr->add_child(new_fake_const_expr(const_int_column(1), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(1), TYPE_INT_DESC));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(5, result->size());
-        EXPECT_FALSE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_FALSE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
-        EXPECT_TRUE(result->is_null(4));
-
-        EXPECT_EQ(1, result->get(0).get_int32());
-        EXPECT_TRUE(result->get(1).is_null());
-        EXPECT_EQ(3, result->get(2).get_int32());
-        EXPECT_TRUE(result->get(3).is_null());
-        EXPECT_TRUE(result->get(4).is_null());
+        EXPECT_EQ("[1, NULL, 3, NULL, NULL]", result->debug_string());
     }
 
     // Inputs:
@@ -141,19 +128,14 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
     //   NULL
     //   NULL
     {
-        std::unique_ptr<Expr> expr = create_array_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_array_element_expr(TYPE_INT_DESC);
 
         expr->add_child(new_fake_const_expr(array->clone(), type_array_int));
-        expr->add_child(new_fake_const_expr(const_int_column(0), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(0), TYPE_INT_DESC));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(5, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
-        EXPECT_TRUE(result->is_null(4));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     // Inputs:
@@ -175,19 +157,14 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
     //   NULL
     //   NULL
     {
-        std::unique_ptr<Expr> expr = create_array_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_array_element_expr(TYPE_INT_DESC);
 
         expr->add_child(new_fake_const_expr(array->clone(), type_array_int));
-        expr->add_child(new_fake_const_expr(const_int_column(-1), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(-1), TYPE_INT_DESC));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(5, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
-        EXPECT_TRUE(result->is_null(4));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     // Inputs:
@@ -209,22 +186,17 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
     //   NULL
     //   NULL
     {
-        std::unique_ptr<Expr> expr = create_array_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_array_element_expr(TYPE_INT_DESC);
 
         auto subscript = NullableColumn::create(Int32Column::create(), NullColumn::create());
         (void)subscript->append_nulls(5);
 
         expr->add_child(new_fake_const_expr(array->clone(), type_array_int));
-        expr->add_child(new_fake_const_expr(std::move(subscript), type_int));
+        expr->add_child(new_fake_const_expr(std::move(subscript), TYPE_INT_DESC));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(5, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
-        EXPECT_TRUE(result->is_null(4));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     // Inputs:
@@ -238,14 +210,14 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
     // Outputs:
     //   NULL
     {
-        std::unique_ptr<Expr> expr = create_array_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_array_element_expr(TYPE_INT_DESC);
 
         auto array1 = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
                                           UInt32Column::create());
         array1->append_datum(Datum(DatumArray()));
 
         expr->add_child(new_fake_const_expr(std::move(array1), type_array_int));
-        expr->add_child(new_fake_const_expr(const_int_column(1), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(1), TYPE_INT_DESC));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
@@ -264,14 +236,14 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
     // Outputs:
     //   NULL
     {
-        std::unique_ptr<Expr> expr = create_array_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_array_element_expr(TYPE_INT_DESC);
 
         auto array1 = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
                                           UInt32Column::create());
         array1->append_datum(Datum(DatumArray()));
 
         expr->add_child(new_fake_const_expr(std::move(array1), type_array_int));
-        expr->add_child(new_fake_const_expr(const_int_column(100), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(100), TYPE_INT_DESC));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
@@ -290,14 +262,14 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
     // Outputs:
     //   NULL
     {
-        std::unique_ptr<Expr> expr = create_array_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_array_element_expr(TYPE_INT_DESC);
 
         auto array1 = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
                                           UInt32Column::create());
         array1->append_datum(Datum(DatumArray()));
 
         expr->add_child(new_fake_const_expr(std::move(array1), type_array_int));
-        expr->add_child(new_fake_const_expr(const_int_column(0), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(0), TYPE_INT_DESC));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
@@ -314,8 +286,6 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
     type_desc.children.back().type = LogicalType::TYPE_ARRAY;
     type_desc.children.back().children.emplace_back();
     type_desc.children.back().children.back().type = LogicalType::TYPE_INT;
-
-    TypeDescriptor type_int(LogicalType::TYPE_INT);
 
     //
     //  array:
@@ -344,15 +314,11 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
         (void)subscript->append_nulls(4);
 
         expr->add_child(new_fake_const_expr(array->clone(), type_desc));
-        expr->add_child(new_fake_const_expr(std::move(subscript), type_int));
+        expr->add_child(new_fake_const_expr(std::move(subscript), TYPE_INT_DESC));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     // select array[-1]
@@ -366,15 +332,11 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_desc.children[0]);
 
         expr->add_child(new_fake_const_expr(array->clone(), type_desc));
-        expr->add_child(new_fake_const_expr(const_int_column(-1), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(-1), TYPE_INT_DESC));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     // select array[0]
@@ -388,15 +350,11 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_desc.children[0]);
 
         expr->add_child(new_fake_const_expr(array->clone(), type_desc));
-        expr->add_child(new_fake_const_expr(const_int_column(0), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(0), TYPE_INT_DESC));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     // select array[1]
@@ -410,7 +368,7 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_desc.children[0]);
 
         expr->add_child(new_fake_const_expr(array->clone(), type_desc));
-        expr->add_child(new_fake_const_expr(const_int_column(1), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(1), TYPE_INT_DESC));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
@@ -437,7 +395,7 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_desc.children[0]);
 
         expr->add_child(new_fake_const_expr(array->clone(), type_desc));
-        expr->add_child(new_fake_const_expr(const_int_column(2), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(2), TYPE_INT_DESC));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
@@ -469,15 +427,11 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_desc.children[0]);
 
         expr->add_child(new_fake_const_expr(array->clone(), type_desc));
-        expr->add_child(new_fake_const_expr(const_int_column(3), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(3), TYPE_INT_DESC));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 
     // select array[100000]
@@ -491,15 +445,11 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_desc.children[0]);
 
         expr->add_child(new_fake_const_expr(array->clone(), type_desc));
-        expr->add_child(new_fake_const_expr(const_int_column(100000), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(100000), TYPE_INT_DESC));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
     // select array[-100000]
     //
@@ -512,15 +462,11 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
         std::unique_ptr<Expr> expr = create_array_element_expr(type_desc.children[0]);
 
         expr->add_child(new_fake_const_expr(array->clone(), type_desc));
-        expr->add_child(new_fake_const_expr(const_int_column(-100000), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(-100000), TYPE_INT_DESC));
 
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(4, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL]", result->debug_string());
     }
 }
 

@@ -13,7 +13,7 @@ description: "Alphabetical d - h"
 - [异步物化视图指标](../metrics-materialized_view.md)
 - [存算分离仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
 
-有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅[监控和告警](../monitoring.md)。
+有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅[监控和告警](../prometheus_grafana.md)。
 
 :::
 
@@ -21,6 +21,18 @@ description: "Alphabetical d - h"
 
 - 单位：计数
 - 描述：BE 中作为 Exchange 接收器的实例的累计数量。
+
+## `datacache_corruption_removed_files`
+
+- 单位：个
+- 类型：累计
+- 描述：扫描从数据缓存读到的内容解析失败后，删除了损坏缓存块的外表文件累计数。由 `external_table_clear_corrupted_cache_data` 控制。
+
+## `datacache_corruption_retried_files`
+
+- 单位：个
+- 类型：累计
+- 描述：为验证缓存副本是否损坏、绕过数据缓存重新读取的外表文件累计数。仅 Parquet 文件会重新读取。
 
 ## `datacache_disk_quota_bytes`
 
@@ -433,6 +445,13 @@ description: "Alphabetical d - h"
 - 类型：计数器
 - 标签：`fstype`（`cachefs`）
 - 描述：存算分离集群读取云原生表文件时 Data Cache 的累计未命中次数。每次读取最多涉及一个缓存块。按字节统计的指标参见 `default_cache_miss_bytes`。
+
+## `gtid_timestamp_ahead_of_clock_ms`
+
+- 单位: 毫秒
+- 类型: 瞬时
+- 标签: `is_leader`
+- 描述: Leader FE 上 gtid 发号器最近一条时间戳相对本机墙上时钟快多少（`max(0, lastTimestamp - now)`）。正值表示发号器快于本机时钟。切主后通常不超过 `gtid_batch_window_ms`，墙上时钟追上后回到 `0`。若长期远大于该窗口，说明曾经发出的时间戳已远快于本机时钟并已写入元数据。仅 Leader FE 上报（`is_leader="true"`）。尚未发过号，或墙上时钟已经追上时，均为 `0`。
 
 ## `hive_write_bytes`
 

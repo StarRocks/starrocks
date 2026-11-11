@@ -15,6 +15,8 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.ReshardingPhysicalPartition;
+import com.starrocks.alter.reshard.SplitTabletJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -788,6 +790,9 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         applier.applyCommitLog(state, tableCommitInfo);
 
         table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        TabletReshardJobMgr manager = new TabletReshardJobMgr();
+        manager.getTabletReshardJobs().put(1L, new SplitTabletJob(1L, dbId, table.getId(),
+                Map.of(physicalPartitionId, new ReshardingPhysicalPartition(physicalPartitionId, Map.of()))));
 
         state.setTransactionStatus(TransactionStatus.VISIBLE);
         partitionCommitInfo.setVersionTime(System.currentTimeMillis());
@@ -807,6 +812,11 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
             public static boolean isCheckpointThread() {
                 return false;
             }
+
+            @Mock
+            public TabletReshardJobMgr getTabletReshardJobMgr() {
+                return manager;
+            }
         };
 
         applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
@@ -815,4 +825,5 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         // Size and row statistics may still be updated; only the shared-file state is gated.
         Assertions.assertTrue(lakeTablet.getDataSize(true) > 0);
     }
+
 }

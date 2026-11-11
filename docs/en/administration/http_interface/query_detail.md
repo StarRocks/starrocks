@@ -27,7 +27,7 @@ Query detail records are collected only when the FE configuration `enable_collec
 
 ## Response
 
-- v1 returns a JSON array of `QueryDetail` objects.
+- v1 returns a JSON array of `QueryDetail` objects. The array is streamed with chunked transfer encoding, so the response has no `Content-Length` header; for an HTTP/1.0 request, the body ends when the connection closes.
 - v2 returns `{ "code": "0", "message": "OK", "result": [ ... ] }` where `result` is a `QueryDetail` list.
 
 ## Authentication and authorization

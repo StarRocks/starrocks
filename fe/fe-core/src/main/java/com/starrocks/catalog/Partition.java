@@ -239,7 +239,7 @@ public class Partition extends MetaObject implements GsonPostProcessable {
     public long getRowCount() {
         long rowCount = 0;
         for (PhysicalPartition subPartition : getSubPartitions()) {
-            rowCount += subPartition.storageRowCount();
+            rowCount += subPartition.getQueryableBaseIndex().getRowCount();
         }
 
         return rowCount;

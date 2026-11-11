@@ -365,12 +365,25 @@ public class LockManager {
 
     /** Whether any locker of the current thread holds {@code rid} with {@code lockType}. */
     public boolean isOwnedByCurrentThread(long rid, LockType lockType) {
-        Thread current = Thread.currentThread();
+        long currentThreadId = Thread.currentThread().getId();
         int lockTableIndex = getLockTableIndex(rid);
         synchronized (lockTableMutexes[lockTableIndex]) {
-            Set<LockHolder> owners = cloneOwnersInternal(rid, lockTableIndex);
-            return owners != null && owners.stream().anyMatch(holder -> holder.getLockType() == lockType
-                    && holder.getLocker().getLockerThread() == current);
+            final Lock lock = lockTables[lockTableIndex].get(rid);
+            return lock != null && lock.isOwnedByThread(currentThreadId, lockType);
+        }
+    }
+
+    /**
+     * Whether the calling thread holds READ or WRITE on {@code rid}, through any {@link Locker}: the two
+     * {@link #isOwnedByCurrentThread} questions under one acquisition of the lock table's mutex.
+     */
+    public boolean isReadOrWriteOwnedByCurrentThread(long rid) {
+        long currentThreadId = Thread.currentThread().getId();
+        int lockTableIndex = getLockTableIndex(rid);
+        synchronized (lockTableMutexes[lockTableIndex]) {
+            final Lock lock = lockTables[lockTableIndex].get(rid);
+            return lock != null && (lock.isOwnedByThread(currentThreadId, LockType.READ)
+                    || lock.isOwnedByThread(currentThreadId, LockType.WRITE));
         }
     }
 

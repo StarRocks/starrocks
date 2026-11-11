@@ -238,12 +238,6 @@ public class DeleteAnalyzer {
             throw new SemanticException("Delete for Iceberg table do not support specifying partitions",
                     deleteStatement.getPartitionNames().getPos());
         }
-        if (deleteStatement.getUsingRelations() != null) {
-            throw new SemanticException("Delete for Iceberg table do not support `using` clause");
-        }
-        if (deleteStatement.getCommonTableExpressions() != null) {
-            throw new SemanticException("Delete for Iceberg table do not support `with` clause");
-        }
 
         TableName tableName = TableName.fromTableRef(deleteStatement.getTableRef());
         // Create select list: SELECT _file, _pos, partition_col1, partition_col2, ...
@@ -265,13 +259,25 @@ public class DeleteAnalyzer {
 
         // Create table relation with WHERE predicate
         TableRelation tableRelation = new TableRelation(tableName);
+        AnalyzerUtils.setIcebergWriteBranch(tableRelation, table, deleteStatement.getTargetBranch());
+        Relation relation = tableRelation;
+        if (deleteStatement.getUsingRelations() != null) {
+            for (Relation r : deleteStatement.getUsingRelations()) {
+                relation = new JoinRelation(null, relation, r, null, false);
+            }
+            // a row joined to several USING rows must be deleted once, or the delete file counts it twice
+            selectList.setIsDistinct(true);
+        }
         SelectRelation selectRelation = new SelectRelation(
                 selectList,
-                tableRelation,
+                relation,
                 deleteStatement.getWherePredicate(),
                 null,
                 null
         );
+        if (deleteStatement.getCommonTableExpressions() != null) {
+            deleteStatement.getCommonTableExpressions().forEach(selectRelation::addCTERelation);
+        }
 
         // Create query statement
         QueryStatement queryStatement = new QueryStatement(selectRelation);
@@ -295,6 +301,10 @@ public class DeleteAnalyzer {
         if (table instanceof IcebergTable) {
             analyzeIcebergTable(deleteStatement, table, session);
             return;
+        }
+
+        if (deleteStatement.getTargetBranch() != null) {
+            throw new SemanticException("Only an Iceberg table can be written on a branch");
         }
 
         if (table instanceof MaterializedView) {

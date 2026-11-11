@@ -2321,6 +2321,16 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "as select tbl1.k1 ss, k2 from tbl1;";
         assertCreateFailWithException(sql, "Invalid parameter Analyze materialized properties failed because unknown " +
                 "properties");
+
+        sql = "create materialized view mv1 " +
+                "partition by ss " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"file_bundling\" = \"true\"\n" +
+                ") " +
+                "as select tbl1.k1 ss, k2 from tbl1;";
+        assertCreateFailWithException(sql, "file_bundling is only supported for materialized views in shared-data mode");
     }
 
     @Test

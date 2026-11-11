@@ -28,6 +28,14 @@ public class ConnectorTableColumnStats {
     // a backend older than the query version that added them behaves.
     private final long collectedPartitionCount;
     private final long perPartitionNdvSum;
+    // Two nested subsets of those partitions, about a third and about two thirds of them: the merged
+    // distinct count over each and how many partitions each holds - two more points on the curve the
+    // merged distinct count traces as partitions are added (see StatisticsUtils#extrapolateNdvFromGrowth).
+    // 0 when the backend did not report them.
+    private final long thirdNdv;
+    private final long twoThirdsNdv;
+    private final long thirdPartitionCount;
+    private final long twoThirdsPartitionCount;
 
     private static final ConnectorTableColumnStats UNKNOWN =
             new ConnectorTableColumnStats(ColumnStatistic.unknown(), -1, "");
@@ -38,11 +46,22 @@ public class ConnectorTableColumnStats {
 
     public ConnectorTableColumnStats(ColumnStatistic columnStatistic, long rowCount, String updateTime,
                                      long collectedPartitionCount, long perPartitionNdvSum) {
+        this(columnStatistic, rowCount, updateTime, collectedPartitionCount, perPartitionNdvSum, 0, 0, 0, 0);
+    }
+
+    public ConnectorTableColumnStats(ColumnStatistic columnStatistic, long rowCount, String updateTime,
+                                     long collectedPartitionCount, long perPartitionNdvSum,
+                                     long thirdNdv, long twoThirdsNdv,
+                                     long thirdPartitionCount, long twoThirdsPartitionCount) {
         this.columnStatistic = columnStatistic;
         this.rowCount = rowCount;
         this.updateTime = updateTime;
         this.collectedPartitionCount = collectedPartitionCount;
         this.perPartitionNdvSum = perPartitionNdvSum;
+        this.thirdNdv = thirdNdv;
+        this.twoThirdsNdv = twoThirdsNdv;
+        this.thirdPartitionCount = thirdPartitionCount;
+        this.twoThirdsPartitionCount = twoThirdsPartitionCount;
     }
 
     public static ConnectorTableColumnStats unknown() {
@@ -71,5 +90,21 @@ public class ConnectorTableColumnStats {
 
     public long getPerPartitionNdvSum() {
         return perPartitionNdvSum;
+    }
+
+    public long getThirdNdv() {
+        return thirdNdv;
+    }
+
+    public long getTwoThirdsNdv() {
+        return twoThirdsNdv;
+    }
+
+    public long getThirdPartitionCount() {
+        return thirdPartitionCount;
+    }
+
+    public long getTwoThirdsPartitionCount() {
+        return twoThirdsPartitionCount;
     }
 }

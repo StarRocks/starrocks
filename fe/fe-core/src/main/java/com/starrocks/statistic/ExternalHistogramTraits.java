@@ -98,7 +98,7 @@ final class ExternalHistogramTraits extends HistogramCollectTraits {
     }
 
     @Override
-    boolean waitsOutProcessMemoryPressure() {
+    boolean waitsOutSharedMemoryPressure() {
         return true;
     }
 

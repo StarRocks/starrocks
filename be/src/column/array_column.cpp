@@ -178,15 +178,13 @@ void ArrayColumn::fill_default(const Filter& filter) {
 bool ArrayColumn::null_rows_are_empty(const uint8_t* nulls, size_t num_rows) const {
     const auto& offs = offsets().immutable_data();
     if (offs.size() != num_rows + 1) {
-        // Not a 1:1 row mapping; be conservative.
+        // Not a 1:1 row mapping; be conservative. A NullableColumn* that actually points at an
+        // unmaterialized AdaptiveNullableColumn lands here: its null buffer is still empty while
+        // the data column already has rows, and the non-virtual immutable_null_column_data() the
+        // caller went through does not materialize it.
         return false;
     }
-    for (size_t i = 0; i < num_rows; ++i) {
-        if (nulls[i] != 0 && offs[i + 1] != offs[i]) {
-            return false;
-        }
-    }
-    return true;
+    return !has_payload_under_null_rows(nulls, offs.data(), num_rows);
 }
 
 void ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {

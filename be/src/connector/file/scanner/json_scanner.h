@@ -141,6 +141,7 @@ private:
 
     Status _check_ndjson();
 
+    bool _report_truncated_tail();
     void _append_error_msg(const std::string&, const std::string& error_msg);
 
     RuntimeState* _state = nullptr;

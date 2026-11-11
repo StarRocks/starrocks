@@ -45,6 +45,11 @@ public class MetadataTableTypeTest {
         assertEquals(MetadataTableType.FILES, MetadataTableType.get("files"));
         assertEquals(MetadataTableType.PARTITIONS, MetadataTableType.get("partitions"));
         assertEquals(MetadataTableType.PROPERTIES, MetadataTableType.get("properties"));
+        assertEquals(MetadataTableType.ENTRIES, MetadataTableType.get("entries"));
+        assertEquals(MetadataTableType.ALL_DATA_FILES, MetadataTableType.get("all_data_files"));
+        assertEquals(MetadataTableType.ALL_DELETE_FILES, MetadataTableType.get("all_delete_files"));
+        assertEquals(MetadataTableType.ALL_MANIFESTS, MetadataTableType.get("all_manifests"));
+        assertEquals(MetadataTableType.ALL_ENTRIES, MetadataTableType.get("all_entries"));
     }
 
     @Test

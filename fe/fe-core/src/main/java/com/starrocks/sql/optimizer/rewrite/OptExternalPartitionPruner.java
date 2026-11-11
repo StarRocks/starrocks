@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.FlussTable;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -430,11 +431,32 @@ public class OptExternalPartitionPruner {
                 columnToPartitionValuesMap, columnToNullPartitions);
     }
 
+    /**
+     * The scan's conjuncts, and for a Hive scan the column predicates implied by its function predicates, so
+     * {@code year(dt) = 2024} prunes partitions and row groups on {@code dt}; pruning only, never failing the query.
+     */
+    private static List<ScalarOperator> conjunctsToClassify(LogicalScanOperator operator,
+                                                            Set<ColumnRefOperator> partitionColumns) {
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(operator.getPredicate());
+        if (!(operator.getTable() instanceof HiveTable)) {
+            return conjuncts;
+        }
+        List<ScalarOperator> preimages = ExternalScanPredicates.forPartitionPruning(ExternalScanPredicates.Connector.HIVE,
+                conjuncts, ExternalScanPredicates.scanTemporalColumns(operator.getColRefToColumnMetaMap()),
+                partitionColumns);
+        if (preimages.isEmpty()) {
+            return conjuncts;
+        }
+        List<ScalarOperator> result = new ArrayList<>(conjuncts);
+        result.addAll(preimages);
+        return result;
+    }
+
     private static void classifyConjuncts(LogicalScanOperator operator,
                                           Map<ColumnRefOperator,
                                                   ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap)
             throws AnalysisException {
-        for (ScalarOperator scalarOperator : Utils.extractConjuncts(operator.getPredicate())) {
+        for (ScalarOperator scalarOperator : conjunctsToClassify(operator, columnToPartitionValuesMap.keySet())) {
             List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(scalarOperator);
             if (!columnRefOperatorList.isEmpty() && !columnRefOperatorList.retainAll(columnToPartitionValuesMap.keySet())) {
                 operator.getScanOperatorPredicates().getPartitionConjuncts().add(scalarOperator);

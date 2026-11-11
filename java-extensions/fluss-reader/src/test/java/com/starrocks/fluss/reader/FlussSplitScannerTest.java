@@ -21,13 +21,16 @@ import org.apache.fluss.client.table.Table;
 import org.apache.fluss.client.table.scanner.Scan;
 import org.apache.fluss.client.table.scanner.ScanRecord;
 import org.apache.fluss.client.table.scanner.batch.BatchScanner;
+import org.apache.fluss.client.table.scanner.batch.LakeSnapshotAndLogSplitScanner;
 import org.apache.fluss.client.table.scanner.log.LogScanner;
 import org.apache.fluss.client.table.scanner.log.ScanRecords;
 import org.apache.fluss.config.Configuration;
-import org.apache.fluss.flink.lake.reader.LakeSnapshotAndLogSplitScanner;
 import org.apache.fluss.flink.lake.reader.LakeSnapshotScanner;
+import org.apache.fluss.flink.lake.split.LakeSnapshotAndFlussLogSplit;
 import org.apache.fluss.flink.source.split.LogSplit;
 import org.apache.fluss.flink.source.split.SourceSplitSerializer;
+import org.apache.fluss.lake.source.LakeSource;
+import org.apache.fluss.lake.source.LakeSplit;
 import org.apache.fluss.metadata.Schema;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableDescriptor;
@@ -46,6 +49,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
@@ -53,6 +57,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -89,6 +94,7 @@ public class FlussSplitScannerTest {
                                 .build())
                         .distributedBy(1)
                         .build(),
+                null,
                 0,
                 0);
         Scan scan = mock(Scan.class);
@@ -153,6 +159,48 @@ public class FlussSplitScannerTest {
         assertSkipsEmptyBatch(
                 new FlussSnapshotAndLogScanner(null, null, null, null),
                 mock(LakeSnapshotAndLogSplitScanner.class));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testOpenSnapshotAndLog() throws Exception {
+        TableBucket bucket = new TableBucket(1, 0);
+        LogScanner logScanner = mock(LogScanner.class);
+        Scan scan = mock(Scan.class);
+        when(scan.project(any(int[].class))).thenReturn(scan);
+        when(scan.createLogScanner()).thenReturn(logScanner);
+        Table table = mock(Table.class);
+        Schema schema = Schema.newBuilder()
+                .column("id", DataTypes.INT())
+                .column("name", DataTypes.STRING())
+                .primaryKey("id")
+                .build();
+        when(table.getTableInfo()).thenReturn(TableInfo.of(
+                TablePath.of("db", "table"), 1, 1,
+                TableDescriptor.builder().schema(schema).distributedBy(1).build(), null, 0, 0));
+        when(table.newScan()).thenReturn(scan);
+        LakeSource<LakeSplit> lakeSource = mock(LakeSource.class);
+        LakeSnapshotAndFlussLogSplit split = new LakeSnapshotAndFlussLogSplit(bucket, null, null, 3, 4);
+        FlussSnapshotAndLogScanner scanner = new FlussSnapshotAndLogScanner(table, lakeSource, split, new int[] {1});
+        try {
+            scanner.open();
+        } finally {
+            scanner.close();
+        }
+
+        verify(scan).project(new int[] {1, 0});
+        verify(lakeSource).withProject(argThat(fields -> Arrays.deepEquals(new int[][] { {1}, {0} }, fields)));
+        verify(logScanner).subscribe(0, 3L);
+        verify(logScanner).close();
+    }
+
+    @Test
+    public void testSnapshotAndLogRequiresStoppingOffset() {
+        LakeSnapshotAndFlussLogSplit split = new LakeSnapshotAndFlussLogSplit(
+                new TableBucket(1, 0), null, null, 3, -1);
+        FlussSnapshotAndLogScanner scanner = new FlussSnapshotAndLogScanner(null, null, split, null);
+        IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class, scanner::open);
+        Assertions.assertTrue(error.getMessage().contains("Stopping offset is required"));
     }
 
     private static void assertSkipsEmptyBatch(

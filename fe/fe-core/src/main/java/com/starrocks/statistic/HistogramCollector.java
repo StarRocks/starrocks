@@ -165,9 +165,9 @@ final class HistogramCollector {
 
                 return new ColumnHistogram(buckets, buildMcvJson(mostCommonValues));
             } catch (Exception e) {
-                if (!traits.waitsOutProcessMemoryPressure()
-                        || attempt >= job.maxProcessMemoryRetries()
-                        || !StatisticsCollectJob.isProcessMemoryExhausted(e)) {
+                if (!traits.waitsOutSharedMemoryPressure()
+                        || attempt >= job.maxSharedMemoryRetries()
+                        || !StatisticsCollectJob.isSharedMemoryExhausted(e)) {
                     throw e;
                 }
                 // A KILL or the overall analyze deadline can land while a query is in flight, where it

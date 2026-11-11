@@ -242,6 +242,39 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
         }
     }
 
+    @Test
+    public void testSharedMemoryLimitIsWaitedOut() throws Exception {
+        try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
+            fixture.setBufferSize(20L * 1024 * 1024);
+            // The query pool is shared: a neighbour filled it, and the rejection clears once that one ends.
+            fixture.failFirstQueriesWith(2, "Memory of query_pool exceed limit. try consume:2684354560 " +
+                    "Backend: 172.26.80.58, Used: 45366981455, Limit: 48061935636. " +
+                    "Mem usage has exceed the limit of query pool: BE:10004");
+
+            fixture.collect();
+
+            Assertions.assertNull(fixture.analyzeStatus().getReason());
+            Assertions.assertEquals(Lists.newArrayList("v2", "v7"), fixture.collectedColumns());
+        }
+    }
+
+    @Test
+    public void testStatementOwnMemoryLimitIsNotRetried() throws Exception {
+        try (ExternalHistogramBatchFixture fixture = new ExternalHistogramBatchFixture(connectContext)) {
+            fixture.setBufferSize(20L * 1024 * 1024);
+            fixture.failFirstQueriesWith(1, "Memory of rg1 exceed limit. Pipeline Backend: 172.26.80.57, " +
+                    "Used: 100, Limit: 50. Mem usage has exceed the big query limit of the resource group [rg1]. " +
+                    "You can change the limit by modifying [big_query_mem_limit] of this group: BE:10004");
+
+            fixture.collect();
+
+            // v2 fails straight away and is tolerated as a column failure; v7 is unaffected.
+            Assertions.assertTrue(fixture.analyzeStatus().getReason().contains("big query limit"),
+                    fixture.analyzeStatus().getReason());
+            Assertions.assertEquals(Lists.newArrayList("v7"), fixture.collectedColumns());
+        }
+    }
+
     private static class ExternalHistogramBatchFixture implements AutoCloseable {
         private static final String HISTOGRAM = "[[\"1\",\"2\",\"3\",\"4\"]]";
 
@@ -251,6 +284,8 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
         private final AtomicInteger cleanupCalls = new AtomicInteger();
         private final AtomicInteger failSecondColumn = new AtomicInteger();
         private final AtomicInteger failEveryColumn = new AtomicInteger();
+        private final AtomicInteger failuresLeft = new AtomicInteger();
+        private String failureMessage;
         private final List<String> cleanedColumns = new ArrayList<>();
         private boolean emptyV2Histogram;
         private boolean noSecondColumnHistogramResults;
@@ -282,6 +317,9 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
                 @Mock
                 public List<TStatisticData> executeStatisticDQL(ConnectContext ctx, String sql) {
                     statisticsQueries.add(sql);
+                    if (failuresLeft.getAndUpdate(n -> Math.max(0, n - 1)) > 0) {
+                        throw new RuntimeException(failureMessage);
+                    }
                     if (failEveryColumn.get() != 0) {
                         throw new RuntimeException("mock every-column failure");
                     }
@@ -314,6 +352,14 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
                 }
             };
 
+            // Keep the retry logic, drop the waiting.
+            new MockUp<StatisticsCollectJob>() {
+                @Mock
+                protected long retryBackoffMillis(int attempt) {
+                    return 0;
+                }
+            };
+
             new MockUp<ExternalHistogramStatisticsCollectJob>() {
                 @Mock
                 public void collectStatisticSync(
@@ -332,6 +378,11 @@ public class ExternalHistogramStatisticsCollectJobTest extends HistogramStatisti
 
         private void failOnSecondColumn() {
             failSecondColumn.set(1);
+        }
+
+        private void failFirstQueriesWith(int count, String message) {
+            failureMessage = message;
+            failuresLeft.set(count);
         }
 
         private void failEveryColumn() {
