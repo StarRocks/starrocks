@@ -1324,6 +1324,38 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
     ASSERT_EQ(1, shared_buffered_input_stream->direct_io_count());
     ASSERT_EQ(1, shared_buffered_input_stream->shared_io_count());
 }
+// Several conjuncts on the same dict column must register the column (and its sub field path) only
+// once; otherwise the per row group dict predicate rewrite runs N^2 times for N conjuncts.
+TEST_F(FileReaderTest, TestDictFilterRegistersColumnOnceForMultipleConjuncts) {
+    auto file_reader = _create_file_reader(_file2_path);
+    auto* ctx = _create_file2_base_context();
+    // c3 >= "c" AND c3 <= "c"
+    auto& c3_conjuncts = ctx->format_scan_context.conjunct_ctxs_by_slot[2];
+    for (auto opcode : {TExprOpcode::GE, TExprOpcode::LE}) {
+        std::vector<ExprContext*> ctxs;
+        _create_string_conjunct_ctxs(opcode, 2, "c", &ctxs);
+        c3_conjuncts.insert(c3_conjuncts.end(), ctxs.begin(), ctxs.end());
+    }
+    ASSERT_EQ(2, c3_conjuncts.size());
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok());
+
+    const auto& materializer = file_reader->_row_group_readers[0]->_column_materializer;
+    const auto& dict_column_indices = materializer->dict_column_indices();
+    ASSERT_EQ(1, dict_column_indices.size());
+    int col_idx = dict_column_indices[0];
+    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id());
+    ASSERT_EQ(1, materializer->dict_column_sub_field_paths().at(col_idx).size());
+
+    auto chunk = _create_chunk();
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(3, chunk->num_rows());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.is_end_of_file());
+}
 
 TEST_F(FileReaderTest, TestGetNextOtherFilter) {
     auto file_reader = _create_file_reader(_file2_path);
@@ -2819,6 +2851,64 @@ TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
             const auto& c_struct = get_struct_field_column(c_struct_struct, "c_struct");
             expect_string_data_column(get_struct_field_column(c_struct, "c0"));
             expect_string_data_column(get_struct_field_column(c_struct, "c1"));
+        }
+    }
+    EXPECT_EQ(100, total_row_nums);
+}
+// Different sub field paths of one struct column are still registered separately, while repeated
+// conjuncts on the same sub field path are registered once.
+TEST_F(FileReaderTest, TestStructDictFilterRegistersEachSubFieldPathOnce) {
+    const std::string struct_in_struct_file_path =
+            "./be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet";
+    auto ctx = _create_file_struct_in_struct_read_context(struct_in_struct_file_path);
+
+    TypeDescriptor type_struct =
+            TypeDescriptor::create_struct_type({"c0", "c1"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
+    TypeDescriptor type_struct_in_struct =
+            TypeDescriptor::create_struct_type({"c0", "c_struct"}, {TYPE_VARCHAR_DESC, type_struct});
+
+    std::vector<std::string> inner_path({"c_struct", "c0"});
+    std::vector<std::string> outer_path({"c0"});
+    auto& conjuncts = ctx->format_scan_context.conjunct_ctxs_by_slot[3];
+    auto add_conjunct = [&](TExprOpcode::type opcode, const std::vector<std::string>& path) {
+        std::vector<ExprContext*> ctxs;
+        _create_struct_subfield_predicate_conjunct_ctxs(opcode, 3, type_struct_in_struct, path, "55", &ctxs);
+        conjuncts.insert(conjuncts.end(), ctxs.begin(), ctxs.end());
+    };
+    // c_struct_struct.c_struct.c0 = '55' AND c_struct_struct.c_struct.c0 >= '55' AND c_struct_struct.c0 = '55'
+    add_conjunct(TExprOpcode::EQ, inner_path);
+    add_conjunct(TExprOpcode::GE, inner_path);
+    add_conjunct(TExprOpcode::EQ, outer_path);
+    ASSERT_EQ(3, conjuncts.size());
+
+    auto file_reader = _create_file_reader(struct_in_struct_file_path);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct_in_struct, true), chunk->num_columns());
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok());
+    const auto& materializer = file_reader->_row_group_readers[0]->_column_materializer;
+    const auto& dict_column_indices = materializer->dict_column_indices();
+    const auto& dict_column_sub_field_paths = materializer->dict_column_sub_field_paths();
+    ASSERT_EQ(1, dict_column_indices.size());
+    ASSERT_EQ(3, dict_column_indices[0]);
+    ASSERT_EQ(2, dict_column_sub_field_paths.at(3).size());
+    ASSERT_EQ(inner_path, dict_column_sub_field_paths.at(3)[0]);
+    ASSERT_EQ(outer_path, dict_column_sub_field_paths.at(3)[1]);
+
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        ASSERT_TRUE(status.ok() || status.is_end_of_file());
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        if (chunk->num_rows() != 0) {
+            ASSERT_EQ("{c0:'55',c_struct:{c0:'55',c1:'46'}}", chunk->get_column_by_slot_id(3)->debug_item(0));
         }
     }
     EXPECT_EQ(100, total_row_nums);
