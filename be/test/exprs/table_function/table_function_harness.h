@@ -50,8 +50,9 @@
 // What it checks on every call:
 //   * the offsets column is batch-local and starts at 0;
 //   * brackets are non-decreasing;
-//   * the fn-result columns hold exactly offsets.back() rows when the expanded value is required, and
-//     nothing at all when it is not;
+//   * the fn-result columns hold exactly offsets.back() rows when the expanded value is required
+//     (when it is not, the operator reads nothing but the bracket counts, so their size is only
+//     reported - see DriveResult::max_fn_result_rows - and left for the caller to assert on);
 //   * the call made progress, so a bug cannot turn into an infinite pipeline-driver spin.
 //
 // Anything specific to one function - what a row is supposed to expand to - stays in that function's
@@ -84,6 +85,11 @@ struct DriveResult {
     // Zero-length brackets seen. Under LEFT JOIN these are the ones the operator turns into an
     // injected NULL row; an implementation that emits that row itself (MultiUnnest) should report 0.
     size_t zero_length_brackets = 0;
+    // The largest fn-result column any call returned. Only interesting when the expanded value is not
+    // required: the operator then reads the column's *type* (clone_empty()) but none of its rows, so an
+    // implementation may either skip materializing it (MultiUnnest, UnnestBitmap - 0 here) or hand back
+    // a column it already had, for free, by reference (Unnest's zero-copy path - the whole expansion).
+    uint32_t max_fn_result_rows = 0;
 };
 
 // Drains one input chunk. `state` must already carry its params (set_params()), its is_left_join and
@@ -109,8 +115,10 @@ inline DriveResult drive(const TableFunction& fn, RuntimeState* runtime_state, T
         EXPECT_EQ(0u, brackets[0]) << "offsets column must be batch-local, at input row " << first_row;
         result.max_rows_per_call = std::max(result.max_rows_per_call, brackets.back());
         for (const auto& column : columns) {
-            EXPECT_EQ(required ? brackets.back() : 0u, column->size())
-                    << "fn-result column size at input row " << first_row;
+            result.max_fn_result_rows = std::max(result.max_fn_result_rows, static_cast<uint32_t>(column->size()));
+            if (required) {
+                EXPECT_EQ(brackets.back(), column->size()) << "fn-result column size at input row " << first_row;
+            }
         }
 
         for (size_t b = 0; b + 1 < brackets.size(); ++b) {

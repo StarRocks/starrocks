@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -53,14 +54,18 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
 public class AnalyzeMgr implements Writable {
@@ -91,6 +96,9 @@ public class AnalyzeMgr implements Writable {
     private final List<Pair<Long, Long>> checkTableIds = Lists.newArrayList(CHECK_ALL_TABLES);
 
     private LocalDateTime lastCleanTime;
+
+    // Serializes the read-modify-write behind updateExternalBasicStatsMeta; see its javadoc.
+    private final Object externalBasicStatsMetaCommitLock = new Object();
 
     public AnalyzeMgr() {
         analyzeJobMap = Maps.newConcurrentMap();
@@ -284,6 +292,30 @@ public class AnalyzeMgr implements Writable {
                         basicStatsMeta));
     }
 
+    /**
+     * Applies {@code updater} to a table's {@link ExternalBasicStatsMeta} - the current one, or null when
+     * the table has none yet - and durably records what it returns. Returning null records nothing.
+     *
+     * <p>Serialized across callers, because committing one is a read-modify-write: the caller clones the
+     * current metadata, adds its own columns to it and writes the result back. Two analyze jobs on the same
+     * table can easily overlap - the query trigger only keeps its own tasks off each other, and says nothing
+     * about the auto collector or a manual ANALYZE - and interleaving their read-modify-writes drops one of
+     * them entirely. That used to be harmless, when every job recorded the same complete partition set for
+     * every column; now a job records the coverage it actually achieved, per column, so a lost write loses
+     * columns and partition sets that nothing will restore until the next full collection. The lock is only
+     * ever held for one metadata commit per analyze job, so contention is not a concern.
+     */
+    public void updateExternalBasicStatsMeta(String catalogName, String dbName, String tableName,
+                                             UnaryOperator<ExternalBasicStatsMeta> updater) {
+        synchronized (externalBasicStatsMetaCommitLock) {
+            ExternalBasicStatsMeta updated =
+                    updater.apply(externalBasicStatsMetaMap.get(new StatsMetaKey(catalogName, dbName, tableName)));
+            if (updated != null) {
+                addExternalBasicStatsMeta(updated);
+            }
+        }
+    }
+
     public void replayAddExternalBasicStatsMeta(ExternalBasicStatsMeta basicStatsMeta) {
         externalBasicStatsMetaMap.put(new StatsMetaKey(basicStatsMeta.getCatalogName(),
                 basicStatsMeta.getDbName(), basicStatsMeta.getTableName()), basicStatsMeta);
@@ -291,10 +323,14 @@ public class AnalyzeMgr implements Writable {
 
     public void removeExternalBasicStatsMeta(String catalogName, String dbName, String tableName) {
         StatsMetaKey key = new StatsMetaKey(catalogName, dbName, tableName);
-        if (externalBasicStatsMetaMap.containsKey(key)) {
-            ExternalBasicStatsMeta basicStatsMeta = externalBasicStatsMetaMap.get(key);
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveExternalBasicStatsMeta(
-                    basicStatsMeta, wal -> externalBasicStatsMetaMap.remove(key));
+        // Serialized with updateExternalBasicStatsMeta: a commit that read the entry before this removal would
+        // otherwise journal it back afterwards.
+        synchronized (externalBasicStatsMetaCommitLock) {
+            if (externalBasicStatsMetaMap.containsKey(key)) {
+                ExternalBasicStatsMeta basicStatsMeta = externalBasicStatsMetaMap.get(key);
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveExternalBasicStatsMeta(
+                        basicStatsMeta, wal -> externalBasicStatsMetaMap.remove(key));
+            }
         }
     }
 
@@ -647,6 +683,223 @@ public class AnalyzeMgr implements Writable {
             dropExternalHistogramStatsMetaAndData(droppedTable.getCatalogName(), droppedTable.getDbName(),
                     droppedTable.getTableName());
         }
+    }
+
+    // At most this many external tables are checked per periodic round; the next round resumes after the last
+    // one checked. Each check lists the table's partitions from the connector and queries the statistics table.
+    @VisibleForTesting
+    static final int EXTERNAL_DROPPED_PARTITION_CLEANUP_TABLES_PER_ROUND = 100;
+    // Wall-clock time of the last periodic round, and the table it stopped after. Leader-only, in memory: a new
+    // leader simply starts a round right away from the first table.
+    private long lastExternalDroppedPartitionCleanupMs = 0;
+    private String externalDroppedPartitionCleanupCursor = null;
+
+    // Deletes the column statistics of dropped partitions of external tables, independent of collections. The
+    // cleanup at the end of a collection (ExternalFullStatisticsCollectJob#cleanupDroppedPartitionStats) misses a
+    // partition dropped after the table's last collection, or still inside the grace at it; the read path
+    // aggregates every row of the table, so those rows would keep inflating row count and NDV and pin min/max.
+    //
+    // Same rule as the in-job cleanup (see ExternalDroppedPartitionStats), over every column the table has
+    // statistics for. Errs on the side of keeping rows: a table is skipped when it cannot be resolved, is not
+    // partitioned, has a pending or running analyze (which does its own cleanup), or its partition list cannot be
+    // obtained or is empty. Never throws.
+    //
+    // The leader refreshes its own statistics cache, and re-journals the table's statistics metadata so followers
+    // drop theirs on replay (see #journalCleanedColumns), as after a collection.
+    public void clearStatisticFromExternalDroppedPartition() {
+        long graceSeconds = Config.connector_table_analyze_dropped_partition_stats_grace_second;
+        long intervalSeconds = Config.connector_table_analyze_dropped_partition_stats_cleanup_interval_second;
+        if (graceSeconds <= 0 || intervalSeconds <= 0) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastExternalDroppedPartitionCleanupMs < intervalSeconds * 1000L) {
+            return;
+        }
+        lastExternalDroppedPartitionCleanupMs = now;
+
+        List<StatsMetaKey> round = nextExternalDroppedPartitionCleanupRound();
+        if (round.isEmpty()) {
+            return;
+        }
+        Set<StatsMetaKey> analyzing = externalTablesUnderAnalyze();
+        int scanned = 0;
+        int cleaned = 0;
+        int skipped = 0;
+        int failed = 0;
+        long deletedPartitions = 0;
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        try (var guard = context.bindScope()) {
+            context.setStatisticsConnection(true);
+            StatisticExecutor executor = new StatisticExecutor();
+            for (StatsMetaKey key : round) {
+                scanned++;
+                if (analyzing.contains(key)) {
+                    skipped++;
+                    continue;
+                }
+                try {
+                    int deleted = clearExternalDroppedPartitionStats(context, executor, key, graceSeconds);
+                    if (deleted == SKIPPED) {
+                        skipped++;
+                    } else if (deleted == FAILED) {
+                        failed++;
+                    } else if (deleted > 0) {
+                        cleaned++;
+                        deletedPartitions += deleted;
+                    }
+                } catch (Exception e) {
+                    failed++;
+                    LOG.warn("[ExternalStats] periodic dropped partition stats cleanup failed | catalog={} db={} " +
+                            "table={}", key.getCatalogName(), key.getDbName(), key.getTableName(), e);
+                }
+            }
+        }
+        LOG.info("[ExternalStats] periodic dropped partition stats cleanup | tablesScanned={} tablesCleaned={} " +
+                        "partitionsDeleted={} tablesSkipped={} tablesFailed={} elapsedMs={}",
+                scanned, cleaned, deletedPartitions, skipped, failed, System.currentTimeMillis() - now);
+    }
+
+    // The tables to check this round: up to EXTERNAL_DROPPED_PARTITION_CLEANUP_TABLES_PER_ROUND, in a stable
+    // order, starting after the table the previous round stopped at and wrapping around.
+    private List<StatsMetaKey> nextExternalDroppedPartitionCleanupRound() {
+        List<StatsMetaKey> keys = externalBasicStatsMetaMap.keySet().stream()
+                .sorted(Comparator.comparing(AnalyzeMgr::cleanupOrderKey))
+                .collect(Collectors.toList());
+        if (keys.isEmpty()) {
+            externalDroppedPartitionCleanupCursor = null;
+            return keys;
+        }
+        int start = 0;
+        if (externalDroppedPartitionCleanupCursor != null) {
+            while (start < keys.size()
+                    && cleanupOrderKey(keys.get(start)).compareTo(externalDroppedPartitionCleanupCursor) <= 0) {
+                start++;
+            }
+            if (start == keys.size()) {
+                start = 0;
+            }
+        }
+        int count = Math.min(EXTERNAL_DROPPED_PARTITION_CLEANUP_TABLES_PER_ROUND, keys.size());
+        List<StatsMetaKey> round = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            round.add(keys.get((start + i) % keys.size()));
+        }
+        externalDroppedPartitionCleanupCursor = cleanupOrderKey(round.get(round.size() - 1));
+        return round;
+    }
+
+    @VisibleForTesting
+    void resetExternalDroppedPartitionCleanupRound() {
+        lastExternalDroppedPartitionCleanupMs = 0;
+        externalDroppedPartitionCleanupCursor = null;
+    }
+
+    private static String cleanupOrderKey(StatsMetaKey key) {
+        return key.getCatalogName() + '\0' + key.getDbName() + '\0' + key.getTableName();
+    }
+
+    private Set<StatsMetaKey> externalTablesUnderAnalyze() {
+        Set<StatsMetaKey> keys = new HashSet<>();
+        for (AnalyzeStatus status : analyzeStatusMap.values()) {
+            if (!(status instanceof ExternalAnalyzeStatus)) {
+                continue;
+            }
+            if (status.getStatus() != StatsConstants.ScheduleStatus.PENDING
+                    && status.getStatus() != StatsConstants.ScheduleStatus.RUNNING) {
+                continue;
+            }
+            try {
+                keys.add(new StatsMetaKey(status.getCatalogName(), status.getDbName(), status.getTableName()));
+            } catch (MetaNotFoundException e) {
+                // ExternalAnalyzeStatus never throws: it holds the names.
+            }
+        }
+        return keys;
+    }
+
+    private static final int SKIPPED = -1;
+    private static final int FAILED = -2;
+
+    // Returns the number of partitions whose statistics were deleted, SKIPPED when the table was left alone, or
+    // FAILED when any DELETE batch failed (the per-table WARN has the details).
+    private int clearExternalDroppedPartitionStats(ConnectContext context, StatisticExecutor executor,
+                                                   StatsMetaKey key, long graceSeconds) {
+        ExternalBasicStatsMeta meta = externalBasicStatsMetaMap.get(key);
+        if (meta == null) {
+            return SKIPPED;
+        }
+        // Only FULL columns, and the SAMPLE columns of an incremental FULL collection whose rows cover the table
+        // the same way (ColumnStatsMeta#isFullCoverageByRows): those are scaled by the partitions their rows come
+        // from, so deleting a dropped partition's rows brings the estimate back to the live table. Any other
+        // SAMPLE column's rows are scaled up by the partition count its metadata recorded
+        // (StatisticsUtils#estimateColumnStatistics), and only a collection rewrites that metadata: deleting rows
+        // here would skew the estimate rather than fix it. Its own collection cleans up dropped partitions. FULL
+        // also means the collection covered every partition it asked for, so no resume record can skip a
+        // partition deleted here. Columns without metadata are left alone too: the optimizer ignores their rows.
+        Set<String> columnSet = new TreeSet<>();
+        meta.getColumnStatsMetaMap().forEach((column, columnMeta) -> {
+            if (columnMeta.isFullCoverageByRows()) {
+                columnSet.add(column);
+            }
+        });
+        if (columnSet.isEmpty()) {
+            return SKIPPED;
+        }
+        List<String> columns = new ArrayList<>(columnSet);
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(context, key.getCatalogName(), key.getDbName(), key.getTableName());
+        if (table == null || table.isUnPartitioned()) {
+            return SKIPPED;
+        }
+        List<String> livePartitionNames = ExternalDroppedPartitionStats.listLivePartitionNames(table);
+        if (livePartitionNames == null || livePartitionNames.isEmpty()) {
+            return SKIPPED;
+        }
+        List<String> dropped = ExternalDroppedPartitionStats.findDroppedPartitions(context, executor, table,
+                livePartitionNames, columns, graceSeconds);
+        if (dropped.isEmpty()) {
+            return 0;
+        }
+        ExternalDroppedPartitionStats.DeleteResult result =
+                ExternalDroppedPartitionStats.deleteInBatches(context, executor, table, dropped, columns);
+        // Refresh rather than invalidate: the old values stay served until the reload lands, as after a
+        // collection. Invalidating would make the next query plan with unknown statistics until it reloads.
+        GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .refreshConnectorTableColumnStatistics(table, columns, false);
+        if (result.failedBatches < result.batches) {
+            journalCleanedColumns(key, columns);
+        }
+        if (result.failedBatches > 0) {
+            LOG.warn("[ExternalStats] periodic dropped partition stats cleanup partially failed | catalog={} db={} " +
+                            "table={} droppedPartitions={} batches={} failedBatches={}",
+                    key.getCatalogName(), key.getDbName(), key.getTableName(), dropped.size(), result.batches,
+                    result.failedBatches);
+            return FAILED;
+        } else {
+            LOG.info("[ExternalStats] periodic dropped partition stats cleaned up | catalog={} db={} table={} " +
+                            "droppedPartitions={} batches={}",
+                    key.getCatalogName(), key.getDbName(), key.getTableName(), dropped.size(), result.batches);
+        }
+        return dropped.size();
+    }
+
+    // Nothing journals the deletes themselves, so re-log the table's current metadata: replaying it drops the
+    // followers' cached statistics of its column list (#replayRefreshExternalBasicStatsCache). That list is only the
+    // last collection's columns, so the cleaned ones are added to it when missing; nothing else changes, the update
+    // times included, since they drive re-analyze. Under the commit lock, so a collection committed meanwhile is not
+    // overwritten, and metadata removed meanwhile (#removeExternalBasicStatsMeta) is not brought back.
+    private void journalCleanedColumns(StatsMetaKey key, List<String> cleanedColumns) {
+        updateExternalBasicStatsMeta(key.getCatalogName(), key.getDbName(), key.getTableName(), current -> {
+            if (current == null || current.getColumns().containsAll(cleanedColumns)) {
+                return current;
+            }
+            ExternalBasicStatsMeta updated = current.clone();
+            Set<String> columns = new LinkedHashSet<>(current.getColumns());
+            columns.addAll(cleanedColumns);
+            updated.setColumns(new ArrayList<>(columns));
+            return updated;
+        });
     }
 
     public void recordDropPartition(long partitionId) {

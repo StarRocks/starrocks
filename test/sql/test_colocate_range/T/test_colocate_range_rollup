@@ -1,0 +1,173 @@
+-- name: test_colocate_range_rollup @cloud
+-- Rollups and synchronous materialized views on range colocate tables. One whose sort key starts with the
+-- group's colocate columns (same order and types) is accepted: it is cut along every ColocateRange of the
+-- group, a join on the colocate column that reads it is still planned colocated and returns what a
+-- non-colocated join returns, and it keeps up with later loads and partitions. One that moves, reorders
+-- or drops a colocate column is rejected, and a sort-key rewrite of a table that has a rollup stays rejected.
+set enable_range_distribution = true;
+-- A load-time pre-split would add tablet boundaries that this case does not control.
+set enable_tablet_pre_split = false;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- t1 is sorted by (k1, k2) and colocated on k1. Each INSERT loads a k1 range of its own
+-- ([0, 9], [10, 19], [20, 29], 1000 rows each), so the rowsets of the single tablet do not overlap on k1.
+create table t1 (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null
+)
+duplicate key(k1, k2)
+order by(k1, k2)
+properties('replication_num' = '1', 'colocate_with' = 'g_rollup_${uuid0}:k1');
+
+insert into t1 select x % 10, x, x from table(generate_series(1, 1000)) as g(x);
+insert into t1 select 10 + x % 10, x, x from table(generate_series(1001, 2000)) as g(x);
+insert into t1 select 20 + x % 10, x, x from table(generate_series(2001, 3000)) as g(x);
+
+-- A three-way split by row count cuts where one load ends and the next begins. Those cuts are changes of
+-- k1, so each becomes a ColocateRange boundary and the group gets three ColocateRanges.
+function: set_first_tablet_id("t1")
+alter table t1 split tablet (${tablet_id}) properties ('tablet_reshard_target_size' = '-3');
+function: wait_reshard_job_finish("t1", "SPLIT_TABLET", 1, 120)
+shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "g_rollup_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
+select buckets from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 't1';
+
+-- t2 joins the group after the split, so it gets one tablet per ColocateRange.
+create table t2 (
+    k1 int not null,
+    k2 int not null,
+    w int not null
+)
+duplicate key(k1, k2)
+order by(k1, k2)
+properties('replication_num' = '1', 'colocate_with' = 'g_rollup_${uuid0}:k1');
+
+insert into t2 select k1, k2, v1 * 10 from t1;
+select count(*), sum(w) from t2;
+
+-- Accepted: the rollup sort key (k1) starts with the colocate column k1.
+alter table t1 add rollup r1 (k1, v1) order by (k1);
+function: wait_alter_table_finish("ROLLUP", 8)
+shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "g_rollup_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
+desc t1 all;
+
+-- The rollup holds every row of the base table. Rewrites are off, so the base is read from the base index
+-- and the rollup only through the index hint.
+set enable_materialized_view_rewrite = false;
+set enable_sync_materialized_view_rewrite = false;
+select count(*), sum(v1) from t1;
+select count(*), sum(v1) from r1 [_SYNC_MV_];
+select k1, count(*), sum(v1) from t1 group by k1 order by k1;
+select k1, count(*), sum(v1) from r1 [_SYNC_MV_] group by k1 order by k1;
+
+-- A join on the colocate column that reads the rollup is planned colocated, and a colocated scan fails
+-- unless every tablet of both sides lies inside one ColocateRange. It returns the same rows as a join
+-- that is not colocated.
+function: assert_explain_contains("select r1.k1, r1.v1, t2.w from r1 [_SYNC_MV_] join t2 on r1.k1 = t2.k1", "INNER JOIN (COLOCATE)")
+select count(*), sum(r1.v1), sum(t2.w) from r1 [_SYNC_MV_] join t2 on r1.k1 = t2.k1;
+select r1.k1, sum(r1.v1), sum(t2.w) from r1 [_SYNC_MV_] join t2 on r1.k1 = t2.k1 group by r1.k1 order by r1.k1;
+set disable_colocate_join = true;
+select count(*), sum(r1.v1), sum(t2.w) from r1 [_SYNC_MV_] join t2 on r1.k1 = t2.k1;
+select r1.k1, sum(r1.v1), sum(t2.w) from r1 [_SYNC_MV_] join t2 on r1.k1 = t2.k1 group by r1.k1 order by r1.k1;
+set disable_colocate_join = false;
+
+-- A load after the rollup exists lands in the rollup's tablets too.
+insert into t1 values (15, 3001, 3001), (25, 3002, 3002);
+select count(*), sum(v1) from t1;
+select count(*), sum(v1) from r1 [_SYNC_MV_];
+select k1, count(*), sum(v1) from r1 [_SYNC_MV_] where k1 in (15, 25) group by k1 order by k1;
+
+-- Accepted: a synchronous materialized view whose sort key starts with the colocate column k1.
+create materialized view mv1 as select k1, sum(v1) from t1 group by k1;
+function: wait_materialized_view_finish()
+shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "g_rollup_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
+select k1, sum(v1) from t1 group by k1 order by k1;
+select k1, sum(mv_sum_v1) from mv1 [_SYNC_MV_] group by k1 order by k1;
+function: assert_explain_contains("select mv1.k1, t2.w from mv1 [_SYNC_MV_] join t2 on mv1.k1 = t2.k1", "INNER JOIN (COLOCATE)")
+select count(*), sum(mv1.mv_sum_v1), sum(t2.w) from mv1 [_SYNC_MV_] join t2 on mv1.k1 = t2.k1;
+set disable_colocate_join = true;
+select count(*), sum(mv1.mv_sum_v1), sum(t2.w) from mv1 [_SYNC_MV_] join t2 on mv1.k1 = t2.k1;
+set disable_colocate_join = false;
+
+-- The materialized view and the rollup keep up with a load.
+insert into t1 values (5, 3003, 3003);
+select k1, sum(v1) from t1 where k1 = 5 group by k1 order by k1;
+select k1, sum(mv_sum_v1) from mv1 [_SYNC_MV_] where k1 = 5 group by k1 order by k1;
+select count(*), sum(v1) from r1 [_SYNC_MV_];
+
+-- Rejected: the rollup sort key does not start with k1.
+alter table t1 add rollup r2 (k2, k1) order by (k2, k1);
+-- Rejected: the rollup sort key leaves k1 out.
+alter table t1 add rollup r3 (k2, v1) order by (k2);
+-- Rejected: the sort key is derived from k1 + 1 (named kk), which is not the colocate column k1.
+create materialized view mv2 as select k1 + 1 as kk, sum(v1) from t1 group by k1 + 1;
+-- Rejected: the materialized view sort key starts with k2.
+create materialized view mv3 as select k2, k1, sum(v1) from t1 group by k2, k1;
+-- No rejected statement left a rollup behind.
+desc t1 all;
+
+-- A sort-key rewrite of a table that has a rollup stays rejected.
+alter table t1 order by (k1, v1);
+
+
+-- Rollups on a partitioned table whose group has several ColocateRanges: the first partition is split along
+-- k1 before the rollup is added, so the rollup is cut along every ColocateRange; rows loaded into a partition
+-- added afterwards are readable through the rollup, and a join on k1 that reads it returns what a
+-- non-colocated join returns.
+create table tp1 (
+    k1 int not null,
+    k2 int not null,
+    v int not null
+)
+duplicate key(k1, k2)
+partition by range(k2) (partition p1 values less than ('100000'))
+order by(k1, k2)
+properties('replication_num' = '1', 'colocate_with' = 'g_rollup_part_${uuid0}:k1');
+
+insert into tp1 select x % 10, x, x from table(generate_series(1, 1000)) as g(x);
+insert into tp1 select 10 + x % 10, x, x from table(generate_series(1001, 2000)) as g(x);
+insert into tp1 select 20 + x % 10, x, x from table(generate_series(2001, 3000)) as g(x);
+
+function: set_first_tablet_id("tp1")
+alter table tp1 split tablet (${tablet_id}) properties ('tablet_reshard_target_size' = '-3');
+function: wait_reshard_job_finish("tp1", "SPLIT_TABLET", 1, 120)
+shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "g_rollup_part_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
+select buckets from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'tp1';
+
+alter table tp1 add rollup rp (k1, k2, v) order by (k1);
+function: wait_alter_table_finish("ROLLUP", 8)
+
+-- tp2 joins the group after the split.
+create table tp2 (
+    k1 int not null,
+    k2 int not null,
+    w int not null
+)
+duplicate key(k1, k2)
+partition by range(k2) (partition p1 values less than ('100000'))
+order by(k1, k2)
+properties('replication_num' = '1', 'colocate_with' = 'g_rollup_part_${uuid0}:k1');
+
+insert into tp2 select k1, k2, v * 10 from tp1;
+
+-- Rows of the added partition span all three k1 ranges.
+alter table tp1 add partition p2 values less than ('200000');
+alter table tp2 add partition p2 values less than ('200000');
+insert into tp1 values (3, 100001, 1), (15, 100002, 2), (25, 100003, 3), (15, 100004, 4);
+insert into tp2 values (3, 100001, 10), (15, 100002, 20), (25, 100003, 30), (15, 100004, 40);
+select buckets >= 3 from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'tp1' and partition_name = 'p2';
+
+select count(*), sum(v) from tp1;
+select count(*), sum(v) from rp [_SYNC_MV_];
+select k1, sum(v) from rp [_SYNC_MV_] where k1 in (3, 15, 25) group by k1 order by k1;
+function: assert_explain_contains("select rp.k1, rp.v, tp2.w from rp [_SYNC_MV_] join tp2 on rp.k1 = tp2.k1", "INNER JOIN (COLOCATE)")
+select count(*), sum(rp.v), sum(tp2.w) from rp [_SYNC_MV_] join tp2 on rp.k1 = tp2.k1;
+select rp.k1, sum(rp.v), sum(tp2.w) from rp [_SYNC_MV_] join tp2 on rp.k1 = tp2.k1 group by rp.k1 order by rp.k1;
+set disable_colocate_join = true;
+select count(*), sum(rp.v), sum(tp2.w) from rp [_SYNC_MV_] join tp2 on rp.k1 = tp2.k1;
+select rp.k1, sum(rp.v), sum(tp2.w) from rp [_SYNC_MV_] join tp2 on rp.k1 = tp2.k1 group by rp.k1 order by rp.k1;
+set disable_colocate_join = false;
+
+drop database db_${uuid0} force;

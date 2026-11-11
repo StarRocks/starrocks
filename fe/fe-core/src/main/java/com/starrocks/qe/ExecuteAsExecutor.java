@@ -104,20 +104,7 @@ public class ExecuteAsExecutor {
             // target identity has no token of its own, so it can never have claim groups.
             ctx.getAccessControlContext().setAuthenticatorGroups(Set.of());
 
-            ResolvedTarget target = resolveTarget(ctx, userIdentity);
-
-            Set<String> groups = new HashSet<>();
-            // `memberof` means the group providers are ignored - the same rule as on the login path.
-            if (target.ldapProvider == null || target.ldapProvider.isGroupProviderUsed()) {
-                // Hand the group providers the real DN when resolving the target produced one: a
-                // provider without `ldap_user_search_attr` keys its cache by DN, and a login name
-                // would simply never match there.
-                String distinguishedName = target.distinguishedName == null
-                        ? userIdentity.getUser() : target.distinguishedName;
-                groups.addAll(AuthenticationHandler.resolveGroupsFromProviders(
-                        userIdentity, distinguishedName, target.groupProviderList));
-            }
-            groups.addAll(target.memberOfGroups);
+            Set<String> groups = resolveGroups(ctx, userIdentity);
 
             // Set groups to context
             ctx.setGroups(groups);
@@ -135,6 +122,28 @@ public class ExecuteAsExecutor {
             ctx.setGroups(Set.of());
             ctx.setCurrentRoleIds(userIdentity, Set.of());
         }
+    }
+
+    /**
+     * The groups a login of {@code userIdentity} would resolve, worked out without its credential, so
+     * groups that only a credential carries (a JWT claim) are not among them.
+     */
+    public static Set<String> resolveGroups(ConnectContext ctx, UserIdentity userIdentity) {
+        ResolvedTarget target = resolveTarget(ctx, userIdentity);
+
+        Set<String> groups = new HashSet<>();
+        // `memberof` means the group providers are ignored - the same rule as on the login path.
+        if (target.ldapProvider == null || target.ldapProvider.isGroupProviderUsed()) {
+            // Hand the group providers the real DN when resolving the target produced one: a
+            // provider without `ldap_user_search_attr` keys its cache by DN, and a login name
+            // would simply never match there.
+            String distinguishedName = target.distinguishedName == null
+                    ? userIdentity.getUser() : target.distinguishedName;
+            groups.addAll(AuthenticationHandler.resolveGroupsFromProviders(
+                    userIdentity, distinguishedName, target.groupProviderList));
+        }
+        groups.addAll(target.memberOfGroups);
+        return groups;
     }
 
     /**
@@ -189,7 +198,8 @@ public class ExecuteAsExecutor {
             return new ResolvedTarget(defaultGroupProviders, null, null);
         }
         // A pre-created LDAP user reads the FE configuration, exactly as at login. When it was
-        // created with AS '<dn>' the provider refuses memberOf on its own (legacy form).
+        // created with AS '<dn>' the provider refuses memberOf on its own (legacy form) and only
+        // hands back that DN for the group providers.
         LDAPAuthProvider provider =
                 asLdapProvider(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.getProvider(info.getAuthString()));
         return new ResolvedTarget(defaultGroupProviders, provider,

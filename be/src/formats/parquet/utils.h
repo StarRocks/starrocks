@@ -14,7 +14,9 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
 
 #include "base/container/raw_container.h"
 #include "gen_cpp/parquet_types.h"
@@ -108,5 +110,41 @@ struct NullInfos {
 private:
     raw::RawVector<uint8_t> _is_nulls;
 };
+
+// Counts the nulls and the null/non-null runs of `n` null flags (0/1) into `infos`. The sums go per block of at
+// most 255 rows into uint8 accumulators, so the compiler keeps the reductions in byte lanes.
+inline void count_nulls_and_ranges(const uint8_t* __restrict is_nulls, size_t n, NullInfos* infos) {
+    constexpr size_t kBlock = 240;
+    size_t num_nulls = 0;
+    size_t num_transitions = 0;
+    for (size_t begin = 0; begin < n; begin += kBlock) {
+        size_t end = std::min(begin + kBlock, n);
+        uint8_t block_nulls = 0;
+        for (size_t i = begin; i < end; ++i) {
+            block_nulls += is_nulls[i];
+        }
+        uint8_t block_transitions = 0;
+        for (size_t i = std::max<size_t>(begin, 1); i < end; ++i) {
+            block_transitions += is_nulls[i] ^ is_nulls[i - 1];
+        }
+        num_nulls += block_nulls;
+        num_transitions += block_transitions;
+    }
+    infos->num_nulls = num_nulls;
+    infos->num_ranges = num_transitions + 1;
+}
+
+// Turns `n` definition levels into the null flags of `infos` (levels[i] < max_def_level), and counts the
+// nulls and the null/non-null runs. The flags are written in one pass and counted in a second; the previous
+// per-row loop (size_t counters, reading is_nulls[i - 1] back) was ~5x slower on gcc/x86 and clang/arm, see
+// be/src/bench/parquet_def_level_bench.cpp.
+inline void assign_nulls_from_def_levels(const int16_t* __restrict levels, int16_t max_def_level, size_t n,
+                                         NullInfos* infos) {
+    uint8_t* __restrict is_nulls = infos->nulls_data();
+    for (size_t i = 0; i < n; ++i) {
+        is_nulls[i] = levels[i] < max_def_level;
+    }
+    count_nulls_and_ranges(is_nulls, n, infos);
+}
 
 } // namespace starrocks::parquet

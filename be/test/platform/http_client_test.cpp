@@ -175,14 +175,14 @@ TEST_F(HttpClientTest, set_single_header) {
     ASSERT_EQ("test_value", response);
 }
 
-TEST_F(HttpClientTest, set_bearer_token) {
+TEST_F(HttpClientTest, set_authorization_header) {
     HttpClient client;
     auto st = client.init(hostname + "/header_test");
     ASSERT_TRUE(st.ok());
     client.set_method(GET);
 
     // Set Bearer token
-    client.set_bearer_token("test_token_123");
+    client.set_header("Authorization", "Bearer test_token_123");
 
     std::string response;
     st = client.execute(&response);
@@ -214,7 +214,7 @@ TEST_F(HttpClientTest, clear_headers) {
 
     // First set some headers
     client.set_header("X-Custom-Header", "test_value");
-    client.set_bearer_token("test_token");
+    client.set_header("Authorization", "Bearer test_token");
 
     // Then clear all headers
     client.clear_headers();

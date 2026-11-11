@@ -962,6 +962,26 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
     }
 
+    // Pick the compute resource that the scheduler's partition-list RPC is routed through, WITHOUT
+    // writing the shared computeResource field. The scheduler refreshes partitions in update()
+    // before prepare() acquires the field, so a job not yet prepared on this leader (a new job, or
+    // one restored from the image or journal) still holds its created or persisted resource,
+    // initially CN group 0 of default_warehouse. If that group has no alive CN, e.g. when every CN
+    // sits in other CN groups, the fetch fails and pauses the NEED_SCHEDULE job before prepare()
+    // ever runs, and every RESUME fails the same way. So keep `current` only while it belongs to
+    // this job's warehouse and still has an alive CN; otherwise acquire a local one.
+    protected ComputeResource resolveFetchComputeResource(ComputeResource current) throws LoadException {
+        if (!RunMode.isSharedDataMode()) {
+            return current;
+        }
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (current != null && current.getWarehouseId() == warehouseId
+                && warehouseManager.isResourceAvailable(current)) {
+            return current;
+        }
+        return acquireComputeResource();
+    }
+
     private Coordinator.Factory getCoordinatorFactory() {
         return new DefaultCoordinator.Factory();
     }

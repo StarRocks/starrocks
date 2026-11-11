@@ -13,7 +13,7 @@ description: "Alphabetical d - h"
 - [非同期マテリアライズドビューのメトリクス](../metrics-materialized_view.md)
 - [共有データダッシュボードのメトリクス、およびStarletダッシュボードのメトリクス](../metrics-shared-data.md)
 
-StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../monitoring.md).
+StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../prometheus_grafana.md).
 
 :::
 
@@ -21,6 +21,18 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: カウント
 - 説明: BEでExchangeレシーバーとして機能するインスタンスの累積数。
+
+## `datacache_corruption_removed_files`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: データキャッシュから読み取った内容のデコードにスキャンが失敗した後、破損したキャッシュブロックを削除した外部テーブルファイルの累積数。`external_table_clear_corrupted_cache_data` で制御されます。
+
+## `datacache_corruption_retried_files`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: キャッシュされたコピーが破損しているかどうかを検証するために、データキャッシュをバイパスして再読み取りした外部テーブルファイルの累積数。再読み取りされるのは Parquet ファイルのみです。
 
 ## `datacache_disk_quota_bytes`
 
@@ -433,6 +445,13 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - タイプ: カウンター
 - ラベル: `fstype` (`cachefs`)
 - 説明: 共有データクラスタでクラウドネイティブテーブルのファイルを読み取る際の、データキャッシュの累積ミス数。1 回の読み取りは最大で 1 つのキャッシュブロックを対象とします。バイト数ベースのメトリクスについては `default_cache_miss_bytes` を参照してください。
+
+## `gtid_timestamp_ahead_of_clock_ms`
+
+- 単位: ミリ秒
+- タイプ: 瞬間
+- ラベル: `is_leader`
+- 説明: Leader FE 上の gtid ジェネレーターの直近タイムスタンプがローカル壁時計よりどれだけ進んでいるか（`max(0, lastTimestamp - now)`）。正の値はジェネレーターがこの FE の時計より進んでいることを示します。フェイルオーバー直後は通常 `gtid_batch_window_ms` 以下で、壁時計が追いつくと `0` に戻ります。ウィンドウを大きく上回る値が長く続く場合、過去に発行したタイムスタンプがこの FE の時計より大幅に進んでおり、メタデータに永続化済みです。Leader FE のみが報告します（`is_leader="true"`）。まだ gtid を発行していない場合、および壁時計が追いついた場合は `0` です。
 
 ## `hive_write_bytes`
 

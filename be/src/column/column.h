@@ -41,6 +41,15 @@ struct TypeDescriptor;
 // Forward declaration
 class Datum;
 
+// True when some row marked null still spans a non-empty offsets range - i.e. the complex column
+// carries payload underneath a row that logically has none. ArrayColumn::null_rows_are_empty() and
+// Column::empty_null_in_complex_column() ask exactly this question, one to decide whether a
+// zero-copy path is safe and the other to decide whether it has any work to do, so the scan lives
+// in one place instead of being hand-vectorized twice.
+//
+// |offsets| must hold |num_rows| + 1 entries: the vector steps read offsets[i .. i + 8].
+bool has_payload_under_null_rows(const uint8_t* nulls, const uint32_t* offsets, size_t num_rows);
+
 class Column : public Cow<Column> {
 public:
     friend class Cow<Column>;
@@ -279,6 +288,12 @@ public:
     // The bad thing is we couldn't get the string defined len from FE when query
     virtual uint32_t max_one_element_serialize_size() const = 0;
 
+    // Upper bound for the compact key encoding written by serialize_batch*(). Only
+    // BinaryColumn differs from the persisted encoding, because only it writes a length
+    // prefix; for every other column the two encodings are byte-identical. Note it is NOT
+    // always <= max_one_element_serialize_size(): a string of 255+ bytes costs one byte more.
+    virtual uint32_t max_one_element_serialize_size_compact() const { return max_one_element_serialize_size(); }
+
     // serialize one data,The memory must allocate firstly from mempool
     virtual uint32_t serialize(size_t idx, uint8_t* pos) const = 0;
 
@@ -288,6 +303,35 @@ public:
 
     virtual void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                  uint32_t max_one_row_size) const = 0;
+
+    // Adds to sizes[i] exactly the number of bytes serialize_batch() writes for row i. A key
+    // builder can then lay the rows out back to back instead of at a max-row-size stride:
+    // pre-set slice_sizes[i] to row i's offset in the buffer and call serialize_batch() with
+    // max_one_row_size = 0. That relies on every serialize_batch*() addressing row i only
+    // through `dst + i * max_one_row_size + slice_sizes[i]`, which they all do.
+    // The sizes are 64-bit so a caller can sum any number of columns without an upper bound
+    // first. An override must match what this column's serialize_batch() writes, not its
+    // compact encoding in general: StructColumn and the other nested columns serialize their
+    // children with the persisted encoding, so they keep this per-row default.
+    virtual void serialize_size_compact_batch(Buffer<uint64_t>& sizes, size_t chunk_size) const {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            sizes[i] += serialize_size(i);
+        }
+    }
+
+    // If serialize_batch() writes the same number of bytes for every row of this column, returns
+    // that number; otherwise 0. O(1). Lets a key builder skip the per-row size pass when every key
+    // column is fixed-width, where it would cost more than it saves.
+    virtual uint32_t serialize_batch_fixed_row_size() const { return 0; }
+
+    // Size counterpart of serialize_batch_with_null_masks(): a one-byte null flag per row, plus the
+    // element's size for rows that are not null.
+    virtual void serialize_size_compact_batch_with_null_masks(Buffer<uint64_t>& sizes, size_t chunk_size,
+                                                              const uint8_t* null_masks) const {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            sizes[i] += sizeof(bool) + (null_masks[i] ? 0 : serialize_size(i));
+        }
+    }
 
     // A dedicated serialization method used by HashJoin to combine multiple columns into a wide-key
     // column, and it's only implemented by numeric columns right now.
@@ -312,8 +356,17 @@ public:
     virtual void deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size,
                                                        Buffer<uint8_t>& is_nulls, bool& has_null) = 0;
 
+    // Per-element counterpart of the compact key encoding written by serialize_batch*(). The
+    // row-wise fallbacks in the hash-table key builders use this, so it MUST stay byte-identical
+    // to serialize_batch*(): mixing the two encodings in one hash table splits logical keys.
+    virtual uint32_t serialize_compact(size_t idx, uint8_t* pos) const { return serialize(idx, pos); }
+
     // deserialize one data and append to this column
     virtual const uint8_t* deserialize_and_append(const uint8_t* pos) = 0;
+
+    // Counterpart of the compact key encoding written by serialize_batch*(). Defaults to the
+    // persisted encoding, which is correct for every column that does not write a length prefix.
+    virtual const uint8_t* deserialize_compact_and_append(const uint8_t* pos) { return deserialize_and_append(pos); }
 
     virtual void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) = 0;
 
@@ -366,6 +419,11 @@ public:
     // Note: shuffle hash function should be different from Aggregate and Join Hash map hash function
     // NOTE: they're still virtual method, because AdaptiveNullableColumn still override the implementation but not in the Visitor
     virtual void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const;
+    // Same as fnv_hash(), except the hash of row i lands in seed[i - from] instead of seed[i], so
+    // `seed` only has to cover [from, to). Hashing a sub-range through fnv_hash() otherwise means
+    // either sizing the buffer for every row before `from`, or handing it a base pointer computed
+    // outside its own allocation.
+    virtual void fnv_hash_rebased(uint32_t* seed, uint32_t from, uint32_t to) const;
     virtual void fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const;
     virtual void fnv_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const;
     virtual void fnv_hash_at(uint32_t* seed, uint32_t idx) const { fnv_hash(seed - idx, idx, idx + 1); }
@@ -515,7 +573,8 @@ public:
             is_nulls.emplace_back(null);
 
             if (null == 0) {
-                srcs[i].data = (char*)derived()->deserialize_and_append((uint8_t*)srcs[i].data);
+                // The bytes came from serialize_batch*(), i.e. the compact key encoding.
+                srcs[i].data = (char*)derived()->deserialize_compact_and_append((uint8_t*)srcs[i].data);
             } else {
                 has_null = true;
                 derived()->append_default();

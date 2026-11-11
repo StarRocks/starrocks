@@ -52,6 +52,7 @@
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
+#include "storage_primitive/flat_json_config.h"
 #include "storage_primitive/tablet_info.h"
 
 namespace starrocks {
@@ -1004,6 +1005,14 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     tablet_ids.reserve(params.tablets_size());
     bool multi_stmt = _is_multi_statements_txn(params);
     bool multi_node_write = _is_multi_node_write(params);
+    // The table's flat_json.* properties travel with the load (see TOlapTableSink.flat_json_config), so
+    // the writer does not depend on this node's tablet metadata cache, which holds nothing for a tablet
+    // that has never published (light_weight_tablet_creation). Absent when the table sets none.
+    std::shared_ptr<FlatJsonConfig> flat_json_config;
+    if (params.has_lake_tablet_params() && params.lake_tablet_params().has_flat_json_config()) {
+        flat_json_config = std::make_shared<FlatJsonConfig>();
+        flat_json_config->update(params.lake_tablet_params().flat_json_config());
+    }
     if (multi_node_write) {
         // Under multi-node write several CNs write the same tablet in one transaction, so each of them
         // produces a PARTIAL txn log. Two FE-side preconditions make that safe, and both are cheap to
@@ -1057,6 +1066,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_global_dicts(&_global_dicts)
                                               .set_is_multi_statements_txn(multi_stmt)
                                               .set_multi_node_write(multi_node_write)
+                                              .set_flat_json_config(flat_json_config)
                                               .build());
         mutable_delta_writers()->emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());

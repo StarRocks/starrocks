@@ -59,7 +59,8 @@ TEST(StorageEnvTest, fixed_provider_init_owns_lake_resources) {
     ASSERT_OK(store_path_registry.init({StorePath("storage_env_test_root")}));
     options.store_path_registry = &store_path_registry;
     options.update_mem_tracker = &update_mem_tracker;
-    options.lake_metadata_cache_limit = 1024 * 1024;
+    options.lake_tablet_metadata_cache_limit = 1024 * 1024;
+    options.lake_segment_metadata_cache_limit = 1024 * 1024;
 
     ASSERT_OK(env.init(options));
 
@@ -93,7 +94,8 @@ TEST(StorageEnvTest, fixed_provider_requires_store_path) {
     StorePathRegistry store_path_registry;
     options.store_path_registry = &store_path_registry;
     options.update_mem_tracker = &update_mem_tracker;
-    options.lake_metadata_cache_limit = 1024 * 1024;
+    options.lake_tablet_metadata_cache_limit = 1024 * 1024;
+    options.lake_segment_metadata_cache_limit = 1024 * 1024;
 
     auto status = env.init(options);
     EXPECT_TRUE(status.is_invalid_argument()) << status;
