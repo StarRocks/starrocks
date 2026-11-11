@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/udf/udf_call_stub.h"
+#include "udf/udf_call_stub.h"
 
 #include <arrow/record_batch.h>
 #include <gtest/gtest.h>
@@ -23,12 +23,12 @@
 #include <thread>
 #include <vector>
 
-#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "exprs/function_context.h"
-#include "types/type_descriptor.h"
+#include "runtime/types.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 

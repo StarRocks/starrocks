@@ -490,11 +490,16 @@ Status GroupReader::_init_read_chunk() {
 }
 
 void GroupReader::_use_as_dict_filter_column(int col_idx, SlotId slot_id, std::vector<std::string>& sub_field_path) {
-    _dict_column_indices.emplace_back(col_idx);
-    if (_dict_column_sub_field_paths.find(col_idx) == _dict_column_sub_field_paths.end()) {
-        _dict_column_sub_field_paths.insert({col_idx, std::vector<std::vector<std::string>>({sub_field_path})});
-    } else {
-        _dict_column_sub_field_paths[col_idx].emplace_back(sub_field_path);
+    // The column reader merges every conjunct of one (column, sub field path) into a single
+    // ColumnDictFilterContext, so register each pair only once. Registering it per conjunct makes
+    // the dict predicate rewrite run N^2 times per row group for N conjuncts on the same column.
+    auto [it, inserted] = _dict_column_sub_field_paths.try_emplace(col_idx);
+    if (inserted) {
+        _dict_column_indices.emplace_back(col_idx);
+    }
+    auto& sub_field_paths = it->second;
+    if (std::find(sub_field_paths.begin(), sub_field_paths.end(), sub_field_path) == sub_field_paths.end()) {
+        sub_field_paths.emplace_back(sub_field_path);
     }
 }
 

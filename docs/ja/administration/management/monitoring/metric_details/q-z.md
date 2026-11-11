@@ -290,6 +290,18 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: カウント
 - 説明: 読み取られた有効な行数（無効な形式の行を除く）。ラベル: `file_format`, `scan_type`。
 
+## `starrocks_be_flat_json_compaction_mixed_inputs_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: 入力セグメントの一部がフラット JSON、残りが完全な JSON である JSON 列を、コンパクションがフラット JSON セグメントのレイアウト（すべてのサブカラムを JSON 型）で読み取った回数。`enable_compaction_flat_json_mixed_inputs` を参照してください。
+
+## `starrocks_be_flat_json_compaction_plain_fallback_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: バッファ済みの入力が `compaction_memory_limit_per_worker` の 8 分の 1（同時に書き込まれる JSON 列で等分）を超えたが、書き出しに使える単一のフラットレイアウトがなかったため、出力を完全な JSON として書き出したフラット JSON コンパクションの回数。
+
 ## `starrocks_be_flat_json_compaction_streaming_total`
 
 - 単位: カウント

@@ -356,6 +356,14 @@ public:
     // recover
     Status recover();
 
+    // Manual repair for a tablet in error state whose apply keeps failing on one transaction: the
+    // next version waiting to apply, which must be a rowset commit. Its rowset is emptied, so the
+    // transaction's upserts and deletes are both dropped, then the error state is cleared and the
+    // version applies as an empty load. On success, |txn_id| and |version| are set to the skipped
+    // transaction and its version. Only this replica drops the transaction, so its data can differ
+    // from the other replicas.
+    Status skip_apply(int64_t* txn_id, EditVersion* version);
+
     void set_error(const string& msg) { _set_error(msg); }
     void reset_error() {
         _error = false;
@@ -560,6 +568,9 @@ private:
     mutable std::mutex _apply_running_lock;
     // make sure at most 1 thread is read or write primary index
     mutable std::shared_timed_mutex _index_lock;
+    // Serializes the manual repairs recover() and skip_apply(), so a repeated request checks the
+    // error state only after the previous repair has finished and resumed apply.
+    std::mutex _repair_lock;
     // apply process is running currently
     bool _apply_running = false;
 
