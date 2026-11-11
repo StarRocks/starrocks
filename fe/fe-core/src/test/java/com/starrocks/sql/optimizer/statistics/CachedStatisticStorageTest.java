@@ -30,6 +30,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.statistics.ConnectorColumnStatsCacheLoader;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+import com.starrocks.connector.statistics.ConnectorTableTriggerAnalyzeMgr;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.metric.CounterMetric;
 import com.starrocks.metric.Metric;
@@ -350,6 +351,51 @@ public class CachedStatisticStorageTest {
             Assertions.assertTrue(stats.stream().allMatch(ConnectorTableColumnStats::isUnknown));
         } finally {
             // The inline load clears the thread's context when it finishes.
+            connectContext.setThreadLocalInfo();
+        }
+    }
+
+    @Test
+    public void testFollowerQueryTriggersAnalyze() throws Exception {
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "hive0", "partitioned_db", "t1");
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public static boolean checkStatisticTableStateNormal() {
+                return true;
+            }
+        };
+        // no statistics collected yet
+        new MockUp<ConnectorColumnStatsCacheLoader>() {
+            @Mock
+            public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID,
+                                                            List<String> columns) {
+                return new ArrayList<>();
+            }
+        };
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+        CountDownLatch triggered = new CountDownLatch(1);
+        new MockUp<ConnectorTableTriggerAnalyzeMgr>() {
+            @Mock
+            public void checkAndUpdateTableStats(
+                    Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> columnStats) {
+                triggered.countDown();
+            }
+        };
+
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        Deencapsulation.setField(storage, "connectorTableCachedStatistics",
+                Caffeine.newBuilder().executor(Runnable::run).buildAsync(new ConnectorColumnStatsCacheLoader()));
+        try {
+            storage.getConnectorTableStatistics(table, ImmutableList.of("c1"));
+            // a follower's query reaches the trigger manager, which forwards the request to the leader
+            Assertions.assertTrue(triggered.await(30, TimeUnit.SECONDS));
+        } finally {
             connectContext.setThreadLocalInfo();
         }
     }
