@@ -1317,12 +1317,12 @@ TEST_F(FileReaderTest, TestDictFilterRegistersColumnOnceForMultipleConjuncts) {
     Status status = file_reader->init(&ctx->format_scan_context);
     ASSERT_TRUE(status.ok());
 
-    const auto& materializer = file_reader->_row_group_readers[0]->_column_materializer;
-    const auto& dict_column_indices = materializer->dict_column_indices();
+    const auto& group_reader = file_reader->_row_group_readers[0];
+    const auto& dict_column_indices = group_reader->_dict_column_indices;
     ASSERT_EQ(1, dict_column_indices.size());
     int col_idx = dict_column_indices[0];
-    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id());
-    ASSERT_EQ(1, materializer->dict_column_sub_field_paths().at(col_idx).size());
+    ASSERT_EQ(2, group_reader->_param.read_cols[col_idx].slot_id());
+    ASSERT_EQ(1, group_reader->_dict_column_sub_field_paths.at(col_idx).size());
 
     auto chunk = _create_chunk();
     status = file_reader->get_next(&chunk);
@@ -2860,9 +2860,9 @@ TEST_F(FileReaderTest, TestStructDictFilterRegistersEachSubFieldPathOnce) {
 
     Status status = file_reader->init(&ctx->format_scan_context);
     ASSERT_TRUE(status.ok());
-    const auto& materializer = file_reader->_row_group_readers[0]->_column_materializer;
-    const auto& dict_column_indices = materializer->dict_column_indices();
-    const auto& dict_column_sub_field_paths = materializer->dict_column_sub_field_paths();
+    const auto& group_reader = file_reader->_row_group_readers[0];
+    const auto& dict_column_indices = group_reader->_dict_column_indices;
+    const auto& dict_column_sub_field_paths = group_reader->_dict_column_sub_field_paths;
     ASSERT_EQ(1, dict_column_indices.size());
     ASSERT_EQ(3, dict_column_indices[0]);
     ASSERT_EQ(2, dict_column_sub_field_paths.at(3).size());
