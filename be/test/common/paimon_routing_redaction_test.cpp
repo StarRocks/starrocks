@@ -20,41 +20,6 @@
 
 namespace starrocks {
 
-TEST(PaimonRoutingRedactionTest, MasksOpaqueCredentialPayloadWithoutChangingExecutablePlan) {
-    TPaimonBucketRouting routing;
-    const std::string secret("cloud-secret\n\x01\"value");
-    routing.__set_protocol_version(1);
-    routing.__set_sink_payload(secret);
-    routing.__set_bucket_slot_id(91);
-    TProjectNode project;
-    project.__set_paimon_bucket_routing(routing);
-    TPlanNode node;
-    node.__set_node_type(TPlanNodeType::PAIMON_BUCKET_ROUTING_NODE);
-    node.__set_project_node(project);
-    TPlan plan;
-    plan.__set_nodes({node});
-    TPlanFragment fragment;
-    fragment.__set_plan(plan);
-    TExecPlanFragmentParams request;
-    request.__set_fragment(fragment);
-    TQueryPlanInfo info;
-    info.__set_plan_fragment(fragment);
-
-    auto masked = node;
-    masked.project_node.paimon_bucket_routing.__set_sink_payload("******");
-    auto masked_fragment = fragment;
-    masked_fragment.plan.nodes[0] = masked;
-    auto masked_request = request;
-    masked_request.fragment = masked_fragment;
-    auto masked_info = info;
-    masked_info.plan_fragment = masked_fragment;
-    EXPECT_EQ(apache::thrift::ThriftDebugString(masked), thrift_plan_debug_string(node));
-    EXPECT_EQ(apache::thrift::ThriftDebugString(masked_fragment), thrift_plan_debug_string(fragment));
-    EXPECT_EQ(apache::thrift::ThriftDebugString(masked_request), thrift_plan_debug_string(request));
-    EXPECT_EQ(apache::thrift::ThriftDebugString(masked_info), thrift_plan_debug_string(info));
-    EXPECT_EQ(secret, node.project_node.paimon_bucket_routing.sink_payload);
-    EXPECT_EQ(secret, request.fragment.plan.nodes[0].project_node.paimon_bucket_routing.sink_payload);
-}
 
 TEST(PaimonRoutingRedactionTest, MasksNativeSinkCredentialsAndPreservesTransmissionCopy) {
     TCloudConfiguration cloud;

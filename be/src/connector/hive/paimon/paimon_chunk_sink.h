@@ -27,10 +27,6 @@ namespace starrocks {
 class ExprContext;
 class PriorityThreadPool;
 
-// Shim-side implementation of the SDK-free routing entrypoint (also used by focused SDK UTs).
-StatusOr<std::vector<int32_t>> calculate_paimon_bucket_ids_in_shim(const TPaimonTableSink& sink, const ChunkPtr& chunk,
-                                                                   const std::vector<ExprContext*>& output_exprs);
-
 namespace connector {
 
 // This contract is shared with the lazily loaded shim. No SDK or Arrow C++ types may escape it.

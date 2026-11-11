@@ -133,7 +133,6 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/limit_operator.cpp
     pipeline/offset_operator.cpp
     pipeline/project_operator.cpp
-    pipeline/paimon_bucket_operator.cpp
     pipeline/dict_decode_operator.cpp
     pipeline/scan/glm_manager.cpp
     pipeline/scan/balanced_chunk_buffer.cpp

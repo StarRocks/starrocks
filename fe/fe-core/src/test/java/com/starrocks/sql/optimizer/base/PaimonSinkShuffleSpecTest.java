@@ -14,33 +14,33 @@
 
 package com.starrocks.sql.optimizer.base;
 
+import com.google.gson.JsonParser;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.ExchangeNode;
-import com.starrocks.planner.PaimonBucketRoutingNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
+import com.starrocks.planner.ProjectNode;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCloudConfiguration;
-import com.starrocks.thrift.TPaimonBucketRouting;
 import com.starrocks.thrift.TPaimonTableSink;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.type.IntegerType;
 import org.apache.paimon.table.FileStoreTable;
-import org.apache.thrift.TDeserializer;
-import org.apache.thrift.protocol.TBinaryProtocol;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -98,25 +98,47 @@ public class PaimonSinkShuffleSpecTest {
             Assertions.assertEquals(2, plan.getOutputExprs().size()); // No route column in native RecordBatch.
             PlanFragment sender = plan.getFragments().get(1);
             Assertions.assertEquals(3, sender.getOutputExprs().size());
-            PaimonBucketRoutingNode routing = (PaimonBucketRoutingNode) sender.getPlanRoot();
-            Assertions.assertSame(oldRoot, routing.getChild(0));
+            ProjectNode routing = (ProjectNode) sender.getPlanRoot();
+            Assertions.assertSame(oldRoot, routing.getChild(0).getChild(0));
             Assertions.assertEquals(5, oldRoot.getLimit());
-            Assertions.assertFalse(routing.getSlotMap().containsKey(new SlotId(bucket))); // No placeholder.
-            Assertions.assertFalse(routing.isTrivial());
+            FunctionCallExpr function = (FunctionCallExpr) routing.getSlotMap().get(new SlotId(bucket));
+            Assertions.assertEquals("__paimon_bucket", function.getFunctionName());
+            Assertions.assertFalse(function.isNullable());
+            var config = JsonParser.parseString(((StringLiteral) function.getChild(0)).getStringValue()).getAsJsonObject();
+            Assertions.assertEquals(1, config.getAsJsonArray("fields").size());
+            Assertions.assertEquals("id", config.getAsJsonArray("fields").get(0).getAsJsonObject().get("name").getAsString());
+            Assertions.assertFalse(config.has("location"));
+            Assertions.assertFalse(config.has("cloud_configuration"));
             TPlanNode wire = routing.treeToThrift().getNodes().get(0);
-            Assertions.assertEquals(TPlanNodeType.PAIMON_BUCKET_ROUTING_NODE, wire.getNode_type());
-            TPaimonBucketRouting route = wire.getProject_node().getPaimon_bucket_routing();
-            Assertions.assertEquals(1, route.getProtocol_version());
-            Assertions.assertEquals(bucket, route.getBucket_slot_id());
-            Assertions.assertEquals(2, route.getSchema_exprsSize());
-            TPaimonTableSink decoded = new TPaimonTableSink();
-            new TDeserializer(new TBinaryProtocol.Factory()).deserialize(decoded, route.getSink_payload());
-            Assertions.assertEquals(sink.getSchema_json(), decoded.getSchema_json());
-            Assertions.assertEquals(sink.getOptions(), decoded.getOptions());
-            Assertions.assertEquals(sink.getCloud_configuration(), decoded.getCloud_configuration());
-            Assertions.assertEquals(bucket, decoded.getRouting_bucket_slot_id());
-            Assertions.assertFalse(decoded.isBucket_routed());
+            Assertions.assertEquals(TPlanNodeType.PROJECT_NODE, wire.getNode_type());
+            var functionNodes = wire.getProject_node().getSlot_map().get(bucket).getNodes();
+            Assertions.assertEquals(10360, functionNodes.get(0).getFn().getFid());
+            Assertions.assertEquals(170500, functionNodes.get(2).getFn().getFid());
             Assertions.assertFalse(sink.isSetBucket_routed()); // No premature promise to the writer.
+        }
+    }
+
+    @Test
+    public void testCompositeAndEmptyBucketKeysUseOnlyKeyExpressions() {
+        for (List<String> names : List.of(List.of("p", "id"), List.<String>of())) {
+            ExecPlan plan = inputPlan(DataPartition.RANDOM);
+            TPaimonTableSink sink = sink(17);
+            sink.setBucket_columns(names);
+            sink.setOptions(Map.of("bucket", "17", "access_key", "must-not-enter-the-function"));
+            int bucket = PaimonSinkShuffleSpec.installBucketRouting(plan, sink);
+            ProjectNode routing = (ProjectNode) plan.getFragments().get(1).getPlanRoot();
+            FunctionCallExpr fn = (FunctionCallExpr) routing.getSlotMap().get(new SlotId(bucket));
+            String json = ((StringLiteral) fn.getChild(0)).getStringValue();
+            Assertions.assertFalse(json.contains("must-not-enter-the-function"));
+            var config = JsonParser.parseString(json).getAsJsonObject();
+            Assertions.assertEquals(names.size(), config.getAsJsonArray("fields").size());
+            FunctionCallExpr row = (FunctionCallExpr) fn.getChild(1);
+            if (names.isEmpty()) {
+                Assertions.assertTrue(row.getChild(0).isConstant());
+            } else {
+                Assertions.assertEquals(2, row.getChildren().size());
+                Assertions.assertTrue(row.getChildren().stream().allMatch(SlotRef.class::isInstance));
+            }
         }
     }
 
@@ -150,7 +172,7 @@ public class PaimonSinkShuffleSpecTest {
         Assertions.assertThrows(SemanticException.class,
                 () -> PaimonSinkShuffleSpec.installBucketRouting(plan, incomplete));
         TPaimonTableSink oversized = sink(3);
-        oversized.setSchema_json("x".repeat(PaimonBucketRoutingNode.MAX_SINK_PAYLOAD_BYTES));
+        oversized.setSchema_json("x".repeat(1024 * 1024));
         Assertions.assertThrows(SemanticException.class,
                 () -> PaimonSinkShuffleSpec.installBucketRouting(plan, oversized));
     }
@@ -187,7 +209,8 @@ public class PaimonSinkShuffleSpecTest {
         sink.setLocation("file:///unused");
         sink.setTable_identity("routing-test");
         sink.setSchema_id(9);
-        sink.setSchema_json("{frozen-native-schema}");
+        sink.setSchema_json("{\"fields\":[{\"name\":\"p\",\"type\":\"INT\"},{\"name\":\"id\",\"type\":\"INT\"}]}");
+        sink.setTime_zone("UTC");
         sink.setOptions(Map.of("bucket", Integer.toString(buckets), "bucket-key", "id"));
         sink.setCloud_configuration(new TCloudConfiguration());
         return sink;
