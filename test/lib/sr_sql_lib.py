@@ -942,7 +942,13 @@ class StarrocksSQLApiLib(object):
                 if sql.endswith(";"):
                     sql = sql[:-1]
                 cursor.execute(sql)
-                result = cursor.fetchall()
+                try:
+                    result = cursor.fetchall()
+                except pyhive.exc.ProgrammingError as e:
+                    # Hive DDL succeeds without a result set; preserve other driver errors.
+                    if str(e) != "No result set" or cursor.description is not None:
+                        raise
+                    result = []
 
                 for i in range(len(result)):
                     row = [str(item) for item in result[i]]
