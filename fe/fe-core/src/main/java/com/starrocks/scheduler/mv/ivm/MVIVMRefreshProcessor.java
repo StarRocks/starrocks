@@ -582,6 +582,15 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         return hasNextTaskRun;
     }
 
+    @Override
+    protected InsertStmt generateInsertAst(ConnectContext ctx, PCellSortedSet mvTargetPartitionNames,
+                                           String definition) throws AnalysisException {
+        // Parse a fixed plan-only level: bare EXPLAIN can inherit ANALYZE from query_explain_level.
+        // Even outer EXPLAIN ANALYZE / TRACE REFRESH only plans this INSERT.
+        String planSql = mvContext.isExplain() ? "EXPLAIN LOGICAL " + definition : definition;
+        return super.generateInsertAst(ctx, mvTargetPartitionNames, planSql);
+    }
+
     private InsertStmt prepareRefreshPlan() throws AnalysisException, LockTimeoutException {
         ConnectContext ctx = mvContext.getCtx();
         ctx.getAuditEventBuilder().reset();
