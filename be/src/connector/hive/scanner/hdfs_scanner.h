@@ -66,6 +66,9 @@ protected:
 
     // Whether do_close() and do_open() restart reading from the file start, to read it again bypassing the datacache.
     virtual bool support_reopen_without_datacache() const { return false; }
+    // Whether the file may be skipped before do_open() when its min/max values from the scan range fail the
+    // predicates, which include the join runtime filters that have arrived.
+    virtual bool support_file_stats_pruning() const { return false; }
     static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 
     void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
@@ -75,6 +78,9 @@ protected:
 private:
     bool _opened = false;
     std::atomic<bool> _closed = false;
+    // The file was skipped by _pruned_by_file_stats(): do_open() never ran.
+    bool _skipped_by_file_stats = false;
+    bool _pruned_by_file_stats() const;
     // A failure which may come from the datacache has been handled.
     bool _datacache_error_handled = false;
     bool _may_be_caused_by_datacache(const Status& status);

@@ -99,8 +99,12 @@ public class DeletePlanner {
         if (table instanceof IcebergTable icebergTable) {
             Optional<ConnectorMetadata> connectorMetadata = GlobalStateMgr.getCurrentState()
                     .getMetadataMgr().getOptionalMetadata(table.getCatalogName());
-            // Extract predicate from logical plan. A metadata delete commits to the main branch.
-            ScalarOperator predicate = deleteStatement.getTargetBranch() == null
+            // Extract predicate from logical plan. A metadata delete commits to the main branch. The first filter is
+            // the predicate on the target only when the target is the only relation: with USING or WITH it can be a
+            // join condition or a filter inside a CTE.
+            boolean singleRelation = deleteStatement.getUsingRelations() == null
+                    && deleteStatement.getCommonTableExpressions() == null;
+            ScalarOperator predicate = singleRelation && deleteStatement.getTargetBranch() == null
                     ? extractPredicateFromOptExpression(logicalPlan.getRoot()) : null;
             if (predicate != null && connectorMetadata.isPresent()) {
                 ConnectorMetadata metadata = connectorMetadata.get();
@@ -108,6 +112,17 @@ public class DeletePlanner {
                     // Return a plan with IcebergMetadataDeleteNode
                     return createMetadataDeletePlan(icebergTable, predicate);
                 }
+            }
+
+            // Anything that is not a metadata delete writes Parquet position delete files, which Iceberg
+            // rejects at commit on format version 3+ (it requires deletion vectors there). Refuse now, before
+            // the BE writes files the commit would throw away. Encrypted tables are always v3.
+            if (icebergTable.getFormatVersion() >= 3) {
+                throw new SemanticException(
+                        "DELETE on Iceberg format version %d table %s can only remove whole partitions or data " +
+                                "files. Deleting individual rows needs deletion vectors, which StarRocks does not " +
+                                "write yet.",
+                        icebergTable.getFormatVersion(), icebergTable.getName());
             }
 
             // For Iceberg, create shuffled property based on partitioning

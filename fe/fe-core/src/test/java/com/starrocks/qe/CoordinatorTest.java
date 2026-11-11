@@ -37,6 +37,7 @@ import com.starrocks.proto.AIExecutionStatisticsPB;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.ExecutionSchedule;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.sql.ast.KeysType;
@@ -56,6 +57,8 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.compress.utils.Lists;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -66,11 +69,18 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 public class CoordinatorTest extends PlanTestBase {
     ConnectContext ctx;
@@ -96,6 +106,75 @@ public class CoordinatorTest extends PlanTestBase {
                 new PlanFragment(new PlanFragmentId(1), new EmptySetNode(new PlanNodeId(1), tupleIdArrayList),
                         new DataPartition(TPartitionType.RANDOM));
         return fragment;
+    }
+
+    @Test
+    public void testCancellationDuringPreparationPreventsDeployment() throws Exception {
+        ctx.setNeedQueued(false);
+        ExecutionSchedule schedule = mock(ExecutionSchedule.class);
+        ResultReceiver receiver = mock(ResultReceiver.class);
+        Deencapsulation.setField(coordinator, "scheduler", schedule);
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void prepareExec() {
+                // Cancellation can arrive before prepareResultSink publishes the receiver.
+                coordinator.cancel(PPlanFragmentCancelReason.USER_CANCEL, "cancel during preparation");
+                Deencapsulation.setField(coordinator, "receiver", receiver);
+            }
+        };
+
+        StarRocksException error = Assertions.assertThrows(StarRocksException.class, coordinator::exec);
+        Assertions.assertTrue(error.getMessage().contains("cancel during preparation"));
+        Assertions.assertTrue(coordinator.getExecStatus().isCancelled());
+        verify(receiver).cancel();
+        verify(schedule, never()).prepareSchedule(any(), any(), any());
+        verify(schedule, never()).schedule(any());
+        verify(schedule, never()).continueSchedule(any());
+    }
+
+    @Test
+    public void testCancellationWhileWaitingForDeploymentLock() throws Exception {
+        ctx.setNeedQueued(false);
+        ExecutionSchedule schedule = mock(ExecutionSchedule.class);
+        Deencapsulation.setField(coordinator, "scheduler", schedule);
+        CountDownLatch prepared = new CountDownLatch(1);
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void prepareExec() {
+                prepared.countDown();
+            }
+        };
+        ReentrantLock deploymentLock = Deencapsulation.getField(coordinator, "lock");
+        ExecutorService worker = Executors.newSingleThreadExecutor();
+        deploymentLock.lock();
+        try {
+            Future<?> execution = worker.submit(() -> {
+                coordinator.exec();
+                return null;
+            });
+            Assertions.assertTrue(prepared.await(5, TimeUnit.SECONDS));
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (!deploymentLock.hasQueuedThreads() && System.nanoTime() < deadline) {
+                Thread.sleep(1);
+            }
+            Assertions.assertTrue(deploymentLock.hasQueuedThreads(), "deployment must be waiting for the lock");
+            coordinator.cancel(PPlanFragmentCancelReason.USER_CANCEL, "cancel before deployment lock");
+            deploymentLock.unlock();
+
+            ExecutionException error = Assertions.assertThrows(ExecutionException.class,
+                    () -> execution.get(5, TimeUnit.SECONDS));
+            Assertions.assertInstanceOf(StarRocksException.class, error.getCause());
+            Assertions.assertTrue(error.getCause().getMessage().contains("cancel before deployment lock"));
+            verify(schedule, never()).prepareSchedule(any(), any(), any());
+            verify(schedule, never()).schedule(any());
+            verify(schedule, never()).continueSchedule(any());
+        } finally {
+            if (deploymentLock.isHeldByCurrentThread()) {
+                deploymentLock.unlock();
+            }
+            worker.shutdownNow();
+            Assertions.assertTrue(worker.awaitTermination(5, TimeUnit.SECONDS));
+        }
     }
 
     @Test

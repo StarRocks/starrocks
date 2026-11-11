@@ -110,9 +110,10 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
      * turn: while the index holds fewer tablets than the bound, that target is the size that would
      * give it one tablet per slot in the bound -- the warehouse's compute-node count capped by
      * {@code tablet_reshard_max_split_count}, so lowering that configuration lowers this width too.
-     * The count is then capped by the slots the index has left, so it lands at or below the
-     * auto-merge floor however its data is spread. Merge acts strictly above that floor, so an index
-     * this widens is never one merge would immediately narrow.
+     * Slots that target leaves unspent then go to the largest tablets neither rule planned, down to
+     * {@code tablet_reshard_min_split_size}. Every count is capped by the slots the index has left, so it
+     * lands at or below the auto-merge floor however its data is spread. Merge acts strictly above that
+     * floor, so an index this widens is never one merge would immediately narrow.
      *
      * <p>The size rule wins outright where it applies. That ordering is load bearing: a BE split is
      * all-or-nothing -- when the key distribution cannot produce exactly the requested number of
@@ -135,7 +136,9 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
             dataSizes[i] = tablets.get(i).getDataSize(true);
             indexDataSize += dataSizes[i];
         }
-        long adaptiveTarget = TabletReshardUtils.adaptiveTargetSize(indexDataSize, steadyTargetSize, bound);
+        // One reading of the floor for both the adaptive target and the fill below.
+        long floor = TabletReshardUtils.adaptiveSplitFloor(steadyTargetSize);
+        long adaptiveTarget = TabletReshardUtils.adaptiveTargetSize(indexDataSize, steadyTargetSize, bound, floor);
         Map<Long, Integer> splitCounts = new LinkedHashMap<>();
 
         // The size rule decides first and is never overridden: asking for more children than it
@@ -173,6 +176,42 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
             if (k > 1) {
                 splitCounts.put(tabletId, k);
                 headroom -= k - 1;
+            }
+        }
+
+        // The walk only cuts a tablet worth two of its target, which is at least indexSize / bound, so an
+        // index of similar tablets stalls once it holds more than half its bound. Hand the headroom left one
+        // child at a time to the tablet whose current children are the largest, until the next child would
+        // fall below the floor. Only tablets neither rule above planned take part, for the reason the size
+        // rule wins outright: asking BE for more children than a rule computed can turn its split into a
+        // no-op. A count of 0 marks such a tablet. The floor is positive here: a zero floor keeps the adaptive
+        // target at the steady-state target, which returned above.
+        if (headroom == 0) {
+            return splitCounts;
+        }
+        int[] fillCounts = new int[dataSizes.length];
+        for (int i = 0; i < dataSizes.length; ++i) {
+            fillCounts[i] = splitCounts.containsKey(tablets.get(i).getId()) ? 0 : 1;
+        }
+        for (; headroom > 0; --headroom) {
+            int best = -1;
+            long bestChild = 0;
+            for (int i = 0; i < dataSizes.length; ++i) {
+                int count = fillCounts[i];
+                if (count > 0 && count < maxSplitCount && dataSizes[i] / (count + 1) >= floor
+                        && dataSizes[i] / count > bestChild) {
+                    best = i;
+                    bestChild = dataSizes[i] / count;
+                }
+            }
+            if (best < 0) {
+                break;
+            }
+            ++fillCounts[best];
+        }
+        for (int i = 0; i < dataSizes.length; ++i) {
+            if (fillCounts[i] > 1) {
+                splitCounts.put(tablets.get(i).getId(), fillCounts[i]);
             }
         }
         return splitCounts;
@@ -240,7 +279,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
      * @throws IllegalArgumentException when {@code oldTabletIdToRanges} is empty or an entry's
      *         range count is outside {@code [2, tablet_reshard_max_split_count]}.
      * @throws StarRocksException when table-level preconditions fail (not cloud-native, not
-     *         range-distribution, not in NORMAL state, or a colocate peer is unstable), or
+     *         range-distribution, in an incompatible alter state, or a colocate peer is unstable), or
      *         catalog lookup fails for any input old tablet id.
      */
     public static TabletReshardJob forExternalBoundaries(Database db, OlapTable table,
@@ -259,7 +298,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
         Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions = new HashMap<>();
 
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
-            checkTableNormalState(db, table);
+            checkTableReshardState(db, table);
 
             // Group input entries by (physicalPartition, materializedIndex) so each
             // ReshardingMaterializedIndex carries all of its targets in one pass.
@@ -388,10 +427,11 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
     }
 
     /**
-     * In-lock guard: the table must be in NORMAL state to build a reshard job.
+     * In-lock guard: other reshard jobs may occupy disjoint physical partitions.
      */
-    private static void checkTableNormalState(Database db, OlapTable table) throws StarRocksException {
-        if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+    private static void checkTableReshardState(Database db, OlapTable table) throws StarRocksException {
+        if (table.getState() != OlapTable.OlapTableState.NORMAL
+                && table.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw new StarRocksException("Unexpected table state " + table.getState()
                     + " in table " + db.getFullName() + '.' + table.getName());
         }
@@ -530,7 +570,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                 splitTabletClause.getTabletList() == null);
 
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
-            checkTableNormalState(db, table);
+            checkTableReshardState(db, table);
 
             // A split whose children must be UNSHARE-rewritten is bounded twice: how far one tablet may
             // fan out (read amplification per generation) and how many tablets one job may take (how long
@@ -801,7 +841,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
         Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions = new HashMap<>();
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
-            checkTableNormalState(db, table);
+            checkTableReshardState(db, table);
             for (Map.Entry<Long, Map<Long, Map<Long, List<TabletRange>>>> partitionEntry : alignmentMap.entrySet()) {
                 long physicalPartitionId = partitionEntry.getKey();
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);

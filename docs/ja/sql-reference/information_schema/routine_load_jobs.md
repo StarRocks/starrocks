@@ -7,6 +7,8 @@ description: "routine_load_jobsはRoutine Loadジョブに関する情報を提�
 
 `routine_load_jobs` はルーチンロードジョブに関する情報を提供します。
 
+`routine_load_jobs` は、ロード先テーブルに対して少なくとも 1 つの権限を持つユーザー、または OPERATE 権限を持つユーザーに、ルーチンロードジョブを表示します。ロード先テーブルに対する SELECT 権限がない場合、`JOB_PROPERTIES`、`DATA_SOURCE_PROPERTIES`、`CUSTOM_PROPERTIES`、`ERROR_LOG_URLS`、`TRACKING_SQL`、`OTHER_MSG` は NULL になり、`REASONS_OF_STATE_CHANGED` はエラーコードのみを保持します。`root` ユーザーはすべてのルーチンロードジョブの完全な情報を参照できます。ロード先テーブルが削除されたルーチンロードジョブは、`root` ユーザーにのみ完全な情報が表示され、OPERATE 権限を持つユーザーには上記のフィールドを除いた情報が表示されます。
+
 `routine_load_jobs` には以下のフィールドが提供されています:
 
 | **フィールド**                 | **説明**                                         |

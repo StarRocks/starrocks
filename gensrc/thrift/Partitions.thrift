@@ -69,7 +69,9 @@ enum TDistributionType {
 
 enum TBucketFunction {
   NATIVE,
-  MURMUR3_X86_32
+  MURMUR3_X86_32,
+  // Iceberg bucket over a uuid read as its 36-char string: murmur3_x86_32 of the 16 uuid bytes.
+  MURMUR3_X86_32_UUID
 }
 
 struct TBucketProperty {

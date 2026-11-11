@@ -147,6 +147,7 @@ import static com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter.DEFAULT
 
 public class MaterializedViewAnalyzer {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewAnalyzer.class);
+    private static final ThreadLocal<Boolean> REANALYZING_EXISTING_MV = ThreadLocal.withInitial(() -> false);
 
     private static final Set<JDBCTable.ProtocolType> SUPPORTED_JDBC_PARTITION_TYPE =
             ImmutableSet.of(JDBCTable.ProtocolType.MYSQL, JDBCTable.ProtocolType.MARIADB);
@@ -168,6 +169,17 @@ public class MaterializedViewAnalyzer {
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
+    }
+
+    /** Runs {@code analysis} as the re-analysis of an existing mv's reconstructed DDL (ALTER ... ACTIVE). */
+    public static void reanalyzeExistingMv(Runnable analysis) {
+        boolean previous = REANALYZING_EXISTING_MV.get();
+        REANALYZING_EXISTING_MV.set(true);
+        try {
+            analysis.run();
+        } finally {
+            REANALYZING_EXISTING_MV.set(previous);
+        }
     }
 
     public static Set<BaseTableInfo> getBaseTableInfos(QueryStatement queryStatement) {
@@ -361,6 +373,22 @@ public class MaterializedViewAnalyzer {
             SECOND
         }
 
+        private static void rejectCurrentTimeFunction(CreateMaterializedViewStatement statement) {
+            // Rejecting a re-analysis would leave an mv created before this check unable to reactivate.
+            if (REANALYZING_EXISTING_MV.get()) {
+                return;
+            }
+            Optional<FunctionCallExpr> timeFunction =
+                    AnalyzerUtils.findCurrentTimeFunction(statement.getQueryStatement());
+            if (timeFunction.isEmpty()) {
+                return;
+            }
+            throw new SemanticException(String.format("Incremental refresh does not support %s in the materialized "
+                    + "view definition: rows already in the materialized view are not re-evaluated as time passes. "
+                    + "Use refresh_mode = 'pct', or keep a time window with the partition_retention_condition "
+                    + "property", ExprToSql.toSql(timeFunction.get())), timeFunction.get().getPos());
+        }
+
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
@@ -423,6 +451,9 @@ public class MaterializedViewAnalyzer {
                     statement.getQueryStopIndex()));
 
             MaterializedView.RefreshMode refreshMode = IVMAnalyzer.getRefreshMode(statement);
+            if (refreshMode.isIncremental()) {
+                rejectCurrentTimeFunction(statement);
+            }
             if (refreshMode.isIncrementalOrAuto()) {
                 IVMAnalyzer ivmAnalyzer = new IVMAnalyzer(context, statement, statement.getQueryStatement());
                 Optional<IVMAnalyzer.IVMAnalyzeResult> ivmAnalyzeResult = ivmAnalyzer.rewrite(refreshMode);
@@ -635,6 +666,26 @@ public class MaterializedViewAnalyzer {
         }
 
         /**
+         * The column list of a new incremental mv may name only the user query's columns, leaving the hidden ones
+         * the IVM rewrite added to their generated names.
+         */
+        private static List<ColWithComment> withIvmInternalColumns(List<ColWithComment> colWithComments,
+                                                                   List<String> columnNames) {
+            long queryColumnCount = columnNames.stream().filter(name -> !IvmOpUtils.isIvmInternalColumn(name)).count();
+            if (colWithComments.size() != queryColumnCount) {
+                return colWithComments;
+            }
+            List<ColWithComment> fullList = Lists.newArrayList();
+            int next = 0;
+            for (String columnName : columnNames) {
+                fullList.add(IvmOpUtils.isIvmInternalColumn(columnName)
+                        ? new ColWithComment(columnName, null, NodePosition.ZERO)
+                        : colWithComments.get(next++));
+            }
+            return fullList;
+        }
+
+        /**
          * NOTE: order or column names of the defined query may be changed when generating.
          *
          * @return : Generate materialized view's columns and corresponding output expression index pair
@@ -654,6 +705,9 @@ public class MaterializedViewAnalyzer {
             Scope queryScope = queryStatement.getQueryRelation().getScope();
             List<Field> relationFields = queryScope.getRelationFields().getAllFields();
             if (colWithComments != null) {
+                if (rowIdStrategy != null) {
+                    colWithComments = withIvmInternalColumns(colWithComments, columnNames);
+                }
                 if (colWithComments.size() != relationFields.size()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
                 }
@@ -1641,12 +1695,6 @@ public class MaterializedViewAnalyzer {
             if (hasSpecifiedPartitions && refreshMode.isIncrementalOrAuto()) {
                 throw new SemanticException("Partition refresh is not supported for materialized views with " +
                         "refresh_mode=" + refreshMode.name() + ". Please refresh the whole materialized view instead.",
-                        tableRef.getPos());
-            }
-            if (statement.isForceRefresh() && refreshMode.isIncrementalOrAuto()) {
-                throw new SemanticException("FORCE refresh is not supported for materialized views with " +
-                        "refresh_mode=" + refreshMode.name() +
-                        ". Please drop and re-create the materialized view instead.",
                         tableRef.getPos());
             }
             PartitionInfo partitionInfo = mv.getPartitionInfo();

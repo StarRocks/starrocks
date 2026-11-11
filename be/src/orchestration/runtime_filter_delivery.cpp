@@ -109,22 +109,35 @@ void RuntimeFilterDelivery::receive_total_runtime_filter(PTransmitRuntimeFilterP
     // deserialize once, and all fragment instance shared that runtime filter.
     RuntimeFilter* rf = nullptr;
     const std::string& data = request.data();
-    RuntimeFilterSerde::deserialize(nullptr, &rf, reinterpret_cast<const uint8_t*>(data.data()), data.size());
+    if (!data.empty()) {
+        RuntimeFilterSerde::deserialize(nullptr, &rf, reinterpret_cast<const uint8_t*>(data.data()), data.size());
+    }
     if (rf == nullptr) {
-        return;
-    }
-
-    if (rf->type() != RuntimeFilterSerializeType::IN_FILTER) {
-        rf->get_membership_filter()->set_global();
-    }
-
-    std::shared_ptr<RuntimeFilter> shared_rf(rf);
-    // for pipeline engine
-    if (request.has_is_pipeline() && request.is_pipeline()) {
-        receive_total_runtime_filter_pipeline(_runtime_services, request, shared_rf);
+        // still forward it below: the nodes after this one in the relay chain may deserialize it.
+        LOG(WARNING) << "RuntimeFilterDelivery::receive_total_runtime_filter. can not deserialize the filter, only "
+                        "forward it. query_id="
+                     << print_id(request.query_id()) << ", filter_id=" << request.filter_id()
+                     << ", size=" << data.size();
     } else {
-        DCHECK(_fragment_mgr != nullptr);
-        _fragment_mgr->receive_runtime_filter(request, shared_rf);
+        if (rf->type() != RuntimeFilterSerializeType::IN_FILTER) {
+            rf->get_membership_filter()->set_global();
+        }
+        // A filter that passes every row only tells the probes to stop waiting: they skip an always-true filter
+        // instead of evaluating it.
+        if (rf->is_pass_all()) {
+            rf->set_always_true();
+            _runtime_services->runtime_filter_cache->add_rf_event(
+                    {request.query_id(), request.filter_id(), BackendOptions::get_localhost(), "RECV_PASS_ALL_RF"});
+        }
+
+        std::shared_ptr<RuntimeFilter> shared_rf(rf);
+        // for pipeline engine
+        if (request.has_is_pipeline() && request.is_pipeline()) {
+            receive_total_runtime_filter_pipeline(_runtime_services, request, shared_rf);
+        } else {
+            DCHECK(_fragment_mgr != nullptr);
+            _fragment_mgr->receive_runtime_filter(request, shared_rf);
+        }
     }
 
     // not enough, have to forward this request to continue broadcast.

@@ -1,0 +1,73 @@
+-- name: test_hive_function_predicate_partition_prune
+create external catalog hive_preimage_${uuid0} PROPERTIES (
+    "type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+create database hive_preimage_${uuid0}.hive_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_hive_function_predicate_partition_prune/${uuid0}"
+);
+-- result:
+-- !result
+create table hive_preimage_${uuid0}.hive_db_${uuid0}.t1 (k int, dt date) partition by (dt);
+-- result:
+-- !result
+insert into hive_preimage_${uuid0}.hive_db_${uuid0}.t1 values (1, '2023-12-31'), (2, '2024-01-01'), (3, '2024-06-15'), (4, '2024-12-31'), (5, '2025-01-01');
+-- result:
+-- !result
+select k, dt from hive_preimage_${uuid0}.hive_db_${uuid0}.t1 where year(dt) = 2024 order by k;
+-- result:
+2	2024-01-01
+3	2024-06-15
+4	2024-12-31
+-- !result
+function: assert_explain_verbose_contains("select * from hive_preimage_${uuid0}.hive_db_${uuid0}.t1 where year(dt) = 2024", "partitions=3/5")
+-- result:
+None
+-- !result
+select k, dt from hive_preimage_${uuid0}.hive_db_${uuid0}.t1 where date_trunc('month', dt) = '2024-06-01' order by k;
+-- result:
+3	2024-06-15
+-- !result
+function: assert_explain_verbose_contains("select * from hive_preimage_${uuid0}.hive_db_${uuid0}.t1 where date_trunc('month', dt) = '2024-06-01'", "partitions=1/5")
+-- result:
+None
+-- !result
+select k, dt from hive_preimage_${uuid0}.hive_db_${uuid0}.t1 where date_format(dt, '%Y%m%d') >= '20241231' order by k;
+-- result:
+4	2024-12-31
+5	2025-01-01
+-- !result
+function: assert_explain_verbose_contains("select * from hive_preimage_${uuid0}.hive_db_${uuid0}.t1 where date_format(dt, '%Y%m%d') >= '20241231'", "partitions=2/5")
+-- result:
+None
+-- !result
+set enable_hive_function_predicate_pruning = false;
+-- result:
+-- !result
+select k, dt from hive_preimage_${uuid0}.hive_db_${uuid0}.t1 where year(dt) = 2024 order by k;
+-- result:
+2	2024-01-01
+3	2024-06-15
+4	2024-12-31
+-- !result
+function: assert_explain_verbose_contains("select * from hive_preimage_${uuid0}.hive_db_${uuid0}.t1 where year(dt) = 2024", "partitions=5/5")
+-- result:
+None
+-- !result
+set enable_hive_function_predicate_pruning = true;
+-- result:
+-- !result
+drop table hive_preimage_${uuid0}.hive_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop database hive_preimage_${uuid0}.hive_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_preimage_${uuid0};
+-- result:
+-- !result

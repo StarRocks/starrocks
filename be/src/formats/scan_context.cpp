@@ -312,12 +312,22 @@ MutableColumnPtr FormatScanContext::create_min_max_value_column(SlotDescriptor* 
     if (!is_first_split) {
         std::reverse(data.begin(), data.end());
     }
-    for (int i = 0; i < data.size() && row_count > 0; i++) {
+    // A batch too small to hold every value (chunk_size <= 2, or a tiny row group) continues where the previous
+    // small batch stopped, so consecutive small batches still emit null/min/max all: always starting over from the
+    // first value would never emit the last one, e.g. the max.
+    size_t start = 0;
+    if (!data.empty() && row_count < data.size()) {
+        size_t& cursor = min_max_value_cursors[slot_desc->id()];
+        start = cursor % data.size();
+        cursor += row_count;
+    }
+    for (size_t i = 0; i < data.size() && row_count > 0; i++) {
         row_count -= 1;
-        if (data[i].is_null()) {
+        const Datum& datum = data[(start + i) % data.size()];
+        if (datum.is_null()) {
             col->append_nulls(1);
         } else {
-            col->append_datum(data[i]);
+            col->append_datum(datum);
         }
     }
     if (row_count > 0) {
@@ -381,9 +391,13 @@ Status FormatScanContext::evaluate_all_predicates(ChunkPtr* chunk) {
 StatusOr<bool> FormatScanContext::should_skip_by_evaluating_not_existed_slots() {
     if (not_existed_slots.size() == 0) return false;
 
-    // build chunk for evaluation.
+    // build chunk for evaluation. It is thrown away, so it must not consume min/max values the output batches still
+    // have to emit.
+    auto saved_min_max_value_cursors = min_max_value_cursors;
     ChunkPtr chunk = std::make_shared<Chunk>();
-    RETURN_IF_ERROR(append_or_update_not_existed_columns_to_chunk(&chunk, 1));
+    Status st = append_or_update_not_existed_columns_to_chunk(&chunk, 1);
+    min_max_value_cursors = std::move(saved_min_max_value_cursors);
+    RETURN_IF_ERROR(st);
     // do evaluation.
     {
         SCOPED_RAW_TIMER(&stats->expr_filter_ns);

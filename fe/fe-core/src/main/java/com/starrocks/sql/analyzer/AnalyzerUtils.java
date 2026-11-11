@@ -26,6 +26,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
@@ -42,8 +43,10 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
@@ -130,6 +133,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -1905,8 +1909,10 @@ public class AnalyzerUtils {
             ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
             PartitionMeasure measure = checkAndGetPartitionMeasure(expressionPartitionDesc.getExpr());
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            // The caller supplies the granularity here (partition merge builds its target partition this
+            // way), so the existing partitions are exactly what it intends to replace — never adopt them.
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
-                    distributionDesc, (ExpressionRangePartitionInfo) partitionInfo);
+                    distributionDesc, (ExpressionRangePartitionInfo) partitionInfo, false);
         } else {
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             throw new AnalysisException("Unsupported partition type " + partitionInfo.getType());
@@ -1927,8 +1933,11 @@ public class AnalyzerUtils {
             }
             Expr expr = partitionExprs.get(0);
             PartitionMeasure measure = checkAndGetPartitionMeasure(expr);
+            // Granularity comes from the table's own expression, so an existing partition may legitimately
+            // be coarser than it (partition merge is scoped by BETWEEN and leaves the expression alone).
+            // A temporary partition is swapped into this table, so it must not contradict what is there.
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
-                    null, expressionRangePartitionInfo);
+                    null, expressionRangePartitionInfo, isTemp);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
             DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
@@ -2040,7 +2049,8 @@ public class AnalyzerUtils {
             String partitionPrefix,
             PartitionMeasure measure,
             DistributionDesc distributionDesc,
-            ExpressionRangePartitionInfo expressionRangePartitionInfo) throws AnalysisException {
+            ExpressionRangePartitionInfo expressionRangePartitionInfo,
+            boolean adoptCoveringPartition) throws AnalysisException {
         String granularity = measure.getGranularity();
         long interval = measure.getInterval();
         Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())
@@ -2078,6 +2088,20 @@ public class AnalyzerUtils {
                 PartitionKeyDesc partitionKeyDesc =
                         createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
 
+                // A partition may be coarser than the table's partition expression: ALTER TABLE ...
+                // PARTITION BY <coarser expr> BETWEEN a AND b merges a range of partitions and, being
+                // scoped by BETWEEN, deliberately leaves the expression alone. A temporary partition is
+                // swapped into this table afterwards, so computing its bounds from the expression would
+                // re-introduce the finer partitions the merge had removed.
+                if (adoptCoveringPartition) {
+                    Pair<String, PartitionKeyDesc> covering =
+                            findCoveringPartition(olapTable, expressionRangePartitionInfo, partitionItem);
+                    if (covering != null) {
+                        partitionName = covering.first;
+                        partitionKeyDesc = covering.second;
+                    }
+                }
+
                 if (partitionPrefix != null) {
                     if (partitionPrefix.contains(PARTITION_NAME_PREFIX_SPLIT)) {
                         throw new AnalysisException("partition name prefix can not contain " + PARTITION_NAME_PREFIX_SPLIT);
@@ -2101,6 +2125,57 @@ public class AnalyzerUtils {
         rangePartitionDesc.setPartitionNames(partitionNames);
         rangePartitionDesc.setSystem(true);
         return new AddPartitionClause(rangePartitionDesc, distributionDesc, partitionProperties, isTemp);
+    }
+
+    /**
+     * The existing (non-temporary) partition whose range covers {@code partitionItem}, as
+     * (partition name, its bounds), or null when no partition covers the value.
+     *
+     * <p>Returning the partition's own name matters as much as its bounds: several values in one
+     * request may fall into the same covering partition, and they must collapse into a single
+     * partition desc instead of producing overlapping ranges under different names.
+     *
+     * <p>One O(log n) lookup in the table's range index per value, with nothing copied or sorted:
+     * the RPC holds the table READ lock while it goes through every value of a request, and tablet
+     * pre-split analyzes each sampled value as a request of its own, without the table lock.
+     */
+    private static Pair<String, PartitionKeyDesc> findCoveringPartition(
+            OlapTable olapTable, ExpressionRangePartitionInfo partitionInfo, String partitionItem)
+            throws AnalysisException {
+        PartitionKey key;
+        try {
+            key = PartitionKey.createPartitionKey(
+                    Collections.singletonList(new PartitionValue(partitionItem)),
+                    partitionInfo.getPartitionColumns(olapTable.getIdToColumn()));
+        } catch (AnalysisException e) {
+            // Not fatal: fall back to the partition expression, which is what this path did before.
+            LOG.warn("failed to look up the partition covering value {}", partitionItem, e);
+            return null;
+        }
+        Map.Entry<Long, Range<PartitionKey>> covering = partitionInfo.getFormalPartitionContaining(key);
+        if (covering == null) {
+            return null;
+        }
+        Partition partition = olapTable.getPartition(covering.getKey());
+        if (partition == null) {
+            // Only possible without the table lock (pre-split): the partition went away after the lookup.
+            // The bounds the expression gives are known to be wrong for this value, so reject the value
+            // instead of falling back to them.
+            throw new AnalysisException("partition " + covering.getKey() + " covering partition value "
+                    + partitionItem + " no longer exists");
+        }
+        return Pair.create(partition.getName(), toPartitionKeyDesc(covering.getValue()));
+    }
+
+    private static PartitionKeyDesc toPartitionKeyDesc(Range<PartitionKey> range) {
+        PartitionKey upper = range.upperEndpoint();
+        PartitionValue upperValue = upper.isMaxValue()
+                ? PartitionValue.MAX_VALUE
+                : new PartitionValue(upper.getKeys().get(0).getStringValue());
+        return new PartitionKeyDesc(
+                Collections.singletonList(
+                        new PartitionValue(range.lowerEndpoint().getKeys().get(0).getStringValue())),
+                Collections.singletonList(upperValue));
     }
 
     private static PartitionKeyDesc createPartitionKeyDesc(Type partitionType, LocalDateTime beginTime,
@@ -2211,12 +2286,45 @@ public class AnalyzerUtils {
     }
 
     public static void checkNondeterministicFunction(ParseNode node) {
+        findFunctionCall(node, FunctionCallExpr::isNondeterministicBuiltinFnName).ifPresent(expr -> {
+            throw new SemanticException("Materialized view query statement select item " +
+                    ExprToSql.toSql(expr) + " not supported nondeterministic function", expr.getPos());
+        });
+    }
+
+    public static Optional<FunctionCallExpr> findCurrentTimeFunction(ParseNode node) {
+        return findFunctionCall(node, AnalyzerUtils::readsCurrentTime);
+    }
+
+    private static boolean readsCurrentTime(FunctionCallExpr expr) {
+        Function fn = expr.getFn();
+        if (fn instanceof SqlFunction sqlFunction) {
+            return sqlFunction.getAnalyzeExpr() != null
+                    && findCurrentTimeFunction(sqlFunction.getAnalyzeExpr()).isPresent();
+        }
+        // A UDF may share a time function's name with another signature.
+        if (fn != null && fn.getBinaryType() != TFunctionBinaryType.BUILTIN) {
+            return false;
+        }
+        String functionName = expr.getFunctionName();
+        if (!FunctionSet.nonDeterministicTimeFunctions.contains(functionName)) {
+            return false;
+        }
+        // unix_timestamp(x) converts its argument; only the no-argument form reads the clock.
+        return !FunctionSet.UNIX_TIMESTAMP.equals(functionName) || expr.getChildren().isEmpty();
+    }
+
+    private static Optional<FunctionCallExpr> findFunctionCall(ParseNode node, Predicate<FunctionCallExpr> predicate) {
+        List<FunctionCallExpr> matches = new ArrayList<>();
         new AstTraverser<Void, Void>() {
             @Override
             public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
-                if (expr.isNondeterministicBuiltinFnName()) {
-                    throw new SemanticException("Materialized view query statement select item " +
-                            ExprToSql.toSql(expr) + " not supported nondeterministic function", expr.getPos());
+                if (!matches.isEmpty()) {
+                    return null;
+                }
+                if (predicate.apply(expr)) {
+                    matches.add(expr);
+                    return null;
                 }
                 return super.visitFunctionCall(expr, context);
             }
@@ -2242,6 +2350,7 @@ public class AnalyzerUtils {
                 return null;
             }
         }.visit(node);
+        return matches.stream().findFirst();
     }
 
     static class NonDeterministicAnalyzeVisitor extends AstTraverser<Void, Void> {

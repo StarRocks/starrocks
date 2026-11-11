@@ -29,6 +29,7 @@
 #include <unordered_map>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "common/config_path_fwd.h"
 #include "common/config_udf_fwd.h"
 #include "exprs/udf/python/callstub.h"
@@ -303,6 +304,38 @@ TEST_F(PyWorkerManagerEnvTest, remote_worker_has_no_process_lifecycle) {
     worker.reset(); // destructor must not touch any process or socket
 
     ASSERT_TRUE(std::filesystem::exists(sentinel)) << "a remote worker must never unlink a socket file";
+}
+
+// A pooled worker idle past python_worker_expire_time_sec is reclaimed, but not while a call stub is
+// still connected to it: a query that keeps calling the UDF for longer than the expire time would
+// otherwise lose its worker mid-query and fail with "Socket closed".
+TEST_F(PyWorkerManagerEnvTest, worker_in_use_is_not_expired) {
+    create_fake_python_env();
+    auto saved_expire_time_sec = config::python_worker_expire_time_sec;
+    // Every unused worker counts as expired.
+    config::python_worker_expire_time_sec = -1;
+    auto& manager = PyWorkerManager::getInstance();
+    constexpr int32_t driver_id = 0x7fff0001;
+    DeferOp restore([&]() {
+        config::python_worker_expire_time_sec = saved_expire_time_sec;
+        std::lock_guard guard(manager._mutex);
+        manager._processes.erase(driver_id);
+    });
+    auto pooled = [&]() {
+        std::lock_guard guard(manager._mutex);
+        return manager._processes[driver_id].size();
+    };
+
+    std::string url;
+    ASSIGN_OR_ABORT(auto worker, manager._acquire_worker(driver_id, /*reusable=*/1, &url));
+    ASSERT_EQ(1, worker->num_clients());
+    manager.cleanup_expired_worker();
+    ASSERT_EQ(1, pooled());
+    ASSERT_FALSE(worker->is_dead());
+
+    worker->remove_client();
+    manager.cleanup_expired_worker();
+    ASSERT_EQ(0, pooled());
 }
 
 // The Flight descriptor must carry the zip checksum (so an external worker can verify a package it

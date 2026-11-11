@@ -69,6 +69,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Collection;
@@ -110,6 +111,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         // Reset per-call buffer to prevent accumulation across retries within the same task run
         // (processor instance is reused by retryProcessTaskRun).
         this.stagedTvrDeltaMap.clear();
+        waitForCommittedMvTransactionsVisible();
         mvPctRefreshSynchronizer.syncAndCheckPCTPartitions();
 
         // collect change snapshots
@@ -134,20 +136,14 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 .map(TvrTableSnapshotInfo::getTvrSnapshot)
                 .allMatch(TvrVersionRange::isEmpty);
         if (isTaskRunSkipped) {
-            if (mvRefreshParams.isNonTentativeForce()) {
-                logger.info("No base table has changed, but force refresh is requested, " +
-                        "proceed with refresh for materialized view: {}", mv.getName());
-            } else {
-                logger.info("No base table has changed, skip the refresh for materialized view: {}",
-                        mv.getName());
-                // No base-table change means the MV is confirmed fresh as of this run's start.
-                confirmFreshness();
-                // Every delta here is a point range (from == to): the window records that the
-                // bookmark had caught up with the base table head.
-                recordImvSourceRangesOnTaskRun();
-                // IVM rejects partial refresh above, so the whole MV is fresh, not just a range.
-                return ProcessExecPlan.skipped(ProcessExecPlan.SkipReason.MV_UP_TO_DATE);
-            }
+            logger.info("No base table has changed, skip the refresh for materialized view: {}", mv.getName());
+            // No base-table change means the MV is confirmed fresh as of this run's start.
+            confirmFreshness();
+            // Every delta here is a point range (from == to): the window records that the
+            // bookmark had caught up with the base table head.
+            recordImvSourceRangesOnTaskRun();
+            // IVM rejects partial refresh above, so the whole MV is fresh, not just a range.
+            return ProcessExecPlan.skipped(ProcessExecPlan.SkipReason.MV_UP_TO_DATE);
         }
 
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
@@ -169,6 +165,42 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         }
         recordImvSourceRangesOnTaskRun();
         return ProcessExecPlan.success(mvContext.getExecPlan(), insertStmt);
+    }
+
+    /**
+     * A refresh insert may return once committed, before it is visible, and its window is recorded at commit. Planning
+     * before it is visible reads the view without it, so a merge with the view's stored state drops that window.
+     */
+    private void waitForCommittedMvTransactionsVisible() {
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        if (!txnMgr.existCommittedTxns(db.getId(), mv.getId(), null)) {
+            return;
+        }
+        long timeoutMs = Config.mv_incremental_refresh_wait_visible_timeout_ms;
+        long startMs = System.currentTimeMillis();
+        try (Timer ignored = Tracers.watchScope("MVRefreshWaitCommittedTxnsVisible")) {
+            do {
+                if (mvContext.getTaskRun() != null && mvContext.getTaskRun().isKilled()) {
+                    throw new MvPublishPendingException(String.format("Refresh of materialized view %s was " +
+                            "cancelled while waiting for its committed transactions to become visible", mv.getName()));
+                }
+                long remainingMs = startMs + timeoutMs - System.currentTimeMillis();
+                if (remainingMs <= 0) {
+                    throw new MvPublishPendingException(String.format("Materialized view %s still has committed " +
+                            "transactions that are not visible after %d ms, see %s; the next refresh tries again",
+                            mv.getName(), timeoutMs, "mv_incremental_refresh_wait_visible_timeout_ms"));
+                }
+                try {
+                    Thread.sleep(Math.min(remainingMs, 100));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new MvPublishPendingException(String.format("Refresh of materialized view %s was " +
+                            "interrupted while waiting for its committed transactions to become visible", mv.getName()));
+                }
+            } while (txnMgr.existCommittedTxns(db.getId(), mv.getId(), null));
+        }
+        logger.info("Waited {} ms for the committed transactions of materialized view {} to become visible",
+                System.currentTimeMillis() - startMs, mv.getName());
     }
 
     /**
@@ -508,6 +540,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                             ? String.valueOf(processStartTime) : "0");
         }
         TaskRun.seedVersionMapResetEpoch(newProperties, mvContext.getVersionMapResetEpoch());
+        TaskRun.seedRefreshJobProcessStartTime(newProperties, mvContext.getStatus());
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
@@ -542,6 +575,15 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
     @Override
     public boolean hasNextBatchRun() {
         return hasNextTaskRun;
+    }
+
+    @Override
+    protected InsertStmt generateInsertAst(ConnectContext ctx, PCellSortedSet mvTargetPartitionNames,
+                                           String definition) throws AnalysisException {
+        // Parse a fixed plan-only level: bare EXPLAIN can inherit ANALYZE from query_explain_level.
+        // Even outer EXPLAIN ANALYZE / TRACE REFRESH only plans this INSERT.
+        String planSql = mvContext.isExplain() ? "EXPLAIN LOGICAL " + definition : definition;
+        return super.generateInsertAst(ctx, mvTargetPartitionNames, planSql);
     }
 
     private InsertStmt prepareRefreshPlan() throws AnalysisException, LockTimeoutException {
@@ -595,17 +637,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
 
             try (Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
                 ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
-                boolean previousBypassAuthorizerCheck = ctx.isBypassAuthorizerCheck();
-                try {
-                    // Match PCT by skipping authorization for the trusted refresh INSERT. External column authorization
-                    // launches an auxiliary optimizer before InsertPlanner has bound the IVM aggregate state columns
-                    // required by the rewrite.
-                    ctx.setBypassAuthorizerCheck(true);
-                    ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
-                    mvContext.setExecPlan(execPlan);
-                } finally {
-                    ctx.setBypassAuthorizerCheck(previousBypassAuthorizerCheck);
-                }
+                ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
+                mvContext.setExecPlan(execPlan);
             }
             return insertStmt;
         } finally {

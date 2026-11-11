@@ -316,7 +316,7 @@ TEST(GeoMetadataTest, MissingAndNoIdColumnsKeepExistingMatching) {
     lake.__set_fields({lake_field});
     SlotDescriptor slot(1, "renamed_shape", TypeDescriptor::create_varbinary_type(1024));
     EXPECT_TRUE(validate_scan(without_shape, &lake, {{0, &slot, true}}, true).ok());
-    SlotDescriptor supported(2, "id", TypeDescriptor(TYPE_INT));
+    SlotDescriptor supported(2, "id", TYPE_INT_DESC);
     EXPECT_TRUE(validate_scan(without_shape, &lake, {{0, &supported, true}}, true).ok());
     auto element = geo_element();
     element.__isset.field_id = false;
@@ -717,10 +717,10 @@ TEST(GeoMetadataTest, GeoAnnotationsDoNotUseRowGroupOrPageIndexMinMax) {
         statistics.__set_max_value("z");
         statistics.__set_null_count(0);
         column.__set_statistics(statistics);
-        const TypeDescriptor type = TypeDescriptor::create_varchar_type(1024);
         std::vector<std::string> min_values;
         std::vector<std::string> max_values;
-        auto status = StatisticsHelper::get_min_max_value(&metadata, type, &column, field, min_values, max_values);
+        auto status = StatisticsHelper::get_min_max_value(&metadata, TYPE_VARCHAR_DESC, &column, field, min_values,
+                                                          max_values);
         EXPECT_EQ(kind == 2, status.ok()) << status;
         EXPECT_EQ(kind == 2 ? 1 : 0, min_values.size());
         EXPECT_EQ(kind == 2 ? 1 : 0, max_values.size());
@@ -729,7 +729,7 @@ TEST(GeoMetadataTest, GeoAnnotationsDoNotUseRowGroupOrPageIndexMinMax) {
         chunk.__set_meta_data(column);
         ColumnReaderOptions options{};
         options.file_meta_data = &metadata;
-        ScalarColumnReader reader(field, &chunk, &type, options);
+        ScalarColumnReader reader(field, &chunk, &TYPE_VARCHAR_DESC, options);
         ObjectPool pool;
         auto* predicate =
                 pool.add(new_column_eq_predicate_from_datum(get_type_info(TYPE_VARCHAR), 1, Datum(Slice("a"))));
@@ -785,7 +785,7 @@ TEST(GeoMetadataTest, GeoMinMaxCannotHideMatchingFileRows) {
                 TSlotDescriptor output;
                 output.__set_id(1);
                 output.__set_colName("shape");
-                output.__set_slotType(TypeDescriptor::create_varchar_type(1024).to_thrift());
+                output.__set_slotType(TYPE_VARCHAR_DESC.to_thrift());
                 output.__set_col_unique_id(-1);
                 output.__set_isMaterialized(true);
                 output.__set_isOutputColumn(true);
@@ -825,7 +825,7 @@ TEST(GeoMetadataTest, NestedNativeGeographyIsRejectedByComplexReader) {
     };
 
     expect_rejected(ColumnType::ARRAY, TypeDescriptor::create_array_type(geography));
-    expect_rejected(ColumnType::MAP, TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), geography));
+    expect_rejected(ColumnType::MAP, TypeDescriptor::create_map_type(TYPE_INT_DESC, geography));
     expect_rejected(ColumnType::STRUCT, TypeDescriptor::create_struct_type({"shape"}, {geography}));
 }
 

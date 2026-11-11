@@ -17,6 +17,8 @@
 #include <arrow/record_batch.h>
 
 #include <memory>
+#include <mutex>
+#include <vector>
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
@@ -38,16 +40,25 @@ public:
     using arrowSchema = arrow::Schema;
     using arrowField = arrow::Field;
 
-    AbstractArrowFuncCallStub(FunctionContext* func_ctx) : _func_ctx(func_ctx) {}
+    // The stub is cached per driver and outlives the FunctionContext it is built from: a scan's IO
+    // tasks evaluate conjuncts through ExprContext clones that are freed with their data source,
+    // while the stub stays in the expr's cache. Copy the types instead of keeping the context.
+    explicit AbstractArrowFuncCallStub(FunctionContext* func_ctx)
+            : _arg_types(func_ctx->get_arg_types()), _return_type(func_ctx->get_return_type()) {}
     ~AbstractArrowFuncCallStub() override = default;
     StatusOr<ColumnPtr> evaluate(const Columns& columns, size_t row_num) final;
 
 protected:
-    FunctionContext* _func_ctx = nullptr;
     virtual StatusOr<std::shared_ptr<RecordBatch>> do_evaluate(RecordBatch&& batch) = 0;
 
 private:
     StatusOr<ColumnPtr> _convert_arrow_to_native(const arrowArray& arrow_batch, const arrowField& field_type);
+
+    const std::vector<TypeDescriptor> _arg_types;
+    const TypeDescriptor _return_type;
+    // A driver's scan IO tasks run on different threads but share the driver's stub, and
+    // do_evaluate is a write-then-read exchange on one stream, so calls must not overlap.
+    std::mutex _evaluate_lock;
 };
 
 std::unique_ptr<UDFCallStub> create_error_call_stub(Status error_status);

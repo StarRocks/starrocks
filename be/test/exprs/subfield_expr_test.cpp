@@ -79,27 +79,23 @@ TEST_F(SubfieldExprTest, subfield_test) {
     column->append_datum(datum_struct_2);
 
     {
-        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"id"});
+        std::unique_ptr<Expr> expr = create_subfield_expr(TYPE_INT_DESC, {"id"});
         expr->add_child(new_fake_const_expr(column->clone(), struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         auto subfield_column = ColumnHelper::get_data_column(result.get());
         EXPECT_TRUE(subfield_column->is_numeric());
-        EXPECT_EQ(2, subfield_column->size());
-        EXPECT_EQ("1", subfield_column->debug_item(0));
-        EXPECT_EQ("2", subfield_column->debug_item(1));
+        EXPECT_EQ("[1, 2]", subfield_column->debug_string());
     }
 
     {
-        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"name"});
+        std::unique_ptr<Expr> expr = create_subfield_expr(TYPE_INT_DESC, {"name"});
         expr->add_child(new_fake_const_expr(column->clone(), struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         auto subfield_column = ColumnHelper::get_data_column(result.get());
         EXPECT_TRUE(subfield_column->is_binary());
-        EXPECT_EQ(2, subfield_column->size());
-        EXPECT_EQ("'smith'", subfield_column->debug_item(0));
-        EXPECT_EQ("'cruise'", subfield_column->debug_item(1));
+        EXPECT_EQ("['smith', 'cruise']", subfield_column->debug_string());
     }
 }
 
@@ -125,7 +121,7 @@ TEST_F(SubfieldExprTest, subfield_null_test) {
         datum_struct_3.push_back("cruise");
         column->append_datum(datum_struct_3);
 
-        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"id"});
+        std::unique_ptr<Expr> expr = create_subfield_expr(TYPE_INT_DESC, {"id"});
         expr->add_child(new_fake_const_expr(std::move(column), struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
@@ -152,16 +148,13 @@ TEST_F(SubfieldExprTest, subfield_null_test) {
         datum_struct_3.push_back("cruise");
         column->append_datum(datum_struct_3);
 
-        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"id"});
+        std::unique_ptr<Expr> expr = create_subfield_expr(TYPE_INT_DESC, {"id"});
         expr->add_child(new_fake_const_expr(std::move(column), struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         auto subfield_column = ColumnHelper::get_data_column(result.get());
         EXPECT_TRUE(subfield_column->is_numeric());
-        EXPECT_EQ(3, subfield_column->size());
-        EXPECT_EQ("1", subfield_column->debug_item(0));
-        EXPECT_EQ("0", subfield_column->debug_item(1));
-        EXPECT_EQ("3", subfield_column->debug_item(2));
+        EXPECT_EQ("[1, 0, 3]", subfield_column->debug_string());
     }
 }
 
@@ -186,7 +179,7 @@ TEST_F(SubfieldExprTest, subfield_clone_test) {
     datum_struct_3.push_back("cruise");
     column->append_datum(datum_struct_3);
 
-    std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"id"});
+    std::unique_ptr<Expr> expr = create_subfield_expr(TYPE_INT_DESC, {"id"});
     expr->add_child(new_fake_const_expr(column->clone(), struct_type));
     auto result = expr->evaluate(nullptr, nullptr);
     EXPECT_TRUE(result->is_nullable());
@@ -230,13 +223,10 @@ TEST_F(SubfieldExprTest, subfield_multi_level_test) {
     datum_struct_3_level1.push_back(datum_struct_3_level2);
     column->append_datum(datum_struct_3_level1);
 
-    std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"level1", "level2"});
+    std::unique_ptr<Expr> expr = create_subfield_expr(TYPE_INT_DESC, {"level1", "level2"});
     expr->add_child(new_fake_const_expr(std::move(column), struct_type));
     auto result = expr->evaluate(nullptr, nullptr);
     EXPECT_TRUE(result->is_nullable());
-    EXPECT_EQ(3, result->size());
-    EXPECT_EQ("'smith'", result->debug_item(0));
-    EXPECT_EQ("NULL", result->debug_item(1));
-    EXPECT_EQ("'cruise'", result->debug_item(2));
+    EXPECT_EQ("['smith', NULL, 'cruise']", result->debug_string());
 }
 } // namespace starrocks

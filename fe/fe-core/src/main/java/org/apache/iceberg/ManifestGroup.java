@@ -35,6 +35,7 @@ import org.apache.iceberg.metrics.ScanMetricsUtil;
 import org.apache.iceberg.relocated.com.google.common.collect.Iterables;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.relocated.com.google.common.collect.Sets;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.ContentFileUtil;
 import org.apache.iceberg.util.ParallelIterable;
@@ -72,6 +73,9 @@ class ManifestGroup {
     private Cache<String, Set<DataFile>> dataFileCache;
     private DeleteFileIndex preparedDeleteFileIndex;
     private Set<Integer> identifierFieldIds;
+    private int cacheStatsColumnLimit = 0;
+    private Map<Integer, Long> cacheStatsCandidateRanks;
+    private Map<Integer, Type.TypeID> cacheStatsTruncatedTypes;
 
     ManifestGroup(FileIO io, Iterable<ManifestFile> manifests) {
         this(
@@ -189,6 +193,21 @@ class ManifestGroup {
 
     ManifestGroup identifierFieldIds(Set<Integer> identifierFieldIds) {
         this.identifierFieldIds = identifierFieldIds;
+        return this;
+    }
+
+    ManifestGroup cacheStatsColumnLimit(int cacheStatsColumnLimit) {
+        this.cacheStatsColumnLimit = cacheStatsColumnLimit;
+        return this;
+    }
+
+    ManifestGroup cacheStatsTruncatedTypes(Map<Integer, Type.TypeID> cacheStatsTruncatedTypes) {
+        this.cacheStatsTruncatedTypes = cacheStatsTruncatedTypes;
+        return this;
+    }
+
+    ManifestGroup cacheStatsCandidateRanks(Map<Integer, Long> cacheStatsCandidateRanks) {
+        this.cacheStatsCandidateRanks = cacheStatsCandidateRanks;
         return this;
     }
 
@@ -367,6 +386,10 @@ class ManifestGroup {
                                                 .dataFileCache(dataFileCache)
                                                 .cacheWithMetrics(dataFileCacheWithMetrics)
                                                 .identifierFieldIds(identifierFieldIds)
+                                                .cacheStatsColumnLimit(cacheStatsColumnLimit)
+                                                .cacheStatsCandidateRanks(cacheStatsCandidateRanks)
+                                                .cacheStatsTruncatedTypes(cacheStatsTruncatedTypes)
+                                                .cacheStatsExpectedFileCount(liveFileCount(manifest))
                                                 .scanMetrics(scanMetrics);
 
                                 CloseableIterable<ManifestEntry<DataFile>> entries;
@@ -422,6 +445,12 @@ class ManifestGroup {
                     return new BaseFileScanTask(
                             dataFile, deleteFiles, ctx.schemaAsString(), ctx.specAsString(), ctx.residuals());
                 });
+    }
+
+    private static int liveFileCount(ManifestFile manifest) {
+        Integer added = manifest.addedFilesCount();
+        Integer existing = manifest.existingFilesCount();
+        return added == null || existing == null ? 0 : added + existing;
     }
 
     @FunctionalInterface

@@ -1,0 +1,44 @@
+-- name: test_deltalake_function_predicate_partition_prune
+create external catalog delta_test_${uuid0} PROPERTIES (
+    "type"="deltalake",
+    "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+select col_date, count(*) from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where date_format(col_date, '%Y-%m-%d %H') = '2024-04-25 00' group by col_date order by col_date;
+-- result:
+2024-04-25	3
+-- !result
+function: assert_explain_verbose_contains("select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where date_format(col_date, '%Y-%m-%d %H') = '2024-04-25 00'", "partitions=1/4")
+-- result:
+None
+-- !result
+select col_date, count(*) from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where date_format(col_date, '%Y-%m-%d %H') >= '2024-04-26 00' group by col_date order by col_date;
+-- result:
+2024-04-26	3
+2024-04-27	3
+-- !result
+function: assert_explain_verbose_contains("select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where date_format(col_date, '%Y-%m-%d %H') >= '2024-04-26 00'", "partitions=2/4")
+-- result:
+None
+-- !result
+set enable_delta_lake_function_predicate_pruning = false;
+-- result:
+-- !result
+select col_date, count(*) from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where date_format(col_date, '%Y-%m-%d %H') = '2024-04-25 00' group by col_date order by col_date;
+-- result:
+2024-04-25	3
+-- !result
+function: assert_explain_verbose_contains("select * from delta_test_${uuid0}.delta_oss_db.delta_lake_par_col_date where date_format(col_date, '%Y-%m-%d %H') = '2024-04-25 00'", "partitions=4/4")
+-- result:
+None
+-- !result
+set enable_delta_lake_function_predicate_pruning = true;
+-- result:
+-- !result
+drop catalog delta_test_${uuid0};
+-- result:
+-- !result
