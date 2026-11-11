@@ -114,7 +114,9 @@ public class RemovePartitionPredicateTest {
         ScalarOperator idEq = eq(id, ConstantOperator.createInt(1));
 
         Assertions.assertEquals(ConstantOperator.TRUE,
-                remove(Utils.compoundAnd(dtEq, dtRange, dtIn, regionEq), TABLE_METADATA));
+                remove(Utils.compoundAnd(dtEq, dtRange, regionEq), TABLE_METADATA));
+        // IN is not pushed down to the Delta kernel scan on this branch, so it is kept
+        Assertions.assertEquals(dtIn, remove(Utils.compoundAnd(dtEq, dtIn), TABLE_METADATA));
         Assertions.assertEquals(idEq, remove(Utils.compoundAnd(dtEq, idEq), TABLE_METADATA));
         // the table's partition column list is not grown by the call
         Assertions.assertEquals(List.of("dt", "Region"), table.getPartitionColumnNames());
