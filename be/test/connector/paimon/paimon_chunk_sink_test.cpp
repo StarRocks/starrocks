@@ -35,12 +35,14 @@
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "connector/hive/paimon/paimon_cpp_loader.h"
 #include "connector_primitive/sink_memory_manager.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
+#include "exprs/paimon_functions.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 
@@ -207,7 +209,12 @@ TEST_F(PaimonChunkSinkTest, NativeFixedBucketRoutingMatchesPublicCalculatorAndCh
     auto* expr = pool.add(new ExprContext(pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 0))));
     ASSERT_OK(ExprExecutor::prepare(expr, &state));
     ASSERT_OK(ExprExecutor::open(expr, &state));
-    auto routed = calculate_paimon_bucket_ids_in_shim(ctx->sink, rows, {expr});
+    auto calculator = starrocks_paimon_bucket_calculator_v1(
+            R"({"version":1,"bucket_count":8,"is_pk":false,"algorithm":"default","time_zone":"UTC","memory_limit":"268435456","fields":[]})",
+            TypeDescriptor::create_struct_type({"dummy"}, {TypeDescriptor(TYPE_INT)}), nullptr);
+    ASSERT_TRUE(calculator.ok()) << calculator.status();
+    auto routed =
+            calculator.value()->calculate(StructColumn::create(Columns{rows->get_column_by_slot_id(0)}, {"dummy"}));
     ASSERT_TRUE(routed.ok()) << routed.status();
     auto native_pool = paimon::GetDefaultPool();
     auto calc = paimon::BucketIdCalculator::Create(false, 8, native_pool);
@@ -218,7 +225,7 @@ TEST_F(PaimonChunkSinkTest, NativeFixedBucketRoutingMatchesPublicCalculatorAndCh
     ASSERT_TRUE(arrow::ExportRecordBatch(*empty, &array, &schema).ok());
     std::vector<int32_t> expected(3);
     ASSERT_TRUE(calc.value()->CalculateBucketIds(&array, &schema, expected.data()).ok());
-    EXPECT_EQ(expected, routed.value());
+    for (size_t i = 0; i < expected.size(); ++i) EXPECT_EQ(expected[i], routed.value()->get(i).get_int32());
     auto route = Int32Column::create();
     for (auto id : expected) route->append(id);
     rows->append_column(std::move(route), 99);
@@ -239,11 +246,17 @@ TEST_F(PaimonChunkSinkTest, FixedBucketSinkUsesRoutedBucket) {
     auto* expr = pool.add(new ExprContext(pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 0))));
     ASSERT_OK(ExprExecutor::prepare(expr, &state));
     ASSERT_OK(ExprExecutor::open(expr, &state));
-    auto calculated = calculate_paimon_bucket_ids_in_shim(ctx->sink, rows, {expr});
+    auto calculator = starrocks_paimon_bucket_calculator_v1(
+            R"({"version":1,"bucket_count":8,"is_pk":false,"algorithm":"default","time_zone":"UTC","memory_limit":"268435456","fields":[]})",
+            TypeDescriptor::create_struct_type({"dummy"}, {TypeDescriptor(TYPE_INT)}), nullptr);
+    ASSERT_TRUE(calculator.ok()) << calculator.status();
+    auto calculated =
+            calculator.value()->calculate(StructColumn::create(Columns{rows->get_column_by_slot_id(0)}, {"dummy"}));
     ASSERT_TRUE(calculated.ok()) << calculated.status();
     // An intentionally different in-range route isolates whether the sink consumes the route
     // column. Real routing must always calculate the native bucket before the exchange.
-    const int32_t routed_bucket = (calculated.value()[0] + 1) % ctx->sink.bucket_count;
+    const int32_t routed_bucket =
+            (down_cast<const Int32Column*>(calculated.value().get())->get_data()[0] + 1) % ctx->sink.bucket_count;
     auto route = Int32Column::create();
     route->append(routed_bucket);
     rows->append_column(std::move(route), 99);

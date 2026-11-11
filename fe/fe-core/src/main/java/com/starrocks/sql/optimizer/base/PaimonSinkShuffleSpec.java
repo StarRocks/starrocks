@@ -14,14 +14,18 @@
 
 package com.starrocks.sql.optimizer.base;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataStreamSink;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.ExchangeNode;
-import com.starrocks.planner.PaimonBucketRoutingNode;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.ProjectNode;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
@@ -29,12 +33,17 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TPaimonTableSink;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import org.apache.paimon.CoreOptions;
 
 import java.util.ArrayList;
@@ -72,8 +81,8 @@ public final class PaimonSinkShuffleSpec implements ConnectorSinkShuffleSpec {
 
     /**
      * Install the final write distribution, after the target's frozen descriptor has been captured.
-     * Returns the actual native bucket slot, or -1 for an append-unaware table. The bucket is never
-     * represented by a SQL scalar or a constant placeholder, and is never a target-schema field.
+     * Returns the actual native bucket slot, or -1 for an append-unaware table.
+     * An internal SDK-backed scalar computes the bucket, which is never a target-schema field.
      */
     public static int installBucketRouting(ExecPlan plan, TPaimonTableSink sink) {
         if (!sink.isSetBucket_count()) {
@@ -118,13 +127,32 @@ public final class PaimonSinkShuffleSpec implements ConnectorSinkShuffleSpec {
             projection.put(slot.getId(), expression);
             schemaExprs.add(new SlotRef(slot));
         }
-        SlotDescriptor bucket = descriptors.addSlotDescriptor(tuple, new SlotId(nextSlot));
+        tuple.computeMemLayout();
+        PlanFragment input = plan.getTopFragment();
+        ProjectNode materialize = new ProjectNode(plan.getNextNodeId(), tuple,
+                input.getPlanRoot(), projection, Collections.emptyMap());
+        TupleDescriptor routedTuple = descriptors.createTupleDescriptor("Paimon bucket function");
+        Map<SlotId, Expr> routedProjection = new LinkedHashMap<>();
+        List<Expr> routedSchemaExprs = new ArrayList<>();
+        for (int i = 0; i < schemaExprs.size(); ++i) {
+            Expr expression = schemaExprs.get(i);
+            SlotDescriptor slot = descriptors.addSlotDescriptor(routedTuple, new SlotId(nextSlot++));
+            slot.setType(expression.getType());
+            slot.setIsNullable(expression.isNullable());
+            slot.setIsMaterialized(true);
+            slot.setIsOutputColumn(true);
+            routedProjection.put(slot.getId(), expression);
+            routedSchemaExprs.add(new SlotRef(slot));
+        }
+        SlotDescriptor bucket = descriptors.addSlotDescriptor(routedTuple, new SlotId(nextSlot));
         bucket.setType(IntegerType.INT);
         bucket.setIsNullable(false);
         bucket.setIsMaterialized(true);
         bucket.setIsOutputColumn(true);
         bucket.setLabel("__paimon_native_bucket");
-        tuple.computeMemLayout();
+        routedProjection.put(bucket.getId(), bucketFunction(sink, schemaExprs));
+        routedTuple.computeMemLayout();
+        schemaExprs = routedSchemaExprs;
 
         List<Expr> routeKeys = new ArrayList<>();
         for (String name : sink.getPartition_columns()) {
@@ -136,9 +164,8 @@ public final class PaimonSinkShuffleSpec implements ConnectorSinkShuffleSpec {
         }
         routeKeys.add(new SlotRef(bucket));
         DataPartition partition = DataPartition.hashPartitioned(routeKeys);
-        PlanFragment input = plan.getTopFragment();
-        PaimonBucketRoutingNode routing = new PaimonBucketRoutingNode(plan.getNextNodeId(), tuple,
-                input.getPlanRoot(), projection, schemaExprs, bucket.getId(), sink);
+        ProjectNode routing = new ProjectNode(plan.getNextNodeId(), routedTuple, materialize,
+                routedProjection, Collections.emptyMap());
         input.setPlanRoot(routing);
         input.disableRuntimeAdaptiveDop();
         ExchangeNode exchange = new ExchangeNode(plan.getNextNodeId(), routing, partition);
@@ -160,4 +187,69 @@ public final class PaimonSinkShuffleSpec implements ConnectorSinkShuffleSpec {
         plan.getFragments().forEach(fragment -> fragment.setCacheParam(null));
         return bucket.getId().asInt();
     }
+    private static Expr bucketFunction(TPaimonTableSink sink, List<Expr> schemaExprs) {
+        if (sink.getSchema_json() == null || sink.getSchema_json().length() >= 1024 * 1024) {
+            throw new SemanticException("Invalid Paimon bucket schema configuration size");
+        }
+        JsonObject config = new JsonObject();
+        config.addProperty("version", 1);
+        config.addProperty("bucket_count", sink.getBucket_count());
+        config.addProperty("is_pk", !sink.getPrimary_key_columns().isEmpty());
+        config.addProperty("algorithm", sink.getOptions().getOrDefault("bucket-function", "default"));
+        config.addProperty("time_zone", sink.getTime_zone());
+        config.addProperty("memory_limit", sink.getOptions().getOrDefault(
+                "starrocks.paimon.max-writer-memory-bytes", "268435456"));
+        JsonArray nativeFields;
+        try {
+            nativeFields = JsonParser.parseString(sink.getSchema_json()).getAsJsonObject().getAsJsonArray("fields");
+            if (nativeFields == null || nativeFields.size() != schemaExprs.size()) {
+                throw new IllegalArgumentException();
+            }
+        } catch (RuntimeException e) {
+            throw new SemanticException("Invalid Paimon bucket schema configuration");
+        }
+        JsonArray keyFields = new JsonArray();
+        List<Expr> keys = new ArrayList<>();
+        ArrayList<StructField> fields = new ArrayList<>();
+        for (String name : sink.getBucket_columns()) {
+            int index = sink.getColumn_names().indexOf(name);
+            if (index < 0) {
+                throw new SemanticException("Paimon bucket key is absent from the frozen schema");
+            }
+            JsonObject field = new JsonObject();
+            field.addProperty("name", name);
+            field.add("type", nativeFields.get(index).getAsJsonObject().get("type").deepCopy());
+            keyFields.add(field);
+            keys.add(schemaExprs.get(index));
+            fields.add(new StructField(name, schemaExprs.get(index).getType()));
+        }
+        config.add("fields", keyFields);
+        // Empty key rows hash to a constant bucket; Project expands the constant result to the chunk size.
+        if (keys.isEmpty()) {
+            keys.add(new IntLiteral(0, IntegerType.INT));
+            fields.add(new StructField("__row_count", IntegerType.INT));
+        }
+        StructType keyType = new StructType(fields);
+        FunctionCallExpr row = new FunctionCallExpr("row", keys);
+        ScalarFunction rowFn = ScalarFunction.createBuiltin("row", "StructFunctions::new_struct",
+                new ArrayList<>(keys.stream().map(Expr::getType).toList()), false, keyType, false);
+        rowFn.setFunctionId(170500);
+        rowFn.setIsNullable(false);
+        row.setFn(rowFn);
+        row.setType(keyType);
+        String json = config.toString();
+        if (json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 1024 * 1024) {
+            throw new SemanticException("Paimon bucket function configuration exceeds 1 MiB");
+        }
+        StringLiteral configuration = new StringLiteral(json);
+        FunctionCallExpr call = new FunctionCallExpr("__paimon_bucket", List.of(configuration, row));
+        ScalarFunction fn = ScalarFunction.createBuiltin("__paimon_bucket", "PaimonFunctions::bucket",
+                new ArrayList<>(List.of(configuration.getType(), keyType)), false, IntegerType.INT, false);
+        fn.setFunctionId(10360);
+        fn.setIsNullable(false);
+        call.setFn(fn);
+        call.setType(IntegerType.INT);
+        return call;
+    }
+
 }

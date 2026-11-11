@@ -42,7 +42,6 @@ std::mutex load_mutex;
 void* shim_handle = nullptr; // Protected by load_mutex.
 std::atomic<StarRocksPaimonCreateScannerFn> create_scanner_fn{nullptr};
 std::atomic<StarRocksPaimonCreateSinkFn> create_sink_fn{nullptr};
-std::atomic<StarRocksPaimonBucketIdsFn> bucket_ids_fn{nullptr};
 
 template <typename Fn>
 StatusOr<Fn> load_capability(std::atomic<Fn>& cached, const char* symbol, bool reader) {
@@ -117,12 +116,6 @@ StatusOr<HdfsScanner*> create_paimon_cpp_scanner() {
 std::unique_ptr<connector::ConnectorSink> create_paimon_cpp_chunk_sink(
         std::shared_ptr<connector::PaimonChunkSinkContext> context, int32_t driver_id) {
     return std::make_unique<DeferredPaimonSink>(std::move(context), driver_id);
-}
-
-StatusOr<std::vector<int32_t>> calculate_paimon_cpp_bucket_ids(const TPaimonTableSink& sink, const ChunkPtr& chunk,
-                                                               const std::vector<ExprContext*>& output_exprs) {
-    ASSIGN_OR_RETURN(auto fn, load_capability(bucket_ids_fn, STARROCKS_PAIMON_BUCKET_IDS_SYMBOL, false));
-    return fn(sink, chunk, output_exprs);
 }
 
 StatusOr<std::unique_ptr<connector::ConnectorSink>> connector::PaimonChunkSinkProvider::create_sink(int32_t driver_id) {

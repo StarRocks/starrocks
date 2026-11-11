@@ -63,10 +63,6 @@ namespace starrocks {
 namespace {
 
 void redact_plan_credentials(TPlanNode& node) {
-    if (node.__isset.project_node && node.project_node.__isset.paimon_bucket_routing) {
-        // This opaque binary TPaimonTableSink contains cloud credentials and native options.
-        node.project_node.paimon_bucket_routing.__set_sink_payload(std::string(kCredentialMask));
-    }
     if (!node.__isset.ai_project_node) {
         return;
     }

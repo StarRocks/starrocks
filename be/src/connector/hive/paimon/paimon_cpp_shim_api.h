@@ -54,8 +54,4 @@ using StarRocksPaimonCreateScannerFn = starrocks::HdfsScanner* (*)();
 using StarRocksPaimonCreateSinkFn = connector::ConnectorSink* (*)(std::shared_ptr<connector::PaimonChunkSinkContext>,
                                                                   int32_t);
 
-#define STARROCKS_PAIMON_BUCKET_IDS_SYMBOL "starrocks_paimon_bucket_ids_v1"
-using StarRocksPaimonBucketIdsFn = StatusOr<std::vector<int32_t>> (*)(const TPaimonTableSink&, const ChunkPtr&,
-                                                                      const std::vector<ExprContext*>&);
-
 } // namespace starrocks
