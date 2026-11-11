@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.jupiter.api.AfterAll;
@@ -440,6 +441,48 @@ public class MvRewriteJoinTest extends MVTestBase {
             starRocksAssert.dropMaterializedView("mv_s026");
             starRocksAssert.dropTable("t1_s026");
             starRocksAssert.dropTable("t2_s026");
+        }
+    }
+
+    // The MV rewrite renames the MV scan's bucket column right above the scan, and global late
+    // materialization defers it below that rename and fetches it back only under the renamed id. A
+    // bucket-shuffle join on that column used to keep the pre-rename id in its probe-side distribution,
+    // which no translated node produces: "Cannot convert ColumnRefOperator to Expr".
+    @Test
+    public void testMVRewriteLateMaterializedBucketShuffleColumn() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t1_glm_bs (\n" +
+                " c1 INT NOT NULL, c2 VARCHAR(50) NULL, c3 TINYINT NULL)\n" +
+                " DUPLICATE KEY(c1) DISTRIBUTED BY HASH(c1) BUCKETS 3\n" +
+                " PROPERTIES('replication_num'='1');");
+        cluster.runSql("test", "insert into t1_glm_bs values (1,'a',1),(2,'b',2),(3,'c',3),(4,'d',3);");
+        createAndRefreshMv("CREATE MATERIALIZED VIEW mv_glm_bs\n" +
+                "DISTRIBUTED BY HASH(c1) BUCKETS 3\n" +
+                "REFRESH ON_CHANGE\n" +
+                "PROPERTIES('replication_num'='1')\n" +
+                "AS SELECT c1, c2, c3 FROM t1_glm_bs;");
+        // without row counts the join below is planned as BUCKET_SHUFFLE(S) and the bug does not show
+        PlanTestBase.setTableStatistics((OlapTable) getTable("test", "t1_glm_bs"), 6);
+        PlanTestBase.setTableStatistics(getMv("test", "mv_glm_bs"), 6);
+
+        boolean prevGlm = connectContext.getSessionVariable().isEnableGlobalLateMaterialization();
+        boolean prevCostBased = connectContext.getSessionVariable().isEnableGlobalLateMaterializationCostBased();
+        try {
+            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
+            connectContext.getSessionVariable().setEnableGlobalLateMaterializationCostBased(false);
+
+            String query = "SELECT c3 = (SELECT max(c1) FROM t1_glm_bs x2), " +
+                    "c3 IN (SELECT c3 FROM t1_glm_bs x3), " +
+                    "c1 NOT IN (SELECT c1 FROM t1_glm_bs x4), " +
+                    "EXISTS (SELECT c1 FROM t1_glm_bs x5) FROM t1_glm_bs";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv_glm_bs");
+            PlanTestBase.assertContains(plan, "FETCH");
+            PlanTestBase.assertContains(plan, "LEFT OUTER JOIN (BUCKET_SHUFFLE)");
+        } finally {
+            connectContext.getSessionVariable().setEnableGlobalLateMaterialization(prevGlm);
+            connectContext.getSessionVariable().setEnableGlobalLateMaterializationCostBased(prevCostBased);
+            starRocksAssert.dropMaterializedView("mv_glm_bs");
+            starRocksAssert.dropTable("t1_glm_bs");
         }
     }
 }
