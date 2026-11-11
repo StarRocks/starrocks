@@ -1594,7 +1594,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of metadata log entries that can be written before a log file is created for these log entries. This parameter is used to control the size of log files. The new log file is written to the BDBJE database. This parameter also controls how often the Leader FE can create a metadata image (checkpoint), because a checkpoint only covers log entries in log files that have already been rolled.
+- Description: The maximum number of metadata log entries that can be written before a log file is created for these log entries. This parameter is used to control the size of log files. The new log file is written to the BDBJE database. This parameter also controls how often a metadata image (checkpoint) can be created, because a checkpoint only covers log entries in log files that have already been rolled.
 - Introduced in: -
 
 ### `edit_log_type`

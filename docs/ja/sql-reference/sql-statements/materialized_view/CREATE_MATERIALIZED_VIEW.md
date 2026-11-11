@@ -298,11 +298,11 @@ AS
 有効な値:
 
 - `column_name`: パーティション化に使用される列の名前。`PARTITION BY dt`という式は、`dt`列に従ってマテリアライズドビューをパーティション化することを意味します。
-- `date_trunc`関数: 時間単位を切り捨てるために使用される関数。`PARTITION BY date_trunc("MONTH", dt)`は、`dt`列を月単位で切り捨ててパーティション化することを意味します。`date_trunc`関数は、`YEAR`、`MONTH`、`WEEK`、`DAY`、`HOUR`、`MINUTE`の単位で時間を切り捨てることをサポートします。
+- `date_trunc`関数: 時間単位を切り捨てるために使用される関数。`PARTITION BY date_trunc("MONTH", dt)`は、`dt`列を月単位で切り捨ててパーティション化することを意味します。`date_trunc`関数は、`YEAR`、`MONTH`、`WEEK`、`DAY`、`HOUR`、`MINUTE`の単位で時間を切り捨てることをサポートします。`WEEK` は v3.3.1 以降でサポートされています。
 - `str2date`関数: ベーステーブルの文字列型パーティションをマテリアライズドビューのパーティションに変換するために使用される関数。`PARTITION BY str2date(dt, "%Y%m%d")`は、`dt`列が`"%Y%m%d"`の日付形式を持つ文字列日付型であることを意味します。`str2date`関数は多くの日付形式をサポートしており、詳細については[str2date](../../sql-functions/date-time-functions/str2date.md)を参照してください。v3.1.4からサポートされています。
 - `time_slice`関数: v3.1以降、これらの関数を使用して、指定された時間の粒度に基づいて、与えられた時間を時間間隔の開始または終了に変換することができます。例: SELECT リストで `time_slice(dt, INTERVAL 7 DAY) AS mv_dt` を指定し、`PARTITION BY date_trunc("MONTH", mv_dt)` とします。time_sliceはdate_truncよりも細かい粒度を持たなければなりません。PARTITION BY 句の `date_trunc` の 2 番目の引数は列である必要があるため、`time_slice` をネストすることはできません。これらを使用して、パーティションキーよりも細かい粒度を持つGROUP BY列を指定することができます。例: `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
 
-v3.5.0以降、非同期マテリアライズドビューは複数列パーティション式をサポートしています。マテリアライズドビューに複数のパーティション列を指定し、ベーステーブルのパーティション列と1対1でマッピングできます。
+v3.5.0以降、非同期マテリアライズドビューは複数列パーティション式をサポートしています。マテリアライズドビューに複数のパーティション列を指定し、ベーステーブルのパーティション列の全部または一部にマッピングできます。
 
 **複数列パーティション式に関する注意事項**:
 

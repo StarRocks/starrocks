@@ -649,7 +649,7 @@ REJECTED_RECORD_PATH: NULL
 
 | FE 配置项                          | 说明                                                         |
 | ---------------------------------- | ------------------------------------------------------------ |
-| insert_load_default_timeout_second | 已弃用。该参数不再控制 INSERT 导入作业的超时时间。请使用 Session 变量 `insert_timeout`。 |
+| insert_load_default_timeout_second | 已弃用。该参数不控制 INSERT 导入作业的超时时间。请使用 Session 变量 `insert_timeout`。 |
 
 - **Session 变量**
 

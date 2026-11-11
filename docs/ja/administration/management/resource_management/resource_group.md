@@ -65,9 +65,9 @@ BE 上のリソースグループに対して、次のパラメータを使用�
 CPU スケジューリングの重みは、次のいずれかのパラメータで設定できます。
 
 - `cpu_weight`: CPU スケジューリングの重みを直接設定します。値の範囲は (0, `avg_be_cpu_cores`] で、`avg_be_cpu_cores` はすべての BE ノードにおける CPU コアの平均数です。このパラメータは、0 より大きい値に設定された場合にのみ有効です。
-- `cpu_weight_percent`: v4.1 以降でサポートされます。CPU スケジューリングの重みをパーセンテージで設定します。値の範囲は [0, 100] です。このパラメータは、0 より大きい値に設定された場合にのみ有効です。`min_be_cpu_cores * cpu_weight_percent / 100 < 1` の場合、システムはエラーを返します。ここで、`min_be_cpu_cores` はすべての BE ノードにおける CPU コアの最小数です。
+- `cpu_weight_percent`: v4.1 以降でサポートされます。CPU スケジューリングの重みをパーセンテージで設定します。値の範囲は [0, 100] です。このパラメータは、0 より大きい値に設定された場合にのみ有効です。
 
-実行時、各 BE は自身の CPU コア数 `be_cpu_cores` に基づいて、`cpu_weight_percent` を実際の `cpu_weight` に変換します: `cpu_weight = be_cpu_cores * cpu_weight_percent / 100`。
+実行時、各 BE は自身の CPU コア数 `be_cpu_cores` に基づいて、`cpu_weight_percent` を実際の `cpu_weight` に変換します: `cpu_weight = max(1, be_cpu_cores * cpu_weight_percent / 100)`。ここで、除算の結果は切り捨てられます。
 
 `cpu_weight`、`cpu_weight_percent`、`exclusive_cpu_cores`、`exclusive_cpu_percent` のうち、0 より大きい値を設定できるのは 1 つだけです。
 
@@ -189,7 +189,7 @@ v3.3.5 以前は、StarRocks はリソースグループの `type` を `short_qu
 
 `default_wg` は、リソースグループの管理下にあるが、どのクラシファイアにも一致しない通常のクエリに割り当てられます。`default_wg` のデフォルトのリソース制限は次のとおりです。
 
-- `cpu_weight_percent`: 100、つまり BE の CPU コア数。（v4.1 より前は `cpu_weight` に BE の CPU コア数が設定されます。）
+- `cpu_weight_percent`: 100、つまり各 BE の CPU コア数。（`default_wg` が v4.1 より前に作成された場合、アップグレード後も `cpu_weight` が保持され、その値は作成時のすべての BE の平均 CPU コア数です。）
 - `mem_limit`: 100%。
 - `concurrency_limit`: 0。
 - `big_query_cpu_second_limit`: 0。
@@ -202,7 +202,7 @@ v3.3.5 以前は、StarRocks はリソースグループの `type` を `short_qu
 
 `default_mv_wg` は、マテリアライズドビューの作成時にプロパティ `resource_group` で対応するマテリアライズドビューにリソースグループが割り当てられていない場合、非同期マテリアライズドビューのリフレッシュタスクに割り当てられます。`default_mv_wg` のデフォルトのリソース制限は次のとおりです。
 
-- `cpu_weight_percent`: 1。（v4.1 より前は `cpu_weight` に 1 が設定されます。）
+- `cpu_weight_percent`: 1。CPU コア数が 200 未満の BE では CPU の重みは 1 になります。（`default_mv_wg` が v4.1 より前に作成された場合、アップグレード後も `cpu_weight` の 1 が保持されます。）
 - `mem_limit`: 80%。
 - `concurrency_limit`: 0。
 - `spill_mem_limit_threshold`: 80%。

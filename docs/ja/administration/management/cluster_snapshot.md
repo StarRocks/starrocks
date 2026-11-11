@@ -59,21 +59,21 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON
 
 `INTERVAL <value> <unit>`: 自動スナップショットを作成する間隔。`value` は正の整数で、`unit` は `SECOND`、`MINUTE`、`HOUR`、`DAY`、`WEEK` のいずれかである必要があります。このパラメータが指定されていない場合、間隔は FE の設定項目 `automated_cluster_snapshot_interval_seconds` によって制御されます。
 
-`storage_volume_name`: スナップショットを保存するために使用されるストレージボリュームを指定します。このパラメータが指定されていない場合、デフォルトのストレージボリュームが使用されます。ストレージボリュームの作成の詳細については、[CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) を参照してください。
+`storage_volume_name`: スナップショットを保存するために使用されるストレージボリュームを指定します。このパラメータが指定されていない場合、組み込みストレージボリューム `builtin_storage_volume` が使用されます。他のストレージボリュームがデフォルトに設定されていても同様です。`builtin_storage_volume` が存在しない場合（例：`enable_load_volume_from_conf` が `false` の場合）、ステートメントは失敗するため、ストレージボリュームを指定する必要があります。ストレージボリュームの作成の詳細については、[CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) を参照してください。
 
-FE がメタデータチェックポイントを完了した後に新しいメタデータイメージを作成するたびに、自動的にスナップショットが作成されます。スナップショットの名前は、`automated_cluster_snapshot_{timestamp}` という形式でシステムによって生成されます。
+前回の自動スナップショットの開始からスナップショット間隔が経過するたびに、Leader FE はメタデータチェックポイントを実行して新しいメタデータイメージを作成し、そこからスナップショットを作成します。スナップショットの名前は、`automated_cluster_snapshot_{timestamp}` という形式でシステムによって生成されます。
 
 メタデータスナップショットは `/{storage_volume_locations}/{service_id}/meta/image/automated_cluster_snapshot_timestamp` に保存されます。データスナップショットは元のデータと同じ場所に保存されます。
 
 機能の有効化時に `INTERVAL` が指定されていない場合、FE の設定項目 `automated_cluster_snapshot_interval_seconds` がスナップショットの自動化サイクルを制御します。デフォルト値は 600 秒（10 分）です。
 
-機能が有効な間、次のステートメントを使用して間隔を変更できます。
+機能が有効な間、次のステートメントを使用して間隔を変更できます（このステートメントと `INTERVAL` 句は v4.0.5 以降でサポートされています）。
 
 ```SQL
 ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL <value> <unit>
 ```
 
-次のステートメントを使用して、機能が有効かどうか、有効な間隔、ストレージボリューム、および前回と次回のスナップショットの時刻を確認できます。
+次のステートメントを使用して、機能が有効かどうか、有効な間隔、ストレージボリューム、および前回と次回のスナップショットの時刻を確認できます（v4.0.6 以降でサポートされています）。
 
 ```SQL
 ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT

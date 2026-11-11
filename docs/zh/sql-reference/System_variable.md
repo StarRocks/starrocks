@@ -42,7 +42,7 @@ StarRocks 支持三种类型（层级）的变量：全局变量、Session 变�
 
 ### 设置变量全局生效或在会话中生效
 
-变量一般可以设置为**全局**生效或**仅当前会话**生效。设置为全局生效后，当前会话和**后续所有新的会话**连接中会使用新设置的值，其他已有的会话还会继续使用之前设置的值；设置为仅当前会话生效时，变量仅对当前会话产生作用。
+变量一般可以设置为**全局**生效或**仅当前会话**生效。设置为全局生效后，当前会话和**后续所有新的会话**连接中会使用新设置的值，其他已有的会话还会继续使用之前设置的值，直到执行 [REFRESH CONNECTIONS](sql-statements/cluster-management/config_vars/REFRESH_CONNECTIONS.md)。下文所列仅支持全局生效的变量除外，其新值会立即对所有会话生效；设置为仅当前会话生效时，变量仅对当前会话产生作用。
 
 通过 `SET <var_name> = xxx;` 语句设置的变量仅在当前会话生效。如：
 
@@ -154,7 +154,7 @@ StarRocks 同时支持在单个语句中设置多个变量，参考如下示例�
 SELECT /*+ SET_VAR
   (
   query_mem_limit = 515396075520,
-  query_timeout=10000000,
+  query_timeout=86400,
   batch_size=4096,
   parallel_fragment_exec_instance_num=32
   )
@@ -1208,7 +1208,7 @@ FROM test;
 ### interactive_timeout
 
 * 描述：用于兼容 MySQL 客户端。无实际作用。
-* 默认值：1024
+* 默认值：3600
 * 单位：秒
 * 类型：Int
 
@@ -1261,7 +1261,7 @@ FROM test;
 
   INSERT 操作涉及查询和导入两个部分，其中查询部分的内存限制由 `query_mem_limit` 设置，导入部分的内存限制由 `load_mem_limit` 设置。
 
-  如果未指定作业属性 `load_mem_limit`，Broker Load 也使用该变量。Stream Load 则使用 HTTP Header `load_mem_limit`。
+  如果未指定作业属性 `load_mem_limit`，Broker Load 也使用该变量。对于 Broker Load，该值同时限制作业的查询部分和导入部分。Stream Load 则使用 HTTP Header `load_mem_limit`。Routine Load 不使用该变量。
 
 * 默认值：0
 * 单位：Byte

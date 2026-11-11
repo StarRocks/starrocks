@@ -47,7 +47,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 #### OVERWRITE
 
-用 StarRocks 表的数据覆盖 Iceberg 表的现有数据。仅覆盖写入了新数据的分区，其他分区保持不变。该行为与变量 `dynamic_overwrite` 无关，该变量对 Iceberg 表不生效。如果查询未返回任何行，则不会覆盖任何数据。
+用 StarRocks 表的数据覆盖 Iceberg 表的现有数据。仅覆盖写入了新数据的分区，其他分区保持不变。该行为与变量 `dynamic_overwrite` 无关，该变量对 Iceberg 表不生效。对于非分区表，所有现有数据都会被替换。如果查询未返回任何行，则不会覆盖任何数据，非分区表也是如此。
 
 #### column_name
 

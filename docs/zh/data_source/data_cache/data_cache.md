@@ -259,7 +259,7 @@ UPDATE be_configs SET VALUE="2T" WHERE NAME="datacache_disk_size";
 
 ### 自动扩缩容
 
-StarRocks 目前支持磁盘容量的自动扩缩容。如果您未在 BE 配置中指定缓存磁盘路径和容量限制，则默认启用自动扩缩容。
+StarRocks 目前支持磁盘容量的自动扩缩容。自动扩缩容默认启用。如果您指定了 `datacache_disk_size`，自动扩缩容仍然启用，并以该值作为缓存容量的上限。
 
 您还可以通过在配置文件中添加以下配置项并重启 BE 或 CN 进程来启用自动扩缩容：
 
@@ -314,9 +314,9 @@ enable_datacache_disk_auto_adjust=true
 - [datacache_mem_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_mem_size)
 - [datacache_disk_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_size)
 - [enable_datacache_disk_auto_adjust](../../administration/configuration/BE_parameters/BE_parameters.md#enable_datacache_disk_auto_adjust)
-- [datacache_disk_high_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_high_level)
-- [datacache_disk_safe_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_safe_level)
-- [datacache_disk_low_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_low_level)
+- [disk_high_level](../../administration/configuration/BE_parameters/BE_parameters.md#disk_high_level)
+- [disk_safe_level](../../administration/configuration/BE_parameters/BE_parameters.md#disk_safe_level)
+- [disk_low_level](../../administration/configuration/BE_parameters/BE_parameters.md#disk_low_level)
 - [datacache_disk_adjust_interval_seconds](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_adjust_interval_seconds)
 - [datacache_disk_idle_seconds_for_expansion](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_idle_seconds_for_expansion)
 - [datacache_min_disk_quota_for_adjustment](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_min_disk_quota_for_adjustment)

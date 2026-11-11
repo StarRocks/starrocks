@@ -41,7 +41,7 @@ SHOW VARIABLES LIKE '%time_zone%';
 
 ### Set variables globally or for a single session
 
-You can set variables to take effect **globally** or **only on the current session**. When set to global, the new value will be used by the current session and all the future sessions, while other existing sessions still use the original value. When set to "current session only", the variable will only take effect on the current session.
+You can set variables to take effect **globally** or **only on the current session**. When set to global, the new value will be used by the current session and all the future sessions, while other existing sessions still use the original value until you run [REFRESH CONNECTIONS](sql-statements/cluster-management/config_vars/REFRESH_CONNECTIONS.md). Variables that only take effect globally (listed below) are an exception: a new value takes effect on all sessions at once. When set to "current session only", the variable will only take effect on the current session.
 
 A variable set by `SET <var_name> = xxx;` only takes effect for the current session. Example:
 
@@ -151,7 +151,7 @@ You can also set multiple variables in a single statement. Example:
 SELECT /*+ SET_VAR
   (
   query_mem_limit = 515396075520,
-  query_timeout=10000000,
+  query_timeout=86400,
   batch_size=4096,
   parallel_fragment_exec_instance_num=32
   )
@@ -1473,7 +1473,7 @@ Specifies the memory limit for the import operation. The default value is 0, mea
 
 For an `INSERT` operation, which involves both query and import, the memory limit for the query part is set by `query_mem_limit` and the memory limit for the import part is set by `load_mem_limit`.
 
-Broker Load also uses this variable unless the `load_mem_limit` job property is specified. Stream Load uses the `load_mem_limit` HTTP header instead.
+Broker Load also uses this variable unless the `load_mem_limit` job property is specified. For Broker Load, this value limits both the query part and the import part of the job. Stream Load uses the `load_mem_limit` HTTP header instead. Routine Load does not use this variable.
 
 ### log_rejected_record_num (v3.1 and later)
 

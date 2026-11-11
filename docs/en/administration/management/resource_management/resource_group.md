@@ -66,9 +66,9 @@ These parameters specify the CPU scheduling weight of a resource group on a sing
 You can use one of the following parameters to set the CPU scheduling weight:
 
 - `cpu_weight`: Directly sets the CPU scheduling weight. Its value range is (0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` is the average number of CPU cores across all BE nodes. The parameter is effective only when it is set to greater than 0.
-- `cpu_weight_percent`: Supported from v4.1. Sets the CPU scheduling weight as a percentage. Its value range is [0, 100]. The parameter is effective only when it is set to greater than 0. If `min_be_cpu_cores * cpu_weight_percent / 100 < 1`, the system returns an error, where `min_be_cpu_cores` is the minimum number of CPU cores across all BE nodes.
+- `cpu_weight_percent`: Supported from v4.1. Sets the CPU scheduling weight as a percentage. Its value range is [0, 100]. The parameter is effective only when it is set to greater than 0.
 
-At runtime, each BE converts `cpu_weight_percent` to the actual `cpu_weight` based on the number of CPU cores on that BE (`be_cpu_cores`): `cpu_weight = be_cpu_cores * cpu_weight_percent / 100`.
+At runtime, each BE converts `cpu_weight_percent` to the actual `cpu_weight` based on the number of CPU cores on that BE (`be_cpu_cores`): `cpu_weight = max(1, be_cpu_cores * cpu_weight_percent / 100)`, where the division is rounded down.
 
 Only one of `cpu_weight`, `cpu_weight_percent`, `exclusive_cpu_cores`, and `exclusive_cpu_percent` can be greater than 0.
 
@@ -190,7 +190,7 @@ There are two system-defined resource groups in each StarRocks instance: `defaul
 
 `default_wg` will be assigned to regular queries that are under the management of resource groups but don't match any classifier. The default resource limits of `default_wg` are as follows:
 
-- `cpu_weight_percent`: 100, that is, the number of CPU cores of the BE. (Before v4.1, `cpu_weight` is set to the number of CPU cores of the BE.)
+- `cpu_weight_percent`: 100, that is, the number of CPU cores of each BE. (If `default_wg` was created before v4.1, it keeps `cpu_weight` set to the average number of CPU cores of the BEs at creation time, even after an upgrade.)
 - `mem_limit`: 100%.
 - `concurrency_limit`: 0.
 - `big_query_cpu_second_limit`: 0.
@@ -203,7 +203,7 @@ There are two system-defined resource groups in each StarRocks instance: `defaul
 
 `default_mv_wg` will be assigned to asynchronous materialized view refresh tasks if no resource group is allocated to the corresponding materialized view in the property `resource_group` during materialized view creation. The default resource limits of `default_mv_wg` are as follows:
 
-- `cpu_weight_percent`: 1. (Before v4.1, `cpu_weight` is set to 1.)
+- `cpu_weight_percent`: 1, which results in a CPU weight of 1 on BEs with fewer than 200 CPU cores. (If `default_mv_wg` was created before v4.1, it keeps `cpu_weight` set to 1.)
 - `mem_limit`: 80%.
 - `concurrency_limit`: 0.
 - `spill_mem_limit_threshold`: 80%.

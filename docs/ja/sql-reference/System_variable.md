@@ -40,7 +40,7 @@ SHOW VARIABLES LIKE '%time_zone%';
 
 ### 変数をグローバルまたは単一のセッションで設定
 
-変数を **グローバルに** または **現在のセッションのみで** 有効に設定できます。グローバルに設定すると、新しい値は現在のセッションとすべての将来のセッションで使用されますが、他の既存のセッションは元の値を使用します。「現在のセッションのみ」に設定すると、変数は現在のセッションでのみ有効になります。
+変数を **グローバルに** または **現在のセッションのみで** 有効に設定できます。グローバルに設定すると、新しい値は現在のセッションとすべての将来のセッションで使用されますが、他の既存のセッションは [REFRESH CONNECTIONS](sql-statements/cluster-management/config_vars/REFRESH_CONNECTIONS.md) を実行するまで元の値を使用します。ただし、以下に示すグローバルにのみ有効な変数は例外で、新しい値はすべてのセッションに即座に反映されます。「現在のセッションのみ」に設定すると、変数は現在のセッションでのみ有効になります。
 
 `SET <var_name> = xxx;` で設定された変数は、現在のセッションでのみ有効です。例：
 
@@ -150,7 +150,7 @@ INTO insert_wiki_edit
 SELECT /*+ SET_VAR
   (
   query_mem_limit = 515396075520,
-  query_timeout=10000000,
+  query_timeout=86400,
   batch_size=4096,
   parallel_fragment_exec_instance_num=32
   )
@@ -1219,7 +1219,7 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 クエリとインポートの両方を含む `INSERT` 操作では、クエリ部分のメモリ制限は `query_mem_limit` によって、インポート部分のメモリ制限は `load_mem_limit` によって設定されます。
 
-Broker Load も、ジョブプロパティ `load_mem_limit` が指定されていない場合はこの変数を使用します。Stream Load は代わりに HTTP ヘッダー `load_mem_limit` を使用します。
+Broker Load も、ジョブプロパティ `load_mem_limit` が指定されていない場合はこの変数を使用します。Broker Load では、この値はジョブのクエリ部分とインポート部分の両方を制限します。Stream Load は代わりに HTTP ヘッダー `load_mem_limit` を使用します。Routine Load はこの変数を使用しません。
 
 ### log_rejected_record_num (v3.1 以降)
 

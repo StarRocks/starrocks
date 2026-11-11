@@ -44,7 +44,7 @@ Appends the data to the Iceberg table.
 
 #### OVERWRITE
 
-Overwrites the existing data of the Iceberg table. Only the partitions that receive new data are overwritten, and the other partitions are kept. This behavior does not depend on the `dynamic_overwrite` variable, which has no effect on Iceberg tables. If the query returns no rows, no data is overwritten.
+Overwrites the existing data of the Iceberg table. Only the partitions that receive new data are overwritten, and the other partitions are kept. This behavior does not depend on the `dynamic_overwrite` variable, which has no effect on Iceberg tables. For an unpartitioned table, all existing data is replaced. If the query returns no rows, no data is overwritten, even for an unpartitioned table.
 
 #### column_name
 

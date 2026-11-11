@@ -243,7 +243,7 @@ Query queue uses BE-level limits for all queries.
 
 `concurrency_limit`, `max_cpu_cores`, and `mem_used_pct_limit` all apply when resource group-level query queue is enabled. `mem_used_pct_limit` additionally requires `enable_query_queue_v2` to be `false`.
 
-### What is the difference between `pipeline_dop`, `exec_mem_limit`, and resource group concurrency limits?
+### What is the difference between `pipeline_dop`, `query_mem_limit`, and resource group concurrency limits?
 
 `pipeline_dop` controls in-query parallelism.
 

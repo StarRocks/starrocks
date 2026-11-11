@@ -295,7 +295,7 @@ AS
 
 - `partition_column`：用于分区的列。形如 `PARTITION BY dt`，表示按照 `dt` 列进行分区。
 - `date_function_expr`：用于分区的日期函数复杂表达式。
-  - `date_trunc` 函数：形如 `PARTITION BY date_trunc("MONTH", dt)`，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`WEEK`、`DAY`、`HOUR` 以及 `MINUTE`。
+  - `date_trunc` 函数：形如 `PARTITION BY date_trunc("MONTH", dt)`，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`WEEK`、`DAY`、`HOUR` 以及 `MINUTE`。其中 `WEEK` 自 v3.3.1 起支持。
   - `str2date` 函数：用于将基表的字符串类型分区键转化为物化视图的分区键所需的日期类型。`PARTITION BY str2date(dt, "%Y%m%d")` 表示 `dt` 列是一个 STRING 类型日期，其日期格式为 `"%Y%m%d"`。`str2date` 函数支持多种日期格式。更多信息，参考[str2date](../../sql-functions/date-time-functions/str2date.md)。自 v3.1.4 起支持。
   - `time_slice` 函数：从 v3.1 开始，您可以进一步使用 time_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如在 SELECT 列表中使用 `time_slice(dt, INTERVAL 7 DAY) AS mv_dt`，并指定 `PARTITION BY date_trunc("MONTH", mv_dt)`，其中 time_slice 的时间粒度必须比 `date_trunc` 的时间粒度更细。PARTITION BY 子句中的 `date_trunc` 不支持嵌套 `time_slice`，因为其第二个参数必须为列。你可以使用它们来指定一个比分区键更细时间粒度的 GROUP BY 列，例如，`GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
 

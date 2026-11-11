@@ -59,21 +59,21 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON
 
 `INTERVAL <value> <unit>`：自动创建快照的时间间隔。`value` 必须为正整数，`unit` 必须为 `SECOND`、`MINUTE`、`HOUR`、`DAY` 或 `WEEK`。如果未指定此参数，则由 FE 配置项 `automated_cluster_snapshot_interval_seconds` 控制时间间隔。
 
-`storage_volume_name`：指定用于存储快照的存储卷。如果未指定此参数，将使用默认存储卷。有关创建存储卷的详细信息，请参阅 [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md)。
+`storage_volume_name`：指定用于存储快照的存储卷。如果未指定此参数，将使用内置存储卷 `builtin_storage_volume`，即使已将其他存储卷设置为默认存储卷。如果 `builtin_storage_volume` 不存在（例如 `enable_load_volume_from_conf` 为 `false`），该语句将失败，您必须指定存储卷。有关创建存储卷的详细信息，请参阅 [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md)。
 
-每次 FE 在完成元数据检查点后创建新的元数据镜像时，它会自动创建一个快照。快照的名称由系统生成，格式为 `automated_cluster_snapshot_{timestamp}`。
+每当距上一次自动快照开始的时间达到快照时间间隔时，Leader FE 会执行一次元数据检查点以创建新的元数据镜像，并基于该镜像创建快照。快照的名称由系统生成，格式为 `automated_cluster_snapshot_{timestamp}`。
 
 元数据快照存储在 `/{storage_volume_locations}/{service_id}/meta/image/automated_cluster_snapshot_timestamp` 下。数据快照存储在与原始数据相同的位置。
 
 如果启用该功能时未指定 `INTERVAL`，则由 FE 配置项 `automated_cluster_snapshot_interval_seconds` 控制快照自动化周期。默认值为 600 秒（10 分钟）。
 
-在功能启用期间，可以使用以下语句修改时间间隔：
+在功能启用期间，可以使用以下语句修改时间间隔（该语句与 `INTERVAL` 子句均自 v4.0.5 起支持）：
 
 ```SQL
 ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET INTERVAL <value> <unit>
 ```
 
-使用以下语句查看该功能是否启用、生效的时间间隔、存储卷，以及上一次和下一次快照的时间：
+使用以下语句查看该功能是否启用、生效的时间间隔、存储卷，以及上一次和下一次快照的时间（自 v4.0.6 起支持）：
 
 ```SQL
 ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT

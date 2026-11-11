@@ -261,7 +261,7 @@ UPDATE be_configs SET VALUE="2T" WHERE NAME="datacache_disk_size";
 
 ### 自動スケーリング
 
-StarRocks は現在、ディスク容量の自動スケーリングをサポートしています。BE 設定でキャッシュディスクパスと容量制限を指定しない場合、自動スケーリングがデフォルトで有効になります。
+StarRocks は現在、ディスク容量の自動スケーリングをサポートしています。自動スケーリングはデフォルトで有効です。`datacache_disk_size` を指定した場合も自動スケーリングは有効のままで、その値をキャッシュ容量の上限として使用します。
 
 設定ファイルに次の設定項目を追加し、BE または CN プロセスを再起動することで、自動スケーリングを有効にすることもできます:
 
@@ -316,9 +316,9 @@ Data Cache は BE ノードのローカルディスクに依存しているた�
 - [datacache_mem_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_mem_size)
 - [datacache_disk_size](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_size)
 - [enable_datacache_disk_auto_adjust](../../administration/configuration/BE_parameters/BE_parameters.md#enable_datacache_disk_auto_adjust)
-- [datacache_disk_high_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_high_level)
-- [datacache_disk_safe_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_safe_level)
-- [datacache_disk_low_level](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_low_level)
+- [disk_high_level](../../administration/configuration/BE_parameters/BE_parameters.md#disk_high_level)
+- [disk_safe_level](../../administration/configuration/BE_parameters/BE_parameters.md#disk_safe_level)
+- [disk_low_level](../../administration/configuration/BE_parameters/BE_parameters.md#disk_low_level)
 - [datacache_disk_adjust_interval_seconds](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_adjust_interval_seconds)
 - [datacache_disk_idle_seconds_for_expansion](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_disk_idle_seconds_for_expansion)
 - [datacache_min_disk_quota_for_adjustment](../../administration/configuration/BE_parameters/BE_parameters.md#datacache_min_disk_quota_for_adjustment)

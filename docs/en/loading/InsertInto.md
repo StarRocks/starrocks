@@ -703,7 +703,7 @@ You can set the following configuration items for INSERT transaction:
 
 | FE configuration                   | Description                                                  |
 | ---------------------------------- | ------------------------------------------------------------ |
-| insert_load_default_timeout_second | Deprecated. This parameter no longer controls the timeout of INSERT transactions. Use the session variable `insert_timeout` instead. |
+| insert_load_default_timeout_second | Deprecated. This parameter does not control the timeout of INSERT transactions. Use the session variable `insert_timeout` instead. |
 
 - **Session variables**
 

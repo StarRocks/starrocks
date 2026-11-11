@@ -10,7 +10,7 @@ ALTER STORAGE VOLUME alters the credential properties, comment, or status (`enab
 > **CAUTION**
 >
 > - Only users with the ALTER privilege on a specific storage volume can perform this operation.
-> - The `TYPE` and `LOCATIONS` of an existing storage volume, and the properties `aws.s3.enable_partitioned_prefix` and `aws.s3.num_partitioned_prefix`, cannot be altered. StarRocks does not block changes to other properties such as the endpoint or region, but you should only alter credential-related properties. If you changed the path-related configuration items, the databases and tables you created before the change become read-only, and you cannot load data into them.
+> - The `TYPE` and `LOCATIONS` of an existing storage volume, and the properties `aws.s3.enable_partitioned_prefix` and `aws.s3.num_partitioned_prefix`, cannot be altered. StarRocks does not block changes to other properties such as the endpoint or region, and the new values apply to all existing databases and tables that use the storage volume. Alter these properties only to access the same storage, for example, to rotate credentials. If the new values point to different storage, the data of the existing databases and tables becomes inaccessible.
 > - When `enabled` is `false`, the corresponding storage volume cannot be referenced.
 > - In shared-data mode, StarRocks performs a storage accessibility check during `ALTER STORAGE VOLUME` only when the `enable_storage_volume_access_check` configuration is enabled (enabled by default). If this check is enabled and the updated credentials or endpoint cannot access remote storage, the statement fails. You can turn off this check by disabling `enable_storage_volume_access_check`.
 

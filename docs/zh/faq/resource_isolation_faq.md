@@ -243,7 +243,7 @@ WITH (
 
 当启用资源组级查询队列时，`concurrency_limit`、`max_cpu_cores` 和 `mem_used_pct_limit` 都适用。其中，`mem_used_pct_limit` 还要求 `enable_query_queue_v2` 为 `false`。
 
-### `pipeline_dop`、`exec_mem_limit` 和资源组并发限制有什么区别？
+### `pipeline_dop`、`query_mem_limit` 和资源组并发限制有什么区别？
 
 `pipeline_dop` 控制查询内的并行度。
 

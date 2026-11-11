@@ -32,8 +32,8 @@ sidebar_position: 40
 | mem_limit | 90% | BE プロセスメモリの上限。パーセンテージ（"80%"）または物理的な制限（"100G"）として設定できます。デフォルト値はサーバーメモリサイズの90%です。BE は `mem_limit` の90%をプロセスメモリトラッカーのメモリ制限として使用するため、デフォルトではサーバーメモリサイズの81%になります。同じサーバーで他のメモリ集約型サービスと一緒に StarRocks をデプロイしたい場合、このパラメータを設定する必要があります。 |
 | disable_storage_page_cache | false | PageCache を無効にするかどうかを制御するブール値。PageCache が有効な場合、StarRocks は最近スキャンされたデータをキャッシュします。PageCache は、類似のクエリが頻繁に繰り返される場合にクエリパフォーマンスを大幅に向上させることができます。`true` は PageCache を無効にすることを示します。この項目は `storage_page_cache_limit` と一緒に使用し、十分なメモリリソースと多くのデータスキャンがあるシナリオでクエリパフォーマンスを加速できます。この項目のデフォルト値は StarRocks v2.4 以降 `true` から `false` に変更されました。 |
 | write_buffer_size | 104857600 |  単一の MemTable の容量制限で、これを超えるとディスクスワイプが行われます。 |
-| load_process_max_memory_limit_bytes | 107374182400 | BE ノード上のすべてのロードプロセスが占有できるメモリリソースの上限。その値は `mem_limit * load_process_max_memory_limit_percent / 100` と `load_process_max_memory_limit_bytes` の小さい方です。このしきい値を超えると、フラッシュとバックプレッシャーがトリガーされます。  |
-| load_process_max_memory_limit_percent | 30 | BE ノード上のすべてのロードプロセスが占有できるメモリリソースの最大パーセンテージ。その値は `mem_limit * load_process_max_memory_limit_percent / 100` と `load_process_max_memory_limit_bytes` の小さい方です。このしきい値を超えると、フラッシュとバックプレッシャーがトリガーされます。 |
+| load_process_max_memory_limit_bytes | 107374182400 | BE ノード上のすべてのロードプロセスが占有できるメモリリソースの上限。その値は `BE プロセスのメモリ上限 * load_process_max_memory_limit_percent / 100`（BE プロセスのメモリ上限は `mem_limit` の 90%）と `load_process_max_memory_limit_bytes` の小さい方です。このしきい値を超えると、フラッシュとバックプレッシャーがトリガーされます。  |
+| load_process_max_memory_limit_percent | 30 | BE ノード上のすべてのロードプロセスが占有できるメモリリソースの最大パーセンテージ。その値は `BE プロセスのメモリ上限 * load_process_max_memory_limit_percent / 100`（BE プロセスのメモリ上限は `mem_limit` の 90%）と `load_process_max_memory_limit_bytes` の小さい方です。このしきい値を超えると、フラッシュとバックプレッシャーがトリガーされます。 |
 | max_compaction_concurrency | -1 | コンパクション（Base Compaction と Cumulative Compaction の両方）の最大同時実行数。値が -1 の場合、同時実行数に制限はありません。 |
 | cumulative_compaction_check_interval_seconds | 1 | コンパクションチェックの間隔|
 

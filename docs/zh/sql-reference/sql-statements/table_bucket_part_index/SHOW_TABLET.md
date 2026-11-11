@@ -97,7 +97,7 @@ SHOW TABLET <tablet_id>
 | CompactionStatus        | 通过 URL 查询 Compaction 状态。    |
 | DiskRootPath            | 副本所在的磁盘。    |
 | MinVersion              | Tablet 保留的最小数据版本。仅适用于存算分离集群。 |
-| Range                   | Tablet 的键范围。仅适用于存算分离集群。 |
+| Range                   | Tablet 的键范围。未使用 Range 分布的表的 Tablet 返回 `null`。仅适用于存算分离集群。自 v4.1 起支持。 |
 
 ### 查看单个 tablet
 
