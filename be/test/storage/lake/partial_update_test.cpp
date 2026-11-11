@@ -555,7 +555,7 @@ TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_seg
     ASSERT_OK(delta_writer->finish_with_txnlog());
     delta_writer->close();
 
-    ConfigResetGuard<int32_t> chunk_size_guard(&config::pk_vector_chunk_size, 4);
+    ConfigResetGuard<int32_t> chunk_size_guard(&config::vector_chunk_size, 4);
     ConfigResetGuard<int64_t> memory_limit_guard(&config::partial_update_memory_limit_per_worker, 80);
     int64_t upt_memory_usage_per_row = 0;
     std::vector<std::pair<uint32_t, uint32_t>> emitted_ranges;
@@ -1025,8 +1025,6 @@ TEST_P(LakePartialUpdateTest, test_dcg_not_found_and_fallback_to_segment) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 == c0 * 7) && (c2 == c0 * 4); }));
 }
 
-<<<<<<< HEAD
-=======
 // A row mode publish reads the rows it replaces from the base segment and from its `.cols` file, and opens both
 // again every time. Their footer reads have to fill the local data cache, and the column reads go through the
 // page cache.
@@ -1130,7 +1128,6 @@ TEST_P(LakePartialUpdateTest, test_dcg_segment_open_fills_data_cache_on_publish)
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c1 == c0 * 7 && c2 == c0 * 5; }));
 }
 
->>>>>>> 586f031 ([Enhancement] Read base rows through the page cache when a PK publish fetches column values (#82863))
 // Explicitly test DCG column file missing: column_file_by_idx returns a path but the file is removed,
 // so new_dcg_segment fails and get_column_values should surface an InternalError during publish.
 TEST_P(LakePartialUpdateTest, test_dcg_segment_missing_files_returns_error) {
