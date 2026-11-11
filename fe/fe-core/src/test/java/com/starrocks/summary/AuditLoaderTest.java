@@ -2482,6 +2482,52 @@ public class AuditLoaderTest {
 
     @Test
     @Timeout(10)
+    public void testAwaitNextCycleReturnsWhenSemaphoreTimesOut() {
+        // Keep the injected clock fixed so only tryAcquire's timeout can end the wait.
+        AuditLoaderMgr mgr = new AuditLoaderMgr(() -> 0L);
+        try {
+            Assertions.assertTimeoutPreemptively(Duration.ofSeconds(1), () -> mgr.awaitNextCycle(20));
+        } finally {
+            mgr.setStop();
+        }
+    }
+
+    @Test
+    @Timeout(10)
+    public void testAwaitNextCyclePreservesInterruptBeforeAndDuringWait() throws Exception {
+        for (boolean beforeWait : List.of(false, true)) {
+            AuditLoaderMgr mgr = new AuditLoaderMgr();
+            AtomicReference<Boolean> interrupted = new AtomicReference<>();
+            Thread waiter = new Thread(() -> {
+                if (beforeWait) {
+                    Thread.currentThread().interrupt();
+                }
+                mgr.awaitNextCycle(5000);
+                interrupted.set(Thread.currentThread().isInterrupted());
+            });
+            try {
+                waiter.start();
+                if (!beforeWait) {
+                    Assertions.assertTimeoutPreemptively(Duration.ofSeconds(1), () -> {
+                        while (waiter.isAlive() && waiter.getState() != Thread.State.TIMED_WAITING) {
+                            Thread.sleep(1);
+                        }
+                        Assertions.assertEquals(Thread.State.TIMED_WAITING, waiter.getState());
+                    });
+                    waiter.interrupt();
+                }
+                waiter.join(1000);
+                Assertions.assertFalse(waiter.isAlive(), "interrupt must end the wait promptly");
+                Assertions.assertEquals(Boolean.TRUE, interrupted.get(), "the interrupt flag must be preserved");
+            } finally {
+                mgr.setStop();
+                waiter.join(1000);
+            }
+        }
+    }
+
+    @Test
+    @Timeout(10)
     public void testStopAndInterruptExitWhileCatalogIsNotReady() throws Exception {
         AtomicReference<ReadyAuditLoader> current = new AtomicReference<>();
         AtomicReference<CountDownLatch> checked = new AtomicReference<>();

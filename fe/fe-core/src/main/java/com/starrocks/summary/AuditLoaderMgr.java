@@ -405,7 +405,7 @@ public class AuditLoaderMgr extends FrontendDaemon {
     void awaitNextCycle(long maxWaitMs) {
         long started = nanoTime.getAsLong();
         try {
-            if (Thread.interrupted()) {
+            if (Thread.currentThread().isInterrupted()) {
                 setStop();
                 return;
             }
@@ -420,10 +420,13 @@ public class AuditLoaderMgr extends FrontendDaemon {
                 if (remaining <= 0) {
                     return;
                 }
-                wakeup.tryAcquire(remaining, TimeUnit.NANOSECONDS);
+                if (!wakeup.tryAcquire(remaining, TimeUnit.NANOSECONDS)) {
+                    return;
+                }
             }
         } catch (InterruptedException e) {
             // An interrupt is a stop signal, not a normal watermark notification.
+            Thread.currentThread().interrupt();
             setStop();
         }
     }
