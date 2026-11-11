@@ -391,7 +391,7 @@ Status HiveDataSource::_init_extended_values() {
     // partition conjuncts are, and skip the whole scan range when they reject the values.
     auto extended_chunk = std::make_shared<Chunk>();
     std::vector<ExprContext*> ctxs;
-    const auto& by_slot = _scanner_ctx.format_scan_context.conjuncts.by_slot;
+    const auto& by_slot = _scanner_ctx.conjuncts.by_slot;
     for (size_t i = 0; i < _scanner_ctx.extended_col_slots.size(); i++) {
         SlotId slot_id = _scanner_ctx.extended_col_slots[i]->id();
         auto it = by_slot.find(slot_id);
@@ -403,7 +403,7 @@ Status HiveDataSource::_init_extended_values() {
         ctxs.insert(ctxs.end(), it->second.begin(), it->second.end());
     }
     if (!ctxs.empty()) {
-        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(ctxs, extended_chunk.get()));
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, extended_chunk.get()));
         if (!extended_chunk->has_rows()) {
             _partition_filter.filter_by_eval = true;
         }
