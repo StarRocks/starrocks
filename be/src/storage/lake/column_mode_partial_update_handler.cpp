@@ -26,6 +26,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/update_manager.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -109,7 +110,7 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
         return Status::InternalError(err_msg);
     }
 
-    std::shared_ptr<Chunk> chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE);
+    std::shared_ptr<Chunk> chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, get_pk_vector_chunk_size());
 
     // alloc first BatchPKsPtr
     auto header_ptr = std::make_shared<BatchPKs>();
@@ -125,7 +126,7 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
             }
         });
         if (segment_iters[idx] != nullptr) {
-            col->reserve(DEFAULT_CHUNK_SIZE);
+            col->reserve(get_pk_vector_chunk_size());
             while (true) {
                 chunk->reset();
                 auto st = segment_iters[idx]->get_next(chunk);
@@ -176,7 +177,8 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
     }
     Schema pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
     OlapReaderStatistics stats;
-    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, true, &stats));
+    ASSIGN_OR_RETURN(auto segment_iters,
+                     _rowset_ptr->get_each_segment_iterator(pkey_schema, true, &stats, get_pk_vector_chunk_size()));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset_ptr->num_segments());
     for (uint32_t i = 0; i < _rowset_ptr->num_segments();) {
         TRACE_COUNTER_INCREMENT("pcu_load_update_state_cnt", 1);
@@ -282,9 +284,10 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(con
     seg_options.tablet_schema = params.tablet_schema;
     // not use delvec loader
     seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(params.metadata);
+    seg_options.chunk_size = get_pk_vector_chunk_size();
     ASSIGN_OR_RETURN(auto seg_iter, segment->new_iterator(schema, seg_options));
     auto source_chunk_ptr = ChunkHelper::new_chunk(schema, segment->num_rows());
-    auto tmp_chunk_ptr = ChunkHelper::new_chunk(schema, 1024);
+    auto tmp_chunk_ptr = ChunkHelper::new_chunk(schema, seg_options.chunk_size);
     while (true) {
         tmp_chunk_ptr->reset();
         auto st = seg_iter->get_next(tmp_chunk_ptr.get());
@@ -331,13 +334,14 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_update_source_by_upt_us");
     // build iterators
     OlapReaderStatistics stats;
-    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats));
+    ASSIGN_OR_RETURN(auto segment_iters,
+                     _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats, get_pk_vector_chunk_size()));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset_ptr->num_segments());
     // handle upt files one by one
     for (const auto& each : upt_id_to_rowid_pairs) {
         const uint32_t upt_id = each.first;
         // 1. get chunk from upt file
-        ChunkUniquePtr upt_chunk = ChunkHelper::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
+        ChunkUniquePtr upt_chunk = ChunkHelper::new_chunk(partial_schema, get_pk_vector_chunk_size());
         DeferOp iter_defer([&]() {
             if (segment_iters[upt_id] != nullptr) {
                 segment_iters[upt_id]->close();

@@ -209,9 +209,10 @@ public:
     // |schema| read schema
     // |update_file_id| the index of update file which we want to get iterator from
     // |stats| used for iterator read stats
+    // |chunk_size| rows per chunk, 0 keeps the SegmentReadOptions default
     // if the segment is empty, return empty iterator
     StatusOr<ChunkIteratorPtr> get_update_file_iterator(const Schema& schema, uint32_t update_file_id,
-                                                        OlapReaderStatistics* stats);
+                                                        OlapReaderStatistics* stats, size_t chunk_size = 0);
 
     // publish rowset to make it visible to read
     void make_visible(Version version);

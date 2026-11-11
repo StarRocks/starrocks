@@ -23,6 +23,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/update_manager.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet_schema.h"
@@ -39,7 +40,7 @@ Status SegmentPKEncodeResult::_load() {
     auto clone_pk_column = pk_column->clone_empty();
     pk_column = std::move(clone_pk_column);
     ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(_pkey_schema, 4096));
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(_pkey_schema, get_pk_vector_chunk_size()));
     auto chunk = chunk_shared_ptr.get();
     if (_iter != nullptr) {
         while (true) {
@@ -272,7 +273,8 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
     Schema pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
 
     if (_segment_iters.empty()) {
-        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, false, &_stats));
+        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, false, &_stats,
+                                                                                get_pk_vector_chunk_size()));
     }
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == _rowset_ptr->num_segments());
     auto& iter = _segment_iters[segment_id];

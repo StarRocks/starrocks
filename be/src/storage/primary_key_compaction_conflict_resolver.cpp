@@ -16,6 +16,7 @@
 
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/primary_index.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rows_mapper.h"
@@ -45,7 +46,7 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                     // only hold pkey, so can use larger chunk size
                     ChunkUniquePtr chunk_shared_ptr;
                     TRY_CATCH_BAD_ALLOC(chunk_shared_ptr =
-                                                ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size));
+                                                ChunkHelper::new_chunk(pkey_schema, get_pk_vector_chunk_size()));
                     auto chunk = chunk_shared_ptr.get();
                     auto col = pk_column->clone();
                     vector<uint32_t> tmp_deletes;

@@ -1490,9 +1490,9 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_source_chunk_limit) {
     }
 
     int64_t version = 1;
-    int64_t old_vector_chunk_size = config::vector_chunk_size;
+    int64_t old_pk_vector_chunk_size = config::pk_vector_chunk_size;
     int64_t old_partial_update_memory_limit_per_worker = config::partial_update_memory_limit_per_worker;
-    config::vector_chunk_size = 10;
+    config::pk_vector_chunk_size = 10;
     config::partial_update_memory_limit_per_worker = 0;
     commit_rowsets(tablet, rowsets, version);
     // check data
@@ -1507,7 +1507,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_source_chunk_limit) {
     for (int i = 10; i < 20; i++) {
         ASSERT_TRUE(RowsetColumnUpdateState::calc_upt_memory_usage_per_row(rowsets[i].get()) > 0);
     }
-    config::vector_chunk_size = old_vector_chunk_size;
+    config::pk_vector_chunk_size = old_pk_vector_chunk_size;
     config::partial_update_memory_limit_per_worker = old_partial_update_memory_limit_per_worker;
     final_check(tablet, rowsets);
 }
@@ -1540,9 +1540,9 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_source_chunk_limit_counts_s
                                                    partial_schemas[i], 1, PartialUpdateMode::COLUMN_UPDATE_MODE, true));
     }
 
-    int64_t old_vector_chunk_size = config::vector_chunk_size;
+    int64_t old_pk_vector_chunk_size = config::pk_vector_chunk_size;
     int64_t old_limit = config::partial_update_memory_limit_per_worker;
-    config::vector_chunk_size = 10;
+    config::pk_vector_chunk_size = 10;
     // Sized so that only the source half of the bound can reach it. The accumulator holds 2 * N
     // rows and the old bound was rows * upt_memory_usage_per_row, which for this schema stays well
     // under this budget for the whole segment -- so before the fix the segment was never split and
@@ -1559,7 +1559,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_source_chunk_limit_counts_s
             return (int16_t)(k1 % 100 + 1) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
         }
     }));
-    config::vector_chunk_size = old_vector_chunk_size;
+    config::pk_vector_chunk_size = old_pk_vector_chunk_size;
     config::partial_update_memory_limit_per_worker = old_limit;
     final_check(tablet, rowsets);
 }

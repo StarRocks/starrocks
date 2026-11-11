@@ -16,6 +16,7 @@
 
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
@@ -80,7 +81,8 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
 
     RowsetReleaseGuard guard(rowset->shared_from_this());
     OlapReaderStatistics stats;
-    auto res = rowset->get_segment_iterators2(pkey_schema, schema, nullptr, 0, &stats);
+    auto res = rowset->get_segment_iterators2(pkey_schema, schema, nullptr, 0, &stats, nullptr,
+                                              get_pk_vector_chunk_size());
     if (!res.ok()) {
         return res.status();
     }
@@ -93,7 +95,7 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
 
     // only hold pkey, so can use larger chunk size
     ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size));
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, get_pk_vector_chunk_size()));
     auto chunk = chunk_shared_ptr.get();
 
     auto itr = itrs[segment_id].get();
