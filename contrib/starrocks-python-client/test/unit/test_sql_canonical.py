@@ -15,8 +15,15 @@
 """Tests for AST-based SQL canonicalization (starrocks.common.sql_canonical)."""
 
 import pytest
+from sqlalchemy import testing
+from sqlalchemy.testing import eq_, fixtures
 
-from starrocks.common.sql_canonical import canonicalize_sql, is_available
+from starrocks.common.sql_canonical import (
+    canonicalize_sql,
+    column_names_in_expressions,
+    is_available,
+    output_column_names,
+)
 
 
 pytestmark = pytest.mark.skipif(not is_available(), reason="sqlglot not installed")
@@ -36,7 +43,7 @@ def _distinct(a: str, b: str, remove_qualifiers: bool = False) -> None:
     assert ca != cb, f"{a!r} and {b!r} both -> {ca!r} (should differ)"
 
 
-class TestSemanticEquivalence:
+class SemanticEquivalenceTest(fixtures.TestBase):
     """Syntactic variation StarRocks introduces must canonicalize to the same string."""
 
     def test_inner_join_keyword_optional(self):
@@ -80,7 +87,7 @@ class TestSemanticEquivalence:
         )
 
 
-class TestRealChangesDetected:
+class RealChangesDetectedTest(fixtures.TestBase):
     """Genuine definition changes must NOT collapse to the same string."""
 
     def test_arithmetic_paren_is_significant(self):
@@ -129,7 +136,7 @@ class TestRealChangesDetected:
         _distinct("select id from t", "select t.id from t", remove_qualifiers=True)
 
 
-class TestFallbackSignalling:
+class FallbackSignallingTest(fixtures.TestBase):
     """canonicalize_sql returns None (caller falls back to regex) on unusable input."""
 
     def test_none_input(self):
@@ -141,3 +148,32 @@ class TestFallbackSignalling:
 
     def test_unparseable_input_returns_none(self):
         assert canonicalize_sql("this (( is not )) valid sql ,,,") is None
+
+
+class OutputColumnNamesTest(fixtures.TestBase):
+    """The names of the columns a view's definition outputs, which tell what a redefined view loses."""
+
+    @testing.combinations(
+        ("columns_and_aliases", "SELECT t.id, `Name`, a + 1 AS b FROM t", ["id", "Name", "b"]),
+        ("a_cte", "WITH x AS (SELECT 1 AS a) SELECT a FROM x", ["a"]),
+        ("a_star", "SELECT * FROM t", None),
+        ("a_table_star", "SELECT t.* FROM t", None),
+        ("an_expression_without_an_alias", "SELECT id, a + 1 FROM t", None),
+        ("a_union", "SELECT a FROM t UNION SELECT b FROM u", None),
+        ("nothing_to_parse", "", None),
+        argnames="sql, names",
+        id_="iaa",
+    )
+    def test_output_column_names(self, sql, names):
+        eq_(output_column_names(sql), names)
+
+    @testing.combinations(
+        ("a_comparison", "dt >= current_date() - interval 3 month", {"dt"}),
+        ("functions_and_quoted_names", "str2date(`D`, '%Y-%m-%d') > '2020-01-01' AND city IN ('a')", {"d", "city"}),
+        ("a_list", "date_trunc('day', dt), city", {"dt", "city"}),
+        ("nothing_to_parse", "", None),
+        argnames="sql, names",
+        id_="iaa",
+    )
+    def test_column_names_in_expressions(self, sql, names):
+        eq_(column_names_in_expressions(sql), names)

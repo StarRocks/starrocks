@@ -60,6 +60,7 @@ class ReflectedState:
     keys: List[Union['ReflectedIndexInfo', 'ReflectedPKInfo', 'ReflectedUKInfo']] = dataclasses.field(default_factory=list)
     fk_constraints: List['ReflectedFKInfo'] = dataclasses.field(default_factory=list)
     ck_constraints: List['ReflectedCKInfo'] = dataclasses.field(default_factory=list)
+    secondary_indexes: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
 
     @property
     def name(self) -> Optional[str]:
@@ -159,6 +160,10 @@ class ReflectedRefreshInfo:
             parts.append(self.type)
         return " ".join(parts)
 
+    def __repr__(self) -> str:
+        """The clause text, so that a migration script that renders the option needs no import."""
+        return repr(str(self))
+
     def __hash__(self) -> int:
         return hash(str(self))
 
@@ -166,6 +171,7 @@ class ReflectedRefreshInfo:
 class MySQLKeyType(Enum):
     PRIMARY = "PRIMARY"
     UNIQUE = "UNIQUE"
+    DUPLICATE = "DUPLICATE"
     FULLTEXT = "FULLTEXT"
     SPATIAL = "SPATIAL"
 

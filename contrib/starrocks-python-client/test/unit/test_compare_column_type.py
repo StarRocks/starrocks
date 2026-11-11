@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
-from sqlalchemy import Column
+from sqlalchemy import REAL, TIMESTAMP, Column, LargeBinary, Text, UnicodeText, testing
+from sqlalchemy.testing import fixtures
 
 from starrocks.alembic.starrocks import StarRocksImpl
 from starrocks.datatype import (
     ARRAY,
     BIGINT,
+    BINARY,
     BITMAP,
     BOOLEAN,
     CHAR,
@@ -32,10 +33,12 @@ from starrocks.datatype import (
     JSON,
     LARGEINT,
     MAP,
+    PERCENTILE,
     SMALLINT,
     STRING,
     STRUCT,
     TINYINT,
+    VARBINARY,
     VARCHAR,
 )
 from starrocks.dialect import StarRocksDialect
@@ -74,160 +77,182 @@ def run_compare(type1, type2):
 # 1. Simple type comparison
 simple_type_params = [
     # 1.1 Completely identical
-    pytest.param(INTEGER(), INTEGER(), False, id="INTEGER vs INTEGER (same)"),
-    pytest.param(VARCHAR(10), VARCHAR(10), False, id="VARCHAR(10) vs VARCHAR(10) (same)"),
-    pytest.param(DECIMAL(10, 2), DECIMAL(10, 2), False, id="DECIMAL(10, 2) vs DECIMAL(10, 2) (same)"),
-    pytest.param(TINYINT(), TINYINT(), False, id="TINYINT vs TINYINT (same)"),
-    pytest.param(SMALLINT(), SMALLINT(), False, id="SMALLINT vs SMALLINT (same)"),
-    pytest.param(LARGEINT(), LARGEINT(), False, id="LARGEINT vs LARGEINT (same)"),
-    pytest.param(FLOAT(), FLOAT(), False, id="FLOAT vs FLOAT (same)"),
-    pytest.param(DOUBLE(), DOUBLE(), False, id="DOUBLE vs DOUBLE (same)"),
-    pytest.param(CHAR(10), CHAR(10), False, id="CHAR(10) vs CHAR(10) (same)"),
-    pytest.param(DATE(), DATE(), False, id="DATE vs DATE (same)"),
-    pytest.param(DATETIME(), DATETIME(), False, id="DATETIME vs DATETIME (same)"),
-    pytest.param(HLL(), HLL(), False, id="HLL vs HLL (same)"),
-    pytest.param(BITMAP(), BITMAP(), False, id="BITMAP vs BITMAP (same)"),
-    # pytest.param(PERCENTILE(), PERCENTILE(), False, id="PERCENTILE vs PERCENTILE (same)"),  # Not supported by compiler yet
-    pytest.param(JSON(), JSON(), False, id="JSON vs JSON (same)"),
+    ("INTEGER vs INTEGER (same)", INTEGER(), INTEGER(), False),
+    ("VARCHAR(10) vs VARCHAR(10) (same)", VARCHAR(10), VARCHAR(10), False),
+    ("DECIMAL(10, 2) vs DECIMAL(10, 2) (same)", DECIMAL(10, 2), DECIMAL(10, 2), False),
+    ("TINYINT vs TINYINT (same)", TINYINT(), TINYINT(), False),
+    ("SMALLINT vs SMALLINT (same)", SMALLINT(), SMALLINT(), False),
+    ("LARGEINT vs LARGEINT (same)", LARGEINT(), LARGEINT(), False),
+    ("FLOAT vs FLOAT (same)", FLOAT(), FLOAT(), False),
+    ("DOUBLE vs DOUBLE (same)", DOUBLE(), DOUBLE(), False),
+    ("CHAR(10) vs CHAR(10) (same)", CHAR(10), CHAR(10), False),
+    ("DATE vs DATE (same)", DATE(), DATE(), False),
+    ("DATETIME vs DATETIME (same)", DATETIME(), DATETIME(), False),
+    ("HLL vs HLL (same)", HLL(), HLL(), False),
+    ("BITMAP vs BITMAP (same)", BITMAP(), BITMAP(), False),
+    ("PERCENTILE vs PERCENTILE (same)", PERCENTILE(), PERCENTILE(), False),
+    ("JSON vs JSON (same)", JSON(), JSON(), False),
 
     # 1.2 Equivalent types (special rules)
-    pytest.param(TINYINT(1), BOOLEAN(), False, id="TINYINT(1) vs BOOLEAN (equivalent)"),
-    pytest.param(BOOLEAN(), TINYINT(1), False, id="BOOLEAN vs TINYINT(1) (equivalent)"),
-    pytest.param(VARCHAR(65533), STRING(), False, id="VARCHAR(65533) vs STRING (equivalent)"),
-    pytest.param(STRING(), VARCHAR(65533), False, id="STRING vs VARCHAR(65533) (equivalent)"),
+    ("TINYINT(1) vs BOOLEAN (equivalent)", TINYINT(1), BOOLEAN(), False),
+    ("BOOLEAN vs TINYINT(1) (equivalent)", BOOLEAN(), TINYINT(1), False),
+    ("VARCHAR(65533) vs STRING (equivalent)", VARCHAR(65533), STRING(), False),
+    ("STRING vs VARCHAR(65533) (equivalent)", STRING(), VARCHAR(65533), False),
 
     # 1.3 Different types
-    pytest.param(INTEGER(), STRING(), True, id="INTEGER vs STRING (different)"),
-    pytest.param(VARCHAR(10), VARCHAR(20), True, id="VARCHAR(10) vs VARCHAR(20) (different)"),
-    pytest.param(DECIMAL(10, 2), DECIMAL(12, 4), True, id="DECIMAL(10,2) vs DECIMAL(12,4) (different)"),
-    pytest.param(INTEGER(), BIGINT(), True, id="INTEGER vs BIGINT (different)"),
-    pytest.param(TINYINT(), SMALLINT(), True, id="TINYINT vs SMALLINT (different)"),
-    pytest.param(FLOAT(), DOUBLE(), True, id="FLOAT vs DOUBLE (different)"),
-    pytest.param(CHAR(10), VARCHAR(10), True, id="CHAR(10) vs VARCHAR(10) (different)"),
-    pytest.param(DATE(), DATETIME(), True, id="DATE vs DATETIME (different)"),
-    pytest.param(HLL(), BITMAP(), True, id="HLL vs BITMAP (different)"),
-    pytest.param(JSON(), STRING(), True, id="JSON vs STRING (different)"),
+    ("INTEGER vs STRING (different)", INTEGER(), STRING(), True),
+    ("VARCHAR(10) vs VARCHAR(20) (different)", VARCHAR(10), VARCHAR(20), True),
+    ("DECIMAL(10,2) vs DECIMAL(12,4) (different)", DECIMAL(10, 2), DECIMAL(12, 4), True),
+    ("INTEGER vs BIGINT (different)", INTEGER(), BIGINT(), True),
+    ("TINYINT vs SMALLINT (different)", TINYINT(), SMALLINT(), True),
+    ("FLOAT vs DOUBLE (different)", FLOAT(), DOUBLE(), True),
+    ("FLOAT vs REAL (same: StarRocks creates REAL as FLOAT)", FLOAT(), REAL(), False),
+    ("DOUBLE vs REAL (different)", DOUBLE(), REAL(), True),
+    ("CHAR(10) vs VARCHAR(10) (different)", CHAR(10), VARCHAR(10), True),
+    ("DATE vs DATETIME (different)", DATE(), DATETIME(), True),
+    ("HLL vs BITMAP (different)", HLL(), BITMAP(), True),
+    ("JSON vs STRING (different)", JSON(), STRING(), True),
 
     # 1.4 Edge cases with parameters
-    pytest.param(TINYINT(2), BOOLEAN(), True, id="TINYINT(2) vs BOOLEAN (not equivalent)"),
-    pytest.param(TINYINT(4), BOOLEAN(), True, id="TINYINT(4) vs BOOLEAN (not equivalent)"),
-    pytest.param(BOOLEAN(), TINYINT(2), True, id="BOOLEAN vs TINYINT(2) (not equivalent)"),
-    pytest.param(BOOLEAN(), TINYINT(4), True, id="BOOLEAN vs TINYINT(4) (not equivalent)"),
-    pytest.param(VARCHAR(65532), STRING(), True, id="VARCHAR(65532) vs STRING (not equivalent)"),
-    pytest.param(DECIMAL(1, 0), DECIMAL(1, 1), True, id="DECIMAL precision/scale difference"),
-    pytest.param(FLOAT(10), FLOAT(20), False, id="FLOAT precision difference (ignored, StarRocks doesn't support FLOAT precision)"),
+    ("TINYINT(2) vs BOOLEAN (not equivalent)", TINYINT(2), BOOLEAN(), True),
+    ("TINYINT(4) vs BOOLEAN (not equivalent)", TINYINT(4), BOOLEAN(), True),
+    ("BOOLEAN vs TINYINT(2) (not equivalent)", BOOLEAN(), TINYINT(2), True),
+    ("BOOLEAN vs TINYINT(4) (not equivalent)", BOOLEAN(), TINYINT(4), True),
+    ("VARCHAR(65532) vs STRING (not equivalent)", VARCHAR(65532), STRING(), True),
+    ("DECIMAL precision/scale difference", DECIMAL(1, 0), DECIMAL(1, 1), True),
+    ("FLOAT precision difference (ignored, StarRocks doesn't support FLOAT precision)", FLOAT(10), FLOAT(20), False),
 
     # 1.5 Integer types with different display_width (should be ignored)
-    pytest.param(TINYINT(1), TINYINT(2), False, id="TINYINT(1) vs TINYINT(2) (display_width ignored)"),
-    pytest.param(TINYINT(2), TINYINT(1), False, id="TINYINT(2) vs TINYINT(1) (display_width ignored)"),
-    pytest.param(TINYINT(), TINYINT(1), False, id="TINYINT() vs TINYINT(1) (display_width ignored)"),
-    pytest.param(TINYINT(1), TINYINT(), False, id="TINYINT(1) vs TINYINT() (display_width ignored)"),
-    pytest.param(TINYINT(5), TINYINT(10), False, id="TINYINT(5) vs TINYINT(10) (display_width ignored)"),
-    pytest.param(SMALLINT(1), SMALLINT(2), False, id="SMALLINT(1) vs SMALLINT(2) (display_width ignored)"),
-    pytest.param(SMALLINT(2), SMALLINT(1), False, id="SMALLINT(2) vs SMALLINT(1) (display_width ignored)"),
-    pytest.param(SMALLINT(), SMALLINT(1), False, id="SMALLINT() vs SMALLINT(1) (display_width ignored)"),
-    pytest.param(SMALLINT(1), SMALLINT(), False, id="SMALLINT(1) vs SMALLINT() (display_width ignored)"),
-    pytest.param(SMALLINT(5), SMALLINT(10), False, id="SMALLINT(5) vs SMALLINT(10) (display_width ignored)"),
-    pytest.param(INTEGER(1), INTEGER(2), False, id="INTEGER(1) vs INTEGER(2) (display_width ignored)"),
-    pytest.param(INTEGER(2), INTEGER(1), False, id="INTEGER(2) vs INTEGER(1) (display_width ignored)"),
-    pytest.param(INTEGER(), INTEGER(1), False, id="INTEGER() vs INTEGER(1) (display_width ignored)"),
-    pytest.param(INTEGER(1), INTEGER(), False, id="INTEGER(1) vs INTEGER() (display_width ignored)"),
-    pytest.param(INTEGER(5), INTEGER(10), False, id="INTEGER(5) vs INTEGER(10) (display_width ignored)"),
-    pytest.param(INTEGER(11), INTEGER(20), False, id="INTEGER(11) vs INTEGER(20) (display_width ignored)"),
-    pytest.param(BIGINT(1), BIGINT(2), False, id="BIGINT(1) vs BIGINT(2) (display_width ignored)"),
-    pytest.param(BIGINT(2), BIGINT(1), False, id="BIGINT(2) vs BIGINT(1) (display_width ignored)"),
-    pytest.param(BIGINT(), BIGINT(1), False, id="BIGINT() vs BIGINT(1) (display_width ignored)"),
-    pytest.param(BIGINT(1), BIGINT(), False, id="BIGINT(1) vs BIGINT() (display_width ignored)"),
-    pytest.param(BIGINT(5), BIGINT(10), False, id="BIGINT(5) vs BIGINT(10) (display_width ignored)"),
-    pytest.param(BIGINT(11), BIGINT(20), False, id="BIGINT(11) vs BIGINT(20) (display_width ignored)"),
+    ("TINYINT(1) vs TINYINT(2) (display_width ignored)", TINYINT(1), TINYINT(2), False),
+    ("TINYINT(2) vs TINYINT(1) (display_width ignored)", TINYINT(2), TINYINT(1), False),
+    ("TINYINT() vs TINYINT(1) (display_width ignored)", TINYINT(), TINYINT(1), False),
+    ("TINYINT(1) vs TINYINT() (display_width ignored)", TINYINT(1), TINYINT(), False),
+    ("TINYINT(5) vs TINYINT(10) (display_width ignored)", TINYINT(5), TINYINT(10), False),
+    ("SMALLINT(1) vs SMALLINT(2) (display_width ignored)", SMALLINT(1), SMALLINT(2), False),
+    ("SMALLINT(2) vs SMALLINT(1) (display_width ignored)", SMALLINT(2), SMALLINT(1), False),
+    ("SMALLINT() vs SMALLINT(1) (display_width ignored)", SMALLINT(), SMALLINT(1), False),
+    ("SMALLINT(1) vs SMALLINT() (display_width ignored)", SMALLINT(1), SMALLINT(), False),
+    ("SMALLINT(5) vs SMALLINT(10) (display_width ignored)", SMALLINT(5), SMALLINT(10), False),
+    ("INTEGER(1) vs INTEGER(2) (display_width ignored)", INTEGER(1), INTEGER(2), False),
+    ("INTEGER(2) vs INTEGER(1) (display_width ignored)", INTEGER(2), INTEGER(1), False),
+    ("INTEGER() vs INTEGER(1) (display_width ignored)", INTEGER(), INTEGER(1), False),
+    ("INTEGER(1) vs INTEGER() (display_width ignored)", INTEGER(1), INTEGER(), False),
+    ("INTEGER(5) vs INTEGER(10) (display_width ignored)", INTEGER(5), INTEGER(10), False),
+    ("INTEGER(11) vs INTEGER(20) (display_width ignored)", INTEGER(11), INTEGER(20), False),
+    ("BIGINT(1) vs BIGINT(2) (display_width ignored)", BIGINT(1), BIGINT(2), False),
+    ("BIGINT(2) vs BIGINT(1) (display_width ignored)", BIGINT(2), BIGINT(1), False),
+    ("BIGINT() vs BIGINT(1) (display_width ignored)", BIGINT(), BIGINT(1), False),
+    ("BIGINT(1) vs BIGINT() (display_width ignored)", BIGINT(1), BIGINT(), False),
+    ("BIGINT(5) vs BIGINT(10) (display_width ignored)", BIGINT(5), BIGINT(10), False),
+    ("BIGINT(11) vs BIGINT(20) (display_width ignored)", BIGINT(11), BIGINT(20), False),
+
+    # 1.6 Binary family: StarRocks stores BINARY(n), VARBINARY(n) and LargeBinary as varbinary(n)
+    ("VARBINARY(10) vs BINARY(10) (same family)", VARBINARY(10), BINARY(10), False),
+    ("VARBINARY(1048576) vs BINARY() (declared length omitted)", VARBINARY(1048576), BINARY(), False),
+    ("VARBINARY(1048576) vs VARBINARY() (declared length omitted)", VARBINARY(1048576), VARBINARY(), False),
+    ("VARBINARY(1048576) vs LargeBinary (declared length omitted)", VARBINARY(1048576), LargeBinary(), False),
+    ("VARBINARY(10) vs BINARY(20) (length differs)", VARBINARY(10), BINARY(20), True),
+    ("VARBINARY(1048576) vs VARBINARY(100) (length differs)", VARBINARY(1048576), VARBINARY(100), True),
+    ("VARBINARY(10) vs STRING (different)", VARBINARY(10), STRING(), True),
+
+    # 1.7 Text and UnicodeText compile to STRING, reported as varchar(65533)
+    ("VARCHAR(65533) vs Text (equivalent)", VARCHAR(65533), Text(), False),
+    ("VARCHAR(65533) vs UnicodeText (equivalent)", VARCHAR(65533), UnicodeText(), False),
+    ("VARCHAR(65532) vs Text (different)", VARCHAR(65532), Text(), True),
+    ("INTEGER vs Text (different)", INTEGER(), Text(), True),
+
+    # 1.8 DATETIME precision and TIMESTAMP are not StarRocks syntax; both are stored as DATETIME
+    ("DATETIME vs DATETIME(fsp=6) (same)", DATETIME(), DATETIME(fsp=6), False),
+    ("DATETIME vs TIMESTAMP (same)", DATETIME(), TIMESTAMP(), False),
 ]
 
 # 2. Complex type vs Simple type
 complex_vs_simple_params = [
-    pytest.param(INTEGER(), ARRAY(INTEGER), True, id="simple INTEGER vs complex ARRAY"),
-    pytest.param(ARRAY(INTEGER), INTEGER(), True, id="complex ARRAY vs simple INTEGER"),
-    pytest.param(MAP(STRING, INTEGER), STRING(), True, id="complex MAP vs simple STRING"),
-    pytest.param(STRUCT(a=INTEGER), INTEGER(), True, id="complex STRUCT vs simple INTEGER"),
+    ("simple INTEGER vs complex ARRAY", INTEGER(), ARRAY(INTEGER), True),
+    ("complex ARRAY vs simple INTEGER", ARRAY(INTEGER), INTEGER(), True),
+    ("complex MAP vs simple STRING", MAP(STRING, INTEGER), STRING(), True),
+    ("complex STRUCT vs simple INTEGER", STRUCT(a=INTEGER), INTEGER(), True),
 ]
 
 # 3. Different complex types
 different_complex_types_params = [
-    pytest.param(ARRAY(INTEGER), MAP(INTEGER, INTEGER), True, id="ARRAY vs MAP"),
-    pytest.param(MAP(STRING, INTEGER), STRUCT(a=STRING, b=INTEGER), True, id="MAP vs STRUCT"),
+    ("ARRAY vs MAP", ARRAY(INTEGER), MAP(INTEGER, INTEGER), True),
+    ("MAP vs STRUCT", MAP(STRING, INTEGER), STRUCT(a=STRING, b=INTEGER), True),
 ]
 
 # 4. ARRAY type comparison
 array_type_params = [
-    pytest.param(ARRAY(INTEGER), ARRAY(INTEGER), False, id="ARRAY<INT> vs ARRAY<INT> (same)"),
-    pytest.param(ARRAY(INTEGER), ARRAY(STRING), True, id="ARRAY<INT> vs ARRAY<STR> (different item type)"),
-    pytest.param(ARRAY(ARRAY(INTEGER)), ARRAY(ARRAY(INTEGER)), False, id="Nested ARRAY (same)"),
-    pytest.param(ARRAY(ARRAY(INTEGER)), ARRAY(ARRAY(STRING)), True, id="Nested ARRAY (different item type)"),
-    pytest.param(ARRAY(MAP(STRING, INTEGER)), ARRAY(MAP(STRING, STRING)), True, id="Nested ARRAY with MAP (deep difference)"),
+    ("ARRAY<INT> vs ARRAY<INT> (same)", ARRAY(INTEGER), ARRAY(INTEGER), False),
+    ("ARRAY<INT> vs ARRAY<STR> (different item type)", ARRAY(INTEGER), ARRAY(STRING), True),
+    ("Nested ARRAY (same)", ARRAY(ARRAY(INTEGER)), ARRAY(ARRAY(INTEGER)), False),
+    ("Nested ARRAY (different item type)", ARRAY(ARRAY(INTEGER)), ARRAY(ARRAY(STRING)), True),
+    ("Nested ARRAY with MAP (deep difference)", ARRAY(MAP(STRING, INTEGER)), ARRAY(MAP(STRING, STRING)), True),
     # Test special equivalence cases in ARRAY item types
-    pytest.param(ARRAY(TINYINT(1)), ARRAY(BOOLEAN), False, id="ARRAY item: TINYINT(1) vs BOOLEAN (equivalent)"),
-    pytest.param(ARRAY(VARCHAR(65533)), ARRAY(STRING), False, id="ARRAY item: VARCHAR(65533) vs STRING (equivalent)"),
-    pytest.param(ARRAY(BOOLEAN), ARRAY(TINYINT(1)), False, id="ARRAY item: BOOLEAN vs TINYINT(1) (equivalent)"),
+    ("ARRAY item: TINYINT(1) vs BOOLEAN (equivalent)", ARRAY(TINYINT(1)), ARRAY(BOOLEAN), False),
+    ("ARRAY item: VARCHAR(65533) vs STRING (equivalent)", ARRAY(VARCHAR(65533)), ARRAY(STRING), False),
+    ("ARRAY item: BOOLEAN vs TINYINT(1) (equivalent)", ARRAY(BOOLEAN), ARRAY(TINYINT(1)), False),
 ]
 
 # 5. MAP type comparison
 map_type_params = [
-    pytest.param(MAP(STRING, INTEGER), MAP(STRING, INTEGER), False, id="MAP<STR,INT> vs MAP<STR,INT> (same)"),
-    pytest.param(MAP(INTEGER, STRING), MAP(INTEGER, STRING), False, id="MAP<INT,STR> vs MAP<INT,STR> (same)"),
-    pytest.param(MAP(STRING, INTEGER), MAP(INTEGER, INTEGER), True, id="MAP (different key type: STR vs INT)"),
-    pytest.param(MAP(INTEGER, STRING), MAP(STRING, STRING), True, id="MAP (different key type: INT vs STR)"),
-    pytest.param(MAP(STRING, INTEGER), MAP(STRING, STRING), True, id="MAP (different value type)"),
-    pytest.param(MAP(STRING, ARRAY(INTEGER)), MAP(STRING, ARRAY(INTEGER)), False, id="Nested MAP with ARRAY (same)"),
-    pytest.param(MAP(STRING, ARRAY(INTEGER)), MAP(STRING, ARRAY(STRING)), True, id="Nested MAP with ARRAY (deep difference)"),
-    pytest.param(MAP(STRING, STRUCT(a=INTEGER)), MAP(STRING, STRUCT(a=STRING)), True, id="Nested MAP with STRUCT (deep difference)"),
+    ("MAP<STR,INT> vs MAP<STR,INT> (same)", MAP(STRING, INTEGER), MAP(STRING, INTEGER), False),
+    ("MAP<INT,STR> vs MAP<INT,STR> (same)", MAP(INTEGER, STRING), MAP(INTEGER, STRING), False),
+    ("MAP (different key type: STR vs INT)", MAP(STRING, INTEGER), MAP(INTEGER, INTEGER), True),
+    ("MAP (different key type: INT vs STR)", MAP(INTEGER, STRING), MAP(STRING, STRING), True),
+    ("MAP (different value type)", MAP(STRING, INTEGER), MAP(STRING, STRING), True),
+    ("Nested MAP with ARRAY (same)", MAP(STRING, ARRAY(INTEGER)), MAP(STRING, ARRAY(INTEGER)), False),
+    ("Nested MAP with ARRAY (deep difference)", MAP(STRING, ARRAY(INTEGER)), MAP(STRING, ARRAY(STRING)), True),
+    ("Nested MAP with STRUCT (deep difference)", MAP(STRING, STRUCT(a=INTEGER)), MAP(STRING, STRUCT(a=STRING)), True),
     # Test special equivalence cases in MAP key/value types
-    pytest.param(MAP(VARCHAR(65533), INTEGER), MAP(STRING(), INTEGER), False, id="MAP key: VARCHAR(65533) vs STRING (equivalent)"),
-    pytest.param(MAP(STRING(), INTEGER), MAP(VARCHAR(65533), INTEGER), False, id="MAP key: STRING vs VARCHAR(65533) (equivalent)"),
-    pytest.param(MAP(STRING, TINYINT(1)), MAP(STRING, BOOLEAN), False, id="MAP value: TINYINT(1) vs BOOLEAN (equivalent)"),
-    pytest.param(MAP(TINYINT(1), STRING), MAP(BOOLEAN, STRING), False, id="MAP key: TINYINT(1) vs BOOLEAN (equivalent)"),
+    ("MAP key: VARCHAR(65533) vs STRING (equivalent)", MAP(VARCHAR(65533), INTEGER), MAP(STRING(), INTEGER), False),
+    ("MAP key: STRING vs VARCHAR(65533) (equivalent)", MAP(STRING(), INTEGER), MAP(VARCHAR(65533), INTEGER), False),
+    ("MAP value: TINYINT(1) vs BOOLEAN (equivalent)", MAP(STRING, TINYINT(1)), MAP(STRING, BOOLEAN), False),
+    ("MAP key: TINYINT(1) vs BOOLEAN (equivalent)", MAP(TINYINT(1), STRING), MAP(BOOLEAN, STRING), False),
 ]
 
 # 6. STRUCT type comparison
 struct_type_params = [
-    pytest.param(STRUCT(a=INTEGER, b=STRING), STRUCT(a=INTEGER, b=STRING), False, id="STRUCT (same)"),
-    pytest.param(STRUCT(a=INTEGER, b=STRING), STRUCT(b=STRING, a=INTEGER), True, id="STRUCT (different field order)"),
-    pytest.param(STRUCT(a=INTEGER), STRUCT(a=INTEGER, b=STRING), True, id="STRUCT (different field count)"),
-    pytest.param(STRUCT(a=INTEGER), STRUCT(c=INTEGER), True, id="STRUCT (different field name)"),
-    pytest.param(STRUCT(a=INTEGER), STRUCT(a=STRING), True, id="STRUCT (different field type)"),
-    pytest.param(STRUCT(a=INTEGER, b=MAP(STRING, INTEGER)), STRUCT(a=INTEGER, b=MAP(STRING, INTEGER)), False, id="Nested STRUCT with MAP (same)"),
-    pytest.param(STRUCT(a=INTEGER, b=MAP(STRING, INTEGER)), STRUCT(a=INTEGER, b=MAP(STRING, STRING)), True, id="Nested STRUCT with MAP (deep difference)"),
+    ("STRUCT (same)", STRUCT(a=INTEGER, b=STRING), STRUCT(a=INTEGER, b=STRING), False),
+    ("STRUCT (different field order)", STRUCT(a=INTEGER, b=STRING), STRUCT(b=STRING, a=INTEGER), True),
+    ("STRUCT (different field count)", STRUCT(a=INTEGER), STRUCT(a=INTEGER, b=STRING), True),
+    ("STRUCT (different field name)", STRUCT(a=INTEGER), STRUCT(c=INTEGER), True),
+    ("STRUCT (different field type)", STRUCT(a=INTEGER), STRUCT(a=STRING), True),
+    ("Nested STRUCT with MAP (same)", STRUCT(a=INTEGER, b=MAP(STRING, INTEGER)), STRUCT(a=INTEGER, b=MAP(STRING, INTEGER)), False),
+    ("Nested STRUCT with MAP (deep difference)", STRUCT(a=INTEGER, b=MAP(STRING, INTEGER)), STRUCT(a=INTEGER, b=MAP(STRING, STRING)), True),
     # Test special equivalence cases in STRUCT fields
-    pytest.param(STRUCT(flag=TINYINT(1)), STRUCT(flag=BOOLEAN), False, id="STRUCT field: TINYINT(1) vs BOOLEAN (equivalent)"),
-    pytest.param(STRUCT(text=VARCHAR(65533)), STRUCT(text=STRING), False, id="STRUCT field: VARCHAR(65533) vs STRING (equivalent)"),
-    pytest.param(STRUCT(flag=BOOLEAN), STRUCT(flag=TINYINT(1)), False, id="STRUCT field: BOOLEAN vs TINYINT(1) (equivalent)"),
+    ("STRUCT field: TINYINT(1) vs BOOLEAN (equivalent)", STRUCT(flag=TINYINT(1)), STRUCT(flag=BOOLEAN), False),
+    ("STRUCT field: VARCHAR(65533) vs STRING (equivalent)", STRUCT(text=VARCHAR(65533)), STRUCT(text=STRING), False),
+    ("STRUCT field: BOOLEAN vs TINYINT(1) (equivalent)", STRUCT(flag=BOOLEAN), STRUCT(flag=TINYINT(1)), False),
 ]
 
 # 7. Complex nested types (ARRAY, MAP, STRUCT combined)
 complex_nested_params = [
-    pytest.param(
+    (
+        "ARRAY<MAP<STR,STRUCT<INT,ARRAY<STR>>>> (same)",
         ARRAY(MAP(STRING, STRUCT(a=INTEGER, b=ARRAY(STRING)))),
         ARRAY(MAP(STRING, STRUCT(a=INTEGER, b=ARRAY(STRING)))),
         False,
-        id="ARRAY<MAP<STR,STRUCT<INT,ARRAY<STR>>>> (same)"
     ),
-    pytest.param(
+    (
+        "ARRAY<MAP<STR,STRUCT<INT,ARRAY<STR>>>> vs ARRAY<MAP<STR,STRUCT<INT,ARRAY<INT>>>> (deep difference)",
         ARRAY(MAP(STRING, STRUCT(a=INTEGER, b=ARRAY(STRING)))),
         ARRAY(MAP(STRING, STRUCT(a=INTEGER, b=ARRAY(INTEGER)))),
         True,
-        id="ARRAY<MAP<STR,STRUCT<INT,ARRAY<STR>>>> vs ARRAY<MAP<STR,STRUCT<INT,ARRAY<INT>>>> (deep difference)"
     ),
-    pytest.param(
+    (
+        "MAP<INT,ARRAY<STRUCT<STR,MAP<STR,INT>>>> (same)",
         MAP(INTEGER, ARRAY(STRUCT(a=STRING, b=MAP(STRING, INTEGER)))),
         MAP(INTEGER, ARRAY(STRUCT(a=STRING, b=MAP(STRING, INTEGER)))),
         False,
-        id="MAP<INT,ARRAY<STRUCT<STR,MAP<STR,INT>>>> (same)"
     ),
-    pytest.param(
+    (
+        "MAP<INT,ARRAY<STRUCT<STR,MAP<STR,INT>>>> vs MAP<INT,ARRAY<STRUCT<STR,MAP<INT,INT>>>> (deep difference)",
         MAP(INTEGER, ARRAY(STRUCT(a=STRING, b=MAP(STRING, INTEGER)))),
         MAP(INTEGER, ARRAY(STRUCT(a=STRING, b=MAP(INTEGER, INTEGER)))),
         True,
-        id="MAP<INT,ARRAY<STRUCT<STR,MAP<STR,INT>>>> vs MAP<INT,ARRAY<STRUCT<STR,MAP<INT,INT>>>> (deep difference)"
     ),
-    pytest.param(
+    (
+        "STRUCT<INT,ARRAY<STR>,MAP<STR,STRUCT<STR,INT>>> (same)",
         STRUCT(
             id=INTEGER,
             tags=ARRAY(STRING),
@@ -239,9 +264,9 @@ complex_nested_params = [
             metadata=MAP(STRING, STRUCT(value=STRING, count=INTEGER))
         ),
         False,
-        id="STRUCT<INT,ARRAY<STR>,MAP<STR,STRUCT<STR,INT>>> (same)"
     ),
-    pytest.param(
+    (
+        "STRUCT<INT,ARRAY<STR>,MAP<STR,STRUCT<STR,INT>>> vs STRUCT<INT,ARRAY<INT>,MAP<STR,STRUCT<STR,INT>>> (deep difference)",
         STRUCT(
             id=INTEGER,
             tags=ARRAY(STRING),
@@ -253,45 +278,58 @@ complex_nested_params = [
             metadata=MAP(STRING, STRUCT(value=STRING, count=INTEGER))
         ),
         True,
-        id="STRUCT<INT,ARRAY<STR>,MAP<STR,STRUCT<STR,INT>>> vs STRUCT<INT,ARRAY<INT>,MAP<STR,STRUCT<STR,INT>>> (deep difference)"
     ),
 ]
 
 
-class TestCompareColumnType:
+class CompareColumnTypeTest(fixtures.TestBase):
     """Test suite for StarRocksImpl.compare_type."""
 
-    @pytest.mark.parametrize("inspector_type, metadata_type, is_different", simple_type_params)
+    @testing.combinations(
+        *simple_type_params, argnames="inspector_type, metadata_type, is_different", id_="iaaa"
+    )
     def test_simple_types(self, inspector_type, metadata_type, is_different):
         """Tests comparison of simple (non-nested) data types."""
         assert run_compare(inspector_type, metadata_type) == is_different
 
-    @pytest.mark.parametrize("inspector_type, metadata_type, is_different", complex_vs_simple_params)
+    @testing.combinations(
+        *complex_vs_simple_params, argnames="inspector_type, metadata_type, is_different", id_="iaaa"
+    )
     def test_complex_vs_simple_types(self, inspector_type, metadata_type, is_different):
         """Tests comparison between complex and simple types."""
         assert run_compare(inspector_type, metadata_type) == is_different
 
-    @pytest.mark.parametrize("inspector_type, metadata_type, is_different", different_complex_types_params)
+    @testing.combinations(
+        *different_complex_types_params, argnames="inspector_type, metadata_type, is_different", id_="iaaa"
+    )
     def test_different_complex_types(self, inspector_type, metadata_type, is_different):
         """Tests comparison between different kinds of complex types (e.g., ARRAY vs MAP)."""
         assert run_compare(inspector_type, metadata_type) == is_different
 
-    @pytest.mark.parametrize("inspector_type, metadata_type, is_different", array_type_params)
+    @testing.combinations(
+        *array_type_params, argnames="inspector_type, metadata_type, is_different", id_="iaaa"
+    )
     def test_array_types(self, inspector_type, metadata_type, is_different):
         """Tests comparison of ARRAY types, including nested scenarios."""
         assert run_compare(inspector_type, metadata_type) == is_different
 
-    @pytest.mark.parametrize("inspector_type, metadata_type, is_different", map_type_params)
+    @testing.combinations(
+        *map_type_params, argnames="inspector_type, metadata_type, is_different", id_="iaaa"
+    )
     def test_map_types(self, inspector_type, metadata_type, is_different):
         """Tests comparison of MAP types, including nested scenarios."""
         assert run_compare(inspector_type, metadata_type) == is_different
 
-    @pytest.mark.parametrize("inspector_type, metadata_type, is_different", struct_type_params)
+    @testing.combinations(
+        *struct_type_params, argnames="inspector_type, metadata_type, is_different", id_="iaaa"
+    )
     def test_struct_types(self, inspector_type, metadata_type, is_different):
         """Tests comparison of STRUCT types, including nested scenarios."""
         assert run_compare(inspector_type, metadata_type) == is_different
 
-    @pytest.mark.parametrize("inspector_type, metadata_type, is_different", complex_nested_params)
+    @testing.combinations(
+        *complex_nested_params, argnames="inspector_type, metadata_type, is_different", id_="iaaa"
+    )
     def test_complex_nested_types(self, inspector_type, metadata_type, is_different):
         """Tests comparison of deeply nested complex types combining ARRAY, MAP, and STRUCT."""
         assert run_compare(inspector_type, metadata_type) == is_different
