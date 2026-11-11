@@ -26,15 +26,7 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
-<<<<<<< HEAD
 #include "common/config.h"
-=======
-#include "common/config_ingest_fwd.h"
-#include "common/config_lake_fwd.h"
-#include "common/config_primary_key_fwd.h"
-#include "common/config_rowset_fwd.h"
-#include "common/config_storage_fwd.h"
->>>>>>> 586f031 ([Enhancement] Read base rows through the page cache when a PK publish fetches column values (#82863))
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"

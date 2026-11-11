@@ -20,6 +20,7 @@
 #include "cache/mem_cache/page_cache.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_memory.h"
+#include "io/shared_buffered_input_stream.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "testutil/assert.h"
@@ -454,8 +455,8 @@ TEST_F(PageIOTest, test_shared_buffered_stream_keys_bundle_slices_like_random_ac
     };
     auto rf_a = open_slice(0, payload_a.size());
     auto rf_b = open_slice(payload_a.size(), payload_b.size());
-    SharedBufferedInputStream coalesced_a(rf_a->stream(), "/bundle_via_shared_buffer", payload_a.size());
-    SharedBufferedInputStream coalesced_b(rf_b->stream(), "/bundle_via_shared_buffer", payload_b.size());
+    io::SharedBufferedInputStream coalesced_a(rf_a->stream(), "/bundle_via_shared_buffer", payload_a.size());
+    io::SharedBufferedInputStream coalesced_b(rf_b->stream(), "/bundle_via_shared_buffer", payload_b.size());
 
     for (int64_t offset : {int64_t{0}, int64_t{512}}) {
         EXPECT_EQ(rf_a->page_cache_key(offset), coalesced_a.page_cache_key(offset));
