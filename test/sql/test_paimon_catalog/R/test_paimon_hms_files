@@ -6,12 +6,9 @@ paimon_hms_test_id=select '${uuid0}';
 hive: create schema ${paimon_hms_prefix}${uuid0};
 -- result:
 -- !result
-hive: create external table ${paimon_hms_prefix}${uuid0}.${paimon_hms_prefix}files (id bigint, amount int, note string)
-stored as inputformat 'org.apache.paimon.hive.mapred.PaimonInputFormat'
-outputformat 'org.apache.paimon.hive.mapred.PaimonOutputFormat'
-location '${paimon_hms_fixture_location}'
-tblproperties ('table_type'='PAIMON', 'external.table.purge'='false');
+shell: python3 sql/test_paimon_catalog/hms_fixture.py register '${hive_metastore_uris}' '${paimon_hms_prefix}${uuid0}' '${paimon_hms_prefix}files' '${paimon_hms_fixture_location}'
 -- result:
+0
 -- !result
 create external catalog ${paimon_hms_prefix}${uuid0}
 properties (
@@ -39,6 +36,6 @@ None
 CLEANUP {
   set catalog default_catalog;
   drop catalog if exists ${paimon_hms_prefix}${paimon_hms_test_id};
-  hive: drop table if exists ${paimon_hms_prefix}${paimon_hms_test_id}.${paimon_hms_prefix}files;
+  shell: python3 sql/test_paimon_catalog/hms_fixture.py drop '${hive_metastore_uris}' '${paimon_hms_prefix}${paimon_hms_test_id}' '${paimon_hms_prefix}files'
   hive: drop schema if exists ${paimon_hms_prefix}${paimon_hms_test_id};
 } END CLEANUP
