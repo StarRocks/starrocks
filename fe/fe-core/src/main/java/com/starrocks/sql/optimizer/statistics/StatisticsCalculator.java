@@ -27,11 +27,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.FunctionSet;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.JDBCTable;
->>>>>>> f606b49f5f1... [BugFix][RB-1306] Decide partition predicate removal per scan from its own statistics (#69246)
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
