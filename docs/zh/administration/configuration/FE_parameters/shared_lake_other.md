@@ -938,6 +938,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 每个 Iceberg 表待处理提交操作的最大数量。当使用提交队列 (`enable_iceberg_commit_queue=true`) 时，这限制了可以为一个表排队的提交操作的数量。当达到限制时，额外的提交操作将在调用者线程中执行（阻塞直到容量可用）。此配置在 FE 启动时读取，并应用于新创建的表执行器。需要重启 FE 才能生效。如果您预期对同一表有许多并发提交，请增加此值。如果此值过低，在高并发期间提交可能会在调用者线程中阻塞。
 - 引入版本: v4.1.0
 
+### `deltalake_checkpoint_meta_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Delta Lake Catalog 共用的一份 Delta Log Checkpoint 文件缓存可以使用的 FE JVM 堆比例，无论有多少个 Catalog，总量都受此上限约束。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `deltalake_checkpoint_meta_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `deltalake_json_meta_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Delta Lake Catalog 共用的一份 Delta Log JSON 文件缓存可以使用的 FE JVM 堆比例。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `deltalake_json_meta_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `iceberg_data_file_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Iceberg Catalog 共用的一份 Data File Manifest 缓存可以使用的 FE JVM 堆比例，无论有多少个 Catalog，总量都受此上限约束。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `iceberg_data_file_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `iceberg_delete_file_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Iceberg Catalog 共用的一份 Delete File Manifest 缓存可以使用的 FE JVM 堆比例；由删除文件构建的删除文件索引另有一份同样大小的缓存。默认值 `0` 表示两者都由每个 Catalog 独占，大小由 Catalog 属性 `iceberg_delete_file_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `iceberg_partition_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Iceberg Catalog 共用的一份分区缓存可以使用的 FE JVM 堆比例。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `iceberg_partition_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
 - 默认值: 86400

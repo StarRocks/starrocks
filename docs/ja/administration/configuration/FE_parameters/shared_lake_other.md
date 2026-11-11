@@ -951,6 +951,51 @@ replication 移行では、`lake_compaction_max_tasks = 0` を維持したまま
 - 説明：Iceberg テーブルごとの保留中のコミット操作の最大数。コミットキュー (`enable_iceberg_commit_queue=true`) を使用する場合、これは単一テーブルのキューに入れられるコミット操作の数を制限します。制限に達すると、追加のコミット操作は呼び出し元のスレッドで実行されます (容量が利用可能になるまでブロックします)。この設定は FE 起動時に読み取られ、新しく作成されたテーブルエクゼキューターに適用されます。有効にするには FE の再起動が必要です。同じテーブルへの同時コミットが多いと予想される場合は、この値を増やしてください。この値が低すぎると、高並行時に呼び出し元スレッドでコミットがブロックされる可能性があります。
 - 導入時期：v4.1.0
 
+### `deltalake_checkpoint_meta_cache_global_memory_ratio`
+
+- デフォルト：0
+- タイプ：Double
+- 単位：-
+- 変更可能：No
+- 説明：すべての Delta Lake カタログで共有する 1 つの Delta Log Checkpoint ファイルキャッシュに使用できる FE JVM ヒープの割合。カタログの数にかかわらず、合計がこの上限に収まります。デフォルトの `0` では、カタログごとに専用のキャッシュを持ち、その上限はカタログプロパティ `deltalake_checkpoint_meta_cache_memory_usage_ratio` で決まります。`0` より大きい場合、そのカタログプロパティは無視されます。有効な値は `0` から `1` までです。変更を反映するには FE の再起動が必要です。
+- 導入時期：-
+
+### `deltalake_json_meta_cache_global_memory_ratio`
+
+- デフォルト：0
+- タイプ：Double
+- 単位：-
+- 変更可能：No
+- 説明：すべての Delta Lake カタログで共有する 1 つの Delta Log JSON ファイルキャッシュに使用できる FE JVM ヒープの割合。デフォルトの `0` では、カタログごとに専用のキャッシュを持ち、その上限はカタログプロパティ `deltalake_json_meta_cache_memory_usage_ratio` で決まります。`0` より大きい場合、そのカタログプロパティは無視されます。有効な値は `0` から `1` までです。変更を反映するには FE の再起動が必要です。
+- 導入時期：-
+
+### `iceberg_data_file_cache_global_memory_ratio`
+
+- デフォルト：0
+- タイプ：Double
+- 単位：-
+- 変更可能：No
+- 説明：すべての Iceberg カタログで共有する 1 つの Data File Manifest キャッシュに使用できる FE JVM ヒープの割合。カタログの数にかかわらず、合計がこの上限に収まります。デフォルトの `0` では、カタログごとに専用のキャッシュを持ち、その上限はカタログプロパティ `iceberg_data_file_cache_memory_usage_ratio` で決まります。`0` より大きい場合、そのカタログプロパティは無視されます。有効な値は `0` から `1` までです。変更を反映するには FE の再起動が必要です。
+- 導入時期：-
+
+### `iceberg_delete_file_cache_global_memory_ratio`
+
+- デフォルト：0
+- タイプ：Double
+- 単位：-
+- 変更可能：No
+- 説明：すべての Iceberg カタログで共有する 1 つの Delete File Manifest キャッシュに使用できる FE JVM ヒープの割合。削除ファイルから構築される削除ファイルインデックスには、同じ割合の別キャッシュが割り当てられます。デフォルトの `0` では、どちらもカタログごとに専用で、その上限はカタログプロパティ `iceberg_delete_file_cache_memory_usage_ratio` で決まります。`0` より大きい場合、そのカタログプロパティは無視されます。有効な値は `0` から `1` までです。変更を反映するには FE の再起動が必要です。
+- 導入時期：-
+
+### `iceberg_partition_cache_global_memory_ratio`
+
+- デフォルト：0
+- タイプ：Double
+- 単位：-
+- 変更可能：No
+- 説明：すべての Iceberg カタログで共有する 1 つのパーティションキャッシュに使用できる FE JVM ヒープの割合。デフォルトの `0` では、カタログごとに専用のキャッシュを持ち、その上限はカタログプロパティ `iceberg_partition_cache_memory_usage_ratio` で決まります。`0` より大きい場合、そのカタログプロパティは無視されます。有効な値は `0` から `1` までです。変更を反映するには FE の再起動が必要です。
+- 導入時期：-
+
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
 - デフォルト：86400
