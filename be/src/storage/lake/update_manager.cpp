@@ -1884,7 +1884,9 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         if (segment_info.bundle_file_offset.has_value()) {
             file_info.bundle_file_offset = segment_info.bundle_file_offset;
         }
-        auto segment = Segment::open(fs, file_info, segment_id, tablet_schema);
+        // Column reads may be served from the page cache, so the footer must fill the data cache itself.
+        const LakeIOOptions segment_io_opts{.fill_data_cache = true};
+        auto segment = Segment::open(fs, file_info, segment_id, tablet_schema, nullptr, nullptr, segment_io_opts);
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open rssid: " << segment_id << " path: " << file_info.path << " : "
                          << segment.status();
@@ -1902,8 +1904,12 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
+        // Publishes of a tablet keep reading the same base rows, from the base segment and from its `.cols`
+        // files alike, so keep their pages in the page cache as a scan does.
+        iter_opts.use_page_cache = !config::disable_storage_page_cache;
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file_with_bundling(opts, file_info));
         iter_opts.read_file = read_file.get();
+        TEST_SYNC_POINT_CALLBACK("UpdateManager::get_column_values:iter_opts", &iter_opts);
 
         GetDeltaColumnContext* dcg_ctx = nullptr;
         if (has_any_dcg && dcg_contexts.count(segment_id) > 0 && !dcg_contexts[segment_id].dcgs.empty()) {
