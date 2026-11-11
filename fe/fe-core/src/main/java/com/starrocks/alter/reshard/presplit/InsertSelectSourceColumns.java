@@ -972,8 +972,10 @@ final class InsertSelectSourceColumns {
     /**
      * Returns {@code true} when the slot's table qualifier refers to the source relation.
      *
-     * <p>An alias in scope shadows the table name (only the alias is a valid qualifier);
-     * otherwise the provided catalog/db parts must match the normalized source name.
+     * <p>An alias in scope shadows the table name (only the alias is a valid table qualifier),
+     * but a slot may still carry the source's db and catalog in front of it: the analyzer
+     * qualifies every column of {@code FROM db.t AS x} as {@code catalog.db.x}. In both cases any
+     * provided catalog/db part must match the normalized source name.
      * Package-private so that Task-2 ({@code SamplingPredicateGate}) can reuse it.
      *
      * @param slotTable           the qualifier from the slot reference
@@ -988,10 +990,7 @@ final class InsertSelectSourceColumns {
         }
         String slotDb = slotTable.getDb();
         String slotCatalog = slotTable.getCatalog();
-        if (sourceAlias != null) {
-            return slotDb == null && slotCatalog == null && slotTbl.equalsIgnoreCase(sourceAlias);
-        }
-        if (!slotTbl.equalsIgnoreCase(normalizedSourceName.getTbl())) {
+        if (!slotTbl.equalsIgnoreCase(sourceAlias != null ? sourceAlias : normalizedSourceName.getTbl())) {
             return false;
         }
         if (slotDb != null && !slotDb.equalsIgnoreCase(normalizedSourceName.getDb())) {

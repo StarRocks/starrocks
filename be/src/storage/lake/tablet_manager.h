@@ -29,6 +29,7 @@
 #include "gen_cpp/Types_types.h" // for PUniqueId
 #include "gutil/macros.h"
 #include "platform/store_path.h"
+#include "storage/lake/metacache_key.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet_metadata.h"
@@ -69,12 +70,14 @@ class TabletManager {
 public:
     // Does NOT take the ownership of |location_provider| and |location_provider| must outlive
     // this TabletManager.
-    // |cache_capacity| is the max number of bytes can be used by the
-    // metadata cache.
+    // |tablet_metadata_cache_capacity| and |segment_metadata_cache_capacity| are the max number of
+    // bytes that can be used by the two LRU caches of the metacache, see Metacache.
     explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, PrimaryKeyManager* primary_key_mgr,
-                           int64_t cache_capacity, const StorePathRegistry* store_path_registry = nullptr);
+                           int64_t tablet_metadata_cache_capacity, int64_t segment_metadata_cache_capacity,
+                           const StorePathRegistry* store_path_registry = nullptr);
 
-    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity,
+    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t tablet_metadata_cache_capacity,
+                           int64_t segment_metadata_cache_capacity,
                            const StorePathRegistry* store_path_registry = nullptr);
 
     ~TabletManager();
@@ -167,6 +170,21 @@ public:
             int64_t tablet_id, int64_t version, const CacheOptions& cache_opts, int64_t expected_gtid = 0,
             const std::shared_ptr<FileSystem>& fs = nullptr,
             InitialMetadataOrder initial_order = InitialMetadataOrder::kPerTabletFirst);
+
+    // Same as the overload above, except that every storage access -- resolving the partition's
+    // physical directory, reading the tablet's own object, the bundle, or the shared version-1 object --
+    // goes through |anchor_tablet_id| instead of |tablet_id|. The metacache is still keyed by
+    // |tablet_id|'s own metadata path, so this read hits and fills the same entries as the overload above.
+    //
+    // On a node that handles a whole partition on behalf of every tablet in it (the file-bundling vacuum
+    // and drop-tablet aggregators), most tablets are not held locally, and resolving one through its own
+    // shard costs a StarMgr GetShard RPC each time. Passing a locally held tablet of the same partition,
+    // e.g. one returned by pick_local_anchor_tablet_id(), resolves everything from the local shard cache.
+    //
+    // Precondition: |anchor_tablet_id| belongs to the same physical partition as |tablet_id|.
+    StatusOr<TabletMetadataPtr> get_tablet_metadata_via_anchor(int64_t tablet_id, int64_t version,
+                                                               int64_t anchor_tablet_id,
+                                                               const CacheOptions& cache_opts);
 
     // Reads the tablet metadata named by |path|, but resolves it through this TabletManager's own
     // LocationProvider: the tablet id comes from the filename, and a bundled partition is then read via
@@ -267,6 +285,8 @@ public:
     // NOTICE : latest_cached_tablet_metadata may contain a tablet meta that
     // is either older or newer than the FE visible version.
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
+
+    void erase_latest_cached_tablet_metadata(int64_t tablet_id);
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id);
 
@@ -371,6 +391,15 @@ public:
 
     std::string bundle_tablet_metadata_location(int64_t tablet_id, int64_t version) const;
 
+    // Keeps |metadata|, one tablet's publish result under file bundling that the aggregator may never put into
+    // the version's bundle, in this node's local disk cache (the datacache) and nowhere else: a retry of the
+    // publish on this node reads it back. Never written to object storage and never deleted; the cache evicts it
+    // like any other entry. NotSupported when the local disk cache is not enabled.
+    Status put_partial_tablet_metadata(const TabletMetadataPtr& metadata);
+
+    // Reads what put_partial_tablet_metadata() kept on this node. NotFound when there is none.
+    StatusOr<TabletMetadataPtr> get_partial_tablet_metadata(int64_t tablet_id, int64_t version, int64_t expected_gtid);
+
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) const;
@@ -403,8 +432,6 @@ public:
 
     CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
 
-    void update_metacache_limit(size_t limit);
-
     TableSchemaService* table_schema_service() { return _table_schema_service.get(); }
 
     // The return value will never be null.
@@ -423,10 +450,10 @@ public:
     // only for TEST purpose
     void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
 
-    // Update the cache size of the segment with the given key. The update is applied only when the
-    // key still maps to `segment`, so that a cache entry replaced by a different instance in the
-    // meantime is not charged with this segment's memory cost.
-    void update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment);
+    // Update the cache size of the segment identified by the file, including its bundle offset.
+    // Apply only when the key still maps to `segment`, so a cache entry replaced by another
+    // instance in the meantime is not charged with this segment's memory cost.
+    void update_segment_cache_size(const FileInfo& file, size_t mem_cost, const Segment* segment);
 
     // If |stats| is not null and the segment footer is read, the read is added to it.
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
@@ -459,9 +486,9 @@ public:
     TabletSchemaPtr get_cached_schema(int64_t schema_id);
 
 private:
-    static std::string global_schema_cache_key(int64_t index_id);
-    static std::string tablet_schema_cache_key(int64_t tablet_id);
-    static std::string tablet_latest_metadata_cache_key(int64_t tablet_id);
+    static MetacacheKey global_schema_cache_key(int64_t index_id);
+    static MetacacheKey tablet_schema_cache_key(int64_t tablet_id);
+    static MetacacheKey tablet_latest_metadata_cache_key(int64_t tablet_id);
 
     StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path);
     StatusOr<TabletSchemaPtr> get_tablet_schema_by_id(int64_t tablet_id, int64_t schema_id);
@@ -480,6 +507,22 @@ private:
     StatusOr<TabletMetadataPtr> load_shared_initial_metadata(const std::string& sibling_path, int64_t tablet_id,
                                                              const CacheOptions& cache_opts, int64_t expected_gtid,
                                                              const std::shared_ptr<FileSystem>& fs);
+    // Shared body of the get_tablet_metadata() overloads. |path| names the metadata to read and keys
+    // the metacache; storage is resolved through |anchor_tablet_id|, which every public overload
+    // except get_tablet_metadata_via_anchor() sets to the tablet id parsed from |path|.
+    StatusOr<TabletMetadataPtr> get_tablet_metadata_impl(const std::string& path, int64_t anchor_tablet_id,
+                                                         const CacheOptions& cache_opts, int64_t expected_gtid,
+                                                         const std::shared_ptr<FileSystem>& fs,
+                                                         InitialMetadataOrder initial_order);
+    // Shared body of the get_single_tablet_metadata() overloads. The metacache is keyed by |tablet_id|;
+    // the bundle is read through |anchor_tablet_id|.
+    StatusOr<TabletMetadataPtr> get_single_tablet_metadata_impl(int64_t tablet_id, int64_t version,
+                                                                int64_t anchor_tablet_id,
+                                                                const CacheOptions& cache_opts, int64_t expected_gtid,
+                                                                const std::shared_ptr<FileSystem>& fs);
+    // Returns |metadata| with its id set to |tablet_id|, copying only when the id differs: the PB may be
+    // shared through the metacache.
+    static TabletMetadataPtr stamp_tablet_id(TabletMetadataPtr metadata, int64_t tablet_id);
     StatusOr<TabletMetadataPtr> construct_initial_metadata(int64_t tablet_id);
     // Build version 1 TabletMetadataPB from a FE response. Exposed for unit tests.
     StatusOr<TabletMetadataPtr> build_initial_metadata(int64_t tablet_id, const TGetTabletMetadataResponse& resp);

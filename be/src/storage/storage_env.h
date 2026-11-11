@@ -51,7 +51,8 @@ struct StorageEnvOptions {
     MemTracker* update_mem_tracker = nullptr;
     int64_t process_mem_limit = 0;
     MemTracker* vector_index_mem_tracker = nullptr;
-    int64_t lake_metadata_cache_limit = 0;
+    int64_t lake_tablet_metadata_cache_limit = 0;
+    int64_t lake_segment_metadata_cache_limit = 0;
 };
 
 // Process-scoped storage resource owner. Keep business logic dependencies

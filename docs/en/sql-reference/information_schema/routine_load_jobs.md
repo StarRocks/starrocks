@@ -7,6 +7,8 @@ description: "routine_load_jobs provides information about routine load jobs."
 
 `routine_load_jobs` provides information about routine load jobs.
 
+`routine_load_jobs` shows a routine load job to users who hold at least one privilege on its target table, or the OPERATE privilege. Unless you hold the SELECT privilege on the target table, `JOB_PROPERTIES`, `DATA_SOURCE_PROPERTIES`, `CUSTOM_PROPERTIES`, `ERROR_LOG_URLS`, `TRACKING_SQL`, and `OTHER_MSG` are NULL, and `REASONS_OF_STATE_CHANGED` keeps only the error code. The `root` user can see all routine load jobs in full. A routine load job whose target table has been dropped is shown in full only to the `root` user, and with these fields hidden to users with the OPERATE privilege.
+
 The following fields are provided in `routine_load_jobs`:
 
 | **Field**                | **Description**                                              |

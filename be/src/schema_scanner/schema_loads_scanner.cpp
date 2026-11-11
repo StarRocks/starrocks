@@ -294,6 +294,9 @@ Status SchemaLoadsScanner::start(RuntimeState* state) {
     if (_param->job_id != -1) {
         _load_params.__set_job_id(_param->job_id);
     }
+    if (nullptr != _param->current_user_ident) {
+        _load_params.__set_current_user_ident(*(_param->current_user_ident));
+    }
 
     // init schema scanner state
     RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
@@ -498,7 +501,11 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 22: {
-                // properties
+                // properties, left out of a job whose rows the user may not read
+                if (!info.__isset.properties) {
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
+                    break;
+                }
                 Slice properties = Slice(info.properties);
                 JsonValue json_value;
                 JsonValue* json_value_ptr = &json_value;

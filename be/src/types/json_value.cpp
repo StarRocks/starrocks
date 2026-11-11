@@ -21,6 +21,7 @@
 
 #include "base/status.h"
 #include "base/statusor.h"
+#include "common/config_json_flat_fwd.h"
 #include "types/json_value_converter.h"
 #include "velocypack/ValueType.h"
 #include "velocypack/vpack.h"
@@ -88,6 +89,19 @@ static bool is_json_start_char(char ch) {
     return ch == '{' || ch == '[' || ch == '"';
 }
 
+int JsonValue::max_nesting_depth() {
+    // A positive config value sets the cap; 0 or below falls back to the built-in default so the
+    // guard cannot be silently disabled (e.g. before config::init() runs the value is still 0).
+    int cap = config::json_max_parse_nesting_depth;
+    return cap > 0 ? cap : 1024;
+}
+
+vpack::Options JsonValue::parse_options_from_config() {
+    vpack::Options options = vpack::Options::Defaults;
+    options.maxNestingDepth = static_cast<unsigned int>(max_nesting_depth());
+    return options;
+}
+
 StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
     if (src.size > kJSONLengthLimit) {
         return Status::NotSupported("JSON string exceed maximum length 16MB");
@@ -104,7 +118,8 @@ StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
             // error-code API: reporting it by throwing costs a full C++ unwind per row and serializes all
             // threads on the unwinder lock.
             vpack::Exception error(vpack::Exception::InternalError);
-            auto b = vpack::Parser::tryFromJson(src.get_data(), src.get_size(), &error);
+            vpack::Options options = parse_options_from_config();
+            auto b = vpack::Parser::tryFromJson(src.get_data(), src.get_size(), &error, &options);
             if (b == nullptr) {
                 return fromVPackException(error);
             }

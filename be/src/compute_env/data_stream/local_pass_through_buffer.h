@@ -26,6 +26,8 @@
 
 namespace starrocks {
 
+class MemTracker;
+
 // To manage pass through chunks between sink/sources in the same process.
 using ChunkUniquePtrVector = std::vector<std::pair<ChunkUniquePtr, int32_t>>;
 class PassThroughChannel;
@@ -49,9 +51,10 @@ public:
             return hash;
         }
     };
-    PassThroughChunkBuffer(const TUniqueId& query_id);
+    PassThroughChunkBuffer(const TUniqueId& query_id, std::shared_ptr<MemTracker> query_mem_tracker);
     ~PassThroughChunkBuffer();
     PassThroughChannelPtr get_or_create_channel(const Key& key);
+    MemTracker* query_mem_tracker() const { return _query_mem_tracker.get(); }
     int ref() { return ++_ref_count; }
     int unref() {
         _ref_count -= 1;
@@ -61,6 +64,9 @@ public:
 private:
     std::mutex _mutex;
     const TUniqueId _query_id;
+    // The query tracker shared by every fragment instance of the query on this BE, handed to each
+    // channel when it is created. Null when the query has none.
+    const std::shared_ptr<MemTracker> _query_mem_tracker;
     std::unordered_map<Key, PassThroughChannelPtr, KeyHash> _key_to_channel;
     int _ref_count{1};
 };
@@ -96,7 +102,11 @@ public:
     // We don't care open/close by which fragment instance,
     // just to want to make sure that fragment instances in a query can
     // share the same `PassThroughChunkBuffer*` struct
-    void open_fragment_instance(const TUniqueId& query_id);
+    // `query_mem_tracker` is the query tracker shared by the sender and receiver instances (they always
+    // belong to the same query on this BE). Buffered chunks are parked on it while they wait in a
+    // channel, so they stay inside the query, resource group and process budgets. Without it they are
+    // parked on the process tracker. Every fragment instance of a query must pass the same tracker.
+    void open_fragment_instance(const TUniqueId& query_id, std::shared_ptr<MemTracker> query_mem_tracker);
     void close_fragment_instance(const TUniqueId& query_id);
     PassThroughChunkBuffer* get(const TUniqueId& query_id);
     void close();

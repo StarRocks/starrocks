@@ -60,6 +60,33 @@ public class SPMPlanBindTest extends PlanTestBase {
     }
 
     @Test
+    public void testSPMComparisonArgumentTypes() {
+        String geography = "ST_GeogFromText('POINT (1 2)')";
+        String geometry = "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')";
+        for (String function : List.of(SPMFunctions.CONST_RANGE_FUNC, SPMFunctions.CONST_ENUM_FUNC)) {
+            String sql = "select v1 from t0 where " + function + "(1, %s, %s) is null";
+            String error = "spm function " + function + " does not support type ";
+            CreateBaselinePlanStmt geogStmt = createBaselinePlanStmt(sql.formatted(geography, geography));
+            CreateBaselinePlanStmt geomStmt = createBaselinePlanStmt(sql.formatted(geometry, geometry));
+            Assertions.assertEquals(error + "GEOGRAPHY", Assertions.assertThrows(SemanticException.class,
+                    () -> new SPMPlanBuilder(connectContext, geogStmt).execute()).getDetailMsg());
+            Assertions.assertEquals(error + "GEOMETRY", Assertions.assertThrows(SemanticException.class,
+                    () -> new SPMPlanBuilder(connectContext, geomStmt).execute()).getDetailMsg());
+
+            for (String value : List.of("PARSE_JSON('1')", "TO_BITMAP(1)", "HLL_HASH('a')")) {
+                CreateBaselinePlanStmt stmt = createBaselinePlanStmt(sql.formatted(value, value));
+                Assertions.assertNotNull(new SPMPlanBuilder(connectContext, stmt).execute());
+            }
+
+            CreateBaselinePlanStmt intStmt = createBaselinePlanStmt(
+                    "select v1 from t0 where v1 = " + function + "(1, cast(1 as int), cast(3 as int))");
+            SPMPlanBuilder builder = new SPMPlanBuilder(connectContext, intStmt);
+            builder.execute();
+            assertContains(builder.getPlanStmtSQL(), function + "(");
+        }
+    }
+
+    @Test
     public void testAIFunctionIsNotSupported() {
         String oldEndpoint = AIProviderTestUtil.chatProperty("endpoint");
         String oldModel = AIProviderTestUtil.chatProperty("model");

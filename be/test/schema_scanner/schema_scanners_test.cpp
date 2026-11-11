@@ -163,7 +163,7 @@ TEST(SchemaScannersTest, DescriptorOnlyScannersExposeStableSchemas) {
 }
 
 TEST(SchemaScannersTest, ColumnFillerHandlesNullableAndNonNullableColumns) {
-    auto nullable_bigint = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    auto nullable_bigint = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     int64_t bigint_value = 42;
     fill_column_with_slot<TYPE_BIGINT>(nullable_bigint.get(), &bigint_value);
     ASSERT_EQ(1, nullable_bigint->size());

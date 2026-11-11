@@ -64,8 +64,9 @@ bool LikePredicate::hs_compile_database(const std::string& pattern, LikePredicat
     }
 
     // Validate that a scratch space can be allocated for this database; if not, fall back to
-    // RE2 (matching the previous behavior). The real per-thread scratch is allocated later, in
-    // the THREAD_LOCAL prepare. The probe scratch is freed immediately.
+    // RE2 (matching the previous behavior). The real per-thread scratch is allocated lazily on
+    // first eval, via the FunctionContext thread-state registry (see _predicate_const_regex).
+    // The probe scratch is freed immediately.
     hs_scratch_t* probe_scratch = nullptr;
     if (hs_alloc_scratch(database, &probe_scratch) != HS_SUCCESS) {
         std::stringstream error;

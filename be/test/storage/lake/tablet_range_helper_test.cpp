@@ -29,6 +29,7 @@
 #include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/primary_key_encoder.h"
+#include "testutil/column_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::lake {
@@ -177,11 +178,10 @@ TEST(TabletRangeHelperTest, test_create_sst_seek_range_from) {
     TabletRangePB range_pb;
     auto lower = range_pb.mutable_lower_bound();
     auto v0 = lower->add_values();
-    TypeDescriptor type_int(TYPE_INT);
-    v0->mutable_type()->CopyFrom(type_int.to_protobuf());
+    v0->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v0->set_value("1");
     auto v1 = lower->add_values();
-    v1->mutable_type()->CopyFrom(type_int.to_protobuf());
+    v1->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v1->set_value("2");
     range_pb.set_lower_bound_included(true);
 
@@ -311,8 +311,7 @@ TEST(TabletRangeHelperTest, test_non_nullable_key_null_fills_type_min) {
     TabletRangePB range_pb;
     auto lower = range_pb.mutable_lower_bound();
     auto v0 = lower->add_values();
-    TypeDescriptor type_int(TYPE_INT);
-    v0->mutable_type()->CopyFrom(type_int.to_protobuf());
+    v0->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v0->set_variant_type(VariantTypePB::NULL_VALUE);
     range_pb.set_lower_bound_included(true);
 
@@ -340,8 +339,7 @@ TEST(TabletRangeHelperTest, test_create_sst_seek_range_requires_v2_encoding) {
     TabletRangePB range_pb;
     auto lower = range_pb.mutable_lower_bound();
     auto v0 = lower->add_values();
-    TypeDescriptor type_int(TYPE_INT);
-    v0->mutable_type()->CopyFrom(type_int.to_protobuf());
+    v0->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v0->set_value("1");
     range_pb.set_lower_bound_included(true);
 
@@ -817,29 +815,27 @@ TEST(TabletRangeHelperTest, test_sst_seek_range_null_as_min_on_non_nullable_pk) 
     schema_pb.add_sort_key_idxes(1);
     auto tablet_schema = TabletSchema::create(schema_pb);
 
-    TypeDescriptor type_int(TYPE_INT);
-
     // Build range [(100, NULL), (200, NULL)) where NULL represents MIN from FE.
     TabletRangePB range_pb;
     {
         auto* lower = range_pb.mutable_lower_bound();
         auto* v0 = lower->add_values();
-        v0->mutable_type()->CopyFrom(type_int.to_protobuf());
+        v0->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
         v0->set_value("100");
         v0->set_variant_type(VariantTypePB::NORMAL_VALUE);
         auto* v1 = lower->add_values();
-        v1->mutable_type()->CopyFrom(type_int.to_protobuf());
+        v1->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
         v1->set_variant_type(VariantTypePB::NULL_VALUE);
         range_pb.set_lower_bound_included(true);
     }
     {
         auto* upper = range_pb.mutable_upper_bound();
         auto* v0 = upper->add_values();
-        v0->mutable_type()->CopyFrom(type_int.to_protobuf());
+        v0->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
         v0->set_value("200");
         v0->set_variant_type(VariantTypePB::NORMAL_VALUE);
         auto* v1 = upper->add_values();
-        v1->mutable_type()->CopyFrom(type_int.to_protobuf());
+        v1->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
         v1->set_variant_type(VariantTypePB::NULL_VALUE);
         range_pb.set_upper_bound_included(false);
     }
@@ -853,11 +849,9 @@ TEST(TabletRangeHelperTest, test_sst_seek_range_null_as_min_on_non_nullable_pk) 
 
     auto encode_key = [&](int32_t v1, int32_t v2) {
         auto chunk = std::make_unique<Chunk>();
-        auto col1 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
-        col1->append_datum(Datum(v1));
+        auto col1 = ColumnTestHelper::build_column<int32_t>({v1});
         chunk->append_column(std::move(col1), (SlotId)0);
-        auto col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
-        col2->append_datum(Datum(v2));
+        auto col2 = ColumnTestHelper::build_column<int32_t>({v2});
         chunk->append_column(std::move(col2), (SlotId)1);
 
         MutableColumnPtr pk_column;
@@ -936,8 +930,7 @@ TEST(TabletRangeHelperTest, test_sst_seek_range_null_as_min_unsupported_type) {
     TabletRangePB range_pb;
     auto* lower = range_pb.mutable_lower_bound();
     auto* v0 = lower->add_values();
-    TypeDescriptor type_desc(TYPE_FLOAT);
-    v0->mutable_type()->CopyFrom(type_desc.to_protobuf());
+    v0->mutable_type()->CopyFrom(TYPE_FLOAT_DESC.to_protobuf());
     v0->set_variant_type(VariantTypePB::NULL_VALUE);
     range_pb.set_lower_bound_included(true);
 
@@ -1213,8 +1206,7 @@ static TabletSchemaSPtr make_range_schema(int num_sort_keys, int64_t schema_id =
 
 static void add_int_val(TuplePB* t, int32_t v) {
     auto* pb = t->add_values();
-    TypeDescriptor td(TYPE_INT);
-    pb->mutable_type()->CopyFrom(td.to_protobuf());
+    pb->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     pb->set_value(std::to_string(v));
     pb->set_variant_type(VariantTypePB::NORMAL_VALUE);
 }
@@ -1390,10 +1382,10 @@ TEST(TabletRangeHelperTest, validate_range_transition_accepts_reencoded_prefix) 
     old_schema->to_schema_pb(old_meta.mutable_schema());
     auto* old_range = old_meta.mutable_range();
     auto* lo = old_range->mutable_lower_bound()->add_values();
-    lo->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    lo->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     lo->set_value("1"); // variant_type intentionally left unset (defaults to NORMAL_VALUE)
     auto* hi = old_range->mutable_upper_bound()->add_values();
-    hi->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    hi->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     hi->set_value("2");
     old_range->set_lower_bound_included(true);
     old_range->set_upper_bound_included(false);

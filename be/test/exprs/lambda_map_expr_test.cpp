@@ -378,8 +378,7 @@ TEST_F(MapApplyExprTest, test_map_varchar_int) {
     type_map_varchar_int.children[0].len = 10;
     type_map_varchar_int.children[1].type = LogicalType::TYPE_INT;
 
-    TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
-    type_varchar.len = 10;
+    TypeDescriptor type_varchar = TypeDescriptor::create_varchar_type(10);
     create_lambda_expr(type_map_varchar_int);
 
     MutableColumnPtr column = ColumnHelper::create_column(type_map_varchar_int, false);

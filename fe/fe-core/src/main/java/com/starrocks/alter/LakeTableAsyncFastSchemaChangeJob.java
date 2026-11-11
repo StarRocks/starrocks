@@ -93,6 +93,12 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     @SerializedName(value = "targetRanges")
     private Map<Long, TabletRange> targetRanges;
 
+    // The colocate_with value the catalog update sets on the table, or null to leave the property unchanged. Set by a
+    // trailing sort-key ADD on a table whose colocate_with names no colocate columns: such a property stands for the
+    // whole routing key (see SchemaChangeHandler#pinnedColocateWith).
+    @SerializedName(value = "pinnedColocateWith")
+    private String pinnedColocateWith;
+
     private Set<String> partitionsWithSchemaFile = new HashSet<>();
 
     // for deserialization
@@ -114,6 +120,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         this.disableFastSchemaEvolutionV2 = other.disableFastSchemaEvolutionV2;
         this.historySchema = other.historySchema;
         this.targetRanges = other.targetRanges == null ? null : new HashMap<>(other.targetRanges);
+        this.pinnedColocateWith = other.pinnedColocateWith;
         partitionsWithSchemaFile.addAll(other.partitionsWithSchemaFile);
     }
 
@@ -123,6 +130,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         this.disableFastSchemaEvolutionV2 = job.disableFastSchemaEvolutionV2;
         this.historySchema = job.historySchema;
         this.targetRanges = job.targetRanges == null ? null : new HashMap<>(job.targetRanges);
+        this.pinnedColocateWith = job.pinnedColocateWith;
     }
 
     public void setIndexTabletSchema(long indexMetaId, String indexName, SchemaInfo schemaInfo) {
@@ -152,6 +160,14 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
 
     Map<Long, TabletRange> getTargetRanges() {
         return targetRanges;
+    }
+
+    void setPinnedColocateWith(String pinnedColocateWith) {
+        this.pinnedColocateWith = pinnedColocateWith;
+    }
+
+    String getPinnedColocateWith() {
+        return pinnedColocateWith;
     }
 
     @Override
@@ -232,15 +248,18 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
                 // multi-index extension must revisit this instead of silently skipping other indexes.
                 Preconditions.checkState(schemaInfos.size() == 1,
                         "range flip target only supports a single index, got " + schemaInfos.size());
+                Preconditions.checkState(schemaInfo.getVersion() >= indexMeta.getSchemaVersion(),
+                        "range flip target schema version " + schemaInfo.getVersion()
+                                + " is older than current " + indexMeta.getSchemaVersion());
+                // Set after the checks above, so that a failed one leaves the property as it is, and before the
+                // exact-state replay return below, so that every replay sets it.
+                SchemaChangeHandler.applyPinnedColocateWith(table, pinnedColocateWith, "Schema change job " + getJobId());
                 if (schemaInfo.getVersion() == indexMeta.getSchemaVersion()) {
                     // Exact-state replay: the flip already happened. Verify the live ranges already
                     // equal the targets and return WITHOUT re-appending (no double-append).
                     verifyLiveRangesMatchTargets(table, indexMetaId);
                     return;
                 }
-                Preconditions.checkState(schemaInfo.getVersion() > indexMeta.getSchemaVersion(),
-                        "range flip target schema version " + schemaInfo.getVersion()
-                                + " is older than current " + indexMeta.getSchemaVersion());
             } else {
                 Preconditions.checkState(schemaInfo.getVersion() > indexMeta.getSchemaVersion());
                 Preconditions.checkState(
@@ -394,6 +413,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         this.historySchema = ((LakeTableAsyncFastSchemaChangeJob) job).historySchema;
         // Replay reprojects from the identical persisted targets, so the flip is reproduced exactly.
         this.targetRanges = schemaChangeJob.targetRanges;
+        this.pinnedColocateWith = schemaChangeJob.pinnedColocateWith;
     }
 
     @Override

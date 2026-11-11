@@ -24,7 +24,7 @@ static Status get_avro_type_from_scalar_type(const avro::NodePtr& node, TypeDesc
     switch (node->type()) {
     case avro::AVRO_STRING:
         // string type UUID is also promoted as varchar.
-        *desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        *desc = TYPE_VARCHAR_DESC;
         break;
 
     case avro::AVRO_BYTES: {
@@ -32,7 +32,7 @@ static Status get_avro_type_from_scalar_type(const avro::NodePtr& node, TypeDesc
         if (logical_type.type() == avro::LogicalType::DECIMAL) {
             *desc = TypeDescriptor::promote_decimal_type(logical_type.precision(), logical_type.scale());
         } else {
-            *desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            *desc = TYPE_VARBINARY_DESC;
         }
         break;
     }
@@ -42,7 +42,7 @@ static Status get_avro_type_from_scalar_type(const avro::NodePtr& node, TypeDesc
         if (logical_type.type() == avro::LogicalType::DECIMAL) {
             *desc = TypeDescriptor::promote_decimal_type(logical_type.precision(), logical_type.scale());
         } else if (logical_type.type() == avro::LogicalType::UUID) {
-            *desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            *desc = TYPE_VARCHAR_DESC;
         } else {
             *desc = TypeDescriptor::create_varbinary_type(node->fixedSize());
         }
@@ -83,7 +83,7 @@ static Status get_avro_type_from_scalar_type(const avro::NodePtr& node, TypeDesc
         break;
 
     default:
-        *desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        *desc = TYPE_VARCHAR_DESC;
         break;
     }
     return Status::OK();
@@ -117,7 +117,7 @@ static Status get_avro_type_from_union(const avro::NodePtr& node, TypeDescriptor
         const auto& branch = node->leafAt(i);
         if (branch->type() != avro::AVRO_NULL) {
             if (not_null) {
-                tmp_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+                tmp_desc = TYPE_VARCHAR_DESC;
                 break;
             }
 
@@ -143,8 +143,7 @@ static Status get_avro_type_from_map(const avro::NodePtr& node, TypeDescriptor* 
     DCHECK_EQ(node->leafAt(0)->type(), avro::AVRO_STRING);
     TypeDescriptor value_desc;
     RETURN_IF_ERROR(get_avro_type(node->leafAt(1), &value_desc));
-    *desc = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
-                                            value_desc);
+    *desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, value_desc);
     return Status::OK();
 }
 
@@ -154,7 +153,7 @@ Status get_avro_type(const avro::NodePtr& node, TypeDescriptor* desc) {
         return get_avro_type_from_record(node, desc);
 
     case avro::AVRO_ENUM:
-        *desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        *desc = TYPE_VARCHAR_DESC;
         return Status::OK();
 
     case avro::AVRO_ARRAY:

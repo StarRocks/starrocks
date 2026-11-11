@@ -137,8 +137,8 @@ void CompactionTaskCallback::cache_txn_log(const CompactionTaskContext& context)
         return;
     }
     auto* tablet_mgr = _scheduler->_tablet_mgr;
-    tablet_mgr->metacache()->cache_txn_log(tablet_mgr->txn_log_location(context.tablet_id, context.txn_id),
-                                           context.txn_log);
+    tablet_mgr->metacache()->cache_txn_log(
+            MetacacheKey::txn_log(tablet_mgr->txn_log_location(context.tablet_id, context.txn_id)), context.txn_log);
 }
 
 void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&& context) {
