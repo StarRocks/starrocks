@@ -31,6 +31,7 @@ description: "变更异步物化视图的名称、刷新策略、状态和属性
   - `foreign_key_constraints`
   - `colocate_with`
   - `excluded_refresh_tables`
+  - `file_bundling`（仅限存算分离集群，自 v26.2 起支持）
   - 所有 Session 变量属性。有关 Session 变量，详细信息请见 [系统变量](../../System_variable.md)。
 
 :::tip
@@ -60,7 +61,7 @@ ALTER MATERIALIZED VIEW [db_name.]<mv_name>
 | ACTIVE                  | 否       | 将物化视图的状态设置为 Active。如果物化视图的基表发生更改，例如被删除后重新创建，StarRocks 会自动将该物化视图的状态设置为 Inactive，以避免原始元数据与更改后的基表不匹配的情况。状态为 Inactive 的物化视图无法用于查询加速或改写。更改基表后，您可以使用此 SQL 将该物化视图的状态设置为 Active。 |
 | INACTIVE                | 否       | 将物化视图的状态设置为 Inactive。Inactive 状态的物化视图无法被刷新，但您仍然可以将其作为表直接查询。 |
 | SWAP WITH               | 否       | 同另一物化视图进行原子替换。替换前，StarRocks 会进行必要的一致性检查。|
-| ORDER BY                | 否       | 在线将物化视图的排序键变更为指定的列，无需重建物化视图。仅支持存算分离集群中 Range 分布的异步物化视图（自 v4.2 起支持）。指定的列必须是物化视图的输出列。对于明细（Duplicate Key）物化视图，排序键可以是任意列的子集；对于聚合（Aggregate）和更新（Unique Key）物化视图，排序键必须恰好由全部 Key 列组成。变更期间物化视图的刷新会被暂停，完成后自动恢复；变更期间物化视图仍可查询，新的排序顺序在切换时原子生效。 |
+| ORDER BY                | 否       | 在线将物化视图的排序键变更为指定的列，无需重建物化视图。仅支持存算分离集群中 Range 分布的异步物化视图（自 v4.2 起支持）。对于设置了 `colocate_with` 的物化视图，新排序键必须以 Colocated Column 开头，且这些列的顺序和类型不变。如果 `colocate_with` 只指定了 Colocation Group，而新排序键包含的列多于 Colocated Column，StarRocks 会将该属性改写为显式列出 Colocated Column 的形式 `<colocation_group>:<colocated_column>[,<colocated_column>]`，此后 `SHOW CREATE MATERIALIZED VIEW` 中显示的即为该形式。指定的列必须是物化视图的输出列。对于明细（Duplicate Key）物化视图，排序键可以是任意列的子集；对于聚合（Aggregate）和更新（Unique Key）物化视图，排序键必须恰好由全部 Key 列组成。变更期间物化视图的刷新会被暂停，完成后自动恢复；变更期间物化视图仍可查询，新的排序顺序在切换时原子生效。 |
 | key                     | 否       | 待变更的属性的名称，详细信息请见 [SQL 参考 - CREATE MATERIALIZED VIEW - 参数](CREATE_MATERIALIZED_VIEW.md#参数)。<br />**说明**<br />如需更改物化视图的 Session 变量属性，则必须为 Session 属性添加 `session.` 前缀，例如，`session.insert_timeout`。您无需为非 Session 属性指定前缀，例如，`mv_rewrite_staleness_second`。 |
 | value                   | 否       | 待变更的属性的值。                                             |
 
@@ -131,4 +132,9 @@ ALTER MATERIALIZED VIEW mv1 SET ("bloom_filter_columns" = "col1, col2");
 示例 11：在线将 Range 分布物化视图的排序键变更为 `(k2, k1)`（自 v4.2 起支持）。
 ```SQL
 ALTER MATERIALIZED VIEW order_mv ORDER BY (k2, k1);
+```
+
+示例 12：为存算分离集群中的物化视图启用 File Bundling（自 v26.2 起支持）。同一条语句中只能设置 `file_bundling` 这一个属性。变更以异步作业的方式执行，可以通过 [SHOW ALTER TABLE COLUMN](../table_bucket_part_index/SHOW_ALTER.md) 查看进度。修改 `file_bundling` 的限制与表相同，参见 [CREATE TABLE](../table_bucket_part_index/CREATE_TABLE.md) 中的 `file_bundling` 属性。
+```SQL
+ALTER MATERIALIZED VIEW order_mv SET ("file_bundling" = "true");
 ```

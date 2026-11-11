@@ -15,7 +15,6 @@
 package com.starrocks.scheduler.mv.ivm;
 
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -37,6 +36,8 @@ import com.starrocks.sql.analyzer.SemanticException;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -57,34 +58,47 @@ import java.util.stream.Stream;
  * A refresh that breaks an incremental MV inactivates it and stops scheduling its task, as every other inactivation
  * does, but lets the failing run report its own error.
  */
-public class IvmBreakingInactivationTaskTest extends IvmCloudNativeRefreshTestBase {
-    private static final String DB = "db_ivm_breaking_task";
-    private static final String SCHEDULED = "ASYNC EVERY(INTERVAL 1 DAY)";
+public class IvmBreakingInactivationTaskTest extends MVIVMIcebergTestBase {
+    // Without START the first scheduled run fires within minutes of CREATE and races the case's own runs.
+    private static final String SCHEDULED = "ASYNC START('2122-12-31') EVERY(INTERVAL 1 DAY)";
     private static final AtomicInteger VIEWS = new AtomicInteger();
+
+    enum Breakage {
+        NON_APPEND_ONLY_DELTA("non-append-only change on base table",
+                MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING),
+        SNAPSHOT_ANCESTRY_BROKEN("snapshot ancestry broken for base table",
+                MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING),
+        MV_SCHEMA_MISMATCH(MaterializedViewExceptions.MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER,
+                MaterializedViewExceptions.INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH);
+
+        final String failure;
+        final String inactiveReasonPrefix;
+
+        Breakage(String failure, String inactiveReasonPrefix) {
+            this.failure = failure;
+            this.inactiveReasonPrefix = inactiveReasonPrefix;
+        }
+    }
 
     @BeforeAll
     public static void beforeClass() throws Exception {
-        setUpSharedDataCluster(DB);
+        MVIVMIcebergTestBase.beforeClass();
+        starRocksAssert.useDatabase("test");
     }
 
     static Stream<Arguments> breakages() {
-        String nonAppendOnly = MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER;
-        String unreachable = MaterializedViewExceptions.SNAPSHOT_ANCESTRY_BROKEN_MARKER + " for base table db.t. "
-                + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER;
-        String schema = MaterializedViewExceptions.MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER + "`v` bigint vs `v` int";
         return Stream.of(
-                Arguments.of(SCHEDULED, nonAppendOnly, MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING),
-                Arguments.of(SCHEDULED, unreachable, MaterializedViewExceptions.INACTIVE_REASON_FOR_BASELINE_UNREACHABLE),
-                Arguments.of(SCHEDULED, schema, MaterializedViewExceptions.INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH),
-                Arguments.of("ON_CHANGE", nonAppendOnly, MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING),
-                Arguments.of("MANUAL", nonAppendOnly, MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING));
+                Arguments.of(SCHEDULED, Breakage.NON_APPEND_ONLY_DELTA),
+                Arguments.of(SCHEDULED, Breakage.SNAPSHOT_ANCESTRY_BROKEN),
+                Arguments.of(SCHEDULED, Breakage.MV_SCHEMA_MISMATCH),
+                Arguments.of("MANUAL", Breakage.NON_APPEND_ONLY_DELTA));
     }
 
     @ParameterizedTest
     @MethodSource("breakages")
-    public void testABreakingRefreshSuspendsTheTaskWithoutKillingTheRun(String refresh, String breakage,
-                                                                         String reason) throws Exception {
-        MaterializedView mv = refreshedView(refresh);
+    public void testABreakingRefreshSuspendsTheTaskWithoutKillingTheRun(String refresh, Breakage breakage)
+            throws Exception {
+        MaterializedView mv = incrementalView(refresh);
         Task task = taskOf(mv);
         List<AlterTaskInfo> taskJournal = captureTaskJournal();
         breakIncrementalRefresh(breakage);
@@ -99,9 +113,12 @@ public class IvmBreakingInactivationTaskTest extends IvmCloudNativeRefreshTestBa
             taskManager().getTaskRunScheduler().removeRunningTask(task.getId());
         }
         Assertions.assertTrue(MaterializedViewExceptions.isIncrementalBreakingFailure(e), e.getMessage());
+        Assertions.assertTrue(ExceptionUtils.getThrowableList(e).stream().anyMatch(cause ->
+                StringUtils.contains(cause.getMessage(), breakage.failure)), ExceptionUtils.getStackTrace(e));
         Assertions.assertFalse(run.isKilled(), "the failing run must report its own error");
         Assertions.assertFalse(mv.isActive());
-        Assertions.assertTrue(mv.getInactiveReason().startsWith(reason), mv.getInactiveReason());
+        Assertions.assertTrue(mv.getInactiveReason().startsWith(breakage.inactiveReasonPrefix),
+                mv.getInactiveReason());
 
         Assertions.assertEquals(Constants.TaskState.PAUSE, task.getState());
         Assertions.assertNull(scheduleOf(task), "an inactive view must not keep its schedule");
@@ -114,10 +131,11 @@ public class IvmBreakingInactivationTaskTest extends IvmCloudNativeRefreshTestBa
 
     @Test
     public void testResumingABrokenViewSchedulesItOnce() throws Exception {
-        MaterializedView mv = refreshedView(SCHEDULED);
+        MaterializedView mv = incrementalView(SCHEDULED);
         Task task = taskOf(mv);
         ScheduledFuture<?> beforeBreak = scheduleOf(task);
-        breakIncrementalRefresh(MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
+        Assertions.assertNotNull(beforeBreak);
+        breakIncrementalRefresh(Breakage.NON_APPEND_ONLY_DELTA);
         Assertions.assertThrows(Exception.class, () -> runFirstBatch(mv));
 
         // what ALTER ... ACTIVE does to the task of the view it activates
@@ -130,20 +148,20 @@ public class IvmBreakingInactivationTaskTest extends IvmCloudNativeRefreshTestBa
 
     @Test
     public void testABreakingRefreshDropsTheRunsQueuedBehindIt() throws Exception {
-        MaterializedView mv = refreshedView("MANUAL");
+        MaterializedView mv = incrementalView("MANUAL");
         Task task = taskOf(mv);
-        breakIncrementalRefresh(MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
+        breakIncrementalRefresh(Breakage.NON_APPEND_ONLY_DELTA);
         TaskRunScheduler scheduler = taskManager().getTaskRunScheduler();
-        for (int i = 0; i < 3; i++) {
-            TaskRun queued = TaskRunBuilder.newBuilder(task).properties(Map.of()).build();
-            queued.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis() + i);
-            Assertions.assertTrue(scheduler.addPendingTaskRun(queued));
-        }
-
         TaskRun run = TaskRunBuilder.newBuilder(task).properties(Map.of()).build();
+        // running first, so that the dispatcher cannot start a queued one meanwhile
         scheduler.addRunningTaskRun(run);
         long stillQueued;
         try {
+            for (int i = 0; i < 3; i++) {
+                TaskRun queued = TaskRunBuilder.newBuilder(task).properties(Map.of()).build();
+                queued.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis() + i);
+                Assertions.assertTrue(scheduler.addPendingTaskRun(queued));
+            }
             Assertions.assertThrows(Exception.class, () -> executeBatch(run));
             stillQueued = scheduler.getTaskIdPendingTaskRunCount(task.getId());
         } finally {
@@ -156,12 +174,14 @@ public class IvmBreakingInactivationTaskTest extends IvmCloudNativeRefreshTestBa
 
     @Test
     public void testAnActivationCannotLandBetweenInactivatingAndSuspending() throws Exception {
-        MaterializedView mv = refreshedView(SCHEDULED);
-        breakIncrementalRefresh(MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
+        MaterializedView mv = incrementalView(SCHEDULED);
+        breakIncrementalRefresh(Breakage.NON_APPEND_ONLY_DELTA);
+        AtomicBoolean suspended = new AtomicBoolean();
         AtomicBoolean activationGotTheLock = new AtomicBoolean();
         new MockUp<TaskManager>() {
             @Mock
             public void suspendTaskWithoutKilling(Invocation invocation, Task task) throws InterruptedException {
+                suspended.set(true);
                 // the lock ALTER ... ACTIVE takes
                 Thread activation = new Thread(() -> {
                     Locker locker = new Locker();
@@ -179,33 +199,53 @@ public class IvmBreakingInactivationTaskTest extends IvmCloudNativeRefreshTestBa
 
         Assertions.assertThrows(Exception.class, () -> runFirstBatch(mv));
         Assertions.assertFalse(mv.isActive());
+        Assertions.assertTrue(suspended.get());
         Assertions.assertFalse(activationGotTheLock.get(), "the suspension would pause the view it activated");
     }
 
-    /** Refreshed once, every partition of its base loaded since. */
-    private static MaterializedView refreshedView(String refresh) throws Exception {
-        OlapTable fact = createFact("fact_breaking_task_" + VIEWS.incrementAndGet());
-        loadEveryPartition(fact);
-        String name = "mv_" + fact.getName();
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + name + " PARTITION BY dt " +
-                "DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED " + refresh + " " +
-                "PROPERTIES ('refresh_mode' = 'INCREMENTAL', 'partition_refresh_number' = '1', " +
-                "'partition_refresh_strategy' = 'strict') AS SELECT dt, k, SUM(v) AS total FROM " + fact.getName() +
-                " GROUP BY dt, k");
-        MaterializedView mv = (MaterializedView) db.getTable(name);
-        mockLakeDml();
-        runJob(mv, fact);
-        loadEveryPartition(fact);
+    /** An incremental view over an Iceberg table whose next refresh runs the incremental processor. */
+    private static MaterializedView incrementalView(String refresh) throws Exception {
+        String name = "mv_breaking_task_" + VIEWS.incrementAndGet();
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + name + " REFRESH DEFERRED " + refresh +
+                " PROPERTIES ('refresh_mode' = 'INCREMENTAL') " +
+                "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", name);
+        seedTvrBaselineAtVersionZero(mv);
         return mv;
     }
 
-    private static void breakIncrementalRefresh(String breakage) {
-        new MockUp<MVIVMRefreshProcessor>() {
-            @Mock
-            public MVRefreshProcessor.ProcessExecPlan getProcessExecPlan(TaskRunContext taskRunContext) {
-                throw new SemanticException("Cannot incrementally refresh materialized view: " + breakage);
-            }
-        };
+    private void breakIncrementalRefresh(Breakage breakage) {
+        if (breakage == Breakage.MV_SCHEMA_MISMATCH) {
+            new MockUp<MVIVMRefreshProcessor>() {
+                @Mock
+                public MVRefreshProcessor.ProcessExecPlan getProcessExecPlan(TaskRunContext taskRunContext) {
+                    throw new SemanticException(MaterializedViewExceptions.inactiveReasonForColumnNotCompatible(
+                            "`id` int", "`id` bigint"));
+                }
+            };
+            return;
+        }
+        advanceTableVersionTo(2);
+        if (breakage == Breakage.NON_APPEND_ONLY_DELTA) {
+            mockListTableDeltaTraits();
+        } else {
+            mockListTableDeltaTraitsThrowsConnector(
+                    "Starting snapshot (exclusive) 0 is not a parent ancestor of end snapshot 2");
+        }
+    }
+
+    private static TaskRun runFirstBatch(MaterializedView mv) throws Exception {
+        Task task = taskOf(mv);
+        task.getProperties().put(TaskRun.IS_TEST, "true");
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(Map.of()).build();
+        executeBatch(taskRun);
+        return taskRun;
+    }
+
+    private static Constants.TaskRunState executeBatch(TaskRun taskRun) throws Exception {
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        return taskRun.executeTaskRun();
     }
 
     private static List<AlterTaskInfo> captureTaskJournal() {

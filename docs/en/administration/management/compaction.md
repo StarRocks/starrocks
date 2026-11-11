@@ -295,6 +295,15 @@ WHERE name = "compact_threads";
 >
 > In production, it is recommended to set `max_cumulative_compaction_num_singleton_deltas` to `100` to accelerate the Compaction tasks and reduce their resource consumption.
 
+##### lake_pk_compaction_max_rowsets_per_level
+
+- Default: 20
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of rowsets that still need compaction at which a size level of a Primary Key table in a shared-data cluster is merged even if it does not have the highest score. The Size-tiered Compaction policy merges only the level with the highest score in each round. While loads keep arriving, the level of the newest and smallest rowsets has the highest score in every round, so a level of larger rowsets (outputs of earlier compactions and medium-sized loads) keeps growing. This increases the number of segments that queries read, and shows up as a spike in the compaction score right after a compaction finishes. When a level that is not picked holds this many rowsets that still need compaction, and these rowsets fit in the same compaction task as the picked ones, the level is merged in that compaction task. Set it to `0` to disable this behavior.
+- Introduced in: -
+
 ### Manually trigger compaction tasks
 
 ```SQL

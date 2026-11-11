@@ -117,6 +117,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
+import static com.starrocks.sql.analyzer.BackupRestoreAnalyzer.isIncrementalOrAutoMv;
 
 public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrackable {
 
@@ -350,30 +351,18 @@ public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrack
             }
         }
 
+        String dbName = null;
         if (!stmt.containsExternalCatalog()) {
             // check if db exist
-            String dbName = stmt.getDbName();
+            dbName = stmt.getDbName();
             if (dbName == null) {
                 // if target dbName if null, use dbName in snapshot
                 dbName = jobInfo.dbName;
             }
 
             db = globalStateMgr.getLocalMetastore().getDb(dbName);
-            if (db == null) {
-                if (stmt instanceof RestoreStmt) {
-                    try {
-                        globalStateMgr.getLocalMetastore().createDb(dbName, null);
-                        db = globalStateMgr.getLocalMetastore().getDb(dbName);
-                        if (db == null) {
-                            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-                        }
-                    } catch (Exception e) {
-                        ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
-                                "Can not create database: " + dbName + " in restore process");
-                    }
-                } else {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-                }
+            if (db == null && !(stmt instanceof RestoreStmt)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
         }
 
@@ -384,7 +373,8 @@ public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrack
         tryLock();
         try {
             // Check if there is backup or restore job running on this database
-            AbstractJob currentJob = dbIdToBackupOrRestoreJob.get(stmt.containsExternalCatalog() ? FAKE_DB_ID : db.getId());
+            AbstractJob currentJob = stmt.containsExternalCatalog() ? dbIdToBackupOrRestoreJob.get(FAKE_DB_ID)
+                    : db == null ? null : dbIdToBackupOrRestoreJob.get(db.getId());
             if (currentJob != null && currentJob.getDbId() == FAKE_DB_ID && !currentJob.isDone()) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                         "Can only run one backup or restore job of external catalog");
@@ -396,7 +386,7 @@ public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrack
             if (stmt instanceof BackupStmt) {
                 backup(context, repository, db, (BackupStmt) stmt);
             } else if (stmt instanceof RestoreStmt) {
-                restore(repository, db, (RestoreStmt) stmt, jobInfo);
+                restore(repository, db, dbName, (RestoreStmt) stmt, jobInfo);
             }
         } finally {
             seqlock.unlock();
@@ -601,7 +591,8 @@ public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrack
         return catalog;
     }
 
-    private void restore(Repository repository, Database db, RestoreStmt stmt, BackupJobInfo jobInfo) throws DdlException {
+    private void restore(Repository repository, Database db, String targetDbName, RestoreStmt stmt, BackupJobInfo jobInfo)
+            throws DdlException {
         BackupMeta backupMeta = downloadAndDeserializeMetaInfo(jobInfo, repository, stmt);
 
         // check the original dbName existed in snapshot or not
@@ -627,14 +618,48 @@ public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrack
         }
 
         if (backupMeta != null) {
+            Set<String> namedTables = stmt.getTableRefs().stream().map(TableRef::getTableName).collect(Collectors.toSet());
+            Set<String> skippedTables = Sets.newHashSet();
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table remoteTbl = backupMeta.getTable(tblInfo.name);
+                if (remoteTbl == null) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                            "Table " + tblInfo.name + " does not exist in snapshot " + jobInfo.name);
+                }
                 if (!remoteTbl.isSupportBackupRestore()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                             "Table: " + remoteTbl.getName() +
                                     " can not support backup restore, type: " + remoteTbl.getType());
                 }
-                mvRestoreContext.addIntoMvBaseTableBackupInfoIfNeeded(db.getOriginName(), remoteTbl, jobInfo, tblInfo);
+                String localName = jobInfo.getAliasByOriginNameIfSet(tblInfo.name);
+                Table localTbl = db == null ? null : globalStateMgr.getLocalMetastore().getTable(db.getFullName(), localName);
+                boolean remoteIsIncremental = isIncrementalOrAutoMv(remoteTbl);
+                if (remoteIsIncremental || isIncrementalOrAutoMv(localTbl)) {
+                    if (namedTables.contains(tblInfo.name)) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR, remoteIsIncremental
+                                ? String.format("Materialized view %s in snapshot %s can not be restored because its " +
+                                        "refresh_mode is %s. Recreate it after restoring its base tables.",
+                                        tblInfo.name, jobInfo.name, ((MaterializedView) remoteTbl).getCurrentRefreshMode())
+                                : String.format("Can not restore %s over materialized view %s because its " +
+                                        "refresh_mode is %s. Drop it, or restore under another name with AS.",
+                                        tblInfo.name, localName, ((MaterializedView) localTbl).getCurrentRefreshMode()));
+                    }
+                    LOG.info("Skip restoring {} of snapshot {} because it or the existing table {} is an incremental " +
+                            "materialized view", tblInfo.name, jobInfo.name, localName);
+                    skippedTables.add(tblInfo.name);
+                }
+            }
+            jobInfo.tables.keySet().removeAll(skippedTables);
+        }
+
+        // The database and the context outlive this statement, so make them only once nothing above can reject it.
+        if (db == null && !stmt.containsExternalCatalog()) {
+            db = createRestoreTargetDb(targetDbName);
+        }
+        if (backupMeta != null) {
+            for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
+                mvRestoreContext.addIntoMvBaseTableBackupInfoIfNeeded(db.getOriginName(),
+                        backupMeta.getTable(tblInfo.name), jobInfo, tblInfo);
             }
         }
 
@@ -654,6 +679,20 @@ public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrack
         addRestoreJob(restoreJob);
 
         LOG.info("finished to submit restore job: {}", restoreJob);
+    }
+
+    private Database createRestoreTargetDb(String dbName) throws DdlException {
+        try {
+            globalStateMgr.getLocalMetastore().createDb(dbName, null);
+        } catch (Exception e) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                    "Can not create database: " + dbName + " in restore process");
+        }
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        return db;
     }
 
     protected void addRestoreJob(RestoreJob restoreJob) {

@@ -38,8 +38,7 @@ TEST(AggregateFactoryCoreTest, dataSketchAggregatesResolve) {
 }
 
 TEST(AggregateFactoryCoreTest, builtinAggregateResolvesFromAggStateDesc) {
-    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    std::vector<TypeDescriptor> arg_types = {TYPE_VARCHAR_DESC, TYPE_INT_DESC};
     auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
     AggStateDesc desc("array_agg2", return_type, arg_types, true, 1);
 
@@ -47,8 +46,8 @@ TEST(AggregateFactoryCoreTest, builtinAggregateResolvesFromAggStateDesc) {
 }
 
 TEST(AggregateFactoryCoreTest, invalidAggStateDescReturnsNull) {
-    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_SMALLINT)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    std::vector<TypeDescriptor> arg_types = {TYPE_SMALLINT_DESC};
+    auto return_type = TYPE_DOUBLE_DESC;
     AggStateDesc desc("invalid_func", return_type, arg_types, false, 1);
 
     EXPECT_EQ(nullptr, get_aggregate_function(desc));

@@ -98,7 +98,9 @@ The `MaterializedView` object is used to define a materialized view in your Pyth
 - **`comment`** (`Optional[str]`): An optional comment to describe the materialized view's purpose.
 - **`starrocks_partition_by`** (`Optional[str]`): Partitioning strategy (e.g., `"order_date"` or `"date_trunc('day', created_at)"`).
 - **`starrocks_distributed_by`** (`Optional[str]`): Distribution strategy (e.g., `"HASH(order_id) BUCKETS 16"`).
-- **`starrocks_refresh`** (`Optional[str]`): Refresh method - `"ASYNC"`, `"MANUAL"`, or a full refresh schedule specification. Specify it when you want to create an Async Materialized View. Sync Materialized View is not supported now.
+- **`starrocks_refresh`** (`Optional[str]`): Refresh method - `"ON_CHANGE"` (refresh when a base table changes), `"MANUAL"`, or a full refresh schedule specification. Specify it when you want to create an Async Materialized View. Sync Materialized View is not supported now.
+
+  StarRocks 26.2 renamed the base-table-change-triggered mode from `ASYNC` to `ON_CHANGE` and rejects the old spelling; releases before it only accept `ASYNC`. Declare either one — the dialect looks at the server it is connected to and sends the keyword that server accepts, so the same metadata works against every supported release. `ASYNC EVERY(...)` and `ASYNC START(...) EVERY(...)` name the scheduled mode, which is unaffected and keeps its spelling.
 - **`starrocks_properties`** (`Optional[dict]`): Additional StarRocks-specific properties (e.g., `{"replication_num": "3"}`).
 
 ## Alembic Integration
@@ -126,7 +128,7 @@ def upgrade():
     op.create_materialized_view(
         "my_mv",
         "SELECT product_id, SUM(total_sales) as aggregated_sales FROM sales_records GROUP BY product_id",
-        starrocks_refresh="ASYNC",
+        starrocks_refresh="ON_CHANGE",
     )
 
 def downgrade():

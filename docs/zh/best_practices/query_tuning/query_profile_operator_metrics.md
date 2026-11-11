@@ -232,7 +232,8 @@ OLAP_SCAN Operator 负责从 StarRocks 内表中读取数据。
 | DataSourceType | 数据源类型，可以是 HiveDataSource、ESDataSource 等。 |
 | Table | 表名。 |
 | TabletCount | tablet 的数量。 |
-| MorselsCount | morsels 的数量。 |
+| MorselsCount | morsels 的数量；对于 lake 分组扫描，包含根裁剪任务和生成的 I/O 子任务。 |
+| RangeClipTasks | 成功打开的 lake 分组根范围裁剪任务数，显示在 `DataSource` 下。每个通过校验的根任务只计数一次，包括未返回数据行或仅发布物理行号子任务的根任务；子任务、读取 Segment 和重新打开 Reader 不会增加该计数。 |
 | Predicates | 谓词表达式。 |
 | PredicatesPartition | 应用于分区的谓词表达式。 |
 | SharedScan | 是否启用了 `enable_shared_scan` 会话变量。 |
@@ -252,6 +253,7 @@ OLAP_SCAN Operator 负责从 StarRocks 内表中读取数据。
 | RuntimeFilterInputRows | 进入 Parquet Reader Join Runtime Filter 求值的行数。 |
 | RuntimeFilterOutputRows | 通过 Parquet Reader Join Runtime Filter 求值的行数。与 `RuntimeFilterInputRows` 差距越大，说明在物化 Lazy 列之前过滤掉的行越多。 |
 | ScanRangesPrunedByPartitionValue | 因 identity 分区值被谓词或已到达的 Join Runtime Filter 过滤，而在读取前被跳过的 Scan Range 数量。 |
+| ScanRangesPrunedByFileStats | 根据 Iceberg Manifest 中的文件级 min/max 值判断没有任何行能满足谓词或已到达的 Runtime Filter（Join 或 Top-N），而在打开数据文件前被跳过的 Scan Range 数量。仅适用于 Parquet 和 ORC 文件。 |
 | PaimonFSAppIOCount | Paimon 文件系统适配层收到的有效读请求次数，为顺序读、位置读和异步读次数之和。 |
 | PaimonFSAppIOBytes | Paimon 文件系统适配层成功返回的读取字节数。 |
 | PaimonFSAppIOTime | Paimon 文件系统适配层读请求的端到端耗时。 |

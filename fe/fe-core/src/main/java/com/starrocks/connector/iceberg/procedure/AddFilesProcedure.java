@@ -22,6 +22,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergEncryption;
 import com.starrocks.connector.iceberg.IcebergPartitionData;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.qe.ShowResultSet;
@@ -146,6 +147,14 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         }
 
         Table table = context.table();
+        // Registering files written elsewhere bypasses the sinks, which are where an encrypted table's data
+        // gets its per-file keys: the files would be committed with no key_metadata and sit in a table
+        // configured to be encrypted as plaintext. Refuse rather than let the table silently hold them.
+        if (IcebergEncryption.declaresEncryption(table.properties())) {
+            throw new StarRocksConnectorException(
+                    "%s is not supported on encrypted Iceberg table %s: the files it registers are not encrypted "
+                            + "with keys recorded in this table", "add_files", table.name());
+        }
         PartitionSpec spec = table.spec();
         if (spec.isPartitioned() && spec.fields().stream().anyMatch(f -> !f.transform().isIdentity())) {
             throw new StarRocksConnectorException(

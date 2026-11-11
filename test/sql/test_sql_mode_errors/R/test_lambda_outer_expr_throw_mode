@@ -1,0 +1,51 @@
+-- name: test_lambda_outer_expr_throw_mode
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id int, xs array<int>, j varchar(100)) duplicate key(id) distributed by hash(id) buckets 1 properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t values (1, [], 'invalid'), (2, [1, 2], '1'), (3, null, 'invalid'), (4, [3], '10');
+-- result:
+-- !result
+set sql_mode = concat(@@sql_mode, ',ALLOW_THROW_EXCEPTION');
+-- result:
+-- !result
+function: assert_explain_not_contains("select id, array_map(x -> if(random() < 2, x + cast(j as int), 0), xs) from t", "common expressions")
+-- result:
+None
+-- !result
+[ORDER]select id, array_map(x -> if(random() < 2, x + cast(j as int), 0), xs) from t order by id;
+-- result:
+1	[]
+2	[2,3]
+3	None
+4	[13]
+-- !result
+[ORDER]select id, array_filter(x -> if(random() < 2, x + cast(j as int), 0) > 2, xs) from t order by id;
+-- result:
+1	[]
+2	[2]
+3	None
+4	[3]
+-- !result
+[ORDER]select id, array_sortby(x -> if(random() < 2, -(x + cast(j as int)), 0), xs) from t order by id;
+-- result:
+1	[]
+2	[2,1]
+3	None
+4	[3]
+-- !result
+insert into t values (5, [1], 'invalid');
+-- result:
+-- !result
+function: assert_query_error_contains("select id, array_map(x -> if(random() < 2, x + cast(j as int), 0), xs) from t order by id", "cast from VARCHAR(invalid) to INT failed")
+-- result:
+None
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

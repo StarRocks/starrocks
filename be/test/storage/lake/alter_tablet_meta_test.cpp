@@ -645,16 +645,14 @@ TabletSchemaPB build_range_schema_pb(int num_sort_keys, int64_t schema_id) {
 
 void add_int_value(TuplePB* t, int32_t v) {
     auto* pb = t->add_values();
-    TypeDescriptor td(TYPE_INT);
-    pb->mutable_type()->CopyFrom(td.to_protobuf());
+    pb->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     pb->set_value(std::to_string(v));
     pb->set_variant_type(VariantTypePB::NORMAL_VALUE);
 }
 
 void add_null_value(TuplePB* t) {
     auto* pb = t->add_values();
-    TypeDescriptor td(TYPE_INT);
-    pb->mutable_type()->CopyFrom(td.to_protobuf());
+    pb->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     pb->set_variant_type(VariantTypePB::NULL_VALUE);
 }
 

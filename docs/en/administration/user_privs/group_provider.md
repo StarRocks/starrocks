@@ -393,6 +393,11 @@ The following example grants the role `example_role` to the user group `analysts
 GRANT example_role TO EXTERNAL GROUP analysts;
 ```
 
+Roles granted to an external group also apply to tasks that run as the user who created them, such as asynchronous materialized view refreshes and tasks submitted with [SUBMIT TASK](../../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md). Each time such a task runs, StarRocks resolves the creator's groups again. Note the following points:
+
+- Groups that only a login credential carries, such as groups read from a claim of a JWT or OAuth 2.0 token, cannot be resolved for a task.
+- For a user who logs in through a JWT or OAuth 2.0 security integration, a task consults the group providers in the FE configuration item `group_provider`, not the `group_provider` property of the integration.
+
 ## Combine group provider with external authorization system (Apache Ranger)
 
 Once you configure the associated group provider in the security integration, StarRocks will record the user's group information upon login. This group information will then be automatically included in the authorization process with Ranger, eliminating the need for additional configuration.

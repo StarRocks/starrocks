@@ -73,7 +73,7 @@ StarRocks 提供了多种监控 Data Cache 的指标。
 - [虚拟机部署 StarRocks 存算分离集群 Dashboard 模板](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-for-vm.json)
 - [Kubernetes 部署 StarRocks 存算分离集群 Dashboard 模板](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-for-k8s.json)
 
-有关为 StarRocks 部署监控和警报服务的更多说明，请参考 [监控报警](../../administration/management/monitoring/monitoring.md)。
+有关为 StarRocks 部署监控和警报服务的更多说明，请参考 [监控报警](../../administration/management/monitoring/prometheus_grafana.md)。
 
 ### 重要指标
 
