@@ -3680,9 +3680,32 @@ public class PlanFragmentBuilder {
 
         private List<Expr> getShuffleExprs(HashDistributionSpec hashDistributionSpec, ExecPlan context) {
             List<ColumnRefOperator> shuffleColumns = getShuffleColumns(hashDistributionSpec, columnRefFactory);
-            return shuffleColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+            return shuffleColumns.stream()
+                    .map(e -> resolveProducedShuffleColumn(e, hashDistributionSpec, context))
+                    .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
+        }
+
+        // A distribution can still name a column that no translated node produces any more: global late
+        // materialization defers a scan column below a rename projection (e.g. the MV rewrite's
+        // `1: c := 90: c`) and fetches it back only under the renamed id. The rename is recorded as a
+        // null-strict equivalence in the spec, so hash the equivalent column that is produced instead;
+        // both carry the same values.
+        private ColumnRefOperator resolveProducedShuffleColumn(ColumnRefOperator column,
+                                                               HashDistributionSpec spec, ExecPlan context) {
+            Map<ColumnRefOperator, Expr> colRefToExpr = context.getColRefToExpr();
+            if (colRefToExpr.containsKey(column)) {
+                return column;
+            }
+            for (DistributionCol equivalent : spec.getEquivDesc().getNullStrictUnionFind()
+                    .getEquivGroup(new DistributionCol(column.getId(), true))) {
+                ColumnRefOperator candidate = columnRefFactory.getColumnRef(equivalent.getColId());
+                if (colRefToExpr.containsKey(candidate)) {
+                    return candidate;
+                }
+            }
+            return column;
         }
 
         private PlanFragment visitPhysicalJoin(PlanFragment leftFragment, PlanFragment rightFragment,
