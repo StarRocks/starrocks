@@ -18,10 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.alter.reshard.presplit.BoundaryPlanner;
-import com.starrocks.alter.reshard.presplit.BoundaryPlannerResult;
-import com.starrocks.alter.reshard.presplit.DefaultPreSplitPipeline;
 import com.starrocks.alter.reshard.presplit.InternalPartitionScanContext;
 import com.starrocks.alter.reshard.presplit.ReservoirSampler;
 import com.starrocks.alter.reshard.presplit.SampleRequest;
@@ -35,11 +32,9 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.server.GlobalStateMgr;
@@ -99,6 +94,12 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
     @SerializedName(value = "shadowShortKeyColumnCount")
     private short shadowShortKeyColumnCount;
 
+    // The colocate_with value the flip sets on the table, or null to leave the property unchanged. Set when the
+    // property names no colocate columns and the new routing key is longer than the group's colocate columns: such a
+    // property stands for the whole routing key (see SchemaChangeHandler#pinnedColocateWith).
+    @SerializedName(value = "pinnedColocateWith")
+    private String pinnedColocateWith;
+
     // Sampling seam. Production samples a partition's base by the new sort key via a SQL sub-query
     // (needs a backend); tests inject a stub returning a canned SampleSet. Not serialized.
     private transient Sampler sampler;
@@ -124,6 +125,7 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         this.newSortKeyUniqueIds = other.newSortKeyUniqueIds == null ? null : new ArrayList<>(other.newSortKeyUniqueIds);
         this.newSortKeyColumns = other.newSortKeyColumns == null ? null : new ArrayList<>(other.newSortKeyColumns);
         this.shadowShortKeyColumnCount = other.shadowShortKeyColumnCount;
+        this.pinnedColocateWith = other.pinnedColocateWith;
     }
 
     public void setNewSchema(List<Column> newSchema) {
@@ -168,6 +170,15 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         this.shadowShortKeyColumnCount = shadowShortKeyColumnCount;
     }
 
+    public void setPinnedColocateWith(String pinnedColocateWith) {
+        this.pinnedColocateWith = pinnedColocateWith;
+    }
+
+    @VisibleForTesting
+    String getPinnedColocateWith() {
+        return pinnedColocateWith;
+    }
+
     /**
      * Inject the sampler used by {@link #planPartitionShadow}. Tests use this to bypass the real SQL
      * sample sub-query (which needs a backend); production leaves it null so {@link #getSampler}
@@ -204,37 +215,15 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
                 "new sort key columns are not set");
     }
 
-    /**
-     * Plan one partition's K-tablet shadow layout lock-free using the shared tablet-count policy: a zero
-     * target preserves the latest base-index {@code K}, while a nonzero target derives {@code K}
-     * adaptively from the base data size and active compute-node count. When {@code K > 1}, sample by the
-     * new sort key and plan the boundaries; {@code K == 1} skips sampling. Build the shadow
-     * {@link MaterializedIndex} via the StarOS createShards RPC. NO db lock is held here.
-     */
+    /** Applies the colocate prefix rule to the new routing columns; a no-op outside a range colocate group. */
     @Override
-    protected void planPartitionShadow(PendingPartitionPlan plan, OlapTable table, String dbName)
-            throws AlterCancelException {
-        int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
-        int requestedTabletCount = selectRequestedTabletCount(plan, activeComputeNodeCount);
-        List<Tuple> boundaries = requestedTabletCount == 1
-                ? List.of()
-                : planBoundaries(table, dbName, plan.tableName, plan.partitionName,
-                        plan.physicalPartitionId, plan.partitionDataSize, requestedTabletCount);
-        // K may collapse to 1 (sampling failure / no-distinction): a single full-range tablet.
-        int shadowTabletCount = boundaries.size() + 1;
-        List<TabletRange> ranges = buildTabletRanges(boundaries);
-        MaterializedIndex shadowIndex;
+    protected void checkShadowColocatePrefix(OlapTable table) throws AlterCancelException {
         try {
-            shadowIndex = LakeTableAlterJobV2Builder.buildRangeShadowIndex(
-                    dbId, table, plan.physicalPartition, shadowIndexMetaId, shadowTabletCount, ranges,
-                    plan.shardGroupId, computeResource);
+            SchemaChangeHandler.checkRangeColocatePrefix(table,
+                    SchemaChangeHandler.newRangeRoutingColumns(newSchema, newKeysType, newSortKeyIdxes));
         } catch (DdlException e) {
-            throw new AlterCancelException("failed to build shadow index for partition "
-                    + plan.physicalPartitionId + ": " + e.getMessage());
+            throw new AlterCancelException(e.getMessage());
         }
-        plan.boundaries = boundaries;
-        plan.shadowTabletCount = shadowTabletCount;
-        plan.shadowIndex = shadowIndex;
     }
 
     @Override
@@ -267,6 +256,22 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         return "range-rewrite";
     }
 
+    @Override
+    protected String rangeJobLogPrefix() {
+        return "range-rewrite schema change job";
+    }
+
+    @Override
+    protected List<Column> getShadowRangeColumns() {
+        return newSortKeyColumns;
+    }
+
+    @Override
+    protected SampleSet sampleShadowSortKey(OlapTable table, String dbName, PendingPartitionPlan plan)
+            throws StarRocksException {
+        return sampleByNewSortKey(table, dbName, plan.tableName, plan.partitionName, plan.partitionDataSize);
+    }
+
     /**
      * Idempotently register the shadow index's {@link MaterializedIndexMeta} (schema, keysType,
      * sort-key indexes) on the table. Re-runnable on replay: {@code setIndexMeta} overwrites the
@@ -290,41 +295,13 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         table.rebuildFullSchema();
     }
 
-    /**
-     * Sample the partition by the new sort key and plan {@code K-1} boundaries. A sampling failure or
-     * a no-distinction sample (empty sample / all-equal keys → planner NO_SPLIT) degrades to an empty
-     * boundary list = a single full-range tablet (K=1 fallback). All inputs are captured snapshots so
-     * this runs lock-free (the sampler itself re-acquires a read lock for its SQL round-trip).
-     */
-    private List<Tuple> planBoundaries(OlapTable table, String dbName, String tableName, String partitionName,
-                                       long physicalPartitionId, long partitionDataSize,
-                                       int requestedTabletCount) {
-        try {
-            SampleSet sampleSet = sampleByNewSortKey(table, dbName, tableName, partitionName, partitionDataSize);
-            if (sampleSet.isEmpty()) {
-                return List.of();
-            }
-            BoundaryPlannerResult planResult =
-                    BoundaryPlanner.planRowQuantileBoundaries(sampleSet, requestedTabletCount, newSortKeyColumns);
-            if (planResult.isNoSplit()) {
-                return List.of();
-            }
-            return planResult.getBoundaries();
-        } catch (StarRocksException | RuntimeException e) {
-            // Sampling / planning failure must not fail the alter: fall back to a single full-range
-            // shadow tablet (the rewrite still re-sorts by the new key; it just isn't split).
-            LOG.warn("range-rewrite schema change job {}: sampling/planning failed for partition {}, "
-                    + "falling back to a single full-range shadow tablet", jobId, physicalPartitionId, e);
-            return List.of();
-        }
-    }
-
     @VisibleForTesting
     public List<Tuple> planBoundariesForTest(OlapTable table, String dbName, String tableName, String partitionName,
                                              long physicalPartitionId, long partitionDataSize,
                                              int requestedTabletCount) {
-        return planBoundaries(table, dbName, tableName, partitionName, physicalPartitionId, partitionDataSize,
-                requestedTabletCount);
+        PendingPartitionPlan plan = new PendingPartitionPlan(physicalPartitionId, null, 0L, partitionName,
+                partitionDataSize, tableName, null);
+        return planBoundaries(table, dbName, plan, requestedTabletCount);
     }
 
     private SampleSet sampleByNewSortKey(OlapTable table, String dbName, String tableName, String partitionName,
@@ -402,21 +379,6 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
     }
 
     /**
-     * Tile {@code (-inf, +inf)} with one {@link TabletRange} per tablet given the {@code K-1}
-     * sorted boundaries: {@code (-inf, c1), [c1, c2), ..., [c_{K-1}, +inf)}. An empty boundary list
-     * yields a single full-range tablet (K=1 case).
-     */
-    @VisibleForTesting
-    static List<TabletRange> buildTabletRanges(List<Tuple> boundaries) {
-        if (boundaries.isEmpty()) {
-            List<TabletRange> singleRange = new ArrayList<>(1);
-            singleRange.add(new TabletRange(Range.all()));
-            return singleRange;
-        }
-        return DefaultPreSplitPipeline.buildTabletRanges(boundaries);
-    }
-
-    /**
      * Non-generated column names the rewrite INSERT selects: the newSchema columns present in the base
      * (origin) index schema. For a sort-key reorder or keyness flip the column set is unchanged, so this
      * is a no-op re-projection in the new order; for a DROP it yields the surviving columns; for an ADD
@@ -476,7 +438,8 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
      * (base) index, and promote the shadow index to NORMAL as the new base. Then rename the shadow index
      * to the origin name, repoint {@code baseIndexMetaId} at the shadow meta (so the table-level schema /
      * keysType / sortKeyIdxes / range distribution all follow, since the range distribution columns are
-     * derived from the base index sort key), rebuild the full schema, and reset the table to NORMAL.
+     * derived from the base index sort key), rebuild the full schema, set the pinned colocate_with if there is one,
+     * and reset the table to NORMAL.
      */
     @Override
     protected void visualiseShadowIndex(@NotNull OlapTable table) {
@@ -533,6 +496,8 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
             table.setBaseIndexMetaId(shadowIndexMetaId);
         }
         table.rebuildFullSchema();
+        SchemaChangeHandler.applyPinnedColocateWith(table, pinnedColocateWith,
+                "range-rewrite schema change job " + jobId);
 
         table.setState(OlapTable.OlapTableState.NORMAL);
     }
@@ -597,6 +562,7 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
             this.newSortKeyUniqueIds = other.newSortKeyUniqueIds;
             this.newSortKeyColumns = other.newSortKeyColumns;
             this.shadowShortKeyColumnCount = other.shadowShortKeyColumnCount;
+            this.pinnedColocateWith = other.pinnedColocateWith;
         }
         super.replay(replayedJob);
     }

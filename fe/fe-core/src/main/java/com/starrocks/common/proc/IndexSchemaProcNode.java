@@ -79,8 +79,8 @@ public class IndexSchemaProcNode implements ProcNodeInterface {
         result.setNames(TITLE_NAMES);
 
         for (Column column : schema) {
-            // Filter out expression partition generated columns in DESC
-            if (column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+            // Filter out expression partition generated columns and hidden columns in DESC
+            if (column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX) || column.isHidden()) {
                 continue;
             }
             // Extra string (aggregation and bloom filter)

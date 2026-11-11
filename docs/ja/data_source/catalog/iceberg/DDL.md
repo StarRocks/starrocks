@@ -96,7 +96,7 @@ col_name col_type [COMMENT 'comment'] [DEFAULT default_value]
 
 ##### デフォルト値
 
-v4.1 以降、StarRocks は Iceberg テーブルの列にデフォルト値を設定することをサポートしています。この機能には Iceberg フォーマットバージョン 3 (`"format-version" = "3"`) が必要です。
+v4.1 以降、StarRocks は Iceberg テーブルの列にデフォルト値を設定することをサポートしています。この機能には Iceberg フォーマットバージョン 3 以降が必要です。
 
 **使用法:**
 
@@ -111,7 +111,7 @@ col_name col_type DEFAULT default_value
 
 **要件:**
 
-- テーブルは Iceberg フォーマットバージョン 3 (`"format-version" = "3"`) を使用する必要があります。
+- テーブルは Iceberg フォーマットバージョン 3 以降を使用する必要があります。
 - 数値型 (INT, BIGINT, FLOAT, DOUBLE)、BOOLEAN、STRING、および DATE/TIMESTAMP 型のデフォルト値は引用符で囲む必要があります。例: `DEFAULT "18"`、`DEFAULT "100.0"`、`DEFAULT "true"`。
 
 **例:**
@@ -174,6 +174,10 @@ ORDER BY (column_name [ASC | DESC] [NULLS FIRST | NULLS LAST], ...)
 - `location`: テーブルのファイルパス。データベースレベルのロケーションなしで AWS Glue を使用する場合に必須です。
 - `file_format`: ファイル形式。`parquet` (デフォルト) のみがサポートされています。
 - `compression_codec`: 圧縮アルゴリズム。オプション: SNAPPY, GZIP, ZSTD, LZ4 (デフォルト: `zstd`)。
+- `format-version`: テーブルの Iceberg フォーマットバージョン。オプション: `1`, `2`, `3`, `4` (デフォルト: `2`)。フォーマットバージョン 4 は v26.4 以降でサポートされており、StarRocks はフォーマットバージョン 4 のテーブルをフォーマットバージョン 3 のテーブルと同じように読み書きします。Iceberg はフォーマットバージョン 4 のテーブルのマニフェストを Parquet ファイルとして書き込みます。フォーマットバージョン 4 のテーブルの location には `s3://` や `hdfs://` などの URI スキームが必要なため、location にスキームがないテーブルはフォーマットバージョン 4 にアップグレードできません。
+- `write.metadata.metrics.default`: StarRocks がデータファイルに書き込む列統計のデフォルトの metrics モード。オプション: `none`, `counts`, `truncate(N)`, `full` (デフォルト: `truncate(16)`)。`none` は統計を書き込まず、`counts` は値の数と NULL の数のみを書き込み、`truncate(N)` は上下限も書き込み、STRING と BINARY の上下限を N 文字 (バイト) に切り詰めます。`full` は切り詰めない上下限を書き込みます。
+- `write.metadata.metrics.column.<col>`: 列 `<col>` の metrics モード。デフォルトを上書きします。オプションは `write.metadata.metrics.default` と同じです。
+- `write.metadata.metrics.max-inferred-column-defaults`: `write.metadata.metrics.default` が設定されていない場合、先頭の N 列のみがデフォルトの `truncate(16)` を使用し、残りの列は `none` になります (デフォルト: `100`)。
 
 ### 例
 

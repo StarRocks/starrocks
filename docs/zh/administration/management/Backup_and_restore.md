@@ -250,6 +250,8 @@ ON (sr_member PARTITION (p1));
 - 在 `ON` 子句中指定物化视图名称，如下方示例。此方式不受 `enable_backup_materialized_view` 影响。
 - 将 FE 配置项 [`enable_backup_materialized_view`](../configuration/FE_parameters/user_query_loading.md#enable_backup_materialized_view) 设置为 `true`。此后，备份整个数据库以及 `ON (ALL MATERIALIZED VIEWS)` 都会包含异步物化视图。
 
+增量物化视图（`refresh_mode` 为 `INCREMENTAL`，或为 `AUTO` 且没有按 PCT 创建）不支持备份。在备份语句中指定增量物化视图会报错；备份整个数据库或所有物化视图时会跳过增量物化视图。请在基表恢复后重新创建增量物化视图。
+
 以下示例将数据库 `sr_hub` 中的异步物化视图 `sr_mv1` 备份到快照 `sr_mv1_backup` 中，并将快照上传到仓库 `test_repo`。
 
 ```SQL
@@ -497,6 +499,8 @@ PROPERTIES ("backup_timestamp" = "2024-12-09-10-52-10-940");
 您可以指定多个分区名称，用逗号 (`,`)分隔，以批量恢复分区。
 
 ### 恢复物化视图
+
+增量物化视图（`refresh_mode` 为 `INCREMENTAL`，或为 `AUTO` 且没有按 PCT 创建）不支持恢复，恢复作业也不会覆盖已有的增量物化视图。在恢复语句中指定此类对象会报错；恢复整个数据库或所有物化视图时会跳过此类对象。请在基表恢复后重新创建增量物化视图。如果某个异步物化视图建在增量物化视图之上，请先在原数据库中以原名称重新创建该增量物化视图，再恢复其上的物化视图。
 
 以下示例将快照 `sr_mv1_backup` 中数据库 `sr_hub` 下的物化视图 `sr_mv1` 还原到目标群集。
 

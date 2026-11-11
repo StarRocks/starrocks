@@ -7,6 +7,8 @@ description: "loads provides the results of load jobs."
 
 `loads` provides the results of load jobs. This view is supported from StarRocks v3.1 onwards.
 
+`loads` shows a load job to users who hold at least one privilege on each table that the job loads data into, or the OPERATE privilege. Unless you hold the SELECT privilege on each of those tables, the fields that can reveal the loaded data are hidden: `TRACKING_SQL`, `REJECTED_RECORD_PATH`, and `PROPERTIES` are NULL, `ERROR_MSG` keeps only the failure type of a Broker Load or INSERT job (for example, `type:ETL_QUALITY_UNSATISFIED`) and is NULL for other jobs, and `RUNTIME_DETAILS` omits the load IDs, the backends, and the transaction error message. The `root` user can see all load jobs in full. A load job whose target table has been dropped is shown in full only to the `root` user, and with these fields hidden to users with the OPERATE privilege.
+
 The following fields are provided in `loads`:
 
 | Field                | Description                                                  |

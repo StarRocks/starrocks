@@ -89,6 +89,12 @@ public:
 
     virtual bool is_encrypted() const { return false; };
 
+    // Where this stream's bytes start inside the physical file `filename()` names: non-zero
+    // only for a slice view (BundleSeekableInputStream). Callers that hand a stream-relative
+    // offset to something working in physical-file coordinates -- the local data cache, which
+    // caches the physical object -- must add it.
+    virtual int64_t bundle_offset() const { return 0; }
+
     // Cache key for the page hosted at `stream_offset` bytes within this stream. The default
     // encodes (filename, stream_offset). Streams whose `filename()` is shared with other streams
     // (e.g. BundleSeekableInputStream slices of one physical file) must override to fold their
@@ -153,6 +159,10 @@ public:
     bool is_encrypted() const override { return _impl->is_encrypted(); };
 
     Status touch_cache(int64_t offset, size_t length) override { return _impl->touch_cache(offset, length); }
+
+    // Forwarded, unlike page_cache_key below: the slice base is a property of the stream being
+    // wrapped, and every wrapper above it keeps the same coordinates.
+    int64_t bundle_offset() const override { return _impl->bundle_offset(); }
 
     // Intentionally do NOT forward page_cache_key to _impl. Wrappers like RandomAccessFile carry
     // the path on themselves (overriding filename() but leaving _impl's _filename empty), so

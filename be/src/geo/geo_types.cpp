@@ -169,7 +169,7 @@ static GeoParseStatus to_s2polyline(const GeoCoordinateList& coords, std::unique
 static GeoParseStatus to_s2polygon(const GeoCoordinateListList& coords_list, std::unique_ptr<S2Polygon>* polygon) {
     std::vector<std::unique_ptr<S2Loop>> loops(coords_list.list.size());
     for (int i = 0; i < coords_list.list.size(); ++i) {
-        auto res = to_s2loop(*coords_list.list[i], &loops[i]);
+        auto res = to_s2loop(coords_list.list[i], &loops[i]);
         if (res != GEO_PARSE_OK) {
             return res;
         }
@@ -376,6 +376,9 @@ bool GeoLine::decode(const void* data, size_t size) {
     return _polyline->Decode(&decoder);
 }
 
+GeoRingScratch::GeoRingScratch() = default;
+GeoRingScratch::~GeoRingScratch() = default;
+
 GeoPolygon::GeoPolygon() = default;
 GeoPolygon::~GeoPolygon() = default;
 
@@ -426,6 +429,37 @@ bool GeoPolygon::is_valid_ring_direct(const GeoCoordinateList& coordinates) {
     std::vector<S2Point> points;
     return to_s2loop_points(coordinates, &points) == GEO_PARSE_OK && has_valid_loop_vertices(points) &&
            has_no_crossings_direct(points);
+}
+
+bool GeoPolygon::point_relation_direct(const GeoCoordinateList& coordinates, const GeoPoint& point,
+                                       GeoRingScratch* scratch, GeoPointPolygonRelation* relation) {
+    if (coordinates.list.size() > kMaxDirectVertices + 1) return false;
+    auto& points = scratch->_points;
+    if (to_s2loop_points(coordinates, &points) != GEO_PARSE_OK) return false;
+    // A 60-degree cap is convex and strictly smaller than a hemisphere. Its
+    // complement contains -points[0], outside the region selected by Normalize().
+    for (const auto& vertex : points) {
+        if (points[0].DotProd(vertex) < 0.5) return false;
+    }
+    if (!(has_valid_loop_vertices(points) && has_no_crossings_direct(points))) return false;
+    S1ChordAngle distance = S1ChordAngle::Infinity();
+    const auto& p = *point.point();
+    for (size_t i = 0; i < points.size(); ++i) {
+        S2::UpdateMinDistance(p, points[i], points[(i + 1) % points.size()], &distance);
+    }
+    // Let the existing query decide the boundary, including distance rounding
+    // after Normalize reverses edges. Account for both rounded distance queries.
+    if (distance.PlusError(-2 * S2::GetUpdateMinDistanceMaxError(distance)).ToAngle().radians() <=
+        kBoundaryToleranceRadians)
+        return false;
+    const S2Point outside = -points[0];
+    S2EdgeCrosser crosser(&outside, &p, &points[0]);
+    bool inside = false;
+    for (size_t i = 1; i <= points.size(); ++i) {
+        inside ^= crosser.EdgeOrVertexCrossing(&points[i == points.size() ? 0 : i]);
+    }
+    *relation = inside ? GeoPointPolygonRelation::INSIDE : GeoPointPolygonRelation::OUTSIDE;
+    return true;
 }
 
 GeoParseStatus GeoPolygon::from_coords(const GeoCoordinateListList& list) {
@@ -486,12 +520,6 @@ bool GeoPolygon::contains(const GeoShape* rhs) const {
     case GEO_SHAPE_POINT: {
         const auto* point = (const GeoPoint*)rhs;
         return _polygon->Contains(*point->point());
-#if 0
-        if (_polygon->Contains(point->point())) {
-            return true;
-        }
-        return _polygon->MayIntersect(S2Cell(point->point()));
-#endif
     }
     case GEO_SHAPE_LINE_STRING: {
         const auto* line = (const GeoLine*)rhs;
@@ -501,35 +529,6 @@ bool GeoPolygon::contains(const GeoShape* rhs) const {
         const auto* other = (const GeoPolygon*)rhs;
         return _polygon->Contains(other->polygon());
     }
-#if 0
-    case GEO_SHAPE_MULTI_POINT: {
-        const GeoMultiPoint* multi_point = (const GeoMultiPoint*)rhs;
-        for (auto& point : multi_point->points()) {
-            if (!_polygon.Contains(point)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    case GEO_SHAPE_MULTI_LINE_STRING: {
-        const GeoMultiLine* multi_line = (const GeoMultiLine*)rhs;
-        for (auto& line : multi_line->lines()) {
-            if (!_polygon.Contains(line)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    case GEO_SHAPE_MULTI_POLYGON: {
-        const GeoMultiPolygon* multi_polygon = (const GeoMultiPolygon*)rhs;
-        for (auto& polygon : multi_polygon->polygons()) {
-            if (!_polygon.Contains(polygon)) {
-                return false;
-            }
-        }
-        return true;
-    }
-#endif
     default:
         return false;
     }
@@ -612,50 +611,7 @@ bool GeoCircle::contains(const GeoShape* rhs) const {
     case GEO_SHAPE_POINT: {
         const auto* point = (const GeoPoint*)rhs;
         return _cap->Contains(*point->point());
-#if 0
-        if (_polygon->Contains(point->point())) {
-            return true;
-        }
-        return _polygon->MayIntersect(S2Cell(point->point()));
-#endif
     }
-#if 0
-    case GEO_SHAPE_LINE_STRING: {
-        const GeoLine* line = (const GeoLine*)rhs;
-        return _polygon->Contains(*line->polyline());
-    }
-    case GEO_SHAPE_POLYGON: {
-        const GeoPolygon* other = (const GeoPolygon*)rhs;
-        return _polygon->Contains(other->polygon());
-    }
-    case GEO_SHAPE_MULTI_POINT: {
-        const GeoMultiPoint* multi_point = (const GeoMultiPoint*)rhs;
-        for (auto& point : multi_point->points()) {
-            if (!_polygon.Contains(point)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    case GEO_SHAPE_MULTI_LINE_STRING: {
-        const GeoMultiLine* multi_line = (const GeoMultiLine*)rhs;
-        for (auto& line : multi_line->lines()) {
-            if (!_polygon.Contains(line)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    case GEO_SHAPE_MULTI_POLYGON: {
-        const GeoMultiPolygon* multi_polygon = (const GeoMultiPolygon*)rhs;
-        for (auto& polygon : multi_polygon->polygons()) {
-            if (!_polygon.Contains(polygon)) {
-                return false;
-            }
-        }
-        return true;
-    }
-#endif
     default:
         return false;
     }
@@ -680,63 +636,5 @@ std::string GeoCircle::as_wkt() const {
     ss << "), " << S2Earth::ToMeters(_cap->radius()) << ")";
     return ss.str();
 }
-
-#if 0
-
-template<typename T>
-bool GeoMultiPolygon::_contains(const T rhs) {
-    for (auto polygon : _polygons) {
-        if (polygon->Contains(point->point())) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool GeoMultiPolygon::contains(const GeoShape* rhs) {
-    switch (rhs->type()) {
-    case GEO_SHAPE_POINT: {
-        const GeoPoint* point = (const GeoPoint*)rhs;
-        return _contains(point->point());
-    }
-    case GEO_SHAPE_LINE_STRING: {
-        const GeoLine* line = (const GeoLine*)rhs;
-        return _contains(line->polyline());
-    }
-    case GEO_SHAPE_POLYGON: {
-        const GeoPolygon* polygon = (const GeoPolygon*)rhs;
-        return _contains(line->polygon());
-    }
-    case GEO_SHAPE_MULTI_POINT: {
-        const GeoMultiPoint* multi_point = (const GeoMultiPoint*)rhs;
-        for (auto& point : multi_point->points()) {
-            if (!_contains(point)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    case GEO_SHAPE_LINE_STRING: {
-        const GeoMultiLine* multi_line = (const GeoMultiLine*)rhs;
-        for (auto& line : multi_line->lines()) {
-            if (!_contains(line)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    case GEO_SHAPE_POLYGON: {
-        const GeoMultiPolygon* multi_polygon = (const GeoMultiPolygon*)rhs;
-        for (auto& polygon : multi_polygon->polygons()) {
-            if (!_contains(polygon)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    }
-    return false;
-}
-#endif
 
 } // namespace starrocks

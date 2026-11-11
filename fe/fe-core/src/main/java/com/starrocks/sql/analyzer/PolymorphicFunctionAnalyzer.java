@@ -344,6 +344,8 @@ public class PolymorphicFunctionAnalyzer {
             throw  new SemanticException(errMsg);
         }
 
+        checkMapKeyType(newRetType);
+
         // change null type into boolean type
         resolvedArgTypes = AnalyzerUtils.replaceNullTypes2Booleans(resolvedArgTypes);
         newRetType = replaceNullType2Boolean(newRetType);
@@ -355,6 +357,22 @@ public class PolymorphicFunctionAnalyzer {
             return newAggregateFunction((AggregateFunction) fn, Arrays.asList(resolvedArgTypes), newRetType);
         }
         return null;
+    }
+
+    static void checkMapKeyType(Type type) {
+        if (type.isMapType()) {
+            MapType map = (MapType) type;
+            if (map.getKeyType().isGeoType() || map.getKeyType().hasNestedGeoType()) {
+                throw new SemanticException("Map key doesn't support type: " + map.getKeyType());
+            }
+            checkMapKeyType(map.getValueType());
+        } else if (type.isArrayType()) {
+            checkMapKeyType(((ArrayType) type).getItemType());
+        } else if (type.isStructType()) {
+            for (StructField field : ((StructType) type).getFields()) {
+                checkMapKeyType(field.getType());
+            }
+        }
     }
 
     private static Function resolvePolymorphicArrayFunction(Function fn, Type[] inputArgTypes) {

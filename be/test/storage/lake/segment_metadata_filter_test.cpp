@@ -67,8 +67,7 @@ protected:
     // Helper function to create a VariantPB for an INT value.
     static VariantPB make_int_variant(int32_t value) {
         VariantPB var;
-        TypeDescriptor td(TYPE_INT);
-        *var.mutable_type() = td.to_protobuf();
+        *var.mutable_type() = TYPE_INT_DESC.to_protobuf();
         var.set_value(std::to_string(value));
         return var;
     }
@@ -76,8 +75,7 @@ protected:
     // Helper function to create a VariantPB for a null INT value.
     static VariantPB make_null_int_variant() {
         VariantPB var;
-        TypeDescriptor td(TYPE_INT);
-        *var.mutable_type() = td.to_protobuf();
+        *var.mutable_type() = TYPE_INT_DESC.to_protobuf();
         // No value set means null
         return var;
     }
@@ -685,8 +683,7 @@ TEST_F(SegmentMetadataFilterTest, test_varchar_sort_key_no_use_after_free) {
 
     auto make_varchar_variant = [](const std::string& value) {
         VariantPB var;
-        TypeDescriptor td = TypeDescriptor::create_varchar_type(128);
-        *var.mutable_type() = td.to_protobuf();
+        *var.mutable_type() = TYPE_VARCHAR_DESC.to_protobuf();
         var.set_variant_type(VariantTypePB::NORMAL_VALUE);
         var.set_value(value);
         return var;

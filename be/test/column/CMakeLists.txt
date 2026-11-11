@@ -96,8 +96,8 @@ set(COLUMN_TEST_LINK_LIBS
 add_library(starrocks_column_test_objs OBJECT ${COLUMN_TEST_FILES})
 target_link_libraries(starrocks_column_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_column_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-add_executable(column_test $<TARGET_OBJECTS:starrocks_column_test_objs>)
-target_link_libraries(column_test ${COLUMN_TEST_LINK_LIBS} gtest_main)
+add_executable(column_test column_test_main.cpp $<TARGET_OBJECTS:starrocks_column_test_objs>)
+target_link_libraries(column_test ${COLUMN_TEST_LINK_LIBS})
 
 set(CHUNK_TEST_FILES
     ../base/cxa_throw_wrap.cpp

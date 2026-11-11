@@ -27,27 +27,27 @@ struct StdDispatcher {
         if constexpr (lt_is_numeric<lt> && lt != TYPE_DECIMAL256) {
             using VarState = DevFromAveAggregateState<RunTimeCppType<DevFromAveResultLT<lt>>>;
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
-                    "variance", true, AggregateFactory::MakeVarianceAggregateFunction<lt, false>());
+                    "variance", kWithWindow, AggregateFactory::MakeVarianceAggregateFunction<lt, false>());
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
-                    "variance_pop", true, AggregateFactory::MakeVarianceAggregateFunction<lt, false>());
+                    "variance_pop", kWithWindow, AggregateFactory::MakeVarianceAggregateFunction<lt, false>());
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
-                    "var_pop", true, AggregateFactory::MakeVarianceAggregateFunction<lt, false>());
+                    "var_pop", kWithWindow, AggregateFactory::MakeVarianceAggregateFunction<lt, false>());
 
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
-                    "variance_samp", true, AggregateFactory::MakeVarianceAggregateFunction<lt, true>(),
+                    "variance_samp", kWithWindow, AggregateFactory::MakeVarianceAggregateFunction<lt, true>(),
                     typename VarianceAggregateFunction<lt, true>::AggNullPred());
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
-                    "var_samp", true, AggregateFactory::MakeVarianceAggregateFunction<lt, true>(),
+                    "var_samp", kWithWindow, AggregateFactory::MakeVarianceAggregateFunction<lt, true>(),
                     typename VarianceAggregateFunction<lt, true>::AggNullPred());
 
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
-                    "stddev", true, AggregateFactory::MakeStddevAggregateFunction<lt, false>());
+                    "stddev", kWithWindow, AggregateFactory::MakeStddevAggregateFunction<lt, false>());
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
-                    "std", true, AggregateFactory::MakeStddevAggregateFunction<lt, false>());
+                    "std", kWithWindow, AggregateFactory::MakeStddevAggregateFunction<lt, false>());
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
-                    "stddev_pop", true, AggregateFactory::MakeStddevAggregateFunction<lt, false>());
+                    "stddev_pop", kWithWindow, AggregateFactory::MakeStddevAggregateFunction<lt, false>());
             resolver->add_aggregate_mapping<lt, DevFromAveResultLT<lt>, VarState>(
-                    "stddev_samp", true, AggregateFactory::MakeStddevAggregateFunction<lt, true>(),
+                    "stddev_samp", kWithWindow, AggregateFactory::MakeStddevAggregateFunction<lt, true>(),
                     typename StddevAggregateFunction<lt, true>::AggNullPred());
         }
     }

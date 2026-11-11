@@ -1149,12 +1149,13 @@ def _compare_mv_refresh(
         # IMMEDIATE is not rendered in SHOW CREATE, so drop
         if normalized.startswith("IMMEDIATE "):
             normalized = normalized[len("IMMEDIATE "):]
-        # SCHEDULE keyword replaced ASYNC 4.1.1, replace with ASYNC for backwards compatibility 
+        # SCHEDULE (4.1.1+) and ON_CHANGE (26.2+) are later spellings of what ASYNC used to
+        # cover; fold them so metadata written for one release is not a diff against another.
         for moment_prefix in ("", "DEFERRED "):
-            keyword = moment_prefix + "SCHEDULE"
-            if normalized.startswith(keyword):
-                normalized = moment_prefix + "ASYNC" + normalized[len(keyword):]
-                break
+            for keyword in ("SCHEDULE", "ON_CHANGE"):
+                legacy = moment_prefix + keyword
+                if normalized.startswith(legacy):
+                    normalized = moment_prefix + "ASYNC" + normalized[len(legacy):]
         # Normalize START("...") (SHOW CREATE) vs START('...') (metadata) quote styles.
         normalized = normalized.replace('"', "'")
         return normalized

@@ -77,6 +77,41 @@ import static org.mockito.Mockito.times;
 class StatementPlannerTest extends PlanTestBase {
 
     @Test
+    public void testGeometryPublicOutput() throws Exception {
+        String geometry = "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')";
+        String column = "ST_GeomFromText(if(v1 IS NULL, NULL, 'POINT (1 2)'), 'EPSG:3857')";
+        for (String sql : List.of("select " + geometry, "select ST_GeomFromText(NULL, 'EPSG:3857')",
+                "select * from (select " + geometry + " g) t",
+                "with c as (select " + geometry + " g) select g from c",
+                "select " + geometry + " union all select NULL", "select " + column + " from t0",
+                "select g from (select " + column + " g from t0) t",
+                "with c as (select " + column + " g from t0) select g from c")) {
+            getFragmentPlan("explain " + sql);
+            for (String prefix : List.of("", "explain analyze ")) {
+                StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(prefix + sql, connectContext);
+                try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
+                    SemanticException error = assertThrows(SemanticException.class,
+                            () -> StatementPlanner.analyzeStatement(stmt, connectContext, locker));
+                    assertTrue(error.getMessage().contains(
+                            "GEOMETRY query results are not supported; use ST_AsText or ST_AsBinary"), error.getMessage());
+                }
+            }
+        }
+        for (String sql : List.of("select ST_GeogFromText('POINT (1 2)')",
+                "select ST_AsText(g), ST_AsBinary(g), g IS NULL from (select " + geometry + " g) t",
+                "select ST_AsText((select " + geometry + "))",
+                "select ST_AsText(g) from (select " + geometry + " g union all select NULL) u",
+                "insert into blackhole() select " + geometry,
+                "create view scalar_geo_view as select " + geometry + " g",
+                "create table scalar_geo_ctas as select ST_AsText(" + geometry + ") g")) {
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+            try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt)) {
+                StatementPlanner.analyzeStatement(stmt, connectContext, locker);
+            }
+        }
+    }
+
+    @Test
     public void testAuthorizationPrecedesAIProviderResolution() throws Exception {
         boolean oldBypassAuthorizerCheck = connectContext.isBypassAuthorizerCheck();
         connectContext.setBypassAuthorizerCheck(false);

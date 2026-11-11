@@ -4,6 +4,8 @@ sidebar_position: 10
 description: "在共享数据集群上使用 Claude 和 StarRocks MCP 服务器分析复杂数据。"
 ---
 
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
+
 # Claude + StarRocks MCP
 
 在对象存储上搭建一个小型 StarRocks 集群，加载真实的公开数据集，并通过**Claude**用自然语言提问。**StarRocks MCP 服务器**Claude 自动发现 schema，编写 SQL（包括多表连接），并渲染图表。所有数据存储在对象存储中，运行于**MinIO**。
@@ -52,6 +54,10 @@ description: "在共享数据集群上使用 Claude 和 StarRocks MCP 服务器�
 :::note
 Apple Silicon：StarRocks 依赖 AVX2（x86）指令集；请使用 ARM 构建版本，否则可能出现较慢的模拟运行。
 :::
+
+### MinIO AIStor 许可证
+
+克隆演示仓库后，将提供获取免费版许可证的说明。
 
 ***
 
@@ -127,6 +133,12 @@ git clone git@github.com:StarRocks/demo.git
 
 ***
 
+## 获取 MinIO AIStor 许可证
+
+<AIStorLicense />
+
+在本教程中，即您本地克隆的 `StarRocks/demo` 仓库中的 `demo/documentation-samples/MCP` 目录。
+
 ## 启动 StarRocks 和 MinIO
 
 ```bash
@@ -150,7 +162,7 @@ docker compose ps -a --format "table {{.Service}}\t{{.Status}}"
 
 ## 在 MinIO 中创建存储桶
 
-在以下地址打开 MinIO 控制台[http://localhost:9001](http://localhost:9001)（登录账号 `miniouser` / `M!n10R0cks`），点击**创建存储桶**，并创建存储桶 `my-starrocks-bucket`。
+在以下地址打开 MinIO 控制台[http://localhost:9001](http://localhost:9001)（登录账号 `miniouser` / `M!n10R0cks`），点击**添加存储桶**，并创建存储桶 `my-starrocks-bucket`。
 
 ***
 

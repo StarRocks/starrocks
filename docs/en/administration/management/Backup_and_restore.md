@@ -217,6 +217,8 @@ By default, asynchronous materialized views are not backed up along with the BAC
 - Specify them by name in the `ON` clause, as in the following examples. This works regardless of `enable_backup_materialized_view`.
 - Set the FE configuration item [`enable_backup_materialized_view`](../configuration/FE_parameters/user_query_loading.md#enable_backup_materialized_view) to `true`. A database-level BACKUP and `ON (ALL MATERIALIZED VIEWS)` then include them.
 
+Incremental materialized views (`refresh_mode` is `INCREMENTAL`, or `AUTO` when the view was not created as PCT) cannot be backed up. BACKUP returns an error if you specify one, and skips them when you back up a database or all materialized views. Recreate them after their base tables are restored.
+
 The following example backs up the materialized view `sr_mv1` from the database `sr_hub` in the snapshot `sr_mv1_backup` and upload the snapshot to the repository `test_repo`.
 
 ```SQL
@@ -465,6 +467,8 @@ PROPERTIES ("backup_timestamp" = "2024-12-09-10-52-10-940");
 You can specify multiple partition names separated by commas (`,`) to restore partitions in batch.
 
 ### Restore materialized view
+
+Incremental materialized views (`refresh_mode` is `INCREMENTAL`, or `AUTO` when the view was not created as PCT) cannot be restored, and RESTORE does not overwrite an existing incremental materialized view. RESTORE returns an error if you specify such an object, and skips it when you restore a database or all materialized views. Recreate incremental materialized views after their base tables are restored. If an asynchronous materialized view is built on an incremental materialized view, recreate the incremental materialized view in its original database and with its original name before you restore the materialized view on top of it.
 
 The following example restores the materialized view `sr_mv1` from the database `sr_hub` in the snapshot `sr_mv1_backup` to the target cluster.
 

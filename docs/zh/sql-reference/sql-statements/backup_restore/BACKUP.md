@@ -267,8 +267,5 @@ ON (ALL FUNCTIONS);
 - 如果恢复作业是一次覆盖操作（指定恢复数据到已经存在的表或分区中），那么从恢复作业的 COMMIT 阶段开始，当前集群上被覆盖的数据有可能不能再被还原。此时如果恢复作业失败或被取消，有可能造成之前的数据损坏且无法访问。这种情况下，只能通过再次执行恢复操作，并等待作业完成。因此，我们建议您，如无必要，不要使用覆盖的方式恢复数据，除非确认当前数据已不再使用。覆盖操作会检查快照和已存在的表或分区的元数据是否相同，包括 Schema 和 Rollup 等信息，如果不同则无法执行恢复操作。
 - 目前 StarRocks 暂不支持备份恢复用户、权限以及资源组配置相关数据。
 - StarRocks 不支持备份恢复表之间的 Colocate Join 关系。
-<<<<<<< HEAD
-=======
 - 除非将 FE 配置项 `enable_backup_materialized_view` 设置为 `true`，否则异步物化视图只有在 BACKUP 语句中按名称指定时才会被备份。默认值 `false` 下，备份整个数据库会跳过异步物化视图，`ON (ALL MATERIALIZED VIEWS)` 不会备份任何内容，作业仍会成功完成，不报错。
 - 增量物化视图（`refresh_mode` 为 `INCREMENTAL`，或为 `AUTO` 且没有按 PCT 创建）不支持备份。在备份语句中指定增量物化视图会报错；备份整个数据库或所有物化视图时会跳过增量物化视图。
->>>>>>> 86d20c080db... [Doc] Document that database-level BACKUP skips asynchronous materialized views by default (#66957)
