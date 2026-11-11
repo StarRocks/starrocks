@@ -18,6 +18,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListUtil;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.BackendSelector;
@@ -25,6 +26,7 @@ import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.FragmentScanRangeAssignment;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
@@ -71,6 +73,11 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
 
     @Override
     public void assignFragmentToWorker(ExecutionFragment execFragment) throws StarRocksException {
+        if (hasParallelRangeScan(execFragment)
+                && (!usePipeline || execFragment.getPlanFragment().getParallelExecNum() != 1)) {
+            throw new NonRecoverableException(
+                    "range_scan_execution_mode=parallel requires pipeline execution and one instance per owner");
+        }
         for (ScanNode scanNode : execFragment.getScanNodes()) {
             assignScanRangesToWorker(execFragment, scanNode);
         }
@@ -99,6 +106,10 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
     }
 
     private void assignScanRangesToFragmentInstancePerWorker(ExecutionFragment execFragment) {
+        if (hasParallelRangeScan(execFragment)) {
+            assignScanRangesToNormalFragmentInstancePerWorker(execFragment);
+            return;
+        }
         ColocatedBackendSelector.Assignment colocatedAssignment = execFragment.getColocatedAssignment();
         boolean hasColocate = execFragment.isColocated()
                 && colocatedAssignment != null && !colocatedAssignment.getSeqToWorkerId().isEmpty();
@@ -130,8 +141,9 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         return !enableTabletInternalParallel || scanRanges.size() > pipelineDop / 2;
     }
 
-    private boolean enableAssignScanRangesPerDriverSeq(PlanFragment fragment, List<TScanRangeParams> scanRanges) {
-        if (!usePipeline) {
+    private boolean enableAssignScanRangesPerDriverSeq(ExecutionFragment execFragment, List<TScanRangeParams> scanRanges) {
+        PlanFragment fragment = execFragment.getPlanFragment();
+        if (!usePipeline || hasParallelRangeScan(execFragment)) {
             return false;
         }
 
@@ -141,6 +153,11 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
 
         return fragment.isAssignScanRangesPerDriverSeq() &&
                 enableAssignScanRangesPerDriverSeq(scanRanges, fragment.getPipelineDop());
+    }
+
+    private static boolean hasParallelRangeScan(ExecutionFragment fragment) {
+        return fragment.getScanNodes().stream()
+                .anyMatch(scan -> scan instanceof OlapScanNode nativeScan && nativeScan.isParallelRangeScan());
     }
 
     private boolean needAddScanRanges(Set<Integer> visitedReplicatedScanIds, Integer scanId) {
@@ -326,7 +343,7 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                     }
                     if (reuse) {
                         assignIncrementalScanRangesToDeployedLayout(fragment, instance, scanId, scanRanges);
-                    } else if (!enableAssignScanRangesPerDriverSeq(fragment, scanRanges)) {
+                    } else if (!enableAssignScanRangesPerDriverSeq(execFragment, scanRanges)) {
                         instance.addScanRanges(scanId, scanRanges);
                         instance.recordDeployedScanRangesWithoutDriverSeq(scanId);
                         fragment.disablePhysicalPropertyOptimize();

@@ -39,6 +39,52 @@ ALTER TABLE iceberg.sales.order
 EXECUTE rollback_to_snapshot(98765);
 ```
 
+### 回滚到时间点
+
+将表回滚到指定时间点之前提交的最新快照。时间点按当前会话的时区解析。
+
+#### `rollback_to_timestamp` 语法
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE rollback_to_timestamp(<timestamp>)
+```
+
+#### Parameters
+
+`timestamp`: 将表回滚到该时间点之前提交的最新快照。格式：'YYYY-MM-DD HH:MM:SS'。如果该时间点之前没有提交过快照，则返回错误。
+
+#### 示例
+
+将表回滚到 2025-01-01 00:00:00 之前的状态：
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE rollback_to_timestamp('2025-01-01 00:00:00');
+```
+
+### 设置当前快照
+
+将表的当前快照设置为指定的快照 ID。与 `rollback_to_snapshot` 不同，该快照不需要是当前快照的祖先，因此可以用于将表重新前移到已被回滚掉的快照。
+
+#### `set_current_snapshot` 语法
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE set_current_snapshot(<snapshot_id>)
+```
+
+#### Parameters
+
+`snapshot_id`: 要设置为表当前快照的快照 ID。
+
+#### 示例
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE set_current_snapshot(98765);
+```
+
 ### 选择快照
 
 选择特定的快照并将其应用到表的当前状态。此操作基于现有快照创建一个新快照，而原始快照保持不变。
@@ -136,6 +182,20 @@ EXECUTE rewrite_data_files
 - 单位：-
 - 类型：Int
 - 默认值：1
+
+###### `delete_ratio_threshold`
+
+- 说明：大于 `min_file_size_bytes` 的数据文件，如果其 Deletion Vector 或文件级 Position Delete 文件删除的行数占该文件行数的比例达到该值，也会被重写。取值范围：[0, 1]。Equality Delete 文件和分区级 Position Delete 文件不计入该比例。
+- 单位：-
+- 类型：Double
+- 默认值：0.3
+
+###### `delete_file_threshold`
+
+- 说明：大于 `min_file_size_bytes` 的数据文件，如果作用于它的 Delete 文件数量不少于该值，也会被重写。必须为正整数。
+- 单位：-
+- 类型：Int
+- 默认值：无限制
 
 ##### `WHERE` clause
 

@@ -115,6 +115,50 @@ public class AnalyzeFunctionTest {
     }
 
     @Test
+    public void testScalarGeoOperations() {
+        for (String constructor : List.of("ST_GeogFromText(%s)", "ST_GeomFromText(%s, 'EPSG:3857')")) {
+            String type = constructor.contains("Geog") ? "GEOGRAPHY" : "GEOMETRY";
+            for (String wkt : List.of("'POINT (1 2)'", "'POINT EMPTY'", "NULL", "if(v1 IS NULL, NULL, 'POINT (1 2)')")) {
+                String source = " from (select " + String.format(constructor, wkt) + " g, v1 id from t0) t";
+                for (String operator : List.of("=", "<=>", "<", "!=", ">", "<=", ">=")) {
+                    analyzeFail("select g " + operator + " g" + source,
+                            "Column type " + type + " does not support binary predicate operation with type " + type);
+                }
+                analyzeFail("select g between g and g" + source,
+                        "between predicate type " + type + " with type INVALID_TYPE is invalid");
+                analyzeFail("select g in (g)" + source,
+                        "The input types (" + type + "," + type + ") of in predict are not compatible");
+                analyzeFail("select case when g then 1 else 0 end" + source,
+                        "Invalid when type cast " + type + " to boolean");
+                analyzeFail("select case g when g then 1 else 0 end" + source,
+                        "Invalid when type cast " + type + " to INVALID_TYPE");
+                analyzeFail("select id" + source + " where g in (select " +
+                        String.format(constructor, "'POINT (1 2)'") + ")",
+                        "The input types (" + type + "," + type + ") of in predict are not compatible");
+                for (String setOp : List.of("union distinct", "intersect", "except")) {
+                    analyzeFail("select g" + source + " " + setOp + " select g" + source,
+                            type + " not support set operation");
+                    analyzeFail("select NULL " + setOp + " select g" + source, type + " not support set operation");
+                    analyzeFail("select g" + source + " " + setOp + " select NULL", type + " not support set operation");
+                }
+                for (String expr : List.of("case when id=1 then g end", "case when id=1 then NULL else g end",
+                        "case when true then g else g end")) {
+                    analyzeFail("select ST_AsText(" + expr + ")" + source,
+                            "Invalid then type cast " + type + " to INVALID_TYPE");
+                }
+                for (String format : List.of("CSV", "PARQUET")) {
+                    analyzeFail("select g" + source + " into outfile 'file:///tmp/scalar_geo_' format as " + format,
+                            "Type " + type + " is not supported for " + format + " outfile");
+                }
+                analyzeSuccess("select case when id=1 then ST_AsText(g) else NULL end" + source);
+                analyzeSuccess("select ST_AsText(g), ST_AsBinary(g), g IS NULL" + source);
+                analyzeSuccess("select ST_AsText(g) from (select g" + source + " union all select g" + source + ") u");
+            }
+        }
+        analyzeSuccess("select ST_GeomFromText('POINT (1 2)') = ST_GeomFromText('POINT (1 2)')");
+    }
+
+    @Test
     public void testNativeGeometryInitialFunctions() {
         analyzeSuccess("select ST_X(ST_GeomFromText('POINT (1 2)', 'EPSG:3857'))");
         analyzeSuccess("select ST_Y(ST_GeomFromText('POINT (1 2)', 'EPSG:3857'))");
@@ -154,13 +198,14 @@ public class AnalyzeFunctionTest {
             analyzeFail("select [" + String.format(constructor, "NULL") + "]", NESTED_GEO_ERROR);
             String source = " from (select " + String.format(constructor, "if(v1 IS NULL, NULL, 'POINT (1 2)')")
                     + " g, v1 id from t0) t";
-            for (String expr : List.of("[[g]]", "map{'a': g}", "map{g: 'a'}", "row([g])", "named_struct('a', [g])",
-                    "array_agg(g)", "array_agg(distinct g)", "max_by([g], id)", "map_agg(id, g)",
+            for (String expr : List.of("[[g]]", "map{'a': g}", "row([g])", "named_struct('a', [g])",
+                    "array_agg(g)", "max_by([g], id)", "map_agg(id, g)",
                     "array_distinct([g])", "array_sort([g])", "array_contains([g], g)", "[g] = [g]",
                     "ST_AsText([g][1])", "cardinality([g])", "array_contains([], g)", "array_position([], g)",
                     "array_contains(NULL, g)")) {
                 analyzeFail("select " + expr + source, NESTED_GEO_ERROR);
             }
+            analyzeFail("select map{g: 'a'}" + source, "Map key doesn't support type: ");
             for (String query : List.of("select [g]" + source + " union all select [g]" + source,
                     "with c as (select [g] a" + source + ") select cardinality(a) from c",
                     "select cardinality(a) from (select [g] a" + source + ") s",
@@ -191,10 +236,12 @@ public class AnalyzeFunctionTest {
         for (String geo : List.of("ST_GeogFromText('POINT (1 2)')", "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')")) {
             for (String expr : List.of("array_sortby(x -> g, [1])", "array_map(x -> g, [1])",
                     "array_filter(x -> g, [1])", "any_match(x -> g, [1])", "all_match(x -> g, [1])",
-                    "map_apply((k,v) -> (k,g), map{1:2})", "transform_keys((k,v) -> g, map{1:2})",
+                    "map_apply((k,v) -> (k,g), map{1:2})",
                     "transform_values((k,v) -> g, map{1:2})")) {
                 analyzeFail("select cardinality(" + expr + ") from (select " + geo + " g) t", NESTED_GEO_ERROR);
             }
+            analyzeFail("select cardinality(transform_keys((k,v) -> g, map{1:2})) from (select " + geo + " g) t",
+                    "Map key doesn't support type: ");
         }
     }
 

@@ -1,0 +1,591 @@
+-- name: test_colocate_range_rollup @cloud
+set enable_range_distribution = true;
+-- result:
+-- !result
+set enable_tablet_pre_split = false;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1 (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null
+)
+duplicate key(k1, k2)
+order by(k1, k2)
+properties('replication_num' = '1', 'colocate_with' = 'g_rollup_${uuid0}:k1');
+-- result:
+-- !result
+insert into t1 select x % 10, x, x from table(generate_series(1, 1000)) as g(x);
+-- result:
+-- !result
+insert into t1 select 10 + x % 10, x, x from table(generate_series(1001, 2000)) as g(x);
+-- result:
+-- !result
+insert into t1 select 20 + x % 10, x, x from table(generate_series(2001, 3000)) as g(x);
+-- result:
+-- !result
+function: set_first_tablet_id("t1")
+-- result:
+None
+-- !result
+alter table t1 split tablet (${tablet_id}) properties ('tablet_reshard_target_size' = '-3');
+-- result:
+-- !result
+function: wait_reshard_job_finish("t1", "SPLIT_TABLET", 1, 120)
+-- result:
+None
+-- !result
+shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "g_rollup_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
+-- result:
+0
+stable=true
+-- !result
+select buckets from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 't1';
+-- result:
+3
+-- !result
+create table t2 (
+    k1 int not null,
+    k2 int not null,
+    w int not null
+)
+duplicate key(k1, k2)
+order by(k1, k2)
+properties('replication_num' = '1', 'colocate_with' = 'g_rollup_${uuid0}:k1');
+-- result:
+-- !result
+insert into t2 select k1, k2, v1 * 10 from t1;
+-- result:
+-- !result
+select count(*), sum(w) from t2;
+-- result:
+3000	45015000
+-- !result
+alter table t1 add rollup r1 (k1, v1) order by (k1);
+-- result:
+-- !result
+function: wait_alter_table_finish("ROLLUP", 8)
+-- result:
+None
+-- !result
+shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "g_rollup_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
+-- result:
+0
+stable=true
+-- !result
+desc t1 all;
+-- result:
+t1	DUP_KEYS	k1	int	NO	true	None	
+		k2	int	NO	true	None	
+		v1	int	NO	false	None	NONE
+							
+r1	DUP_KEYS	k1	int	NO	true	None	
+		v1	int	NO	false	None	NONE
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+set enable_sync_materialized_view_rewrite = false;
+-- result:
+-- !result
+select count(*), sum(v1) from t1;
+-- result:
+3000	4501500
+-- !result
+select count(*), sum(v1) from r1 [_SYNC_MV_];
+-- result:
+3000	4501500
+-- !result
+select k1, count(*), sum(v1) from t1 group by k1 order by k1;
+-- result:
+0	100	50500
+1	100	49600
+2	100	49700
+3	100	49800
+4	100	49900
+5	100	50000
+6	100	50100
+7	100	50200
+8	100	50300
+9	100	50400
+10	100	150500
+11	100	149600
+12	100	149700
+13	100	149800
+14	100	149900
+15	100	150000
+16	100	150100
+17	100	150200
+18	100	150300
+19	100	150400
+20	100	250500
+21	100	249600
+22	100	249700
+23	100	249800
+24	100	249900
+25	100	250000
+26	100	250100
+27	100	250200
+28	100	250300
+29	100	250400
+-- !result
+select k1, count(*), sum(v1) from r1 [_SYNC_MV_] group by k1 order by k1;
+-- result:
+0	100	50500
+1	100	49600
+2	100	49700
+3	100	49800
+4	100	49900
+5	100	50000
+6	100	50100
+7	100	50200
+8	100	50300
+9	100	50400
+10	100	150500
+11	100	149600
+12	100	149700
+13	100	149800
+14	100	149900
+15	100	150000
+16	100	150100
+17	100	150200
+18	100	150300
+19	100	150400
+20	100	250500
+21	100	249600
+22	100	249700
+23	100	249800
+24	100	249900
+25	100	250000
+26	100	250100
+27	100	250200
+28	100	250300
+29	100	250400
+-- !result
+function: assert_explain_contains("select r1.k1, r1.v1, t2.w from r1 [_SYNC_MV_] join t2 on r1.k1 = t2.k1", "INNER JOIN (COLOCATE)")
+-- result:
+None
+-- !result
+select count(*), sum(r1.v1), sum(t2.w) from r1 [_SYNC_MV_] join t2 on r1.k1 = t2.k1;
+-- result:
+300000	450150000	4501500000
+-- !result
+select r1.k1, sum(r1.v1), sum(t2.w) from r1 [_SYNC_MV_] join t2 on r1.k1 = t2.k1 group by r1.k1 order by r1.k1;
+-- result:
+0	5050000	50500000
+1	4960000	49600000
+2	4970000	49700000
+3	4980000	49800000
+4	4990000	49900000
+5	5000000	50000000
+6	5010000	50100000
+7	5020000	50200000
+8	5030000	50300000
+9	5040000	50400000
+10	15050000	150500000
+11	14960000	149600000
+12	14970000	149700000
+13	14980000	149800000
+14	14990000	149900000
+15	15000000	150000000
+16	15010000	150100000
+17	15020000	150200000
+18	15030000	150300000
+19	15040000	150400000
+20	25050000	250500000
+21	24960000	249600000
+22	24970000	249700000
+23	24980000	249800000
+24	24990000	249900000
+25	25000000	250000000
+26	25010000	250100000
+27	25020000	250200000
+28	25030000	250300000
+29	25040000	250400000
+-- !result
+set disable_colocate_join = true;
+-- result:
+-- !result
+select count(*), sum(r1.v1), sum(t2.w) from r1 [_SYNC_MV_] join t2 on r1.k1 = t2.k1;
+-- result:
+300000	450150000	4501500000
+-- !result
+select r1.k1, sum(r1.v1), sum(t2.w) from r1 [_SYNC_MV_] join t2 on r1.k1 = t2.k1 group by r1.k1 order by r1.k1;
+-- result:
+0	5050000	50500000
+1	4960000	49600000
+2	4970000	49700000
+3	4980000	49800000
+4	4990000	49900000
+5	5000000	50000000
+6	5010000	50100000
+7	5020000	50200000
+8	5030000	50300000
+9	5040000	50400000
+10	15050000	150500000
+11	14960000	149600000
+12	14970000	149700000
+13	14980000	149800000
+14	14990000	149900000
+15	15000000	150000000
+16	15010000	150100000
+17	15020000	150200000
+18	15030000	150300000
+19	15040000	150400000
+20	25050000	250500000
+21	24960000	249600000
+22	24970000	249700000
+23	24980000	249800000
+24	24990000	249900000
+25	25000000	250000000
+26	25010000	250100000
+27	25020000	250200000
+28	25030000	250300000
+29	25040000	250400000
+-- !result
+set disable_colocate_join = false;
+-- result:
+-- !result
+insert into t1 values (15, 3001, 3001), (25, 3002, 3002);
+-- result:
+-- !result
+select count(*), sum(v1) from t1;
+-- result:
+3002	4507503
+-- !result
+select count(*), sum(v1) from r1 [_SYNC_MV_];
+-- result:
+3002	4507503
+-- !result
+select k1, count(*), sum(v1) from r1 [_SYNC_MV_] where k1 in (15, 25) group by k1 order by k1;
+-- result:
+15	101	153001
+25	101	253002
+-- !result
+create materialized view mv1 as select k1, sum(v1) from t1 group by k1;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "g_rollup_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
+-- result:
+0
+stable=true
+-- !result
+select k1, sum(v1) from t1 group by k1 order by k1;
+-- result:
+0	50500
+1	49600
+2	49700
+3	49800
+4	49900
+5	50000
+6	50100
+7	50200
+8	50300
+9	50400
+10	150500
+11	149600
+12	149700
+13	149800
+14	149900
+15	153001
+16	150100
+17	150200
+18	150300
+19	150400
+20	250500
+21	249600
+22	249700
+23	249800
+24	249900
+25	253002
+26	250100
+27	250200
+28	250300
+29	250400
+-- !result
+select k1, sum(mv_sum_v1) from mv1 [_SYNC_MV_] group by k1 order by k1;
+-- result:
+0	50500
+1	49600
+2	49700
+3	49800
+4	49900
+5	50000
+6	50100
+7	50200
+8	50300
+9	50400
+10	150500
+11	149600
+12	149700
+13	149800
+14	149900
+15	153001
+16	150100
+17	150200
+18	150300
+19	150400
+20	250500
+21	249600
+22	249700
+23	249800
+24	249900
+25	253002
+26	250100
+27	250200
+28	250300
+29	250400
+-- !result
+function: assert_explain_contains("select mv1.k1, t2.w from mv1 [_SYNC_MV_] join t2 on mv1.k1 = t2.k1", "INNER JOIN (COLOCATE)")
+-- result:
+None
+-- !result
+select count(*), sum(mv1.mv_sum_v1), sum(t2.w) from mv1 [_SYNC_MV_] join t2 on mv1.k1 = t2.k1;
+-- result:
+3000	450750300	45015000
+-- !result
+set disable_colocate_join = true;
+-- result:
+-- !result
+select count(*), sum(mv1.mv_sum_v1), sum(t2.w) from mv1 [_SYNC_MV_] join t2 on mv1.k1 = t2.k1;
+-- result:
+3000	450750300	45015000
+-- !result
+set disable_colocate_join = false;
+-- result:
+-- !result
+insert into t1 values (5, 3003, 3003);
+-- result:
+-- !result
+select k1, sum(v1) from t1 where k1 = 5 group by k1 order by k1;
+-- result:
+5	53003
+-- !result
+select k1, sum(mv_sum_v1) from mv1 [_SYNC_MV_] where k1 = 5 group by k1 order by k1;
+-- result:
+5	53003
+-- !result
+select count(*), sum(v1) from r1 [_SYNC_MV_];
+-- result:
+3003	4510506
+-- !result
+alter table t1 add rollup r2 (k2, k1) order by (k2, k1);
+-- result:
+E: (1064, 'The sort key of rollup r2 of a table in a range colocate group must start with its colocate columns [k1] (same order and types). Got: [k2, k1]')
+-- !result
+alter table t1 add rollup r3 (k2, v1) order by (k2);
+-- result:
+E: (1064, 'The sort key of rollup r3 of a table in a range colocate group must start with its colocate columns [k1] (same order and types). Got: [k2]')
+-- !result
+create materialized view mv2 as select k1 + 1 as kk, sum(v1) from t1 group by k1 + 1;
+-- result:
+E: (1064, 'The sort key of synchronous materialized view mv2 of a table in a range colocate group must start with its colocate columns [k1] (same order and types). Got: [mv_kk] The sort key of a synchronous materialized view is its leading non-aggregated columns in SELECT order; for a view without GROUP BY, aggregation or DISTINCT it is the short-key prefix of the SELECT list (at most 3 columns and 36 bytes; it ends with the first VARCHAR column, or before the first column whose type cannot be a key, such as FLOAT or DOUBLE), and ORDER BY does not change it. Use ALTER TABLE ... ADD ROLLUP ... ORDER BY (...) to choose the sort key of such a projection.')
+-- !result
+create materialized view mv3 as select k2, k1, sum(v1) from t1 group by k2, k1;
+-- result:
+E: (1064, 'The sort key of synchronous materialized view mv3 of a table in a range colocate group must start with its colocate columns [k1] (same order and types). Got: [k2, k1] The sort key of a synchronous materialized view is its leading non-aggregated columns in SELECT order; for a view without GROUP BY, aggregation or DISTINCT it is the short-key prefix of the SELECT list (at most 3 columns and 36 bytes; it ends with the first VARCHAR column, or before the first column whose type cannot be a key, such as FLOAT or DOUBLE), and ORDER BY does not change it. Use ALTER TABLE ... ADD ROLLUP ... ORDER BY (...) to choose the sort key of such a projection.')
+-- !result
+desc t1 all;
+-- result:
+t1	DUP_KEYS	k1	int	NO	true	None	
+		k2	int	NO	true	None	
+		v1	int	NO	false	None	NONE
+							
+mv1	AGG_KEYS	k1	int	NO	true	None	
+		mv_sum_v1	bigint	YES	false	None	SUM
+							
+r1	DUP_KEYS	k1	int	NO	true	None	
+		v1	int	NO	false	None	NONE
+-- !result
+alter table t1 order by (k1, v1);
+-- result:
+E: (1064, 'Modifying sort key (ALTER TABLE ... ORDER BY) is not supported on tables with range distribution, because the sort key defines tablet boundaries.')
+-- !result
+create table tp1 (
+    k1 int not null,
+    k2 int not null,
+    v int not null
+)
+duplicate key(k1, k2)
+partition by range(k2) (partition p1 values less than ('100000'))
+order by(k1, k2)
+properties('replication_num' = '1', 'colocate_with' = 'g_rollup_part_${uuid0}:k1');
+-- result:
+-- !result
+insert into tp1 select x % 10, x, x from table(generate_series(1, 1000)) as g(x);
+-- result:
+-- !result
+insert into tp1 select 10 + x % 10, x, x from table(generate_series(1001, 2000)) as g(x);
+-- result:
+-- !result
+insert into tp1 select 20 + x % 10, x, x from table(generate_series(2001, 3000)) as g(x);
+-- result:
+-- !result
+function: set_first_tablet_id("tp1")
+-- result:
+None
+-- !result
+alter table tp1 split tablet (${tablet_id}) properties ('tablet_reshard_target_size' = '-3');
+-- result:
+-- !result
+function: wait_reshard_job_finish("tp1", "SPLIT_TABLET", 1, 120)
+-- result:
+None
+-- !result
+shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "g_rollup_part_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
+-- result:
+0
+stable=true
+-- !result
+select buckets from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'tp1';
+-- result:
+3
+-- !result
+alter table tp1 add rollup rp (k1, k2, v) order by (k1);
+-- result:
+-- !result
+function: wait_alter_table_finish("ROLLUP", 8)
+-- result:
+None
+-- !result
+create table tp2 (
+    k1 int not null,
+    k2 int not null,
+    w int not null
+)
+duplicate key(k1, k2)
+partition by range(k2) (partition p1 values less than ('100000'))
+order by(k1, k2)
+properties('replication_num' = '1', 'colocate_with' = 'g_rollup_part_${uuid0}:k1');
+-- result:
+-- !result
+insert into tp2 select k1, k2, v * 10 from tp1;
+-- result:
+-- !result
+alter table tp1 add partition p2 values less than ('200000');
+-- result:
+-- !result
+alter table tp2 add partition p2 values less than ('200000');
+-- result:
+-- !result
+insert into tp1 values (3, 100001, 1), (15, 100002, 2), (25, 100003, 3), (15, 100004, 4);
+-- result:
+-- !result
+insert into tp2 values (3, 100001, 10), (15, 100002, 20), (25, 100003, 30), (15, 100004, 40);
+-- result:
+-- !result
+select buckets >= 3 from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'tp1' and partition_name = 'p2';
+-- result:
+1
+-- !result
+select count(*), sum(v) from tp1;
+-- result:
+3004	4501510
+-- !result
+select count(*), sum(v) from rp [_SYNC_MV_];
+-- result:
+3004	4501510
+-- !result
+select k1, sum(v) from rp [_SYNC_MV_] where k1 in (3, 15, 25) group by k1 order by k1;
+-- result:
+3	49801
+15	150006
+25	250003
+-- !result
+function: assert_explain_contains("select rp.k1, rp.v, tp2.w from rp [_SYNC_MV_] join tp2 on rp.k1 = tp2.k1", "INNER JOIN (COLOCATE)")
+-- result:
+None
+-- !result
+select count(*), sum(rp.v), sum(tp2.w) from rp [_SYNC_MV_] join tp2 on rp.k1 = tp2.k1;
+-- result:
+300806	450750816	4507508160
+-- !result
+select rp.k1, sum(rp.v), sum(tp2.w) from rp [_SYNC_MV_] join tp2 on rp.k1 = tp2.k1 group by rp.k1 order by rp.k1;
+-- result:
+0	5050000	50500000
+1	4960000	49600000
+2	4970000	49700000
+3	5029901	50299010
+4	4990000	49900000
+5	5000000	50000000
+6	5010000	50100000
+7	5020000	50200000
+8	5030000	50300000
+9	5040000	50400000
+10	15050000	150500000
+11	14960000	149600000
+12	14970000	149700000
+13	14980000	149800000
+14	14990000	149900000
+15	15300612	153006120
+16	15010000	150100000
+17	15020000	150200000
+18	15030000	150300000
+19	15040000	150400000
+20	25050000	250500000
+21	24960000	249600000
+22	24970000	249700000
+23	24980000	249800000
+24	24990000	249900000
+25	25250303	252503030
+26	25010000	250100000
+27	25020000	250200000
+28	25030000	250300000
+29	25040000	250400000
+-- !result
+set disable_colocate_join = true;
+-- result:
+-- !result
+select count(*), sum(rp.v), sum(tp2.w) from rp [_SYNC_MV_] join tp2 on rp.k1 = tp2.k1;
+-- result:
+300806	450750816	4507508160
+-- !result
+select rp.k1, sum(rp.v), sum(tp2.w) from rp [_SYNC_MV_] join tp2 on rp.k1 = tp2.k1 group by rp.k1 order by rp.k1;
+-- result:
+0	5050000	50500000
+1	4960000	49600000
+2	4970000	49700000
+3	5029901	50299010
+4	4990000	49900000
+5	5000000	50000000
+6	5010000	50100000
+7	5020000	50200000
+8	5030000	50300000
+9	5040000	50400000
+10	15050000	150500000
+11	14960000	149600000
+12	14970000	149700000
+13	14980000	149800000
+14	14990000	149900000
+15	15300612	153006120
+16	15010000	150100000
+17	15020000	150200000
+18	15030000	150300000
+19	15040000	150400000
+20	25050000	250500000
+21	24960000	249600000
+22	24970000	249700000
+23	24980000	249800000
+24	24990000	249900000
+25	25250303	252503030
+26	25010000	250100000
+27	25020000	250200000
+28	25030000	250300000
+29	25040000	250400000
+-- !result
+set disable_colocate_join = false;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

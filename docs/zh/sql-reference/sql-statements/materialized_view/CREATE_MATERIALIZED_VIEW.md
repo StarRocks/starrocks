@@ -123,7 +123,9 @@ GROUP BY store_id;
 
 物化视图拥有独立的 Range Tablet 布局和排序键。对于聚合视图，所有分组键都作为排序键，无需与基表的 `ORDER BY` 相同。历史数据在线构建，后续 INSERT 和导入操作同步维护视图。基表和视图的 Tablet 均支持通过 `ALTER TABLE ... SPLIT TABLETS` 和 `ALTER TABLE ... MERGE TABLETS` 进行分裂与合并；如需操作视图的布局，请指定其 Tablet ID。合并仍要求源 Tablet 不包含共享文件，Compaction 可以清除分裂产生的共享文件。当前创建任务达到 `FINISHED` 后，才能继续创建同一基表的其他同步物化视图或 Rollup。
 
-现有的单表、表达式和基表模型限制仍然适用。Range 同步物化视图不支持存算一体集群、主键基表或 Colocate 基表。基表包含 `AUTO_INCREMENT` 列时，视图列不能由该列计算得出，但可以直接选择该列，或在 `WHERE` 子句中按该列过滤。创建时，每个逻辑分区必须恰好对应一个物理分区，支持多个逻辑分区。创建前，请完成所有 FE 的协调升级：旧版本 FE 无法安全地恢复此类 Range 视图的元数据。对此类视图执行 tablet 切分或合并前，还需升级所有 CN。
+现有的单表、表达式和基表模型限制仍然适用。Range 同步物化视图不支持存算一体集群或主键基表。基表包含 `AUTO_INCREMENT` 列时，视图列不能由该列计算得出，但可以直接选择该列，或在 `WHERE` 子句中按该列过滤。创建时，每个逻辑分区必须恰好对应一个物理分区，支持多个逻辑分区。创建前，请完成所有 FE 的协调升级：旧版本 FE 无法安全地恢复此类 Range 视图的元数据。对此类视图执行 tablet 切分或合并前，还需升级所有 CN。
+
+基表设置了 `colocate_with` 时，视图的排序键必须以 Colocated Column 开头，列的顺序和类型均须与之一致。同步物化视图的排序键是 `SELECT` 列表开头的非聚合列，顺序与 `SELECT` 中一致；如果视图不含 `GROUP BY`、聚合函数或 `DISTINCT`，排序键取 `SELECT` 列表的前缀（最多三列、不超过 36 字节；遇到 VARCHAR 列时取到该列为止，遇到不能作为键的类型（如 FLOAT、DOUBLE）时在该列之前截止），`ORDER BY` 对它不起作用。如需为这类视图自行指定排序键，请改用 `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)`。
 
 Range 同步物化视图不支持表达式生成的 MV 列名与真实基表列重名。例如，基表已包含 `mv_sum_v` 时，不能使用 `SUM(v)`。请重命名冲突的基表列，或在支持别名的表达式中使用其他别名。直接选择名称以 `mv_` 开头的真实基表列仍受支持。
 
@@ -410,6 +412,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
     有关通用分区表达式 TTL 和 `force_mv` 语义的详细指导，参考 [示例六](#示例)。
 
 - `storage_volume`：如果您使用存算分离集群，则需要指定创建物化视图的 Storage Volume 名称。该属性自 v3.1 版本起支持。如果未指定该属性，则使用默认 Storage Volume。示例：`"storage_volume" = "def_volume"`。
+- `file_bundling`：是否为异步物化视图启用 File Bundling 优化。该属性仅适用于存算分离集群，自 v26.2 版本起支持。如果未指定该属性，则由 FE 配置项 `enable_file_bundling`（默认值：`true`）决定。已有的物化视图在升级后仍不启用 File Bundling，可以通过 [ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md) 修改该属性。File Bundling 的作用以及修改该属性的限制，参见 [CREATE TABLE](../table_bucket_part_index/CREATE_TABLE.md) 中的 `file_bundling` 属性。
 - `force_external_table_query_rewrite`: 是否启用基于 External Catalog 的物化视图的查询改写。该属性自 v3.2 起支持。有效值：
   - `true`（自 v3.3 变为默认值）：启用基于 External Catalog 的物化视图的查询改写。
   - `false`：禁用基于 External Catalog 的物化视图的查询改写。
@@ -500,7 +503,7 @@ StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷�
 - 如果省略 `distribution_desc`，仅当处于存算分离模式且 `enable_range_distribution` 与 `enable_mv_range_distribution` 均已启用时，StarRocks 才使用 Range 分布。其他情况下，StarRocks 回退到基于目标表全部 Key 列的哈希分布。
 - Range 分布没有用户可指定的 `DISTRIBUTED BY RANGE` 语法，无法显式指定。
 - 如果显式指定哈希分布或随机分布，StarRocks 会将其归一化为基于目标表全部 Key 列的哈希分布，并保留显式指定的分桶数量。
-- Range 分布的分区初始只有一个 Tablet，因此首次刷新原本只能由单个节点写入。为此 StarRocks 会对该次刷新写入的 Tablet 进行预分裂，其区间边界由内部 Row ID 列推导得出，不采样任何数据。该行为在以下条件下生效：物化视图的 Row ID 由存储引擎生成、尚未为该视图分配过任何 Row ID（新建视图的首次刷新即属于此情况），并且该次刷新只写入单个分区。这是尽力而为的优化：其他情况下刷新将不做预分裂，原因记录在 `starrocks_fe_tablet_pre_split_eligibility_skipped` 中。将 `enable_tablet_pre_split_for_mv_refresh` 设为 `false` 可关闭该行为。
+- Range 分布的分区初始只有一个 Tablet，覆盖写刷新所写入的替换分区同样如此，这类刷新原本只能由单个节点写入。为此 StarRocks 会对该次刷新写入的 Tablet 进行预分裂，区间边界由内部 Row ID 列推导，不采样任何数据。该行为分两种情况生效：若物化视图的 Row ID 是刷新查询计算出的指纹，则该次刷新覆盖写的各分区均分预估的输出量，只要预估输出所需的 Tablet 数多于分区数，就会预分裂其中最多 `tablet_pre_split_max_partitions_per_load` 个分区；若 Row ID 由存储引擎生成，则仅当该次刷新只覆盖写单个分区时才会预分裂，例如新建视图的首次刷新。这是尽力而为的优化：其他情况下刷新将不做预分裂，原因记录在 `starrocks_fe_tablet_pre_split_eligibility_skipped` 中。将 `enable_tablet_pre_split_for_mv_refresh` 设为 `false` 可关闭该行为。
 
 #### 排序键
 

@@ -404,6 +404,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 有効にすると、部分的なカラム更新によって生成される delta columns に対する compaction に「lazy」戦略を優先します。StarRocks は compaction の I/O を節約するために、delta-column ファイルをメインのセグメントファイルへ積極的にマージすることを避けます。実際には compaction 選択コードが部分カラム更新の rowset と複数の候補をチェックし、それらが見つかりこのフラグが true の場合、エンジンは compaction にさらに入力を追加するのを止めるか、空の rowset（レベル -1）のみをマージして delta columns を別に保持します。これにより compaction 時の即時 I/O と CPU が削減されますが、統合の遅延（セグメント数増加や一時的なストレージオーバーヘッドの可能性）というコストが発生します。正確性やクエリのセマンティクスに変更はありません。
 - 導入バージョン: v3.2.3
 
+### enable_light_pk_compaction_publish
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有なしクラスタの主キーテーブルで軽量コンパクション publish を使用するかどうかを指定します。この設定は共有なしテーブルにのみ適用されます。共有データの主キーテーブルは常に軽量コンパクション publish を使用するため、このパラメーターを `false` にしても共有データテーブルの軽量 publish パスは無効になりません。
+- 導入バージョン: -
+
 ### enable_new_load_on_memory_limit_exceeded
 
 - デフォルト: false
@@ -897,6 +906,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: Bytes
 - 変更可能: はい
 - 説明: インポートまたはコンパクションで生成されるデータがこの閾値を超えたときに、システムは PK インデックスファイルを即座に構築します。デフォルトは 100MB です。
+- 導入バージョン: -
+
+### pk_index_del_sst_min_rows
+
+- デフォルト: 1000000
+- タイプ: Int
+- 単位: 行
+- 変更可能: はい
+- 説明: 共有データクラスタの主キーテーブルに適用されます。ロードで生成された削除ファイルの行数がこの値以上の場合、システムはロード時にそのファイルの PK インデックスファイルも構築します。ロードの公開時には、削除された各キーをメモリ上の PK インデックスに書き込む代わりに、そのファイルを直接取り込みます。この条件は `pk_index_eager_build_threshold_bytes` と併せて機能し、削除ファイルがいずれかの条件を満たすとインデックスファイルが構築されます。`0` 以下に設定するとこの条件は無効になります。
 - 導入バージョン: -
 
 ### primary_key_limit_size

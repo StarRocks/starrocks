@@ -74,6 +74,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
@@ -90,7 +91,10 @@ public class CompactionScheduler extends Daemon {
     private final ConcurrentHashMap<PartitionIdentifier, CompactionJob> runningCompactions;
     private final SynchronizedCircularQueue<CompactionRecord> history;
     private long lastPartitionCleanTime;
-    private Set<Long> disabledIds; // copy-on-write, table id or partition id
+    // Publish copy-on-write snapshots containing table or partition IDs.
+    private final AtomicReference<Set<Long>> disabledIds = new AtomicReference<>(Collections.emptySet());
+    // null means NORMAL; an empty set allows no tables. Publish mode and IDs together on config refresh.
+    private final AtomicReference<Set<Long>> allowedTableIds = new AtomicReference<>(Collections.emptySet());
 
     CompactionScheduler(@NotNull CompactionMgr compactionManager, @NotNull SystemInfoService systemInfoService,
                         @NotNull GlobalTransactionMgr transactionMgr, @NotNull GlobalStateMgr stateMgr,
@@ -103,9 +107,8 @@ public class CompactionScheduler extends Daemon {
         this.runningCompactions = new ConcurrentHashMap<>();
         this.lastPartitionCleanTime = System.currentTimeMillis();
         this.history = new SynchronizedCircularQueue<>(Config.lake_compaction_history_size);
-        this.disabledIds = Collections.unmodifiableSet(new HashSet<>());
-
         disableTableOrPartitionId(disableIdsStr);
+        updateCompactionAllowlist(Config.lake_compaction_admission_mode, Config.lake_compaction_allow_table_ids);
     }
 
     @Override
@@ -223,7 +226,7 @@ public class CompactionScheduler extends Daemon {
         }
 
         List<PartitionStatisticsSnapshot> partitions = compactionManager.choosePartitionsToCompact(
-                runningCompactions.keySet(), disabledIds);
+                runningCompactions.keySet(), disabledIds.get());
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         int limitReachCnt = 0;
@@ -233,6 +236,9 @@ public class CompactionScheduler extends Daemon {
         int index = 0;
         while (limitReachCnt < workerGroupCnt && index < partitions.size()) {
             PartitionStatisticsSnapshot partitionStatisticsSnapshot = partitions.get(index++);
+            if (!isCompactionAllowed(partitionStatisticsSnapshot.getPartition())) {
+                continue;
+            }
             CompactionWarehouseInfo info = null;
             try {
                 ComputeResource computeResource =
@@ -334,6 +340,10 @@ public class CompactionScheduler extends Daemon {
     protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot,
             CompactionWarehouseInfo info) {
         PartitionIdentifier partitionIdentifier = partitionStatisticsSnapshot.getPartition();
+        // Recheck because the policy may have changed since candidate selection. Existing jobs are not cancelled.
+        if (!isCompactionAllowed(partitionIdentifier)) {
+            return null;
+        }
         boolean unshare = partitionStatisticsSnapshot.getPriority() == PartitionStatistics.CompactionPriority.UNSHARE;
         Database db = stateMgr.getLocalMetastore().getDb(partitionIdentifier.getDbId());
         if (db == null) {
@@ -346,6 +356,7 @@ public class CompactionScheduler extends Daemon {
         OlapTable table;
         PhysicalPartition partition;
         Map<Long, List<Long>> beToTablets;
+        boolean manualCompaction;
 
         // Intensive path: IS on DB + READ on this one table. The critical section
         // only reads / mutates state of one known table (partition lookup,
@@ -390,8 +401,15 @@ public class CompactionScheduler extends Daemon {
                         Config.lake_compaction_interval_ms_on_failure);
                 return null;
             }
-            if (unshare && (!isPartitionResharding
-                    || !partition.isUnsharing() || !table.isFileBundling())) {
+            // An UNSHARE is served when a reshard asks for it on a partition its split left unsharing, or when
+            // ALTER TABLE COMPACT asks for it on a table whose COMPACT unshares. The latter also runs through a
+            // reshard like any compaction (aborted by reshard cleanup while uncommitted, cross-published to the
+            // split children once committed): holding it back would stop the partition from compacting for the
+            // whole reshard. It is served in every table state that reaches this point, as the ordinary
+            // compaction that COMPACT asks for on any other table is.
+            boolean reshardUnshare = isPartitionResharding && partition.isUnsharing() && table.isFileBundling();
+            boolean compactUnshare = TabletReshardUtils.compactUnsharesSharedFiles(table);
+            if (unshare && !reshardUnshare && !compactUnshare) {
                 // Clear the marker before dropping the request. Priority is otherwise only reset for
                 // partitions that made it into runningCompactions, and this one never will -- while
                 // the retained priority would route every retry back here as UNSHARE, so the partition
@@ -405,6 +423,7 @@ public class CompactionScheduler extends Daemon {
                 LOG.warn("Ignore stale UNSHARE compaction request for partition {}", partitionIdentifier);
                 return null;
             }
+            manualCompaction = isManualCompaction(partitionStatisticsSnapshot.getPriority(), reshardUnshare);
 
             currentVersion = partition.getVisibleVersion();
 
@@ -421,6 +440,7 @@ public class CompactionScheduler extends Daemon {
             partition.setMinRetainVersion(currentVersion);
 
         } catch (RunningTxnExceedException | AnalysisException | LabelAlreadyUsedException | DuplicatedRequestException e) {
+            compactionManager.enableCompactionAfter(partitionIdentifier, Config.lake_compaction_interval_ms_on_failure);
             LOG.error("Fail to create transaction for compaction job. {}", e.getMessage());
             return null;
         } catch (Throwable e) {
@@ -438,12 +458,13 @@ public class CompactionScheduler extends Daemon {
         try {
             if (table.isFileBundling()) {
                 CompactionTask task = createAggregateCompactionTask(currentVersion, beToTablets, txnId,
-                        partitionStatisticsSnapshot.getPriority(), info.computeResource, partition.getId(), table);
+                        partitionStatisticsSnapshot.getPriority(), manualCompaction, info.computeResource,
+                        partition.getId(), table);
                 task.sendRequest();
                 job.setAggregateTask(task);
             } else {
                 List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId,
-                        job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority(), table);
+                        job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority(), manualCompaction, table);
                 for (CompactionTask task : tasks) {
                     task.sendRequest();
                 }
@@ -482,24 +503,32 @@ public class CompactionScheduler extends Daemon {
                 retryAfterMs);
     }
 
-    private static boolean allowBaseCompaction(OlapTable table, PartitionStatistics.CompactionPriority priority) {
+    // ALTER TABLE COMPACT asks for a manual compaction: MANUAL_COMPACT, or UNSHARE on a table whose COMPACT unshares,
+    // where a tablet with nothing to unshare runs the manual compaction instead. A split's own UNSHARE is not manual.
+    @VisibleForTesting
+    static boolean isManualCompaction(PartitionStatistics.CompactionPriority priority, boolean reshardUnshare) {
+        return priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT
+                || (priority == PartitionStatistics.CompactionPriority.UNSHARE && !reshardUnshare);
+    }
+
+    private static boolean allowBaseCompaction(OlapTable table, boolean manualCompaction) {
         // An explicit manual request is an operator override. The forbidden
         // ranges only limit automatic base compaction.
-        return priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT ||
+        return manualCompaction ||
                 !CompactionControlScheduler.isBaseCompactionForbidden(
                         table.getBaseCompactionForbiddenTimeRanges(), new Date());
     }
 
     @NotNull
     private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
-            boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority, OlapTable table)
-            throws StarRocksException, RpcException {
+            boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority, boolean manualCompaction,
+            OlapTable table) throws StarRocksException, RpcException {
         List<CompactionTask> tasks = new ArrayList<>();
 
         // Get parallel compaction configuration from table property
         // maxParallel > 0 means parallel compaction is enabled
         int maxParallel = table.getTableProperty().getLakeCompactionMaxParallel();
-        boolean allowBaseCompaction = allowBaseCompaction(table, priority);
+        boolean allowBaseCompaction = allowBaseCompaction(table, manualCompaction);
 
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
@@ -516,7 +545,7 @@ public class CompactionScheduler extends Daemon {
             request.timeoutMs = LakeService.TIMEOUT_COMPACT;
             request.allowPartialSuccess = allowPartialSuccess;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
-            request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            request.forceBaseCompaction = manualCompaction;
             request.allowBaseCompaction = allowBaseCompaction;
             request.unshareSegments = priority == PartitionStatistics.CompactionPriority.UNSHARE;
 
@@ -540,8 +569,8 @@ public class CompactionScheduler extends Daemon {
 
     @NotNull
     private CompactionTask createAggregateCompactionTask(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
-            PartitionStatistics.CompactionPriority priority, ComputeResource computeResource, long partitionId,
-            OlapTable table) throws StarRocksException, RpcException {
+            PartitionStatistics.CompactionPriority priority, boolean manualCompaction, ComputeResource computeResource,
+            long partitionId, OlapTable table) throws StarRocksException, RpcException {
         // 1. build AggregateCompactRequest
         AggregateCompactRequest aggRequest = new AggregateCompactRequest();
         aggRequest.requests = Lists.newArrayList();
@@ -579,8 +608,8 @@ public class CompactionScheduler extends Daemon {
             request.timeoutMs = LakeService.TIMEOUT_COMPACT;
             request.allowPartialSuccess = false;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
-            request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
-            request.allowBaseCompaction = allowBaseCompaction(table, priority);
+            request.forceBaseCompaction = manualCompaction;
+            request.allowBaseCompaction = allowBaseCompaction(table, manualCompaction);
             request.skipWriteTxnlog = true;
             request.unshareSegments = priority == PartitionStatistics.CompactionPriority.UNSHARE;
 
@@ -753,10 +782,11 @@ public class CompactionScheduler extends Daemon {
      * is neither cancelled nor needs to be waited on. Its txn id is returned so the caller can exclude
      * it from the previous-transactions wait.
      *
-     * <p>The UNSHARE compaction started by the current reshard job is never cancelled. Its transaction
-     * can equal {@code endTransactionId} because the reshard job records the next transaction id before
-     * triggering UNSHARE; cancelling that equality case would make a successful UNSHARE appear as a
-     * failed compaction in history. It remains part of the previous-transactions wait until it publishes.
+     * <p>An UNSHARE on a partition that is unsharing is the one the current reshard job started, and it is
+     * never cancelled. Its transaction can equal {@code endTransactionId} because the reshard job records
+     * the next transaction id before triggering UNSHARE; cancelling that equality case would make a
+     * successful UNSHARE appear as a failed compaction in history. It remains part of the
+     * previous-transactions wait until it publishes.
      *
      * <p>For any other uncommitted compaction this only requests the abort of the compaction task. The
      * compaction scheduler thread then aborts the transaction: {@link #scheduleNewCompaction} aborts an
@@ -782,7 +812,8 @@ public class CompactionScheduler extends Daemon {
                 ignoredTxnIds.add(job.getTxnId());
                 continue;
             }
-            if (!job.isUnshare() && !job.transactionHasCommitted()) {
+            boolean reshardOwnUnshare = job.isUnshare() && job.getPartition().isUnsharing();
+            if (!reshardOwnUnshare && !job.transactionHasCommitted()) {
                 job.abort();
             }
         }
@@ -852,11 +883,47 @@ public class CompactionScheduler extends Daemon {
     }
 
     public boolean isTableDisabled(Long tableId) {
-        return disabledIds.contains(tableId);
+        return disabledIds.get().contains(tableId);
+    }
+
+    boolean isCompactionAllowed(PartitionIdentifier partition) {
+        Set<Long> allowed = allowedTableIds.get();
+        Set<Long> disabled = disabledIds.get();
+        return !disabled.contains(partition.getTableId()) && !disabled.contains(partition.getPartitionId())
+                && (allowed == null || allowed.contains(partition.getTableId()));
+    }
+
+    void updateCompactionAllowlist(String mode, String tableIds) {
+        Set<Long> newAllowedIds = new HashSet<>();
+        if ("NORMAL".equals(mode.trim())) {
+            allowedTableIds.set(null);
+        } else {
+            try {
+                if (!"ALLOWLIST".equals(mode.trim())) {
+                    throw new IllegalArgumentException("Mode must be NORMAL or ALLOWLIST");
+                }
+                String value = tableIds.trim();
+                if (!value.isEmpty()) {
+                    for (String id : value.split(";", -1)) {
+                        long parsedId = Long.parseLong(id.trim());
+                        if (parsedId <= 0) {
+                            throw new NumberFormatException("IDs must be positive");
+                        }
+                        newAllowedIds.add(parsedId);
+                    }
+                }
+                allowedTableIds.set(Collections.unmodifiableSet(newAllowedIds));
+            } catch (IllegalArgumentException e) {
+                // Fail closed, including at startup: a typo must not enable compaction on migrating tables.
+                allowedTableIds.set(Collections.emptySet());
+                LOG.warn("Invalid compaction mode '{}' or table allowlist '{}'; no new compactions will be scheduled. " +
+                        "Use NORMAL or ALLOWLIST and positive table IDs separated by semicolons", mode, tableIds);
+            }
+        }
     }
 
     public boolean isPartitionDisabled(Long partitionId) {
-        return disabledIds.contains(partitionId);
+        return disabledIds.get().contains(partitionId);
     }
 
     public void disableTableOrPartitionId(String disableIdsStr) {
@@ -874,7 +941,7 @@ public class CompactionScheduler extends Daemon {
                 }
             }
         }
-        disabledIds = Collections.unmodifiableSet(newDisabledIds);
+        disabledIds.set(Collections.unmodifiableSet(newDisabledIds));
     }
 
     private Map<ComputeResource, Integer> getRunningTaskInfo() {

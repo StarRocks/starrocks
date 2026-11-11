@@ -248,6 +248,30 @@ final class PreSplitTargets {
     }
 
     /**
+     * Re-reads the physical partition {@code target} resolved, under the table lock as the coordinator's own gate
+     * reads it, and says why it cannot be carved.
+     *
+     * @return {@code null} when it is still empty by {@link #isEmptyPartition};
+     *         {@link SkipReason#PARTITION_NOT_EMPTY} when it holds rows; {@link SkipReason#METADATA_NOT_RESOLVED}
+     *         when it or its base index is gone, since the lock taken to resolve it has been released.
+     */
+    static SkipReason checkStillEmpty(EligibleTarget target) {
+        OlapTable table = target.olapTable();
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(target.database().getId(), table.getId(), LockType.READ);
+        try {
+            PhysicalPartition partition = table.getPhysicalPartition(target.partitionId());
+            MaterializedIndex baseIndex = partition == null ? null : partition.getIndex(table.getBaseIndexMetaId());
+            if (baseIndex == null) {
+                return SkipReason.METADATA_NOT_RESOLVED;
+            }
+            return isEmptyPartition(partition, baseIndex) ? null : SkipReason.PARTITION_NOT_EMPTY;
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(target.database().getId(), table.getId(), LockType.READ);
+        }
+    }
+
+    /**
      * Resolves every visible index of {@code table}'s {@code partition} into an
      * {@link IndexPreSplitTarget}, base index first.
      *

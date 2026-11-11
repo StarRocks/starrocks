@@ -51,6 +51,7 @@ import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobRunner;
 import com.starrocks.load.InsertOverwriteJobState;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.EditLogException;
 import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.OlapTableSink;
@@ -117,9 +118,12 @@ public class TabletReshardConcurrencyTest {
     @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
-        TabletReshardJobMgr sharedMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
-        sharedMgr.setStop();
-        LeaderDaemon.awaitQuiesced(List.of(sharedMgr), 30_000L);
+        // Queued WAL tests replace getEditLog() for every thread. Stop and drain all leader daemons,
+        // including heartbeat-mgr and timePrinter, before they can submit unrelated journal entries
+        // to a test-owned queue and participate in its WAL fence.
+        List<LeaderDaemon> daemons = LeaderDaemon.getRunningInstances();
+        daemons.forEach(LeaderDaemon::setStop);
+        LeaderDaemon.awaitQuiesced(daemons, 30_000L);
         ConnectContext context = UtFrameUtils.createDefaultCtx();
         Config.enable_range_distribution = true;
         StarRocksAssert starRocksAssert = new StarRocksAssert(context);
@@ -885,6 +889,7 @@ public class TabletReshardConcurrencyTest {
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(4);
         EditLog editLog = useQueuedWal(queue);
         TabletReshardJob pending = job(false, partitions.get(0));
+        AtomicBoolean rolledBack = new AtomicBoolean();
         new MockUp<EditLog>() {
             @Mock
             public void logUpdateTabletReshardJob(Invocation invocation, TabletReshardJob snapshot, WALApplier applier) {
@@ -898,12 +903,17 @@ public class TabletReshardConcurrencyTest {
             @Mock
             void refreshTableStateLocked(Invocation invocation, OlapTable lockedTable, long excludedJobId) {
                 assertEquals(1, (int) Deencapsulation.invoke(editLog, "inFlightForTest"));
+                rolledBack.set(true);
                 invocation.proceed(lockedTable, excludedJobId);
             }
         };
-        assertThrows(RuntimeException.class, () -> mgr.addTabletReshardJob(pending));
+        EditLogException failure = assertThrows(EditLogException.class, () -> mgr.addTabletReshardJob(pending));
+        assertTrue(failure.getMessage().contains("leader WAL gate is closed"));
+        assertTrue(rolledBack.get());
         assertTrue(mgr.getTabletReshardJobs().isEmpty());
         assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        assertFalse(pending.isAdmissionReady());
+        assertTrue(queue.isEmpty());
         assertEquals(0, (int) Deencapsulation.invoke(editLog, "inFlightForTest"));
     }
 

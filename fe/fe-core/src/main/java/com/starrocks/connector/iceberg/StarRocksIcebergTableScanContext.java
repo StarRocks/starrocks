@@ -32,11 +32,14 @@ public class StarRocksIcebergTableScanContext {
     private final String dbName;
     private final String tableName;
     private boolean dataFileCacheWithMetrics;
+    private int dataFileCacheStatsColumnLimit;
     private Cache<String, Set<DataFile>> dataFileCache;
     private Cache<String, Set<DeleteFile>> deleteFileCache;
     private DeleteFileIndexCache deleteFileIndexCache;
     private Map<IcebergTableName, Set<String>> metaFileCacheMap;
     private boolean onlyReadCache;
+    // The requested column statistics are optional: they must not force local planning.
+    private boolean optionalColumnStats;
     private int localParallelism;
     private long localPlanningMaxSlotSize;
     private boolean enableCacheDataFileIdentifierColumnMetrics;
@@ -103,6 +106,14 @@ public class StarRocksIcebergTableScanContext {
         this.dataFileCacheWithMetrics = dataFileCacheWithMetrics;
     }
 
+    public int getDataFileCacheStatsColumnLimit() {
+        return dataFileCacheStatsColumnLimit;
+    }
+
+    public void setDataFileCacheStatsColumnLimit(int dataFileCacheStatsColumnLimit) {
+        this.dataFileCacheStatsColumnLimit = dataFileCacheStatsColumnLimit;
+    }
+
     public void setDataFileCache(Cache<String, Set<DataFile>> dataFileCache) {
         this.dataFileCache = dataFileCache;
     }
@@ -113,6 +124,14 @@ public class StarRocksIcebergTableScanContext {
 
     public void setMetaFileCacheMap(Map<IcebergTableName, Set<String>> metaFileCacheMap) {
         this.metaFileCacheMap = metaFileCacheMap;
+    }
+
+    public boolean isOptionalColumnStats() {
+        return optionalColumnStats;
+    }
+
+    public void setOptionalColumnStats(boolean optionalColumnStats) {
+        this.optionalColumnStats = optionalColumnStats;
     }
 
     public boolean isOnlyReadCache() {

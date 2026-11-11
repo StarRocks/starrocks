@@ -416,7 +416,7 @@ struct BucketAwareFullScanIterator {
         }
     }
 
-    void compute_hash(const std::vector<const Column*>& columns) { calc_hash_values_and_bucket_ids(columns, ctx); }
+    void compute_hash(const std::vector<const Column*>& columns) { compute_hash_values_and_bucket_ids(columns, ctx); }
 
     BucketAwarePartitionCtx& ctx;
     size_t num_rows;

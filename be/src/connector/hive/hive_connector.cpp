@@ -16,13 +16,17 @@
 
 #include <filesystem>
 
+#include "base/failpoint/fail_point.h"
+#include "base/time/time.h"
 #include "cache/disk_cache/block_cache.h"
 #ifdef WITH_STARCACHE
 #include "cache/datacache.h"
 #endif
 #include "common/config_scan_io_fwd.h"
+#include "common/util/thrift_client_cache.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/global_dict/parser.h"
+#include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/query/query_runtime_state.h"
 #include "connector/hive/hive_chunk_sink.h"
 #include "connector/hive/iceberg_global_late_materialization_context.h"
@@ -41,6 +45,8 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "fs/fs_factory.h"
+#include "gen_cpp/FrontendService.h"
+#include "platform/thrift_rpc_helper.h"
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
@@ -71,15 +77,59 @@ StatusOr<std::unique_ptr<ConnectorSinkProvider>> HiveConnector::create_sink_prov
 
 // ================================
 
+namespace {
+const TCloudConfiguration* cloud_configuration_of(const THdfsScanNode& hdfs_scan_node) {
+    return hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr;
+}
+
+// Asks the coordinator for the current configuration of this scan node's vended credentials.
+StatusOr<TCloudConfiguration> fetch_scan_credentials(RuntimeState* state, int32_t plan_node_id,
+                                                     const TCloudConfiguration& current) {
+    auto* fragment_state = state->fragment_runtime_state();
+    if (fragment_state == nullptr) {
+        return Status::NotSupported("no coordinator address to refresh scan credentials from");
+    }
+    const int timeout_ms = config::scan_credential_refresh_rpc_timeout_ms;
+    if (timeout_ms <= 0) {
+        return Status::NotSupported("scan credential refresh is turned off");
+    }
+    TRefreshScanCredentialsRequest request;
+    request.__set_query_id(state->query_id());
+    request.__set_plan_node_id(plan_node_id);
+    request.__set_refresh_token(current.refresh_token);
+    TRefreshScanCredentialsResponse response;
+    // The coordinator may have to call the catalog. File opens of this scan node wait meanwhile; reads of files
+    // already open do not. Not retried: the current credentials are kept and asked about again later.
+    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+            fragment_state->fe_addr(),
+            [&request, &response](FrontendServiceConnection& client) {
+                client->refreshScanCredentials(response, request);
+            },
+            timeout_ms, 0));
+    RETURN_IF_ERROR(Status(response.status));
+    if (!response.__isset.cloud_configuration) {
+        return Status::InternalError("coordinator returned no cloud configuration");
+    }
+    return std::move(response.cloud_configuration);
+}
+} // namespace
+
 HiveDataSourceProvider::HiveDataSourceProvider(const TPlanNode& plan_node)
-        : _plan_node_id(plan_node.node_id), _hdfs_scan_node(plan_node.hdfs_scan_node) {
+        : _plan_node_id(plan_node.node_id),
+          _hdfs_scan_node(plan_node.hdfs_scan_node),
+          _cloud_configuration(cloud_configuration_of(_hdfs_scan_node),
+                               config::scan_credential_refresh_rpc_timeout_ms > 0) {
     if (_hdfs_scan_node.__isset.bucket_properties) {
         _bucket_properties = _hdfs_scan_node.bucket_properties;
     }
 }
 
+// A short-lived provider per lookup (Iceberg global late materialization): it would lose a renewal and its retry
+// backoff with every lookup and ask the coordinator each time, so it keeps the deployed credentials.
 HiveDataSourceProvider::HiveDataSourceProvider(int32_t plan_node_id, const THdfsScanNode& hdfs_scan_node)
-        : _plan_node_id(plan_node_id), _hdfs_scan_node(hdfs_scan_node) {
+        : _plan_node_id(plan_node_id),
+          _hdfs_scan_node(hdfs_scan_node),
+          _cloud_configuration(cloud_configuration_of(_hdfs_scan_node), false) {
     if (_hdfs_scan_node.__isset.bucket_properties) {
         _bucket_properties = _hdfs_scan_node.bucket_properties;
     }
@@ -478,6 +528,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     }
     if (hdfs_scan_node.__isset.can_use_min_max_opt) {
         _scanner_ctx.format_scan_context.options.use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
+        _scanner_ctx.format_scan_context.options.min_max_values_of_all_slots = hdfs_scan_node.can_use_min_max_opt;
     }
     // can_use_any_column is set by PruneHDFSScanColumnRule when every queried column is
     // a partition column and a placeholder materialized column was injected to satisfy
@@ -624,6 +675,8 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _scanner_ctx.profile.scan_ranges_size = ADD_COUNTER(_runtime_profile, "ScanRangesSize", TUnit::BYTES);
     _scan_ranges_pruned_by_partition_value_counter =
             ADD_COUNTER(_runtime_profile, "ScanRangesPrunedByPartitionValue", TUnit::UNIT);
+    _scanner_ctx.profile.scan_ranges_pruned_by_file_stats_counter =
+            ADD_COUNTER(_runtime_profile, "ScanRangesPrunedByFileStats", TUnit::UNIT);
 
     _scanner_ctx.profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
     _scanner_ctx.profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
@@ -814,8 +867,13 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
 
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
-    auto fsOptions =
-            FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
+    const int32_t plan_node_id = _provider->_plan_node_id;
+    _cloud_configuration = _provider->_cloud_configuration.get(
+            [state, plan_node_id](const TCloudConfiguration& current) {
+                return fetch_scan_credentials(state, plan_node_id, current);
+            },
+            [] { return UnixMillis(); });
+    auto fsOptions = FSOptions(_cloud_configuration.get());
 
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
     if (hdfs_scan_node.__isset.column_access_paths && _scanner_ctx.format_scan_context.column_access_paths.empty()) {

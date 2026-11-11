@@ -72,7 +72,17 @@ Status RuntimeFilterPredicate::evaluate(Chunk* chunk, uint8_t* selection, uint16
                                          &_running_ctx);
         }
     }
+    if (!column->has_null()) {
+        _rf->evaluate(column.get(), hash_values, selection, from, to);
+        return Status::OK();
+    }
+    // A filter writes its has_null verdict for a NULL key without looking at selection[i], so a <=> join
+    // filter would revive NULL-key rows an earlier predicate rejected unless its result is ANDed back.
+    _input_selection.assign(selection + from, selection + to);
     _rf->evaluate(column.get(), hash_values, selection, from, to);
+    for (uint16_t i = from; i < to; i++) {
+        selection[i] &= _input_selection[i - from];
+    }
     return Status::OK();
 }
 

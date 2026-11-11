@@ -48,6 +48,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/utils.h"
 #include "storage/parallel_upsert_context.h"
 #include "storage/primary_index.h"
@@ -225,6 +226,15 @@ Status LakePersistentIndex::merge_sstable_into_fileset(std::unique_ptr<Persisten
     bool need_create_new_fileset = false;
     if (_sstable_filesets.empty()) {
         // first fileset
+        need_create_new_fileset = true;
+    }
+    // A fileset holding a file this tablet must rewrite takes no new files, for two reasons: an UNSHARE may pick it
+    // even when it is the newest fileset, and its publish replaces whole filesets by fileset id, which would drop a
+    // file appended in the meantime; and the size-tiered picker never compacts the newest fileset, so one that kept
+    // growing would keep its shared or out-of-range file.
+    if (!need_create_new_fileset && _sstable_filesets.back()->any_sstable([&](const PersistentIndexSstablePB& pb) {
+            return sstable_needs_rewrite(pb, tablet_sst_range());
+        })) {
         need_create_new_fileset = true;
     }
     if (!need_create_new_fileset) {
@@ -496,7 +506,7 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
                                    IOStat* stat, ParallelUpsertContext* ctx) {
     // The active-memtable write stays on the caller thread: the memtable is not safe for concurrent
     // writes, and this is also what fixes the order of an upsert against the deletes around it.
-    std::shared_ptr<std::set<KeyIndex>> not_founds = std::make_shared<std::set<KeyIndex>>();
+    std::shared_ptr<KeyIndexSet> not_founds = std::make_shared<KeyIndexSet>();
     size_t num_found;
     RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, not_founds.get(), &num_found, _publish_version));
 
@@ -593,7 +603,7 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     if (parallel_worthwhile) {
         KeyIndexSet cur;
         for (auto idx : not_founds) {
-            cur.insert(idx);
+            cur.insert(cur.end(), idx);
             if (cur.size() >= min_rows_per_task) {
                 subsets.push_back(std::move(cur));
                 cur.clear();
@@ -649,7 +659,7 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
                 [min_rows_per_task, n](size_t i) {
                     KeyIndexSet key_indexes;
                     for (size_t j = i * min_rows_per_task, e = std::min(j + min_rows_per_task, n); j < e; ++j) {
-                        key_indexes.insert(j);
+                        key_indexes.insert(key_indexes.end(), j);
                     }
                     return key_indexes;
                 },
@@ -779,13 +789,22 @@ StatusOr<AsyncCompactCBPtr> LakePersistentIndex::early_sst_compact(
 
 Status LakePersistentIndex::parallel_major_compact(lake::LakePersistentIndexParallelCompactMgr* compact_mgr,
                                                    TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                                   TxnLogPB* txn_log) {
-    if (metadata->sstable_meta().sstables_size() < config::lake_pk_index_sst_min_compaction_versions) {
-        return Status::OK();
+                                                   TxnLogPB* txn_log, bool unshare) {
+    // 1. Pick sstable for merge. UNSHARE rewrites every file the tablet cannot keep, however few files the tablet
+    // holds; otherwise use size tiered compaction strategy.
+    CompactionCandidateResult result;
+    if (unshare) {
+        ASSIGN_OR_RETURN(auto tablet_range, TabletRangeHelper::create_sst_seek_range_from(
+                                                    metadata->range(), TabletSchema::create(metadata->schema())));
+        ASSIGN_OR_RETURN(result, LakePersistentIndexSizeTieredCompactionStrategy::pick_unshare_candidates(
+                                         metadata->sstable_meta(), tablet_range));
+    } else {
+        if (metadata->sstable_meta().sstables_size() < config::lake_pk_index_sst_min_compaction_versions) {
+            return Status::OK();
+        }
+        ASSIGN_OR_RETURN(result, LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                                         metadata->sstable_meta()));
     }
-    // 1. Pick sstable for merge, using size tiered compaction strategy.
-    ASSIGN_OR_RETURN(auto result, LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
-                                          metadata->sstable_meta()));
     if (result.candidate_filesets.empty()) {
         return Status::OK();
     }
@@ -998,7 +1017,8 @@ static bool should_parallel_rebuild_prefetch(int num_files) {
 
 // Rebuild index's memtable via del files, it will read from del file and write to index.
 // If it fail, SR will retry publish txn, and this index's memtable will be release and rebuild again.
-Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
+Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version,
+                                      const SstSeekRange* tablet_range) {
     TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_del_cost_us");
     // Build pk column struct from schema
     ASSIGN_OR_RETURN(auto pk_encoding_type, rowset->tablet_schema()->primary_key_encoding_type_or_error());
@@ -1072,28 +1092,28 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     // re-upsert would wrongly erase it.
     //
     // The filter needs an index get() (the ONLY SST-reading step here). It is a no-op -- and is skipped
-    // -- when nothing can be newer than the delete: an origin del file that follows the last segment
-    // (op_offset == max segment id) erases every key of this rowset, so we avoid its cold-start SST
-    // reads. This preserves the dominant cold-rebuild win for the common (non-interleaved) case.
-    // replay_erase (Phase 2) is a pure memtable write.
+    // -- when nothing in the index is newer than the delete: in the common (non-interleaved) case, an
+    // origin del file that follows the last segment (op_offset == max segment id) erases every key of
+    // this rowset, so we avoid its cold-start SST reads. replay_erase (Phase 2) is a pure memtable write.
     auto load_one = [&](int del_idx, DecodedDel* out) -> Status {
         ASSIGN_OR_RETURN(out->pkc, read_one(del_idx));
         RETURN_IF_ERROR(extract_keys(out->pkc, &out->keys));
         const auto& del = rowset->metadata().del_files(del_idx);
-        const bool is_origin = (rowset->id() == del.origin_rowset_id());
         // Fall back to the max segment id when a delete has no recorded op_offset (older metadata):
         // it then follows the last segment, so the filter erases everything (the legacy behavior).
         // This must cover non-origin (compaction-inherited) dels too: otherwise del.op_offset() reads a
         // defaulted 0, under-setting too_old below and wrongly skipping -- resurrecting -- rows on
         // rebuild. Matches resolve_del_op_offset() and erase_one().
         const uint32_t op_offset = !del.has_op_offset() ? get_max_segment_idx(rowset->metadata()) : del.op_offset();
-        // Skip the get()-based filter only when the delete follows the last segment of its own rowset,
-        // so nothing in (or before) this rowset can be newer than it; otherwise some key may be newer.
-        const bool need_filter = !is_origin || op_offset < get_max_segment_idx(rowset->metadata());
-        if (need_filter) {
-            // Use `origin_rowset_id + op_offset` as the delete's rssid; keys whose current entry is
-            // newer (upserted by a later segment, or a newer rowset) are skipped.
-            const uint32_t too_old = del.origin_rowset_id() + op_offset;
+        // Use `origin_rowset_id + op_offset` as the delete's rssid; keys whose current entry is
+        // newer (upserted by a later segment, or a newer rowset) are skipped.
+        const uint32_t too_old = del.origin_rowset_id() + op_offset;
+        // The filter only skips a key whose current entry is newer than the delete, so look the keys up only
+        // when the index already holds such an entry; the memtable's max_rss_rowid is at least that of every
+        // entry, flushed ones included. Replayed in id order, a del file its own rowset wrote after its last
+        // segment never needs it; after a tablet merge, which orders the rowsets of a version by uid, a rowset
+        // with a larger id may have been replayed first.
+        if ((_memtable->max_rss_rowid() >> 32) > too_old) {
             // Never join here: load_one and these lookups share the PK execution pool.
             return parallel_get(&get_runner, out->keys.size(), out->keys.data(), too_old, &out->filter_words);
         }
@@ -1113,6 +1133,19 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
             }
         }
         DelFilter().swap(d->filter_words);
+    };
+
+    // Drop keys outside the tablet range from the replay: a split child inherits its sibling's delete
+    // keys, and erasing them would put out-of-range keys into the next flushed index file.
+    auto clip_one = [tablet_range](DecodedDel* d) {
+        if (tablet_range == nullptr) {
+            return;
+        }
+        for (size_t i = 0; i < d->keys.size(); ++i) {
+            if (!tablet_range->contains(d->keys[i])) {
+                d->filter[i] = true;
+            }
+        }
     };
 
     // Phase-2 work. Memtable mutation; callers invoke sequentially in del_idx order.
@@ -1148,14 +1181,15 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
             RETURN_IF_ERROR(load_status);
             RETURN_IF_ERROR(get_status);
             filter_one(&d);
+            clip_one(&d);
             RETURN_IF_ERROR(erase_one(del_idx, d));
         }
         return Status::OK();
     }
 
-    // Phase 1 (parallel): load all del files — read+decode bytes, extract keys, and (for non-origin
-    // files only) submit the index get(). Both the OSS byte reads and the non-origin SST get()s
-    // overlap here on pk_index_execution_thread_pool. load_one only submits lookups and returns;
+    // Phase 1 (parallel): load all del files — read+decode bytes, extract keys, and (for files the
+    // index may hold newer entries for) submit the index get(). Both the OSS byte reads and the SST
+    // get()s overlap here on pk_index_execution_thread_pool. load_one only submits lookups and returns;
     // the caller joins the load runner before joining the lookup runner, so no pool worker waits
     // for work queued to its own pool. Memory tradeoff: holds all `num_del_files`
     // decoded columns concurrently until Phase 2 consumes them — guarded above by the update-memtracker
@@ -1186,6 +1220,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     // Phase 2 (sequential): order-dependent memtable erases.
     for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
         filter_one(&decoded[del_idx]);
+        clip_one(&decoded[del_idx]);
         RETURN_IF_ERROR(erase_one(del_idx, decoded[del_idx]));
     }
     return Status::OK();
@@ -1601,6 +1636,19 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     _need_rebuild_row_cnt = row_cnt;
     ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema->primary_key_encoding_type_or_error());
 
+    // A range-distribution tablet owns only [seek_key, stop_key); delete keys outside it are dropped
+    // on replay. Both bounds empty means (-inf, +inf), so there is nothing to clip. Range bounds are only
+    // comparable with index keys under the big-endian (V2) encoding that range distribution requires.
+    _tablet_sst_range.reset();
+    if (metadata->has_range() && pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
+        ASSIGN_OR_RETURN(auto seek_range,
+                         TabletRangeHelper::create_sst_seek_range_from(metadata->range(), tablet_schema));
+        if (!seek_range.seek_key.empty() || !seek_range.stop_key.empty()) {
+            _tablet_sst_range = std::move(seek_range);
+        }
+    }
+    const SstSeekRange* tablet_range = tablet_sst_range();
+
     // Init PersistentIndex
     _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema, pk_encoding_type);
 
@@ -1689,7 +1737,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 unit_cursor++;
             }
             if (rebuild_rowsets[ro].has_del_files) {
-                RETURN_IF_ERROR(load_dels(rebuild_rowsets[ro].rowset, pkey_schema, rebuild_rowsets[ro].rowset_version));
+                RETURN_IF_ERROR(load_dels(rebuild_rowsets[ro].rowset, pkey_schema, rebuild_rowsets[ro].rowset_version,
+                                          tablet_range));
             }
         }
     } else {
@@ -1718,7 +1767,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", unit_rows);
             }
             if (one->has_del_files) {
-                RETURN_IF_ERROR(load_dels(rowset, pkey_schema, one->rowset_version));
+                RETURN_IF_ERROR(load_dels(rowset, pkey_schema, one->rowset_version, tablet_range));
             }
         }
     }

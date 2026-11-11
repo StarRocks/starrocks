@@ -146,7 +146,7 @@ Since v3.5.0, StarRocks will automatically change the full collection to sampled
 
 For basic statistics, StarRocks automatically collects full statistics of a table by default, without requiring manual operations. For tables on which no statistics have been collected, StarRocks automatically collects statistics within the scheduling period. For tables on which statistics have been collected, StarRocks updates the total number of rows and modified rows in the tables, and persists this information regularly for judging whether to trigger automatic collection. Histograms and multi-column joint statistics are not captured by the current automatic collection task.
 
-From 2.4.5 onwards, StarRocks allows you to specify a collection period for automatic full collection, which prevents cluster performance jitter caused by automatic full collection. This period is specified by FE parameters `statistic_auto_analyze_start_time` and `statistic_auto_analyze_end_time`.
+From 2.4.5 onwards, StarRocks allows you to specify a collection period for automatic full collection, which prevents cluster performance jitter caused by automatic full collection. This period is specified by FE parameters `statistic_auto_analyze_start_time` and `statistic_auto_analyze_end_time`. Both the start time and the end time are inclusive at second granularity. For example, if the end time is `17:00:00`, collection is allowed until `17:00:00` ends. If the start time is later than the end time, the period spans midnight.
 
 Conditions that will trigger automatic collection:
 

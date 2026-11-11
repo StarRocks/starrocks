@@ -708,6 +708,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v3.5.1
 
+### enable_delta_lake_function_predicate_pruning
+
+* **Description**: Whether a predicate on a function of a Delta Lake column can skip data files. StarRocks converts such a predicate into a condition on the column itself, for example `year(dt) = 2024` into `dt >= '2024-01-01' AND dt < '2025-01-01'`, so that files are skipped through partition values and file column statistics, and Parquet row groups are skipped through their column statistics. It applies to the same functions as `enable_iceberg_function_predicate_pruning`. The original predicate is still evaluated on the rows. Set it to `false` to plan such queries as before, for example to compare results.
+* **Default**: true
+* **Introduced in**: v26.3
+
 ### enable_distinct_agg_over_window
 
 * **Description**: Controls the optimizer rewrite that transforms DISTINCT aggregate calls over WINDOW clauses into an equivalent join-based plan. When enabled (`true`, the default) QueryOptimizer.invoke convertDistinctAggOverWindowToNullSafeEqualJoin will:
@@ -798,9 +804,21 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v3.1.4
 
+### enable_hive_function_predicate_pruning
+
+* **Description**: Whether a predicate on a function of a date or datetime column of a Hive table can prune partitions. StarRocks converts such a predicate into a condition on the column itself, for example `year(dt) = 2024` into `dt >= '2024-01-01' AND dt < '2025-01-01'`, so that partitions are pruned on a partition column and row groups are skipped through their column statistics. It applies to the date and time functions listed for `enable_iceberg_function_predicate_pruning`. The original predicate is still evaluated on the rows. Set it to `false` to plan such queries as before, for example to compare results.
+* **Default**: true
+* **Introduced in**: v26.3
+
 ### enable_iceberg_eq_delete_runtime_filter_pruning
 
 * **Description**: Whether runtime filters can skip the equality delete files of an Iceberg table. It applies when the table has never changed its partition spec and every partition field is an identity transform of an INT, DATE, or STRING column that the query reads. A runtime filter that a join builds on such a column then skips the equality delete files of the partitions it rejects. Set it to `false` to apply every equality delete file, for example when a query fails with an error that names this variable.
+* **Default**: true
+* **Introduced in**: v26.2
+
+### enable_iceberg_function_predicate_pruning
+
+* **Description**: Whether a predicate on a function of an Iceberg column can skip data files. StarRocks converts such a predicate into a condition on the column itself, for example `year(dt) = 2024` into `dt >= '2024-01-01' AND dt < '2025-01-01'`, so that files are skipped through any partition transform of the column (`year`, `month`, `day`, `hour`, `truncate`) and through file column statistics. It applies to `year()`, `to_date()`, `date()`, `date_trunc()`, `date_format()` with a zero-padded format such as `'%Y-%m'`, `datediff()`, `weeks_add()`/`hours_add()`/`minutes_add()`/`seconds_add()` and their `_sub` forms, `year() = ... AND month()/quarter() = ...`, `left()`/`substr(s, 1, n)` compared for equality, and `starts_with()`. The original predicate is still evaluated on the rows. Set it to `false` to plan such queries as before, for example to compare results.
 * **Default**: true
 * **Introduced in**: v26.2
 
@@ -814,7 +832,7 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 
 ### enable_insert_partial_update
 
-* **Description**: Whether to enable Partial Update for INSERT statements on Primary Key tables. When this item is set to `true` (default), if an INSERT statement specifies only a subset of columns (fewer than the number of all non-generated columns in the table), the system performs a Partial Update to update only the specified columns while preserving existing values in other columns. When set to `false`, the system uses default values for unspecified columns instead of preserving existing values. This feature is particularly useful for updating specific columns in Primary Key tables without affecting other column values.
+* **Description**: Whether to enable Partial Update for INSERT statements on Primary Key tables. When this item is set to `true` (default), if an INSERT statement specifies only a subset of columns (fewer than the number of all non-generated columns in the table), the system performs a Partial Update to update only the specified columns while preserving existing values in other columns. When set to `false`, the system uses default values for unspecified columns instead of preserving existing values. This feature is particularly useful for updating specific columns in Primary Key tables without affecting other column values. If no transaction has ever committed to the target partitions, there are no existing values to preserve, so the INSERT runs as a plain insert that fills the unspecified columns with default values and skips the Partial Update processing. This applies only when every unspecified column can be filled that way (it is nullable or has a default value, and is not an AUTO_INCREMENT column), and not to INSERT OVERWRITE or to an INSERT inside an explicit transaction (`BEGIN ... COMMIT`), which keep the Partial Update. If another write reaches those partitions first, the INSERT is automatically planned and run once more as a Partial Update.
 * **Default**: true
 * **Introduced in**: v3.3.20, v3.4.9, v3.5.8, v4.0.2
 
@@ -1820,6 +1838,18 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Description**: The maximum number of IN predicates that can be used for Range partition pruning. Default value: 100. A value larger than 100 may cause the system to scan all tablets, which compromises the query performance.
 * **Default**: 100
 * **Introduced in**: v3.0
+
+### range_scan_execution_mode
+
+* **Description**: Experimental execution mode for read-only single-table aggregates on native shared-data range-colocate tables. `colocate` preserves range colocation. `parallel` gives the scan effective ANY distribution and requires Hash/Gather Exchanges to merge aggregates, including exact `COUNT DISTINCT`. Values are case-insensitive; `auto` is unsupported.
+* **Scope**: Session
+* **Default**: `colocate`
+* **Data type**: String
+* **Valid values**: `colocate`, `parallel`
+
+A nonempty parallel scan must select at least two logical partitions and two real tablets, and the selected compute resource must contain at least two eligible CNs. Among aggregates with the DISTINCT modifier, only `COUNT DISTINCT` is supported. Pipeline execution and `parallel_fragment_exec_instance_num = 1` are required. Parallel mode adds network and aggregate-state transfer costs and can increase non-owner remote reads; it does not guarantee a speedup or use of every compute node. Partition and tablet pruning remain unchanged.
+
+Parallel mode rejects writes/refreshes, joins, set operations, CTEs, subqueries, analytic functions, grouping sets, special/historical/metadata/cache-stat or sampled/hinted scans, MV/rollup source replacement, multiple final scans, Query Cache, phased scheduling, prepared physical split scans, single-node plans, and nonpipeline execution. Fully pruned input retains normal empty-aggregate semantics. Unsupported requests fail explicitly without changing other session settings.
 
 ### resource_group
 

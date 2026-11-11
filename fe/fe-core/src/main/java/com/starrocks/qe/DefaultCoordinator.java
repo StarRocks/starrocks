@@ -67,6 +67,7 @@ import com.starrocks.lake.LakeMetaVersionNotFoundException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -535,6 +536,11 @@ public class DefaultCoordinator extends Coordinator {
                 jobSpec.setIncrementalScanRanges(true);
             }
         }
+        if (jobSpec.getScanNodes().stream()
+                .anyMatch(scan -> scan instanceof OlapScanNode nativeScan && nativeScan.isParallelRangeScan())) {
+            // Native parallel tablet tasks use the ordinary one-shot assignment and deployment lifecycle.
+            jobSpec.setIncrementalScanRanges(false);
+        }
 
         coordinatorPreprocessor.prepareExec();
 
@@ -751,6 +757,12 @@ public class DefaultCoordinator extends Coordinator {
     private void deliverExecFragments(ScheduleOption option) throws RpcException, StarRocksException {
         lock();
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployLockInternalTime")) {
+            if (!queryStatus.ok()) {
+                // Preparation may publish a receiver and instances after cancel() has run.
+                // Clean them up and reject deployment under the same lock used by cancellation.
+                cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
+                dealStatusToTryRetry(queryStatus);
+            }
             Deployer deployer =
                     new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
                             this::handleErrorExecution, option.doDeploy);

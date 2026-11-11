@@ -34,9 +34,9 @@ TEST(AggregateFactoryExtensionTest, srjarAggregateUsesExprsExtension) {
 }
 
 TEST(AggregateFactoryExtensionTest, srjarArrowAggregateUsesArrowVariant) {
-    TypeDescriptor bigint(TYPE_BIGINT);
-    const auto* func = get_aggregate_function("java_udaf", bigint, std::vector<TypeDescriptor>{bigint}, false,
-                                              TFunctionBinaryType::SRJAR, /*func_version=*/1, /*is_arrow_input=*/true);
+    const auto* func =
+            get_aggregate_function("java_udaf", TYPE_BIGINT_DESC, std::vector<TypeDescriptor>{TYPE_BIGINT_DESC}, false,
+                                   TFunctionBinaryType::SRJAR, /*func_version=*/1, /*is_arrow_input=*/true);
 
     ASSERT_NE(nullptr, func);
     EXPECT_EQ("arrow_java_udaf", func->get_name());

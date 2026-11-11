@@ -1,0 +1,63 @@
+-- name: test_iceberg_encryption_unsupported_catalog
+create external catalog iceberg_enc_unsupported_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hadoop", "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_encryption_unsupported_catalog/${uuid0}/warehouse/");
+-- result:
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_encryption_unsupported_catalog/${uuid0}/warehouse/iceberg_enc_db > /dev/null
+-- result:
+0
+
+-- !result
+use iceberg_enc_unsupported_${uuid0}.iceberg_enc_db;
+-- result:
+-- !result
+CREATE TABLE enc_t (
+    id INT,
+    region STRING
+)
+PARTITION BY (region)
+properties(
+  'format-version' = '3'
+);
+-- result:
+-- !result
+insert into enc_t values (1, 'a'), (2, 'a'), (3, 'b');
+-- result:
+-- !result
+delete from enc_t where id = 1;
+-- result:
+[REGEX]E: \(\d+.*DELETE on Iceberg format version 3 table .*can only remove whole partitions or data files.*deletion vectors.*
+-- !result
+delete from enc_t where region = 'b';
+-- result:
+-- !result
+select * from enc_t order by id;
+-- result:
+1	a
+2	a
+-- !result
+alter table enc_t set ('encryption.key-id' = 'sql-tester-key');
+-- result:
+-- !result
+insert into enc_t values (4, 'a');
+-- result:
+[REGEX]E: \(\d+.*refusing to write Iceberg table .*declares encryption.*plaintext encryption manager.*
+-- !result
+select * from enc_t order by id;
+-- result:
+[REGEX]E: \(\d+.*cannot read Iceberg table .*declares encryption.*plaintext encryption manager.*
+-- !result
+drop table enc_t force;
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_enc_unsupported_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_encryption_unsupported_catalog/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result

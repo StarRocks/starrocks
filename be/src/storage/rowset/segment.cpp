@@ -568,8 +568,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
         } else {
             auto nullable = _column_readers[id]->is_nullable();
             auto source_type = TypeDescriptor::from_logical_type(_column_readers[id]->column_type());
-            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(), column.precision(),
-                                                                 column.scale());
+            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.precision(), column.scale());
             return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
         }
     }
@@ -637,8 +636,8 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
                 } else {
                     auto nullable = sub_reader->is_nullable();
                     auto source_type = TypeDescriptor::from_logical_type(reader_type);
-                    auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(),
-                                                                         column.precision(), column.scale());
+                    auto target_type =
+                            TypeDescriptor::from_logical_type(column.type(), column.precision(), column.scale());
                     return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type,
                                                                 nullable);
                 }
@@ -695,8 +694,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const Tab
         } else {
             auto nullable = iter->second->is_nullable();
             auto source_type = TypeDescriptor::from_logical_type(iter->second->column_type());
-            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.length(), column.precision(),
-                                                                 column.scale());
+            auto target_type = TypeDescriptor::from_logical_type(column.type(), column.precision(), column.scale());
             return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
         }
     } else {
@@ -769,7 +767,7 @@ void Segment::turn_off_batch_update_cache_size() {
                 // a path-only key would miss for bundled slices (non-zero bundle_file_offset) and
                 // their cache entries would never get the post-open memory cost, defeating
                 // metacache capacity control.
-                _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost, this);
+                _tablet_manager->update_segment_cache_size(_segment_file_info, mem_cost, this);
             }
         }
     }
@@ -780,7 +778,7 @@ void Segment::update_cache_size() {
         // could be race condition on this `_batch_on_flags_counter` check, but it is ok to be inaccurate in such case.
         if (_batch_on_flags_counter.load(std::memory_order_relaxed) == 0) {
             auto mem_cost = mem_usage();
-            _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost, this);
+            _tablet_manager->update_segment_cache_size(_segment_file_info, mem_cost, this);
         } else {
             // under batch mode, only increase the _dirty_cache_counter
             _dirty_cache_counter.fetch_add(1, std::memory_order_relaxed);

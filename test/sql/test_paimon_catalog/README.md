@@ -35,6 +35,8 @@ The reader-boundary cases additionally use these fixed tables:
 | `reader_json_v1`, `reader_per_level_v1` | JSON data files and an unsupported per-level format configuration |
 | `reader_aggregate_product_v1` | Unsupported native `product` aggregation uses JNI |
 | `reader_timestamp9_v1`, `reader_orc_legacy_v1` | Nanosecond timestamps and legacy ORC timestamp encoding |
+| `reader_struct_parent_null_v1` | 8,192 rows with NULL ancestor ROWs, SQL NULL and VARIANT null; two overlapping primary-key files require SDK reads |
+| `reader_int96_signed_nanos_v1` | TIMESTAMP(6) columns backed by legacy Parquet INT96 with signed negative nanoseconds, positive timestamps and NULLs |
 | `reader_pk_nullable_map_orc_v1`, `reader_nullable_map_avro_v1` | Nullable MAP keys on SDK reads; the ORC table retains unmerged primary-key files |
 | `reader_schema_cast_v1` | INT-to-STRING evolution outside native compatibility rules |
 | `reader_bitmap64_dv_v1` | Real bitmap64 DV files plus INT-to-STRING evolution, preventing raw-file bypass of the SDK check |
@@ -72,13 +74,70 @@ Use an endpoint reachable from both FE and BE. CI supplies its own OSS settings;
 keep credentials out of committed files. The original six fixtures originate from
 [starrocks-testing-data](https://github.com/StarRocks/starrocks-testing-data/tree/4bce0eac1a87b23982561b7c53636d125e13abf2/catalog/paimon).
 
-Cases create unique Catalog names and drop only those Catalogs when finished.
+Fixture-based cases create unique Catalog names and drop only those Catalogs when finished.
 They do not upload, modify or delete the shared data. An early failure may leave
 a Catalog requiring cleanup. Tests that generate or modify data must use a
 separate `tmp/<case-name>/<UUID>/` prefix, not this persistent warehouse.
 See [T/test_paimon_reader_modes](T/test_paimon_reader_modes) for an example.
 
+## DDL tests
+
+`T/test_paimon_catalog_ddl` creates and drops native databases and tables through SQL.
+Each case uses its own `oss://${oss_bucket}/tmp/paimon_catalog_ddl/${uuid0}/`
+filesystem warehouse; the configured OSS credentials need write/delete permission there.
+Set `paimon_ddl_warehouse_root` under `[replace]` in a private config to use a personal
+OSS prefix instead of the default CI prefix. The case UUID is appended to that root.
+The cases do not use or change the persistent fixtures. A second Catalog reads the
+native `$schemas` system tables to verify persisted column comments, scalar and nested
+types, primary keys, partitions and inferred NOT NULL constraints. Key cases cover
+property-based composite keys, whitespace/case normalization, matching and conflicting
+SQL/property declarations, and missing/duplicate key references. Rejected partition
+expressions and invalid/unsupported options must leave no native table behind. Existing DESC nullability conversion is not used
+as evidence of native nullability.
+
+For local execution, add `paimon_ddl_local_warehouse_root` under `[replace]` in a
+private SQL-tester config and pass it with `--config`. This selects a local filesystem
+warehouse without OSS credentials. The absolute directory must be visible at the same
+path to the test runner, FE and BE. Each case creates its own UUID subdirectory.
+Cases skip if neither local storage nor OSS credentials are configured. CLEANUP
+blocks drop the temporary SQL objects even after an assertion fails. Empty warehouse
+directories or OSS directory markers may remain after SQL cleanup.
+Run `python3 run.py -d sql/test_paimon_catalog/R/test_paimon_catalog_ddl -v`.
+
 ## Reader assertions
+
+### Signed INT96 fixture
+
+`test_paimon_int96_signed_nanoseconds` reads a complete, static Paimon table.
+It checks pre-epoch microseconds, a negative fractional second, a positive timestamp
+and NULLs through the StarRocks raw-file reader in UTC and Asia/Shanghai, then
+compares the JNI result. The TIMESTAMP(6) values have no time zone and must remain
+identical in both sessions. The routing assertion is essential: a JNI-only read
+would not exercise the Parquet converter being tested.
+
+To reproduce the fixture offline, from the repository root:
+
+```bash
+# Requires PyArrow 25.0.1; regenerates the checked-in BE test file.
+python3 be/test/formats/parquet/test_data/gen_int96_signed_nanoseconds.py
+# Requires a built FE distribution with Paimon 2.0.0 and a compatible JDK.
+javac -cp 'fe/fe-server/target/lib/*' -d "$FIXTURE_CLASSES" \
+  test/sql/test_paimon_catalog/datagen/GenerateInt96Fixture.java
+java -cp "$FIXTURE_CLASSES:fe/fe-server/target/lib/*" GenerateInt96Fixture \
+  "$NEW_FIXTURE_WAREHOUSE" \
+  be/test/formats/parquet/test_data/column_converter/int96_signed_nanoseconds.parquet
+```
+
+Set `FIXTURE_CLASSES` to a scratch class directory and `NEW_FIXTURE_WAREHOUSE` to
+a new local directory. The Python generator changes the equivalent INT96 encoding
+to signed nanoseconds and checks the decoded values. The Java generator commits
+that file through the Paimon API, creating schema, manifests and a snapshot, and
+independently verifies all five rows using the Java reader. Fixture publication
+copies the entire `paimon_test.db/reader_int96_signed_nanos_v1/` directory into the
+shared warehouse, preserving its layout. Do not upload only the Parquet file or
+overwrite the existing shared fixture during test execution.
+
+### Routing helpers
 
 After creating the catalog as in that example, add
 these statements to a T file:
@@ -121,12 +180,14 @@ rows to verify results as well as the reader path.
 
 | Cases | Coverage |
 | --- | --- |
+| `catalog_ddl` | Database/table lifecycle, IF [NOT] EXISTS, non-cascading FORCE, persisted comments and scalar/nested types, SQL/property composite keys and declaration consistency, implicit/explicit nullability, rejected defaults/partitions/options and failure cleanup |
 | `filesystem_catalog`, `reader_modes` | Scalar, NULL, VARIANT, BLOB and reader routing/profile |
 | `scalar_predicates` | Projection order, NULL logic, decimals, date/time, Unicode, compound predicates, aggregates and LIMIT |
 | `primary_key_merge`, `primary_key_sequence` | Update/delete, reinsert, repeated updates, NULL replacement across Parquet/ORC/Avro, and predicates on obsolete values |
 | `partition_pruning` | Equality, IN and NULL partition filters, with EXPLAIN partition counts |
 | `schema_versions` | Mixed-schema files after rename, widening, drop/add; projection and filters |
 | `nested_types_*`, `map_size_native` | ARRAY/MAP/ROW, nested ARRAY, empty/NULL values, subfield projection and map-size pruning |
+| `struct_parent_null` | NULL ancestor ROWs around VARIANT, full/pruned projections, predicates, chunk boundaries, NATIVE/AUTO routing and native profile |
 | `empty_table_*`, `empty_after_delete` | No-snapshot empty tables and all-deleted tables |
 | `writer_snapshot` | Final rows from an independent Paimon writer update/insert |
 | `predicate_pushdown` | Actual TRACE predicates, file pruning, typed literals, unsupported/partially supported predicates and final rows |
@@ -171,8 +232,8 @@ written after index creation; these cases do not build or refresh indexes at run
 Run the reader assertion helper tests from `test/` with
 `python3 -m unittest lib.test_paimon_fixture -v`.
 
-All table mutations happen during offline data preparation, not during these cases.
-In particular, schema evolution and writer-snapshot cases read already prepared
+Fixture table mutations happen during offline data preparation. The DDL cases above
+mutate only their isolated warehouses. Schema evolution and writer-snapshot cases read already prepared
 files; they do not test live cache invalidation or schema refresh. This suite does
 not require a writer JDK/classpath or a Spark/Flink environment.
 
@@ -180,6 +241,42 @@ The additional tables were generated and verified with the Paimon 2.0.0
 Java API. The existing five imported tables have unknown original generator
 versions; `pk_merge_v1` has its
 [original generator](https://github.com/StarRocks/starrocks-testing-data/blob/4bce0eac1a87b23982561b7c53636d125e13abf2/catalog/paimon/datagen/README.md).
+
+## NULL STRUCT fixture
+
+`test_paimon_struct_parent_null` reads `reader_struct_parent_null_v1` through
+paimon-cpp. Its 8,192 rows repeat eight patterns: ordinary values, a NULL outer
+ROW, a NULL nested ROW, SQL NULL VARIANT fields, encoded VARIANT null, and
+object/array/boolean/decimal values. Two overlapping, uncompacted primary-key
+files prevent the StarRocks raw-file reader from bypassing Arrow conversion.
+The Java generator verifies the final rows and rejects splits eligible for raw
+reads. SQL checks full structs, pruned and unpruned subfields, NULL predicates,
+aggregates, small chunks and chunk boundaries, plus NATIVE/AUTO reader selection
+and the BE `PaimonNativeReader` profile. JNI does not support these VARIANT fields.
+
+This fixture checks integration and compatibility. Ordinary SDK-generated NULL
+rows can also query correctly before the fix; the BE Arrow converter tests
+separately reproduce valid child buffers hidden by NULL ancestors and verify
+that those buffers are ignored during conversion.
+
+To reproduce the fixture offline from the repository root, use a compatible JDK
+and a built FE distribution containing Paimon 2.0.0:
+
+```bash
+mkdir -p "$FIXTURE_CLASSES"
+javac -proc:none -cp 'fe/fe-server/target/lib/*' -d "$FIXTURE_CLASSES" \
+  test/sql/test_paimon_catalog/datagen/GenerateStructParentNullFixture.java
+java -cp "$FIXTURE_CLASSES:fe/fe-server/target/lib/*" GenerateStructParentNullFixture \
+  "$NEW_FIXTURE_WAREHOUSE"
+```
+
+Set `FIXTURE_CLASSES` to a scratch class directory and `NEW_FIXTURE_WAREHOUSE` to
+a new local directory. Publish the complete generated
+`paimon_test.db/reader_struct_parent_null_v1/` directory, including schema,
+snapshots, manifests and data, under
+`oss://${oss_bucket}/ci_catalog_test_data/paimon/paimon_test.db/`.
+Do not overwrite the existing shared fixture during test execution. The SQL case
+only creates and cleans up its own Catalog; it does not modify the static table.
 
 ## Statistics and layout assertions
 

@@ -805,6 +805,46 @@ DISTRIBUTED BY HASH(site_id,city_code);
 - 该语义从 v4.1 开始支持。在存算分离模式下默认启用，由 FE 配置 `enable_range_distribution` 控制。
 - 如需将其禁用并回退到此前的默认分布方式，请将 FE 配置项 `enable_range_distribution` 设置为 `false`。该配置在存算一体模式下无效。
 
+#### Tablet 目标大小
+
+基于范围分布的表在自动拆分、合并 Tablet 时，会让每个 Tablet 的大小保持在一个目标值附近。默认情况下，所有表都以 FE 配置项 `tablet_reshard_target_size`（默认值：10 GB）作为目标大小。如需为某张表单独指定目标大小，可以在建表时将表属性 `tablet_reshard_target_size`（单位：字节）设置为正整数，建表后也可以通过 `ALTER TABLE ... SET` 修改。该表属性与 FE 配置项同名，仅适用于基于范围分布的表；在其他表上设置时，语句会报错 `tablet_reshard_target_size is only supported for range-distributed tables`。
+
+```SQL
+CREATE TABLE orders (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int,
+    amount decimal(18, 2)
+)
+DUPLICATE KEY (tenant_id, created_time, id)
+PROPERTIES ("tablet_reshard_target_size" = "1073741824");
+
+-- 将该表的目标大小改为 4 GB。
+ALTER TABLE orders SET ("tablet_reshard_target_size" = "4294967296");
+
+-- 删除该属性，该表重新以 FE 配置项 tablet_reshard_target_size 作为目标大小。
+ALTER TABLE orders SET ("tablet_reshard_target_size" = "");
+```
+
+设置了该属性的表在以下场景中以属性值代替 FE 配置项：
+
+- 自动拆分：Tablet 达到属性值的 1.5 倍（向上取整）时触发拆分，拆分为若干个大小接近属性值的 Tablet。
+- 自动合并（需开启 FE 配置项 `tablet_reshard_enable_tablet_merge`）：相邻两个 Tablet 的大小之和小于属性值的 80%（向上取整）时触发合并，每组参与合并的 Tablet 大小总和不超过属性值。
+- 手动执行 `ALTER TABLE ... SPLIT TABLET` 或 `ALTER TABLE ... MERGE TABLET` 时，如果语句的 `PROPERTIES` 中未指定 `tablet_reshard_target_size`，则以属性值作为目标大小。
+- 导入时的 Tablet 预分裂、在线变更排序键（例如 `ALTER TABLE ... ORDER BY`）以及为该表创建 Rollup，同样以属性值作为新 Tablet 的目标大小。
+
+详细规则参见 [ALTER TABLE - 调整 Tablet 大小](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#调整-tablet-大小)。
+
+该表属性没有默认值。未设置该属性的表以 FE 配置项 `tablet_reshard_target_size` 作为目标大小，之后修改该配置项也会对其生效。将该属性设置为 `0`、负数或非数字时，语句会报错。
+
+如果将 FE 配置项 `tablet_reshard_target_size` 设置为 `0`，所有表的自动拆分和合并都会关闭，设置了该表属性的表也不例外。该配置项恢复为正数后，表属性重新生效。
+
+:::note
+
+如果表设置了 `tablet_reshard_target_size` 属性，`SHOW CREATE TABLE` 返回的建表语句会包含该属性。在默认分布方式不是基于范围分布的环境中（FE 配置项 `enable_range_distribution` 为 `false`，或存算一体模式），该语句会创建哈希分桶或随机分桶的表，而该属性仅适用于基于范围分布的表，因此语句会报错。不支持该属性的版本会将其视为未知属性并报错。在这些环境中执行该语句前，请先删除该属性。
+
+:::
+
 #### 示例
 
 ##### 创建具有基于范围的分布语义的新表
@@ -861,7 +901,11 @@ PRIMARY KEY (tenant_id, created_time, id);
 除了 Colocation Group 之外，您还必须在 `colocate_with` 属性中以 `<colocation_group>:<colocated_column>[,<colocated_column>]` 的格式指定 Colocated Column：
 - Colocated Column 必须是排序列的前缀。
 - 同一 Colocation Group 中的表必须具有相同类型的 Colocated Column，且 Colocated Column 的数量和顺序必须一致。
+- 建表后不能修改 Colocated Column 的类型，包括增加 VARCHAR 列的长度。
+- 建表后可以在线变更排序键（`ALTER TABLE ... ORDER BY`、添加或删除键列、扩宽整数类型的排序键列），前提是新排序键仍以 Colocated Column 开头，且这些列的顺序和类型不变。不支持删除 Colocated Column、调整其顺序或修改其类型。变更完成后，表仍属于原 Colocation Group，Colocate Join 不受影响。
 - 默认的 Colocated Column 即为排序列。
+- 如果 `colocate_with` 只指定了 Colocation Group，而排序键变更后包含的列多于 Colocated Column，StarRocks 会将该属性改写为显式列出 Colocated Column 的形式 `<colocation_group>:<colocated_column>[,<colocated_column>]`，此后 `SHOW CREATE TABLE` 中显示的即为该形式。
+- 支持 Rollup 和同步物化视图，但其排序键必须以 Colocated Column 开头，列的顺序和类型均须与之一致。在 `CREATE TABLE ... ROLLUP (...)` 中定义的 Rollup 以键列为排序键，写在其中的 `ORDER BY` 不会生效，因此这类 Rollup 的键列必须以 Colocated Column 开头。同步物化视图的排序键是 `SELECT` 列表开头的非聚合列，顺序与 `SELECT` 中一致；如果视图不含 `GROUP BY`、聚合函数或 `DISTINCT`，排序键取 `SELECT` 列表的前缀（最多三列、不超过 36 字节；遇到 VARCHAR 列时取到该列为止，遇到不能作为键的类型（如 FLOAT、DOUBLE）时在该列之前截止），`ORDER BY` 对它不起作用。如需为这类视图自行指定排序键，请改用 `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)`。表上已有 Rollup 或同步物化视图时，不支持上述排序键变更。
 :::
 
 ```SQL
@@ -882,7 +926,7 @@ PROPERTIES(
 
 有关拆分或合并 Tablet 的详细指引，参考 [ALTER TABLE - Modify the tablet size](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#modify-the-tablet-size)。
 
-- 将表中所有符合条件的 Tablet 拆分，目标大小为 10 GB（默认值）。
+- 将表中所有符合条件的 Tablet 按表的目标大小（默认为 10 GB）拆分。
 
 ```SQL
 ALTER TABLE table1 SPLIT TABLETS;
@@ -903,9 +947,10 @@ PROPERTIES (
 | DDL | 原因 |
 | --- | --- |
 | 不包含 `ORDER BY` 子句的 `ALTER TABLE ... ADD ROLLUP ...` | 普通同步 Rollup 依赖基表与 Rollup 表 Tablet 一一对应且行顺序一致，基于范围的分布无法满足这一前提。请改用 `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)`：在存算分离集群中的范围分布表上，该语句会构建带独立排序键的 Rollup，且支持添加多个此类 Rollup（每条 `ALTER TABLE` 语句添加一个）。 |
-| `CREATE MATERIALIZED VIEW ... AS ...`（同步物化视图，未指定 `REFRESH` 和 `DISTRIBUTED BY` 子句） | 同步物化视图本质上是一个普通同步 Rollup，受相同限制。 |
+| `CREATE MATERIALIZED VIEW ... AS ...`（同步物化视图，未指定 `REFRESH` 和 `DISTRIBUTED BY` 子句） | 存算分离集群中的明细表、聚合表和更新表支持同步物化视图，参见 [CREATE MATERIALIZED VIEW](../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md)。其他情况下，同步物化视图本质上是一个普通同步 Rollup，受相同限制。 |
 | `ALTER TABLE ... MERGE TABLETS`（排序键与主键不同的主键表；基于大小的自动合并也会跳过该形态） | 这类表按主键空间的 range 路由数据，而 Segment 按排序键排列，因此合并时无法判定源 Tablet 之间共享的 Segment 中某一行仍归属于哪个源。SPLIT 不受影响；排序键即主键的主键表仍可正常 MERGE。 |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE 会对分区重新分布数据/重新分桶，与基于范围的 tablet 边界不兼容。 |
+| 在设置了 `colocate_with` 的表上使用 `CREATE TABLE ... ROLLUP (...)`、`ALTER TABLE ... ADD ROLLUP ...` 或 `CREATE MATERIALIZED VIEW`，且 Rollup 或同步物化视图的排序键不以 Colocated Column 开头 | Rollup 和同步物化视图的 tablet 必须与 Colocation Group 对齐，只有排序键以 Colocated Column 开头，表中所有索引才能保持对齐。不含 `GROUP BY`、聚合函数或 `DISTINCT` 的同步物化视图无法自行指定排序键，这时请改用 `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)`。 |
 
 对于类似 Rollup 的聚合场景，请使用**异步物化视图**，并显式指定 `REFRESH` 子句或 `DISTRIBUTED BY` 子句，例如：
 
@@ -971,6 +1016,7 @@ AS SELECT ... FROM range_table;
       user_name VARCHAR(32) DEFAULT '')
   DUPLICATE KEY (event_day,site_id,pv)
   PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY RANDOM
   -- 该表分区中的分桶数量由 StarRocks 自动设置，并且因为指定单个分桶的大小为 1 GB，分桶数量会按需动态增加。
   PROPERTIES("bucket_size"="1073741824")
   ;
@@ -983,6 +1029,7 @@ AS SELECT ... FROM range_table;
       user_name VARCHAR(32) DEFAULT '')
   DUPLICATE KEY (event_day,site_id,pv)
   PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY RANDOM
   -- 该表分区中的分桶数量由 StarRocks 自动设置，并且由于没有指定单个分桶的大小，分桶数量不会按需动态增加。
   ;
   ```

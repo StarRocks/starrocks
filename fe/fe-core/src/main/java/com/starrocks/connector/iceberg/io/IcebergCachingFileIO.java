@@ -57,6 +57,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.common.util.concurrent.lock.LockInvariantViolationException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import com.starrocks.fs.azure.AzBlobURI;
 import org.apache.hadoop.conf.Configuration;
@@ -68,7 +69,6 @@ import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
-import org.apache.iceberg.hadoop.SerializableConfiguration;
 import org.apache.iceberg.hadoop.Util;
 import org.apache.iceberg.io.ByteBufferInputStream;
 import org.apache.iceberg.io.FileIO;
@@ -138,7 +138,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         wrappedIO.initialize(properties);
 
         if (conf != null) {
-            wrappedIO.setConf(conf.get());
+            setWrappedConf(conf.get());
         }
 
         if (ENABLE_DISK_CACHE) {
@@ -169,9 +169,40 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
     @Override
     public void setConf(Configuration conf) {
-        this.conf = new SerializableConfiguration(conf)::get;
+        this.conf = new SharedConfiguration(conf);
         if (wrappedIO != null) {
-            wrappedIO.setConf(conf);
+            setWrappedConf(conf);
+        }
+    }
+
+    // ResolvingFileIO.setConf copies the configuration into a SerializableConfiguration, which rebuilds a
+    // second Configuration on first use. A table whose REST load response carries its own config or
+    // credentials gets its own FileIO, so those copies (~80-180 KB with a default Hadoop configuration) were
+    // retained per cached table. Hand the wrapped IO a reference instead. serializeConfWith replaces its
+    // supplier in one assignment (its getConf() is null-safe, and the argument is ignored), so a concurrent
+    // newInputFile never sees a half-set configuration.
+    private void setWrappedConf(Configuration conf) {
+        wrappedIO.serializeConfWith(ignored -> new SharedConfiguration(conf));
+    }
+
+    // Shares the Configuration in memory and copies it only when serialized (a table shipped in a split).
+    // The copy is a SerializableTable.SerializableConfSupplier, not a lambda or a class of fe-core: a
+    // concurrent newInputFile can put this supplier back on the wrapped IO after SerializableTable installed
+    // its own, and the BE deserializing the split has neither fe-core nor this class.
+    private static final class SharedConfiguration implements SerializableSupplier<Configuration> {
+        private final transient Configuration conf;
+
+        private SharedConfiguration(Configuration conf) {
+            this.conf = conf;
+        }
+
+        @Override
+        public Configuration get() {
+            return conf;
+        }
+
+        private Object writeReplace() {
+            return new SerializableTable.SerializableConfSupplier(conf);
         }
     }
 
@@ -187,7 +218,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         try {
             Configuration fileConf = buildConfFromProperties(properties, path);
             // deleteFile() and getWrappedIO() still go through wrappedIO, so it needs this file's credential too.
-            wrappedIO.setConf(fileConf);
+            setWrappedConf(fileConf);
             FileSystem gcs = sharedGcsFileSystem(path, fileConf);
             if (gcs != null) {
                 return new CachingInputFile(fileContentCache, HadoopInputFile.fromPath(new Path(path), gcs, fileConf));
@@ -204,7 +235,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     public OutputFile newOutputFile(String path) {
         try {
             Configuration fileConf = buildConfFromProperties(properties, path);
-            wrappedIO.setConf(fileConf);
+            setWrappedConf(fileConf);
             FileSystem gcs = sharedGcsFileSystem(path, fileConf);
             if (gcs != null) {
                 return HadoopOutputFile.fromPath(new Path(path), gcs, fileConf);

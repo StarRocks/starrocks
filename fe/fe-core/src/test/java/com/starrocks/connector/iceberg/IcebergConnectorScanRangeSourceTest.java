@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -29,6 +30,7 @@ import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsPartition;
@@ -36,7 +38,11 @@ import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TIcebergDeleteFile;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.DateType;
+import com.starrocks.type.VarbinaryType;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.iceberg.AppendFiles;
+import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
@@ -50,6 +56,12 @@ import org.apache.iceberg.PartitionKey;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.encryption.EncryptedInputFile;
+import org.apache.iceberg.encryption.EncryptedOutputFile;
+import org.apache.iceberg.encryption.EncryptionManager;
+import org.apache.iceberg.encryption.StarRocksKeyMetadata;
+import org.apache.iceberg.io.InputFile;
+import org.apache.iceberg.io.OutputFile;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
@@ -57,6 +69,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -67,6 +80,7 @@ import java.util.Set;
 import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.IntegerType.INT;
 import static com.starrocks.type.VarcharType.VARCHAR;
+import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
 
 /**
  * Test cases for IcebergConnectorScanRangeSource focusing on initBucketInfo and extractBucketId methods
@@ -119,6 +133,59 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 // 2 * (64 + 1) + 1 data-j2
                 Assertions.assertEquals(2 * (BUCKETS_NUMBER2 + 1) + 1, mappingId);
             }
+        }
+    }
+
+    @Test
+    public void testExtractBucketIdAfterBucketColumnRename() {
+        // The partition field keeps its name (k1_bucket) after the source column is renamed.
+        mockedNativeTable2Bucket.newFastAppend().appendFile(FILE_J_1).appendFile(FILE_J_2).commit();
+        mockedNativeTable2Bucket.updateSchema().renameColumn("k1", "k1_new").commit();
+        List<Column> schema = new ArrayList<>();
+        schema.add(new Column("id", INT));
+        schema.add(new Column("k1_new", INT));
+        schema.add(new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTable2Bucket, Maps.newHashMap());
+        List<BucketProperty> bucketProperties = icebergTable.getBucketProperties();
+        Assertions.assertEquals(2, bucketProperties.size());
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor, Optional.of(bucketProperties),
+                PartitionIdGenerator.of(), false, false);
+
+        for (FileScanTask fileScanTask : mockedNativeTable2Bucket.newScan().planFiles()) {
+            int mappingId = scanRangeSource.extractBucketId(fileScanTask);
+            if (fileScanTask.file().location().endsWith("data-j1.parquet")) {
+                Assertions.assertEquals((BUCKETS_NUMBER2 + 1) + 1, mappingId);
+            } else {
+                Assertions.assertEquals(2 * (BUCKETS_NUMBER2 + 1) + 1, mappingId);
+            }
+        }
+    }
+
+    @Test
+    public void testExtractBucketIdTwoBucketTransformsOnOneColumn() {
+        // bucket(k1, 4) named k1_4 comes first; the bucket property is the 8-bucket one (field k1_bucket).
+        PartitionSpec spec = PartitionSpec.builderFor(SCHEMA_J).bucket("k1", 4, "k1_4").bucket("k1", 8).build();
+        TestTables.TestTable nativeTable = create(SCHEMA_J, spec, "k1_two_buckets", 2);
+        DataFile file = DataFiles.builder(spec).withPath("/path/to/k1_4=1/k1_bucket=3/a.parquet")
+                .withFileSizeInBytes(10).withPartitionPath("k1_4=1/k1_bucket=3").withRecordCount(1).build();
+        nativeTable.newFastAppend().appendFile(file).commit();
+        List<Column> schema = new ArrayList<>();
+        schema.add(new Column("id", INT));
+        schema.add(new Column("k1", INT));
+        schema.add(new Column("k2", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, nativeTable, Maps.newHashMap());
+        BucketProperty bucket8 = icebergTable.getBucketProperties().stream()
+                .filter(bp -> bp.getBucketNum() == 8).findFirst().orElseThrow();
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tupleDescriptor, Optional.of(List.of(bucket8)),
+                PartitionIdGenerator.of(), false, false);
+        for (FileScanTask fileScanTask : nativeTable.newScan().planFiles()) {
+            Assertions.assertEquals(3, scanRangeSource.extractBucketId(fileScanTask));
         }
     }
 
@@ -519,6 +586,70 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 PartitionIdGenerator.of(), false, false);
         notPartitioned.setRuntimeFilterPruningColumns(Set.of("k1"));
         Assertions.assertThrows(StarRocksConnectorException.class, () -> notPartitioned.toScanRanges(task));
+    }
+
+    @Test
+    public void testRuntimeFilterProbeSlotsCarryFileBounds() throws Exception {
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(20));
+        SlotDescriptor k1Slot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        k1Slot.setType(INT);
+        k1Slot.setColumn(new Column("k1", INT));
+        localTupleDescriptor.addSlot(k1Slot);
+        SlotDescriptor k2Slot = new SlotDescriptor(new SlotId(2), localTupleDescriptor);
+        k2Slot.setType(INT);
+        k2Slot.setColumn(new Column("k2", INT));
+        localTupleDescriptor.addSlot(k2Slot);
+
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_3).commit();
+        List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableB, Maps.newHashMap());
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+
+        FileScanTask task = Lists.newArrayList(mockedNativeTableB.newScan().includeColumnStats().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(task);
+        // without probe slots (and without the min/max optimization) no bounds are sent
+        Assertions.assertFalse(scanRangeSource.buildScanRange(task, task.file(), partitionId).isSetMin_max_values());
+
+        scanRangeSource.setRuntimeFilterProbeSlotIds(Set.of(k1Slot.getId().asInt()));
+        THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), partitionId);
+        Assertions.assertEquals(Set.of(k1Slot.getId().asInt()), range.getMin_max_values().keySet());
+        Assertions.assertEquals(1, range.getMin_max_values().get(k1Slot.getId().asInt()).getMin_int_value());
+        Assertions.assertEquals(2, range.getMin_max_values().get(k1Slot.getId().asInt()).getMax_int_value());
+    }
+
+    // A time-travel read binds the slots to the snapshot schema: the bounds are looked up by the name there, not in
+    // the current schema where the column was renamed since.
+    @Test
+    public void testRuntimeFilterProbeSlotBoundsUseReadSchema() throws Exception {
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(21));
+        SlotDescriptor k1Slot = new SlotDescriptor(new SlotId(1), localTupleDescriptor);
+        k1Slot.setType(INT);
+        k1Slot.setColumn(new Column("k1", INT));
+        localTupleDescriptor.addSlot(k1Slot);
+
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_3).commit();
+        long snapshotId = mockedNativeTableB.currentSnapshot().snapshotId();
+        Schema snapshotSchema = mockedNativeTableB.schema();
+        mockedNativeTableB.updateSchema().renameColumn("k1", "k1_renamed").commit();
+
+        List<Column> schema = Lists.newArrayList(new Column("k1_renamed", INT), new Column("k2", INT));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableB, Maps.newHashMap())
+                .withReadMetadata(snapshotSchema, IcebergMetadata.getSnapshotSpecs(mockedNativeTableB, snapshotId));
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+        scanRangeSource.setRuntimeFilterProbeSlotIds(Set.of(k1Slot.getId().asInt()));
+
+        FileScanTask task = Lists.newArrayList(
+                mockedNativeTableB.newScan().useSnapshot(snapshotId).includeColumnStats().planFiles()).get(0);
+        long partitionId = scanRangeSource.addPartition(task);
+        THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), partitionId);
+        Assertions.assertEquals(1, range.getMin_max_values().get(k1Slot.getId().asInt()).getMin_int_value());
+        Assertions.assertEquals(2, range.getMin_max_values().get(k1Slot.getId().asInt()).getMax_int_value());
     }
 
     @Test
@@ -1240,6 +1371,158 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         }
     }
 
+    // An identity partition column always takes the partition value, also without a session (incremental scan
+    // ranges): a data file may not store the column (e.g. a migrated Hive file), and reading it from the file gives
+    // NULL.
+    @Test
+    public void testIdentityPartitionValueAlwaysUsed() throws Exception {
+        ConnectContext prevCtx = ConnectContext.get();
+        ConnectContext.remove();
+        try {
+            PartitionSpec specIdentityK1 = PartitionSpec.builderFor(SCHEMA_F).identity("k1").build();
+            TestTables.TestTable table = create(SCHEMA_F, specIdentityK1, "ti_identity_opt_off", 2);
+            DataFile file = DataFiles.builder(specIdentityK1)
+                    .withPath("/path/to/identity-opt-off.parquet")
+                    .withFileSizeInBytes(10)
+                    .withRecordCount(2)
+                    .withPartitionPath("k1=7")
+                    .build();
+            table.newFastAppend().appendFile(file).commit();
+
+            TupleDescriptor localTuple = new TupleDescriptor(new TupleId(103));
+            SlotDescriptor k1Slot = new SlotDescriptor(new SlotId(1), localTuple);
+            k1Slot.setType(INT);
+            k1Slot.setColumn(new Column("k1", INT));
+            localTuple.addSlot(k1Slot);
+
+            List<Column> schema = Lists.newArrayList(new Column("k1", INT), new Column("dt", DateType.DATE));
+            IcebergTable icebergTable = new IcebergTable(1, "iceberg_identity_opt_off", "iceberg_catalog",
+                    "resource", "db", "table", "", schema, table, Maps.newHashMap());
+            IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                    RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTuple, Optional.empty(),
+                    PartitionIdGenerator.of(), false, false);
+
+            FileScanTask task = Lists.newArrayList(table.newScan().planFiles()).get(0);
+            long pid = scanRangeSource.addPartition(task);
+            THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), pid);
+            Assertions.assertEquals(pid, range.getPartition_id());
+            Assertions.assertEquals(List.of(1), range.getIdentity_partition_slot_ids());
+            Assertions.assertEquals(1, range.getPartition_value().getPartition_key_exprs().size());
+        } finally {
+            if (prevCtx == null) {
+                ConnectContext.remove();
+            } else {
+                prevCtx.setThreadLocalInfo();
+            }
+        }
+    }
+
+    // An identity partition column takes the raw bytes of a BINARY partition value, and a partition field named apart
+    // from its source column (identity(q) named P, next to a column p) fills its source column.
+    @Test
+    public void testIdentityPartitionValueBinaryAndRenamedField() throws Exception {
+        ConnectContext prevCtx = ConnectContext.get();
+        new ConnectContext().setThreadLocalInfo();
+        try {
+            Schema schema = new Schema(
+                    Types.NestedField.optional(1, "b", Types.BinaryType.get()),
+                    Types.NestedField.optional(2, "q", Types.IntegerType.get()),
+                    Types.NestedField.optional(3, "p", Types.IntegerType.get()));
+            PartitionSpec spec = PartitionSpec.builderFor(schema).identity("b").identity("q", "P").build();
+            TestTables.TestTable table = create(schema, spec, "ti_binary_renamed_field", 2);
+            byte[] bytes = new byte[] {0x41, 0x00, (byte) 0xff};
+            PartitionData partition = new PartitionData(spec.partitionType());
+            partition.set(0, ByteBuffer.wrap(bytes));
+            partition.set(1, 7);
+            table.newFastAppend().appendFile(DataFiles.builder(spec)
+                    .withPath("/path/to/binary-renamed-field.parquet")
+                    .withFileSizeInBytes(10)
+                    .withRecordCount(1)
+                    .withPartition(partition)
+                    .build()).commit();
+
+            TupleDescriptor localTuple = new TupleDescriptor(new TupleId(104));
+            List<Column> columns = Lists.newArrayList(new Column("b", VarbinaryType.VARBINARY),
+                    new Column("q", INT), new Column("p", INT));
+            for (Column column : columns) {
+                SlotDescriptor slot = new SlotDescriptor(new SlotId(localTuple.getSlots().size() + 1), localTuple);
+                slot.setType(column.getType());
+                slot.setColumn(column);
+                localTuple.addSlot(slot);
+            }
+            IcebergTable icebergTable = new IcebergTable(1, "iceberg_binary_renamed_field", "iceberg_catalog",
+                    "resource", "db", "table", "", columns, table, Maps.newHashMap());
+            IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                    RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTuple, Optional.empty(),
+                    PartitionIdGenerator.of(), false, false);
+
+            FileScanTask task = Lists.newArrayList(table.newScan().planFiles()).get(0);
+            long pid = scanRangeSource.addPartition(task);
+            THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), pid);
+            Assertions.assertEquals(List.of(localTuple.getColumnSlot("b").getId().asInt(),
+                    localTuple.getColumnSlot("q").getId().asInt()), range.getIdentity_partition_slot_ids());
+            List<TExpr> keys = range.getPartition_value().getPartition_key_exprs();
+            Assertions.assertEquals(2, keys.size());
+            Assertions.assertEquals(TExprNodeType.BINARY_LITERAL, keys.get(0).getNodes().get(0).getNode_type());
+            Assertions.assertArrayEquals(bytes, keys.get(0).getNodes().get(0).getBinary_literal().getValue());
+            Assertions.assertEquals(7, keys.get(1).getNodes().get(0).getInt_literal().getValue());
+        } finally {
+            if (prevCtx == null) {
+                ConnectContext.remove();
+            } else {
+                prevCtx.setThreadLocalInfo();
+            }
+        }
+    }
+
+    // A TIME identity partition value has no literal to send, so the TIME column is read from the file instead of
+    // failing the scan.
+    @Test
+    public void testTimeIdentityPartitionReadFromFile() throws Exception {
+        ConnectContext prevCtx = ConnectContext.get();
+        new ConnectContext().setThreadLocalInfo();
+        try {
+            Schema schema = new Schema(
+                    Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                    Types.NestedField.optional(2, "t", Types.TimeType.get()));
+            PartitionSpec spec = PartitionSpec.builderFor(schema).identity("t").build();
+            TestTables.TestTable table = create(schema, spec, "ti_time_identity", 2);
+            PartitionData partition = new PartitionData(spec.partitionType());
+            partition.set(0, 36672123456L);
+            table.newFastAppend().appendFile(DataFiles.builder(spec)
+                    .withPath("/path/to/time-identity.parquet")
+                    .withFileSizeInBytes(10)
+                    .withRecordCount(1)
+                    .withPartition(partition)
+                    .build()).commit();
+
+            TupleDescriptor localTuple = new TupleDescriptor(new TupleId(105));
+            List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("t", DateType.TIME));
+            for (Column column : columns) {
+                SlotDescriptor slot = new SlotDescriptor(new SlotId(localTuple.getSlots().size() + 1), localTuple);
+                slot.setType(column.getType());
+                slot.setColumn(column);
+                localTuple.addSlot(slot);
+            }
+            IcebergTable icebergTable = new IcebergTable(1, "iceberg_time_identity", "iceberg_catalog",
+                    "resource", "db", "table", "", columns, table, Maps.newHashMap());
+            IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                    RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTuple, Optional.empty(),
+                    PartitionIdGenerator.of(), false, false);
+
+            FileScanTask task = Lists.newArrayList(table.newScan().planFiles()).get(0);
+            long pid = scanRangeSource.addPartition(task);
+            THdfsScanRange range = scanRangeSource.buildScanRange(task, task.file(), pid);
+            Assertions.assertEquals(List.of(), range.getIdentity_partition_slot_ids());
+        } finally {
+            if (prevCtx == null) {
+                ConnectContext.remove();
+            } else {
+                prevCtx.setThreadLocalInfo();
+            }
+        }
+    }
+
     @Test
     public void testCacheKeyShouldUseEffectiveIdentityKey() throws Exception {
         ConnectContext prevCtx = ConnectContext.get();
@@ -1454,5 +1737,230 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
                 throw new UnsupportedOperationException();
             }
         };
+    }
+
+    /** Non-plaintext EncryptionManager stub: buildEncryptionInfo only checks it is not the plaintext one. */
+    private static class StubEncryptionManager implements EncryptionManager {
+        @Override
+        public InputFile decrypt(EncryptedInputFile encrypted) {
+            throw new UnsupportedOperationException("not reached: the DEK is read straight from key_metadata");
+        }
+
+        @Override
+        public EncryptedOutputFile encrypt(OutputFile rawOutput) {
+            throw new UnsupportedOperationException("not reached: this is the read path");
+        }
+    }
+
+    private TupleDescriptor twoColumnTuple(int tupleId) {
+        TupleDescriptor tuple = new TupleDescriptor(new TupleId(tupleId));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(1), tuple);
+        idSlot.setType(INT);
+        idSlot.setColumn(new Column("id", INT));
+        tuple.addSlot(idSlot);
+        SlotDescriptor dataSlot = new SlotDescriptor(new SlotId(2), tuple);
+        dataSlot.setType(VARCHAR);
+        dataSlot.setColumn(new Column("data", VARCHAR));
+        tuple.addSlot(dataSlot);
+        return tuple;
+    }
+
+    private IcebergConnectorScanRangeSource sourceForTable(TupleDescriptor tuple) {
+        List<Column> schema = Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableA, Maps.newHashMap());
+        return new IcebergConnectorScanRangeSource(icebergTable, RemoteFileInfoDefaultSource.EMPTY,
+                IcebergMORParams.EMPTY, tuple, Optional.empty(), PartitionIdGenerator.of(), false, false);
+    }
+
+    private static DataFile encryptedDataFile(String path, ByteBuffer keyMetadata) {
+        return DataFiles.builder(SPEC_A)
+                .withPath(path)
+                .withFileSizeInBytes(10)
+                .withPartitionPath("data_bucket=0")
+                .withRecordCount(2)
+                .withEncryptionKeyMetadata(keyMetadata)
+                .build();
+    }
+
+    @Test
+    public void testBuildScanRangeRecoversDekAndAadFromKeyMetadata() throws Exception {
+        // The read path's whole job: turn the key_metadata Iceberg committed back into the DEK and AAD
+        // prefix the BE needs. Nothing else in FE tests this, and it is what decides whether a file
+        // another engine wrote can be decrypted at all.
+        byte[] dek = new byte[32];
+        byte[] aadPrefix = new byte[16];
+        for (int i = 0; i < dek.length; i++) {
+            dek[i] = (byte) (i + 1);
+        }
+        for (int i = 0; i < aadPrefix.length; i++) {
+            aadPrefix[i] = (byte) (i + 100);
+        }
+
+        new MockUp<BaseTable>() {
+            @Mock
+            public EncryptionManager encryption() {
+                return new StubEncryptionManager();
+            }
+        };
+
+        mockedNativeTableA.newFastAppend()
+                .appendFile(encryptedDataFile("/path/to/enc-a.parquet",
+                        StarRocksKeyMetadata.serialize(dek, aadPrefix)))
+                .commit();
+
+        TupleDescriptor tuple = twoColumnTuple(40);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+        THdfsScanRange range = source.buildScanRange(task, task.file(), source.addPartition(task));
+
+        Assertions.assertTrue(range.isSetParquet_encryption_info(),
+                "an encrypted file's scan range must carry key material for the BE");
+        Assertions.assertArrayEquals(dek, range.getParquet_encryption_info().getFile_dek());
+        Assertions.assertArrayEquals(aadPrefix, range.getParquet_encryption_info().getAad_prefix());
+    }
+
+    @Test
+    public void testBuildScanRangeFailsWhenKeyMetadataCarriesNoDataKey() throws Exception {
+        // Fail closed: a key_metadata with no usable key must fail the query rather than produce a
+        // scan range the BE will then try to read as plaintext.
+        new MockUp<BaseTable>() {
+            @Mock
+            public EncryptionManager encryption() {
+                return new StubEncryptionManager();
+            }
+        };
+
+        mockedNativeTableA.newFastAppend()
+                .appendFile(encryptedDataFile("/path/to/enc-nokey.parquet", ByteBuffer.wrap(new byte[] {0x00})))
+                .commit();
+
+        TupleDescriptor tuple = twoColumnTuple(41);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> source.buildScanRange(task, task.file(), source.addPartition(task)));
+    }
+
+    @Test
+    public void testBuildScanRangeFailsWhenKeyMetadataParsesToAnEmptyDataKey() throws Exception {
+        // Well-formed key_metadata whose key is empty. Unlike an unparseable blob, this gets past the
+        // parser, so the explicit empty-key check is what has to refuse it.
+        new MockUp<BaseTable>() {
+            @Mock
+            public EncryptionManager encryption() {
+                return new StubEncryptionManager();
+            }
+        };
+
+        mockedNativeTableA.newFastAppend()
+                .appendFile(encryptedDataFile("/path/to/enc-emptykey.parquet",
+                        StarRocksKeyMetadata.serialize(new byte[0], new byte[16])))
+                .commit();
+
+        TupleDescriptor tuple = twoColumnTuple(44);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> source.buildScanRange(task, task.file(), source.addPartition(task)));
+        Assertions.assertTrue(e.getMessage().contains("carries no data key"), e.getMessage());
+    }
+
+    @Test
+    public void testPositionDeleteFileCarriesItsOwnKey() throws Exception {
+        // A position-delete file in an encrypted table is encrypted under its OWN per-file key. It must
+        // reach the BE on the delete-file descriptor, distinct from the data file's key, or the BE cannot
+        // open it.
+        byte[] dataDek = new byte[16];
+        byte[] deleteDek = new byte[16];
+        for (int i = 0; i < 16; i++) {
+            dataDek[i] = (byte) (i + 1);
+            deleteDek[i] = (byte) (i + 50);
+        }
+        new MockUp<BaseTable>() {
+            @Mock
+            public EncryptionManager encryption() {
+                return new StubEncryptionManager();
+            }
+        };
+
+        DeleteFile encryptedDeletes = FileMetadata.deleteFileBuilder(SPEC_A)
+                .ofPositionDeletes()
+                .withPath("/path/to/enc-a-deletes.parquet")
+                .withFormat(FileFormat.PARQUET)
+                .withFileSizeInBytes(10)
+                .withPartitionPath("data_bucket=0")
+                .withRecordCount(1)
+                .withEncryptionKeyMetadata(StarRocksKeyMetadata.serialize(deleteDek, new byte[16]))
+                .build();
+        mockedNativeTableA.newRowDelta()
+                .addRows(encryptedDataFile("/path/to/enc-a.parquet", StarRocksKeyMetadata.serialize(dataDek, new byte[16])))
+                .addDeletes(encryptedDeletes)
+                .commit();
+
+        TupleDescriptor tuple = twoColumnTuple(45);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+        List<TScanRangeLocations> ranges = source.toScanRanges(task);
+
+        THdfsScanRange range = ranges.get(0).getScan_range().getHdfs_scan_range();
+        Assertions.assertArrayEquals(dataDek, range.getParquet_encryption_info().getFile_dek());
+        Assertions.assertEquals(1, range.getDelete_files().size());
+        TIcebergDeleteFile deleteFile = range.getDelete_files().get(0);
+        Assertions.assertTrue(deleteFile.isSetParquet_encryption_info(),
+                "an encrypted position-delete file must carry its own key material");
+        Assertions.assertArrayEquals(deleteDek, deleteFile.getParquet_encryption_info().getFile_dek());
+    }
+
+    @Test
+    public void testBuildScanRangeOnPlaintextTableCarriesNoEncryptionInfo() throws Exception {
+        // A plaintext table must not get encryption info even though the file carries key metadata:
+        // the table's EncryptionManager is what decides, not the presence of bytes on the file.
+        mockedNativeTableA.newFastAppend()
+                .appendFile(encryptedDataFile("/path/to/plain-a.parquet",
+                        StarRocksKeyMetadata.serialize(new byte[16], new byte[16])))
+                .commit();
+
+        TupleDescriptor tuple = twoColumnTuple(42);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+        THdfsScanRange range = source.buildScanRange(task, task.file(), source.addPartition(task));
+
+        Assertions.assertFalse(range.isSetParquet_encryption_info(),
+                "a plaintext table must not ship key material to the BE");
+    }
+
+    @Test
+    public void testDeclaredEncryptionWithPlaintextManagerFailsEvenForAFileWithNoKeyMetadata() throws Exception {
+        // Regression test for the fail-open this gate exists to close. The gate used to live inside
+        // buildEncryptionInfo(), which is only reached when a file HAS key metadata -- but the state it
+        // guards against is a table declaring encryption.key-id while the catalog supplies a plaintext
+        // manager, and such a table's files are written WITHOUT key metadata. So the offending file
+        // skipped the branch, skipped the gate, and was served silently.
+        //
+        // The file below therefore deliberately has NO key metadata: that is the case that must fail.
+        // If the gate is ever moved back inside the per-file branch, this test fails.
+        // Declared via a mocked property map, not updateProperties(): TableTestBase builds format-v2
+        // tables and EncryptionUtil.checkCompatibility rejects encryption.key-id below v3, so a real
+        // commit would fail for an unrelated reason.
+        new MockUp<BaseTable>() {
+            @Mock
+            public Map<String, String> properties() {
+                return ImmutableMap.of(ENCRYPTION_TABLE_KEY, "some-kms-key");
+            }
+        };
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+
+        TupleDescriptor tuple = twoColumnTuple(43);
+        IcebergConnectorScanRangeSource source = sourceForTable(tuple);
+        FileScanTask task = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+
+        // No MockUp on encryption(): the real TestTable returns PlaintextEncryptionManager, which is
+        // exactly the unsupported-catalog shape.
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> source.buildScanRange(task, task.file(), source.addPartition(task)));
+        Assertions.assertTrue(e.getMessage().contains("cannot read"), e.getMessage());
     }
 }
