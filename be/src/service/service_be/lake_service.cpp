@@ -19,6 +19,7 @@
 #include <bthread/mutex.h>
 #include <butil/time.h> // NOLINT
 
+#include <algorithm>
 #include <set>
 
 #include "agent/agent_server.h"
@@ -148,6 +149,11 @@ bvar::LatencyRecorder g_aggregate_publish_version_wait_resp_latency("lake_aggreg
 bvar::LatencyRecorder g_aggregate_publish_version_write_meta_latency("lake_aggregate_publish_version_write_meta");
 bvar::Adder<int64_t> g_aggregate_compaction_failed_tasks("lake_aggregate_compaction_failed_tasks");
 bvar::Adder<int64_t> g_aggregate_compaction_total_tasks("lake_aggregate_compaction_total_tasks");
+// partial_meta entries written to this node's local disk cache, see lake_enable_publish_partial_meta.
+bvar::Adder<int64_t> g_publish_partial_meta_written("lake_publish_partial_meta_written");
+// A tablet that finishes this long after its request arrived cannot have been waited for by the aggregator,
+// whose deadline started before it sent the request. The margin absorbs timing error between the two.
+constexpr int64_t kPartialMetaTimeoutMarginMs = 3000;
 bvar::LatencyRecorder g_aggregate_compaction_wait_resp_latency("lake_aggregate_compaction_wait_resp");
 bvar::LatencyRecorder g_aggregate_compaction_write_meta_latency("lake_aggregate_compaction_write_meta");
 
@@ -170,6 +176,11 @@ void add_failed_tablets(PublishVersionResponse* response, const ReshardingTablet
     } else if (resharding_tablet_info.has_identical_tablet_info()) {
         response->add_failed_tablets(resharding_tablet_info.identical_tablet_info().old_tablet_id());
     }
+}
+
+void add_failed_tablets(PublishVersionResponse* response, const lake::PublishTabletInfo& tablet_info) {
+    response->mutable_failed_tablets()->Add(tablet_info.get_tablet_ids_in_txn_logs().begin(),
+                                            tablet_info.get_tablet_ids_in_txn_logs().end());
 }
 
 bool should_rebuild_pindex(const std::unordered_set<int64>& rebuild_pindex_tablets,
@@ -204,6 +215,32 @@ bool is_async_vector_index_table(const TabletMetadataPB& metadata) {
     return false;
 }
 
+// Under file bundling a tablet's publish result reaches storage only inside the version's bundle, which the
+// aggregator writes once every tablet of the partition succeeded. Keeps a copy in this node's local disk cache when
+// it may never get there: the aggregator has stopped waiting for it, or the partition is being retried and the copy
+// in the metacache may be evicted before the next attempt. A retry on this node reads it back. A retry writes the
+// entry again even when it was answered from it, which also keeps it recently used in the cache.
+void maybe_keep_partial_meta(lake::TabletManager* tablet_mgr, const PublishVersionRequest& request,
+                             bool skip_write_tablet_metadata, int64_t start_monotonic_us, int64_t timeout_ms,
+                             const TabletMetadataPtr& metadata) {
+    if (!skip_write_tablet_metadata || !config::lake_enable_publish_partial_meta ||
+        request.resharding_tablet_infos_size() > 0) {
+        return;
+    }
+    if (!request.is_retry_publish() &&
+        MonotonicMicros() - start_monotonic_us <= (timeout_ms + kPartialMetaTimeoutMarginMs) * 1000) {
+        return;
+    }
+    auto st = tablet_mgr->put_partial_tablet_metadata(metadata);
+    if (st.ok()) {
+        g_publish_partial_meta_written << 1;
+    } else if (!st.is_not_supported()) {
+        // Best effort: the publish itself succeeded, a retry just re-applies.
+        LOG(WARNING) << "Fail to write partial_meta of tablet " << metadata->id() << " version " << metadata->version()
+                     << ": " << st;
+    }
+}
+
 } // namespace
 
 // Get txn_ids string from request (compatible with both new and old FE versions)
@@ -222,6 +259,478 @@ std::string get_txn_ids_string(const PublishVersionRequest* request) {
 }
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
+
+namespace {
+
+bool has_no_op_publish(const PublishVersionRequest& request) {
+    return std::any_of(request.txn_infos().begin(), request.txn_infos().end(),
+                       [](const TxnInfoPB& txn_info) { return txn_info.no_op_publish(); });
+}
+
+Status validate_publish_version_request(const PublishVersionRequest& request) {
+    if (!request.has_base_version()) {
+        return Status::InvalidArgument("missing base version");
+    }
+    if (!request.has_new_version()) {
+        return Status::InvalidArgument("missing new version");
+    }
+    if (request.txn_ids_size() == 0 && request.txn_infos_size() == 0) {
+        return Status::InvalidArgument("neither txn_ids nor txn_infos is set, one of them must be set");
+    }
+    for (const auto& resharding_tablet_info : request.resharding_tablet_infos()) {
+        if (!resharding_tablet_info.has_splitting_tablet_info()) {
+            continue;
+        }
+        const auto& splitting_tablet_info = resharding_tablet_info.splitting_tablet_info();
+        const int split_count = splitting_tablet_info.new_tablet_ids_size();
+        if (split_count <= 1) {
+            return Status::InvalidArgument(fmt::format("splitting tablet {} requires at least 2 new tablet ids, got {}",
+                                                       splitting_tablet_info.old_tablet_id(), split_count));
+        }
+    }
+    return Status::OK();
+}
+
+bool is_tablet_reshard_txn(const PublishVersionRequest& request) {
+    return request.txn_infos_size() == 1 && request.txn_infos(0).txn_type() == TXN_TABLET_RESHARD;
+}
+
+// The tablets published by run_publish_tablet_task(), one task each.
+//
+// Both kinds of txn publish the requested tablet_ids. A tablet reshard txn does so because a CN may
+// hold only indexes left unchanged by a split or merge on another CN, and their normal tablet_ids
+// still need to advance to the partition's new version; its resharding_tablet_infos are published
+// by run_publish_resharding_tablet_task() instead. A normal txn also cross-publishes onto the new
+// tablets of every split, merge or identical reshard in the request.
+std::vector<lake::PublishTabletInfo> build_publish_tablet_infos(const PublishVersionRequest& request,
+                                                                bool tablet_reshard_txn) {
+    std::vector<lake::PublishTabletInfo> publish_tablet_infos;
+    publish_tablet_infos.reserve(request.tablet_ids_size());
+    for (auto tablet_id : request.tablet_ids()) {
+        // Publish normal tablets
+        publish_tablet_infos.emplace_back(tablet_id);
+    }
+    if (tablet_reshard_txn) {
+        return publish_tablet_infos;
+    }
+    for (const auto& resharding_tablet_info : request.resharding_tablet_infos()) {
+        // Cross publish
+        if (resharding_tablet_info.has_splitting_tablet_info()) {
+            // Splitting tablet
+            const auto& splitting_tablet_info = resharding_tablet_info.splitting_tablet_info();
+            int32_t split_count = splitting_tablet_info.new_tablet_ids_size();
+            int32_t split_index = 0;
+            for (auto new_tablet_id : splitting_tablet_info.new_tablet_ids()) {
+                publish_tablet_infos.emplace_back(lake::PublishTabletInfo::SPLITTING_TABLET,
+                                                  splitting_tablet_info.old_tablet_id(), new_tablet_id, split_count,
+                                                  split_index);
+                split_index++;
+            }
+        } else if (resharding_tablet_info.has_merging_tablet_info()) {
+            // Merging tablets
+            const auto& merging_tablet_info = resharding_tablet_info.merging_tablet_info();
+            publish_tablet_infos.emplace_back(lake::PublishTabletInfo::MERGING_TABLET,
+                                              merging_tablet_info.old_tablet_ids(),
+                                              merging_tablet_info.new_tablet_id());
+        } else if (resharding_tablet_info.has_identical_tablet_info()) {
+            // Identical tablet
+            const auto& identical_tablet_info = resharding_tablet_info.identical_tablet_info();
+            publish_tablet_infos.emplace_back(lake::PublishTabletInfo::IDENTICAL_TABLET,
+                                              identical_tablet_info.old_tablet_id(),
+                                              identical_tablet_info.new_tablet_id());
+        }
+    }
+    return publish_tablet_infos;
+}
+
+// The txns to apply to one tablet.
+std::vector<TxnInfoPB> build_publish_txns(const PublishVersionRequest& request, bool rebuild_pindex) {
+    auto txns = std::vector<TxnInfoPB>();
+    if (request.txn_infos_size() > 0) {
+        txns.insert(txns.begin(), request.txn_infos().begin(), request.txn_infos().end());
+        if (rebuild_pindex) {
+            for (auto& txn : txns) {
+                txn.set_rebuild_pindex(true);
+            }
+        }
+    } else { // This is a request from older version FE
+        // Construct TxnInfoPB from other fields
+        txns.reserve(request.txn_ids_size());
+        for (auto i = 0, sz = request.txn_ids_size(); i < sz; i++) {
+            auto& info = txns.emplace_back();
+            info.set_txn_id(request.txn_ids(i));
+            info.set_txn_type(TXN_NORMAL);
+            info.set_combined_txn_log(false);
+            info.set_commit_time(request.commit_time());
+            info.set_force_publish(false);
+            if (rebuild_pindex) {
+                info.set_rebuild_pindex(true);
+            }
+        }
+    }
+    return txns;
+}
+
+// FE-provided built version for the async vector index build of |tablet_id|, or 0 if FE sent none.
+int64_t get_fe_built_version(const PublishVersionRequest& request, int64_t tablet_id) {
+    auto it = request.tablet_built_versions().find(tablet_id);
+    return it != request.tablet_built_versions().end() ? it->second : 0;
+}
+
+// Whether a rowset this publish added (version above |base_version|) has a segment with a vector index.
+bool new_rowsets_have_vector_index(const TabletMetadataPB& metadata, int64_t base_version) {
+    for (const auto& rowset : metadata.rowsets()) {
+        int64_t rv = rowset.has_version() ? rowset.version() : 0;
+        if (rv <= base_version) continue; // existing rowset, not from this publish
+        for (const auto& segment_meta : rowset.segment_metas()) {
+            if (segment_meta.vector_index_ids_size() > 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// State shared by the tasks of one publish_version RPC. It lives on the handler's stack and the handler
+// returns once |latch| reaches zero, so each task must count the latch down exactly once -- after it
+// runs, when it is cancelled, or when it cannot be submitted -- and touch nothing here afterwards.
+struct PublishVersionContext {
+    PublishVersionContext(lake::TabletManager* tablet_mgr, const PublishVersionRequest* request,
+                          PublishVersionResponse* response, int64_t timeout_ms, int task_num)
+            : tablet_mgr(tablet_mgr),
+              request(request),
+              response(response),
+              timeout_ms(timeout_ms),
+              timeout_deadline(std::chrono::system_clock::now() + std::chrono::milliseconds(timeout_ms)),
+              start_ts(butil::gettimeofday_us()),
+              start_monotonic_us(MonotonicMicros()),
+              skip_write_tablet_metadata(request->has_enable_aggregate_publish() &&
+                                         request->enable_aggregate_publish()),
+              base_version_order(request->prefer_shared_initial_metadata()
+                                         ? lake::InitialMetadataOrder::kSharedFirst
+                                         : lake::InitialMetadataOrder::kPerTabletFirst),
+              trace(new Trace()),
+              latch(task_num) {
+        for (auto id : request->rebuild_pindex_tablet_ids()) {
+            LOG(INFO) << "get rebuild tablet: " << id;
+            rebuild_pindex_tablets.insert(id);
+        }
+    }
+
+    // TimedOut once the request deadline has passed. Checked by each task before it publishes.
+    Status check_deadline() const {
+        if (std::chrono::system_clock::now() < timeout_deadline) {
+            return Status::OK();
+        }
+        auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
+        return Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
+    }
+
+    // Records a failed task in the response: its tablets go to failed_tablets and |st| becomes the
+    // response status.
+    template <typename TaskInfo>
+    void record_failure(const TaskInfo& task_info, const Status& st) {
+        std::lock_guard l(response_mtx);
+        add_failed_tablets(response, task_info);
+        st.to_protobuf(response->mutable_status());
+    }
+
+    // Like record_failure(), but does not overwrite a non-OK response status.
+    template <typename TaskInfo>
+    void record_cancellation(const TaskInfo& task_info, const Status& st) {
+        std::lock_guard l(response_mtx);
+        add_failed_tablets(response, task_info);
+        if (response->status().status_code() == 0) {
+            st.to_protobuf(response->mutable_status());
+        }
+    }
+
+    lake::TabletManager* const tablet_mgr;
+    const PublishVersionRequest* const request;
+    PublishVersionResponse* const response;
+    const int64_t timeout_ms;
+    const std::chrono::system_clock::time_point timeout_deadline;
+    const int64_t start_ts;
+    const int64_t start_monotonic_us;
+    // Aggregate publish: the new metadata goes back in the response and the aggregator writes it.
+    const bool skip_write_tablet_metadata;
+    // FE resolved this partition's version-1 layout from its own metadata and offers it as a lookup
+    // preference, so no tablet task -- normal or resharding -- has to discover it by 404ing on a
+    // per-tablet key that was never written. Applied per request and never remembered -- see
+    // lake::InitialMetadataOrder.
+    const lake::InitialMetadataOrder base_version_order;
+    std::unordered_set<int64> rebuild_pindex_tablets;
+    scoped_refptr<Trace> trace;
+    BThreadCountDownLatch latch;
+    // Guards |response| while tasks are running.
+    bthread::Mutex response_mtx;
+};
+
+// Adds what FE reads from a published tablet to the response: the compaction score, the tablet stats,
+// the metadata itself under aggregate publish, and the async vector index build info.
+// If the metadata to return to the aggregator cannot be normalized, records |tablet_info| as failed
+// instead, adds nothing else, and returns the error.
+Status add_published_tablet(PublishVersionContext* ctx, const lake::PublishTabletInfo& tablet_info,
+                            const TabletMetadataPtr& metadata) {
+    const auto* request = ctx->request;
+    auto* response = ctx->response;
+    auto score = compaction_score(ctx->tablet_mgr, metadata);
+    // Per-tablet stats returned to FE: for range-distribution tablets (every
+    // publish) to drive real-time split/merge, and on first import (base_version==1)
+    // for any tablet so FE can collect first-load statistics. Supersedes the
+    // deprecated tablet_row_nums field; note num_rows here is the live-row count
+    // (PK tablets subtract deletes) rather than that field's raw rowset row sum,
+    // so a first load with intra-batch duplicate keys or deletes reports fewer
+    // rows. Summed without delvec I/O (publish hot path).
+    const bool emit_stats = metadata->has_range() || request->base_version() == 1;
+    int64_t stats_num_rows = 0;
+    int64_t stats_data_size = 0;
+    bool stats_has_shared_files = false;
+    if (emit_stats) {
+        compute_tablet_stats(*metadata, &stats_num_rows, &stats_data_size);
+        // Metadata-only scan; kept out of response_mtx for the same reason the
+        // row/size computation is.
+        stats_has_shared_files = lake::tablet_reshard_helper::has_shared_files(*metadata);
+    }
+    // Copy metadata out of the lock(response_mtx), to let it execute in parallel.
+    TabletMetadataPB local_metadata;
+    if (ctx->skip_write_tablet_metadata) {
+        local_metadata.CopyFrom(*metadata);
+        // Dual-write the legacy arrays into the RPC payload so an aggregator that
+        // lacks the segment_metas refactor (a node not yet upgraded, or one rolled
+        // back below this version) still persists metadata an old BE can read.
+        // Mirrors the dual-write that every on-disk save performs.
+        if (auto st = lake::normalize_tablet_metadata_before_save(&local_metadata); !st.ok()) {
+            g_publish_version_failed_tasks << 1;
+            LOG(WARNING) << "Fail to normalize aggregate-publish metadata: " << st << " tablet_id=" << metadata->id();
+            ctx->record_failure(tablet_info, st);
+            return st;
+        }
+    }
+    {
+        std::lock_guard l(ctx->response_mtx);
+        response->mutable_compaction_scores()->insert({metadata->id(), score});
+        if (emit_stats) {
+            auto* stat = &(*response->mutable_tablet_stats())[metadata->id()];
+            stat->set_num_rows(stats_num_rows);
+            stat->set_data_size(stats_data_size);
+            stat->set_has_shared_files(stats_has_shared_files);
+            // Compat shim: also mirror the first-load row count into the legacy
+            // field so an old FE (BE-before-FE rolling upgrade) still collects
+            // first-load statistics from ordinal 4; a new FE reads tablet_stats.
+            // Nested here because base_version==1 implies emit_stats, so
+            // stats_num_rows is the freshly computed value.
+            if (request->base_version() == 1) {
+                (*response->mutable_deprecated_tablet_row_nums())[metadata->id()] = stats_num_rows;
+            }
+        }
+        if (ctx->skip_write_tablet_metadata) {
+            (*response->mutable_tablet_metas())[metadata->id()].Swap(&local_metadata);
+        }
+    }
+    // Report tablet for async VI build-frontier tracking on async-mode
+    // tables. We report whenever this publish advanced the tablet version,
+    // even when the new rowset carries no vector_index_ids (bundle /
+    // below-threshold segments skip the inline .vi). build_needed lets the
+    // FE tell the two apart:
+    //   true  -> a new segment needs a real .vi build; FE dispatches to CN.
+    //   false -> nothing to build this version; FE advances built_version
+    //            directly (no CN round-trip), so observability isn't stuck.
+    // Sync-mode tables build VI inline, so no FE dispatch is needed.
+    if (is_async_vector_index_table(*metadata) && metadata->version() > request->base_version()) {
+        bool new_rowset_has_vi = new_rowsets_have_vector_index(*metadata, request->base_version());
+        std::lock_guard l(ctx->response_mtx);
+        auto* info = response->add_vector_index_build_infos();
+        info->set_tablet_id(metadata->id());
+        info->set_version(metadata->version());
+        info->set_build_needed(new_rowset_has_vi);
+    }
+    return Status::OK();
+}
+
+// Publishes one tablet and records the result in the response. Runs on the publish thread pool.
+void run_publish_tablet_task(PublishVersionContext* ctx, const lake::PublishTabletInfo& tablet_info) {
+    scoped_refptr<Trace> child_trace(new Trace);
+    Trace* sub_trace = child_trace.get();
+    ctx->trace->AddChildTrace("PublishTablet", sub_trace);
+
+    ADOPT_TRACE(sub_trace);
+    TRACE("start publish tablet $0 at thread $1", tablet_info.get_tablet_id_in_metadata(),
+          Thread::current_thread()->tid());
+
+    auto run_ts = butil::gettimeofday_us();
+    auto queuing_latency = run_ts - ctx->start_ts;
+    g_publish_tablet_version_queuing_latency << queuing_latency;
+
+    const auto* request = ctx->request;
+    auto base_version = request->base_version();
+    auto new_version = request->new_version();
+    auto txns = build_publish_txns(*request, should_rebuild_pindex(ctx->rebuild_pindex_tablets, tablet_info));
+
+    TRACE_COUNTER_INCREMENT("tablet_id", tablet_info.get_tablet_id_in_metadata());
+    TRACE_COUNTER_INCREMENT("queuing_latency_us", queuing_latency);
+    TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::publish_version:before_publish", &txns);
+
+    int64_t fe_built_version = get_fe_built_version(*request, tablet_info.get_tablet_id_in_metadata());
+
+    StatusOr<TabletMetadataPtr> res;
+    if (auto st = ctx->check_deadline(); st.ok()) {
+        res = lake::publish_version(ctx->tablet_mgr, tablet_info, base_version, new_version, txns,
+                                    ctx->skip_write_tablet_metadata, fe_built_version, ctx->base_version_order,
+                                    request->is_retry_publish());
+    } else {
+        res = std::move(st);
+    }
+    if (res.ok()) {
+        auto metadata = std::move(res).value();
+        maybe_keep_partial_meta(ctx->tablet_mgr, *request, ctx->skip_write_tablet_metadata, ctx->start_monotonic_us,
+                                ctx->timeout_ms, metadata);
+        if (!add_published_tablet(ctx, tablet_info, metadata).ok()) {
+            return;
+        }
+    } else {
+        if (res.status().is_resource_busy()) {
+            VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_info=" << tablet_info
+                    << " txns=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
+        } else {
+            g_publish_version_failed_tasks << 1;
+            LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_info=" << tablet_info
+                         << " txn_ids=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
+        }
+        ctx->record_failure(tablet_info, res.status());
+    }
+    TRACE("finished");
+    auto tablet_publish_cost = butil::gettimeofday_us() - run_ts;
+    // Emit the per-tablet total into the child trace so the sub-latencies can be
+    // reconciled against the whole: total - sum(sub-counters) is the still-untraced
+    // residual, which makes an uncovered slow step obvious at a glance.
+    TRACE_COUNTER_INCREMENT("publish_tablet_total_us", tablet_publish_cost);
+    g_publish_tablet_version_latency << tablet_publish_cost;
+}
+
+// Publishes one resharding_tablet_info of a tablet reshard txn and records the result in the
+// response. Runs on the publish thread pool.
+void run_publish_resharding_tablet_task(PublishVersionContext* ctx,
+                                        const ReshardingTabletInfoPB& resharding_tablet_info) {
+    const auto* request = ctx->request;
+    auto txn_info = request->txn_infos()[0];
+    auto base_version = request->base_version();
+    auto new_version = request->new_version();
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    Status res = ctx->check_deadline();
+    if (res.ok()) {
+        res = lake::publish_resharding_tablet(ctx->tablet_mgr, resharding_tablet_info, base_version, new_version,
+                                              txn_info, ctx->skip_write_tablet_metadata, tablet_metadatas,
+                                              tablet_ranges, ctx->base_version_order);
+    }
+    if (!res.ok()) {
+        if (res.is_resource_busy()) {
+            VLOG(2) << "Failed to publish resharding tablet: " << res
+                    << ". resharding_tablet_info=" << resharding_tablet_info.DebugString()
+                    << " txn=" << txn_info.DebugString() << " version=" << new_version;
+        } else {
+            g_publish_version_failed_tasks << 1;
+            LOG(WARNING) << "Failed to publish resharding tablet: " << res
+                         << ". resharding_tablet_info=" << resharding_tablet_info.DebugString()
+                         << " txn=" << txn_info.DebugString() << " version=" << new_version;
+        }
+        ctx->record_failure(resharding_tablet_info, res);
+        return;
+    }
+
+    if (ctx->skip_write_tablet_metadata) {
+        // Copy metadata out of the lock(response_mtx), to let it execute in parallel.
+        std::unordered_map<int64_t, TabletMetadataPB> copied_tablet_metas;
+        for (auto& pair : tablet_metadatas) {
+            copied_tablet_metas[pair.first].CopyFrom(*pair.second);
+        }
+        // Dual-write the legacy arrays into the RPC payload (see add_published_tablet())
+        // so an aggregator without the segment_metas refactor persists old-readable
+        // metadata. If any fails, fail the whole reshard task rather than publish a
+        // partial tablet_metas map.
+        for (auto& pair : copied_tablet_metas) {
+            if (auto st = lake::normalize_tablet_metadata_before_save(&pair.second); !st.ok()) {
+                g_publish_version_failed_tasks << 1;
+                LOG(WARNING) << "Fail to normalize aggregate reshard metadata: " << st << " tablet_id=" << pair.first;
+                ctx->record_failure(resharding_tablet_info, st);
+                return;
+            }
+        }
+
+        std::lock_guard l(ctx->response_mtx);
+        auto& response_tablet_metas = *ctx->response->mutable_tablet_metas();
+        for (auto& pair : copied_tablet_metas) {
+            response_tablet_metas[pair.first].Swap(&pair.second);
+        }
+    }
+    if (!tablet_ranges.empty()) {
+        std::lock_guard l(ctx->response_mtx);
+        auto& response_tablet_ranges = *ctx->response->mutable_tablet_ranges();
+        for (auto& pair : tablet_ranges) {
+            response_tablet_ranges[pair.first].Swap(&pair.second);
+        }
+    }
+}
+
+void submit_publish_tablet_task(PublishVersionContext* ctx, ConcurrencyLimitedThreadPoolToken* thread_pool_token,
+                                const lake::PublishTabletInfo& tablet_info) {
+    auto task = std::make_shared<CancellableRunnable>(
+            [ctx, tablet_info] {
+                DeferOp defer([ctx] { ctx->latch.count_down(); });
+                run_publish_tablet_task(ctx, tablet_info);
+            },
+            [ctx, tablet_info] {
+                g_publish_version_failed_tasks << 1;
+                Status st = Status::Cancelled(fmt::format("publish version task has been cancelled, tablet_info={}",
+                                                          publish_tablet_info_string(tablet_info)));
+                LOG(WARNING) << st;
+                ctx->record_cancellation(tablet_info, st);
+                ctx->latch.count_down();
+            });
+
+    auto st = thread_pool_token->submit(std::move(task), ctx->timeout_deadline);
+    if (!st.ok()) {
+        g_publish_version_failed_tasks << 1;
+        LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_info=" << tablet_info
+                     << " txn_ids=" << get_txn_ids_string(ctx->request);
+        ctx->record_failure(tablet_info, st);
+        ctx->latch.count_down();
+    }
+}
+
+void submit_publish_resharding_tablet_task(PublishVersionContext* ctx,
+                                           ConcurrencyLimitedThreadPoolToken* thread_pool_token,
+                                           const ReshardingTabletInfoPB& resharding_tablet_info) {
+    auto task = std::make_shared<CancellableRunnable>(
+            [ctx, resharding_tablet_info] {
+                DeferOp defer([ctx] { ctx->latch.count_down(); });
+                run_publish_resharding_tablet_task(ctx, resharding_tablet_info);
+            },
+            [ctx, resharding_tablet_info] {
+                g_publish_version_failed_tasks << 1;
+                Status st = Status::Cancelled(
+                        fmt::format("publish resharding tablet task has been cancelled, resharding_tablet_info={}",
+                                    resharding_tablet_info.DebugString()));
+                LOG(WARNING) << st;
+                ctx->record_cancellation(resharding_tablet_info, st);
+                ctx->latch.count_down();
+            });
+
+    auto st = thread_pool_token->submit(std::move(task), ctx->timeout_deadline);
+    if (!st.ok()) {
+        g_publish_version_failed_tasks << 1;
+        LOG(WARNING) << "Failed to submit publish resharding tablet task: " << st
+                     << ". resharding_tablet_info=" << resharding_tablet_info.DebugString()
+                     << " txn_infos=" << JoinMapped(ctx->request->txn_infos(), txn_info_string, ",")
+                     << " version=" << ctx->request->new_version();
+        ctx->record_failure(resharding_tablet_info, st);
+        ctx->latch.count_down();
+    }
+}
+
+} // namespace
 
 LakeServiceImpl::LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr, LoadChannelMgr* load_channel_mgr)
         : _env(env), _tablet_mgr(tablet_mgr), _load_channel_mgr(load_channel_mgr) {}
@@ -247,8 +756,6 @@ LakeServiceImpl::~LakeServiceImpl() = default;
 // in the txn-log apply path (OSS read of txn_log, broken segment, ...),
 // which no_op_publish=true bypasses entirely (transactions.cpp:320).
 DEFINE_FAIL_POINT(lake_publish_version_rpc_fail);
-// Forces the query-side parent alias back to the pre-fix behaviour (merge the primary-index
-// sstables too), so the cost of that merge can be measured against the same data.
 
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
                                       const ::starrocks::PublishVersionRequest* request,
@@ -256,14 +763,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                                       ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
-    bool any_no_op = false;
-    for (int i = 0; i < request->txn_infos_size(); i++) {
-        if (request->txn_infos(i).no_op_publish()) {
-            any_no_op = true;
-            break;
-        }
-    }
-    if (!any_no_op) {
+    if (!has_no_op_publish(*request)) {
         FAIL_POINT_TRIGGER_RETURN(lake_publish_version_rpc_fail,
                                   cntl->SetFailed("inject lake_publish_version_rpc_fail"));
     }
@@ -272,431 +772,47 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     // cntl can be nullptr in unit tests, so guard the access.
     int64_t brpc_queue_us = (cntl != nullptr) ? cntl->latency_us() : 0;
 
-    if (!request->has_base_version()) {
-        cntl->SetFailed("missing base version");
-        return;
-    }
-    if (!request->has_new_version()) {
-        cntl->SetFailed("missing new version");
-        return;
-    }
-    if (request->txn_ids_size() == 0 && request->txn_infos_size() == 0) {
-        cntl->SetFailed("neither txn_ids nor txn_infos is set, one of them must be set");
+    if (auto st = validate_publish_version_request(*request); !st.ok()) {
+        cntl->SetFailed(std::string(st.message()));
         return;
     }
 
-    for (const auto& resharding_tablet_info : request->resharding_tablet_infos()) {
-        if (!resharding_tablet_info.has_splitting_tablet_info()) {
-            continue;
-        }
-        const auto& splitting_tablet_info = resharding_tablet_info.splitting_tablet_info();
-        const int split_count = splitting_tablet_info.new_tablet_ids_size();
-        if (split_count <= 1) {
-            cntl->SetFailed(fmt::format("splitting tablet {} requires at least 2 new tablet ids, got {}",
-                                        splitting_tablet_info.old_tablet_id(), split_count));
-            return;
-        }
-    }
-
-    int task_num = request->tablet_ids_size();
-
-    // Prepare publish tablet infos
-    std::vector<lake::PublishTabletInfo> publish_tablet_infos;
-    publish_tablet_infos.reserve(request->tablet_ids_size());
-    for (auto tablet_id : request->tablet_ids()) {
-        // Publish normal tablets
-        publish_tablet_infos.emplace_back(tablet_id);
-    }
-
-    bool is_tablet_reshard_txn = false;
-    if (request->txn_infos_size() == 1 && request->txn_infos()[0].txn_type() == TXN_TABLET_RESHARD) {
-        // A CN may hold only indexes left unchanged by a split or merge on another CN.
-        // Their normal tablet_ids still need to advance to the partition's new version.
-        is_tablet_reshard_txn = true;
-        task_num += request->resharding_tablet_infos_size();
-    } else { // Normal transaction
-        for (const auto& resharding_tablet_info : request->resharding_tablet_infos()) {
-            // Cross publish
-            if (resharding_tablet_info.has_splitting_tablet_info()) {
-                // Splitting tablet
-                const auto& splitting_tablet_info = resharding_tablet_info.splitting_tablet_info();
-                task_num += splitting_tablet_info.new_tablet_ids_size();
-                int32_t split_count = splitting_tablet_info.new_tablet_ids_size();
-                int32_t split_index = 0;
-                for (auto new_tablet_id : splitting_tablet_info.new_tablet_ids()) {
-                    publish_tablet_infos.emplace_back(lake::PublishTabletInfo::SPLITTING_TABLET,
-                                                      splitting_tablet_info.old_tablet_id(), new_tablet_id, split_count,
-                                                      split_index);
-                    split_index++;
-                }
-            } else if (resharding_tablet_info.has_merging_tablet_info()) {
-                // Merging tablets
-                task_num += 1;
-                const auto& merging_tablet_info = resharding_tablet_info.merging_tablet_info();
-                publish_tablet_infos.emplace_back(lake::PublishTabletInfo::MERGING_TABLET,
-                                                  merging_tablet_info.old_tablet_ids(),
-                                                  merging_tablet_info.new_tablet_id());
-            } else if (resharding_tablet_info.has_identical_tablet_info()) {
-                // Identical tablet
-                task_num += 1;
-                const auto& identical_tablet_info = resharding_tablet_info.identical_tablet_info();
-                publish_tablet_infos.emplace_back(lake::PublishTabletInfo::IDENTICAL_TABLET,
-                                                  identical_tablet_info.old_tablet_id(),
-                                                  identical_tablet_info.new_tablet_id());
-            }
-        }
-    }
-
+    const bool tablet_reshard_txn = is_tablet_reshard_txn(*request);
+    auto publish_tablet_infos = build_publish_tablet_infos(*request, tablet_reshard_txn);
+    // A tablet reshard txn also publishes each of its resharding_tablet_infos with a task of its own.
+    int task_num = static_cast<int>(publish_tablet_infos.size()) +
+                   (tablet_reshard_txn ? request->resharding_tablet_infos_size() : 0);
     if (task_num == 0) {
         cntl->SetFailed("neither tablet_ids nor resharding_tablet_infos is set, one of them must be set");
         return;
     }
 
     auto timeout_ms = request->has_timeout_ms() ? request->timeout_ms() : kDefaultTimeoutForPublishVersion;
-    auto timeout_deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(timeout_ms);
-    auto start_ts = butil::gettimeofday_us();
+    PublishVersionContext ctx(_tablet_mgr, request, response, timeout_ms, task_num);
     auto thread_pool = publish_version_thread_pool(_env);
     CHECK(thread_pool != nullptr);
     auto thread_pool_token = ConcurrencyLimitedThreadPoolToken(thread_pool, thread_pool->max_threads() * 2);
-    auto latch = BThreadCountDownLatch(task_num);
-    bthread::Mutex response_mtx;
-    scoped_refptr<Trace> trace_gurad = scoped_refptr<Trace>(new Trace());
-    Trace* trace = trace_gurad.get();
-    TRACE_TO(trace, "got request. txn_ids=$0 base_version=$1 new_version=$2 #tablets=$3 #task_num=$4",
+    TRACE_TO(ctx.trace, "got request. txn_ids=$0 base_version=$1 new_version=$2 #tablets=$3 #task_num=$4",
              get_txn_ids_string(request), request->base_version(), request->new_version(), request->tablet_ids_size(),
              task_num);
 
     Status::OK().to_protobuf(response->mutable_status());
-    std::unordered_set<int64> rebuild_pindex_tablets;
-    for (auto id : request->rebuild_pindex_tablet_ids()) {
-        LOG(INFO) << "get rebuild tablet: " << id;
-        rebuild_pindex_tablets.insert(id);
-    }
-    bool skip_write_tablet_metadata = request->has_enable_aggregate_publish() && request->enable_aggregate_publish();
-    // FE resolved this partition's version-1 layout from its own metadata and offers it as a lookup
-    // preference, so no tablet task -- normal or resharding -- has to discover it by 404ing on a
-    // per-tablet key that was never written. Applied per request and never remembered -- see
-    // lake::InitialMetadataOrder.
-    auto base_version_order = request->prefer_shared_initial_metadata() ? lake::InitialMetadataOrder::kSharedFirst
-                                                                        : lake::InitialMetadataOrder::kPerTabletFirst;
-
     for (const auto& tablet_info : publish_tablet_infos) {
-        auto task = std::make_shared<CancellableRunnable>(
-                [&, tablet_info] {
-                    DeferOp defer([&] { latch.count_down(); });
-
-                    scoped_refptr<Trace> child_trace(new Trace);
-                    Trace* sub_trace = child_trace.get();
-                    trace->AddChildTrace("PublishTablet", sub_trace);
-
-                    ADOPT_TRACE(sub_trace);
-                    TRACE("start publish tablet $0 at thread $1", tablet_info.get_tablet_id_in_metadata(),
-                          Thread::current_thread()->tid());
-
-                    auto run_ts = butil::gettimeofday_us();
-                    auto queuing_latency = run_ts - start_ts;
-                    g_publish_tablet_version_queuing_latency << queuing_latency;
-
-                    auto base_version = request->base_version();
-                    auto new_version = request->new_version();
-                    auto txns = std::vector<TxnInfoPB>();
-                    bool rebuild_pindex = should_rebuild_pindex(rebuild_pindex_tablets, tablet_info);
-                    if (request->txn_infos_size() > 0) {
-                        txns.insert(txns.begin(), request->txn_infos().begin(), request->txn_infos().end());
-                        if (rebuild_pindex) {
-                            for (auto& txn : txns) {
-                                txn.set_rebuild_pindex(true);
-                            }
-                        }
-                    } else { // This is a request from older version FE
-                        // Construct TxnInfoPB from other fields
-                        txns.reserve(request->txn_ids_size());
-                        for (auto i = 0, sz = request->txn_ids_size(); i < sz; i++) {
-                            auto& info = txns.emplace_back();
-                            info.set_txn_id(request->txn_ids(i));
-                            info.set_txn_type(TXN_NORMAL);
-                            info.set_combined_txn_log(false);
-                            info.set_commit_time(request->commit_time());
-                            info.set_force_publish(false);
-                            if (rebuild_pindex) {
-                                info.set_rebuild_pindex(true);
-                            }
-                        }
-                    }
-
-                    TRACE_COUNTER_INCREMENT("tablet_id", tablet_info.get_tablet_id_in_metadata());
-                    TRACE_COUNTER_INCREMENT("queuing_latency_us", queuing_latency);
-                    TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::publish_version:before_publish", &txns);
-
-                    // Look up FE-provided built version for async vector index build
-                    int64_t fe_built_version = 0;
-                    auto bv_it = request->tablet_built_versions().find(tablet_info.get_tablet_id_in_metadata());
-                    if (bv_it != request->tablet_built_versions().end()) {
-                        fe_built_version = bv_it->second;
-                    }
-
-                    StatusOr<TabletMetadataPtr> res;
-                    if (std::chrono::system_clock::now() < timeout_deadline) {
-                        res = lake::publish_version(_tablet_mgr, tablet_info, base_version, new_version, txns,
-                                                    skip_write_tablet_metadata, fe_built_version, base_version_order);
-                    } else {
-                        auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
-                        res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
-                    }
-                    if (res.ok()) {
-                        auto metadata = std::move(res).value();
-                        auto score = compaction_score(_tablet_mgr, metadata);
-                        // Per-tablet stats returned to FE: for range-distribution tablets (every
-                        // publish) to drive real-time split/merge, and on first import (base_version==1)
-                        // for any tablet so FE can collect first-load statistics. Supersedes the
-                        // deprecated tablet_row_nums field; note num_rows here is the live-row count
-                        // (PK tablets subtract deletes) rather than that field's raw rowset row sum,
-                        // so a first load with intra-batch duplicate keys or deletes reports fewer
-                        // rows. Summed without delvec I/O (publish hot path).
-                        const bool emit_stats = metadata->has_range() || request->base_version() == 1;
-                        int64_t stats_num_rows = 0;
-                        int64_t stats_data_size = 0;
-                        bool stats_has_shared_files = false;
-                        if (emit_stats) {
-                            compute_tablet_stats(*metadata, &stats_num_rows, &stats_data_size);
-                            // Metadata-only scan; kept out of response_mtx for the same reason the
-                            // row/size computation is.
-                            stats_has_shared_files = lake::tablet_reshard_helper::has_shared_files(*metadata);
-                        }
-                        // Copy metadata out of the lock(response_mtx), to let it execute in parallel.
-                        TabletMetadataPB local_metadata;
-                        if (skip_write_tablet_metadata) {
-                            local_metadata.CopyFrom(*metadata);
-                            // Dual-write the legacy arrays into the RPC payload so an aggregator that
-                            // lacks the segment_metas refactor (a node not yet upgraded, or one rolled
-                            // back below this version) still persists metadata an old BE can read.
-                            // Mirrors the dual-write that every on-disk save performs.
-                            if (auto st = lake::normalize_tablet_metadata_before_save(&local_metadata); !st.ok()) {
-                                g_publish_version_failed_tasks << 1;
-                                LOG(WARNING) << "Fail to normalize aggregate-publish metadata: " << st
-                                             << " tablet_id=" << metadata->id();
-                                std::lock_guard l(response_mtx);
-                                response->mutable_failed_tablets()->Add(
-                                        tablet_info.get_tablet_ids_in_txn_logs().begin(),
-                                        tablet_info.get_tablet_ids_in_txn_logs().end());
-                                st.to_protobuf(response->mutable_status());
-                                return;
-                            }
-                        }
-                        {
-                            std::lock_guard l(response_mtx);
-                            response->mutable_compaction_scores()->insert({metadata->id(), score});
-                            if (emit_stats) {
-                                auto* stat = &(*response->mutable_tablet_stats())[metadata->id()];
-                                stat->set_num_rows(stats_num_rows);
-                                stat->set_data_size(stats_data_size);
-                                stat->set_has_shared_files(stats_has_shared_files);
-                                // Compat shim: also mirror the first-load row count into the legacy
-                                // field so an old FE (BE-before-FE rolling upgrade) still collects
-                                // first-load statistics from ordinal 4; a new FE reads tablet_stats.
-                                // Nested here because base_version==1 implies emit_stats, so
-                                // stats_num_rows is the freshly computed value.
-                                if (request->base_version() == 1) {
-                                    (*response->mutable_deprecated_tablet_row_nums())[metadata->id()] = stats_num_rows;
-                                }
-                            }
-                            if (skip_write_tablet_metadata) {
-                                (*response->mutable_tablet_metas())[metadata->id()].Swap(&local_metadata);
-                            }
-                        }
-                        // Report tablet for async VI build-frontier tracking on async-mode
-                        // tables. We report whenever this publish advanced the tablet version,
-                        // even when the new rowset carries no vector_index_ids (bundle /
-                        // below-threshold segments skip the inline .vi). build_needed lets the
-                        // FE tell the two apart:
-                        //   true  -> a new segment needs a real .vi build; FE dispatches to CN.
-                        //   false -> nothing to build this version; FE advances built_version
-                        //            directly (no CN round-trip), so observability isn't stuck.
-                        // Sync-mode tables build VI inline, so no FE dispatch is needed.
-                        if (is_async_vector_index_table(*metadata) && metadata->version() > base_version) {
-                            bool new_rowset_has_vi = false;
-                            for (const auto& rowset : metadata->rowsets()) {
-                                int64_t rv = rowset.has_version() ? rowset.version() : 0;
-                                if (rv <= base_version) continue; // existing rowset, not from this publish
-                                for (const auto& segment_meta : rowset.segment_metas()) {
-                                    if (segment_meta.vector_index_ids_size() > 0) {
-                                        new_rowset_has_vi = true;
-                                        break;
-                                    }
-                                }
-                                if (new_rowset_has_vi) break;
-                            }
-                            std::lock_guard l(response_mtx);
-                            auto* info = response->add_vector_index_build_infos();
-                            info->set_tablet_id(metadata->id());
-                            info->set_version(metadata->version());
-                            info->set_build_needed(new_rowset_has_vi);
-                        }
-                    } else {
-                        if (res.status().is_resource_busy()) {
-                            VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_info=" << tablet_info
-                                    << " txns=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
-                        } else {
-                            g_publish_version_failed_tasks << 1;
-                            LOG(WARNING) << "Fail to publish version: " << res.status()
-                                         << ". tablet_info=" << tablet_info
-                                         << " txn_ids=" << JoinMapped(txns, txn_info_string, ",")
-                                         << " version=" << new_version;
-                        }
-
-                        std::lock_guard l(response_mtx);
-                        response->mutable_failed_tablets()->Add(tablet_info.get_tablet_ids_in_txn_logs().begin(),
-                                                                tablet_info.get_tablet_ids_in_txn_logs().end());
-                        res.status().to_protobuf(response->mutable_status());
-                    }
-                    TRACE("finished");
-                    auto tablet_publish_cost = butil::gettimeofday_us() - run_ts;
-                    // Emit the per-tablet total into the child trace so the sub-latencies can be
-                    // reconciled against the whole: total - sum(sub-counters) is the still-untraced
-                    // residual, which makes an uncovered slow step obvious at a glance.
-                    TRACE_COUNTER_INCREMENT("publish_tablet_total_us", tablet_publish_cost);
-                    g_publish_tablet_version_latency << tablet_publish_cost;
-                },
-                [&, tablet_info] {
-                    g_publish_version_failed_tasks << 1;
-                    Status st = Status::Cancelled(fmt::format("publish version task has been cancelled, tablet_info={}",
-                                                              publish_tablet_info_string(tablet_info)));
-                    LOG(WARNING) << st;
-                    std::lock_guard l(response_mtx);
-                    response->mutable_failed_tablets()->Add(tablet_info.get_tablet_ids_in_txn_logs().begin(),
-                                                            tablet_info.get_tablet_ids_in_txn_logs().end());
-                    if (response->status().status_code() == 0) {
-                        st.to_protobuf(response->mutable_status());
-                    }
-                    latch.count_down();
-                });
-
-        auto st = thread_pool_token.submit(std::move(task), timeout_deadline);
-        if (!st.ok()) {
-            g_publish_version_failed_tasks << 1;
-            LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_info=" << tablet_info
-                         << " txn_ids=" << get_txn_ids_string(request);
-            std::lock_guard l(response_mtx);
-            response->mutable_failed_tablets()->Add(tablet_info.get_tablet_ids_in_txn_logs().begin(),
-                                                    tablet_info.get_tablet_ids_in_txn_logs().end());
-            st.to_protobuf(response->mutable_status());
-            latch.count_down();
-        }
+        submit_publish_tablet_task(&ctx, &thread_pool_token, tablet_info);
     }
-
-    if (is_tablet_reshard_txn) {
+    if (tablet_reshard_txn) {
         for (const auto& resharding_tablet_info : request->resharding_tablet_infos()) {
-            auto task = std::make_shared<CancellableRunnable>(
-                    [&, resharding_tablet_info] {
-                        DeferOp defer([&latch] { latch.count_down(); });
-
-                        auto txn_info = request->txn_infos()[0];
-                        auto base_version = request->base_version();
-                        auto new_version = request->new_version();
-
-                        Status res;
-                        std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
-                        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-
-                        if (std::chrono::system_clock::now() < timeout_deadline) {
-                            res = lake::publish_resharding_tablet(_tablet_mgr, resharding_tablet_info, base_version,
-                                                                  new_version, txn_info, skip_write_tablet_metadata,
-                                                                  tablet_metadatas, tablet_ranges, base_version_order);
-                        } else {
-                            auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
-                            res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
-                        }
-
-                        if (res.ok()) {
-                            if (skip_write_tablet_metadata) {
-                                // Copy metadata out of the lock(response_mtx), to let it execute in parallel.
-                                std::unordered_map<int64_t, TabletMetadataPB> copied_tablet_metas;
-                                for (auto& pair : tablet_metadatas) {
-                                    copied_tablet_metas[pair.first].CopyFrom(*pair.second);
-                                }
-                                // Dual-write the legacy arrays into the RPC payload (see the non-reshard
-                                // publish path above) so an aggregator without the segment_metas refactor
-                                // persists old-readable metadata. If any fails, fail the whole reshard
-                                // task rather than publish a partial tablet_metas map.
-                                for (auto& pair : copied_tablet_metas) {
-                                    if (auto st = lake::normalize_tablet_metadata_before_save(&pair.second); !st.ok()) {
-                                        g_publish_version_failed_tasks << 1;
-                                        LOG(WARNING) << "Fail to normalize aggregate reshard metadata: " << st
-                                                     << " tablet_id=" << pair.first;
-                                        std::lock_guard l(response_mtx);
-                                        add_failed_tablets(response, resharding_tablet_info);
-                                        st.to_protobuf(response->mutable_status());
-                                        return;
-                                    }
-                                }
-
-                                std::lock_guard l(response_mtx);
-                                auto& response_tablet_metas = *response->mutable_tablet_metas();
-                                for (auto& pair : copied_tablet_metas) {
-                                    response_tablet_metas[pair.first].Swap(&pair.second);
-                                }
-                            }
-                            if (!tablet_ranges.empty()) {
-                                std::lock_guard l(response_mtx);
-                                auto& response_tablet_ranges = *response->mutable_tablet_ranges();
-                                for (auto& pair : tablet_ranges) {
-                                    response_tablet_ranges[pair.first].Swap(&pair.second);
-                                }
-                            }
-                        } else {
-                            if (res.is_resource_busy()) {
-                                VLOG(2) << "Failed to publish resharding tablet: " << res
-                                        << ". resharding_tablet_info=" << resharding_tablet_info.DebugString()
-                                        << " txn=" << txn_info.DebugString() << " version=" << new_version;
-                            } else {
-                                g_publish_version_failed_tasks << 1;
-                                LOG(WARNING) << "Failed to publish resharding tablet: " << res
-                                             << ". resharding_tablet_info=" << resharding_tablet_info.DebugString()
-                                             << " txn=" << txn_info.DebugString() << " version=" << new_version;
-                            }
-
-                            std::lock_guard l(response_mtx);
-                            add_failed_tablets(response, resharding_tablet_info);
-                            res.to_protobuf(response->mutable_status());
-                        }
-                    },
-                    [&, resharding_tablet_info] {
-                        g_publish_version_failed_tasks << 1;
-                        Status st = Status::Cancelled(fmt::format(
-                                "publish splitting tablet task has been cancelled, resharding_tablet_info={}",
-                                resharding_tablet_info.DebugString()));
-                        LOG(WARNING) << st;
-
-                        std::lock_guard l(response_mtx);
-                        add_failed_tablets(response, resharding_tablet_info);
-                        if (response->status().status_code() == 0) {
-                            st.to_protobuf(response->mutable_status());
-                        }
-                        latch.count_down();
-                    });
-
-            auto st = thread_pool_token.submit(std::move(task), timeout_deadline);
-            if (!st.ok()) {
-                g_publish_version_failed_tasks << 1;
-                LOG(WARNING) << "Failed to submit publish splitting tablet task: " << st
-                             << ". resharding_tablet_info=" << resharding_tablet_info.DebugString()
-                             << " txn_infos=" << JoinMapped(request->txn_infos(), txn_info_string, ",")
-                             << " version=" << request->new_version();
-                std::lock_guard l(response_mtx);
-                add_failed_tablets(response, resharding_tablet_info);
-                st.to_protobuf(response->mutable_status());
-                latch.count_down();
-            }
+            submit_publish_resharding_tablet_task(&ctx, &thread_pool_token, resharding_tablet_info);
         }
     }
 
-    latch.wait();
-    auto cost = butil::gettimeofday_us() - start_ts;
+    ctx.latch.wait();
+    auto cost = butil::gettimeofday_us() - ctx.start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
     if (is_slow) {
         LOG(INFO) << "Published txns=" << get_txn_ids_string(request)
                   << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
-                  << "us brpc_queue_us=" << brpc_queue_us << ", trace: " << trace->MetricsAsJSON();
+                  << "us brpc_queue_us=" << brpc_queue_us << ", trace: " << ctx.trace->MetricsAsJSON();
     }
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }
@@ -2329,7 +2445,7 @@ Status LakeServiceImpl::_cleanup_before_repair(const ::starrocks::RepairTabletMe
         RETURN_IF(!st.ok() && !st.is_not_found(), st);
 
         // drop meta cache
-        _tablet_mgr->metacache()->erase(tablet_metadata_location);
+        _tablet_mgr->metacache()->erase(lake::MetacacheKey::tablet_metadata(tablet_metadata_location));
 
         // clear primary key index
         if (metadata_pb.schema().keys_type() == PRIMARY_KEYS) {

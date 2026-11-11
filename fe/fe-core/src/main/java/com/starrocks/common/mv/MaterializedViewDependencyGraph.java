@@ -17,21 +17,32 @@
 
 package com.starrocks.common.mv;
 
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Set;
 
+/**
+ * Orders materialized views so that every MV comes after the MVs it is built on.
+ *
+ * <p>Dependency edges come from each MV's persisted {@code baseTableInfos}: an MV depends on every other MV of the
+ * input whose id appears as a base table id. This is a pure id comparison, no table is resolved, so external tables
+ * (whose {@code tableId} is -1), plain tables, views and dropped tables simply produce no edge. The runtime
+ * {@code relatedMaterializedViews} set is deliberately not used: it is empty right after image load and it points from
+ * a base table to the MVs built on it, i.e. the opposite direction.
+ *
+ * <p>Callers must build the order before any MV is reloaded, because reloading an MV may rewrite its
+ * {@code baseTableInfos}.
+ */
 public class MaterializedViewDependencyGraph {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewDependencyGraph.class);
 
@@ -39,70 +50,103 @@ public class MaterializedViewDependencyGraph {
         super();
     }
 
-    public static List<MaterializedView> buildTopologicalOrder(List<MaterializedView> allMVs) {
-        // Collect all materialized views and process them in topological order,
-        // ensuring that dependencies are handled correctly.
-        Map<Long, MaterializedView> mvById = new HashMap<>();
-        // mv -> its related mvs
-        Map<MaterializedView, Set<Long>> dependencyGraph = new HashMap<>();
-        // mv <- mvs which depend on this mv
-        Map<Long, Set<Long>> reDependencyGraph = new HashMap<>();
+    /**
+     * Splits the MVs into topological layers: layer 0 holds the MVs without a predecessor in the input, and layer k+1
+     * holds the MVs whose last predecessor is in layer k. Inside a layer, MVs keep their input order.
+     *
+     * <p>Predecessors of an MV are the ids in its {@code baseTableInfos} that belong to another MV of the input; ids
+     * outside the input (dangling ids, non-MV tables) and the MV's own id are ignored. If the dependencies contain a
+     * cycle, a single layer holding all MVs in input order is returned.
+     *
+     * @param allMVs the MVs to order, across all databases
+     * @return the layers in dependency order; empty if the input is empty
+     */
+    public static List<List<MaterializedView>> buildTopologicalLayers(List<MaterializedView> allMVs) {
+        List<List<MaterializedView>> layers = new ArrayList<>();
+        if (CollectionUtils.isEmpty(allMVs)) {
+            return layers;
+        }
 
-        // First, gather all MVs across all databases.
-        for (MaterializedView mv : allMVs) {
-            long mvId = mv.getId();
-            mvById.put(mvId, mv);
+        int mvCount = allMVs.size();
+        Map<Long, Integer> indexById = new HashMap<>();
+        for (int i = 0; i < mvCount; i++) {
+            indexById.put(allMVs.get(i).getId(), i);
+        }
 
-            // Build dependency graph: for each MV, collect its direct MV dependencies (by table id).
-            Set<Long> deps = new HashSet<>();
-            Set<MvId> relatedMVs = mv.getRelatedMaterializedViews();
-            if (CollectionUtils.isNotEmpty(relatedMVs)) {
-                for (MvId depMv : relatedMVs) {
-                    long depId = depMv.getId();
-                    deps.add(depId);
-                    reDependencyGraph.computeIfAbsent(depId, k -> new HashSet<>()).add(mvId);
+        // successors.get(p) = indexes of the MVs that directly depend on the MV at index p
+        List<List<Integer>> successors = new ArrayList<>(mvCount);
+        for (int i = 0; i < mvCount; i++) {
+            successors.add(new ArrayList<>());
+        }
+        int[] inDegree = new int[mvCount];
+        for (int i = 0; i < mvCount; i++) {
+            MaterializedView mv = allMVs.get(i);
+            List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+            if (CollectionUtils.isEmpty(baseTableInfos)) {
+                continue;
+            }
+            Set<Integer> predecessors = new LinkedHashSet<>();
+            for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                if (baseTableInfo == null || baseTableInfo.getTableId() == mv.getId()) {
+                    continue;
+                }
+                Integer predecessor = indexById.get(baseTableInfo.getTableId());
+                if (predecessor != null) {
+                    predecessors.add(predecessor);
                 }
             }
-            dependencyGraph.put(mv, deps);
+            for (int predecessor : predecessors) {
+                successors.get(predecessor).add(i);
+            }
+            inDegree[i] = predecessors.size();
         }
 
-        // Topological sort using Kahn's algorithm
-        List<MaterializedView> topoOrder = new ArrayList<>();
-        Queue<MaterializedView> ready = new ArrayDeque<>();
-        Map<Long, Integer> inDegree = new HashMap<>();
-
-        for (MaterializedView mv : allMVs) {
-            int depCount = dependencyGraph.get(mv).size();
-            inDegree.put(mv.getId(), depCount);
-            if (depCount == 0) {
-                ready.add(mv);
+        // Kahn's algorithm, dequeuing the whole ready set at once as one layer.
+        List<Integer> current = new ArrayList<>();
+        for (int i = 0; i < mvCount; i++) {
+            if (inDegree[i] == 0) {
+                current.add(i);
             }
         }
-
-        while (!ready.isEmpty()) {
-            MaterializedView mv = ready.poll();
-            topoOrder.add(mv);
-            // For all MVs that depend on mv, decrease their in-degree
-            Set<Long> deps = reDependencyGraph.get(mv.getId());
-            if (CollectionUtils.isNotEmpty(deps)) {
-                for (Long depId : deps) {
-                    MaterializedView other = mvById.get(depId);
-                    if (other != null) {
-                        inDegree.put(other.getId(), inDegree.get(other.getId()) - 1);
-                        if (inDegree.get(other.getId()) == 0) {
-                            ready.add(other);
-                        }
+        int placed = 0;
+        while (!current.isEmpty()) {
+            List<MaterializedView> layer = new ArrayList<>(current.size());
+            List<Integer> next = new ArrayList<>();
+            for (int index : current) {
+                layer.add(allMVs.get(index));
+                for (int successor : successors.get(index)) {
+                    inDegree[successor]--;
+                    if (inDegree[successor] == 0) {
+                        next.add(successor);
                     }
                 }
             }
+            layers.add(layer);
+            placed += layer.size();
+            // keep the input order inside a layer
+            Collections.sort(next);
+            current = next;
         }
 
-        // If topoOrder does not contain all MVs, there is a cycle
-        if (topoOrder.size() != allMVs.size()) {
+        // If not every MV was placed, there is a cycle
+        if (placed != mvCount) {
             LOG.warn("Cycle detected in Materialized View dependencies! Processing in arbitrary order. " +
-                    "All MVs: {}, Topo Order: {}", allMVs.size(), topoOrder.size());
-            // fallback: Use the original order
-            topoOrder = allMVs;
+                    "All MVs: {}, Topo Order: {}", mvCount, placed);
+            // fallback: a single layer in the original order
+            List<List<MaterializedView>> fallback = new ArrayList<>();
+            fallback.add(new ArrayList<>(allMVs));
+            return fallback;
+        }
+        return layers;
+    }
+
+    /**
+     * Returns the MVs in topological order, i.e. the layers of {@link #buildTopologicalLayers(List)} flattened.
+     */
+    public static List<MaterializedView> buildTopologicalOrder(List<MaterializedView> allMVs) {
+        List<MaterializedView> topoOrder = new ArrayList<>();
+        for (List<MaterializedView> layer : buildTopologicalLayers(allMVs)) {
+            topoOrder.addAll(layer);
         }
         return topoOrder;
     }

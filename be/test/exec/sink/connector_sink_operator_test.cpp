@@ -255,10 +255,8 @@ std::shared_ptr<connector::HiveChunkSinkContext> make_hive_sink_context(Fragment
     sink_ctx->path = "/path/to/directory/";
     sink_ctx->data_column_names = {"k1"};
     sink_ctx->partition_column_names = {"k2"};
-    sink_ctx->data_column_evaluators =
-            ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_VARCHAR)});
-    sink_ctx->partition_column_evaluators =
-            ColumnSlotIdEvaluator::from_types({TypeDescriptor::from_logical_type(TYPE_INT)});
+    sink_ctx->data_column_evaluators = ColumnSlotIdEvaluator::from_types({TYPE_VARCHAR_DESC});
+    sink_ctx->partition_column_evaluators = ColumnSlotIdEvaluator::from_types({TYPE_INT_DESC});
     sink_ctx->executor = nullptr;
     sink_ctx->format = formats::PARQUET;
     sink_ctx->compression_type = TCompressionType::NO_COMPRESSION;

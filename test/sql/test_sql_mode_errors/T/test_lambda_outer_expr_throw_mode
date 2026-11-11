@@ -1,0 +1,18 @@
+-- name: test_lambda_outer_expr_throw_mode
+-- A lambda body expression that does not depend on the lambda argument must not be evaluated for rows whose array is
+-- empty or NULL: with ALLOW_THROW_EXCEPTION it would fail the query on a row that never runs the lambda. The rows share
+-- one chunk, so the empty, NULL and non-empty arrays are evaluated together. The always-true random() < 2 keeps the
+-- planner from moving cast(j as int) out of the lambda, so the expression reaches BE inside the lambda body.
+create database db_${uuid0};
+use db_${uuid0};
+create table t (id int, xs array<int>, j varchar(100)) duplicate key(id) distributed by hash(id) buckets 1 properties('replication_num' = '1');
+insert into t values (1, [], 'invalid'), (2, [1, 2], '1'), (3, null, 'invalid'), (4, [3], '10');
+set sql_mode = concat(@@sql_mode, ',ALLOW_THROW_EXCEPTION');
+function: assert_explain_not_contains("select id, array_map(x -> if(random() < 2, x + cast(j as int), 0), xs) from t", "common expressions")
+[ORDER]select id, array_map(x -> if(random() < 2, x + cast(j as int), 0), xs) from t order by id;
+[ORDER]select id, array_filter(x -> if(random() < 2, x + cast(j as int), 0) > 2, xs) from t order by id;
+[ORDER]select id, array_sortby(x -> if(random() < 2, -(x + cast(j as int)), 0), xs) from t order by id;
+-- a row that does run the lambda still fails
+insert into t values (5, [1], 'invalid');
+function: assert_query_error_contains("select id, array_map(x -> if(random() < 2, x + cast(j as int), 0), xs) from t order by id", "cast from VARCHAR(invalid) to INT failed")
+drop database db_${uuid0};

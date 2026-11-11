@@ -46,7 +46,10 @@ public class IcebergFileStats {
     private Map<Integer, Object> maxValues;
     private Map<Integer, Long> nullCounts;
     private Map<Integer, Long> columnSizes;
-    private Set<Integer> corruptedStats;
+    // Columns whose lower (upper) bound is unknown: a counted file has rows for them but no lower (upper) bound.
+    // Tracked per side, so a file missing only one bound keeps the other side usable.
+    private Set<Integer> corruptedMinStats;
+    private Set<Integer> corruptedMaxStats;
     private boolean hasValidColumnMetrics;
     private Map<Integer, Long> columnSizeRecordCounts;
 
@@ -70,16 +73,13 @@ public class IcebergFileStats {
             this.maxValues = null;
             this.nullCounts = null;
             this.columnSizes = null;
-            corruptedStats = null;
+            corruptedMinStats = null;
+            corruptedMaxStats = null;
         } else {
             this.minValues = new HashMap<>(minValues);
             this.maxValues = new HashMap<>(maxValues);
-            // we are assuming if minValues is not present, max will be not be present either.
-            this.corruptedStats = nonPartitionPrimitiveColumns.stream()
-                    .map(Types.NestedField::fieldId)
-                    .filter(id -> !minValues.containsKey(id) &&
-                            (!nullCounts.containsKey(id) || nullCounts.get(id) != recordCount))
-                    .collect(toSet());
+            this.corruptedMinStats = missingBounds(nonPartitionPrimitiveColumns, minValues, nullCounts, recordCount);
+            this.corruptedMaxStats = missingBounds(nonPartitionPrimitiveColumns, maxValues, nullCounts, recordCount);
             this.nullCounts = new HashMap<>(nullCounts);
             this.columnSizes = columnSizes != null ? new HashMap<>(columnSizes) : new HashMap<>();
             this.columnSizeRecordCounts = new HashMap<>();
@@ -90,6 +90,16 @@ public class IcebergFileStats {
             }
             hasValidColumnMetrics = true;
         }
+    }
+
+    // A bound may be absent only when every value of the column in the file is null.
+    private static Set<Integer> missingBounds(List<Types.NestedField> columns, Map<Integer, Object> bounds,
+                                              Map<Integer, Long> nullCounts, long recordCount) {
+        return columns.stream()
+                .map(Types.NestedField::fieldId)
+                .filter(id -> !bounds.containsKey(id) &&
+                        (!nullCounts.containsKey(id) || nullCounts.get(id) != recordCount))
+                .collect(toSet());
     }
 
     public IcebergFileStats(long recordCount) {
@@ -157,8 +167,9 @@ public class IcebergFileStats {
         return columnSizes;
     }
 
-    public Set<Integer> getCorruptedStats() {
-        return corruptedStats;
+    // The corrupted set of the side `bounds` belongs to (getMinValues() or getMaxValues()).
+    public Set<Integer> getCorruptedStats(Map<Integer, Object> bounds) {
+        return bounds == maxValues ? corruptedMaxStats : corruptedMinStats;
     }
 
     public boolean hasValidColumnMetrics() {
@@ -205,6 +216,7 @@ public class IcebergFileStats {
             hasValidColumnMetrics = false;
             return;
         }
+        Set<Integer> corruptedStats = getCorruptedStats(current);
         for (Types.NestedField column : nonPartitionPrimitiveColumns) {
             int id = column.fieldId();
 

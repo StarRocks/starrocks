@@ -112,6 +112,19 @@ struct CompileAssert {};
     TypeName(TypeName&&) = delete; \
     void operator=(TypeName&&) = delete
 
+// Keep these combined macros self-contained. butil/macros.h defines them in
+// terms of DISALLOW_COPY/DISALLOW_MOVE, which are redefined above with
+// assignment operators included and otherwise produce duplicate declarations.
+#undef DISALLOW_COPY_AND_ASSIGN
+#define DISALLOW_COPY_AND_ASSIGN(TypeName) \
+    TypeName(const TypeName&) = delete;    \
+    TypeName& operator=(const TypeName&) = delete
+
+#undef DISALLOW_MOVE_AND_ASSIGN
+#define DISALLOW_MOVE_AND_ASSIGN(TypeName) \
+    TypeName(TypeName&&) = delete;         \
+    TypeName& operator=(TypeName&&) = delete
+
 #undef DISALLOW_COPY_AND_MOVE
 #define DISALLOW_COPY_AND_MOVE(TypeName) \
     DISALLOW_COPY(TypeName);             \

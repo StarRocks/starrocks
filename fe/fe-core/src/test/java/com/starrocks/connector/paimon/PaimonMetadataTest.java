@@ -2520,6 +2520,7 @@ public class PaimonMetadataTest {
 
     @Test
     public void testView(@Mocked org.apache.paimon.view.View paimonView) throws Exception {
+        Identifier viewIdentifier = new Identifier("db", "test_view");
         //test createview
         new Expectations() {
             {
@@ -2538,6 +2539,9 @@ public class PaimonMetadataTest {
         //test getview
         new Expectations() {
             {
+                paimonNativeCatalog.getTable(viewIdentifier);
+                result = new Catalog.TableNotExistException(viewIdentifier);
+                minTimes = 0;
                 paimonNativeCatalog.getView((Identifier) any);
                 result = paimonView;
                 paimonView.query();
@@ -2553,17 +2557,25 @@ public class PaimonMetadataTest {
         //test drop normal
         DropTableStmt dropStmt = new DropTableStmt(true, new TableRef(QualifiedName.of(
                 Lists.newArrayList("paimon_catalog", "db", "test_view")), null, NodePosition.ZERO),
-                true, true);
-        metadata.dropTable(connectContext, dropStmt);
-
-        //test drop not exist
+                true, false);
         new Expectations() {
             {
-                paimonNativeCatalog.dropView((Identifier) any, true);
-                result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
+                paimonNativeCatalog.dropView(viewIdentifier, true);
+                times = 1;
             }
         };
-        org.junit.jupiter.api.Assertions.assertThrows(StarRocksConnectorException.class,
-                () -> metadata.dropTable(connectContext, dropStmt));
+        metadata.dropTable(connectContext, dropStmt);
+
+        // A successful drop evicts the view. IF EXISTS then tolerates a missing native object.
+        new Expectations() {
+            {
+                paimonNativeCatalog.getView(viewIdentifier);
+                result = new Catalog.ViewNotExistException(viewIdentifier);
+            }
+        };
+        assertNull(metadata.getTable(connectContext, "db", "test_view"));
+        metadata.dropTable(connectContext, dropStmt);
+        DropTableStmt missing = new DropTableStmt(false, dropStmt.getTableRef(), true, false);
+        assertThrows(StarRocksConnectorException.class, () -> metadata.dropTable(connectContext, missing));
     }
 }

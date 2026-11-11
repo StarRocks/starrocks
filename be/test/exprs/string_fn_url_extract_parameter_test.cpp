@@ -76,12 +76,11 @@ void test_url_extract_parameter(const Columns& columns, const std::string& expec
 }
 
 TEST_F(UrlExtractParameterTest, constNull) {
-    TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(10000);
     test_url_extract_parameter({ColumnHelper::create_const_null_column(10), ColumnHelper::create_const_null_column(10)},
                                "", true, [](int i) { return false; });
     test_url_extract_parameter(
-            {ColumnHelper::unfold_const_column(varchar_type, 10, ColumnHelper::create_const_null_column(10)),
-             ColumnHelper::unfold_const_column(varchar_type, 10, ColumnHelper::create_const_null_column(10))},
+            {ColumnHelper::unfold_const_column(TYPE_VARCHAR_DESC, 10, ColumnHelper::create_const_null_column(10)),
+             ColumnHelper::unfold_const_column(TYPE_VARCHAR_DESC, 10, ColumnHelper::create_const_null_column(10))},
             "", true, [](int i) { return false; });
     for (TestCaseType tc : test_cases) {
         auto url = std::get<0>(tc);
@@ -95,9 +94,9 @@ TEST_F(UrlExtractParameterTest, constNull) {
         test_url_extract_parameter({url_col->clone(), ColumnHelper::create_const_null_column(10)}, "", true,
                                    [](int i) { return false; });
         test_url_extract_parameter({ColumnHelper::create_const_null_column(10),
-                                    ColumnHelper::unfold_const_column(varchar_type, 10, param_key_col->clone())},
+                                    ColumnHelper::unfold_const_column(TYPE_VARCHAR_DESC, 10, param_key_col->clone())},
                                    "", true, [](int i) { return false; });
-        test_url_extract_parameter({ColumnHelper::unfold_const_column(varchar_type, 10, url_col->clone()),
+        test_url_extract_parameter({ColumnHelper::unfold_const_column(TYPE_VARCHAR_DESC, 10, url_col->clone()),
                                     ColumnHelper::create_const_null_column(10)},
                                    "", true, [](int i) { return false; });
     }

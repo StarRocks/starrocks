@@ -93,6 +93,7 @@ dependencies {
     implementation("com.github.oshi:oshi-core")
     implementation("com.github.seancfoley:ipaddress")
     implementation("com.google.cloud.bigdataoss:gcs-connector")
+    implementation("com.google.code.findbugs:jsr305")
     implementation("com.google.code.gson:gson")
     implementation("com.google.guava:guava")
     implementation("com.google.protobuf:protobuf-java")

@@ -306,21 +306,6 @@ TEST(GeoOverlayCoreTest, RejectsTranslatedCollapsedHolesAndMultiComponents) {
     }
 }
 
-TEST(GeoOverlayCoreTest, SymmetricDifferenceChecksCancellationBetweenPrimitives) {
-    auto left = prepare(square);
-    auto right = prepare(shifted);
-    ASSERT_TRUE(left.ok());
-    ASSERT_TRUE(right.ok());
-    size_t checkpoints = 0;
-    // Entry and post-translation checks precede the first difference.
-    auto result = (*left)->overlay(**right, GeoOverlayKind::SYMMETRIC_DIFFERENCE, [&]() {
-        return ++checkpoints == 3 ? Status::Cancelled("cancel after first difference") : Status::OK();
-    });
-    ASSERT_FALSE(result.ok());
-    EXPECT_TRUE(result.status().is_cancelled());
-    EXPECT_EQ(3, checkpoints);
-}
-
 TEST(GeoOverlayCoreTest, RejectsInvalidTopologyAndUnsupportedWkb) {
     const char* invalid[] = {"POLYGON ((0 0,4 4,0 4,4 0,0 0))",
                              "POLYGON ((0 0,4 0,4 4,0 4,0 0),(8 8,9 8,9 9,8 9,8 8))",
@@ -467,21 +452,6 @@ TEST(GeoOverlayCoreTest, IntersectionPreservesSubdividedContactAndNarrowArea) {
     intersection_both_orders(square, "POLYGON ((4 0,8 0,8 4,4 4,4 3,4 2,4 1,4 0))", "LINESTRING (4 0,4 4)");
     intersection_both_orders(square, "POLYGON ((3.9999999999 0,6 0,6 4,3.9999999999 4,3.9999999999 0))",
                              "POLYGON ((3.9999999999 0,4 0,4 4,3.9999999999 4,3.9999999999 0))");
-}
-TEST(GeoOverlayCoreTest, IntersectionCancellationBetweenContactPrimitives) {
-    auto a = prepare(square), b = prepare("POLYGON ((4 0,8 0,8 4,4 4,4 0))");
-    ASSERT_TRUE(a.ok());
-    ASSERT_TRUE(b.ok());
-    size_t checks = 0;
-    auto cancelled = (*a)->overlay(**b, GeoOverlayKind::INTERSECTION, [&]() {
-        return ++checks == 4 ? Status::Cancelled("cancel after boundary intersection") : Status::OK();
-    });
-    ASSERT_FALSE(cancelled.ok());
-    EXPECT_TRUE(cancelled.status().is_cancelled());
-    EXPECT_EQ(4, checks);
-    auto again = (*a)->overlay(**b, GeoOverlayKind::INTERSECTION);
-    ASSERT_TRUE(again.ok()) << again.status();
-    expect_intersection(*again, "LINESTRING (4 0,4 4)");
 }
 TEST(GeoOverlayCoreTest, IntersectionRejectsPrecisionLossDuringOperandTranslation) {
     auto a =

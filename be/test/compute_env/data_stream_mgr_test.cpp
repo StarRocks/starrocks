@@ -26,8 +26,8 @@ TEST(DataStreamMgr, pass_through_buffer_test) {
     query_id.hi = 2023;
 
     // register the same query_id twice
-    mgr->prepare_pass_through_chunk_buffer(query_id);
-    mgr->prepare_pass_through_chunk_buffer(query_id);
+    mgr->prepare_pass_through_chunk_buffer(query_id, nullptr);
+    mgr->prepare_pass_through_chunk_buffer(query_id, nullptr);
 
     // unregister one
     mgr->destroy_pass_through_chunk_buffer(query_id);

@@ -238,7 +238,7 @@ public class OlapTableSink extends DataSink {
         tSink.setTxn_id(txnId);
         tSink.setNull_expr_in_auto_increment(nullExprInAutoIncrement);
         tSink.setMiss_auto_increment_column(missAutoIncrementColumn);
-        tSink.setAuto_increment_slot_id(autoIncrementSlotId);
+        tSink.setAuto_increment_slot_id(autoIncrementSlotIdForWrite());
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         TransactionState explicitTxnState = globalTransactionMgr.reserveExplicitTransactionLayout(
                 txnId, dbId, dstTable.getId());
@@ -267,6 +267,13 @@ public class OlapTableSink extends DataSink {
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         tSink.setEncryption_meta(GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta());
         tSink.setEnable_data_file_bundling(dstTable.isFileBundling());
+        // Shared-data writers decide the physical shape of JSON columns from the table's flat_json.*
+        // properties. Carry them on the sink: the CN otherwise reads them from its tablet metadata cache
+        // and falls back to be.conf on a miss, and under light_weight_tablet_creation nothing is cached
+        // before a tablet's first publish, so every first write would ignore the table's settings.
+        if (writesToCloudNativeTable() && dstTable.getFlatJsonConfig() != null) {
+            tSink.setFlat_json_config(dstTable.getFlatJsonConfig().toTFlatJsonConfig());
+        }
         tSink.setEnable_lake_per_partition_coordinator_txn_log(
                 Config.lake_enable_per_partition_coordinator_txn_log);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -552,6 +559,20 @@ public class OlapTableSink extends DataSink {
 
     public void setTargetWriteIndexId(Long targetWriteIndexId) {
         this.targetWriteIndexId = targetWriteIndexId;
+    }
+
+    // A write that persists only a target index which does not store the AUTO_INCREMENT column must not fill it:
+    // filling would allocate ids from the table's counter and discard them.
+    private int autoIncrementSlotIdForWrite() {
+        if (autoIncrementSlotId == -1 || targetWriteIndexId == null) {
+            return autoIncrementSlotId;
+        }
+        String columnName = tupleDescriptor.getSlot(autoIncrementSlotId).getColumn().getName();
+        MaterializedIndexMeta indexMeta = dstTable.getIndexMetaByMetaId(targetWriteIndexId);
+        if (indexMeta != null && indexMeta.getSchema().stream().noneMatch(c -> c.getName().equalsIgnoreCase(columnName))) {
+            return -1;
+        }
+        return autoIncrementSlotId;
     }
 
     public void complete(String mergeCondition) throws StarRocksException {

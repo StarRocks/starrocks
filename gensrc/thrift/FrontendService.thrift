@@ -50,6 +50,7 @@ include "AgentService.thrift"
 include "ResourceUsage.thrift"
 include "MVMaintenance.thrift"
 include "DataCache.thrift"
+include "CloudConfiguration.thrift"
 
 // These are supporting structs for JniFrontend.java, which serves as the glue
 // between our C++ execution environment and the Java frontend.
@@ -640,6 +641,8 @@ struct TGetLoadsParams {
     // declares it understands TGetLoadsResult.next_job_id_offset; FE returns the whole
     // result set unpaged when it is absent, so an old BE keeps its previous behavior.
     21: optional i64 start_job_id_offset
+    // The querying user. FE returns only the load jobs this user may see, and none when it is unset.
+    22: optional Types.TUserIdentity current_user_ident
 }
 
 struct TTrackingLoadInfo {
@@ -1710,6 +1713,9 @@ struct TPartitionMetaInfo {
     // Last time this partition was modified by a user write (load/DML, excluding compaction),
     // in unix seconds. 0/absent = unknown.
     36: optional i64 last_update_time
+    // The version the partition's incremental vacuum has advanced to; everything below it is reclaimed.
+    // Equals visible_version once vacuum catches up, and is smaller while a reclaim backlog remains.
+    37: optional i64 vacuum_version
 }
 
 // Ask one FE for its local in-memory partition query-access times of a table, so the querying FE
@@ -2508,7 +2514,7 @@ struct TCloudTabletMeta {
     3: optional bool enable_persistent_index;
     4: optional AgentService.TPersistentIndexType persistent_index_type;
     5: optional AgentService.TCompactionStrategy compaction_strategy;
-    6: optional AgentService.TFlatJsonConfig flat_json_config;
+    6: optional Descriptors.TFlatJsonConfig flat_json_config;
     7: optional map<i64, Types.TTabletRange> tablet_ranges;
     8: optional i64 gtid;
     9: optional Types.TCompressionType compression_type;
@@ -2538,6 +2544,36 @@ struct TFeMetricsResult {
     1: optional Status.TStatus status
     // JSON payload identical to the FE `/metrics?type=json` output, parsed by the BE scanner.
     2: optional string json_metrics
+}
+
+// Asked by a backend whose scan node carries a TCloudConfiguration with refresh_after_ms set, once that time
+// has passed. refresh_token is the one that configuration carried; the coordinator answers with the scan node's
+// current configuration, renewing it first if it is due.
+struct TRefreshScanCredentialsRequest {
+    1: optional Types.TUniqueId query_id;
+    2: optional i32 plan_node_id;
+    3: optional string refresh_token;
+}
+
+struct TRefreshScanCredentialsResponse {
+    1: optional Status.TStatus status;
+    2: optional CloudConfiguration.TCloudConfiguration cloud_configuration;
+}
+
+// Columns of one external table whose statistics a query found missing or expired.
+struct TTriggerExternalAnalyzeTable {
+    1: optional string table_uuid;
+    2: optional list<string> columns;
+}
+
+// Sent by a follower to the leader: query-triggered external table analyze runs only on the leader, because
+// it writes the edit log. Best effort; a dropped request is raised again by the next query.
+struct TTriggerExternalAnalyzeRequest {
+    1: optional list<TTriggerExternalAnalyzeTable> tables;
+}
+
+struct TTriggerExternalAnalyzeResponse {
+    1: optional Status.TStatus status;
 }
 
 service FrontendService {
@@ -2704,4 +2740,8 @@ service FrontendService {
     // when `enable_http_auth` is on. Returns OK status when the user/password pair is
     // valid for the given host, or an error status otherwise.
     TFeResult checkAuth(1: optional TAuthenticateParams request)
+
+    TRefreshScanCredentialsResponse refreshScanCredentials(1: optional TRefreshScanCredentialsRequest request)
+
+    TTriggerExternalAnalyzeResponse triggerExternalAnalyze(1: optional TTriggerExternalAnalyzeRequest request)
 }

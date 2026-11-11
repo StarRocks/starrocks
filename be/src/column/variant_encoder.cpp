@@ -818,7 +818,10 @@ StatusOr<VariantRowValue> VariantEncoder::encode_json_text_to_variant(std::strin
     // error-code API: a throw per non-JSON row would be far too expensive. The catch only remains as a safety
     // net for exceptions that are not caused by the input, so it costs nothing on the hot path.
     try {
-        auto builder = vpack::Parser::tryFromJson(json_text.data(), json_text.size(), nullptr);
+        // Honor the shared JSON nesting-depth cap here too; over-deep input then fails to parse and
+        // falls back to string storage below, like any other non-JSON text.
+        auto options = JsonValue::parse_options_from_config();
+        auto builder = vpack::Parser::tryFromJson(json_text.data(), json_text.size(), nullptr, &options);
         if (builder == nullptr) {
             return encode_json_to_variant(JsonValue::from_string(Slice(json_text.data(), json_text.size())));
         }
