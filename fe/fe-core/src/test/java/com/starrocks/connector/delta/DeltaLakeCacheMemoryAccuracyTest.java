@@ -257,7 +257,8 @@ public class DeltaLakeCacheMemoryAccuracyTest {
         Cache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache =
                 field(metastore, DeltaLakeMetastore.class, "checkpointCache");
         Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache = field(metastore, DeltaLakeMetastore.class, "jsonCache");
-        DeltaLakeEngine engine = DeltaLakeEngine.create(new HadoopFileIO(new Configuration()), properties, checkpointCache, jsonCache);
+        DeltaLakeEngine engine = DeltaLakeEngine.create(
+                new HadoopFileIO(new Configuration()), properties, checkpointCache, jsonCache);
         Snapshot snapshot = Table.forPath(engine, path).getLatestSnapshot(engine);
         Scan scan = snapshot.getScanBuilder().build();
         try (CloseableIterator<FilteredColumnarBatch> it = scan.getScanFiles(engine)) {
