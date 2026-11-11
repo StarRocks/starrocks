@@ -80,6 +80,7 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -1433,7 +1434,15 @@ public class InsertPlanner {
             }
             Preconditions.checkState(index >= 0, "Paimon static partition target mismatch");
             LiteralExpr value = (LiteralExpr) values.get(index);
-            partition.put(column, value.isConstantNull() ? nullPartition : value.getStringValue());
+            String partitionValue;
+            if (value.isConstantNull()) {
+                partitionValue = nullPartition;
+            } else if (value instanceof BoolLiteral boolLiteral) {
+                partitionValue = Boolean.toString(boolLiteral.getValue());
+            } else {
+                partitionValue = value.getStringValue();
+            }
+            partition.put(column, partitionValue);
         }
         return partition;
     }

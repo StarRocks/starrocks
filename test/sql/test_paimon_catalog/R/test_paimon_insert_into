@@ -220,3 +220,50 @@ CLEANUP {
   drop database if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db;
   drop catalog if exists paimon_write_${paimon_ddl_warehouse_id};
 } END CLEANUP
+
+-- name: test_paimon_insert_into_boolean_partitions
+function: create_paimon_ddl_catalog("paimon_write_${uuid0}", "${uuid0}")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+create database paimon_write_${uuid0}.writer_db;
+-- result:
+-- !result
+create table paimon_write_${uuid0}.writer_db.boolean_rows (p boolean, id int not null) partition by(p) properties ('bucket'='-1', 'file.format'='parquet');
+-- result:
+-- !result
+insert into paimon_write_${uuid0}.writer_db.boolean_rows partition(p=true) values (1);
+-- result:
+-- !result
+insert into paimon_write_${uuid0}.writer_db.boolean_rows partition(p=false) select 2;
+-- result:
+-- !result
+insert into paimon_write_${uuid0}.writer_db.boolean_rows values (true, 3), (false, 4);
+-- result:
+-- !result
+[ORDER]select id, p from paimon_write_${uuid0}.writer_db.boolean_rows order by id;
+-- result:
+1	1
+2	0
+3	1
+4	0
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select id, p from paimon_write_${uuid0}.writer_db.boolean_rows order by id;
+-- result:
+1	1
+2	0
+3	1
+4	0
+-- !result
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.boolean_rows;
+  drop database if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_write_${paimon_ddl_warehouse_id};
+} END CLEANUP

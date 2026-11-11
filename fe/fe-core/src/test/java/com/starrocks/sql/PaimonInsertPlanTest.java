@@ -76,6 +76,8 @@ public class PaimonInsertPlanTest extends PlanTestBase {
                 "paimon.catalog.type", "filesystem", "paimon.catalog.warehouse", "file:///unused-paimon-planning"));
         register("target", Schema.newBuilder().column("p", DataTypes.DATE()).column("id", DataTypes.INT().notNull())
                 .column("value", DataTypes.STRING()).partitionKeys("p").option("bucket", "-1").build());
+        register("boolean_partition", Schema.newBuilder().column("p", DataTypes.BOOLEAN())
+                .column("id", DataTypes.INT().notNull()).partitionKeys("p").option("bucket", "-1").build());
         register("unpartitioned", Schema.newBuilder().column("id", DataTypes.INT().notNull())
                 .column("value", DataTypes.STRING()).option("bucket", "-1").build());
         register("fixed", Schema.newBuilder().column("p", DataTypes.DATE().notNull()).column("id", DataTypes.INT().notNull())
@@ -176,6 +178,16 @@ public class PaimonInsertPlanTest extends PlanTestBase {
                 + " partition(p='2026-10-29') (value, id) values ('a', 9)");
         Assertions.assertTrue(permutation.plan().getOutputExprs().get(0).getType().isDate());
         Assertions.assertTrue(permutation.plan().getOutputExprs().get(1).getType().isInt());
+    }
+
+    @Test
+    public void testBooleanStaticPartitionsUseNativeRepresentation() throws Exception {
+        for (String value : List.of("true", "false")) {
+            Planned partition = plan("insert into " + target("boolean_partition")
+                    + " partition(p=" + value + ") values (1)");
+            Assertions.assertEquals(Map.of("p", value), partition.sink().getPaimonSinkExtra().getStaticPartition());
+            Assertions.assertTrue(partition.plan().getOutputExprs().get(0).getType().isBoolean());
+        }
     }
 
     @Test

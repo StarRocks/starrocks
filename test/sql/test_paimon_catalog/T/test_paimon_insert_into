@@ -80,3 +80,21 @@ CLEANUP {
   drop database if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db;
   drop catalog if exists paimon_write_${paimon_ddl_warehouse_id};
 } END CLEANUP
+
+-- name: test_paimon_insert_into_boolean_partitions
+function: create_paimon_ddl_catalog("paimon_write_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'native';
+create database paimon_write_${uuid0}.writer_db;
+create table paimon_write_${uuid0}.writer_db.boolean_rows (p boolean, id int not null) partition by(p) properties ('bucket'='-1', 'file.format'='parquet');
+insert into paimon_write_${uuid0}.writer_db.boolean_rows partition(p=true) values (1);
+insert into paimon_write_${uuid0}.writer_db.boolean_rows partition(p=false) select 2;
+insert into paimon_write_${uuid0}.writer_db.boolean_rows values (true, 3), (false, 4);
+[ORDER]select id, p from paimon_write_${uuid0}.writer_db.boolean_rows order by id;
+set paimon_reader_mode = 'jni';
+[ORDER]select id, p from paimon_write_${uuid0}.writer_db.boolean_rows order by id;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.boolean_rows;
+  drop database if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_write_${paimon_ddl_warehouse_id};
+} END CLEANUP
