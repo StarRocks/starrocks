@@ -405,7 +405,7 @@ public class QueryTransformer {
                 if (rewriteOperator.isSkewed()) {
                     windowOperator.setSkewed();
                 }
-                windowOperator.addFunction(analyticExpr);
+                windowOperator.addFunction(analyticExpr, rewriteOperator);
             } else {
                 windowOperators.add(rewriteOperator);
             }
