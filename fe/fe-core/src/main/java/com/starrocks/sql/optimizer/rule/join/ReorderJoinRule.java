@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.join;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -385,14 +384,8 @@ public class ReorderJoinRule extends Rule {
             LogicalProperty newProperty = new LogicalProperty(optExpression.getLogicalProperty());
             newProperty.setOutputColumns(newCols);
 
-            if (!Optional.ofNullable(optExpression.getStatistics()).isPresent()) {
-                ExpressionContext expressionContext = new ExpressionContext(optExpression);
-                StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
-                        expressionContext, optimizerContext.getColumnRefFactory(), optimizerContext);
-                statisticsCalculator.estimatorStats();
-                optExpression.setStatistics(expressionContext.getStatistics());
-            }
-            Preconditions.checkState(optExpression.getStatistics() != null);
+            // Estimating this operator requires statistics for its children, which may also be missing.
+            ensureStatistics(optExpression, optimizerContext);
             Statistics oldStats = optExpression.getStatistics();
             Statistics.Builder newStatsBuilder = Statistics.builder()
                     .setOutputRowCount(oldStats.getOutputRowCount())

@@ -47,6 +47,7 @@
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
+#include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
 #include "runtime/types.h"
 #include "storage/rowset/column_reader.h"
@@ -56,6 +57,7 @@
 #include "util/json_converter.h"
 #include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
+#include "util/string_parser.hpp"
 
 namespace starrocks {
 
@@ -175,8 +177,13 @@ void merge_number(vpack::Builder* builder, const std::string_view& name, const C
     const auto data = col->immutable_data().data();
 
     if constexpr (TYPE == LogicalType::TYPE_LARGEINT) {
-        // the value is from json, must be uint64_t
-        builder->addUnchecked(name.data(), name.size(), vpack::Value((uint64_t)data[idx]));
+        // The value is a JSON integer: unsigned past INT64_MAX, or negative where an older deriver met negative
+        // integers with such values at LARGEINT. Writing a negative one as uint64_t would change it.
+        if (data[idx] < 0) {
+            builder->addUnchecked(name.data(), name.size(), vpack::Value(static_cast<int64_t>(data[idx])));
+        } else {
+            builder->addUnchecked(name.data(), name.size(), vpack::Value(static_cast<uint64_t>(data[idx])));
+        }
     } else {
         builder->addUnchecked(name.data(), name.size(), vpack::Value(data[idx]));
     }
@@ -328,13 +335,60 @@ static uint64_t base_type_hits(LogicalType sub_column_type, uint64_t hits) {
     return sub_column_type == LogicalType::TYPE_JSON ? 0 : hits;
 }
 
-// Accounts an already-flattened sub-column of `type` at `leaf`. A JSON sub-column with value stats contributes
+// Value range of a BIGINT sub-column; nullopt when unknown.
+using BigintRange = std::optional<std::pair<int64_t, int64_t>>;
+
+static BigintRange bigint_range_of(const ColumnReader* sub) {
+    const ZoneMapPB* zm = sub->segment_zone_map();
+    if (zm == nullptr) {
+        return std::nullopt;
+    }
+    if (!zm->has_not_null()) {
+        return std::make_pair(int64_t{0}, int64_t{0});
+    }
+    if (!zm->has_min() || !zm->has_max()) {
+        return std::nullopt;
+    }
+    StringParser::ParseResult min_result;
+    StringParser::ParseResult max_result;
+    auto min = StringParser::string_to_int<int64_t>(zm->min().data(), zm->min().size(), &min_result);
+    auto max = StringParser::string_to_int<int64_t>(zm->max().data(), zm->max().size(), &max_result);
+    if (min_result != StringParser::PARSE_SUCCESS || max_result != StringParser::PARSE_SUCCESS) {
+        return std::nullopt;
+    }
+    return std::make_pair(min, max);
+}
+
+static BigintRange bigint_range_of(const Column& sub) {
+    if (sub.is_nullable()) {
+        const auto& nullable = down_cast<const NullableColumn&>(sub);
+        const auto* data = down_cast<const Int64Column*>(nullable.data_column().get());
+        int64_t min = 0;
+        int64_t max = 0;
+        for (size_t i = 0; i < sub.size(); i++) {
+            if (!nullable.is_null(i)) {
+                min = std::min(min, data->get_data()[i]);
+                max = std::max(max, data->get_data()[i]);
+            }
+        }
+        return std::make_pair(min, max);
+    }
+    return std::nullopt;
+}
+
+// Accounts an already-flattened sub-column of type `type` holding `hits` values to `leaf`.
+//
+// The layout derived from sub-columns is read by casting each source sub-column to the derived type, so the
+// derived type must hold every source value exactly; dfs_keep_numbers_exact() checks that from the value range
+// of the path. A LARGEINT sub-column only exists for values past INT64_MAX; a BIGINT sub-column contributes its
+// value range, or the whole BIGINT range when it is unknown. A JSON sub-column with value stats contributes
 // what deriving from its values would have found; without them it leaves the path JSON.
-static void add_flat_sub_column(JsonFlatPath* leaf, LogicalType type, uint64_t hits,
+static void add_flat_sub_column(JsonFlatPath* leaf, LogicalType type, uint64_t hits, const BigintRange& range,
                                 const flat_json::JsonValueStats* stats) {
     if (type == LogicalType::TYPE_JSON && stats != nullptr) {
         leaf->json_type &= stats->json_type;
         leaf->max_uint = std::max(leaf->max_uint, stats->max_uint);
+        leaf->min_int = std::min(leaf->min_int, stats->min_int);
         leaf->hits += hits;
         // A NULL row holds no value at the path, as a row without it in a typed sub-column.
         const uint64_t non_base = stats->values - std::min(stats->values, stats->base_type_count);
@@ -342,6 +396,16 @@ static void add_flat_sub_column(JsonFlatPath* leaf, LogicalType type, uint64_t h
         return;
     }
     leaf->json_type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(type);
+    if (type == LogicalType::TYPE_LARGEINT) {
+        leaf->max_uint = std::numeric_limits<uint64_t>::max();
+    } else if (type == LogicalType::TYPE_BIGINT) {
+        const auto [min, max] = range.value_or(
+                std::make_pair(std::numeric_limits<int64_t>::min(), std::numeric_limits<int64_t>::max()));
+        leaf->min_int = std::min(leaf->min_int, min);
+        if (max > 0) {
+            leaf->max_uint = std::max(leaf->max_uint, static_cast<uint64_t>(max));
+        }
+    }
     leaf->hits += hits;
     leaf->flat_base_type_hits += base_type_hits(type, hits);
 }
@@ -569,7 +633,10 @@ void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_reade
                 stats->max_uint = pb->max_uint();
                 stats->min_int = pb->min_int();
             }
-            add_flat_sub_column(leaf, sub->column_type(), reader->num_rows(), stats.has_value() ? &*stats : nullptr);
+            add_flat_sub_column(
+                    leaf, sub->column_type(), reader->num_rows(),
+                    sub->column_type() == LogicalType::TYPE_BIGINT ? bigint_range_of(sub.get()) : std::nullopt,
+                    stats.has_value() ? &*stats : nullptr);
         }
     }
 
@@ -662,7 +729,10 @@ void JsonPathDeriver::_derived_on_flat_json(const std::vector<const Column*>& js
                 stats.emplace();
                 stats->update(*json_col->get_flat_field(i));
             }
-            add_flat_sub_column(leaf, types[i], hits, stats.has_value() ? &*stats : nullptr);
+            add_flat_sub_column(
+                    leaf, types[i], hits,
+                    types[i] == LogicalType::TYPE_BIGINT ? bigint_range_of(*json_col->get_flat_field(i)) : std::nullopt,
+                    stats.has_value() ? &*stats : nullptr);
         }
     }
 }
@@ -732,6 +802,7 @@ void JsonPathDeriver::_clean_sparsity_path(const std::string_view& name, JsonFla
         if (child->hits < check_hits_min) {
             if (_generate_filter) {
                 _remain_keys.insert(iter->first);
+                _add_remain_subtree(child);
             }
             node->remain = true;
             iter = node->children.erase(iter);
@@ -767,6 +838,24 @@ void JsonPathDeriver::_add_remain_key(const std::string_view& key) {
     }
 }
 
+void JsonPathDeriver::_add_remain_keys_in(const vpack::Slice& value) {
+    if (!value.isObject()) {
+        return;
+    }
+    for (vpack::ObjectIterator it(value, true); _generate_filter && it.valid(); it.next()) {
+        auto current = (*it);
+        _add_remain_key(current.key.stringView());
+        _add_remain_keys_in(current.value);
+    }
+}
+
+void JsonPathDeriver::_add_remain_subtree(const JsonFlatPath* node) {
+    for (auto iter = node->children.begin(); _generate_filter && iter != node->children.end(); ++iter) {
+        _add_remain_key(iter->first);
+        _add_remain_subtree(iter->second.get());
+    }
+}
+
 // Drops paths seen in a single row so far (other than the current one), like _clean_sparsity_path
 // drops the ones that can no longer reach the sparsity threshold.
 size_t JsonPathDeriver::_drop_singleton_paths(JsonFlatPath* node, size_t current_row) {
@@ -779,6 +868,7 @@ size_t JsonPathDeriver::_drop_singleton_paths(JsonFlatPath* node, size_t current
         const auto* child = iter->second.get();
         if (child->hits < 2 && child->last_row != current_row) {
             _add_remain_key(iter->first);
+            _add_remain_subtree(child);
             node->remain = true;
             // Unlike a path _clean_sparsity_path drops, this one can still reach the sparsity threshold if it
             // shows up again; it then comes back without the values seen so far. See _visit_json_paths().
@@ -818,6 +908,7 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
                 // Never flattened, so it stays in this node's remain.
                 root->remain = true;
                 _add_remain_key(k);
+                _add_remain_keys_in(v);
                 continue;
             }
             iter = root->children.emplace(k, std::make_unique<JsonFlatPath>()).first;
@@ -858,8 +949,33 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
             child->base_type_count += flat_json::JSON_BASE_TYPE.count(json_type);
             if (json_type == vpack::ValueType::UInt) {
                 child->max_uint = std::max(child->max_uint, v.getUIntUnchecked());
+            } else if (json_type == vpack::ValueType::Int || json_type == vpack::ValueType::SmallInt) {
+                const int64_t value = v.getInt();
+                if (value < 0) {
+                    child->min_int = std::min(child->min_int, value);
+                } else {
+                    child->max_uint = std::max(child->max_uint, static_cast<uint64_t>(value));
+                }
             }
         }
+    }
+}
+
+// A numeric type the bits meet at must hold every value of the path exactly, or the value read back differs from
+// the one loaded. Integers and doubles meet at DOUBLE, which rounds integers past 2^53; negative and unsigned
+// integers meet at LARGEINT, which is rebuilt as uint64 (JsonMerger). Such a path is flattened as JSON instead,
+// which keeps each value as it was.
+void dfs_keep_numbers_exact(JsonFlatPath* node) {
+    constexpr int64_t kMaxExactDoubleInt = int64_t{1} << 53;
+    const bool past_double =
+            node->max_uint > static_cast<uint64_t>(kMaxExactDoubleInt) || node->min_int < -kMaxExactDoubleInt;
+    const bool past_bigint = node->max_uint > static_cast<uint64_t>(RunTimeTypeLimits<TYPE_BIGINT>::max_value());
+    if ((node->json_type == flat_json::JSON_TYPE_BITS.at(vpack::ValueType::Double) && past_double) ||
+        (node->json_type == flat_json::JSON_TYPE_BITS.at(vpack::ValueType::UInt) && node->min_int < 0 && past_bigint)) {
+        node->json_type = flat_json::JSON_BASE_TYPE_BITS;
+    }
+    for (auto& [_, child] : node->children) {
+        dfs_keep_numbers_exact(child.get());
     }
 }
 
@@ -962,6 +1078,7 @@ void dfs_add_remain_keys(JsonFlatPath* node, std::unordered_set<std::string_view
 }
 
 void JsonPathDeriver::_finalize() {
+    dfs_keep_numbers_exact(_path_root.get());
     // try downgrade json-uint to bigint
     dfs_downgrade_uint(_path_root.get());
 
@@ -1666,11 +1783,7 @@ void HyperJsonTransformer::init_read_task(const std::vector<std::string>& paths,
             mk.src_index.emplace_back(equals[0]);
             mk.dst_index = i;
             if (_dst_types[i] != _src_types[equals[0]]) {
-                mk.need_cast = true;
-                SlotDescriptor source_slot(i, "mock_solt", TypeDescriptor(_src_types[equals[0]]));
-                ColumnRef* col_ref = _pool.add(new ColumnRef(&source_slot));
-                mk.cast_expr = VectorizedCastExprFactory::from_type(TypeDescriptor(_src_types[equals[0]]),
-                                                                    TypeDescriptor(_dst_types[i]), col_ref, &_pool);
+                _init_conversion(&mk, i, _src_types[equals[0]], false);
             }
         } else if (!merges.empty() || (_dst_paths[i].empty() && has_remain)) {
             // the root is rebuilt from every flat path and the remain, even when only the remain was read
@@ -1799,19 +1912,8 @@ void HyperJsonTransformer::init_compaction_task(const std::vector<std::string>& 
                 mk.is_merge = false;
                 mk.src_index.emplace_back(j);
                 mk.dst_index = i;
-                if (_dst_types[i] != _src_types[j] && _src_types[j] == TYPE_JSON &&
-                    flat_json::JSON_EXTRACT_FUNC.contains(_dst_types[i])) {
-                    // A compaction types a JSON sub-column by the value stats of its values (JsonValueStatsPB);
-                    // extract each value as loading it would have, which the stats guarantee to be exact, rather
-                    // than casting it.
-                    mk.need_cast = true;
-                    mk.from_json = true;
-                } else if (_dst_types[i] != _src_types[j]) {
-                    mk.need_cast = true;
-                    SlotDescriptor source_slot(i, "mock_solt", TypeDescriptor(_src_types[j]));
-                    ColumnRef* col_ref = _pool.add(new ColumnRef(&source_slot));
-                    mk.cast_expr = VectorizedCastExprFactory::from_type(TypeDescriptor(_src_types[j]),
-                                                                        TypeDescriptor(_dst_types[i]), col_ref, &_pool);
+                if (_dst_types[i] != _src_types[j]) {
+                    _init_conversion(&mk, i, _src_types[j], true);
                 }
                 break;
             }
@@ -1916,8 +2018,32 @@ Status HyperJsonTransformer::trans(const Columns& columns) {
     return Status::OK();
 }
 
+void HyperJsonTransformer::_init_conversion(MergeTask* task, int dst_index, LogicalType src_type, bool compaction) {
+    task->need_cast = true;
+    if (compaction && src_type == TYPE_JSON && flat_json::JSON_EXTRACT_FUNC.contains(_dst_types[dst_index])) {
+        // A compaction types a JSON sub-column by the value stats of its values (JsonValueStatsPB); extract each
+        // value as loading it would have, which the stats guarantee to be exact, rather than casting it.
+        task->from_json = true;
+        return;
+    }
+    if (_dst_types[dst_index] == TYPE_JSON && flat_json::JSON_MERGE_FUNC.contains(src_type)) {
+        // A cast to JSON parses a VARCHAR that looks like JSON text ("[1,2]" becomes an array) and renders
+        // LARGEINT differently; rebuild each value the way JsonMerger does instead.
+        task->to_json = true;
+        task->src_type = src_type;
+        return;
+    }
+    SlotDescriptor source_slot(dst_index, "mock_solt", TypeDescriptor(src_type));
+    ColumnRef* col_ref = _pool.add(new ColumnRef(&source_slot));
+    task->cast_expr = VectorizedCastExprFactory::from_type(TypeDescriptor(src_type),
+                                                           TypeDescriptor(_dst_types[dst_index]), col_ref, &_pool);
+}
+
 Status HyperJsonTransformer::_equals(const MergeTask& task, const Columns& columns) {
     DCHECK(task.src_index.size() == 1);
+    if (task.to_json) {
+        return _to_json(task, columns[task.src_index[0]]);
+    }
     if (task.from_json) {
         return _from_json(task, columns[task.src_index[0]]);
     }
@@ -1950,6 +2076,36 @@ Status HyperJsonTransformer::_cast(const MergeTask& task, const ColumnPtr& col) 
         DCHECK_EQ(_dst_columns[task.dst_index]->is_nullable(), res->is_nullable());
         _dst_columns[task.dst_index].swap(res);
     }
+    return Status::OK();
+}
+
+Status HyperJsonTransformer::_to_json(const MergeTask& task, const ColumnPtr& col) {
+    DCHECK(task.to_json);
+    const auto merge_func = flat_json::JSON_MERGE_FUNC.at(task.src_type);
+    // The merge functions take a nullable source and add a keyed value to an open object.
+    ColumnPtr src = NullableColumn::wrap_if_necessary(col);
+    auto json = JsonColumn::create();
+    auto nulls = NullColumn::create();
+    json->reserve(src->size());
+    nulls->reserve(src->size());
+    constexpr const char* kKey = "v";
+    vpack::Builder builder;
+    for (size_t row = 0; row < src->size(); row++) {
+        if (src->is_null(row)) {
+            json->append_default();
+            nulls->append(1);
+            continue;
+        }
+        builder.clear();
+        builder.openObject();
+        merge_func(&builder, kKey, src.get(), row);
+        builder.close();
+        json->append(JsonValue(builder.slice().get(kKey)));
+        nulls->append(0);
+    }
+    auto res = NullableColumn::create(std::move(json), std::move(nulls));
+    res->set_delete_state(col->delete_state());
+    _dst_columns[task.dst_index] = std::move(res);
     return Status::OK();
 }
 

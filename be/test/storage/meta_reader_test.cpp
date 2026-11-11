@@ -29,6 +29,7 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment_writer.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -63,6 +64,8 @@ public:
     ~SegmentMetaCollecterTest() { delete_file(_segment_name); }
 
 protected:
+    static const OlapReaderStatistics& stats_of(const SegmentMetaCollecter& collecter) { return collecter._stats; }
+
     std::string _segment_name;
     TabletSchemaCSPtr _tablet_schema;
     SegmentSharedPtr _segment;
@@ -447,6 +450,92 @@ TEST_F(SegmentMetaCollecterTest, test_collect_with_dcg_loader_non_pk) {
     EXPECT_OK(collecter.collect(&columns));
     EXPECT_EQ(1, col->size());
     EXPECT_EQ(0, col->get(0).get_int64());
+}
+
+// A metadata scan opens the `.cols` segment again every time it runs. Its footer read has to fill the local
+// data cache, like the other reads of the scan, and count towards the scan's statistics.
+TEST_F(SegmentMetaCollecterTest, test_dcg_segment_open_fills_data_cache) {
+    TabletSchemaPB schema_pb;
+    for (int i = 0; i < 2; i++) {
+        auto col = schema_pb.add_column();
+        col->set_name("c" + std::to_string(i));
+        col->set_type("INT");
+        col->set_is_key(i == 0);
+        col->set_is_nullable(false);
+        col->set_unique_id(i);
+    }
+    auto schema = TabletSchema::create(schema_pb);
+
+    const std::string dir = "./meta_reader_test_dcg_open";
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(dir));
+    (void)fs->delete_dir_recursive(dir);
+    ASSERT_OK(fs->create_dir_recursive(dir));
+    DeferOp defer_op([&] { (void)fs->delete_dir_recursive(dir); });
+    const std::string segment_path = dir + "/seg.dat";
+    const std::string cols_path = dir + "/update.cols";
+    auto write_segment = [&](const std::string& path) {
+        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(path));
+        SegmentWriter writer(std::move(wf), 0, schema, SegmentWriterOptions());
+        ASSERT_OK(writer.init());
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        for (int v : {1, 2, 3}) {
+            c0->append(v);
+            c1->append(v * 10);
+        }
+        auto chunk = std::make_shared<Chunk>(Columns{c0, c1}, std::make_shared<Schema>(schema->schema()));
+        ASSERT_OK(writer.append_chunk(*chunk));
+        uint64_t file_size, index_size, footer_pos;
+        ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_pos));
+    };
+    ASSERT_NO_FATAL_FAILURE(write_segment(segment_path));
+    ASSERT_NO_FATAL_FAILURE(write_segment(cols_path));
+    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{.path = segment_path}, 0, schema));
+
+    // Column uid 1 lives in `update.cols`.
+    auto dcg = std::make_shared<DeltaColumnGroup>();
+    dcg->init(1, {{1}}, {"update.cols"});
+    auto mock_loader = std::make_shared<MockDeltaColumnGroupLoader>();
+    mock_loader->set_dcgs({dcg});
+
+    std::vector<bool> cols_skip_fill;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("Segment::_open:footer_file_options", [&](void* arg) {
+        auto* path_and_opts = static_cast<std::pair<const std::string*, const RandomAccessFileOptions*>*>(arg);
+        if (*path_and_opts->first == cols_path) {
+            cols_skip_fill.push_back(path_and_opts->second->skip_fill_local_cache);
+        }
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+
+    SegmentMetaCollecter collecter(segment);
+    SegmentMetaCollecterParams params;
+    params.fields = {META_COUNT_COL};
+    params.field_type = {TYPE_BIGINT};
+    params.cids = {1};
+    params.read_page = {true};
+    params.tablet_schema = schema;
+    SegmentMetaCollectOptions options;
+    options.is_primary_keys = true;
+    options.tablet_id = 12345;
+    options.pk_rowsetid = 1;
+    options.dcg_loader = mock_loader;
+    ASSERT_OK(collecter.init(&params, options));
+    ASSERT_OK(collecter.open());
+
+    ASSERT_EQ(1, cols_skip_fill.size());
+    EXPECT_FALSE(cols_skip_fill[0]);
+    // The base segment was opened before the scan, so the one segment counted is the `.cols` segment.
+    EXPECT_EQ(1, stats_of(collecter).segments_read_count);
+
+    auto count_col = Int64Column::create();
+    std::vector<Column*> columns = {count_col.get()};
+    ASSERT_OK(collecter.collect(&columns));
+    EXPECT_EQ(3, count_col->get(0).get_int64());
 }
 
 // Integration test for reading from DCG segments with actual column files
