@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg.procedure;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergEncryption;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -58,6 +59,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+
+import static com.starrocks.catalog.IcebergTable.PARTITION_KEY;
 
 /**
  * Registers existing files as Iceberg equality delete files, the delete-side counterpart of add_files.
@@ -128,6 +131,14 @@ public class AddEqualityDeleteFilesProcedure extends IcebergTableProcedure {
         }
 
         Table table = context.table();
+        // Registering files written elsewhere bypasses the sinks, which are where an encrypted table's data
+        // gets its per-file keys: the files would be committed with no key_metadata and sit in a table
+        // configured to be encrypted as plaintext. Refuse rather than let the table silently hold them.
+        if (IcebergEncryption.declaresEncryption(table.properties())) {
+            throw new StarRocksConnectorException(
+                    "%s is not supported on encrypted Iceberg table %s: the files it registers are not encrypted "
+                            + "with keys recorded in this table", "add_equality_delete_files", table.name());
+        }
         int formatVersion = TableUtil.formatVersion(table);
         if (formatVersion < 2) {
             throw new StarRocksConnectorException(
@@ -141,10 +152,12 @@ public class AddEqualityDeleteFilesProcedure extends IcebergTableProcedure {
                             "is not supported");
         }
         checkNoLiveDataInOtherSpecs(table);
-        // with this session variable the scan reads equality deletes that span several specs
+        // with this session variable the scan reads equality deletes that span several specs, except on a table with
+        // a real column named $partition_key
         ConnectContext connectContext = context.context();
         if (connectContext == null ||
-                !connectContext.getSessionVariable().enableReadIcebergEqDeleteWithPartitionEvolution()) {
+                !connectContext.getSessionVariable().enableReadIcebergEqDeleteWithPartitionEvolution() ||
+                table.schema().caseInsensitiveFindField(PARTITION_KEY) != null) {
             checkNoEqualityDeletesInOtherSpecs(table);
         }
         int[] equalityFieldIds = resolveEqualityFieldIds(table.schema(), equalityColumnsArg.getVarchar());

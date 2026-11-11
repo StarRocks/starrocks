@@ -25,12 +25,15 @@ import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.Set;
+
 public class PhysicalIcebergEqualityDeleteScanOperator extends PhysicalScanOperator {
 
     private ScalarOperator originPredicate;
 
     private IcebergTableMORParams tableFullMORParams = IcebergTableMORParams.EMPTY;
     private IcebergMORParams morParams;
+    private Set<String> runtimeFilterPruningColumns = Set.of();
 
     public PhysicalIcebergEqualityDeleteScanOperator(LogicalIcebergEqualityDeleteScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_ICEBERG_EQUALITY_DELETE_SCAN, scanOperator);
@@ -58,6 +61,14 @@ public class PhysicalIcebergEqualityDeleteScanOperator extends PhysicalScanOpera
 
     public void setMORParams(IcebergMORParams morParams) {
         this.morParams = morParams;
+    }
+
+    public Set<String> getRuntimeFilterPruningColumns() {
+        return runtimeFilterPruningColumns;
+    }
+
+    public void setRuntimeFilterPruningColumns(Set<String> runtimeFilterPruningColumns) {
+        this.runtimeFilterPruningColumns = runtimeFilterPruningColumns;
     }
 
     @Override

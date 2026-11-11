@@ -71,7 +71,7 @@ AIProviderErrorCode classify_error(const rapidjson::Value& envelope) {
 } // namespace
 
 StatusOr<AIProviderHttpRequest> DashScopeMultimodalProvider::build_request(const AIChatRequest& request) const {
-    if (request.capability != AICapability::TEXT_EMBEDDING) {
+    if (request.capability != AICapability::EMBEDDING) {
         return Status::NotSupported("DashScope multimodal protocol supports embedding only");
     }
     if (request.model.empty()) return Status::InvalidArgument("AI provider model is empty");
@@ -150,7 +150,7 @@ AIProviderParseResult DashScopeMultimodalProvider::parse_response(std::string_vi
     if (document.HasMember("code") || document.HasMember("type")) {
         return AIProviderStructuredError{.code = classify_error(document), .usage = usage};
     }
-    if (capability != AICapability::TEXT_EMBEDDING) return AIProviderMalformed{.usage = usage};
+    if (capability != AICapability::EMBEDDING) return AIProviderMalformed{.usage = usage};
     const auto output = document.FindMember("output");
     if (output == document.MemberEnd() || !output->value.IsObject()) return AIProviderMalformed{.usage = usage};
     const auto embeddings = output->value.FindMember("embeddings");

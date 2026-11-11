@@ -281,3 +281,93 @@ shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value_schema
 0
 
 -- !result
+-- name: testIcebergV3RequiredColumnWithDefault
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_default_value_required/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+create external catalog `ice_def_req${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_default_value_required/${uuid0}"
+);
+-- result:
+-- !result
+create database ice_def_req${uuid0}.ice_def_db${uuid0};
+-- result:
+-- !result
+create table ice_def_req${uuid0}.ice_def_db${uuid0}.required_test (
+    id int,
+    name string
+) properties (
+    "format-version" = "3"
+);
+-- result:
+-- !result
+insert into ice_def_req${uuid0}.ice_def_db${uuid0}.required_test values (1, 'alice');
+-- result:
+-- !result
+alter table ice_def_req${uuid0}.ice_def_db${uuid0}.required_test add column age int not null default "20";
+-- result:
+-- !result
+alter table ice_def_req${uuid0}.ice_def_db${uuid0}.required_test add column (score int not null default "60", note string);
+-- result:
+-- !result
+alter table ice_def_req${uuid0}.ice_def_db${uuid0}.required_test add column level int not null;
+-- result:
+E: (1064, "Getting analyzing error from line 1, column 124 to line 1, column 138. Detail message: Field 'level' is not null but doesnt have a default value.")
+-- !result
+function: assert_query_contains("show create table ice_def_req${uuid0}.ice_def_db${uuid0}.required_test", 'age` int(11) NOT NULL DEFAULT "20"')
+select * from ice_def_req${uuid0}.ice_def_db${uuid0}.required_test order by id;
+-- result:
+1	alice	20	60	None
+-- !result
+insert into ice_def_req${uuid0}.ice_def_db${uuid0}.required_test (id, name) values (2, 'bob');
+-- result:
+-- !result
+insert into ice_def_req${uuid0}.ice_def_db${uuid0}.required_test values (3, 'carol', DEFAULT, DEFAULT, 'x');
+-- result:
+-- !result
+insert into ice_def_req${uuid0}.ice_def_db${uuid0}.required_test values (4, 'dave', 25, 70, 'y');
+-- result:
+-- !result
+insert into ice_def_req${uuid0}.ice_def_db${uuid0}.required_test values (5, 'eve', 30, 80, DEFAULT);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column has no default value, column=note.')
+-- !result
+insert into ice_def_req${uuid0}.ice_def_db${uuid0}.required_test values (6, 'frank', null, 80, 'z');
+-- result:
+[REGEX]E: \(5609, "NULL value in non-nullable column 'age'.*
+-- !result
+select * from ice_def_req${uuid0}.ice_def_db${uuid0}.required_test order by id;
+-- result:
+1	alice	20	60	None
+2	bob	20	60	None
+3	carol	20	60	x
+4	dave	25	70	y
+-- !result
+select count(*) from ice_def_req${uuid0}.ice_def_db${uuid0}.required_test where age = 20;
+-- result:
+3
+-- !result
+create table ice_def_req${uuid0}.ice_def_db${uuid0}.required_v2 (
+    id int
+) properties (
+    "format-version" = "2"
+);
+-- result:
+-- !result
+alter table ice_def_req${uuid0}.ice_def_db${uuid0}.required_v2 add column age int not null default "20";
+-- result:
+E: (1064, 'column in iceberg table must be nullable, unless it has a default value on a v3 table.')
+-- !result
+drop catalog ice_def_req${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value_required/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

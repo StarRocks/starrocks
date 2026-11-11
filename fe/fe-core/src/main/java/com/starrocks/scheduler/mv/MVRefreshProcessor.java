@@ -20,6 +20,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -347,11 +348,6 @@ public abstract class MVRefreshProcessor {
         return pinState().isPinnedBy(getStartTaskRunId());
     }
 
-<<<<<<< HEAD
-    // Hydrate pinnedTvrMap and each PCTTableSnapshotInfo.pinnedRange from the persistent temp
-    // TVR map. Must run after syncAndCheckPCTPartitions (snapshotBaseTables ready) and after
-    // afterSyncHook (owner installed, if any). No-op for non-pinned runs.
-=======
     /**
      * Freeze the base-table snapshot the scan will read, before partitions are aligned against it.
      * Only the PCT path pins: the temp TVR map is also written by an in-flight IVM execution, so
@@ -365,7 +361,6 @@ public abstract class MVRefreshProcessor {
     // Must run after the base-table snapshots are collected (snapshotBaseTables ready) and
     // after the freeze hook (owner installed, if any), and before partitions are aligned against the
     // pinned ranges. No-op for non-pinned runs.
->>>>>>> 7571ee7e6f0... [BugFix][RB-596] Keep EXPLAIN REFRESH off the state of a refresh in flight (#66215)
     protected void setupPinnedRangesIfNeeded() {
         if (!isPinnedMode()) {
             return;
@@ -645,7 +640,7 @@ public abstract class MVRefreshProcessor {
             final Optional<Table> optTable = MvUtils.getTable(baseTableInfo);
             if (optTable.isEmpty()) {
                 logger.warn("table {} do not exist when refreshing materialized view", baseTableInfo.getTableInfoStr());
-                mv.setInactiveAndReason(
+                AlterMVJobExecutor.inactiveMvFromRefresh(mv,
                         MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 throw new DmlException("Materialized view %s.%s refresh failed: base table %s does not exist",
                         db.getFullName(), mv.getName(), baseTableInfo.getTableInfoStr());
@@ -686,7 +681,7 @@ public abstract class MVRefreshProcessor {
             if (optNewTable.isEmpty()) {
                 logger.warn("table {} does not exist after refreshing materialized view",
                         baseTableInfo.getTableInfoStr());
-                mv.setInactiveAndReason(
+                AlterMVJobExecutor.inactiveMvFromRefresh(mv,
                         MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 throw new DmlException("Materialized view %s.%s refresh failed: base table %s disappeared " +
                                 "after metadata refresh",

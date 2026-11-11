@@ -16,7 +16,6 @@ package com.starrocks.load;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.TupleDescriptor;
@@ -27,6 +26,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.type.VarcharType;
+import com.starrocks.utframe.AIProviderTestUtil;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -48,19 +48,19 @@ public class AILoadExpressionTest {
     @BeforeAll
     public static void setUp() throws Exception {
         AnalyzeTestUtil.init();
-        previousEndpoint = Config.ai_default_chat_endpoint;
-        previousModel = Config.ai_default_chat_model;
-        previousProvider = Config.ai_default_chat_provider;
-        Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
-        Config.ai_default_chat_model = "load-test-model";
-        Config.ai_default_chat_provider = "openai_compatible";
+        previousEndpoint = AIProviderTestUtil.chatProperty("endpoint");
+        previousModel = AIProviderTestUtil.chatProperty("model");
+        previousProvider = AIProviderTestUtil.chatProperty("protocol");
+        AIProviderTestUtil.setChatProperty("endpoint", "https://models.example.test/v1/chat/completions");
+        AIProviderTestUtil.setChatProperty("model", "load-test-model");
+        AIProviderTestUtil.setChatProperty("protocol", "openai");
     }
 
     @AfterAll
     public static void restoreAIConfiguration() {
-        Config.ai_default_chat_endpoint = previousEndpoint;
-        Config.ai_default_chat_model = previousModel;
-        Config.ai_default_chat_provider = previousProvider;
+        AIProviderTestUtil.setChatProperty("endpoint", previousEndpoint);
+        AIProviderTestUtil.setChatProperty("model", previousModel);
+        AIProviderTestUtil.setChatProperty("protocol", previousProvider);
     }
 
     @ParameterizedTest

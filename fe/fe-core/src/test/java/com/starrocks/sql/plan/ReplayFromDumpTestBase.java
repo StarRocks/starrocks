@@ -41,13 +41,17 @@ import org.junit.jupiter.api.BeforeEach;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.zip.GZIPInputStream;
 
 public class ReplayFromDumpTestBase extends StarRocksTestBase {
     public static ConnectContext connectContext;
@@ -57,6 +61,10 @@ public class ReplayFromDumpTestBase extends StarRocksTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
+        // Like PlanTestNoneDBBase: the proc profile collector samples every thread with async-profiler, which can
+        // SIGSEGV the forked test JVM while walking a c1 frame (seen on macOS aarch64)
+        Config.proc_profile_cpu_enable = false;
+        Config.proc_profile_mem_enable = false;
         UtFrameUtils.createMinStarRocksCluster();
         // Should disable Dynamic Partition in replay dump test
         Config.show_execution_groups = false;
@@ -149,8 +157,17 @@ public class ReplayFromDumpTestBase extends StarRocksTestBase {
         Assertions.assertEquals(originCostPlan, replayCostPlan);
     }
 
+    // Large dumps (e.g. query_dump/iceberg_tpcds1t, which list every partition of the fact tables) are checked in
+    // gzipped; a plain <name>.json takes precedence over <name>.json.gz.
     protected static String getDumpInfoFromFile(String fileName) throws Exception {
         String completeFileName = fileName + ".json";
+        String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
+        File gzFile = new File(path + "/" + completeFileName + ".gz");
+        if (!new File(path + "/" + completeFileName).exists() && gzFile.exists()) {
+            try (InputStream in = new GZIPInputStream(new FileInputStream(gzFile))) {
+                return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            }
+        }
         return getContentFromFile(completeFileName);
     }
 

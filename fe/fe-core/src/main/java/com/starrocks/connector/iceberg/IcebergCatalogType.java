@@ -26,6 +26,30 @@ public enum IcebergCatalogType {
     UNKNOWN;
     // TODO: add more iceberg catalog type
 
+    /**
+     * Which external system a catalog of this type contacts, as
+     * {@link com.starrocks.common.util.concurrent.lock.BlockingCallValidator} reports it. The tag is
+     * what makes "lock-held time grouped by transport" aggregatable, so the same system must always
+     * get the same one: a hadoop catalog is a directory tree, so it is storage, and a hive catalog
+     * reaches the metastore through {@code HiveMetaClient}, which tags its own requests.
+     */
+    public String transportTag() {
+        switch (this) {
+            case GLUE_CATALOG:
+                return "iceberg-glue";
+            case REST_CATALOG:
+                return "iceberg-rest";
+            case JDBC_CATALOG:
+                return "iceberg-jdbc";
+            case HADOOP_CATALOG:
+                return "remote-storage";
+            case HIVE_CATALOG:
+                return "hive-metastore";
+            default:
+                return "iceberg-catalog";
+        }
+    }
+
     public static IcebergCatalogType fromString(String catalogType) {
         for (IcebergCatalogType type : IcebergCatalogType.values()) {
             if (type.name().equalsIgnoreCase(String.format("%s_CATALOG", catalogType))) {

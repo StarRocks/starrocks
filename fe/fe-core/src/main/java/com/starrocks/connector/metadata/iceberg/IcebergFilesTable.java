@@ -15,16 +15,24 @@
 package com.starrocks.connector.metadata.iceberg;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorTableId;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
+import com.starrocks.connector.share.iceberg.IcebergPartitionUtils;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.type.MapType;
+import com.starrocks.type.StructType;
 import com.starrocks.type.VarcharType;
+import org.apache.iceberg.PartitionField;
 
 import java.util.List;
 
@@ -44,17 +52,25 @@ public class IcebergFilesTable extends MetadataTable {
         super(catalogName, id, name, type, baseSchema, originDb, originTable, metadataTableType);
     }
 
-    public static IcebergFilesTable create(String catalogName, String originDb, String originTable) {
+    // FILES lists the live files of a snapshot; ALL_DATA_FILES and ALL_DELETE_FILES list the live files of every
+    // manifest reachable from any snapshot, so a file can appear more than once
+    public static IcebergFilesTable create(ConnectContext context, String catalogName, String originDb,
+                                           String originTable, MetadataTableType metadataTableType) {
+        Builder builder = builder()
+                .column("content", INT)
+                .column("file_path", VarcharType.VARCHAR)
+                .column("file_format", VarcharType.VARCHAR)
+                .column("spec_id", INT);
+        // the partition values over the partition fields of all specs, absent for a never-partitioned table
+        StructType partitionType = getPartitionType(context, catalogName, originDb, originTable);
+        if (partitionType != null) {
+            builder.column("partition", partitionType);
+        }
         return new IcebergFilesTable(catalogName,
                 ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(),
                 TABLE_NAME,
                 Table.TableType.METADATA,
-                builder()
-                        .column("content", INT)
-                        .column("file_path", VarcharType.VARCHAR)
-                        .column("file_format", VarcharType.VARCHAR)
-                        .column("spec_id", INT)
-                        .column("record_count", BIGINT)
+                builder.column("record_count", BIGINT)
                         .column("file_size_in_bytes", BIGINT)
                         .column("column_sizes", new MapType(INT, BIGINT))
                         .column("value_counts", new MapType(INT, BIGINT))
@@ -66,10 +82,35 @@ public class IcebergFilesTable extends MetadataTable {
                         .column("sort_id", INT)
                         .column("equality_ids", ARRAY_INT)
                         .column("key_metadata", VARBINARY)
+                        // format v3: the first row id of a data file, and the data file and blob range a deletion
+                        // vector applies to
+                        .column("first_row_id", BIGINT)
+                        .column("referenced_data_file", VarcharType.VARCHAR)
+                        .column("content_offset", BIGINT)
+                        .column("content_size_in_bytes", BIGINT)
                         .build(),
                 originDb,
                 originTable,
-                MetadataTableType.FILES);
+                metadataTableType);
+    }
+
+    static StructType getPartitionType(ConnectContext context, String catalogName, String originDb,
+                                       String originTable) {
+        Table icebergTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(context, catalogName, originDb, originTable);
+        if (icebergTable == null) {
+            throw new StarRocksConnectorException("table [%s.%s.%s] does not exist", catalogName, originDb, originTable);
+        }
+        if (!icebergTable.isIcebergTable()) {
+            throw new StarRocksConnectorException("table [%s.%s.%s] isn't an iceberg table", catalogName, originDb,
+                    originTable);
+        }
+        org.apache.iceberg.Table table = ((IcebergTable) icebergTable).getNativeTable();
+        List<PartitionField> partitionFields = IcebergPartitionUtils.getAllPartitionFields(table);
+        if (partitionFields.isEmpty()) {
+            return null;
+        }
+        return new StructType(IcebergApiConverter.getPartitionColumns(partitionFields, table.schema()), true);
     }
 
     @Override
@@ -83,7 +124,7 @@ public class IcebergFilesTable extends MetadataTable {
 
     @Override
     public boolean isTemporal() {
-        return true;
+        return getMetadataTableType() == MetadataTableType.FILES;
     }
 
     @Override

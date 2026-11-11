@@ -19,7 +19,10 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "gutil/strings/join.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/primary_key_manager.h"
+#include "storage/lake/sst_seek_range.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
@@ -126,12 +129,57 @@ StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_l
         compaction_level++;
     }
 
-    int32_t max_compaction_levels = config::size_tiered_max_compaction_level;
-    while (!order_levels.empty() && compaction_level <= max_compaction_levels) {
-        auto next_level_ptr = std::make_unique<PKSizeTieredLevel>(order_levels.top());
+    // While loads keep arriving, the newest and smallest rowsets give their level the highest score in every
+    // round, so a level of larger rowsets (outputs of earlier rounds, medium-sized loads) is never on top and
+    // only gets merged by the rule above, when a compaction happens to start while the tablet takes no loads.
+    // Until then it keeps growing, and every rowset in it is one more segment for readers to open. Once such a
+    // level holds lake_pk_compaction_max_rowsets_per_level rowsets that still need compaction, merge it into
+    // this compaction, but only when all of them fit in it next to the rowsets already picked
+    // (pick_rowset_indexes stops at update_compaction_result_bytes and lake_pk_compaction_max_input_rowsets):
+    // a level of large rowsets is left to the score as before, and so is any level while the picked one
+    // already takes most of a compaction.
+    const int64_t max_rowsets_per_level = config::lake_pk_compaction_max_rowsets_per_level;
+    double picked_bytes = 0;
+    int64_t picked_rowsets = 0;
+    if (max_rowsets_per_level > 0) {
+        for (auto picked = top_level_ptr->rowsets; !picked.empty(); picked.pop()) {
+            picked_bytes += picked.top().read_bytes();
+        }
+        picked_rowsets = static_cast<int64_t>(top_level_ptr->rowsets.size());
+    }
+    // Take the other levels out of the heap once, in descending score order, and choose the overfull level on
+    // the way; the scan for other-level rowsets below walks the same vector.
+    std::vector<PKSizeTieredLevel> other_levels;
+    other_levels.reserve(order_levels.size());
+    int overfull_index = -1;
+    while (!order_levels.empty()) {
+        const auto& level = order_levels.top();
+        if (max_rowsets_per_level > 0 && level.num_compactable_rowsets >= max_rowsets_per_level &&
+            picked_bytes + level.compactable_bytes <= static_cast<double>(config::update_compaction_result_bytes) &&
+            picked_rowsets + level.num_compactable_rowsets <= config::lake_pk_compaction_max_input_rowsets &&
+            (overfull_index < 0 ||
+             level.num_compactable_rowsets > other_levels[overfull_index].num_compactable_rowsets)) {
+            overfull_index = static_cast<int>(other_levels.size());
+        }
+        other_levels.push_back(level);
         order_levels.pop();
-        if (next_level_ptr->get_compact_level() < top_level_ptr->get_compact_level()) {
-            top_level_ptr->add_other_level_rowsets(*next_level_ptr);
+    }
+    if (overfull_index >= 0) {
+        auto& overfull_level = other_levels[overfull_index];
+        top_level_ptr->overfull.level_size = overfull_level.compact_level;
+        top_level_ptr->overfull.rowsets = overfull_level.num_compactable_rowsets;
+        top_level_ptr->merge_compactable_rowsets(overfull_level);
+        compaction_level++;
+    }
+
+    int32_t max_compaction_levels = config::size_tiered_max_compaction_level;
+    for (int i = 0; i < static_cast<int>(other_levels.size()) && compaction_level <= max_compaction_levels; ++i) {
+        if (i == overfull_index) {
+            continue;
+        }
+        auto& next_level = other_levels[i];
+        if (next_level.get_compact_level() < top_level_ptr->get_compact_level()) {
+            top_level_ptr->add_other_level_rowsets(next_level);
             compaction_level++;
         }
     }
@@ -153,15 +201,68 @@ static bool carries_shared_segment(const RowsetMetadataPB& rowset) {
                        [](const SegmentMetadataPB& segment) { return segment.shared(); });
 }
 
+// A rowset holds a file shared with a split sibling when any of its segments, any of its del files,
+// or a DCG/IDG sidecar keyed by one of its segments' rssids is shared.
+// The kinds mirror tablet_reshard_helper::has_shared_files, except the tablet-wide index files.
+static bool holds_shared_file(const TabletMetadataPB& metadata, const RowsetMetadataPB& rowset) {
+    if (carries_shared_segment(rowset) || std::any_of(rowset.del_files().begin(), rowset.del_files().end(),
+                                                      [](const DelfileWithRowsetId& del) { return del.shared(); })) {
+        return true;
+    }
+    const auto& dcgs = metadata.dcg_meta().dcgs();
+    const auto& idgs = metadata.idg_meta().idgs();
+    for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+        const uint32_t rssid = get_rssid(rowset, i);
+        if (auto it = dcgs.find(rssid);
+            it != dcgs.end() && std::any_of(it->second.shared_files().begin(), it->second.shared_files().end(),
+                                            [](bool shared) { return shared; })) {
+            return true;
+        }
+        if (auto it = idgs.find(rssid);
+            it != idgs.end() && std::any_of(it->second.entries().begin(), it->second.entries().end(),
+                                            [](const IndexDeltaGroupEntryPB& entry) { return entry.shared_file(); })) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// UNSHARE picks every rowset that holds any file shared with a split sibling (segment, del file,
+// or DCG/IDG sidecar). A tablet whose sort key differs from the primary key keeps the narrower
+// rule: only rowsets with a shared segment.
+static bool unshare_picks(const TabletMetadataPB& metadata, const RowsetMetadataPB& rowset, bool separate_sort_key) {
+    return separate_sort_key ? carries_shared_segment(rowset) : holds_shared_file(metadata, rowset);
+}
+
 StatusOr<std::vector<RowsetPtr>> UnshareCompactionPolicy::pick_rowsets() {
+    const bool separate_sort_key = TabletSchema::create(_tablet_metadata->schema())->has_separate_sort_key();
     std::vector<RowsetPtr> input_rowsets;
     for (int i = 0; i < _tablet_metadata->rowsets_size(); ++i) {
-        if (carries_shared_segment(_tablet_metadata->rowsets(i))) {
+        if (unshare_picks(*_tablet_metadata, _tablet_metadata->rowsets(i), separate_sort_key)) {
             input_rowsets.emplace_back(
                     std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, 0 /* compaction_segment_limit */));
         }
     }
     return input_rowsets;
+}
+
+StatusOr<bool> UnshareCompactionPolicy::has_work(const TabletMetadataPB& metadata) {
+    const auto schema = TabletSchema::create(metadata.schema());
+    const bool separate_sort_key = schema->has_separate_sort_key();
+    if (std::any_of(metadata.rowsets().begin(), metadata.rowsets().end(), [&](const RowsetMetadataPB& rowset) {
+            return unshare_picks(metadata, rowset, separate_sort_key);
+        })) {
+        return true;
+    }
+    // Mirrors the index step of an UNSHARE, which runs only without a separate sort key.
+    if (separate_sort_key || !metadata.has_range()) {
+        return false;
+    }
+    ASSIGN_OR_RETURN(auto tablet_range, TabletRangeHelper::create_sst_seek_range_from(metadata.range(), schema));
+    const auto& sstables = metadata.sstable_meta().sstables();
+    return std::any_of(sstables.begin(), sstables.end(), [&](const PersistentIndexSstablePB& sstable) {
+        return sstable_needs_rewrite(sstable, &tablet_range);
+    });
 }
 
 StatusOr<CompactionAlgorithm> UnshareCompactionPolicy::choose_compaction_algorithm(
@@ -377,7 +478,8 @@ static bool skip_sparse_low_score_level(const PKSizeTieredLevel& pick_level,
 }
 
 StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
-        const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, std::vector<bool>* has_dels) {
+        const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, std::vector<bool>* has_dels,
+        OverfullMergeInfo* overfull) {
     bool is_real_time = is_real_time_compaction_strategy(tablet_metadata);
     PrimaryKeyManager* mgr = _tablet_mgr->primary_key_mgr();
     std::vector<int64_t> rowset_indexes;
@@ -407,6 +509,9 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
     ASSIGN_OR_RETURN(auto pick_level_ptr, pick_max_level(rowset_vec));
     if (pick_level_ptr == nullptr) {
         return rowset_indexes;
+    }
+    if (overfull != nullptr) {
+        *overfull = pick_level_ptr->overfull;
     }
 
     // 2b. Skip low-value sparse mid-tier picks (see skip_sparse_low_score_level).
@@ -563,7 +668,16 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
     }
 
     std::vector<RowsetPtr> input_rowsets;
-    ASSIGN_OR_RETURN(auto rowset_indexes, pick_rowset_indexes(tablet_metadata, has_dels));
+    OverfullMergeInfo overfull;
+    ASSIGN_OR_RETURN(auto rowset_indexes, pick_rowset_indexes(tablet_metadata, has_dels, &overfull));
+    if (overfull.rowsets > 0 && !rowset_indexes.empty()) {
+        // Logged on the compaction path only: the compaction score is computed with the same pick on every publish.
+        LOG(INFO) << "lake PK compaction merges an overfull level: tablet=" << tablet_metadata->id()
+                  << " version=" << tablet_metadata->version() << " level_size=" << overfull.level_size
+                  << " level_rowsets=" << overfull.rowsets
+                  << " max_rowsets_per_level=" << config::lake_pk_compaction_max_rowsets_per_level
+                  << " input_rowsets=" << rowset_indexes.size();
+    }
     input_rowsets.reserve(rowset_indexes.size());
     for (auto rowset_index : rowset_indexes) {
         input_rowsets.emplace_back(

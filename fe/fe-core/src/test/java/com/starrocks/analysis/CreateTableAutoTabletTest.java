@@ -277,6 +277,69 @@ public class CreateTableAutoTabletTest {
     }
 
     @Test
+    public void testCreateColocateTableAutoBuckets() throws Exception {
+        PseudoCluster cluster = PseudoCluster.getInstance();
+        cluster.runSql("db_for_auto_tablets",
+                " CREATE TABLE colocate_auto_buckets (" +
+                        "    k1 date," +
+                        "    k2 int(11)," +
+                        "    k3 smallint(6)," +
+                        "    v1 varchar(2048)," +
+                        "    v2 datetime" +
+                        "  ) ENGINE=OLAP" +
+                        "  DUPLICATE KEY(k1, k2, k3) " +
+                        "  PARTITION BY RANGE(k1)" +
+                        "  (PARTITION p20230306 VALUES [('2023-03-06'), ('2023-03-07')))" +
+                        "  DISTRIBUTED BY HASH(k2) " +
+                        "  PROPERTIES (" +
+                        "   'replication_num' = '1'," +
+                        "   'colocate_with' = 'g_auto');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_for_auto_tablets");
+        if (db == null) {
+            return;
+        }
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "colocate_auto_buckets");
+        if (table == null) {
+            return;
+        }
+
+        int bucketNum = 0;
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        try {
+            Partition partition = table.getPartition("p20230306");
+            bucketNum = partition.getDistributionInfo().getBucketNum();
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+        Assertions.assertTrue(bucketNum > 0, "colocate CREATE without BUCKETS must auto-infer buckets");
+
+        String fullGroupName = db.getId() + "_g_auto";
+        ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateGroupSchema groupSchema = index.getGroupSchema(fullGroupName);
+        Assertions.assertNotNull(groupSchema);
+        Assertions.assertEquals(groupSchema.getBucketsNum(), bucketNum);
+        Assertions.assertEquals(bucketNum, table.getDefaultDistributionInfo().getBucketNum());
+
+        cluster.runSql("db_for_auto_tablets",
+                "ALTER TABLE colocate_auto_buckets ADD PARTITION p20230312 " +
+                        "VALUES [('2023-03-12'), ('2023-03-13'))");
+        checkTableStateToNormal(table);
+
+        int addedBucketNum = 0;
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        try {
+            Partition partition = table.getPartition("p20230312");
+            addedBucketNum = partition.getDistributionInfo().getBucketNum();
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+        Assertions.assertEquals(groupSchema.getBucketsNum(), addedBucketNum);
+    }
+
+    @Test
     public void createBadDbName() {
         String longDbName = new String(new char[257]).replace('\0', 'a');
         String sql = "create database " + longDbName;

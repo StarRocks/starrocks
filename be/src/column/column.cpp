@@ -68,27 +68,16 @@ void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& sli
     }
 }
 
-bool Column::empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, const ImmBuffer<uint32_t>& offsets) {
-    DCHECK_EQ(null_data.size(), this->size());
-    if (!is_array() && !is_map()) {
-        throw std::runtime_error("empty_null_in_complex_column() only works for array and map column.");
-    }
-    bool need_empty = false;
-    size_t size = this->size();
-    if (size + 1 != offsets.size()) {
-        throw std::runtime_error(
-                fmt::format("inputs offsets' size {} != the column's offsets' size {}.", offsets.size(), size + 1));
-    }
+bool has_payload_under_null_rows(const uint8_t* nulls, const uint32_t* offsets, size_t num_rows) {
+    bool found = false;
 #if defined(__AVX2__) && !defined(__AVX512F__)
     // Branchless scan of 8 entries per step: a null entry that still spans a non-empty range needs emptying.
     {
-        const uint32_t* offs = offsets.data();
-        const uint8_t* nulls = null_data.data();
         const __m256i zero = _mm256_setzero_si256();
         size_t i = 0;
-        for (; i + 8 <= size && !need_empty; i += 8) {
-            __m256i cur = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(offs + i));
-            __m256i nxt = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(offs + i + 1));
+        for (; i + 8 <= num_rows && !found; i += 8) {
+            __m256i cur = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(offsets + i));
+            __m256i nxt = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(offsets + i + 1));
             // eq lanes are all-ones where offset == next offset, i.e. the entry is empty.
             __m256i eq = _mm256_cmpeq_epi32(cur, nxt);
 
@@ -98,23 +87,21 @@ bool Column::empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, c
             __m256i nullmask = _mm256_cmpgt_epi32(nulls32, zero);
 
             // found = (~eq) & nullmask: a null entry whose range is non-empty.
-            __m256i found = _mm256_andnot_si256(eq, nullmask);
-            need_empty = !_mm256_testz_si256(found, found);
+            __m256i hit = _mm256_andnot_si256(eq, nullmask);
+            found = !_mm256_testz_si256(hit, hit);
         }
         // Scalar tail
-        for (; i < size && !need_empty; ++i) {
-            if (null_data[i] && offsets[i + 1] != offsets[i]) {
-                need_empty = true;
+        for (; i < num_rows && !found; ++i) {
+            if (nulls[i] && offsets[i + 1] != offsets[i]) {
+                found = true;
             }
         }
     }
 #elif defined(__ARM_NEON) && defined(__aarch64__)
     // Branchless scan of 8 entries per step: a null entry that still spans a non-empty range needs emptying.
     {
-        const uint32_t* offs = offsets.data();
-        const uint8_t* nulls = null_data.data();
         size_t i = 0;
-        for (; i + 8 <= size && !need_empty; i += 8) {
+        for (; i + 8 <= num_rows && !found; i += 8) {
             uint16x8_t n16 = vmovl_u8(vld1_u8(nulls + i));
             uint32x4_t nlo = vmovl_u16(vget_low_u16(n16));
             uint32x4_t nhi = vmovl_u16(vget_high_u16(n16));
@@ -123,29 +110,43 @@ bool Column::empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, c
             uint32x4_t null_hi = vtstq_u32(nhi, nhi);
 
             // eq lanes are all-ones where offset == next offset, i.e. the entry is empty.
-            uint32x4_t eq_lo = vceqq_u32(vld1q_u32(offs + i), vld1q_u32(offs + i + 1));
-            uint32x4_t eq_hi = vceqq_u32(vld1q_u32(offs + i + 4), vld1q_u32(offs + i + 5));
+            uint32x4_t eq_lo = vceqq_u32(vld1q_u32(offsets + i), vld1q_u32(offsets + i + 1));
+            uint32x4_t eq_hi = vceqq_u32(vld1q_u32(offsets + i + 4), vld1q_u32(offsets + i + 5));
 
-            // found = (~eq) & null: a null entry whose range is non-empty.
-            uint32x4_t found = vorrq_u32(vbicq_u32(null_lo, eq_lo), vbicq_u32(null_hi, eq_hi));
-            if (vmaxvq_u32(found) != 0) {
-                need_empty = true;
+            // hit = (~eq) & null: a null entry whose range is non-empty.
+            uint32x4_t hit = vorrq_u32(vbicq_u32(null_lo, eq_lo), vbicq_u32(null_hi, eq_hi));
+            if (vmaxvq_u32(hit) != 0) {
+                found = true;
             }
         }
         // Scalar tail
-        for (; i < size && !need_empty; ++i) {
-            if (null_data[i] && offsets[i + 1] != offsets[i]) {
-                need_empty = true;
+        for (; i < num_rows && !found; ++i) {
+            if (nulls[i] && offsets[i + 1] != offsets[i]) {
+                found = true;
             }
         }
     }
 #else
-    for (size_t i = 0; i < size && !need_empty; ++i) {
-        if (null_data[i] && offsets[i + 1] != offsets[i]) {
-            need_empty = true;
+    for (size_t i = 0; i < num_rows && !found; ++i) {
+        if (nulls[i] && offsets[i + 1] != offsets[i]) {
+            found = true;
         }
     }
 #endif
+    return found;
+}
+
+bool Column::empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, const ImmBuffer<uint32_t>& offsets) {
+    DCHECK_EQ(null_data.size(), this->size());
+    if (!is_array() && !is_map()) {
+        throw std::runtime_error("empty_null_in_complex_column() only works for array and map column.");
+    }
+    size_t size = this->size();
+    if (size + 1 != offsets.size()) {
+        throw std::runtime_error(
+                fmt::format("inputs offsets' size {} != the column's offsets' size {}.", offsets.size(), size + 1));
+    }
+    const bool need_empty = has_payload_under_null_rows(null_data.data(), offsets.data(), size);
     // TODO: copy too much may result in worse performance.
     if (need_empty) {
         auto new_column = clone_empty();
@@ -171,6 +172,10 @@ bool Column::empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, c
 
 void Column::fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
     fnv_hash_column(*this, seed, from, to);
+}
+
+void Column::fnv_hash_rebased(uint32_t* seed, uint32_t from, uint32_t to) const {
+    fnv_hash_column_rebased(*this, seed, from, to);
 }
 
 void Column::fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {

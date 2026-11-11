@@ -15,7 +15,7 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - [非同期マテリアライズドビューのメトリクスに関するメトリクス](../metrics-materialized_view.md)
 - [共有データダッシュボードのメトリクス、およびスターレットダッシュボードのメトリクスに関するメトリクス](../metrics-shared-data.md)
 
-StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../monitoring.md)。
+StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../prometheus_grafana.md)。
 
 :::
 
@@ -268,6 +268,55 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: バイト
 - 説明: JITコンパイルされた関数キャッシュによって使用されるメモリ。
 
+## `jvm_heap_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used`、`committed`、または `max`)
+- 説明: BE プロセスに組み込まれた JVM のヒープメモリ。`used` はオブジェクトが占有しているメモリ、`committed` は JVM がオペレーティングシステムから確保しているメモリ、`max` はヒープサイズの上限です。FE ノードも自身の JVM について同じ名前のメトリクスをエクスポートしますが、ここでは BE のメトリクスについて説明します。
+  - BE の JVM メトリクス (このセクションのすべての `jvm_*_size_bytes` メトリクス) は、BE 設定項目 `enable_jvm_metrics` が `true` (デフォルト) で、BE 起動時に環境変数 `JAVA_HOME` が設定されている場合にのみエクスポートされます。
+  - BE はこれらのメトリクスを収集するために JVM を起動しません。BE プロセス内で JVM が作成されるまで (たとえば HDFS へのアクセス、JNI ベースのスキャナー、Java UDF の使用時)、すべての値は `0` のままです。
+  - BE 設定項目 `enable_metric_calculator` が `true` (デフォルト) の場合、値は 15 秒ごとに更新されます。それ以外の場合は、メトリクスの取得時に更新されます。
+  - `enable_jvm_memory_tracker` が `true` (デフォルト) の場合、コミット済みのヒープメモリと非ヒープメモリは BE の `jvm` メモリトラッカーにも計上されます。
+
+## `jvm_non_heap_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used` または `committed`)
+- 説明: BE プロセスに組み込まれた JVM の非ヒープメモリ (Metaspace やコードキャッシュなど)。`max` の値はエクスポートされません。BE の JVM メトリクスがエクスポートされる条件については、[`jvm_heap_size_bytes`](#jvm_heap_size_bytes) を参照してください。
+
+## `jvm_old_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used`、`committed`、`max`、`peak_used`、または `peak_max`)
+- 説明: BE プロセスに組み込まれた JVM の Old 世代メモリプール。各 `type` の意味とサポートされるガベージコレクターについては、[`jvm_young_size_bytes`](#jvm_young_size_bytes) を参照してください。
+
+## `jvm_perm_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used`、`committed`、`max`、`peak_used`、または `peak_max`)
+- 説明: BE プロセスに組み込まれた JVM の Metaspace (Java 7 以前では Permanent 世代)。JVM オプション `-XX:MaxMetaspaceSize` が設定されていない限り Metaspace には上限が定義されていないため、`max` と `peak_max` は通常 `-1` です。各 `type` の意味については、[`jvm_young_size_bytes`](#jvm_young_size_bytes) を参照してください。
+
+## `jvm_survivor_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used`、`committed`、`max`、`peak_used`、または `peak_max`)
+- 説明: BE プロセスに組み込まれた JVM の Survivor 領域メモリプール。デフォルトの G1 コレクターを使用する場合、`max` と `peak_max` は `-1` です。各 `type` の意味とサポートされるガベージコレクターについては、[`jvm_young_size_bytes`](#jvm_young_size_bytes) を参照してください。
+
+## `jvm_young_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used`、`committed`、`max`、`peak_used`、または `peak_max`)
+- 説明: BE プロセスに組み込まれた JVM の Young 世代 (Eden 領域) メモリプール。デフォルトの G1 コレクターを使用する場合、`max` と `peak_max` は `-1` です。BE の JVM メトリクスがエクスポートされる条件については、[`jvm_heap_size_bytes`](#jvm_heap_size_bytes) を参照してください。
+  - `used`、`committed`、`max` はメモリプールの現在の使用状況です。`peak_used` と `peak_max` は、JVM がメモリプールについて記録するピーク使用状況 (`MemoryPoolMXBean.getPeakUsage()`) から取得されます。`peak_used` は `used` の最大値で、`peak_max` はそのピーク使用状況の記録に含まれる `max` フィールドです。`peak_max` は `max` の最大値を別途追跡したものではないため、メモリプールの容量を監視するには `peak_max` ではなく `max` を使用してください。ピーク使用状況は、JVM の起動時または最後にリセットされた時点から記録されます。BE はピーク使用状況をリセットしないため、リセットされるのは BE の再起動時だけです。
+  - `max` または `peak_max` が `-1` の場合、そのメモリプールにはサイズの上限が定義されていないことを意味します。エラーを示すものではありません。
+  - `jvm_young_size_bytes`、`jvm_survivor_size_bytes`、`jvm_old_size_bytes` はメモリプール名で照合されるため、JVM が Serial、Parallel、CMS、または G1 ガベージコレクターを使用している場合にのみ値が設定されます。ZGC または Shenandoah では `0` のままです。`jvm_heap_size_bytes` と `jvm_non_heap_size_bytes` は影響を受けません。
+
 ## `lake_compaction_held_segment_bytes`
 
 - 単位: バイト
@@ -346,6 +395,48 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: 件数
 - タイプ: 累積
 - 説明: 共有データモード専用。主キーテーブルの Publish 時に、tablet の主キーインデックスが主キーインデックスキャッシュになく、インデックス全体をロードする必要があった回数。インデックスがキャッシュにないのは、BE の起動後にまだロードされていないか、削除（evict）されたためです。ロードでは、その tablet のすべての主キーインデックス SST ファイルを開き、それらのファイルがまだカバーしていない rowset を再生します。失敗したロードも数えられます。ロード先の tablet が変わらないのにこの値が増え続ける場合、インデックスの削除と再ロードが繰り返されています。
+
+## `lake_publish_batch_retry_total`
+
+- 単位: 件数
+- タイプ: 累積
+- 説明: 共有データクラスタで、完了しなかった試行を再試行したバッチ発行の回数。つまり、バッチの最初のトランザクションが以前の試行ですでに送信されていたものです。`lake_enable_batch_publish_retry_freeze` が `true` の場合、このような再試行には以前の試行のトランザクションだけが含まれます。このカウンタを増加させるのは Leader FE のみです。
+
+## `lake_publish_partial_meta_written`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: この BE/CN の起動以降、tablet の publish 結果をこのノードの Data Cache に書き込んだ累積回数。BE 設定項目 `lake_enable_publish_partial_meta` が `true` の場合のみ、File Bundling が有効なテーブルについてカウントされます。tablet の publish がリクエスト到着から publish RPC タイムアウト + 3 秒を超えて完了した場合、または publish が再試行の場合に結果を書き込みます。保持済みの結果を使った再試行でも、もう一度書き込みます。同じノードでの後続の再試行は、再適用せずにこの結果を読み出します（`lake_publish_skipped_by_partial_meta` を参照）。共有データクラスタのみ。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
+
+## `lake_publish_skipped_by_partial_meta`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: この BE/CN の起動以降、再試行された publish が、このノードの Data Cache に保持された tablet の publish 結果（`lake_publish_partial_meta_written` を参照）を使い、トランザクションを再適用しなかった tablet の累積回数。BE 設定項目 `lake_enable_publish_partial_meta` が `true` の場合のみ、File Bundling が有効なテーブルについてカウントされます。共有データクラスタのみ。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
+
+## `lake_publish_version_skipped_durable`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: この BE/CN の起動以降、再試行された publish が、ストレージにすでに書き込まれている新しいバージョンの tablet メタデータを使い、トランザクションを再適用しなかった tablet の累積回数。再試行（そのパーティションの以前の publish リクエストが送信され、完了しなかった場合）で、新しいバージョンがメタデータキャッシュにない場合のみカウントされます。メタデータキャッシュでヒットした tablet と初回の publish はカウントされません。共有データクラスタのみ。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
+
+## `lake_segment_cache_hit_minute`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: 共有データクラスタにおける、直近 60 秒間の segment メタデータキャッシュのルックアップヒット数。ヒットはキャッシュ内の候補が見つかったことを示しますが、そのスキーマがリクエストと互換性を持たない場合、再利用が拒否されることがあります。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
+
+## `lake_segment_cache_miss_minute`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: 共有データクラスタにおける、直近 60 秒間の segment メタデータキャッシュのルックアップで、キャッシュエントリが見つからなかった回数。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
+
+## `lake_segment_cache_schema_reject_total`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: この BE/CN の起動以降、スキーマが存在しない、または要求されたスキーマと互換性がないために、キャッシュ済み segment 候補の再利用が拒否された累積回数。キャッシュへの追加が有効な場合、拒否されたエントリが引き続き同じ segment を参照しているときに限り、アトミックに置き換えます。既存のリーダーは元の segment を引き続き使用します。それ以外の場合、リクエストはプライベート segment を開きます。ルックアップミス後の並行キャッシュ挿入で互換性のない候補が返された場合も含むため、この値をルックアップヒット数から直接差し引くことはできません。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
 
 ## `lake_tablet_location_handoff_entries`
 
@@ -735,6 +826,8 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: バイト
 - 説明: このプロセスが使用するメモリ。
+
+このメトリクスには、`passthrough_mem_bytes` が追跡するローカル pass-through バッファのメモリが含まれます。pass-through メトリクスはプロセス合計の一部であり、追加のメモリではありません。合計使用量を計算する際に両者を加算しないでください。このメモリ計上値はコンテナの RSS とは異なります。
 
 ## `process_thread_num`
 

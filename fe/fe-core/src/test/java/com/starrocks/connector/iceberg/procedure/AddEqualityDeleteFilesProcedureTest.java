@@ -48,6 +48,7 @@ import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.MessageTypeParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.Mockito;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -56,6 +57,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.catalog.IcebergTable.PARTITION_KEY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -74,6 +76,21 @@ public class AddEqualityDeleteFilesProcedureTest {
 
     @TempDir
     File tempDir;
+
+    @Test
+    public void testRefusesAnEncryptedTable() {
+        // Like add_files: the registered delete files bypass the sinks, so they would carry no key_metadata
+        // in a table declared encrypted.
+        Table table = Mockito.mock(Table.class);
+        Mockito.when(table.properties()).thenReturn(Map.of("encryption.key-id", "my-kms-key"));
+        Mockito.when(table.name()).thenReturn("db.enc_tbl");
+        IcebergTableProcedureContext context = new IcebergTableProcedureContext(
+                null, table, null, null, new HdfsEnvironment(), null, null);
+        StarRocksConnectorException exception = assertThrows(StarRocksConnectorException.class,
+                () -> AddEqualityDeleteFilesProcedure.getInstance().execute(context, args("deletes", "parquet", "id")));
+        assertTrue(exception.getMessage().contains("add_equality_delete_files is not supported on encrypted"),
+                exception.getMessage());
+    }
 
     @Test
     public void testPartitionedDeleteIsScopedToItsPartition() throws Exception {
@@ -194,6 +211,26 @@ public class AddEqualityDeleteFilesProcedureTest {
         connectContext.getSessionVariable().setEnableReadIcebergEqDeleteWithPartitionEvolution(true);
         execute(table, args("new_deletes", "parquet", "id"), connectContext);
         assertEquals(List.of(2), deletesPerDataFile(table).values().stream().toList());
+    }
+
+    @Test
+    public void testRejectsEqualityDeletesUnderOlderSpecWithPartitionKeyColumn() throws Exception {
+        writeIdFile("old_deletes/p=a/delete.parquet", 1);
+        writeIdFile("new_deletes/delete.parquet", 2);
+
+        // a real $partition_key column keeps the scan from reading deletes of two specs, so the check stays on
+        Table table = createTable(PartitionSpec.builderFor(SCHEMA).identity("p").build(), "2");
+        appendDataFile(table, "p=a");
+        execute(table, args("old_deletes", "parquet", "id"));
+        table.updateSpec().removeField("p").commit();
+        table.updateSchema().addColumn(PARTITION_KEY, Types.StringType.get()).commit();
+        long snapshotId = table.currentSnapshot().snapshotId();
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.getSessionVariable().setEnableReadIcebergEqDeleteWithPartitionEvolution(true);
+        StarRocksConnectorException e = assertThrows(StarRocksConnectorException.class,
+                () -> execute(table, args("new_deletes", "parquet", "id"), connectContext));
+        assertTrue(e.getMessage().contains("equality delete files written under partition spec 0"), e.getMessage());
+        assertEquals(snapshotId, table.currentSnapshot().snapshotId());
     }
 
     @Test

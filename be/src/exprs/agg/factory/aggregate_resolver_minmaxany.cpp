@@ -26,33 +26,33 @@ namespace starrocks {
 
 void AggregateFuncResolver::register_bitmap() {
     add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT, BitmapValue>(
-            "bitmap_union_int", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_TINYINT>());
+            "bitmap_union_int", kWithoutWindow, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_TINYINT>());
     add_aggregate_mapping<TYPE_SMALLINT, TYPE_BIGINT, BitmapValue>(
-            "bitmap_union_int", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_SMALLINT>());
+            "bitmap_union_int", kWithoutWindow, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_SMALLINT>());
     add_aggregate_mapping<TYPE_INT, TYPE_BIGINT, BitmapValue>(
-            "bitmap_union_int", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_INT>());
+            "bitmap_union_int", kWithoutWindow, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_INT>());
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT, BitmapValue>(
-            "bitmap_union_int", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_BIGINT>());
-    add_aggregate_mapping<TYPE_OBJECT, TYPE_OBJECT, BitmapValue>("bitmap_union", true,
+            "bitmap_union_int", kWithoutWindow, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_BIGINT>());
+    add_aggregate_mapping<TYPE_OBJECT, TYPE_OBJECT, BitmapValue>("bitmap_union", kWithWindow,
                                                                  AggregateFactory::MakeBitmapUnionAggregateFunction());
 
     add_aggregate_mapping<TYPE_BOOLEAN, TYPE_OBJECT, BitmapValue>(
-            "bitmap_agg", false, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_BOOLEAN>());
+            "bitmap_agg", kWithoutWindow, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_BOOLEAN>());
     add_aggregate_mapping<TYPE_TINYINT, TYPE_OBJECT, BitmapValue>(
-            "bitmap_agg", false, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_TINYINT>());
+            "bitmap_agg", kWithoutWindow, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_TINYINT>());
     add_aggregate_mapping<TYPE_SMALLINT, TYPE_OBJECT, BitmapValue>(
-            "bitmap_agg", false, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_SMALLINT>());
+            "bitmap_agg", kWithoutWindow, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_SMALLINT>());
     add_aggregate_mapping<TYPE_INT, TYPE_OBJECT, BitmapValue>(
-            "bitmap_agg", false, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_INT>());
+            "bitmap_agg", kWithoutWindow, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_INT>());
     add_aggregate_mapping<TYPE_BIGINT, TYPE_OBJECT, BitmapValue>(
-            "bitmap_agg", false, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_BIGINT>());
+            "bitmap_agg", kWithoutWindow, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_BIGINT>());
     add_aggregate_mapping<TYPE_LARGEINT, TYPE_OBJECT, BitmapValue>(
-            "bitmap_agg", false, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_LARGEINT>());
+            "bitmap_agg", kWithoutWindow, AggregateFactory::MakeBitmapAggAggregateFunction<TYPE_LARGEINT>());
 
     add_aggregate_mapping<TYPE_OBJECT, TYPE_OBJECT, BitmapValuePacked>(
-            "bitmap_intersect", false, AggregateFactory::MakeBitmapIntersectAggregateFunction());
+            "bitmap_intersect", kWithoutWindow, AggregateFactory::MakeBitmapIntersectAggregateFunction());
     add_aggregate_mapping<TYPE_OBJECT, TYPE_BIGINT, BitmapValue>(
-            "bitmap_union_count", true, AggregateFactory::MakeBitmapUnionCountAggregateFunction());
+            "bitmap_union_count", kWithWindow, AggregateFactory::MakeBitmapUnionCountAggregateFunction());
 }
 
 struct MinMaxAnyDispatcher {
@@ -60,14 +60,14 @@ struct MinMaxAnyDispatcher {
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (lt_is_aggregate<lt> || lt_is_json<lt>) {
             resolver->add_aggregate_mapping<lt, lt, MinAggregateData<lt>>(
-                    "min", true, AggregateFactory::MakeMinAggregateFunction<lt>());
+                    "min", kWithWindow, AggregateFactory::MakeMinAggregateFunction<lt>());
             resolver->add_aggregate_mapping<lt, lt, MaxAggregateData<lt>>(
-                    "max", true, AggregateFactory::MakeMaxAggregateFunction<lt>());
+                    "max", kWithWindow, AggregateFactory::MakeMaxAggregateFunction<lt>());
             // For json type, use `AnyValueSemiState` state to store the value as other semi structures.
             // This is because any_value's agg state may be flat json and cannot extract `JsonValue` from it directly.
             if (lt_is_aggregate<lt>) {
                 resolver->add_aggregate_mapping<lt, lt, AnyValueAggregateData<lt>>(
-                        "any_value", true, AggregateFactory::MakeAnyValueAggregateFunction<lt>());
+                        "any_value", kWithWindow, AggregateFactory::MakeAnyValueAggregateFunction<lt>());
             }
         }
     }
@@ -82,7 +82,7 @@ struct MinNDispatcher {
             AggregateFunctionPtr func = AggregateFactory::MakeMinNAggregateFunction<lt>();
             using MinNState = MinMaxNAggregateState<lt, true>;
             // Use add_aggregate_mapping with IgnoreNull=false to support nullable array elements
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, MinNState>("min_n", false, func);
+            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, MinNState>("min_n", kWithoutWindow, func);
         }
     }
 };
@@ -96,7 +96,7 @@ struct MaxNDispatcher {
             AggregateFunctionPtr func = AggregateFactory::MakeMaxNAggregateFunction<lt>();
             using MaxNState = MinMaxNAggregateState<lt, false>;
             // Use add_aggregate_mapping with IgnoreNull=false to support nullable array elements
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, MaxNState>("max_n", false, func);
+            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, MaxNState>("max_n", kWithoutWindow, func);
         }
     }
 };

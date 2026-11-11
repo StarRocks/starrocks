@@ -22,21 +22,14 @@
 
 namespace starrocks {
 
-// Non-owning callback/context: the query owns that context for the partition
-// lifetime.
-struct GeoCoverageCheckpoint {
-    void* context = nullptr;
-    Status (*check)(void*) = nullptr;
-};
-
 // One complete partition. Admission precedes payload copies/decode; no row is
 // available until finish succeeds. Holds original and output native WKB with
 // positional mapping, including NULL/EMPTY and MULTIPOLYGON members. The caller
 // owns descriptor compatibility. Standard allocations use the BE memory hooks;
-// the checkpoint supplies cancellation/query-status/memory checks.
+// the aggregation framework handles cancellation and query-state checks.
 class GeoCoverageSimplify {
 public:
-    static StatusOr<std::unique_ptr<GeoCoverageSimplify>> create(GeoCoverageCheckpoint checkpoint = {});
+    static StatusOr<std::unique_ptr<GeoCoverageSimplify>> create();
     ~GeoCoverageSimplify();
 
     Status append(std::optional<Slice> wkb);

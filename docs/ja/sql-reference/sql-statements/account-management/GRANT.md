@@ -47,7 +47,7 @@ GRANT USAGE ON AI PROVIDER <provider_name> TO {ROLE <role_name> | USER <user_ide
 GRANT USAGE ON ALL AI PROVIDERS TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
 ```
 
-AI FUNCTION には、データベース修飾や引数シグネチャのない公開組み込み関数ファミリー名を指定します。`USAGE ON ALL AI FUNCTIONS` は現在および将来のファミリーを対象とし、`WITH GRANT OPTION` を付けると個別またはすべてのファミリーの使用権限を再付与できます。Provider 使用権限は含みません。Provider 名は完全一致します。
+AI FUNCTION には、データベース修飾や引数シグネチャのない公開組み込み関数ファミリー名を指定します。`USAGE ON ALL AI FUNCTIONS` は現在および将来のファミリーを対象とし、`WITH GRANT OPTION` を付けると個別またはすべてのファミリーの使用権限を再付与できます。Provider 使用権限は含みません。Provider 名は完全一致します。詳細は [AI の権限項目](../../../administration/user_privs/authorization/privilege_item.md#ai-function-privileges)を参照してください。
 
 
 #### リソースグループ

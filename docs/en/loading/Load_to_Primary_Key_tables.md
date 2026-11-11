@@ -599,6 +599,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
 > - You cannot specify different columns as update conditions for the same batch of data.
 > - DELETE operations do not support conditional updates.
 > - In versions earlier than v3.1.3, partial updates and conditional updates cannot be used simultaneously. From v3.1.3 onwards, StarRocks supports using partial updates with conditional updates.
+> - In shared-nothing clusters, partial updates in column mode cannot be used with conditional updates, and such a load fails. In shared-data clusters, partial updates in column mode support conditional updates from v4.1.1 onwards.
 
 ### Data examples
 

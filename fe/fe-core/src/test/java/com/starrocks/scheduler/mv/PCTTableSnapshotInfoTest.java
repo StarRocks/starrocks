@@ -24,14 +24,10 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
-import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.MVPartitionCellBuilder;
 import com.starrocks.mv.pct.BaseToMVPartitionMapping;
->>>>>>> 7571ee7e6f0... [BugFix][RB-596] Keep EXPLAIN REFRESH off the state of a refresh in flight (#66215)
 import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.PCellSortedSet;

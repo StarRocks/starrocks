@@ -16,6 +16,7 @@
 
 #include <bthread/mutex.h>
 
+#include <ctime>
 #include <memory>
 #include <ostream>
 #include <unordered_map>
@@ -25,6 +26,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "common/tracer_fwd.h"
 #include "data_workflows/load/tablet_writer/tablets_channel.h"
 #include "gen_cpp/InternalService_types.h"
@@ -89,7 +91,8 @@ public:
     void add_chunks(const PTabletWriterAddChunksRequest& request, PTabletWriterAddBatchResult* response);
 
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
+                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
+                     const timespec& deadline);
 
     void cancel(const std::string& reason);
 
@@ -106,6 +109,10 @@ public:
     int64_t timeout() const { return _timeout_s; }
 
     std::shared_ptr<TabletsChannel> get_tablets_channel(const TabletsChannelKey& key);
+
+    // Used only by segment replication; other channel lookups keep their existing lock behavior.
+    StatusOr<std::shared_ptr<TabletsChannel>> get_tablets_channel_until(const TabletsChannelKey& key,
+                                                                        const timespec& deadline);
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
 

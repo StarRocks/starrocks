@@ -41,6 +41,8 @@ import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RewriteDataFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.RewriteManifestsProcedure;
 import com.starrocks.connector.iceberg.procedure.RollbackToSnapshotProcedure;
+import com.starrocks.connector.iceberg.procedure.RollbackToTimestampProcedure;
+import com.starrocks.connector.iceberg.procedure.SetCurrentSnapshotProcedure;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.expression.ExprToThrift;
@@ -61,6 +63,7 @@ import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TCompressedPartitionMap;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.TIcebergPartitionInfo;
+import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TPartitionMap;
 import com.starrocks.thrift.TSortOrder;
@@ -266,12 +269,15 @@ public class IcebergTable extends Table {
             fieldIdToIndex.put(fields.get(i).fieldId(), i);
         }
 
-        // Keep the returned indexes aligned with sortOrder.fields() order.
+        // Keep the returned indexes aligned with sortOrder.fields() order: callers pair indexes.get(i) with
+        // sortOrder.fields().get(i). A sort field whose source is not a top-level column (e.g. a struct subfield)
+        // ends the list, since skipping it would shift every later direction and null order onto the wrong column.
         for (SortField sortField : sortOrder.fields()) {
             Integer idx = fieldIdToIndex.get(sortField.sourceId());
-            if (idx != null) {
-                indexes.add(idx);
+            if (idx == null) {
+                break;
             }
+            indexes.add(idx);
         }
 
         return indexes;
@@ -407,7 +413,11 @@ public class IcebergTable extends Table {
             if (!bucketPropertySupported(column.getType())) {
                 continue;
             }
-            bucketProperties.add(new BucketProperty(TBucketFunction.MURMUR3_X86_32, bucket.second, column));
+            // Iceberg buckets a uuid by its 16 bytes, but StarRocks reads it as a 36-char string, so the BE
+            // must parse the string back to bytes before hashing when it shuffles the other side.
+            TBucketFunction func = schema.findField(bucket.first).type() instanceof Types.UUIDType
+                    ? TBucketFunction.MURMUR3_X86_32_UUID : TBucketFunction.MURMUR3_X86_32;
+            bucketProperties.add(new BucketProperty(func, bucket.second, column));
         }
 
         return bucketProperties;
@@ -451,7 +461,8 @@ public class IcebergTable extends Table {
     }
 
     // Immutable read view a time-travel query pins on its per-query IcebergTable copy: the targeted
-    // snapshot's schema and the partition specs its manifests reference, keyed by spec id.
+    // snapshot's schema and the partition specs its manifests reference, keyed by spec id. A branch read
+    // pins the current schema and no specs, so it keeps the current spec.
     private static class SnapshotReadView {
         private final Schema schema;
         private final Map<Integer, PartitionSpec> specsById;
@@ -474,6 +485,13 @@ public class IcebergTable extends Table {
         table.setForeignKeyConstraints(getForeignKeyConstraints());
         table.metricsReporter = metricsReporter;
         return table;
+    }
+
+    // Pin the source table's read view on a table the planner derives from it over the same native table
+    // (the equality-delete rewrite builds such tables), so a time-travel read keeps the snapshot schema in
+    // the derived scans and their descriptors. Only for a freshly built, not yet shared table.
+    public void inheritReadView(IcebergTable source) {
+        this.readView = source.readView;
     }
 
     /**
@@ -573,7 +591,9 @@ public class IcebergTable extends Table {
         }
         tIcebergTable.setColumns(tColumns);
 
-        tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(iceSchema));
+        TIcebergSchema tIcebergSchema = IcebergApiConverter.getTIcebergSchema(iceSchema);
+        IcebergApiConverter.setMappedNames(tIcebergSchema, getNativeTable().properties());
+        tIcebergTable.setIceberg_schema(tIcebergSchema);
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
         if (comment == null || !comment.equals(EQUALITY_DELETE_TABLE_COMMENT)) {
             // Resolve partition source names against the read schema so the generated
@@ -784,6 +804,8 @@ public class IcebergTable extends Table {
             case EXPIRE_SNAPSHOTS -> ExpireSnapshotsProcedure.getInstance();
             case REMOVE_ORPHAN_FILES -> RemoveOrphanFilesProcedure.getInstance();
             case ROLLBACK_TO_SNAPSHOT -> RollbackToSnapshotProcedure.getInstance();
+            case ROLLBACK_TO_TIMESTAMP -> RollbackToTimestampProcedure.getInstance();
+            case SET_CURRENT_SNAPSHOT -> SetCurrentSnapshotProcedure.getInstance();
             case REWRITE_DATA_FILES -> RewriteDataFilesProcedure.getInstance();
             case REWRITE_MANIFESTS -> RewriteManifestsProcedure.getInstance();
             case ADD_FILES -> AddFilesProcedure.getInstance();

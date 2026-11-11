@@ -15,7 +15,7 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - [异步物化视图指标](../metrics-materialized_view.md)
 - [存算分离仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
 
-有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../monitoring.md)。
+有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../prometheus_grafana.md)。
 
 :::
 
@@ -268,6 +268,55 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
 
+## `jvm_heap_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used`、`committed` 或 `max`）
+- 描述：BE 进程内嵌 JVM 的堆内存。`used` 为对象占用的内存，`committed` 为 JVM 已向操作系统申请的内存，`max` 为堆内存上限。FE 节点也会为自身的 JVM 导出同名指标，此处描述的是 BE 指标。
+  - 仅当 BE 配置项 `enable_jvm_metrics` 为 `true`（默认值）且 BE 启动时设置了环境变量 `JAVA_HOME` 时，才会导出 BE JVM 指标（本节中所有 `jvm_*_size_bytes` 指标）。
+  - BE 不会为了采集这些指标而启动 JVM。在 BE 进程中创建 JVM 之前（例如访问 HDFS、使用基于 JNI 的 Scanner 或 Java UDF），所有取值均为 `0`。
+  - 当 BE 配置项 `enable_metric_calculator` 为 `true`（默认值）时，每 15 秒刷新一次取值；否则在拉取指标时刷新。
+  - 当 `enable_jvm_memory_tracker` 为 `true`（默认值）时，已提交的堆内存和非堆内存还会计入 BE 的 `jvm` 内存追踪器（MemTracker）。
+
+## `jvm_non_heap_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used` 或 `committed`）
+- 描述：BE 进程内嵌 JVM 的非堆内存，例如 Metaspace 和 Code Cache。不导出 `max` 取值。BE JVM 指标的导出条件参见 [`jvm_heap_size_bytes`](#jvm_heap_size_bytes)。
+
+## `jvm_old_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used`、`committed`、`max`、`peak_used` 或 `peak_max`）
+- 描述：BE 进程内嵌 JVM 的老年代内存池。各 `type` 的含义及支持的垃圾回收器参见 [`jvm_young_size_bytes`](#jvm_young_size_bytes)。
+
+## `jvm_perm_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used`、`committed`、`max`、`peak_used` 或 `peak_max`）
+- 描述：BE 进程内嵌 JVM 的 Metaspace（Java 7 及更早版本中为永久代）。除非设置了 JVM 参数 `-XX:MaxMetaspaceSize`，Metaspace 没有确定的上限，因此 `max` 和 `peak_max` 通常为 `-1`。各 `type` 的含义参见 [`jvm_young_size_bytes`](#jvm_young_size_bytes)。
+
+## `jvm_survivor_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used`、`committed`、`max`、`peak_used` 或 `peak_max`）
+- 描述：BE 进程内嵌 JVM 的 Survivor 区内存池。使用默认的 G1 回收器时，`max` 和 `peak_max` 为 `-1`。各 `type` 的含义及支持的垃圾回收器参见 [`jvm_young_size_bytes`](#jvm_young_size_bytes)。
+
+## `jvm_young_size_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 标签：`type`（`used`、`committed`、`max`、`peak_used` 或 `peak_max`）
+- 描述：BE 进程内嵌 JVM 的新生代（Eden 区）内存池。使用默认的 G1 回收器时，`max` 和 `peak_max` 为 `-1`。BE JVM 指标的导出条件参见 [`jvm_heap_size_bytes`](#jvm_heap_size_bytes)。
+  - `used`、`committed` 和 `max` 为内存池的当前使用情况。`peak_used` 和 `peak_max` 来自 JVM 为该内存池记录的峰值使用情况（`MemoryPoolMXBean.getPeakUsage()`）：`peak_used` 为 `used` 的最大值，`peak_max` 为该峰值记录中的 `max` 字段。`peak_max` 并不是单独统计的 `max` 历史最大值，因此监控内存池容量时请使用 `max`，而不是 `peak_max`。峰值记录从 JVM 启动或上一次重置时开始统计。BE 不会重置峰值记录，因此只有 BE 重启时才会重置。
+  - `max` 或 `peak_max` 为 `-1` 表示该内存池没有确定的上限，并不表示出错。
+  - `jvm_young_size_bytes`、`jvm_survivor_size_bytes` 和 `jvm_old_size_bytes` 按照内存池名称匹配，因此仅在 JVM 使用 Serial、Parallel、CMS 或 G1 垃圾回收器时才有取值。使用 ZGC 或 Shenandoah 时，这些指标保持为 `0`。`jvm_heap_size_bytes` 和 `jvm_non_heap_size_bytes` 不受影响。
+
 ## `lake_compaction_held_segment_bytes`
 
 - 单位：字节
@@ -346,6 +395,48 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 类型：累积
 - 描述：仅存算分离模式。主键表 Publish 时，tablet 的主键索引不在主键索引缓存中、必须整体加载的次数。索引不在缓存中，要么是 BE 启动后尚未加载过，要么是已被淘汰。加载时会打开该 tablet 的全部主键索引 SST 文件，并重放这些文件尚未覆盖的 rowset。加载失败也会计入。如果写入的 tablet 集合不变而该值持续上升，说明主键索引在被反复淘汰和重新加载。
+
+## `lake_publish_batch_retry_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：存算分离集群中重试批量发布的次数，即批次的首个事务在之前的尝试中已经发出、但那次尝试没有完成。`lake_enable_batch_publish_retry_freeze` 为 `true` 时，这类重试只包含上一次尝试中的事务。仅 Leader FE 递增该计数器。
+
+## `lake_publish_partial_meta_written`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：本 BE/CN 启动以来，把 Tablet 发布结果写入本节点 Data Cache 的累积次数。仅在 BE 配置项 `lake_enable_publish_partial_meta` 为 `true` 时统计，且只涉及开启 File Bundling 的表。某个 Tablet 的 Publish 在请求到达后超过 Publish RPC 超时时间加 3 秒才完成，或者本次 Publish 是重试，就会写入其结果；重试即使直接用了已保留的结果，也会再写一次。之后同一节点上的重试会直接读取这份结果，不再重新 apply，参见 `lake_publish_skipped_by_partial_meta`。仅适用于存算分离集群。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+## `lake_publish_skipped_by_partial_meta`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：本 BE/CN 启动以来，重试的 Publish 直接使用本节点 Data Cache 中保留的 Tablet 发布结果（参见 `lake_publish_partial_meta_written`）、不再重新 apply 事务的 Tablet 累积次数。仅在 BE 配置项 `lake_enable_publish_partial_meta` 为 `true` 时统计，且只涉及开启 File Bundling 的表。仅适用于存算分离集群。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+## `lake_publish_version_skipped_durable`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：本 BE/CN 启动以来，重试的 publish 直接使用存储中已写好的新版本 tablet 元数据、不再重新 apply 事务的 tablet 累积次数。只统计重试（该分区之前的 publish 请求已经发出、但没有完成）且新版本不在元数据缓存中的情况；命中元数据缓存的 tablet 和首次 publish 都不计入。仅适用于存算分离集群。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+## `lake_segment_cache_hit_minute`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：存算分离集群下，过去 60 秒内 segment 元数据缓存查找命中的次数。命中表示找到一个缓存候选对象，该对象仍可能因 schema 与请求不兼容而被拒绝复用。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+## `lake_segment_cache_miss_minute`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：存算分离集群下，过去 60 秒内 segment 元数据缓存查找未找到缓存条目的次数。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+## `lake_segment_cache_schema_reject_total`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：本 BE/CN 启动以来，缓存 segment 候选对象因 schema 缺失或与请求指定的 schema 不兼容而被拒绝复用的累积次数。启用缓存填充时，仅当被拒绝的条目仍指向同一个 segment 对象，才会原子替换该条目；在途读取继续使用原对象。否则，本次请求打开私有 segment。也包括查找未命中后，并发缓存插入返回不兼容候选对象的情况，因此不能直接从查找命中数中扣除此值。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
 
 ## `lake_tablet_location_handoff_entries`
 
@@ -755,6 +846,8 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 单位：字节
 - 描述：此进程使用的内存。
+
+此指标包含 `passthrough_mem_bytes` 统计的本机 pass-through 缓冲内存。pass-through 指标是进程总量的组成部分，而非额外内存；计算总用量时不要将两个指标相加。此记账指标不等同于容器 RSS。
 
 ## `process_thread_num`
 

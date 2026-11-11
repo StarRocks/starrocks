@@ -32,7 +32,7 @@ TEST(DashScopeMultimodalProviderTest, BuildsTextAndImageContentsWithParameters) 
                           .api_key = "key",
                           .prompt = "hello\nworld",
                           .options = &*options,
-                          .capability = AICapability::TEXT_EMBEDDING};
+                          .capability = AICapability::EMBEDDING};
     auto text = provider.build_request(request);
     ASSERT_TRUE(text.ok()) << text.status();
     EXPECT_EQ(request.endpoint, text->url);
@@ -54,12 +54,12 @@ TEST(DashScopeMultimodalProviderTest, RejectsVideoChatAndImplicitFusion) {
     DashScopeMultimodalProvider provider;
     AIMediaInput image{"image/png", std::string("\x89PNG\r\n\x1a\n", 8)};
     AIChatRequest request{
-            .model = "model", .prompt = "unexpected text", .capability = AICapability::TEXT_EMBEDDING, .media = &image};
+            .model = "model", .prompt = "unexpected text", .capability = AICapability::EMBEDDING, .media = &image};
     EXPECT_FALSE(provider.build_request(request).ok());
     request.prompt = "";
     request.capability = AICapability::CHAT;
     EXPECT_FALSE(provider.build_request(request).ok());
-    request.capability = AICapability::TEXT_EMBEDDING;
+    request.capability = AICapability::EMBEDDING;
     AIMediaInput video{"video/mp4", std::string("\0\0\0\x18"
                                                 "ftypisom\0\0\0\0isommp42",
                                                 24)};
@@ -74,14 +74,14 @@ TEST(DashScopeMultimodalProviderTest, RejectsReservedOptionsAndHeaderInjection) 
                 {{.key = key, .serialized_json = R"("secret-override")", .kind = AIProviderOptionKind::STRING}});
         ASSERT_TRUE(options.ok());
         auto result = provider.build_request(
-                {.model = "model", .prompt = "text", .options = &*options, .capability = AICapability::TEXT_EMBEDDING});
+                {.model = "model", .prompt = "text", .options = &*options, .capability = AICapability::EMBEDDING});
         ASSERT_FALSE(result.ok());
         EXPECT_EQ(std::string::npos, result.status().message().find("secret-override"));
     }
     EXPECT_FALSE(provider.build_request({.model = "model",
                                          .api_key = "secret\r\nX-Key: bad",
                                          .prompt = "text",
-                                         .capability = AICapability::TEXT_EMBEDDING})
+                                         .capability = AICapability::EMBEDDING})
                          .ok());
 }
 
@@ -89,7 +89,7 @@ TEST(DashScopeMultimodalProviderTest, ParsesOneIndexedFiniteVectorAndOptionalUsa
     DashScopeMultimodalProvider provider;
     auto result = provider.parse_response(
             R"({"output":{"embeddings":[{"index":0,"embedding":[0,0.25,-2,3e-5],"type":"image"}]},"usage":{"input_tokens":0,"total_tokens":7}})",
-            AICapability::TEXT_EMBEDDING);
+            AICapability::EMBEDDING);
     ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(result));
     const auto& success = std::get<AIProviderSuccess>(result);
     EXPECT_EQ((std::vector<float>{0, 0.25f, -2, 3e-5f}), std::get<std::vector<float>>(success.value));
@@ -97,7 +97,7 @@ TEST(DashScopeMultimodalProviderTest, ParsesOneIndexedFiniteVectorAndOptionalUsa
     EXPECT_FALSE(success.usage.completion_tokens.has_value());
     EXPECT_EQ(7, success.usage.total_tokens);
     auto no_usage = provider.parse_response(R"({"output":{"embeddings":[{"index":0,"embedding":[1]}]}})",
-                                            AICapability::TEXT_EMBEDDING);
+                                            AICapability::EMBEDDING);
     ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(no_usage));
     EXPECT_FALSE(std::get<AIProviderSuccess>(no_usage).usage.prompt_tokens.has_value());
 }
@@ -122,7 +122,7 @@ TEST(DashScopeMultimodalProviderTest, NormalizesSplitAndInclusiveInputUsage) {
         SCOPED_TRACE(test.usage);
         const std::string body =
                 std::string(R"({"output":{"embeddings":[{"index":0,"embedding":[1]}]},"usage":)") + test.usage + "}";
-        auto result = provider.parse_response(body, AICapability::TEXT_EMBEDDING);
+        auto result = provider.parse_response(body, AICapability::EMBEDDING);
         ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(result));
         const auto& usage = std::get<AIProviderSuccess>(result).usage;
         EXPECT_EQ(test.prompt_tokens, usage.prompt_tokens);
@@ -142,7 +142,7 @@ TEST(DashScopeMultimodalProviderTest, InvalidOrOverflowingImageUsageDoesNotRepor
         SCOPED_TRACE(input_usage);
         const std::string body = std::string(R"({"output":{"embeddings":[{"index":0,"embedding":[1]}]},"usage":{)") +
                                  input_usage + R"(,"output_tokens":2,"total_tokens":19}})";
-        auto result = provider.parse_response(body, AICapability::TEXT_EMBEDDING);
+        auto result = provider.parse_response(body, AICapability::EMBEDDING);
         ASSERT_TRUE(std::holds_alternative<AIProviderSuccess>(result));
         const auto& usage = std::get<AIProviderSuccess>(result).usage;
         EXPECT_FALSE(usage.prompt_tokens.has_value());
@@ -157,7 +157,7 @@ TEST(DashScopeMultimodalProviderTest, PreservesSplitInputUsageOnErrorsAndMalform
                                 R"("output":{"embeddings":[]})"}) {
         SCOPED_TRACE(payload);
         const std::string body = std::string("{") + payload + R"(,"usage":{"input_tokens":43,"image_tokens":1247}})";
-        auto result = provider.parse_response(body, AICapability::TEXT_EMBEDDING);
+        auto result = provider.parse_response(body, AICapability::EMBEDDING);
         ASSERT_FALSE(std::holds_alternative<AIProviderSuccess>(result));
         const auto& usage =
                 std::visit([](const auto& parsed) -> const AIProviderUsage& { return parsed.usage; }, result);
@@ -178,12 +178,10 @@ TEST(DashScopeMultimodalProviderTest, RejectsInvalidEmbeddingShapeCardinalityInd
                                 R"([{"index":0,"embedding":[3.5e38]}])", R"([{"index":0,"embedding":[1e400]}])",
                                 R"([{"index":0,"embedding":[NaN]}])", R"([{"index":0,"embedding":[Infinity]}])"}) {
         const std::string body = std::string(R"({"output":{"embeddings":)") + entries + "}}";
-        EXPECT_TRUE(std::holds_alternative<AIProviderMalformed>(
-                provider.parse_response(body, AICapability::TEXT_EMBEDDING)))
+        EXPECT_TRUE(std::holds_alternative<AIProviderMalformed>(provider.parse_response(body, AICapability::EMBEDDING)))
                 << body;
     }
-    EXPECT_TRUE(
-            std::holds_alternative<AIProviderMalformed>(provider.parse_response("{}", AICapability::TEXT_EMBEDDING)));
+    EXPECT_TRUE(std::holds_alternative<AIProviderMalformed>(provider.parse_response("{}", AICapability::EMBEDDING)));
     EXPECT_TRUE(std::holds_alternative<AIProviderMalformed>(
             provider.parse_response(R"({"output":{"embeddings":[{"index":0,"embedding":[1]}]}})", AICapability::CHAT)));
 }
@@ -192,7 +190,7 @@ TEST(DashScopeMultimodalProviderTest, ErrorsPreserveClassificationAndUsageWithou
     DashScopeMultimodalProvider provider;
     auto result = provider.parse_response(
             R"({"code":"Throttling.RateQuota","message":"private-secret","usage":{"input_tokens":9,"output_tokens":0}})",
-            AICapability::TEXT_EMBEDDING);
+            AICapability::EMBEDDING);
     ASSERT_TRUE(std::holds_alternative<AIProviderStructuredError>(result));
     const auto& error = std::get<AIProviderStructuredError>(result);
     EXPECT_EQ(AIProviderErrorCode::THROTTLING, error.code);
@@ -200,20 +198,23 @@ TEST(DashScopeMultimodalProviderTest, ErrorsPreserveClassificationAndUsageWithou
     EXPECT_EQ(9, error.usage.prompt_tokens);
     EXPECT_EQ(0, error.usage.completion_tokens);
     EXPECT_FALSE(error.usage.total_tokens.has_value());
-    auto retry = provider.parse_response(R"({"code":"InternalError.Algo"})", AICapability::TEXT_EMBEDDING);
+    auto retry = provider.parse_response(R"({"code":"InternalError.Algo"})", AICapability::EMBEDDING);
     ASSERT_TRUE(std::holds_alternative<AIProviderStructuredError>(retry));
     EXPECT_EQ(AIProviderErrorAction::RETRYABLE,
               ai_provider_error_action(std::get<AIProviderStructuredError>(retry).code));
 }
 
 TEST(AIProviderFactoryTest, ValidatesExplicitProtocolAndCapability) {
-    EXPECT_TRUE(create_ai_provider("openai_compatible", AICapability::CHAT).ok());
-    EXPECT_TRUE(create_ai_provider("openai_compatible", AICapability::TEXT_EMBEDDING).ok());
-    EXPECT_TRUE(create_ai_provider("qwen_compatible", AICapability::CHAT).ok());
-    EXPECT_FALSE(create_ai_provider("qwen_compatible", AICapability::TEXT_EMBEDDING).ok());
-    EXPECT_TRUE(create_ai_provider("dashscope_multimodal", AICapability::TEXT_EMBEDDING).ok());
-    EXPECT_FALSE(create_ai_provider("dashscope_multimodal", AICapability::CHAT).ok());
-    EXPECT_FALSE(create_ai_provider("private-unknown-protocol", AICapability::CHAT).ok());
+    EXPECT_TRUE(create_ai_provider(AIProviderProtocol::OPENAI, AICapability::CHAT).ok());
+    EXPECT_TRUE(create_ai_provider(AIProviderProtocol::OPENAI, AICapability::EMBEDDING).ok());
+    EXPECT_TRUE(create_ai_provider(AIProviderProtocol::DASHSCOPE_MULTIMODAL, AICapability::EMBEDDING).ok());
+    EXPECT_TRUE(create_ai_provider(AIProviderProtocol::DASHSCOPE_MULTIMODAL, AICapability::CHAT)
+                        .status()
+                        .is_not_supported());
+    EXPECT_TRUE(
+            create_ai_provider(static_cast<AIProviderProtocol>(99), AICapability::CHAT).status().is_not_supported());
+    EXPECT_TRUE(
+            create_ai_provider(AIProviderProtocol::OPENAI, static_cast<AICapability>(99)).status().is_not_supported());
 }
 
 } // namespace

@@ -388,6 +388,11 @@ ALTER SECURITY INTEGRATION LDAP SET
 GRANT example_role TO EXTERNAL GROUP analysts;
 ```
 
+授予用户组的角色同样作用于以创建者身份运行的任务，例如异步物化视图的刷新，以及通过 [SUBMIT TASK](../../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) 提交的任务。此类任务每次运行时，StarRocks 都会重新解析创建者所属的用户组。注意以下几点：
+
+- 只有登录凭据才携带的用户组（例如从 JWT 或 OAuth 2.0 令牌的 claim 中读取的用户组）无法在任务中解析。
+- 对于通过 JWT 或 OAuth 2.0 安全集成登录的用户，任务查询的是 FE 配置项 `group_provider` 中的 Group Provider，而不是该安全集成的 `group_provider` 属性。
+
 ## 将 Group Provider 与外部授权系统（Apache Ranger）结合
 
 一旦您在安全集成中配置了关联的 Group Provider，StarRocks 将在用户登录时记录用户的组信息。然后，这些组信息将自动包含在与 Ranger 的授权过程中，无需额外配置。

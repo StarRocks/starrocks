@@ -100,20 +100,18 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
         // reset the task run id for pct
         this.mvContext.getCtx().setQueryId(UUIDUtil.genUUID());
 
-        // First-batch setup: drop stale state from any prior attempt and install the freeze hook.
+        // First-batch setup: drop stale state from any prior attempt and install the freeze hook, which
+        // the sync path fires before it aligns partitions against the frozen snapshot.
         // Subsequent batches reuse the persisted owner and do not enter this branch.
         if (mvRefreshParams.isCompleteRefresh()) {
-<<<<<<< HEAD
-            mv.getRefreshScheme().getAsyncRefreshContext().clearTempBaseTableInfoTvrDeltaState();
-            pctProcessor.setAfterSyncHook(() -> {
-=======
             pinState().clear();
             pctProcessor.setBeforePartitionAlignHook(() -> {
->>>>>>> 7571ee7e6f0... [BugFix][RB-596] Keep EXPLAIN REFRESH off the state of a refresh in flight (#66215)
                 MaterializedView.AsyncRefreshContext refreshContext =
                         mv.getRefreshScheme().getAsyncRefreshContext();
-                final Map<BaseTableInfo, TvrVersionRange> committedMap =
-                        refreshContext.getBaseTableInfoTvrVersionRangeMap();
+                // FORCE trusts no baseline, not even an unchanged table's: each one is dropped before the first
+                // write and set by the last batch, so a rebuild that stops part way is finished by the next refresh.
+                final Map<BaseTableInfo, TvrVersionRange> committedMap = mvRefreshParams.isNonTentativeForce()
+                        ? Map.of() : refreshContext.getBaseTableInfoTvrVersionRangeMap();
                 final Map<BaseTableInfo, TvrVersionRange> frozen = Maps.newHashMap();
                 for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
                     TvrVersionRange changedVersionRange = ivmProcessor.getBaseTableMaxChangedDelta(

@@ -51,7 +51,7 @@ import java.util.List;
  * <p>Contains helpers for:
  * <ul>
  *   <li>Aggregate state column naming ({@code __AGG_STATE_*})</li>
- *   <li>Row-id encoding ({@code encode_sort_key} / {@code encode_fingerprint_sha256})</li>
+ *   <li>Row-id encoding ({@code encode_sort_key} / {@code encode_fingerprint_sha256_v2})</li>
  *   <li>Row-id equality predicate and state_union scalar operator construction</li>
  * </ul>
  */
@@ -59,11 +59,15 @@ public class IvmOpUtils {
     public static final String COLUMN_ROW_ID = "__ROW_ID__";
     public static final String COLUMN_AGG_STATE_PREFIX = "__AGG_STATE";
     public static final int ENCODE_ROW_ID_VERSION_SORT_KEY = 0;
+    // Not prefix-free: a string key carries no length, so two distinct key tuples can share a row id. Only mvs
+    // created with it still use it; their stored rows are keyed on its bytes.
     public static final int ENCODE_ROW_ID_VERSION_FINGERPRINT = 1;
+    public static final int ENCODE_ROW_ID_VERSION_FINGERPRINT_V2 = 2;
     public static final ImmutableMap<Integer, String> ENCODE_ROW_ID_FUNCTION_MAP =
             new ImmutableMap.Builder<Integer, String>()
                     .put(ENCODE_ROW_ID_VERSION_SORT_KEY, FunctionSet.ENCODE_SORT_KEY)
                     .put(ENCODE_ROW_ID_VERSION_FINGERPRINT, FunctionSet.ENCODE_FINGERPRINT_SHA256)
+                    .put(ENCODE_ROW_ID_VERSION_FINGERPRINT_V2, FunctionSet.ENCODE_FINGERPRINT_SHA256_V2)
                     .build();
 
     // The fingerprint's own width. Past it a sort key buys locality at the cost of a wider primary key,
@@ -104,7 +108,7 @@ public class IvmOpUtils {
     /**
      * The row-id encoding for a set of keys: encode_sort_key(...) if every key is a type the backend can
      *                       order-encode and they total at most 32 bytes
-     *                    -> encode_fingerprint_sha256(...) otherwise
+     *                    -> encode_fingerprint_sha256_v2(...) otherwise
      *
      * <p>The chosen version is stored on the mv ({@code MaterializedView.encodeRowIdVersion}) and reused for
      * every later refresh, so this only ever runs when an mv is created.
@@ -116,21 +120,21 @@ public class IvmOpUtils {
             // per row in the chunk and never in the others, so that key overflows primary_key_limit_size and
             // every other row silently loses it.
             if (child.isConstant()) {
-                return ENCODE_ROW_ID_VERSION_FINGERPRINT;
+                return ENCODE_ROW_ID_VERSION_FINGERPRINT_V2;
             }
             Type type = child.getType();
             if (type == null || !type.isValid() || !type.isScalarType()) {
-                return ENCODE_ROW_ID_VERSION_FINGERPRINT;
+                return ENCODE_ROW_ID_VERSION_FINGERPRINT_V2;
             }
             Integer encodedBytes = SORT_KEY_ENCODED_BYTES.get(((ScalarType) type).getPrimitiveType());
             if (encodedBytes == null) {
-                return ENCODE_ROW_ID_VERSION_FINGERPRINT;
+                return ENCODE_ROW_ID_VERSION_FINGERPRINT_V2;
             }
             totalSize += encodedBytes;
         }
         return totalSize > 0 && encodedWidth(totalSize, children.size()) <= MAX_SORT_KEY_BYTES
                 ? ENCODE_ROW_ID_VERSION_SORT_KEY
-                : ENCODE_ROW_ID_VERSION_FINGERPRINT;
+                : ENCODE_ROW_ID_VERSION_FINGERPRINT_V2;
     }
 
     /**

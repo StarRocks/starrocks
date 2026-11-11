@@ -24,8 +24,10 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BenchmarkTable;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -44,8 +46,10 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.benchmark.BenchmarkRowCountCalculator;
 import com.starrocks.connector.benchmark.RowCountEstimate;
+import com.starrocks.connector.delta.ScalarOperationToDeltaLakeExpr;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.iceberg.IcebergMORParams;
+import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.RowCountEstimator;
 import com.starrocks.connector.statistics.StatisticsUtils;
@@ -167,14 +171,18 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.sql.optimizer.rewrite.ExternalScanPredicates;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.type.DateType;
+import io.delta.kernel.internal.actions.Metadata;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -189,6 +197,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.buildFrom;
@@ -277,10 +286,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         PredicateColumnsMgr.getInstance().recordPredicateColumns(predicate, optimizerContext.getColumnRefFactory(),
                 context.getOptExpression());
 
-        predicate = removePartitionPredicate(predicate, node, optimizerContext);
         Statistics statistics = context.getStatistics();
-        if (null != predicate && !predicate.isNotEvalEstimate()) {
-            statistics = estimateStatistics(ImmutableList.of(predicate), statistics);
+        ScalarOperator selectivityPredicate = removePartitionPredicate(predicate, node, statistics);
+        if (null != selectivityPredicate && !selectivityPredicate.isNotEvalEstimate()) {
+            Statistics scanStatistics = statistics;
+            statistics = estimateStatistics(ImmutableList.of(selectivityPredicate), scanStatistics);
+            if (selectivityPredicate != predicate) {
+                statistics = keepRemovedPredicateColumnStatistics(predicate, selectivityPredicate, scanStatistics,
+                        statistics);
+            }
         }
 
         Statistics.Builder statisticsBuilder = Statistics.buildFrom(statistics);
@@ -469,7 +483,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         // This block is reentrant. This is the first cardinality estimation of the scan node.
         // we need to ensure that the state of each predicate is reset before each entry.
         Utils.extractConjuncts(predicate).forEach(op -> op.setNotEvalEstimate(false));
-        predicate = removePartitionPredicate(predicate, node, optimizerContext);
+        predicate = removePartitionPredicate(predicate, node, null);
         for (var entry : partitionStatistics.entrySet()) {
             Statistics partitionStat = estimateStatistics(ImmutableList.of(predicate), entry.getValue());
             long partitionSelectedRows = (long) partitionStat.getOutputRowCount();
@@ -1414,31 +1428,40 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     context.getOptExpression());
         }
 
-        Statistics crossJoinStats = crossBuilder.build();
+        Statistics rawCrossJoinStats = crossBuilder.build();
+        // Selectivity stays uncertain when any key had unknown statistics, even if the known side lent its own.
+        boolean hasUncertainSelectivity = hasUnknownColumnStatistics(rawCrossJoinStats, eqOnPredicates);
+        Statistics crossJoinStats = joinType.isAntiJoin() ? rawCrossJoinStats :
+                borrowKnownSideStatistics(rawCrossJoinStats, eqOnPredicates,
+                        optimizerContext == null ? Map.of() : optimizerContext.getJoinKeyNdvBounds());
         double innerRowCount = -1;
         // For unknown column Statistics
-        boolean hasUnknownColumnStatistics =
-                eqOnPredicates.stream().map(PredicateOperator::getChildren).flatMap(Collection::stream)
-                        .filter(ScalarOperator::isColumnRef)
-                        .map(column -> crossJoinStats.getColumnStatistic((ColumnRefOperator) column))
-                        .anyMatch(ColumnStatistic::isUnknown);
-        if (hasUnknownColumnStatistics) {
+        boolean hasUnknownColumnStatistics = hasUnknownColumnStatistics(crossJoinStats, eqOnPredicates);
+        // The row count used when a key has unknown statistics. When the known side lent its statistics, it is
+        // kept as a floor: the unknown side's own row count may already be a guess (e.g. a default selectivity on
+        // another unknown column), so borrowing may only raise this join's estimate, never lower it. The borrowed
+        // statistics flow on to the joins above, which then see the column as known and get no floor of their own.
+        double unknownStatsRowCount = -1;
+        if (hasUncertainSelectivity) {
             // To avoid anti-join estimation of 0 rows, the rows of inner join
             // need to take a table with a small number of rows
             if (joinType.isAntiJoin()) {
-                innerRowCount = Math.max(0, Math.min(leftRowCount, rightRowCount));
+                unknownStatsRowCount = Math.max(0, Math.min(leftRowCount, rightRowCount));
             } else {
                 // if the large table is ten million times larger than the small table, we'd better multiply
                 // a filter coefficient.
                 double scaleFactor = Math.max(leftRowCount, rightRowCount) / Math.min(leftRowCount, rightRowCount);
                 if (scaleFactor >= Math.pow(10, 7)) {
-                    innerRowCount = Math.max(1, Math.max(leftRowCount, rightRowCount)
+                    unknownStatsRowCount = Math.max(1, Math.max(leftRowCount, rightRowCount)
                             * pow(PREDICATE_UNKNOWN_FILTER_COEFFICIENT, eqOnPredicates.size()));
                 } else {
-                    innerRowCount = Math.max(1, Math.max(leftRowCount, rightRowCount));
+                    unknownStatsRowCount = Math.max(1, Math.max(leftRowCount, rightRowCount));
                 }
 
             }
+        }
+        if (hasUnknownColumnStatistics) {
+            innerRowCount = unknownStatsRowCount;
         }
 
         Statistics innerJoinStats;
@@ -1451,11 +1474,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             if (optExpression != null && sessionVariable.isEnableUKFKOpt()) {
                 UKFKConstraintsCollector.collectColumnConstraints(optExpression);
                 UKFKConstraints constraints = optExpression.getConstraints();
+                // Built from crossJoinStats, so the key statistics borrowed above also reach the joins above.
                 Statistics ukfkJoinStat = buildStatisticsForUKFKJoin(joinType, constraints,
-                        leftRowCount, rightRowCount, crossBuilder);
+                        leftRowCount, rightRowCount, Statistics.buildFrom(crossJoinStats));
                 if (ukfkJoinStat.getOutputRowCount() < innerJoinStats.getOutputRowCount()) {
                     innerJoinStats = ukfkJoinStat;
                 }
+            }
+            if (innerJoinStats.getOutputRowCount() < unknownStatsRowCount) {
+                innerJoinStats = innerJoinStats.withOutputRowCount(unknownStatsRowCount);
             }
             innerRowCount = innerJoinStats.getOutputRowCount();
         } else {
@@ -1481,13 +1508,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 outputRowCount = max(innerRowCount, leftRowCount);
                 joinStatsBuilder.setOutputRowCount(outputRowCount);
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, outputRowCount,
-                        leftStatistics, rightStatistics, eqOnPredicates, hasUnknownColumnStatistics, joinStatsBuilder);
+                        leftStatistics, rightStatistics, eqOnPredicates, hasUncertainSelectivity, joinStatsBuilder);
                 break;
             case ASOF_LEFT_OUTER_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(leftRowCount);
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, leftRowCount, leftStatistics, rightStatistics,
-                        eqOnPredicates, hasUnknownColumnStatistics, joinStatsBuilder);
+                        eqOnPredicates, hasUncertainSelectivity, joinStatsBuilder);
                 break;
             case LEFT_SEMI_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(StatisticsEstimateUtils.adjustStatisticsByRowCount(
@@ -1509,7 +1536,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 outputRowCount = max(innerRowCount, rightRowCount);
                 joinStatsBuilder.setOutputRowCount(outputRowCount);
                 computeNullFractionForOuterJoin(rightRowCount, innerRowCount, outputRowCount,
-                        rightStatistics, leftStatistics, eqOnPredicates, hasUnknownColumnStatistics, joinStatsBuilder);
+                        rightStatistics, leftStatistics, eqOnPredicates, hasUncertainSelectivity, joinStatsBuilder);
                 break;
             case RIGHT_ANTI_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
@@ -1525,15 +1552,25 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         max(leftRowCount, max(rightRowCount, max(innerRowCount, leftRowCount + rightRowCount - innerRowCount)));
                 joinStatsBuilder.setOutputRowCount(outputRowCount);
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, outputRowCount,
-                        leftStatistics, rightStatistics, eqOnPredicates, hasUnknownColumnStatistics, joinStatsBuilder);
+                        leftStatistics, rightStatistics, eqOnPredicates, hasUncertainSelectivity, joinStatsBuilder);
                 computeNullFractionForOuterJoin(rightRowCount, innerRowCount, outputRowCount,
-                        rightStatistics, leftStatistics, eqOnPredicates, hasUnknownColumnStatistics, joinStatsBuilder);
+                        rightStatistics, leftStatistics, eqOnPredicates, hasUncertainSelectivity, joinStatsBuilder);
                 break;
             default:
                 throw new StarRocksPlannerException("Not support join type : " + joinType,
                         ErrorType.INTERNAL_ERROR);
         }
         Statistics joinStats = joinStatsBuilder.build();
+        if (joinType.isOuterJoin()) {
+            ColumnRefSet preservedColumns = new ColumnRefSet();
+            if (!joinType.isRightOuterJoin()) {
+                preservedColumns.union(leftStatistics.getUsedColumns());
+            }
+            if (joinType.isRightOuterJoin() || joinType.isFullOuterJoin()) {
+                preservedColumns.union(rightStatistics.getUsedColumns());
+            }
+            joinStats = restoreUnknownPreservedKeys(joinStats, rawCrossJoinStats, eqOnPredicates, preservedColumns);
+        }
 
         allJoinPredicate.removeAll(eqOnPredicates);
         Statistics estimateStatistics = estimateStatistics(allJoinPredicate, joinStats);
@@ -1951,6 +1988,99 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return visitOperator(context.getOp(), context);
     }
 
+    private static boolean hasUnknownColumnStatistics(Statistics statistics,
+                                                      List<BinaryPredicateOperator> eqOnPredicates) {
+        return eqOnPredicates.stream().map(PredicateOperator::getChildren).flatMap(Collection::stream)
+                .filter(ScalarOperator::isColumnRef)
+                .map(column -> statistics.getColumnStatistic((ColumnRefOperator) column))
+                .anyMatch(ColumnStatistic::isUnknown);
+    }
+
+    // Statistics borrowed for an unknown key only price this join. Rows of an outer join's preserved side that find
+    // no match keep their own key values, which need not lie in the lender's domain, so a preserved-side key goes
+    // back to its unknown statistics in the join output.
+    private static Statistics restoreUnknownPreservedKeys(Statistics joinStats, Statistics rawCrossJoinStats,
+                                                          List<BinaryPredicateOperator> eqOnPredicates,
+                                                          ColumnRefSet preservedColumns) {
+        Statistics.Builder builder = null;
+        for (BinaryPredicateOperator predicate : eqOnPredicates) {
+            for (ScalarOperator child : predicate.getChildren()) {
+                if (!(child instanceof ColumnRefOperator column) || !preservedColumns.contains(column)) {
+                    continue;
+                }
+                ColumnStatistic raw = rawCrossJoinStats.getColumnStatistic(column);
+                if (!raw.isUnknown() || joinStats.getColumnStatistic(column).isUnknown()) {
+                    continue;
+                }
+                if (builder == null) {
+                    builder = Statistics.buildFrom(joinStats);
+                }
+                builder.addColumnStatistic(column, raw);
+            }
+        }
+        return builder == null ? joinStats : builder.build();
+    }
+
+    // For an equi-join key whose statistics are unknown on one side only, assume its values are contained in the
+    // known side's domain and borrow the known side's statistics. The estimate L * R / ndv(known) is then never
+    // below the one full statistics would give (L * R / max(ndvL, ndvR)), so a missing statistic cannot make a
+    // many-to-many join look cheap. Keys unknown on both sides are left as they are. When one unknown column is
+    // equated to several known columns, it borrows from the one with the fewest distinct values (the largest
+    // estimate), the lowest column id among equals, so the result does not depend on the predicate order.
+    // A key unknown on both sides gets the containment bound of its equated columns (JoinKeyContainmentBound) as its
+    // number of distinct values, when there is one.
+    private static Statistics borrowKnownSideStatistics(Statistics statistics,
+                                                        List<BinaryPredicateOperator> eqOnPredicates,
+                                                        Map<Integer, Double> ndvBounds) {
+        Map<ColumnRefOperator, ColumnRefOperator> lenders = new HashMap<>();
+        Map<ColumnRefOperator, Double> bounded = new HashMap<>();
+        for (BinaryPredicateOperator predicate : eqOnPredicates) {
+            if (!predicate.getChild(0).isColumnRef() || !predicate.getChild(1).isColumnRef()) {
+                continue;
+            }
+            ColumnRefOperator left = (ColumnRefOperator) predicate.getChild(0);
+            ColumnRefOperator right = (ColumnRefOperator) predicate.getChild(1);
+            ColumnStatistic leftStat = statistics.getColumnStatistic(left);
+            ColumnStatistic rightStat = statistics.getColumnStatistic(right);
+            if (leftStat.isUnknown() && rightStat.isUnknown()) {
+                Double leftBound = ndvBounds.get(left.getId());
+                Double rightBound = ndvBounds.get(right.getId());
+                if (leftBound != null && rightBound != null) {
+                    double bound = Math.min(leftBound, rightBound);
+                    bounded.merge(left, bound, Math::min);
+                    bounded.merge(right, bound, Math::min);
+                }
+                continue;
+            }
+            if (!leftStat.isUnknown() && !rightStat.isUnknown()) {
+                continue;
+            }
+            ColumnRefOperator unknownRef = leftStat.isUnknown() ? left : right;
+            ColumnRefOperator knownRef = leftStat.isUnknown() ? right : left;
+            lenders.merge(unknownRef, knownRef, (a, b) -> {
+                int byNdv = Double.compare(statistics.getColumnStatistic(a).getDistinctValuesCount(),
+                        statistics.getColumnStatistic(b).getDistinctValuesCount());
+                return byNdv < 0 || (byNdv == 0 && a.getId() < b.getId()) ? a : b;
+            });
+        }
+        if (lenders.isEmpty() && bounded.isEmpty()) {
+            return statistics;
+        }
+        Statistics.Builder builder = Statistics.buildFrom(statistics);
+        bounded.forEach((column, bound) -> builder.addColumnStatistic(column,
+                ColumnStatistic.buildFrom(statistics.getColumnStatistic(column))
+                        .setDistinctValuesCount(bound)
+                        .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                        .build()));
+        lenders.forEach((unknownRef, knownRef) -> builder.addColumnStatistic(unknownRef,
+                ColumnStatistic.buildFrom(statistics.getColumnStatistic(knownRef))
+                        .setNullsFraction(0)
+                        .setHistogram(null)
+                        .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                        .build()));
+        return builder.build();
+    }
+
     public Statistics estimateInnerJoinStatistics(Statistics statistics, List<BinaryPredicateOperator> eqOnPredicates) {
         if (eqOnPredicates.isEmpty()) {
             return statistics;
@@ -2277,9 +2407,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             return statistics;
         }
 
+        // Chain the estimation so every predicate's selectivity is applied, not only the last one.
         Statistics result = statistics;
         for (ScalarOperator predicate : predicateList) {
-            result = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics);
+            result = PredicateStatisticsCalculator.statisticsCalculate(predicate, result);
         }
 
         // avoid sample statistics filter all data, save one rows least
@@ -2393,30 +2524,150 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return visitOperator(node, context);
     }
 
-    // avoid use partition cols filter rows twice
+    // Avoid filtering rows twice with partition-column conjuncts that the scan's row count already reflects.
+    // The decision is made per scan from its own statistics, never from query-wide state:
+    // - OLAP list partition: the row count is the sum of the selected partitions.
+    // - Iceberg / Delta Lake: the row count comes from the files (or manifests) planned with the scan predicate
+    //   (TABLE_METADATA, not ANALYZE full-table or default statistics), and only conjuncts that prune whole
+    //   partitions in that planning are removed.
     @VisibleForTesting
     public ScalarOperator removePartitionPredicate(ScalarOperator predicate, Operator operator,
-                                                   OptimizerContext optimizerContext) {
-        boolean isTableTypeSupported = operator instanceof LogicalIcebergScanOperator ||
-                isOlapScanListPartitionTable(operator);
-        if (isTableTypeSupported && !optimizerContext.isObtainedFromInternalStatistics()) {
-            LogicalScanOperator scanOperator = operator.cast();
-            List<String> partitionColNames = scanOperator.getTable().getPartitionColumnNames();
-            partitionColNames.addAll(ListPartitionPruner.deduceGenerateColumns(scanOperator));
+                                                   Statistics scanStatistics) {
+        if (predicate == null) {
+            return null;
+        }
+        Predicate<ScalarOperator> prunedByScan;
+        if (isOlapScanListPartitionTable(operator)) {
+            prunedByScan = conjunct -> true;
+        } else if (operator instanceof LogicalIcebergScanOperator) {
+            if (scanStatistics == null || scanStatistics.getStatsSource() != Statistics.StatsSource.TABLE_METADATA) {
+                return predicate;
+            }
+            prunedByScan = icebergPushedConjunct((LogicalIcebergScanOperator) operator);
+            if (prunedByScan == null) {
+                return predicate;
+            }
+        } else if (operator instanceof LogicalDeltaLakeScanOperator) {
+            if (scanStatistics == null || scanStatistics.getStatsSource() != Statistics.StatsSource.TABLE_METADATA) {
+                return predicate;
+            }
+            prunedByScan = deltaLakePushedConjunct((LogicalDeltaLakeScanOperator) operator);
+            if (prunedByScan == null) {
+                return predicate;
+            }
+        } else {
+            return predicate;
+        }
 
-            List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
-            List<ScalarOperator> newPredicates = Lists.newArrayList();
-            for (ScalarOperator scalarOperator : conjuncts) {
-                if (ListPartitionPruner.canPruneWithConjunct(scalarOperator) &&
-                        isPartitionCol(scalarOperator.getChild(0), partitionColNames)) {
-                    // drop this predicate
-                } else {
-                    newPredicates.add(scalarOperator);
+        LogicalScanOperator scanOperator = operator.cast();
+        Set<String> partitionColNames = new HashSet<>();
+        scanOperator.getTable().getPartitionColumnNames().forEach(name -> partitionColNames.add(
+                StringUtils.lowerCase(name)));
+        ListPartitionPruner.deduceGenerateColumns(scanOperator).forEach(name -> partitionColNames.add(
+                StringUtils.lowerCase(name)));
+
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        List<ScalarOperator> newPredicates = Lists.newArrayList();
+        for (ScalarOperator scalarOperator : conjuncts) {
+            if (ListPartitionPruner.canPruneWithConjunct(scalarOperator) &&
+                    isPartitionCol(scalarOperator.getChild(0), partitionColNames) &&
+                    prunedByScan.test(scalarOperator)) {
+                // drop this predicate
+            } else {
+                newPredicates.add(scalarOperator);
+            }
+        }
+        return newPredicates.isEmpty() ? ConstantOperator.TRUE : Utils.compoundAnd(newPredicates);
+    }
+
+    // The row count already reflects the removed partition conjuncts, but their columns still get the refinement the
+    // conjuncts imply (an IN list caps the NDV, a range narrows min/max), as estimated with the whole predicate.
+    private Statistics keepRemovedPredicateColumnStatistics(ScalarOperator predicate, ScalarOperator kept,
+                                                            Statistics scanStatistics, Statistics estimated) {
+        List<ScalarOperator> keptConjuncts = Utils.extractConjuncts(kept);
+        ColumnRefSet removedColumns = new ColumnRefSet();
+        for (ScalarOperator conjunct : Utils.extractConjuncts(predicate)) {
+            if (!keptConjuncts.contains(conjunct)) {
+                removedColumns.union(conjunct.getUsedColumns());
+            }
+        }
+        if (removedColumns.isEmpty()) {
+            return estimated;
+        }
+        Statistics filtered = estimateStatistics(ImmutableList.of(predicate), scanStatistics);
+        Statistics.Builder builder = Statistics.buildFrom(estimated);
+        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : filtered.getColumnStatistics().entrySet()) {
+            if (removedColumns.contains(entry.getKey())) {
+                builder.addColumnStatistic(entry.getKey(), entry.getValue());
+            }
+        }
+        return builder.build();
+    }
+
+    // Iceberg prunes by partition transform: a conjunct on the source column of a bucket / truncate / time transform
+    // only narrows the row count to whole transformed partitions (a range on a bucket column does not prune at all),
+    // so only conjuncts on columns that are identity-partitioned in every partition spec are removed. Conjuncts the
+    // Iceberg expression converter rejects, and string-to-temporal casts (pruned coarsely, outside the converted
+    // predicate), are kept.
+    private static Predicate<ScalarOperator> icebergPushedConjunct(LogicalIcebergScanOperator scan) {
+        IcebergTable table = (IcebergTable) scan.getTable();
+        org.apache.iceberg.Table nativeTable;
+        try {
+            nativeTable = table.getNativeTable();
+        } catch (Exception e) {
+            return null;
+        }
+        if (nativeTable == null) {
+            return null;
+        }
+        org.apache.iceberg.Schema schema = nativeTable.schema();
+        Set<String> identityColumns = null;
+        for (PartitionSpec spec : nativeTable.specs().values()) {
+            Set<String> specIdentityColumns = new HashSet<>();
+            for (PartitionField field : spec.fields()) {
+                String name = field.transform().isIdentity() ? schema.findColumnName(field.sourceId()) : null;
+                if (name != null) {
+                    specIdentityColumns.add(StringUtils.lowerCase(name));
                 }
             }
-            return newPredicates.isEmpty() ? ConstantOperator.TRUE : Utils.compoundAnd(newPredicates);
+            if (identityColumns == null) {
+                identityColumns = specIdentityColumns;
+            } else {
+                identityColumns.retainAll(specIdentityColumns);
+            }
         }
-        return predicate;
+        if (identityColumns == null || identityColumns.isEmpty()) {
+            return null;
+        }
+        Set<String> identityPartitionColumns = identityColumns;
+        ScalarOperatorToIcebergExpr.IcebergContext context =
+                new ScalarOperatorToIcebergExpr.IcebergContext(schema.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+        return conjunct -> {
+            ScalarOperator column = conjunct.getChild(0);
+            if (!column.isColumnRef() && !(column instanceof CastOperator && column.getChild(0).isColumnRef())) {
+                return false;
+            }
+            ColumnRefOperator ref = column.isColumnRef() ? (ColumnRefOperator) column : column.getChild(0).cast();
+            return identityPartitionColumns.contains(StringUtils.lowerCase(ref.getName())) &&
+                    !ExternalScanPredicates.containsStringToTemporalCast(conjunct) &&
+                    converter.convertStrict(List.of(conjunct), context) != null;
+        };
+    }
+
+    // Conjuncts not converted into the kernel scan predicate (non-identity cast, long or large IN list, unsupported
+    // literal ...) do not prune files, so the row count still includes the rows they filter out.
+    private static Predicate<ScalarOperator> deltaLakePushedConjunct(LogicalDeltaLakeScanOperator scan) {
+        DeltaLakeTable table = (DeltaLakeTable) scan.getTable();
+        if (table.getDeltaSnapshot() == null) {
+            return null;
+        }
+        Metadata metadata = table.getDeltaMetadata();
+        ScalarOperationToDeltaLakeExpr.DeltaLakeContext context =
+                new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(metadata.getSchema(),
+                        metadata.getPartitionColNames());
+        ScalarOperationToDeltaLakeExpr converter = new ScalarOperationToDeltaLakeExpr();
+        return conjunct -> converter.canConvert(conjunct, context);
     }
 
     // NOTE: Why list partition ?

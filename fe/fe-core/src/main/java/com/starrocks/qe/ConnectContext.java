@@ -234,6 +234,10 @@ public class ConnectContext {
 
     protected StatementBase.ExplainLevel explainLevel;
 
+    // Set while the finished query's plan is rendered into its profile; scan nodes skip explain lines that read
+    // remote metadata, since nothing bounds that read after the query has ended.
+    protected boolean explainForProfile = false;
+
     protected TWorkGroup resourceGroup;
 
     protected volatile boolean isPending = false;
@@ -344,21 +348,6 @@ public class ConnectContext {
         return scanVersionOverride;
     }
 
-<<<<<<< HEAD
-=======
-    // Base-table bookmark to read AS-OF during a pinned MV refresh, keyed by
-    // Table#getUUID(). Carries the frozen snapshot from the refresh
-    // planner to RelationTransformer without mutating the (immutable) query AST.
-    private Map<String, Long> mvPinnedBookmarkIds = null;
-
-    public void setMvPinnedBookmarkIds(Map<String, Long> mvPinnedBookmarkIds) {
-        this.mvPinnedBookmarkIds = mvPinnedBookmarkIds;
-    }
-
-    public Map<String, Long> getMvPinnedBookmarkIds() {
-        return mvPinnedBookmarkIds;
-    }
-
     // Start task run id of the incremental MV refresh whose staged TVR window this connection's insert commits;
     // see IVMInsertLoadTxnCallback.
     private String tvrStagingOwner = null;
@@ -371,7 +360,6 @@ public class ConnectContext {
         return tvrStagingOwner;
     }
 
->>>>>>> 7571ee7e6f0... [BugFix][RB-596] Keep EXPLAIN REFRESH off the state of a refresh in flight (#66215)
     public void setOptimizeRewrite(boolean optimizeRewrite) {
         this.optimizeRewrite = optimizeRewrite;
     }
@@ -1158,6 +1146,14 @@ public class ConnectContext {
 
     public void setExplainLevel(StatementBase.ExplainLevel explainLevel) {
         this.explainLevel = explainLevel;
+    }
+
+    public boolean isExplainForProfile() {
+        return explainForProfile;
+    }
+
+    public void setExplainForProfile(boolean explainForProfile) {
+        this.explainForProfile = explainForProfile;
     }
 
     public TWorkGroup getResourceGroup() {

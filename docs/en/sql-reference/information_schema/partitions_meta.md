@@ -41,6 +41,7 @@ The following fields are provided in `partitions_meta`:
 | STORAGE_PATH                  | Storage path of the partition.                               |
 | STORAGE_SIZE                  | Storage size of the partition.                               |
 | METADATA_SWITCH_VERSION       | Metadata switch version of the partition.                    |
+| VACUUM_VERSION                | The version the partition's incremental vacuum has advanced to; everything below it has been reclaimed. Equals VISIBLE_VERSION once vacuum has caught up, and is smaller than VISIBLE_VERSION while vacuum lags behind (the difference is the not-yet-reclaimed backlog). |
 | TABLET_BALANCED               | Whether the tablet distribution is balanced in the partition. |
 | LAST_UPDATE_TIME              | The last time the partition was modified by a user write (load / INSERT / DELETE / UPDATE). |
 | LAST_ACCESS_TIME              | The last time the partition was read by a user statement: a query, `INSERT ... SELECT`, `INSERT OVERWRITE`, CTAS, primary-key `UPDATE`/`DELETE`, materialized view refresh, or `EXPORT`. Reads issued by internal statistics collection are excluded. Currently kept in FE memory only (not persisted); aggregated across FEs at query time. |

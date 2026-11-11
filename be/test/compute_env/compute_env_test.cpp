@@ -14,6 +14,7 @@
 
 #include "compute_env/compute_env.h"
 
+#include <arrow/io/interfaces.h>
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -27,6 +28,7 @@
 #include "common/config_exec_env_fwd.h"
 #include "common/config_llm_fwd.h"
 #include "compute_env/ai/ai_executor.h"
+#include "compute_env/arrow_io_thread_pool.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
 #include "compute_env/pipeline/driver_limiter.h"
 #include "exec_primitive/pipeline/primitives/driver_executor.h"
@@ -291,6 +293,30 @@ TEST(ComputeEnvTest, RejectsInvalidAIConfigWithoutPartialInitialization) {
     EXPECT_EQ(nullptr, env.driver_limiter());
     EXPECT_EQ(nullptr, env.pipeline_timer());
     EXPECT_EQ(nullptr, env.workgroup_manager());
+    env.destroy();
+}
+
+TEST(ComputeEnvTest, AppliesArrowIOThreadPoolSizeAtInit) {
+    init_compute_env_test_context();
+    const int default_capacity = arrow_io_thread_pool_default_capacity();
+    DeferOp restore_pool([] { ASSERT_OK(apply_arrow_io_thread_pool_size(0)); });
+    SCOPED_UPDATE(int32_t, config::arrow_io_thread_pool_size, default_capacity + 5);
+
+    ComputeEnv env;
+    ASSERT_OK(env.init(make_compute_env_options()));
+    EXPECT_EQ(default_capacity + 5, arrow::io::GetIOThreadPoolCapacity());
+    env.destroy();
+}
+
+TEST(ComputeEnvTest, KeepsArrowIOThreadPoolSizeOnInvalidConfig) {
+    init_compute_env_test_context();
+    const int capacity = arrow::io::GetIOThreadPoolCapacity();
+    SCOPED_UPDATE(int32_t, config::arrow_io_thread_pool_size, kMaxArrowIOThreadPoolSize + 1);
+
+    // A bad value is logged and ignored, it does not fail the node's startup.
+    ComputeEnv env;
+    ASSERT_OK(env.init(make_compute_env_options()));
+    EXPECT_EQ(capacity, arrow::io::GetIOThreadPoolCapacity());
     env.destroy();
 }
 

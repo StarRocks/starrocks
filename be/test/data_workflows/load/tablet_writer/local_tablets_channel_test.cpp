@@ -14,8 +14,15 @@
 
 #include "data_workflows/load/tablet_writer/local_tablets_channel.h"
 
+#include <brpc/controller.h>
+#include <butil/time.h>
 #include <fmt/format.h>
 #include <gtest/gtest.h>
+
+#include <atomic>
+#include <chrono>
+#include <future>
+#include <string>
 
 #include "base/brpc/reusable_closure.h"
 #include "base/failpoint/fail_point.h"
@@ -43,6 +50,16 @@
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
+
+namespace {
+
+class SegmentLockCountingClosure : public google::protobuf::Closure {
+public:
+    void Run() override { calls.fetch_add(1); }
+    std::atomic<int> calls{0};
+};
+
+} // namespace
 
 struct SecondaryReplicasWaiterTestCase;
 
@@ -93,6 +110,17 @@ protected:
 
     void test_cancel_secondary_replica_base(bool is_empty_tablet);
     void test_secondary_replicas_waiter_base(SecondaryReplicasWaiterTestCase& test_case);
+
+    PTabletWriterAddSegmentRequest _segment_lock_request() {
+        PTabletWriterAddSegmentRequest request;
+        request.mutable_id()->CopyFrom(_load_id);
+        request.set_txn_id(_txn_id);
+        request.set_index_id(_index_id);
+        request.set_sink_id(_sink_id);
+        request.set_tablet_id(123456);
+        request.set_eos(false);
+        return request;
+    }
 
     struct ReplicaInfo {
         int64_t tablet_id;
@@ -1004,6 +1032,90 @@ TEST_F(LocalTabletsChannelTest, test_get_load_replica_status_use_after_free) {
     ASSERT_TRUE(sync_triggered);
     // After the fix the call completes successfully; each tablet should have a status entry.
     ASSERT_EQ(static_cast<int>(_tablets.size()), status_response.replica_statuses_size());
+}
+
+TEST_F(LocalTabletsChannelTest, timed_channel_lookup_times_out_and_recovers) {
+    const TabletsChannelKey key(_load_id, _sink_id, _index_id);
+    std::unique_lock holder(_load_channel->_lock);
+    const auto deadline = butil::milliseconds_from_now(20);
+    auto lookup =
+            std::async(std::launch::async, [&] { return _load_channel->get_tablets_channel_until(key, deadline); });
+    const auto ready = lookup.wait_for(std::chrono::seconds(5));
+    holder.unlock();
+    auto result = lookup.get();
+    ASSERT_EQ(std::future_status::ready, ready);
+    ASSERT_TRUE(result.status().is_time_out()) << result.status();
+    EXPECT_NE(std::string::npos, result.status().message().find("LoadChannel::_lock"));
+    EXPECT_NE(std::string::npos, result.status().message().find(std::to_string(_txn_id)));
+    auto retry = _load_channel->get_tablets_channel_until(key, butil::milliseconds_from_now(1000));
+    ASSERT_OK(retry.status());
+    EXPECT_EQ(nullptr, retry.value());
+}
+
+TEST_F(LocalTabletsChannelTest, add_segment_m_timeout_reports_once) {
+    auto request = _segment_lock_request();
+    PTabletWriterAddSegmentResult response;
+    response.mutable_status()->add_error_msgs("stale error");
+    SegmentLockCountingClosure done;
+    brpc::Controller cntl;
+    const auto previous_segments = _load_channel->_num_segment;
+    std::unique_lock holder(_load_channel->_lock);
+    const auto deadline = butil::milliseconds_from_now(20);
+    auto call = std::async(std::launch::async,
+                           [&] { _load_channel->add_segment(&cntl, &request, &response, &done, deadline); });
+    const auto ready = call.wait_for(std::chrono::seconds(5));
+    holder.unlock();
+    call.get();
+    ASSERT_EQ(std::future_status::ready, ready);
+    ASSERT_EQ(TStatusCode::TIMEOUT, response.status().status_code());
+    ASSERT_EQ(1, response.status().error_msgs_size());
+    EXPECT_NE(std::string::npos, response.status().error_msgs(0).find("LoadChannel::_lock"));
+    EXPECT_EQ(1, done.calls.load());
+    EXPECT_EQ(previous_segments + 1, _load_channel->_num_segment);
+    EXPECT_EQ(0, response.tablet_vec_size());
+    EXPECT_EQ(0, response.failed_tablet_vec_size());
+}
+
+TEST_F(LocalTabletsChannelTest, add_segment_r_timeout_reports_once_and_recovers) {
+    const TabletsChannelKey key(_load_id, _sink_id, _index_id);
+    _load_channel->_tablets_channels.emplace(key, _tablets_channel);
+    auto request = _segment_lock_request();
+    // Exercise both a future deadline and an already-expired deadline under R contention.
+    for (const int timeout_ms : {20, -1}) {
+        SCOPED_TRACE(timeout_ms);
+        PTabletWriterAddSegmentResult response;
+        response.mutable_status()->add_error_msgs("stale error");
+        SegmentLockCountingClosure done;
+        brpc::Controller cntl;
+        std::unique_lock holder(_tablets_channel->_rw_mtx);
+        const auto deadline = butil::milliseconds_from_now(timeout_ms);
+        auto call = std::async(std::launch::async,
+                               [&] { _load_channel->add_segment(&cntl, &request, &response, &done, deadline); });
+        const auto ready = call.wait_for(std::chrono::seconds(5));
+        holder.unlock();
+        call.get();
+        ASSERT_EQ(std::future_status::ready, ready);
+        ASSERT_EQ(TStatusCode::TIMEOUT, response.status().status_code());
+        ASSERT_EQ(1, response.status().error_msgs_size());
+        const auto& message = response.status().error_msgs(0);
+        EXPECT_NE(std::string::npos, message.find("LocalTabletsChannel::_rw_mtx"));
+        EXPECT_NE(std::string::npos, message.find(std::to_string(request.txn_id())));
+        EXPECT_NE(std::string::npos, message.find(std::to_string(request.tablet_id())));
+        EXPECT_EQ(1, done.calls.load());
+        EXPECT_EQ(0, response.tablet_vec_size());
+        EXPECT_EQ(0, response.failed_tablet_vec_size());
+    }
+    // Admission works again after releasing R: the request now reaches the missing-tablet check.
+    PTabletWriterAddSegmentResult response;
+    SegmentLockCountingClosure done;
+    brpc::Controller cntl;
+    _load_channel->add_segment(&cntl, &request, &response, &done, butil::milliseconds_from_now(1000));
+    ASSERT_EQ(TStatusCode::INTERNAL_ERROR, response.status().status_code());
+    ASSERT_EQ(1, response.status().error_msgs_size());
+    EXPECT_NE(std::string::npos, response.status().error_msgs(0).find("not exists"));
+    EXPECT_EQ(1, done.calls.load());
+    std::unique_lock lock(_tablets_channel->_rw_mtx, std::try_to_lock);
+    EXPECT_TRUE(lock.owns_lock());
 }
 
 } // namespace starrocks

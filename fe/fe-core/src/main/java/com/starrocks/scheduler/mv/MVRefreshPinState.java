@@ -14,23 +14,18 @@
 
 package com.starrocks.scheduler.mv;
 
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.lake.bookmark.BookmarkHolder;
-import com.starrocks.lake.ivm.MvBookmarkOps;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Map;
 
 /**
- * Where a refresh run plans against: the base-table snapshot it pins its scan to, and the bookmarks it reads base
- * tables at. A refresh keeps both on the materialized view, where its later batches and its commit find them. An
- * EXPLAIN / TRACE REFRESH plans the same way against a private copy, so it never changes what a refresh in flight
- * is about to commit.
+ * Where a refresh run plans against: the base-table snapshot it pins its scan to. A refresh keeps it on the
+ * materialized view, where its later batches and its commit find it. An EXPLAIN / TRACE REFRESH plans the same way
+ * against a private copy, so it never changes what a refresh in flight is about to commit.
  */
 public abstract class MVRefreshPinState {
 
@@ -58,12 +53,8 @@ public abstract class MVRefreshPinState {
 
     public abstract void clear();
 
-    /** The snapshot of {@code table} to read, held as a bookmark on tables that have them. */
+    /** The snapshot of {@code table} to read. */
     public abstract TvrVersionRange acquireSnapshot(BaseTableInfo baseTableInfo, Table table);
-
-    /** Give back the bookmarks only this run holds. */
-    public void release() {
-    }
 
     private static final class Persisted extends MVRefreshPinState {
         private final MaterializedView mv;
@@ -105,15 +96,11 @@ public abstract class MVRefreshPinState {
 
     private static final class Explain extends MVRefreshPinState {
         private final MaterializedView mv;
-        private final BookmarkHolder holder;
-        // table id -> db id of every table this run holds a bookmark on
-        private final Map<Long, Long> bookmarkedTables = Maps.newHashMap();
         private String owner;
         private Map<BaseTableInfo, TvrVersionRange> frozen = Map.of();
 
         private Explain(MaterializedView mv) {
             this.mv = mv;
-            this.holder = BookmarkHolder.forMvExplain(mv.getMvId(), UUIDUtil.genUUID().toString());
         }
 
         @Override
@@ -140,19 +127,8 @@ public abstract class MVRefreshPinState {
 
         @Override
         public TvrVersionRange acquireSnapshot(BaseTableInfo baseTableInfo, Table table) {
-            if (!table.isCloudNativeTableOrMaterializedView()) {
-                return GlobalStateMgr.getCurrentState().getMetadataMgr()
-                        .acquireTvrSnapshot(baseTableInfo.getDbName(), table, mv.getMvId());
-            }
-            bookmarkedTables.put(table.getId(), baseTableInfo.getDbId());
-            return MvBookmarkOps.acquireForExplain(baseTableInfo.getDbId(), table, holder);
-        }
-
-        @Override
-        public void release() {
-            bookmarkedTables.forEach((tableId, dbId) ->
-                    MvBookmarkOps.releaseForExplain(dbId, tableId, holder.getHolderId()));
-            bookmarkedTables.clear();
+            return GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .acquireTvrSnapshot(baseTableInfo.getDbName(), table, mv.getMvId());
         }
     }
 }
