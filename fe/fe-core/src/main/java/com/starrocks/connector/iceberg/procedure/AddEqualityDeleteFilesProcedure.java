@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg.procedure;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergEncryption;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -130,6 +131,14 @@ public class AddEqualityDeleteFilesProcedure extends IcebergTableProcedure {
         }
 
         Table table = context.table();
+        // Registering files written elsewhere bypasses the sinks, which are where an encrypted table's data
+        // gets its per-file keys: the files would be committed with no key_metadata and sit in a table
+        // configured to be encrypted as plaintext. Refuse rather than let the table silently hold them.
+        if (IcebergEncryption.declaresEncryption(table.properties())) {
+            throw new StarRocksConnectorException(
+                    "%s is not supported on encrypted Iceberg table %s: the files it registers are not encrypted "
+                            + "with keys recorded in this table", "add_equality_delete_files", table.name());
+        }
         int formatVersion = TableUtil.formatVersion(table);
         if (formatVersion < 2) {
             throw new StarRocksConnectorException(

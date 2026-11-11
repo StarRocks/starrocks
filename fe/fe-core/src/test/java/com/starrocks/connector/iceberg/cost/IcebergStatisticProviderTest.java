@@ -552,6 +552,50 @@ public class IcebergStatisticProviderTest extends TableTestBase {
     }
 
     @Test
+    public void testMissingBoundDropsOnlyItsSide() {
+        List<Types.NestedField> allColumns = Lists.newArrayList(
+                Types.NestedField.required(1, "k1", Types.IntegerType.get()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get()),
+                Types.NestedField.required(3, "k3", Types.IntegerType.get())
+        );
+        Map<Integer, org.apache.iceberg.types.Type.PrimitiveType> idToTypeMapping = allColumns.stream()
+                .collect(Collectors.toMap(Types.NestedField::fieldId, c -> c.type().asPrimitiveType()));
+
+        IcebergFileStats fileStats = buildFileStats(idToTypeMapping, allColumns,
+                100, 1000,
+                ImmutableMap.of(1, 1, 2, 1, 3, 1),
+                ImmutableMap.of(1, 100, 2, 100, 3, 100),
+                ImmutableMap.of(1, 0L, 2, 0L, 3, 0L),
+                null);
+
+        // File 2: k1 has no bounds (metrics mode none), k2 only an upper bound, k3 both bounds.
+        Map<Integer, Long> nullCounts = ImmutableMap.of(2, 0L, 3, 0L);
+        fileStats.updateStats(fileStats.getMinValues(), ImmutableMap.of(3, 0), nullCounts, 200, i -> i > 0);
+        fileStats.updateStats(fileStats.getMaxValues(), ImmutableMap.of(2, 500, 3, 200), nullCounts, 200,
+                i -> i < 0);
+
+        // k1: neither side is known, not a one-sided range taken from file 1.
+        Assertions.assertFalse(fileStats.getMinValue(1).isPresent());
+        Assertions.assertFalse(fileStats.getMaxValue(1).isPresent());
+        // k2: the min is unknown, the max still covers file 2.
+        Assertions.assertFalse(fileStats.getMinValue(2).isPresent());
+        Assertions.assertEquals(500.0, fileStats.getMaxValue(2).get(), 0.001);
+        Assertions.assertEquals(0.0, fileStats.getMinValue(3).get(), 0.001);
+        Assertions.assertEquals(200.0, fileStats.getMaxValue(3).get(), 0.001);
+
+        // File 3 brings a lower bound for k1/k2 back: a side once unknown stays unknown.
+        Map<Integer, Long> nullCounts3 = ImmutableMap.of(1, 0L, 2, 0L, 3, 0L);
+        fileStats.updateStats(fileStats.getMinValues(), ImmutableMap.of(1, -5, 2, -5, 3, 5), nullCounts3, 10,
+                i -> i > 0);
+        fileStats.updateStats(fileStats.getMaxValues(), ImmutableMap.of(1, 50, 2, 50, 3, 50), nullCounts3, 10,
+                i -> i < 0);
+        Assertions.assertFalse(fileStats.getMinValue(1).isPresent());
+        Assertions.assertFalse(fileStats.getMaxValue(1).isPresent());
+        Assertions.assertFalse(fileStats.getMinValue(2).isPresent());
+        Assertions.assertEquals(500.0, fileStats.getMaxValue(2).get(), 0.001);
+    }
+
+    @Test
     public void testAverageRowSizeFirstNullThenPresent() {
         List<Types.NestedField> allColumns = Lists.newArrayList(
                 Types.NestedField.required(1, "k1", Types.IntegerType.get()),

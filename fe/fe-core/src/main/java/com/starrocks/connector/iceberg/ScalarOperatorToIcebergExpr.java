@@ -17,11 +17,16 @@ package com.starrocks.connector.iceberg;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.LocalTimeBounds;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -33,6 +38,8 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.sql.optimizer.rewrite.ExternalScanPredicates;
+import com.starrocks.sql.optimizer.rewrite.FunctionPreimage;
 import com.starrocks.sql.optimizer.rule.tree.VariantPathRewriteRule;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -51,12 +58,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.apache.iceberg.expressions.Expressions.and;
@@ -136,10 +144,47 @@ public class ScalarOperatorToIcebergExpr {
                         operator.debugString());
             }
         }
+        if (usePreimage(effectiveContext)) {
+            // preimages that need several conjuncts together, e.g. year(c) = 2024 and month(c) = 3
+            for (ScalarOperator derived : FunctionPreimage.deriveConjuncts(operators, resolver(effectiveContext))) {
+                Expression expr = derived.accept(visitor, effectiveContext);
+                if (expr == null) {
+                    continue;
+                }
+                try {
+                    Binder.bind(context.getSchema(), expr, false);
+                    expressions.add(expr);
+                } catch (ValidationException e) {
+                    LOG.debug("binding the conjunct preimage {} failed", expr);
+                }
+            }
+        }
 
         LOG.debug("Number of predicates pushed down / Total number of predicates: {}/{}",
                 expressions.size(), operators.size());
         return expressions.stream().reduce(Expressions.alwaysTrue(), Expressions::and);
+    }
+
+    /**
+     * The columns of {@code schema} a function preimage may be put on, see {@link FunctionPreimage}.
+     */
+    public static FunctionPreimage.ColumnResolver preimageResolver(Types.StructType schema) {
+        return resolver(new IcebergContext(schema));
+    }
+
+    /**
+     * Plain {@code column op constant} predicates implied by the function predicates of an Iceberg scan, for the BE
+     * to prune row groups (Parquet statistics and page index) with: {@code year(c) = 2024} prunes Iceberg files
+     * through the preimage above but no row group inside them, since the BE only prunes on a bare column. Only DATE
+     * and DATETIME columns of the scan are handled; the bounds are local times, which is also how the BE reads a
+     * timestamptz column. See {@link ExternalScanPredicates#forBeConjuncts}.
+     */
+    public static List<ScalarOperator> scanPreimages(List<ScalarOperator> conjuncts, Types.StructType schema,
+                                                     Map<ColumnRefOperator, Column> colRefToColumn) {
+        FunctionPreimage.ColumnResolver scan = ExternalScanPredicates.scanTemporalColumns(colRefToColumn);
+        FunctionPreimage.ColumnResolver iceberg = preimageResolver(schema);
+        return ExternalScanPredicates.forBeConjuncts(ExternalScanPredicates.Connector.ICEBERG, conjuncts,
+                (operand, kind) -> scan.accepts(operand, kind) && iceberg.accepts(operand, kind));
     }
 
     public static class IcebergContext {
@@ -255,13 +300,20 @@ public class ScalarOperatorToIcebergExpr {
         public Expression visitBinaryPredicate(BinaryPredicateOperator operator, IcebergContext context) {
             String columnName = getColumnName(operator.getChild(0));
             if (columnName == null) {
-                return null;
+                return derivePreimage(operator.getChild(0), operator.getBinaryType(),
+                        List.of(operator.getChild(1)), context);
             }
 
             Type icebergType = getResultType(columnName, context);
             if (icebergType == null) {
                 // not a column of the table schema (e.g. the _pos / _file metadata columns): the BE filters it
                 return null;
+            }
+            LocalDateTime local = timestampTzLocalTime(operator.getChild(1), icebergType);
+            if (local != null && LocalTimeBounds.isAmbiguous(local)) {
+                // the superset covers both instants of an overlap; a strict or negated conversion needs a subset
+                return context.isStrict() || context.isInsideNot() ? null
+                        : toExpression(columnName, LocalTimeBounds.superset(operator.getBinaryType(), local));
             }
             Type.TypeID typeID = icebergType.typeId();
             Object literalValue = getLiteralValue(operator.getChild(1), icebergType);
@@ -299,12 +351,30 @@ public class ScalarOperatorToIcebergExpr {
         public Expression visitInPredicate(InPredicateOperator operator, IcebergContext context) {
             String columnName = getColumnName(operator.getChild(0));
             if (columnName == null) {
-                return null;
+                return operator.isNotIn() ? null : derivePreimage(operator.getChild(0), BinaryType.EQ,
+                        operator.getListChildren(), context);
             }
 
             Type icebergType = getResultType(columnName, context);
             if (icebergType == null) {
                 return null;
+            }
+            if (operator.getListChildren().stream().anyMatch(child -> {
+                LocalDateTime local = timestampTzLocalTime(child, icebergType);
+                return local != null && LocalTimeBounds.isAmbiguous(local);
+            })) {
+                if (operator.isNotIn() || context.isStrict() || context.isInsideNot()) {
+                    return null;
+                }
+                List<Object> instants = Lists.newArrayList();
+                for (ScalarOperator child : operator.getListChildren()) {
+                    LocalDateTime local = timestampTzLocalTime(child, icebergType);
+                    if (local == null) {
+                        return null;
+                    }
+                    instants.addAll(LocalTimeBounds.equalInstants(local));
+                }
+                return in(columnName, instants);
             }
             List<Object> literalValues = operator.getListChildren().stream()
                     .map(childOperator -> {
@@ -352,9 +422,106 @@ public class ScalarOperatorToIcebergExpr {
         }
 
         @Override
+        public Expression visitCall(CallOperator call, IcebergContext context) {
+            return usePreimage(context) ? startsWithPredicate(call, context) : null;
+        }
+
+        @Override
         public Expression visit(ScalarOperator scalarOperator, IcebergContext context) {
             return null;
         }
+
+        /**
+         * A function of a column compared with constants: prune on the preimage of the comparison on the column.
+         */
+        private Expression derivePreimage(ScalarOperator call, BinaryType op, List<ScalarOperator> values,
+                                          IcebergContext context) {
+            if (!usePreimage(context)) {
+                return null;
+            }
+            ScalarOperator preimage = FunctionPreimage.deriveComparison(call, op, values, resolver(context));
+            return preimage == null ? null : preimage.accept(this, context);
+        }
+
+        private static Expression toExpression(String columnName, List<LocalTimeBounds.Bound> bounds) {
+            if (bounds == null) {
+                return null;
+            }
+            Expression result = null;
+            for (LocalTimeBounds.Bound bound : bounds) {
+                Expression expr;
+                switch (bound.op()) {
+                    case EQ:
+                        expr = equal(columnName, bound.micros());
+                        break;
+                    case GE:
+                        expr = greaterThanOrEqual(columnName, bound.micros());
+                        break;
+                    case GT:
+                        expr = greaterThan(columnName, bound.micros());
+                        break;
+                    case LT:
+                        expr = lessThan(columnName, bound.micros());
+                        break;
+                    case LE:
+                        expr = lessThanOrEqual(columnName, bound.micros());
+                        break;
+                    default:
+                        return null;
+                }
+                result = result == null ? expr : and(result, expr);
+            }
+            return result;
+        }
+    }
+
+    /**
+     * A preimage is a pruning-only superset, so it is not valid under NOT or for strict conversion.
+     */
+    private static boolean usePreimage(IcebergContext context) {
+        return !context.isStrict() && !context.isInsideNot()
+                && ExternalScanPredicates.isFunctionPruningEnabled(ExternalScanPredicates.Connector.ICEBERG);
+    }
+
+    /**
+     * Function preimages go on columns of the table whose Iceberg type orders like the preimage's bounds.
+     */
+    private static FunctionPreimage.ColumnResolver resolver(IcebergContext context) {
+        return (operand, kind) -> {
+            Type type = columnType(operand, context);
+            if (type == null) {
+                return false;
+            }
+            switch (kind) {
+                case TEMPORAL:
+                    return type.typeId() == Type.TypeID.DATE || type.typeId() == Type.TypeID.TIMESTAMP;
+                case STRING:
+                    return type.typeId() == Type.TypeID.STRING;
+                default:
+                    return false;
+            }
+        };
+    }
+
+    private static Type columnType(ScalarOperator operand, IcebergContext context) {
+        String columnName = getColumnName(operand);
+        return columnName == null ? null : IcebergExprVisitor.getResultType(columnName, context);
+    }
+
+    /**
+     * {@code starts_with(s, 'abc')} on a string column.
+     */
+    private static Expression startsWithPredicate(CallOperator call, IcebergContext context) {
+        if (!FunctionSet.STARTS_WITH.equalsIgnoreCase(call.getFnName()) || call.getChildren().size() != 2) {
+            return null;
+        }
+        Type type = columnType(call.getChild(0), context);
+        ScalarOperator prefix = call.getChild(1);
+        if (type == null || type.typeId() != Type.TypeID.STRING || !(prefix instanceof ConstantOperator constant)
+                || constant.isNull() || !constant.getType().isStringType()) {
+            return null;
+        }
+        return startsWith(getColumnName(call.getChild(0)), constant.getVarchar());
     }
 
     private static Object getLiteralValue(ScalarOperator operator, Type icebergType) {
@@ -363,6 +530,24 @@ public class ScalarOperatorToIcebergExpr {
         }
 
         return operator.accept(new ExtractLiteralValue(), icebergType);
+    }
+
+    /**
+     * The local time a constant compared with a timestamptz column names in the session time zone, or null.
+     */
+    private static LocalDateTime timestampTzLocalTime(ScalarOperator operator, Type icebergType) {
+        if (!Types.TimestampType.withZone().equals(icebergType) || !(operator instanceof ConstantOperator constant)
+                || constant.isNull()) {
+            return null;
+        }
+        if (!constant.getType().isDatetime()) {
+            Optional<ConstantOperator> cast = constant.castTo(DateType.DATETIME);
+            if (cast.isEmpty()) {
+                return null;
+            }
+            constant = cast.get();
+        }
+        return constant.getDatetime();
     }
 
     private static Object convertBoolLiteralValue(Object literalValue) {
@@ -511,9 +696,8 @@ public class ScalarOperatorToIcebergExpr {
                         zoneId = ZoneOffset.UTC;
                     }
 
-                    long value = operator.getDatetime().atZone(zoneId).toEpochSecond() * 1000
-                            * 1000 * 1000 + operator.getDatetime().getNano();
-                    return TimeUnit.MICROSECONDS.convert(value, TimeUnit.NANOSECONDS);
+                    // counting in nanoseconds would overflow before 1677 and after 2262
+                    return LocalTimeBounds.toMicros(operator.getDatetime().atZone(zoneId).toInstant());
                 case VARBINARY:
                 case BINARY:
                     return operator.getBinary();

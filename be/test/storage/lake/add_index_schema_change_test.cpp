@@ -77,7 +77,8 @@ public:
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
         _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024,
+                                                          1024 * 1024);
     }
 
 protected:
@@ -1919,7 +1920,8 @@ TEST_F(AddIndexSchemaChangeTest, run_does_not_seed_metacache_with_alter_schema) 
         seg_fi.bundle_file_offset = segment_meta.bundle_file_offset();
     }
     const std::string cache_key = seg_fi.cache_key();
-    ASSERT_TRUE(_tablet_manager->metacache()->lookup_segment(cache_key) == nullptr) << "precondition: not cached";
+    ASSERT_TRUE(_tablet_manager->metacache()->lookup_segment(MetacacheKey::TEST_from_string(cache_key)) == nullptr)
+            << "precondition: not cached";
 
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
     AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, authoritative);
@@ -1928,7 +1930,7 @@ TEST_F(AddIndexSchemaChangeTest, run_does_not_seed_metacache_with_alter_schema) 
     ASSERT_EQ(1, op.segment_entries_size()) << "c1 is present, so its index must be built";
 
     // The alter's narrower Segment must not have been published to the cache.
-    EXPECT_TRUE(_tablet_manager->metacache()->lookup_segment(cache_key) == nullptr)
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_segment(MetacacheKey::TEST_from_string(cache_key)) == nullptr)
             << "builder seeded the shared metacache with a Segment opened under a schema lacking c3; "
                "a reader of c3 sharing it would get defaults instead of the segment's real values";
 
@@ -1944,7 +1946,7 @@ TEST_F(AddIndexSchemaChangeTest, run_does_not_seed_metacache_with_alter_schema) 
     AddIndexSchemaChange sc2(_tablet_manager.get(), next_id(), vt, vt, indexes, version, authoritative);
     TxnLogPB_OpAddIndex op2;
     ASSERT_OK(sc2.run(&op2));
-    auto cached = _tablet_manager->metacache()->lookup_segment(cache_key);
+    auto cached = _tablet_manager->metacache()->lookup_segment(MetacacheKey::TEST_from_string(cache_key));
     ASSERT_TRUE(cached != nullptr);
     EXPECT_TRUE(cached->column_with_uid(_c3_uid) != nullptr)
             << "the alter replaced or narrowed the Segment a reader had cached with c3";

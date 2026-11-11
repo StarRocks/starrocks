@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard;
 
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.starrocks.alter.ConcurrentLoad;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -31,10 +32,13 @@ import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.persist.EditLog;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
@@ -51,12 +55,15 @@ import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -71,11 +78,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
 
 public class SplitTabletJobTest {
     protected static ConnectContext connectContext;
@@ -160,6 +171,160 @@ public class SplitTabletJobTest {
         for (Tablet tablet : newMaterializedIndex.getTablets()) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
         }
+    }
+
+    /**
+     * A load that commits while the job creates the new shards takes a version below the one the job commits,
+     * so the gtid that labels the job's version must be drawn after the load's, when the job reserves the
+     * version.
+     */
+    @Test
+    public void testCommitVersionGtid() throws Exception {
+        starRocksAssert.withTable("create table gtid_split_table (key1 int, key2 varchar(10)) order by(key1) "
+                + "properties('replication_num' = '1')");
+        OlapTable gtidTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "gtid_split_table");
+        PhysicalPartition physicalPartition = gtidTable.getAllPhysicalPartitions().iterator().next();
+        ConcurrentLoad.holdPublishDaemon();
+        List<TxnInfoPB> publishedTxns = new CopyOnWriteArrayList<>();
+        List<Long> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<MockLakeService>() {
+            @Mock
+            public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
+                return CompletableFuture.completedFuture(
+                        recordPublish(List.of(request), publishedTxns, publishedVersions));
+            }
+
+            @Mock
+            public Future<PublishVersionResponse> aggregatePublishVersion(AggregatePublishVersionRequest request) {
+                return CompletableFuture.completedFuture(
+                        recordPublish(request.publishReqs, publishedTxns, publishedVersions));
+            }
+        };
+        AtomicReference<TransactionState> load = new AtomicReference<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForSplit(Invocation invocation, Map<Long, Long> newToOldShardId,
+                                             Map<Long, List<Long>> newShardIdToGroupIds, FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo, Map<String, String> properties,
+                                             ComputeResource computeResource, boolean unpinPlacement)
+                    throws Exception {
+                load.set(ConcurrentLoad.commit(db, gtidTable));
+                invocation.proceed();
+            }
+        };
+        long tabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
+        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(tabletId)),
+                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
+        clause.setTabletReshardTargetSize(-2);
+        TabletReshardJob job = new SplitTabletJobFactory(db, gtidTable, clause).createTabletReshardJob();
+
+        job.init();
+        job.run();
+        // The job waits for the load, which holds the version below the one the job reserved.
+        Assertions.assertEquals(TabletReshardJob.JobState.PREPARING, job.getJobState());
+        ConcurrentLoad.makeVisible(db, load.get());
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (job.getJobState() != TabletReshardJob.JobState.FINISHED) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + job.getJobState());
+            job.run();
+            Thread.sleep(10);
+        }
+
+        long loadVersion = ConcurrentLoad.versionIn(load.get(), gtidTable, physicalPartition.getId());
+        Assertions.assertFalse(publishedTxns.isEmpty());
+        Assertions.assertEquals(Set.of(loadVersion + 1), Set.copyOf(publishedVersions));
+        Set<Long> publishedGtids = publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet());
+        Assertions.assertEquals(1, publishedGtids.size(), publishedGtids.toString());
+        long commitGtid = publishedGtids.iterator().next();
+        Assertions.assertTrue(load.get().getGlobalTransactionId() > 0);
+        Assertions.assertTrue(commitGtid > load.get().getGlobalTransactionId(),
+                "commit version gtid " + commitGtid + " is not after the gtid " + load.get().getGlobalTransactionId()
+                        + " of the load committed below it");
+    }
+
+    /**
+     * A load that committed after the job reserved its version but before the job journaled the reservation would
+     * reach the journal first, so a leader change in between would leave the reserved version to no one and the
+     * partition stuck behind it. Such a load has to wait for the reservation's journal entry, then takes the next
+     * version.
+     */
+    @Test
+    public void testCommitVersionJournaledBeforeNextLoad() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+        starRocksAssert.withTable("create table journal_split_table (key1 int, key2 varchar(10)) order by(key1) "
+                + "properties('replication_num' = '1')");
+        OlapTable journalTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "journal_split_table");
+        PhysicalPartition physicalPartition = journalTable.getAllPhysicalPartitions().iterator().next();
+        ConcurrentLoad.holdPublishDaemon();
+        long loadId = ConcurrentLoad.begin(db, journalTable);
+        AtomicLong nextVersionWhenJournaled = new AtomicLong();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logUpdateTabletReshardJob(Invocation invocation, TabletReshardJob job) {
+                boolean reservationEntry = job.getJobState() == TabletReshardJob.JobState.PREPARING;
+                if (reservationEntry) {
+                    ConcurrentLoad.tryCommit(db, journalTable, loadId, 100);
+                }
+                invocation.proceed();
+                if (reservationEntry) {
+                    nextVersionWhenJournaled.set(physicalPartition.getNextVersion());
+                }
+            }
+        };
+        long tabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
+        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(tabletId)),
+                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
+        clause.setTabletReshardTargetSize(-2);
+        TabletReshardJob job = new SplitTabletJobFactory(db, journalTable, clause).createTabletReshardJob();
+        long reservedVersion = physicalPartition.getNextVersion();
+
+        job.init();
+        job.runPendingJob();
+
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Assertions.assertEquals(TransactionStatus.PREPARE,
+                txnMgr.getTransactionState(db.getId(), loadId).getTransactionStatus());
+        Assertions.assertEquals(reservedVersion + 1, nextVersionWhenJournaled.get());
+        TransactionState load = ConcurrentLoad.commit(db, journalTable, loadId);
+        Assertions.assertEquals(reservedVersion + 1,
+                ConcurrentLoad.versionIn(load, journalTable, physicalPartition.getId()));
+
+        // The job publishes the version it reserved, then waits in CLEANING for the load above it.
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (job.getJobState() != TabletReshardJob.JobState.CLEANING) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + job.getJobState());
+            job.run();
+            Thread.sleep(10);
+        }
+        ConcurrentLoad.makeVisible(db, load);
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
+    }
+
+
+    /**
+     * Records the transactions and the version of each reshard publish, and answers it the way a BE splits the
+     * tablets by their data.
+     */
+    private PublishVersionResponse recordPublish(List<PublishVersionRequest> requests, List<TxnInfoPB> txns,
+                                                 List<Long> versions) {
+        PublishVersionResponse response = new PublishVersionResponse();
+        response.status = new StatusPB();
+        response.status.statusCode = TStatusCode.OK.getValue();
+        response.tabletRanges = new HashMap<>();
+        for (PublishVersionRequest request : requests) {
+            if (request.reshardingTabletInfos == null) {
+                continue;
+            }
+            txns.addAll(request.txnInfos);
+            versions.add(request.newVersion);
+            for (ReshardingTabletInfoPB info : request.reshardingTabletInfos) {
+                addDataDrivenRanges(info, response.tabletRanges);
+            }
+        }
+        return response;
     }
 
     @Test
@@ -973,7 +1138,11 @@ public class SplitTabletJobTest {
     }
 
     private TabletReshardJob createTabletReshardJob() throws Exception {
-        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        return createTabletReshardJob(table, table.getAllPhysicalPartitions().iterator().next());
+    }
+
+    private TabletReshardJob createTabletReshardJob(OlapTable targetTable, PhysicalPartition physicalPartition)
+            throws Exception {
         MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
 
         long tabletId = materializedIndex.getTablets().get(0).getId();
@@ -983,7 +1152,7 @@ public class SplitTabletJobTest {
         SplitTabletClause clause = new SplitTabletClause(null, tabletList, properties);
         clause.setTabletReshardTargetSize(-2);
 
-        TabletReshardJobFactory factory = new SplitTabletJobFactory(db, table, clause);
+        TabletReshardJobFactory factory = new SplitTabletJobFactory(db, targetTable, clause);
         TabletReshardJob tabletReshardJob = factory.createTabletReshardJob();
 
         Assertions.assertTrue(tabletReshardJob.getParallelTablets() > 0);
@@ -1362,5 +1531,98 @@ public class SplitTabletJobTest {
             splitJob.replayAbortedJob();
             physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);
         }
+    }
+
+    // A RUNNING split job on partition p1 of a new range-partitioned table, which holds the table in TABLET_RESHARD.
+    private TabletReshardJob startSplitJob(String tableName) throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+        starRocksAssert.withTable("create table " + tableName + " (p int, k int, v int) partition by range(p) "
+                + "(partition p1 values [('0'), ('10')), partition p2 values [('10'), ('20'))) "
+                + "order by(k) properties('replication_num' = '1')");
+        OlapTable target = (OlapTable) db.getTable(tableName);
+        TabletReshardJob job = createTabletReshardJob(target, target.getPartition("p1").getDefaultPhysicalPartition());
+        job.init();
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
+        return job;
+    }
+
+    private static void runUntilDone(TabletReshardJob job) {
+        for (int i = 0; i < 10 && !job.isDone(); i++) {
+            job.run();
+        }
+    }
+
+    // Metadata-only ALTER TABLE clauses run while the split job holds the table in TABLET_RESHARD: adding a
+    // partition the job does not own, renaming the sort-key column and renaming the table. The job still
+    // installs its new index and restores NORMAL.
+    @Test
+    public void testMetadataAlterWhileSplitJobRuns() throws Exception {
+        TabletReshardJob job = startSplitJob("split_alter_lifecycle");
+        OlapTable target = (OlapTable) db.getTable(job.getTableId());
+        PhysicalPartition physicalPartition = target.getPartition("p1").getDefaultPhysicalPartition();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+
+        starRocksAssert.alterTable("alter table split_alter_lifecycle add partition p3 values [('20'), ('30'))");
+        starRocksAssert.alterTable("alter table split_alter_lifecycle rename column k to k2");
+        starRocksAssert.alterTable("alter table split_alter_lifecycle rename split_alter_lifecycle_renamed");
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, target.getState());
+
+        runUntilDone(job);
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, target.getState());
+        MaterializedIndex newIndex = physicalPartition.getLatestBaseIndex();
+        Assertions.assertNotSame(oldIndex, newIndex);
+        Assertions.assertTrue(newIndex.getTablets().size() > oldIndex.getTablets().size());
+        Assertions.assertNotNull(target.getPartition("p3"));
+        Assertions.assertNotNull(target.getColumn("k2"));
+        Assertions.assertSame(target, db.getTable("split_alter_lifecycle_renamed"));
+    }
+
+    // The partition a split job is resharding can be dropped while the job runs (with FORCE: a recoverable drop is
+    // refused, see AlterTableDuringTabletReshardTest); the job skips the partition and still finishes, restoring
+    // NORMAL.
+    @Test
+    public void testDropReshardedPartitionWhileSplitJobRuns() throws Exception {
+        TabletReshardJob job = startSplitJob("split_drop_lifecycle");
+        OlapTable target = (OlapTable) db.getTable(job.getTableId());
+
+        starRocksAssert.alterTable("alter table split_drop_lifecycle drop partition p1 force");
+        Assertions.assertNull(target.getPartition("p1"));
+
+        runUntilDone(job);
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, target.getState());
+    }
+
+    // The partitions' cache settings are read under the table READ lock: PartitionInfo keeps them in a plain
+    // HashMap that a concurrent ADD PARTITION may be rehashing. The StarOS RPC itself runs without the lock.
+    @Test
+    public void testCreateShardsReadsPartitionCacheInfoUnderTheLockAndCallsStarOSWithoutIt() throws Exception {
+        SplitTabletJob splitJob = (SplitTabletJob) createTabletReshardJob();
+        AtomicBoolean cacheInfoReadUnderLock = new AtomicBoolean(false);
+        AtomicBoolean starOSCalledWithoutLock = new AtomicBoolean(false);
+        new MockUp<LakeTable>() {
+            @Mock
+            public FileCacheInfo getPartitionFileCacheInfo(Invocation invocation, long partitionId) {
+                cacheInfoReadUnderLock.set(LockHoldDepth.current() > 0);
+                return invocation.proceed(partitionId);
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForSplit(Map<Long, Long> newToOldShardId,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
+                                             FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo,
+                                             Map<String, String> properties,
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) {
+                starOSCalledWithoutLock.set(LockHoldDepth.current() == 0);
+            }
+        };
+        splitJob.createShardsOnStarOS();
+        Assertions.assertTrue(cacheInfoReadUnderLock.get());
+        Assertions.assertTrue(starOSCalledWithoutLock.get());
     }
 }

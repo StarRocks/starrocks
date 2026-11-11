@@ -953,6 +953,20 @@ PROPERTIES (
 - `flat_json.sparsity.factor` (オプション): 同名の列の割合のしきい値。同名の列の割合がこの値よりも低い場合、その列はFlat JSONによって抽出されません。このパラメータは、`flat_json.enable`が`true`に設定されている場合にのみ有効です。デフォルト値: `0.3`。
 - `flat_json.column.max` (オプション): Flat JSONによって抽出できるサブフィールドの最大数。このパラメータは、`flat_json.enable`が`true`に設定されている場合にのみ有効です。デフォルト値: `100`。
 
+### 範囲ベースの分散を使用するテーブルのタブレット目標サイズ
+
+*範囲ベースの分散を使用するテーブルでのみ利用できます*
+
+プロパティ `tablet_reshard_target_size` を設定すると、範囲ベースの分散を使用するテーブルに独自のタブレット目標サイズを指定できます。同じ名前の FE 設定 `tablet_reshard_target_size` が正の値の場合、このテーブルでは、タブレットの自動分割と自動統合にその設定ではなくこの値が使用されます。単位: バイト。値は正の整数である必要があります。
+
+```SQL
+PROPERTIES (
+    "tablet_reshard_target_size" = "4294967296"
+)
+```
+
+このプロパティにデフォルト値はなく、設定しない場合は FE 設定 `tablet_reshard_target_size` に従います。範囲ベースの分散を使用しないテーブルに設定すると、`tablet_reshard_target_size is only supported for range-distributed tables` というエラーになります。このプロパティは [ALTER TABLE](ALTER_TABLE.md) で変更または削除できます。詳細については、[データ分散 - タブレットの目標サイズ](../../../table_design/data_distribution/Data_distribution.md#タブレットの目標サイズ)を参照してください。
+
 ### 統計情報の自動収集で特定のテーブルをスキップする
 
 `enable_statistic_auto_collect` を `false` に設定すると、統計情報の自動収集でそのテーブルがスキップされます。デフォルト: `true`。

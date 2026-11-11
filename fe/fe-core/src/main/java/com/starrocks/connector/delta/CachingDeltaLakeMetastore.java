@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.connector.ConnectorMetadataCache;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.CachingMetastore;
@@ -216,6 +217,12 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
         lastAccessTimeMap.clear();
     }
 
+    public void releaseCaches() {
+        if (delegate instanceof DeltaLakeMetastore) {
+            ((DeltaLakeMetastore) delegate).releaseCaches();
+        }
+    }
+
     @Override
     public synchronized void invalidateTable(String dbName, String tableName) {
         super.invalidateTable(dbName, tableName);
@@ -234,10 +241,15 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
 
     @Override
     public long estimateSize() {
-        return Estimator.estimate(databaseCache.asMap(), 20)
-                + Estimator.estimate(databaseNamesCache.asMap(), 20)
-                + Estimator.estimate(tableNamesCache.asMap(), 20)
-                + Estimator.estimate(tableSnapshotCache.asMap(), 20)
-                + Estimator.estimate(tableCache.asMap(), 20);
+        // A cached snapshot reaches the delegate's checkpoint and log file caches through its engine; those may be
+        // in a store shared with other catalogs, so they are skipped here and reported by the delegate's ledger.
+        return Estimator.estimate(databaseCache.asMap(), 20, SKIPPED_IN_ESTIMATE)
+                + Estimator.estimate(databaseNamesCache.asMap(), 20, SKIPPED_IN_ESTIMATE)
+                + Estimator.estimate(tableNamesCache.asMap(), 20, SKIPPED_IN_ESTIMATE)
+                + Estimator.estimate(tableSnapshotCache.asMap(), 20, SKIPPED_IN_ESTIMATE)
+                + Estimator.estimate(tableCache.asMap(), 20, SKIPPED_IN_ESTIMATE)
+                + delegate.estimateSize();
     }
+
+    private static final Set<Class<?>> SKIPPED_IN_ESTIMATE = Set.of(ConnectorMetadataCache.ScopedGuavaCache.class);
 }

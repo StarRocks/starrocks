@@ -28,6 +28,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
@@ -118,6 +119,10 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     @SerializedName(value = "commitVersionMap")
     protected Map<Long, Long> commitVersionMap = new HashMap<>();
 
+    /** Gtid of the versions the job publishes; 0 if they were reserved on an FE that drew none. */
+    @SerializedName(value = "commitGtid")
+    protected long commitGtid = 0;
+
     /**
      * The schemas this job retires from the catalog at its FINISHED flip: applyCatalogMutation stamps a
      * NEW schema id onto every affected index meta in place, so the previous id disappears from the
@@ -191,6 +196,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         this.partitionToTablets = other.partitionToTablets == null ? null : new HashMap<>(other.partitionToTablets);
         this.tabletToIndexMetaId = other.tabletToIndexMetaId == null ? null : new HashMap<>(other.tabletToIndexMetaId);
         this.commitVersionMap = other.commitVersionMap == null ? null : new HashMap<>(other.commitVersionMap);
+        this.commitGtid = other.commitGtid;
     }
 
     // ---------------------------------------------------------------------
@@ -331,6 +337,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             if (table == null) {
                 throw new AlterCancelException("table does not exist, tableId: " + tableId);
             }
+            // Same lock as the version reservation, so the gtid falls between those of commits before and after.
+            commitGtid = GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
             commitVersionMap.clear();
             for (Long ppId : partitionToTablets.keySet()) {
                 PhysicalPartition pp = table.getPhysicalPartition(ppId);
@@ -422,11 +430,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             // publishVersion handles the per-tablet PublishVersionTask fan-out
             // and collects results; a single boolean return drives the
             // AlterJobV2 state machine.
-            TxnInfoPB txnInfo = new TxnInfoPB();
-            txnInfo.txnId = watershedTxnId;
-            txnInfo.combinedTxnLog = false;
-            txnInfo.commitTime = System.currentTimeMillis() / 1000;
-            txnInfo.txnType = TxnTypePB.TXN_NORMAL;
+            TxnInfoPB txnInfo = TxnInfoHelper.forJobPublish(watershedTxnId, TxnTypePB.TXN_NORMAL,
+                    System.currentTimeMillis(), commitGtid);
             // A file-bundling table stores each version's tablet metadata in a
             // single bundle file ({0}_{version}.meta) written by the aggregate
             // publish path -- exactly like loads and metadata-alter jobs. The
@@ -443,6 +448,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     return false;
                 }
                 long commitVersion = e.getValue();
+                // A retry lets the tablets an earlier attempt already published answer from storage.
+                boolean isRetryPublish = getAndMarkLakePublishSent(e.getKey());
                 // Task dispatch and publish both iterate every latest visible
                 // logical index, so base + rollup + sync-MV tablets advance
                 // together without republishing retained physical generations.
@@ -457,12 +464,12 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                         tablets.addAll(idx.getTablets());
                     } else {
                         Utils.publishVersion(idx.getTablets(), txnInfo, commitVersion - 1,
-                                commitVersion, computeResource, false);
+                                commitVersion, computeResource, false, isRetryPublish);
                     }
                 }
                 if (useAggregatePublish) {
                     Utils.publishVersion(tablets, txnInfo, commitVersion - 1,
-                            commitVersion, computeResource, true);
+                            commitVersion, computeResource, true, isRetryPublish);
                 }
             }
             return true;
@@ -513,6 +520,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         boolean advanceVersionForForce =
                 force && jobState == JobState.FINISHED_REWRITING && tableStillExists && hasReservedVersion;
         if (advanceVersionForForce) {
+            markLakeNoOpPublishSent();
             if (!lakePublishVersionWithSkip(errMsg)) {
                 // The no-op publish RPC failed; leave the job in
                 // FINISHED_REWRITING so the operator can retry
@@ -631,9 +639,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         }
-        // The index fast path's normal publish does not use a gtid (its TxnInfoPB
-        // leaves gtid=0), so pass 0 here for consistency.
-        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, /*watershedGtid=*/ 0L,
+        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, commitGtid,
                 commitVersionMap, tabletsByPartition, computeResource, useAggregatePublish);
     }
 
@@ -703,6 +709,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         this.partitionToTablets = other.partitionToTablets;
         this.tabletToIndexMetaId = other.tabletToIndexMetaId;
         this.commitVersionMap = other.commitVersionMap;
+        this.commitGtid = other.commitGtid;
         this.errMsg = other.errMsg;
         this.finishedTimeMs = other.finishedTimeMs;
         // FORCE-cancel audit marker. Must be copied here so the CANCELLED branch

@@ -40,6 +40,7 @@ import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION_V2;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_V3_VERSION;
+import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_V4_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_PARTITION_VERSION_V2;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_QUERY_MULTI_COLUMN_VERSION;
@@ -137,6 +138,38 @@ public class StatisticSQLBuilder {
                     + " max(update_time),"
                     + " cast(count(distinct partition_name) as bigint),"
                     + " cast(sum(hll_cardinality(ndv)) as bigint)"
+                    + " FROM (SELECT *, row_number() over ("
+                    + " partition by partition_name, column_name order by update_time desc) as rn"
+                    + " FROM " + StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME
+                    + " WHERE $predicate) dedup_t"
+                    + " WHERE rn = 1"
+                    + " GROUP BY column_name";
+
+    // Same aggregate as V3 with two more points on the curve the merged distinct count traces as partitions
+    // are added: the merged distinct count and the partition count of two nested subsets of the covered
+    // partitions, about a third and about two thirds of them. Together with the distinct count over all of
+    // them, they show whether the column is still picking up new values at the end of what was collected,
+    // which the coverage numbers alone cannot tell (see
+    // connector.statistics.StatisticsUtils#extrapolateNdvFromGrowth).
+    //
+    // The subsets are picked by a hash of the partition name. That keeps them nested, stable from one load
+    // to the next, and computable inside the same aggregate - an order-based split needs a window over
+    // all of a column's rows, which measured 1.7x the cost of this query at 1800 partitions. The subsets'
+    // sizes are only about a third and two thirds, so the query reports them rather than leaving the read
+    // side to assume them.
+    private static final String EXTERNAL_PARTITION_SUBSET = "abs(cast(murmur_hash3_32(partition_name) as bigint)) % 3";
+    private static final String QUERY_EXTERNAL_FULL_STATISTIC_V4_TEMPLATE =
+            "SELECT cast(" + STATISTIC_EXTERNAL_QUERY_V4_VERSION + " as INT), column_name,"
+                    + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
+                    + " cast(max(cast(nullif(max, '') as $type)) as string),"
+                    + " cast(min(cast(nullif(min, '') as $type)) as string),"
+                    + " max(update_time),"
+                    + " cast(count(distinct partition_name) as bigint),"
+                    + " cast(sum(hll_cardinality(ndv)) as bigint),"
+                    + " hll_union_agg(if(" + EXTERNAL_PARTITION_SUBSET + " < 1, ndv, NULL)),"
+                    + " hll_union_agg(if(" + EXTERNAL_PARTITION_SUBSET + " < 2, ndv, NULL)),"
+                    + " cast(sum(if(" + EXTERNAL_PARTITION_SUBSET + " < 1, 1, 0)) as bigint),"
+                    + " cast(sum(if(" + EXTERNAL_PARTITION_SUBSET + " < 2, 1, 0)) as bigint)"
                     + " FROM (SELECT *, row_number() over ("
                     + " partition by partition_name, column_name order by update_time desc) as rn"
                     + " FROM " + StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME
@@ -264,21 +297,30 @@ public class StatisticSQLBuilder {
 
     public static String buildQueryExternalFullStatisticsSQL(String tableUUID, List<String> columnNames,
                                                              List<Type> columnTypes) {
-        return buildQueryExternalFullStatisticsSQL(tableUUID, columnNames, columnTypes, true);
+        return buildQueryExternalFullStatisticsSQL(tableUUID, columnNames, columnTypes,
+                STATISTIC_EXTERNAL_QUERY_V4_VERSION);
     }
 
     /**
-     * @param reportCoverage whether to ask for the numbers describing the aggregate's own coverage, which
-     *                       only a backend at STATISTIC_EXTERNAL_QUERY_V3_VERSION or later can serialize.
-     *                       False produces the older shape, for the rolling-upgrade fallback in
-     *                       {@link StatisticExecutor#queryStatisticSync}.
+     * @param queryVersion the result shape to ask for: STATISTIC_EXTERNAL_QUERY_V4_VERSION,
+     *                     STATISTIC_EXTERNAL_QUERY_V3_VERSION or STATISTIC_EXTERNAL_QUERY_V2_VERSION. Each
+     *                     needs a backend that can serialize it; the older ones are the rolling-upgrade
+     *                     fallbacks in {@link StatisticExecutor#queryStatisticSync}.
      */
     public static String buildQueryExternalFullStatisticsSQL(String tableUUID, List<String> columnNames,
-                                                             List<Type> columnTypes, boolean reportCoverage) {
+                                                             List<Type> columnTypes, int queryVersion) {
         Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes, true);
         String tableUUIDPredicate = buildTableUUIDInPredicate(tableUUID);
-        String template = reportCoverage
-                ? QUERY_EXTERNAL_FULL_STATISTIC_V3_TEMPLATE : QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE;
+        String template;
+        if (queryVersion == STATISTIC_EXTERNAL_QUERY_V4_VERSION) {
+            template = QUERY_EXTERNAL_FULL_STATISTIC_V4_TEMPLATE;
+        } else if (queryVersion == STATISTIC_EXTERNAL_QUERY_V3_VERSION) {
+            template = QUERY_EXTERNAL_FULL_STATISTIC_V3_TEMPLATE;
+        } else if (queryVersion == STATISTIC_EXTERNAL_QUERY_V2_VERSION) {
+            template = QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE;
+        } else {
+            throw new IllegalArgumentException("Unknown external statistics query version " + queryVersion);
+        }
 
         List<String> querySQL = new ArrayList<>();
         nameGroups.forEach((type, names) -> {
@@ -397,6 +439,35 @@ public class StatisticSQLBuilder {
                 " WHERE TABLE_UUID = '" + SqlUtils.escapeSqlString(rawTableUUID) + "'" +
                 " AND PARTITION_NAME IN (" + partitionsIn + ")" +
                 " AND COLUMN_NAME IN (" + columnsIn + ")";
+    }
+
+    // Partitions that have external column statistics but none written within the last `graceSeconds`.
+    // update_time is written with now() (see ExternalFullStatisticsCollectJob), so comparing against now()
+    // here uses the same clock. Matches both the hashed and the raw table_uuid.
+    public static String buildQueryExternalStatPartitionsNotUpdatedSinceSQL(String tableUUID, List<String> columnNames,
+                                                                            long graceSeconds) {
+        return "SELECT partition_name FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME +
+                " WHERE " + buildTableUUIDInPredicateQuoted(tableUUID) +
+                " AND COLUMN_NAME IN (" + quotedInList(columnNames) + ")" +
+                " GROUP BY partition_name" +
+                " HAVING max(update_time) < date_sub(now(), INTERVAL " + graceSeconds + " SECOND)";
+    }
+
+    // Deletes the given columns' statistics of the given partitions, under both the hashed and the raw table_uuid.
+    // Used to drop the statistics of partitions that no longer exist in the table. Filters on key columns only:
+    // in shared-data mode the statistics table is UNIQUE_KEYS, whose DELETE accepts nothing else.
+    public static String buildDropExternalStatSQLForDroppedPartitions(String tableUUID, List<String> partitionNames,
+                                                                      List<String> columnNames) {
+        Preconditions.checkState(partitionNames != null && !partitionNames.isEmpty());
+        Preconditions.checkState(columnNames != null && !columnNames.isEmpty());
+        return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME +
+                " WHERE " + buildTableUUIDInPredicateQuoted(tableUUID) +
+                " AND PARTITION_NAME IN (" + quotedInList(partitionNames) + ")" +
+                " AND COLUMN_NAME IN (" + quotedInList(columnNames) + ")";
+    }
+
+    private static String quotedInList(List<String> values) {
+        return values.stream().map(v -> "'" + SqlUtils.escapeSqlString(v) + "'").collect(Collectors.joining(", "));
     }
 
     // Same cleanup purpose as buildDropExternalStatSQLForPartitions, for external_histogram_statistics

@@ -502,28 +502,20 @@ public class VariableMgr {
         reader.readCollection(VariableInfo.class, v -> {
             VarContext varContext = getVarContext(v.name);
             if (varContext != null) {
-                try {
-                    setValue(varContext.getObj(), varContext.getField(), v.variable);
-                } catch (DdlException e) {
-                    throw new IOException(e);
-                }
+                setPersistedValue(varContext, v.name, v.variable, "image");
             }
         });
 
         reader.readCollection(VariableInfo.class, v -> {
             VarContext varContext = getVarContext(v.name);
             if (varContext != null) {
-                try {
-                    setValue(varContext.getObj(), varContext.getField(), v.variable);
-                } catch (DdlException e) {
-                    throw new IOException(e);
-                }
+                setPersistedValue(varContext, v.name, v.variable, "image");
             }
         });
     }
 
     // this method is used to replace the `replayGlobalVariable()`
-    public void replayGlobalVariableV2(GlobalVarPersistInfo info) throws DdlException {
+    public void replayGlobalVariableV2(GlobalVarPersistInfo info) {
         wLock.lock();
         try {
             String json = info.getPersistJsonString();
@@ -535,10 +527,27 @@ public class VariableMgr {
                     LOG.error("failed to get global variable {} when replaying", varName);
                     continue;
                 }
-                setValue(varContext.getObj(), varContext.getField(), root.get(varName).toString());
+                setPersistedValue(varContext, varName, root.get(varName).toString(), "journal");
             }
         } finally {
             wLock.unlock();
+        }
+    }
+
+    // A persisted value may be rejected by this build, e.g. a new enum value written by a newer build
+    // before a rollback. Log it and keep the current value instead of failing the whole image load or
+    // journal entry. Parsing and setters validate before assigning, so the variable is left untouched:
+    // - on image load it keeps this build's default;
+    // - on journal replay it keeps the value it had before the entry.
+    // New sessions copy the kept value; sessions already open keep their own copy. The next checkpoint
+    // persists the kept value, so the rejected value is lost: rolling forward to the newer build again
+    // does not restore it, it has to be set again with SET GLOBAL.
+    private void setPersistedValue(VarContext varContext, String varName, String value, String source) {
+        try {
+            setValue(varContext.getObj(), varContext.getField(), value);
+        } catch (DdlException e) {
+            LOG.warn("ignore the {} value '{}' of variable {} that this build rejects, keep '{}'. reason: {}",
+                    source, value, varName, getValue(varContext.getObj(), varContext.getField()), e.getMessage());
         }
     }
 

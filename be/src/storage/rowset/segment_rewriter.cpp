@@ -16,6 +16,7 @@
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/types_fwd.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/rowset/segment_options.h"
@@ -221,6 +222,7 @@ Status SegmentRewriter::rewrite_partial_update_owned_only(
     SegmentReadOptions read_opts;
     read_opts.fs = fs;
     read_opts.stats = &stats;
+    read_opts.chunk_size = get_pk_vector_chunk_size();
     ASSIGN_OR_RETURN(auto iter, segment->new_iterator(written_schema, read_opts));
 
     // Read the source through, keeping only the rows this tablet owns. |owned| covers the run of rows
@@ -228,7 +230,7 @@ Status SegmentRewriter::rewrite_partial_update_owned_only(
     // sort-key == PK tablet emits a slice, not the whole file -- so a source row outside that run is
     // not this tablet's either and is dropped with the rest.
     auto kept = ChunkFactory::new_chunk(written_schema, owned.size());
-    auto chunk = ChunkFactory::new_chunk(written_schema, DEFAULT_CHUNK_SIZE);
+    auto chunk = ChunkFactory::new_chunk(written_schema, read_opts.chunk_size);
     size_t source_row = 0;
     while (true) {
         chunk->reset();

@@ -128,6 +128,22 @@ public class ColumnStatsMeta {
                 && sampledPartitionsHashValue.size() < requestedPartitionCount;
     }
 
+    /**
+     * Whether the column's rows are expected to cover the whole table, as a FULL entry's are, even though the
+     * entry is SAMPLE: a FULL collection that refreshed only some partitions is committed as SAMPLE over the
+     * table's partition count with no partition set and no requested count (see
+     * StatisticExecutor#commitExternalStatistics), so the read path extrapolates by the partitions its rows
+     * actually come from. Everything except the read path treats such a column like a FULL one - dropped
+     * partition cleanup, and keeping it when a later run covers only part of it. A collected SAMPLE entry
+     * always records the partitions it sampled, so an empty set with a known partition count tells the two
+     * apart without a new field.
+     */
+    public boolean isFullCoverageByRows() {
+        return type == StatsConstants.AnalyzeType.FULL
+                || (type == StatsConstants.AnalyzeType.SAMPLE && allPartitionSize > 0 && requestedPartitionCount == 0
+                && (sampledPartitionsHashValue == null || sampledPartitionsHashValue.isEmpty()));
+    }
+
     public String simpleString(boolean isExternalTable) {
         if (isExternalTable && type == StatsConstants.AnalyzeType.SAMPLE && sampledPartitionsHashValue != null) {
             // The requested count is only worth showing when it says the collection fell short of it -

@@ -26,9 +26,8 @@ namespace starrocks {
 struct TypeDescriptor;
 
 // Standalone physical column; not a VARBINARY SQL type or a TypeDescriptor attachment.
-// Semantic metadata is immutable; transport restores storage metadata after validation.
-// A typed materialization placeholder binds its storage metadata on the first payload copy.
-// Populated columns and concrete physical descriptors require identical storage metadata;
+// The descriptor holds only the immutable semantic type; copies and transport require it to match.
+// Rows are WKB and describe their own dimension; kernels check each row.
 // SQL assignment/coercion belongs to FE, not to these physical copy operations.
 // NULL is represented by NullableColumn. Empty bytes are only a default/null placeholder,
 // not an OGC EMPTY geometry. Payload ingestion preserves bytes without eager parsing.
@@ -117,8 +116,7 @@ public:
                                                bool& has_null) override;
 
 private:
-    bool _is_storage_placeholder() const;
-    const GeoColumn& _source(const Column& src);
+    const GeoColumn& _source(const Column& src) const;
     GeoColumnDescriptor _descriptor;
     // Exclusive ownership: no mutable BinaryColumn escape hatch or shared backing buffers.
     std::unique_ptr<BinaryColumn> _data = std::make_unique<BinaryColumn>();
