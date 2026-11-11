@@ -38,6 +38,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
@@ -1024,6 +1025,112 @@ TEST_P(LakePartialUpdateTest, test_dcg_not_found_and_fallback_to_segment) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 == c0 * 7) && (c2 == c0 * 4); }));
 }
 
+<<<<<<< HEAD
+=======
+// A row mode publish reads the rows it replaces from the base segment and from its `.cols` file, and opens both
+// again every time. Their footer reads have to fill the local data cache, and the column reads go through the
+// page cache.
+TEST_P(LakePartialUpdateTest, test_dcg_segment_open_fills_data_cache_on_publish) {
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    auto write_and_publish = [&](const Chunk& chunk, std::vector<SlotDescriptor*>* slots, PartialUpdateMode mode) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(slots)
+                                                   .set_partial_update_mode(mode)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    };
+
+    // Base rows, then a column mode update that moves c1 into a `.cols` file.
+    ASSERT_NO_FATAL_FAILURE(
+            write_and_publish(generate_data(kChunkSize, 0, false, 3), nullptr, PartialUpdateMode::ROW_MODE));
+    ASSERT_NO_FATAL_FAILURE(write_and_publish(generate_data(kChunkSize, 0, true, 7), &_slot_pointers,
+                                              PartialUpdateMode::COLUMN_UPDATE_MODE));
+
+    // A row mode update of (c0, c2): its publish reads the unmodified c1 from the `.cols` file.
+    std::vector<int> keys(kChunkSize);
+    std::vector<int> c2_vals(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        keys[i] = i;
+        c2_vals[i] = i * 5;
+    }
+    auto c0_col = Int32Column::create();
+    auto c2_col = Int32Column::create();
+    c0_col->append_numbers(keys.data(), keys.size() * sizeof(int));
+    c2_col->append_numbers(c2_vals.data(), c2_vals.size() * sizeof(int));
+    Chunk::SlotHashMap slot_map;
+    slot_map[0] = 0;
+    slot_map[2] = 1;
+    Chunk c0_c2_chunk({std::move(c0_col), std::move(c2_col)}, slot_map);
+    std::vector<SlotDescriptor> c0_c2_slots;
+    c0_c2_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+    c0_c2_slots.emplace_back(2, "c2", TYPE_INT_DESC);
+    std::vector<SlotDescriptor*> c0_c2_slot_pointers{&c0_c2_slots[0], &c0_c2_slots[1]};
+
+    // The base segment holding the rows this update replaces.
+    ASSIGN_OR_ABORT(auto base_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_GT(base_metadata->rowsets_size(), 0);
+    ASSERT_GT(base_metadata->rowsets(0).segment_metas_size(), 0);
+    const std::string base_segment_name = base_metadata->rowsets(0).segment_metas(0).filename();
+
+    std::vector<bool> cols_skip_fill;
+    std::vector<bool> base_skip_fill;
+    std::vector<bool> iter_use_page_cache;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("Segment::_open:footer_file_options", [&](void* arg) {
+        auto* path_and_opts = static_cast<std::pair<const std::string*, const RandomAccessFileOptions*>*>(arg);
+        if (path_and_opts->first->ends_with(".cols")) {
+            cols_skip_fill.push_back(path_and_opts->second->skip_fill_local_cache);
+        } else if (path_and_opts->first->ends_with(base_segment_name)) {
+            base_skip_fill.push_back(path_and_opts->second->skip_fill_local_cache);
+        }
+    });
+    // Take the static open, so the base segment footer is read by this publish even if an earlier step
+    // left the segment in the metacache.
+    sync->SetCallBack("UpdateManager::get_column_values:fill_meta_cache",
+                      [](void* arg) { *static_cast<bool*>(arg) = false; });
+    sync->SetCallBack("UpdateManager::get_column_values:iter_opts", [&](void* arg) {
+        iter_use_page_cache.push_back(static_cast<ColumnIteratorOptions*>(arg)->use_page_cache);
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    ASSERT_NO_FATAL_FAILURE(write_and_publish(c0_c2_chunk, &c0_c2_slot_pointers, PartialUpdateMode::ROW_MODE));
+    sync->DisableProcessing();
+
+    // The footer reads of both the `.cols` file and the base segment fill the local data cache.
+    ASSERT_FALSE(cols_skip_fill.empty());
+    for (bool skip_fill : cols_skip_fill) {
+        EXPECT_FALSE(skip_fill);
+    }
+    // Other steps of the publish (rebuilding the primary key index, for one) may open the base segment with
+    // their own options, so only require that the open made by get_column_values fills the cache.
+    EXPECT_TRUE(std::any_of(base_skip_fill.begin(), base_skip_fill.end(), [](bool skip_fill) { return !skip_fill; }));
+    // The column reads of the publish go through the page cache.
+    ASSERT_FALSE(iter_use_page_cache.empty());
+    for (bool use_page_cache : iter_use_page_cache) {
+        EXPECT_EQ(!config::disable_storage_page_cache, use_page_cache);
+    }
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c1 == c0 * 7 && c2 == c0 * 5; }));
+}
+
+>>>>>>> 672348a2e09... [Enhancement] Read base rows through the page cache when a PK publish fetches column values (#69171)
 // Explicitly test DCG column file missing: column_file_by_idx returns a path but the file is removed,
 // so new_dcg_segment fails and get_column_values should surface an InternalError during publish.
 TEST_P(LakePartialUpdateTest, test_dcg_segment_missing_files_returns_error) {

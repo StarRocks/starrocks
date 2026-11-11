@@ -63,6 +63,21 @@ public:
         _offset = position;
         return _stream->seek(position);
     }
+<<<<<<< HEAD
+=======
+
+    // The stream underneath may be one slice of a bundle file, and every offset this class
+    // reports is relative to that slice while filename() names the physical file. A reader
+    // translating between the two -- the cache dump narrowing itself to the blocks that
+    // failed -- has to see the slice base, so pass it through rather than inheriting 0.
+    int64_t bundle_offset() const override { return _stream->bundle_offset(); }
+    // Name a page by its absolute position in the physical file, the same key RandomAccessFile and
+    // BundleSeekableInputStream produce for it. With the slice-relative offset, a page of one slice
+    // and the page at the same relative offset of the slice at the start of the file share a key.
+    std::string page_cache_key(int64_t stream_offset) const override {
+        return io::SeekableInputStream::page_cache_key(bundle_offset() + stream_offset);
+    }
+>>>>>>> 672348a2e09... [Enhancement] Read base rows through the page cache when a PK publish fetches column values (#69171)
     StatusOr<int64_t> position() override { return _offset; }
     StatusOr<int64_t> read(void* data, int64_t count) override;
     Status read_at_fully(int64_t offset, void* out, int64_t count) override;
