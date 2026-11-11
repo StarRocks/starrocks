@@ -257,11 +257,7 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
         if (StringUtils.equals(originFuncName, newFuncName)) {
             return new CallOperator(originFuncName, origin.getType(), origin.getChildren(), origin.getFunction());
         } else {
-<<<<<<< HEAD
-            Function newFunc = Expr.getBuiltinFunction(newFuncName, origin.getFunction().getArgs(),
-=======
-            Function builtin = ExprUtils.getBuiltinFunction(newFuncName, origin.getFunction().getArgs(),
->>>>>>> dd8c1bb ([BugFix][RB-1261] Keep reversed FIRST_VALUE/LAST_VALUE windows typed and stable across replanning (#82865))
+            Function builtin = Expr.getBuiltinFunction(newFuncName, origin.getFunction().getArgs(),
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             Preconditions.checkNotNull(builtin);
             // multi_distinct_sum and sum share the same decimal return type; keep the analyzed types.

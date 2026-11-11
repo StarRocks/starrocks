@@ -28,12 +28,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
-import com.starrocks.type.ArrayType;
-import com.starrocks.type.Type;
->>>>>>> dd8c1bb ([BugFix][RB-1261] Keep reversed FIRST_VALUE/LAST_VALUE windows typed and stable across replanning (#82865))
 
 import java.util.Map;
 
@@ -147,15 +142,11 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
         if (replaced == null) {
             return null;
         }
-<<<<<<< HEAD
         Function rollup = Expr.getBuiltinFunction(FunctionSet.ARRAY_UNIQUE_AGG, argTypes, compareMode);
-=======
-        Function rollup = ExprUtils.getBuiltinFunction(FunctionSet.ARRAY_UNIQUE_AGG, argTypes, compareMode);
         if (rollup == null) {
             return null;
         }
         rollup = ScalarOperatorUtil.withConcreteTypes(rollup, argTypes, argTypes[0]);
->>>>>>> dd8c1bb ([BugFix][RB-1261] Keep reversed FIRST_VALUE/LAST_VALUE windows typed and stable across replanning (#82865))
         CallOperator res = new CallOperator(
                 FunctionSet.ARRAY_UNIQUE_AGG,
                 new ArrayType(newInputArgType),
