@@ -15,16 +15,20 @@
 package com.starrocks.sql.optimizer.rule.ivm;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OpRuleBit;
@@ -35,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -71,8 +76,15 @@ import java.util.stream.Collectors;
  *           │           └── child...
  *           └── OlapScan(MV)           ← scan existing MV state
  * </pre>
+ *
+ * <p>An aggregate with no aggregate function leaves the MV no state to merge, so it plans the aggregate and the
+ * projection alone, without the join or the MV scan.
  */
 public class IvmDeltaAggregateRule extends TransformationRule {
+    // Measured to saturate here: past the second column the delta spans the whole domain of every later
+    // one, so its filter is always true and only the extra column read is left.
+    private static final int MAX_SORT_KEY_JOIN_COLUMNS = 2;
+
     public IvmDeltaAggregateRule() {
         super(RuleType.TF_IVM_DELTA_AGGREGATE,
                 Pattern.create(OperatorType.LOGICAL_DELTA)
@@ -116,6 +128,19 @@ public class IvmDeltaAggregateRule extends TransformationRule {
         Preconditions.checkState(rowIdColumn != null, "__ROW_ID__ column must exist in MV");
         int encodeRowIdVersion = mv.getEncodeRowIdVersion();
 
+        List<ColumnRefOperator> groupingKeys = inputAggOp.getGroupingKeys();
+        Map<ColumnRefOperator, CallOperator> inputAggMap = inputAggOp.getAggregations();
+        if (inputAggMap.isEmpty()) {
+            // Every MV column is a group key or the row id derived from them, so a group already in the MV is
+            // upserted with the values it holds.
+            LogicalAggregationOperator groupOnlyAgg =
+                    buildIntermediateAggOperator(columnRefFactory, groupingKeys, inputAggMap, Maps.newHashMap());
+            OptExpression groupOnlyAggExpr = OptExpression.create(groupOnlyAgg,
+                    OptExpression.create(new LogicalDeltaOperator(false, delta.getActionColumn()), aggChild));
+            return List.of(OptExpression.create(
+                    new LogicalProjectOperator(upsertProjection(inputAggOp, delta)), groupOnlyAggExpr));
+        }
+
         // Step 2: Create MV scan
         LogicalOlapScanOperator mvScan = MvRewritePreprocessor.createScanMvOperator(
                 mv, columnRefFactory, PCellSortedSet.of(), true);
@@ -126,10 +151,8 @@ public class IvmDeltaAggregateRule extends TransformationRule {
         Map<Column, ColumnRefOperator> mvColMetaToRefMap = mvScan.getColumnMetaToColRefMap();
 
         // Step 3: Collect input aggregate info and the aggregate -> state-column binding
-        // (built by IvmRewriter.bindStateColumnsForAggregate; keyed by ref id so the pairing
+        // (built by IvmRewriter.bindMvColumnsForAggregate; keyed by ref id so the pairing
         // holds for any column layout).
-        List<ColumnRefOperator> groupingKeys = inputAggOp.getGroupingKeys();
-        Map<ColumnRefOperator, CallOperator> inputAggMap = inputAggOp.getAggregations();
         Map<Integer, String> stateColumnByAggRefId =
                 context.getTvrOptContext().getIvmStateColumnNameByAggRefId();
         Preconditions.checkState(stateColumnByAggRefId != null,
@@ -149,30 +172,25 @@ public class IvmDeltaAggregateRule extends TransformationRule {
                 .collect(Collectors.toList());
         ScalarOperator eqPredicate = IvmOpUtils.buildRowIdEqBinaryPredicateOp(
                 encodeRowIdVersion, mvRowIdRef, uniqueKeys);
-<<<<<<< HEAD
-=======
         List<ScalarOperator> onConjuncts = Lists.newArrayList(eqPredicate);
         if (context.getSessionVariable().isEnableIvmMvScanSortKeyJoinKeys() && keepsMvDistribution(mv, mvScan)) {
             onConjuncts.addAll(buildSortKeyPrefixConjuncts(mv, mvColMetaToRefMap, groupingKeys,
                     context.getTvrOptContext().getIvmGroupKeyRefIdByMvColumn()));
         }
->>>>>>> 50cafe6f003... [BugFix] Keep the sort-key join keys off a shuffled IVM state-merge join (#64200)
 
         // Step 6: Build LEFT OUTER JOIN (intermediate agg ⋈ MV scan)
         // Delta is preserved on the aggregate's child for subsequent iterations.
         LogicalDeltaOperator childDelta = new LogicalDeltaOperator(false, delta.getActionColumn());
         OptExpression intermediateAggExpr = OptExpression.create(intermediateAgg,
                 OptExpression.create(childDelta, aggChild));
-        LogicalJoinOperator joinOp = new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, eqPredicate);
+        LogicalJoinOperator joinOp =
+                new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, Utils.compoundAnd(onConjuncts));
         OptExpression joinExpr = OptExpression.create(joinOp,
                 intermediateAggExpr,
                 OptExpression.create(mvScan));
 
         // Step 7: Build state_union project
-        Map<ColumnRefOperator, ScalarOperator> projMap = Maps.newHashMap();
-        if (inputAggOp.getProjection() != null) {
-            projMap.putAll(inputAggOp.getProjection().getColumnRefMap());
-        }
+        Map<ColumnRefOperator, ScalarOperator> projMap = upsertProjection(inputAggOp, delta);
 
         // Iteration is id-sorted only to keep plans deterministic; the pairing itself is by ref id.
         List<ColumnRefOperator> inputAggCallRefs = inputAggMap.keySet().stream()
@@ -200,18 +218,24 @@ public class IvmDeltaAggregateRule extends TransformationRule {
             projMap.put(origRef, stateUnion);
         }
 
-        // Aggregate MV outputs are all UPSERTs. __ACTION__ = INSERT_ACTION (= __op UPSERT).
-        ColumnRefOperator actionColumn = delta.getActionColumn();
-        if (actionColumn != null) {
-            projMap.put(actionColumn, ConstantOperator.createTinyInt(IvmRuleUtils.INSERT_ACTION));
-        }
-
         OptExpression result = OptExpression.create(new LogicalProjectOperator(projMap), joinExpr);
         return List.of(result);
     }
 
-<<<<<<< HEAD
-=======
+    // Aggregate MV outputs are all UPSERTs. __ACTION__ = INSERT_ACTION (= __op UPSERT).
+    private static Map<ColumnRefOperator, ScalarOperator> upsertProjection(LogicalAggregationOperator inputAggOp,
+                                                                           LogicalDeltaOperator delta) {
+        Map<ColumnRefOperator, ScalarOperator> projMap = Maps.newHashMap();
+        if (inputAggOp.getProjection() != null) {
+            projMap.putAll(inputAggOp.getProjection().getColumnRefMap());
+        }
+        ColumnRefOperator actionColumn = delta.getActionColumn();
+        if (actionColumn != null) {
+            projMap.put(actionColumn, ConstantOperator.createTinyInt(IvmRuleUtils.INSERT_ACTION));
+        }
+        return projMap;
+    }
+
     /**
      * Whether the join can leave the mv scan in its own buckets, by the test {@code HashDistributionSpec} applies:
      * one selected partition, or a stable colocate group. Otherwise the join shuffles on every equi-join key, and
@@ -286,7 +310,6 @@ public class IvmDeltaAggregateRule extends TransformationRule {
         return conjuncts;
     }
 
->>>>>>> 50cafe6f003... [BugFix] Keep the sort-key join keys off a shuffled IVM state-merge join (#64200)
     private LogicalAggregationOperator buildIntermediateAggOperator(
             ColumnRefFactory columnRefFactory,
             List<ColumnRefOperator> groupingKeys,

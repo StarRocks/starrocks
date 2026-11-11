@@ -18,8 +18,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class StructCastTest extends PlanTestBase {
@@ -60,6 +62,27 @@ public class StructCastTest extends PlanTestBase {
         } finally {
             sv.setSqlMode(prev);
         }
+    }
+
+    @Test
+    public void testReuseCastUnderSubfield() throws Exception {
+        String sql = "select s.k1, s.k2, s.k3 from (select cast(parse_json(concat('{\"k1\":', v1, ',\"k2\":', v2, " +
+                "',\"k3\":', v3, '}')) as struct<k1 bigint, k2 bigint, k3 bigint>) s from t0) x";
+        String plan = getVerboseExplain(sql);
+        // The struct cast is evaluated once as a common expression and every field reads from it.
+        assertEquals(1, StringUtils.countMatches(plan, "parse_json[("), plan);
+        assertEquals(1, StringUtils.countMatches(plan, "as struct<"), plan);
+        assertContains(plan, "common expressions:");
+        assertContains(plan, ".k1[false]", ".k2[false]", ".k3[false]");
+    }
+
+    @Test
+    public void testReuseCastUnderSubfieldInAggregate() throws Exception {
+        String sql = "select count(s.k1), count(s.k2) from (select cast(parse_json(concat('{\"k1\":', v1, " +
+                "',\"k2\":', v2, '}')) as struct<k1 bigint, k2 bigint>) s from t0) x";
+        String plan = getVerboseExplain(sql);
+        assertEquals(1, StringUtils.countMatches(plan, "parse_json[("), plan);
+        assertEquals(1, StringUtils.countMatches(plan, "as struct<"), plan);
     }
 
 }

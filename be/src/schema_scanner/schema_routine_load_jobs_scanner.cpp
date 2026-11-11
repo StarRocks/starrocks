@@ -33,9 +33,9 @@ SchemaScanner::ColumnDesc SchemaRoutineLoadJobsScanner::_s_tbls_columns[] = {
         {"STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"DATA_SOURCE_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"CURRENT_TASK_NUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
-        {"JOB_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
-        {"DATA_SOURCE_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
-        {"CUSTOM_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"JOB_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"DATA_SOURCE_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"CUSTOM_PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"STATISTICS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"PROGRESS", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"REASONS_OF_STATE_CHANGED", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
@@ -62,6 +62,9 @@ Status SchemaRoutineLoadJobsScanner::start(RuntimeState* state) {
     }
     if (_param->job_id != -1) {
         load_params.__set_job_id(_param->job_id);
+    }
+    if (nullptr != _param->current_user_ident) {
+        load_params.__set_current_user_ident(*(_param->current_user_ident));
     }
 
     // init schema scanner state
@@ -161,20 +164,32 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             case 11: {
                 // job_properties
-                Slice job_properties = Slice(info.job_properties);
-                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&job_properties);
+                if (info.__isset.job_properties) {
+                    Slice job_properties = Slice(info.job_properties);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&job_properties);
+                } else {
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
+                }
                 break;
             }
             case 12: {
                 // data_source_properties
-                Slice data_source_properties = Slice(info.data_source_properties);
-                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&data_source_properties);
+                if (info.__isset.data_source_properties) {
+                    Slice data_source_properties = Slice(info.data_source_properties);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&data_source_properties);
+                } else {
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
+                }
                 break;
             }
             case 13: {
                 // custom_properties
-                Slice custom_properties = Slice(info.custom_properties);
-                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&custom_properties);
+                if (info.__isset.custom_properties) {
+                    Slice custom_properties = Slice(info.custom_properties);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&custom_properties);
+                } else {
+                    down_cast<NullableColumn*>(column)->append_nulls(1);
+                }
                 break;
             }
 

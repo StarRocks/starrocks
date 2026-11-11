@@ -22,8 +22,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <ostream>
+#include <random>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -31,7 +33,9 @@
 #include "base/compression/block_compression.h"
 #include "base/string/slice.h"
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/flat_json/json_merger.h"
 #include "column/json_column.h"
@@ -608,6 +612,222 @@ TEST_F(JsonFlattenerTest, testPathTreeBoundedWithinASingleWideRow) {
     ASSIGN_OR_ABORT(auto a, JsonValue::parse(original));
     ASSIGN_OR_ABORT(auto b, JsonValue::parse(roundtrip));
     EXPECT_EQ(0, a.compare(b));
+}
+
+// Flattens json_column with the layout jf derived for it and expects every row back exactly.
+static void expect_flatten_round_trip(const JsonColumn& json_column, const JsonPathDeriver& jf) {
+    JsonFlattener flattener(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    flattener.flatten(&json_column);
+    Columns flat_columns;
+    for (auto& col : flattener.mutable_result()) {
+        flat_columns.emplace_back(std::move(col));
+    }
+    JsonMerger merger(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    auto merged = merger.merge(flat_columns);
+    const auto* merged_json = down_cast<const JsonColumn*>(ColumnHelper::get_data_column(merged.get()));
+    ASSERT_EQ(json_column.size(), merged_json->size());
+    for (size_t row = 0; row < json_column.size(); row++) {
+        const auto* expected = json_column.get_object(row);
+        const auto* got = merged_json->get_object(row);
+        EXPECT_EQ(0, expected->compare(*got)) << "row " << row << ": expected " << expected->to_string_uncheck()
+                                              << ", got " << got->to_string_uncheck();
+    }
+}
+
+// A path dropped to keep the trie within its budget can show up again and reach the sparsity threshold. Its
+// stats then start afresh: typed from the later values alone, the column cannot hold the earlier ones, and
+// JsonFlattener writes those as NULL without keeping them in the remain.
+TEST_F(JsonFlattenerTest, testDroppedPathComingBackKeepsEarlierValues) {
+    config::json_flat_sparsity_factor = 0.3;
+    // Half of the default 6400-node budget per wide row: the trie fills up at the end of the second row, and
+    // shrinking it drops every path the first row alone had.
+    constexpr int kNodesPerWideRow = 3200;
+    auto wide_row = [](const std::string& head, int head_nodes, const std::string& prefix) {
+        std::string json = "{" + head;
+        for (int j = 0; j < kNodesPerWideRow - head_nodes; j++) {
+            json += fmt::format(R"({}"{}{}": {})", head.empty() && j == 0 ? "" : ", ", prefix, j, j);
+        }
+        return json + "}";
+    };
+    struct Case {
+        std::string first_row;
+        std::string second_row;
+        std::string later_rows;
+        std::string path;
+    };
+    // clang-format off
+    std::vector<Case> cases = {
+        {wide_row(R"("t": "abc")", 1, "a"), wide_row("", 0, "b"), R"({"t": 1})", "t"},
+        // The whole object is dropped: the path under it comes back with its parent.
+        {wide_row(R"("o": {"t": "abc"})", 2, "a"), wide_row("", 0, "b"), R"({"o": {"t": 1}})", "o.t"},
+        // Only the path under the object is dropped; the object itself stays.
+        {wide_row(R"("o": {"t": "abc"})", 2, "a"), wide_row(R"("o": {})", 0, "b"), R"({"o": {"t": 1}})", "o.t"},
+    };
+    // clang-format on
+    for (const auto& c : cases) {
+        SCOPED_TRACE(c.path + " " + c.later_rows);
+        auto json_column = JsonColumn::create();
+        for (const auto& json : {c.first_row, c.second_row}) {
+            ASSIGN_OR_ABORT(auto jv, JsonValue::parse(json));
+            json_column->append(&jv);
+        }
+        for (int r = 2; r < 10; r++) {
+            ASSIGN_OR_ABORT(auto jv, JsonValue::parse(c.later_rows));
+            json_column->append(&jv);
+        }
+
+        std::vector<const Column*> columns{json_column.get()};
+        JsonPathDeriver jf;
+        jf.derived(columns);
+        ASSERT_EQ(std::vector<std::string>{c.path}, jf.flat_paths());
+        // Any value fits JSON.
+        EXPECT_EQ(std::vector<LogicalType>{TYPE_JSON}, jf.flat_types());
+        EXPECT_TRUE(jf.has_remain_json());
+        expect_flatten_round_trip(*json_column, jf);
+    }
+}
+
+// Whatever the trie budget drops and brings back, every value must survive flattening. Rows carry enough keys
+// named by data to fill the trie every few dozen rows; each shared key shows up once, stays away across at least
+// one shrink, then keeps coming back with values of one type, while its first value may be of any type.
+TEST_F(JsonFlattenerTest, testFlattenKeepsEveryValueUnderTheTrieBound) {
+    config::json_flat_sparsity_factor = 0.3;
+    constexpr int kRows = 400;
+    constexpr int kDataKeysPerRow = 200;
+    constexpr int kSharedKeys = 8;
+    auto add_value = [](vpack::Builder* b, const std::string& key, int kind, std::mt19937* rng) {
+        switch (kind) {
+        case 0:
+            b->add(key, vpack::Value(static_cast<int64_t>((*rng)() % 1000)));
+            break;
+        case 1:
+            b->add(key, vpack::Value(static_cast<int64_t>((*rng)() % 1000000) << 40));
+            break;
+        case 2:
+            b->add(key, vpack::Value(static_cast<double>((*rng)() % 1000) / 8));
+            break;
+        case 3:
+            b->add(key, vpack::Value("s" + std::to_string((*rng)() % 100)));
+            break;
+        case 4:
+            b->add(key, vpack::Value((*rng)() % 2 == 0));
+            break;
+        case 5:
+            b->add(key, vpack::Value(vpack::ValueType::Null));
+            break;
+        case 6:
+            b->add(key, vpack::Value(vpack::ValueType::Array));
+            b->add(vpack::Value(static_cast<int64_t>((*rng)() % 10)));
+            b->close();
+            break;
+        default:
+            b->add(key, vpack::Value(vpack::ValueType::Object));
+            b->add("x", vpack::Value(static_cast<int64_t>((*rng)() % 10)));
+            b->close();
+            break;
+        }
+    };
+    constexpr int kKinds = 8;
+    for (uint32_t seed = 1; seed <= 10; seed++) {
+        SCOPED_TRACE("seed " + std::to_string(seed));
+        std::mt19937 rng(seed);
+        std::vector<int> first_row(kSharedKeys);
+        std::vector<int> back_from(kSharedKeys);
+        std::vector<int> first_kind(kSharedKeys);
+        std::vector<int> later_kind(kSharedKeys);
+        for (int k = 0; k < kSharedKeys; k++) {
+            first_row[k] = static_cast<int>(rng() % 100);
+            back_from[k] = first_row[k] + 40 + static_cast<int>(rng() % 60);
+            first_kind[k] = static_cast<int>(rng() % kKinds);
+            later_kind[k] = static_cast<int>(rng() % 5); // a scalar type the path may be flattened as
+        }
+        auto json_column = JsonColumn::create();
+        for (int r = 0; r < kRows; r++) {
+            vpack::Builder builder;
+            builder.openObject(true);
+            for (int k = 0; k < kSharedKeys; k++) {
+                const std::string key = "k" + std::to_string(k);
+                if (r == first_row[k]) {
+                    add_value(&builder, key, first_kind[k], &rng);
+                } else if (r >= back_from[k] && rng() % 10 != 0) {
+                    add_value(&builder, key, later_kind[k], &rng);
+                }
+            }
+            for (int j = 0; j < kDataKeysPerRow; j++) {
+                builder.add("u" + std::to_string(r) + "_" + std::to_string(j), vpack::Value(j));
+            }
+            builder.close();
+            JsonValue jv;
+            jv.assign(builder);
+            json_column->append(&jv);
+        }
+
+        std::vector<const Column*> columns{json_column.get()};
+        JsonPathDeriver jf;
+        jf.derived(columns);
+        EXPECT_LE(jf._num_nodes, jf._max_nodes);
+        EXPECT_FALSE(jf.flat_paths().empty());
+        expect_flatten_round_trip(*json_column, jf);
+    }
+}
+
+// The keys below an object the deriver prunes from the path tree go to the remain, so the remain filter must report
+// them too: a reader probes it with the last component of the path it extracts and skips the remain on a miss. Both
+// prunes are covered: a path too sparse to be flattened (checked every vector_chunk_size rows) and a singleton dropped
+// when the tree reaches its node budget.
+TEST_F(JsonFlattenerTest, testRemainFilterReportsKeysBelowAPrunedObject) {
+    config::json_flat_sparsity_factor = 0.3;
+    const int32_t saved_chunk_size = config::vector_chunk_size;
+    DeferOp restore([&]() { config::vector_chunk_size = saved_chunk_size; });
+
+    auto derive = [](const std::vector<std::string>& docs) {
+        auto json_column = JsonColumn::create();
+        for (const auto& doc : docs) {
+            ASSIGN_OR_ABORT(auto jv, JsonValue::parse(doc));
+            json_column->append(&jv);
+        }
+        auto jf = std::make_unique<JsonPathDeriver>();
+        jf->set_generate_filter(true);
+        std::vector<const Column*> columns{json_column.get()};
+        jf->derived(columns);
+        return jf;
+    };
+
+    {
+        // Sparse: "s" is in 1 of 200 rows, and is pruned at the first check past the rows that could still reach 30%;
+        // it never comes back, so only the prune can have reported its keys.
+        config::vector_chunk_size = 16;
+        std::vector<std::string> docs;
+        for (int row = 0; row < 200; row++) {
+            docs.emplace_back(row == 0 ? fmt::format(R"({{"id": {}, "s": {{"leaf1": 1, "leaf2": 2}}}})", row)
+                                       : fmt::format(R"({{"id": {}}})", row));
+        }
+        auto jf = derive(docs);
+        ASSERT_TRUE(jf->has_remain_json());
+        ASSERT_NE(nullptr, jf->remain_fitler());
+        for (const char* key : {"s", "leaf1", "leaf2"}) {
+            EXPECT_TRUE(jf->remain_fitler()->test_bytes(key, strlen(key))) << key;
+        }
+    }
+    {
+        // Singleton: "single" is seen once, then two rows fill the node budget and the shrink drops it.
+        config::vector_chunk_size = saved_chunk_size;
+        std::string wide = R"({"0id": 0)";
+        for (int i = 0; i < 80; i++) {
+            wide += ", \"a" + std::to_string(i) + "\": {";
+            for (int j = 0; j < 80; j++) {
+                wide += (j ? ", " : "") + std::string("\"b") + std::to_string(j) + "\": " + std::to_string(j);
+            }
+            wide += "}";
+        }
+        wide += "}";
+        auto jf = derive({R"({"0id": 0, "single": {"leafA": 1, "leafB": 2}})", wide, wide});
+        ASSERT_TRUE(jf->has_remain_json());
+        ASSERT_NE(nullptr, jf->remain_fitler());
+        for (const char* key : {"single", "leafA", "leafB"}) {
+            EXPECT_TRUE(jf->remain_fitler()->test_bytes(key, strlen(key))) << key;
+        }
+    }
 }
 
 TEST_F(JsonFlattenerTest, testRemainFilterReportsKeysNestedUnderASkippedKey) {

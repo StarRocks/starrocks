@@ -11,6 +11,8 @@ SHOW ROUTINE LOAD shows the execution information of Routine Load jobs.
 
 <RoutineLoadPrivNote />
 
+SHOW ROUTINE LOAD displays a Routine Load job if you hold at least one privilege on its target table, or the OPERATE privilege. Unless you hold the SELECT privilege on the target table, `JobProperties`, `DataSourceProperties`, `CustomProperties`, `ErrorLogUrls`, `TrackingSQL`, and `OtherMsg` are NULL, and `ReasonOfStateChanged` keeps only the error code. The `root` user can see all Routine Load jobs in full. A Routine Load job whose target table has been dropped is shown in full only to the `root` user, and with these fields hidden to users with the OPERATE privilege.
+
 ## Syntax
 
 ```SQL

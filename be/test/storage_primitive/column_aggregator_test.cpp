@@ -389,9 +389,7 @@ TEST(ColumnAggregator, testNullBooleanMin) {
 
     aggregator->aggregate_values(0, 2, loops.data(), true);
 
-    ASSERT_EQ(2, agg->size());
-    ASSERT_EQ("NULL", agg->debug_item(0));
-    ASSERT_EQ("1", agg->debug_item(1));
+    ASSERT_EQ("[NULL, 1]", agg->debug_string());
 
     // third chunk column
     src->reset_column();

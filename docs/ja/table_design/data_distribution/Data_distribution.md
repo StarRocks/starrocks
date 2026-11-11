@@ -818,6 +818,46 @@ v4.1 以降、StarRocks は**レンジベースの分散セマンティクス**�
 - 本機能は v4.1 以降でサポートされます。共有データモードでは、FE 設定 `enable_range_distribution` によって制御され、デフォルトで有効です。
 - 無効にして従来のデフォルト分散に戻すには、FE 設定 `enable_range_distribution` を `false` に設定します。共有なしモードでは効果がありません。
 
+#### タブレットの目標サイズ
+
+レンジ分散のテーブルでは、タブレットの自動分割と自動統合によって、各タブレットのサイズが目標サイズ前後に保たれます。デフォルトでは、すべてのテーブルが FE 設定 `tablet_reshard_target_size`（デフォルト：10 GB）を目標サイズとして使用します。テーブルごとに目標サイズを指定するには、テーブル作成時にテーブルプロパティ `tablet_reshard_target_size`（単位：バイト）に正の整数を設定します。作成後は `ALTER TABLE ... SET` で変更できます。このテーブルプロパティは FE 設定と同じ名前で、レンジ分散のテーブルでのみサポートされます。それ以外のテーブルに設定すると、`tablet_reshard_target_size is only supported for range-distributed tables` というエラーになります。
+
+```SQL
+CREATE TABLE orders (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int,
+    amount decimal(18, 2)
+)
+DUPLICATE KEY (tenant_id, created_time, id)
+PROPERTIES ("tablet_reshard_target_size" = "1073741824");
+
+-- テーブルの目標サイズを 4 GB に変更します。
+ALTER TABLE orders SET ("tablet_reshard_target_size" = "4294967296");
+
+-- プロパティを削除します。テーブルは再び FE 設定 tablet_reshard_target_size に従います。
+ALTER TABLE orders SET ("tablet_reshard_target_size" = "");
+```
+
+このプロパティを設定したテーブルでは、次の処理で FE 設定の代わりにプロパティの値が使用されます。
+
+- 自動分割：タブレットがプロパティ値の 1.5 倍（切り上げ）に達すると、プロパティ値前後のサイズのタブレットに分割されます。
+- 自動統合（FE 設定 `tablet_reshard_enable_tablet_merge` で有効にした場合）：隣接する 2 つのタブレットの合計サイズがプロパティ値の 80%（切り上げ）を下回ると実行されます。統合される各グループの合計サイズはプロパティ値を超えません。
+- `ALTER TABLE ... SPLIT TABLET` と `ALTER TABLE ... MERGE TABLET` は、ステートメントの `PROPERTIES` で `tablet_reshard_target_size` を指定しない場合、プロパティ値を目標サイズとして使用します。
+- データロード時のタブレットの事前分割、`ALTER TABLE ... ORDER BY` などのオンラインでのソートキー変更、およびこのテーブルの Rollup でも、新しいタブレットはプロパティ値を目標サイズとして作成されます。
+
+詳細は [ALTER TABLE - Tablet サイズの調整](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#tablet-サイズの調整) を参照してください。
+
+このテーブルプロパティにデフォルト値はありません。このプロパティを設定していないテーブルは FE 設定 `tablet_reshard_target_size` に従い、この設定を後から変更した場合も、変更後の値に従います。`0`、負の値、数値以外の値を指定するとエラーになります。
+
+FE 設定 `tablet_reshard_target_size` を `0` に設定すると、このテーブルプロパティを設定したテーブルも含め、すべてのテーブルで自動分割と自動統合が無効になります。この設定を正の値に戻すと、テーブルプロパティが再び有効になります。
+
+:::note
+
+`SHOW CREATE TABLE` は、`tablet_reshard_target_size` プロパティを設定したテーブルについて、このプロパティを含むステートメントを返します。レンジ分散がデフォルトではない環境（FE 設定 `enable_range_distribution` が `false` の場合、または共有なしモード）では、このステートメントはハッシュバケット法またはランダムバケット法のテーブルを作成しようとするため、レンジ分散のテーブル専用であるこのプロパティによってエラーになります。このプロパティをサポートしないバージョンでは、不明なプロパティとして拒否されます。これらの環境で実行する前に、このプロパティを削除してください。
+
+:::
+
 #### 例
 
 ##### 範囲ベースの分布セマンティクスを使用した新しいテーブルの作成
@@ -874,7 +914,11 @@ PRIMARY KEY (tenant_id, created_time, id);
 コロケーショングループに加えて、`colocate_with` プロパティで、`<colocation_group>:<colocated_column>[,<colocated_column>]` という形式で、コロケーション対象の列を指定する必要があります。
 - コロケーション対象の列は、ソート列のプレフィックスでなければなりません。
 - 同じコロケーショングループ内のテーブルは、コロケーション対象の列の型、数、順序が同一でなければなりません。
+- テーブル作成後は、コロケーション対象の列の型を変更できません（VARCHAR 列の長さを増やす変更も含みます）。
+- テーブル作成後も、ソートキーをオンラインで変更できます（`ALTER TABLE ... ORDER BY`、キー列の追加または削除、整数型のソートキー列の拡張）。ただし、新しいソートキーは、コロケーション対象の列を同じ順序・同じ型のまま先頭に含む必要があります。コロケーション対象の列の削除、順序の入れ替え、型の変更を伴う変更は拒否されます。変更後もテーブルは同じコロケーショングループに属し、Colocate Join を引き続き利用できます。
 - デフォルトのコロケーション対象の列は、ソート列です。
+- `colocate_with` でコロケーショングループのみを指定している場合、ソートキーの変更によってソートキーの列数がコロケーション対象の列数より多くなると、StarRocks はこのプロパティをコロケーション対象の列を明示する形式 `<colocation_group>:<colocated_column>[,<colocated_column>]` に書き換えます。以後、`SHOW CREATE TABLE` にはこの形式が表示されます。
+- Rollup と同期マテリアライズドビューを作成できます。ただし、そのソートキーは、コロケーション対象の列を同じ順序・同じ型のまま先頭に含む必要があります。`CREATE TABLE ... ROLLUP (...)` で定義した Rollup はキー列でソートされ、その中に記述した `ORDER BY` は使用されません。そのため、この Rollup のキー列は、コロケーション対象の列を同じ順序・同じ型のまま先頭に含む必要があります。同期マテリアライズドビューのソートキーは、`SELECT` リストの先頭にある集計されていない列で、順序は `SELECT` での順序に従います。`GROUP BY`、集計、`DISTINCT` のいずれも含まないビューでは、ソートキーは `SELECT` リストのプレフィックス（最大 3 列かつ 36 バイト以内。VARCHAR 列があればその列まで、キーにできない型（FLOAT、DOUBLE など）の列があればその直前まで）となり、`ORDER BY` では変更できません。このようなビューのソートキーを指定するには、代わりに `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` を使用してください。Rollup または同期マテリアライズドビューを持つテーブルでは、上記のソートキーの変更はサポートされません。
 :::
 
 ```SQL
@@ -896,7 +940,7 @@ PROPERTIES(
 
 タブレットの分割および統合に関する詳細な手順については、[ALTER TABLE - Split or merge tablets](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#split-or-merge-tablets) を参照してください。
 
-- 表内にあるすべての条件を満たすタブレットを、10 GB (デフォルト) を目標サイズとして分割する。
+- 表内にあるすべての条件を満たすタブレットを、テーブルの目標サイズ (デフォルトは 10 GB) に従って分割する。
 
 ```SQL
 ALTER TABLE table1 SPLIT TABLETS;
@@ -917,9 +961,10 @@ PROPERTIES (
 | DDL | 理由 |
 | --- | --- |
 | `ORDER BY` 句を持たない `ALTER TABLE ... ADD ROLLUP ...` | 普通の同期 Rollup は、ベーステーブルと Rollup テーブルの tablet が 1 対 1 で対応し行順序が一致していることを前提としますが、レンジ分散ではこれを満たせません。代わりに `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` を使用してください。共有データのレンジ分散テーブルでは（v4.2 以降）独立したソートキーを持つ Rollup を作成でき、この種の Rollup は複数追加できます（`ALTER TABLE` 文ごとに 1 つ）。 |
-| `CREATE MATERIALIZED VIEW ... AS ...`（`REFRESH` および `DISTRIBUTED BY` 句を持たない同期型） | 同期マテリアライズドビューは本質的に普通の同期 Rollup であり、同じ制限を受けます。 |
+| `CREATE MATERIALIZED VIEW ... AS ...`（`REFRESH` および `DISTRIBUTED BY` 句を持たない同期型） | 共有データクラスタの重複キーテーブル、集計テーブル、ユニークキーテーブルでは、同期マテリアライズドビューを作成できます。詳しくは [CREATE MATERIALIZED VIEW](../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md) を参照してください。それ以外の場合、同期マテリアライズドビューは本質的に普通の同期 Rollup であり、同じ制限を受けます。 |
 | `ALTER TABLE ... MERGE TABLETS`（`ORDER BY` が主キーと異なる主キーテーブル。サイズに基づく自動マージも同じ形態をスキップします） | この種のテーブルは主キー空間のレンジで行をルーティングする一方、Segment はソートキー順に配置されるため、マージ時に、複数のソースが共有する Segment 内のある行がどのソース Tablet に属しているかを判定できません。SPLIT は影響を受けません。また `ORDER BY` が主キーと同じ主キーテーブルは、これまでどおり MERGE できます。 |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE はパーティション内のデータを再分散・再バケット化するため、レンジ tablet の境界と互換性がありません。 |
+| `colocate_with` を設定したテーブルでの `CREATE TABLE ... ROLLUP (...)`、`ALTER TABLE ... ADD ROLLUP ...`、`CREATE MATERIALIZED VIEW` のうち、Rollup または同期マテリアライズドビューのソートキーがコロケーション対象の列で始まらないもの | Rollup と同期マテリアライズドビューの tablet はコロケーショングループと揃っている必要があり、ソートキーがコロケーション対象の列で始まることで、テーブルのすべてのインデックスが揃った状態に保たれます。`GROUP BY`、集計、`DISTINCT` のいずれも含まない同期マテリアライズドビューはソートキーを指定できないため、代わりに `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` を使用してください。 |
 
 Rollup のような集計ユースケースには、明示的な `REFRESH` 句または `DISTRIBUTED BY` 句を伴う**非同期マテリアライズドビュー**を使用してください。例：
 
@@ -984,6 +1029,7 @@ AS SELECT ... FROM range_table;
       user_name VARCHAR(32) DEFAULT '')
   DUPLICATE KEY (event_day,site_id,pv)
   PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY RANDOM
   -- パーティション内のバケット数はStarRocksによって自動的に決定され、バケットのサイズが1 GBに設定されているため、オンデマンドで動的に増加します。
   PROPERTIES("bucket_size"="1073741824")
   ;
@@ -996,6 +1042,7 @@ AS SELECT ... FROM range_table;
       user_name VARCHAR(32) DEFAULT '')
   DUPLICATE KEY (event_day,site_id,pv)
   PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY RANDOM
   -- テーブルパーティション内のバケット数はStarRocksによって自動的に決定され、バケットのサイズが設定されていないため、オンデマンドで動的に増加しません。
   ;
   ```

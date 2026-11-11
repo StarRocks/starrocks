@@ -154,6 +154,10 @@ public class ConnectorColumnStatsCacheLoader implements
                 splits[1], splits[3], statisticData.columnName, columnType);
         return new ConnectorTableColumnStats(columnStatistic, statisticData.rowCount, statisticData.updateTime,
                 statisticData.isSetCollectedPartitionCount() ? statisticData.collectedPartitionCount : 0,
-                statisticData.isSetPerPartitionNdvSum() ? statisticData.perPartitionNdvSum : 0);
+                statisticData.isSetPerPartitionNdvSum() ? statisticData.perPartitionNdvSum : 0,
+                statisticData.isSetThirdNdv() ? statisticData.thirdNdv : 0,
+                statisticData.isSetTwoThirdsNdv() ? statisticData.twoThirdsNdv : 0,
+                statisticData.isSetThirdPartitionCount() ? statisticData.thirdPartitionCount : 0,
+                statisticData.isSetTwoThirdsPartitionCount() ? statisticData.twoThirdsPartitionCount : 0);
     }
 }

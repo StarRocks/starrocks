@@ -1,0 +1,47 @@
+-- name: test_colocate_range_create_table_rollup @cloud
+-- CREATE TABLE ... ROLLUP on a range table with colocate_with: a rollup whose sort key starts with the
+-- colocate columns is created together with the table and readable; a rollup whose sort key does not
+-- start with them is rejected and the rejected statement leaves no table behind.
+set enable_range_distribution = true;
+set enable_tablet_pre_split = false;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+-- Rejected: the rollup sort key (k2, k1) does not start with the colocate column k1.
+create table t (k1 int, k2 int, v int)
+    order by(k1, k2)
+    rollup (r2 (k2, k1))
+    properties('replication_num' = '1', 'colocate_with' = 'g_ctr_${uuid0}:k1');
+
+show tables;
+
+-- Accepted: the rollup sort key (k1) starts with the colocate column k1.
+create table t (k1 int, k2 int, v int)
+    order by(k1, k2)
+    rollup (r1 (k1, v))
+    properties('replication_num' = '1', 'colocate_with' = 'g_ctr_${uuid0}:k1');
+
+show tables;
+desc t all;
+
+insert into t values (1, 10, 100), (1, 11, 101), (2, 20, 200), (3, 30, 300), (3, 31, 301), (3, 32, 302);
+select k1, count(*) from t group by k1 order by k1;
+select count(*), sum(v) from t;
+
+-- The rollup holds the same rows and is read by an explicit index hint; rewrites are off for the base read.
+set enable_materialized_view_rewrite = false;
+set enable_sync_materialized_view_rewrite = false;
+select k1, count(*), sum(v) from t group by k1 order by k1;
+select k1, count(*), sum(v) from r1 [_SYNC_MV_] group by k1 order by k1;
+select count(*), sum(v) from r1 [_SYNC_MV_];
+
+-- Without a rollup the same table definition is still accepted.
+create table t_plain (k1 int, k2 int, v int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'g_ctr_${uuid0}:k1');
+show tables;
+
+drop table t_plain;
+drop table t;
+drop database db_${uuid0};

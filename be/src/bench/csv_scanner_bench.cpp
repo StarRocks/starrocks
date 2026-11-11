@@ -447,10 +447,10 @@ struct ScanColumns {
                 types.emplace_back(TypeDescriptor::create_varchar_type(64));
                 break;
             case Col::Long:
-                types.emplace_back(TypeDescriptor(LogicalType::TYPE_BIGINT));
+                types.emplace_back(TYPE_BIGINT_DESC);
                 break;
             case Col::Datetime:
-                types.emplace_back(TypeDescriptor(LogicalType::TYPE_DATETIME));
+                types.emplace_back(TYPE_DATETIME_DESC);
                 break;
             case Col::Decimal:
                 types.emplace_back(

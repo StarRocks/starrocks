@@ -30,6 +30,7 @@ description: "非同期マテリアライズドビューの名前変更、リフ
   - `foreign_key_constraints`
   - `colocate_with`
   - `excluded_refresh_tables`
+  - `file_bundling`（共有データクラスタのみ、v26.2 以降でサポート）
   - すべてのセッション変数関連のプロパティ。セッション変数については、[System variables](../../System_variable.md)を参照してください。
 
 :::tip
@@ -61,7 +62,7 @@ ALTER MATERIALIZED VIEW [db_name.]<mv_name>
 | ACTIVE                  | no           | マテリアライズドビューのステータスをアクティブに設定します。StarRocksは、ベーステーブルが変更された場合（例: 削除され再作成された場合）、元のメタデータが変更されたベーステーブルと一致しない状況を防ぐために、マテリアライズドビューを自動的に非アクティブに設定します。非アクティブなマテリアライズドビューはクエリアクセラレーションやクエリの書き換えには使用できません。ベーステーブルを変更した後、このSQLを使用してマテリアライズドビューをアクティブにできます。 |
 | INACTIVE                | no           | マテリアライズドビューのステータスを非アクティブに設定します。非アクティブな非同期マテリアライズドビューはリフレッシュできませんが、テーブルとしてクエリすることはできます。 |
 | SWAP WITH               | no           | 必要な整合性チェックの後、他の非同期マテリアライズドビューとアトミック交換を実行します。 |
-| ORDER BY                | no           | マテリアライズドビューのソートキーを、指定した列にオンラインで変更します（再作成不要）。共有データクラスターの Range 分散の非同期マテリアライズドビューでのみサポートされます（v4.2 以降）。指定する列はマテリアライズドビューの出力列である必要があります。重複キー（Duplicate Key）マテリアライズドビューではソートキーは任意の列のサブセットにできます。集計（Aggregate）およびユニークキー（Unique Key）マテリアライズドビューではソートキーはすべてのキー列で構成される必要があります。変更中はマテリアライズドビューのリフレッシュが一時停止され、完了時に自動的に再開されます。変更中もマテリアライズドビューはクエリ可能で、新しいソート順序は切り替え時にアトミックに反映されます。 |
+| ORDER BY                | no           | マテリアライズドビューのソートキーを、指定した列にオンラインで変更します（再作成不要）。共有データクラスターの Range 分散の非同期マテリアライズドビューでのみサポートされます（v4.2 以降）。`colocate_with` が設定されたマテリアライズドビューでは、新しいソートキーは、コロケーション対象の列を同じ順序・同じ型のまま先頭に含む必要があります。`colocate_with` でコロケーショングループのみを指定していて、新しいソートキーの列数がコロケーション対象の列数より多い場合、このプロパティはコロケーション対象の列を明示する形式 `<colocation_group>:<colocated_column>[,<colocated_column>]` に書き換えられ、以後 `SHOW CREATE MATERIALIZED VIEW` にはこの形式が表示されます。指定する列はマテリアライズドビューの出力列である必要があります。重複キー（Duplicate Key）マテリアライズドビューではソートキーは任意の列のサブセットにできます。集計（Aggregate）およびユニークキー（Unique Key）マテリアライズドビューではソートキーはすべてのキー列で構成される必要があります。変更中はマテリアライズドビューのリフレッシュが一時停止され、完了時に自動的に再開されます。変更中もマテリアライズドビューはクエリ可能で、新しいソート順序は切り替え時にアトミックに反映されます。 |
 | key                     | no           | 変更するプロパティの名前。詳細は[SQL Reference - CREATE MATERIALIZED VIEW - Parameters](CREATE_MATERIALIZED_VIEW.md#parameters)を参照してください。<br />**注意**<br />マテリアライズドビューのセッション変数関連のプロパティを変更する場合は、プロパティに`session.`プレフィックスを追加する必要があります。例: `session.insert_timeout`。非セッションプロパティの場合、プレフィックスを指定する必要はありません。例: `mv_rewrite_staleness_second`。 |
 | value                   | no           | 変更するプロパティの値。                                      |
 
@@ -134,4 +135,10 @@ ALTER MATERIALIZED VIEW mv1 SET ("bloom_filter_columns" = "col1, col2");
 
 ```SQL
 ALTER MATERIALIZED VIEW order_mv ORDER BY (k2, k1);
+```
+
+例12: 共有データクラスタのマテリアライズドビューでファイルバンドリングを有効にします（v26.2 以降）。このステートメントで設定できるプロパティは `file_bundling` のみです。変更は非同期ジョブとして実行され、進捗は [SHOW ALTER TABLE COLUMN](../table_bucket_part_index/SHOW_ALTER.md) で確認できます。`file_bundling` の変更に関する制限はテーブルと同じです。[CREATE TABLE](../table_bucket_part_index/CREATE_TABLE.md) の `file_bundling` プロパティを参照してください。
+
+```SQL
+ALTER MATERIALIZED VIEW order_mv SET ("file_bundling" = "true");
 ```

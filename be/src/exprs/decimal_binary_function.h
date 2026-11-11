@@ -48,7 +48,7 @@ struct DecimalBinaryFunction {
               typename RhsCppType, typename ResultCppType>
     static inline bool adjust_evaluate(size_t num_rows, const LhsCppType* lhs_data, const RhsCppType* rhs_data,
                                        ResultCppType* result_data, NullColumn::ValueType* nulls, bool* has_null,
-                                       int adjust_scale) {
+                                       int adjust_scale, const uint8_t* input_nulls) {
         [[maybe_unused]] LhsCppType lhs_datum;
         [[maybe_unused]] RhsCppType rhs_datum;
         [[maybe_unused]] const auto scale_factor = get_scale_factor<LhsCppType>(adjust_scale);
@@ -61,7 +61,9 @@ struct DecimalBinaryFunction {
             if constexpr (adjust_left) {
                 overflow = DecimalV3Cast::scale_up<LhsCppType, LhsCppType, check_overflow<overflow_mode>>(
                         lhs_datum, scale_factor, &lhs_datum);
-                // adjusting operand generates decimal overflow
+                // adjusting operand generates decimal overflow. The constant operand is shared by every row, and
+                // NullAwareReportErrorDecimalBinaryFunction never calls in with every row null, so under
+                // REPORT_ERROR this overflow belongs to a non-null row.
                 if constexpr (check_overflow<overflow_mode>) {
                     if (overflow) {
                         if constexpr (error_if_overflow<overflow_mode>) {
@@ -100,8 +102,10 @@ struct DecimalBinaryFunction {
             if constexpr (check_overflow<overflow_mode>) {
                 if (overflow) {
                     if constexpr (error_if_overflow<overflow_mode>) {
-                        throw std::overflow_error(strings::Substitute(
-                                "The '$0' operation involving decimal values overflows", get_op_name<Op>()));
+                        if (!is_null_input_row(input_nulls, i)) {
+                            throw std::overflow_error(strings::Substitute(
+                                    "The '$0' operation involving decimal values overflows", get_op_name<Op>()));
+                        }
                     } else {
                         static_assert(null_if_overflow<overflow_mode>);
                         *has_null = true;
@@ -114,7 +118,7 @@ struct DecimalBinaryFunction {
     }
 
     template <bool lhs_is_const, bool rhs_is_const, LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
-    static inline ColumnPtr evaluate(const ColumnPtr& lhs, const ColumnPtr& rhs) {
+    static inline ColumnPtr evaluate(const ColumnPtr& lhs, const ColumnPtr& rhs, const uint8_t* input_nulls = nullptr) {
         using ResultCppType = RunTimeCppType<ResultType>;
         using ResultColumnType = RunTimeColumnType<ResultType>;
 
@@ -148,27 +152,27 @@ struct DecimalBinaryFunction {
             if (adjust_scale == 0) {
                 // S(lhs)==S(rhs) no need to adjust
                 all_null = adjust_evaluate<lhs_is_const, rhs_is_const, false, BinaryOperator>(
-                        num_rows, lhs_data, rhs_data, result_data, nulls, &has_null, adjust_scale);
+                        num_rows, lhs_data, rhs_data, result_data, nulls, &has_null, adjust_scale, input_nulls);
             } else if (lhs_scale < rhs_scale) {
                 // S(lhs) < S(rhs), scale lhs up by S(rhs)-S(lhs)
                 all_null = adjust_evaluate<lhs_is_const, rhs_is_const, true, BinaryOperator>(
-                        num_rows, lhs_data, rhs_data, result_data, nulls, &has_null, adjust_scale);
+                        num_rows, lhs_data, rhs_data, result_data, nulls, &has_null, adjust_scale, input_nulls);
             } else {
                 // S(lhs) > S(rhs), scale rhs up by S(lhs)-S(rhs)
                 if constexpr (is_add_op<Op>) {
                     // add: just swap two operands
                     all_null = adjust_evaluate<rhs_is_const, lhs_is_const, true, BinaryOperator>(
-                            num_rows, rhs_data, lhs_data, result_data, nulls, &has_null, adjust_scale);
+                            num_rows, rhs_data, lhs_data, result_data, nulls, &has_null, adjust_scale, input_nulls);
                 } else if constexpr (is_sub_op<Op>) {
                     // sub: just swap two operand and then rhs - lhs
                     using ReverseSubOperator = ArithmeticBinaryOperator<ReverseSubOp, ResultType>;
                     all_null = adjust_evaluate<rhs_is_const, lhs_is_const, true, ReverseSubOperator>(
-                            num_rows, rhs_data, lhs_data, result_data, nulls, &has_null, adjust_scale);
+                            num_rows, rhs_data, lhs_data, result_data, nulls, &has_null, adjust_scale, input_nulls);
                 } else if constexpr (is_mod_op<Op>) {
                     // mod: just swap two operand and then rhs - lhs
                     using ReverseModOperator = ArithmeticBinaryOperator<ReverseModOp, ResultType>;
                     all_null = adjust_evaluate<rhs_is_const, lhs_is_const, true, ReverseModOperator>(
-                            num_rows, rhs_data, lhs_data, result_data, nulls, &has_null, adjust_scale);
+                            num_rows, rhs_data, lhs_data, result_data, nulls, &has_null, adjust_scale, input_nulls);
                 } else {
                     static_assert(is_add_op<Op> || is_sub_op<Op>, "Invalid Op");
                 }
@@ -176,19 +180,19 @@ struct DecimalBinaryFunction {
         } else if constexpr (is_mul_op<Op>) {
             // mul operation, no need to adjust scale
             all_null = adjust_evaluate<lhs_is_const, rhs_is_const, false, BinaryOperator>(
-                    num_rows, lhs_data, rhs_data, result_data, nulls, &has_null, adjust_scale);
+                    num_rows, lhs_data, rhs_data, result_data, nulls, &has_null, adjust_scale, input_nulls);
         } else if constexpr (is_div_op<Op>) {
             // div operation, scale lhs up by S(rhs)
             if (adjust_scale == 0) {
                 all_null = adjust_evaluate<lhs_is_const, rhs_is_const, false, BinaryOperator>(
-                        num_rows, lhs_data, rhs_data, result_data, nulls, &has_null, adjust_scale);
+                        num_rows, lhs_data, rhs_data, result_data, nulls, &has_null, adjust_scale, input_nulls);
             } else {
                 all_null = adjust_evaluate<lhs_is_const, rhs_is_const, true, BinaryOperator>(
-                        num_rows, lhs_data, rhs_data, result_data, nulls, &has_null, adjust_scale);
+                        num_rows, lhs_data, rhs_data, result_data, nulls, &has_null, adjust_scale, input_nulls);
             }
         } else if constexpr (is_decimal_fast_mul_op<Op>) {
             all_null = adjust_evaluate<lhs_is_const, rhs_is_const, false, BinaryOperator>(
-                    num_rows, lhs_data, rhs_data, result_data, nulls, &has_null, adjust_scale);
+                    num_rows, lhs_data, rhs_data, result_data, nulls, &has_null, adjust_scale, input_nulls);
         }
 
         if constexpr (check_overflow<overflow_mode>) {
@@ -221,20 +225,24 @@ struct DecimalBinaryFunction {
 #endif
 
     template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
-    static inline ColumnPtr const_const(const ColumnPtr& lhs, const ColumnPtr& rhs) {
-        return evaluate<true, true, LhsType, RhsType, ResultType>(lhs, rhs);
+    static inline ColumnPtr const_const(const ColumnPtr& lhs, const ColumnPtr& rhs,
+                                        const uint8_t* input_nulls = nullptr) {
+        return evaluate<true, true, LhsType, RhsType, ResultType>(lhs, rhs, input_nulls);
     }
     template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
-    static inline ColumnPtr const_vector(const ColumnPtr& lhs, const ColumnPtr& rhs) {
-        return evaluate<true, false, LhsType, RhsType, ResultType>(lhs, rhs);
+    static inline ColumnPtr const_vector(const ColumnPtr& lhs, const ColumnPtr& rhs,
+                                         const uint8_t* input_nulls = nullptr) {
+        return evaluate<true, false, LhsType, RhsType, ResultType>(lhs, rhs, input_nulls);
     }
     template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
-    static inline ColumnPtr vector_const(const ColumnPtr& lhs, const ColumnPtr& rhs) {
-        return evaluate<false, true, LhsType, RhsType, ResultType>(lhs, rhs);
+    static inline ColumnPtr vector_const(const ColumnPtr& lhs, const ColumnPtr& rhs,
+                                         const uint8_t* input_nulls = nullptr) {
+        return evaluate<false, true, LhsType, RhsType, ResultType>(lhs, rhs, input_nulls);
     }
     template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
-    static inline ColumnPtr vector_vector(const ColumnPtr& lhs, const ColumnPtr& rhs) {
-        return evaluate<false, false, LhsType, RhsType, ResultType>(lhs, rhs);
+    static inline ColumnPtr vector_vector(const ColumnPtr& lhs, const ColumnPtr& rhs,
+                                          const uint8_t* input_nulls = nullptr) {
+        return evaluate<false, false, LhsType, RhsType, ResultType>(lhs, rhs, input_nulls);
     }
 };
 
@@ -242,31 +250,114 @@ template <typename OP, OverflowMode overflow_mode>
 class UnpackConstColumnDecimalBinaryFunction {
 public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
-    static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
+    static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2, const uint8_t* input_nulls = nullptr) {
         using Function = DecimalBinaryFunction<overflow_mode, OP>;
         if (!v1->is_constant() && !v2->is_constant()) {
-            return Function::template vector_vector<LType, RType, ResultType>(v1, v2);
+            return Function::template vector_vector<LType, RType, ResultType>(v1, v2, input_nulls);
         } else if (!v1->is_constant() && v2->is_constant()) {
             const ColumnPtr& data2 = ColumnHelper::as_raw_column<ConstColumn>(v2)->data_column();
-            return Function::template vector_const<LType, RType, ResultType>(v1, data2);
+            return Function::template vector_const<LType, RType, ResultType>(v1, data2, input_nulls);
         } else if (v1->is_constant() && !v2->is_constant()) {
             const ColumnPtr& data1 = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
-            return Function::template const_vector<LType, RType, ResultType>(data1, v2);
+            return Function::template const_vector<LType, RType, ResultType>(data1, v2, input_nulls);
         } else {
             const ColumnPtr& data1 = ColumnHelper::as_raw_column<ConstColumn>(v1)->data_column();
             const ColumnPtr& data2 = ColumnHelper::as_raw_column<ConstColumn>(v2)->data_column();
-            return Function::template const_const<LType, RType, ResultType>(data1, data2);
+            return Function::template const_const<LType, RType, ResultType>(data1, data2, input_nulls);
+        }
+    }
+};
+
+/**
+ * Drives a decimal arithmetic op under REPORT_ERROR.
+ *
+ * The nullable binary drivers hand the op only the data columns of the operands, so the op would also check a
+ * row where an operand is NULL, whose data slot is undefined: 0 for a NULL divisor, or a value left by an
+ * upstream expression (`a + b` with a NULL `a` holds `b`). Pass the operands' null flags down instead, so the op
+ * reports an overflow only for a row where both operands are non-null.
+ *
+ * PRODUCE_NULL_FN, unless void, marks more NULL result rows, as in ProduceNullableColumnBinaryFunction: the zero
+ * divisor check of div and mod. Those rows are NULL like in every other overflow mode, and the op computes them
+ * with a placeholder divisor whose quotient may overflow, so they are passed down as null rows as well.
+ */
+template <typename OP, typename PRODUCE_NULL_FN = void>
+class NullAwareReportErrorDecimalBinaryFunction {
+    using Kernel = UnpackConstColumnDecimalBinaryFunction<OP, OverflowMode::REPORT_ERROR>;
+    using NullUnawareFunction =
+            std::conditional_t<std::is_void_v<PRODUCE_NULL_FN>, UnionNullableColumnBinaryFunction<Kernel>,
+                               ProduceNullableColumnBinaryFunction<PRODUCE_NULL_FN, Kernel>>;
+
+public:
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
+    static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
+        // A constant operand may report fewer rows than the chunk: a decimal const-op-const result has one row.
+        const size_t num_rows = std::max(v1->size(), v2->size());
+        if (v1->only_null() || v2->only_null()) {
+            return ColumnHelper::create_const_null_column(num_rows);
+        }
+        if constexpr (std::is_void_v<PRODUCE_NULL_FN>) {
+            if (!v1->has_null() && !v2->has_null()) {
+                return NullUnawareFunction::template evaluate<LType, RType, ResultType>(v1, v2);
+            }
+        } else if (v1->is_constant() && v2->is_constant()) {
+            // ProduceNullableColumnBinaryFunction checks a constant divisor for zero before calling the op.
+            return NullUnawareFunction::template evaluate<LType, RType, ResultType>(v1, v2);
+        }
+
+        // Here only a non-constant nullable operand has null rows.
+        NullColumn::MutablePtr nulls = NullColumn::create(num_rows, 0);
+        _union_nulls(v1, nulls.get());
+        _union_nulls(v2, nulls.get());
+        const ColumnPtr& data1 = FunctionHelper::get_data_column_of_nullable(v1);
+        const ColumnPtr& data2 = FunctionHelper::get_data_column_of_nullable(v2);
+        if constexpr (!std::is_void_v<PRODUCE_NULL_FN>) {
+            ColumnPtr produce_null = PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(data1, data2);
+            _union_nulls(down_cast<const NullColumn*>(produce_null.get())->immutable_data(), nulls.get());
+        }
+        if (SIMD::count_nonzero(nulls->get_data()) == num_rows) {
+            return ColumnHelper::create_const_null_column(num_rows);
+        }
+
+        ColumnPtr result = Kernel::template evaluate<LType, RType, ResultType>(data1, data2, nulls->get_data().data());
+        return FunctionHelper::merge_column_and_null_column(std::move(result), std::move(nulls));
+    }
+
+    template <LogicalType Type>
+    static inline ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
+        return evaluate<Type, Type, Type>(v1, v2);
+    }
+
+    template <LogicalType Type, LogicalType ResultType>
+    static inline ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
+        return evaluate<Type, Type, ResultType>(v1, v2);
+    }
+
+private:
+    static void _union_nulls(const ColumnPtr& column, NullColumn* nulls) {
+        if (!column->is_constant() && column->is_nullable()) {
+            _union_nulls(down_cast<const NullableColumn*>(column.get())->immutable_null_column_data(), nulls);
+        }
+    }
+
+    template <typename NullData>
+    static void _union_nulls(const NullData& src, NullColumn* nulls) {
+        auto* dst = nulls->get_data().data();
+        for (size_t i = 0; i < src.size(); ++i) {
+            dst[i] |= src[i];
         }
     }
 };
 
 template <typename OP, OverflowMode overflow_mode = OverflowMode::IGNORE>
-using VectorizedStrictDecimalBinaryFunction =
-        UnionNullableColumnBinaryFunction<UnpackConstColumnDecimalBinaryFunction<OP, overflow_mode>>;
+using VectorizedStrictDecimalBinaryFunction = std::conditional_t<
+        error_if_overflow<overflow_mode>, NullAwareReportErrorDecimalBinaryFunction<OP>,
+        UnionNullableColumnBinaryFunction<UnpackConstColumnDecimalBinaryFunction<OP, overflow_mode>>>;
 
 template <LogicalType Type, typename OP, OverflowMode overflow_mode = OverflowMode::IGNORE>
-using VectorizedUnstrictDecimalBinaryFunction =
+using VectorizedUnstrictDecimalBinaryFunction = std::conditional_t<
+        error_if_overflow<overflow_mode>,
+        NullAwareReportErrorDecimalBinaryFunction<OP, UnpackConstColumnBinaryFunction<ArithmeticRightZeroCheck<Type>>>,
         ProduceNullableColumnBinaryFunction<UnpackConstColumnBinaryFunction<ArithmeticRightZeroCheck<Type>>,
-                                            UnpackConstColumnDecimalBinaryFunction<OP, overflow_mode>>;
+                                            UnpackConstColumnDecimalBinaryFunction<OP, overflow_mode>>>;
 
 } //namespace starrocks

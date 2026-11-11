@@ -39,7 +39,7 @@ TColumnAccessPath make_thrift_path(TAccessPathType::type type, bool from_predica
 } // namespace
 
 TEST(ColumnAccessPathCoreTest, createFromThriftUsesResolverForWholeTree) {
-    auto leaf = make_thrift_path(TAccessPathType::FIELD, true, true, TypeDescriptor(TYPE_VARCHAR));
+    auto leaf = make_thrift_path(TAccessPathType::FIELD, true, true, TYPE_VARCHAR_DESC);
     auto child = make_thrift_path(TAccessPathType::FIELD);
     child.__set_children({leaf});
     auto root_path = make_thrift_path(TAccessPathType::ROOT);

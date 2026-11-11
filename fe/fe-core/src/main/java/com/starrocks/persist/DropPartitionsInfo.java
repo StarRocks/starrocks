@@ -54,6 +54,10 @@ public class DropPartitionsInfo implements Writable {
     private List<String> partitionNames = new ArrayList<>();
     @SerializedName(value = "isDropAll")
     private boolean isDropAll = false;
+    // Seconds a force drop keeps the dropped partitions' tablets in the recycle bin before they can be
+    // erased, 0 for none. An FE that does not know this field replays the drop as a plain force drop.
+    @SerializedName(value = "retentionPeriod")
+    private long retentionPeriod = 0L;
 
     private DropPartitionsInfo() {
     }
@@ -64,12 +68,18 @@ public class DropPartitionsInfo implements Writable {
 
     public DropPartitionsInfo(Long dbId, Long tableId, boolean isTempPartition,
                               boolean forceDrop, List<String> partitionNames, boolean isDropAll) {
+        this(dbId, tableId, isTempPartition, forceDrop, partitionNames, isDropAll, 0L);
+    }
+
+    public DropPartitionsInfo(Long dbId, Long tableId, boolean isTempPartition, boolean forceDrop,
+                              List<String> partitionNames, boolean isDropAll, long retentionPeriod) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.isTempPartition = isTempPartition;
         this.forceDrop = forceDrop;
         this.partitionNames = partitionNames;
         this.isDropAll = isDropAll;
+        this.retentionPeriod = retentionPeriod;
     }
 
     public Long getDbId() {
@@ -96,6 +106,10 @@ public class DropPartitionsInfo implements Writable {
         return isDropAll;
     }
 
+    public long getRetentionPeriod() {
+        return retentionPeriod;
+    }
+
     public void setPartitionNames(List<String> partitionNames) {
         this.partitionNames = partitionNames;
     }
@@ -111,11 +125,11 @@ public class DropPartitionsInfo implements Writable {
         DropPartitionsInfo that = (DropPartitionsInfo) o;
         return isTempPartition == that.isTempPartition && forceDrop == that.forceDrop && Objects.equals(dbId, that.dbId) &&
                 Objects.equals(tableId, that.tableId) && Objects.equals(partitionNames, that.partitionNames) &&
-                isDropAll == that.isDropAll;
+                isDropAll == that.isDropAll && retentionPeriod == that.retentionPeriod;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(dbId, tableId, isTempPartition, forceDrop, partitionNames, isDropAll);
+        return Objects.hash(dbId, tableId, isTempPartition, forceDrop, partitionNames, isDropAll, retentionPeriod);
     }
 }

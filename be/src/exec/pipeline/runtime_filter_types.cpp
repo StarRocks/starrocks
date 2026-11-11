@@ -328,7 +328,10 @@ StatusOr<bool> PartialRuntimeFilterMerger::_try_do_merge(RuntimeMembershipFilter
     if (1 == _num_active_builders--) {
         if (_always_true) {
             _partial_in_filters.clear();
-            _bloom_filter_descriptors.clear();
+            _bloom_filter_descriptors = std::move(bloom_filter_descriptors);
+            for (auto* desc : _bloom_filter_descriptors) {
+                desc->set_runtime_filter(nullptr);
+            }
             return true;
         }
         _bloom_filter_descriptors = std::move(bloom_filter_descriptors);
