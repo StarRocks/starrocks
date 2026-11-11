@@ -22,14 +22,18 @@ properties (
 );
 -- result:
 -- !result
-set paimon_reader_mode = 'jni';
+set paimon_force_jni_reader = true;
 -- result:
 -- !result
 select count(*) > 0, coalesce(sum(record_count), 0) > 0 from ${paimon_hms_prefix}${uuid0}.${paimon_hms_prefix}${uuid0}.`${paimon_hms_prefix}files$files`;
 -- result:
 1	1
 -- !result
-function: assert_paimon_reader("select record_count from ${paimon_hms_prefix}${uuid0}.${paimon_hms_prefix}${uuid0}.`${paimon_hms_prefix}files$files`", "${paimon_hms_prefix}files$files", "jni")
+function: assert_query_contains("trace values external select record_count from ${paimon_hms_prefix}${uuid0}.${paimon_hms_prefix}${uuid0}.`${paimon_hms_prefix}files$files`", "Paimon.metadata.reader.${paimon_hms_prefix}files$files.jniReaderReadNum: ", "Paimon.metadata.reader.${paimon_hms_prefix}files$files.nativeReaderReadNum: 0")
+-- result:
+None
+-- !result
+function: assert_query_not_contains("trace values external select record_count from ${paimon_hms_prefix}${uuid0}.${paimon_hms_prefix}${uuid0}.`${paimon_hms_prefix}files$files`", "Paimon.metadata.reader.${paimon_hms_prefix}files$files.jniReaderReadNum: 0")
 -- result:
 None
 -- !result
