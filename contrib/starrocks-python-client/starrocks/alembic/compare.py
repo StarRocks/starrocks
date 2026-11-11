@@ -1869,9 +1869,13 @@ def _compare_table_properties_impl(
 ) -> Tuple[Dict[str, str], Dict[str, str]]:
     """Compare properties changes and add AlterTablePropertiesOp if needed.
 
-    - If a property is specified in metadata, it is compared with the database.
-    - If a property is NOT specified in metadata but exists in the database with a NON-DEFAULT value,
-      a change is detected.
+    - If a property is specified in metadata, it is compared with the database. When the
+      database does not report it, the default from ``default_cls`` stands in for its value.
+    - If a property is NOT specified in metadata, it is unmanaged: the database value is left
+      alone and no operation is generated. Many defaults depend on the StarRocks version or
+      FE config (e.g. ``bucket_size``, ``replication_num``), so a hardcoded default cannot
+      tell a user-set value from one StarRocks filled in. Unknown properties (no entry in
+      ``default_cls``) are additionally warned about.
     - The generated operation will set only the properties that have changed.
       Because some of the properties are not supported to be changed.
 
@@ -1913,43 +1917,42 @@ def _compare_table_properties_impl(
         # The effective value in the metadata is meta_str if set, otherwise default_str
         effective_meta_str = meta_str if meta_str is not None else default_str
 
-        if effective_conn_str == effective_meta_str:
+        if (default_cls.normalize_property_value(key, effective_conn_str)
+                == default_cls.normalize_property_value(key, effective_meta_str)):
             # logger.debug("Property no changes. key: %s, effective_conn_str: %s, effective_meta_str: %s", key, effective_conn_str, effective_meta_str)
             continue
 
-        logger.debug("Property changes. key: %s, effective_conn_str: %s, effective_meta_str: %s", key, effective_conn_str, effective_meta_str)
         if meta_value is None:
-            if key in default_cls.skip_implicit_reset_properties():
-                # This property must not be implicitly reset to its default when it is absent
-                # from the metadata. Leave the database value untouched. See
-                # ReflectionTableDefaults._SKIP_IMPLICIT_RESET_PROPERTIES.
+            # Unmanaged property: leave the database value alone. See the docstring.
+            if default_value is None:
+                logger.warning(
+                    f"{object_label} '{full_name}': Property '{key}' exists in the database with value '{conn_value}' "
+                    f"but is not specified in metadata and no default is defined in {default_cls.__name__}. "
+                    f"To manage this property, please specify it explicitly in your metadata. "
+                    f"No ALTER TABLE SET operation will be generated for this property."
+                )
+            else:
                 logger.debug(
                     "Property %r is not specified in metadata for %r; leaving the database "
-                    "value %r unchanged (implicit reset is disabled for this property).",
-                    key, full_name, conn_value,
+                    "value %r unchanged (default %r).",
+                    key, full_name, conn_value, default_value,
                 )
-                continue
-            if default_value is None:
-                # Scenario 1: Implicit deletion of a property with no default.
-                if conn_value is not None:
-                    logger.warning(
-                        f"{object_label} '{full_name}': Property '{key}' exists in the database with value '{conn_value}' "
-                        f"but is not specified in metadata and no default is defined in {default_cls.__name__}."
-                        f"Implicit deletion is not recommended. "
-                        f"To manage this property, please specify it explicitly in your metadata. "
-                        f"No ALTER TABLE SET operation will be generated for this property."
-                    )
-                    continue  # Skip generating an op for this property
-            else:
-                # Scenario 2: Implicit reset to default.
-                logger.warning(
-                    f"{object_label} '{full_name}': Property '{key}' has non-default value '{conn_value}' in database "
-                    f"but is not specified in metadata. An ALTER TABLE SET operation will be generated to "
-                    f"reset it to its default value '{default_value}'. "
-                    f"Consider explicitly setting default properties in your metadata to avoid ambiguity."
-                )
+            continue
+
+        unreported_reason = default_cls.unreported_property_reason(key)
+        if conn_value is None and unreported_reason:
+            # The database does not report it, so the table cannot hold it: an ALTER would
+            # fail or repeat on every run.
+            logger.warning(
+                f"{object_label} '{full_name}': Property '{key}' is set to '{meta_value}' in metadata "
+                f"but the database does not report it ({unreported_reason}). It cannot be compared. "
+                f"No ALTER TABLE SET operation will be generated for this property."
+            )
+            continue
+
+        logger.debug("Property changes. key: %s, effective_conn_str: %s, effective_meta_str: %s", key, effective_conn_str, effective_meta_str)
         # Determine the value for the upgrade operation.
-        target_val_upgrade = meta_str if meta_str is not None else default_str
+        target_val_upgrade = meta_str
         prop_key = (
             TablePropertyForFuturePartitions.wrap(key)
             if add_default_prefix and TablePropertyForFuturePartitions.contains(key)
