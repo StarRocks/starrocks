@@ -77,8 +77,8 @@ public:
         _root_profile = std::make_unique<RuntimeProfile>("LoadChannel");
         _location_provider = std::make_unique<lake::FixedLocationProvider>(_test_directory);
         _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager =
-                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
+        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(),
+                                                                1024 * 1024, 1024 * 1024);
 
         _load_channel_mgr =
                 std::make_unique<LoadChannelMgr>(_tablet_manager.get(), RuntimeEnv::GetInstance()->diagnose_daemon(),
@@ -1613,7 +1613,7 @@ TEST_P(LakeTabletsChannelMultiSenderTest, test_dont_write_txn_log) {
             auto metacache = _tablet_manager->metacache();
             for (auto tablet_id : {10086, 10087, 10088, 10089}) {
                 auto txn_log_path = _tablet_manager->txn_log_location(tablet_id, kTxnId);
-                ASSERT_TRUE(metacache->lookup_txn_log(txn_log_path));
+                ASSERT_TRUE(metacache->lookup_txn_log(starrocks::lake::MetacacheKey::txn_log(txn_log_path)));
                 ASSERT_TRUE(FileSystem::Default()->path_exists(txn_log_path).is_not_found());
             }
         } else if (sender_id == 0) {

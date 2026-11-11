@@ -35,6 +35,7 @@ set(FILESYSTEM_FILES
     azure/fs_azblob.cpp
     azure/utils.cpp
     credential/cloud_configuration_factory.cpp
+    credential/refreshable_cloud_configuration.cpp
     )
 
 ADD_BE_LIB(FileSystem

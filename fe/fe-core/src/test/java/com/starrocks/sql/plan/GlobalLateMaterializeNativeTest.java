@@ -315,6 +315,83 @@ public class GlobalLateMaterializeNativeTest extends PlanTestBase {
         assertContains(plan, "FETCH");
     }
 
+    // A deferred column may be renamed more than once on its way up the plan: the projection over the
+    // scan names the (json-subfield) scan column, and the projection that feeds an aggregate renames it
+    // again. ColumnCollector used to record only the first rename, because the second one's target is a
+    // projection output rather than a scan column -- so nothing above could register a fetch position for
+    // the column, while the Rewriter still deferred it and stripped it from both projections. The
+    // aggregate was then left reading a column no operator produced and the plan failed validation with
+    // "Input dependency cols check failed" (or, with the validator off, at fragment building).
+    //
+    // The LIMIT is load-bearing (GLM only engages with one) and so is the join (it keeps the rename that
+    // feeds the aggregate in its own projection above the join). Reproduced first on a live cluster,
+    // where the plan carried exactly this shape:
+    //
+    //   AGG max(20)
+    //     PROJECT {1->1, 20 -> 22}            <- second rename, dropped by the collector
+    //       JOIN
+    //         PROJECT {1->1, 22 -> 23: j.a}   <- first rename, the only one recorded
+    //           SCAN [1: k, 23: j.a]
+    @Test
+    public void testAggregateOverTwiceRenamedDeferredColumn() throws Exception {
+        boolean pruneJsonSubfield = connectContext.getSessionVariable().isCboPruneJsonSubfield();
+        boolean lowCardinality = connectContext.getSessionVariable().isEnableLowCardinalityOptimize();
+        boolean mockDict = FeConstants.USE_MOCK_DICT_MANAGER;
+        // The json read has to survive as a plain rename for this shape to exist at all. The mock dict
+        // manager this class installs pretends every string column has a global dictionary, which turns
+        // the read into a DictMapping expression -- a derived value, which the collector already handles
+        // correctly -- and hides the defect entirely. A real cluster has no dictionary on a json subfield.
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        FeConstants.USE_MOCK_DICT_MANAGER = false;
+        connectContext.getSessionVariable().setCboPruneJsonSubfield(true);
+        try {
+            String sql;
+            String plan;
+
+            // max() over the renamed column -- the shape that used to produce an invalid plan.
+            sql = "select v_int, max(a) from (select t.v_int as v_int, get_json_string(t.v_json, '$.a') as a "
+                    + "from tjson t join t0 d on d.v1 = t.v_int) x group by v_int limit 5";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "max");
+
+            // A numeric subfield is the same defect. It used to be masked in production because the
+            // cost model declines to defer a small all-numeric set -- so the bug looked type-dependent
+            // when the type only decided whether the gate let GLM run at all. With the gate off, as it
+            // is in this class, it fails exactly like the varchar one.
+            sql = "select v_int, max(n) from (select t.v_int as v_int, get_json_double(t.v_json, '$.n') as n "
+                    + "from tjson t join t0 d on d.v1 = t.v_int) x group by v_int limit 5";
+            getFragmentPlan(sql);
+
+            // Neighbouring shapes. These plan on their own today -- the optimizer lays their
+            // projections out differently and no second rename survives -- but they are one plan-shape
+            // change away from the same path, so keep them as guard rails rather than as repros.
+            sql = "select v_int, any_value(a) from (select t.v_int as v_int, get_json_string(t.v_json, '$.a') as a "
+                    + "from tjson t join t0 d on d.v1 = t.v_int) x group by v_int limit 5";
+            getFragmentPlan(sql);
+
+            sql = "select v_int, a from (select t.v_int as v_int, get_json_string(t.v_json, '$.a') as a "
+                    + "from tjson t join t0 d on d.v1 = t.v_int) x group by v_int, a limit 5";
+            getFragmentPlan(sql);
+
+            // An expression over the renamed column keeps the projection non-trivial, so the collector
+            // records the base column through collectEarlyMaterialized and this shape always planned.
+            sql = "select v_int, max(concat(a, 'x')) from (select t.v_int as v_int, "
+                    + "get_json_string(t.v_json, '$.a') as a from tjson t join t0 d on d.v1 = t.v_int) x "
+                    + "group by v_int limit 5";
+            getFragmentPlan(sql);
+
+            // Without the limit GLM never engages at all.
+            sql = "select v_int, max(a) from (select t.v_int as v_int, get_json_string(t.v_json, '$.a') as a "
+                    + "from tjson t join t0 d on d.v1 = t.v_int) x group by v_int";
+            plan = getFragmentPlan(sql);
+            assertNotContains(plan, "FETCH");
+        } finally {
+            connectContext.getSessionVariable().setCboPruneJsonSubfield(pruneJsonSubfield);
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(lowCardinality);
+            FeConstants.USE_MOCK_DICT_MANAGER = mockDict;
+        }
+    }
+
     @Test
     public void testCTE() throws Exception {
         String sql;

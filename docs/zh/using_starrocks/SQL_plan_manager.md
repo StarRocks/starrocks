@@ -303,7 +303,9 @@ SQL Plan Manager 函数是一组特殊的占位符函数，具有两个主要目
 - `_spm_const_var(placeholdID)`：用于标记单个常量值。
 - `_spm_const_list(placeholdID)`：用于标记多个常量值，通常用于标记 IN 条件中的多个常量值。
 - `_spm_const_range(placeholdID, min, max)`：用于标记单个常量值，但要求常量值在指定范围`[min, max]`之内。
-- `_spm_const_num(placeholdID, value...)`：用于标记单个常量值，但要求常量值为指定`value...`中的一个值。
+- `_spm_const_enum(placeholdID, value...)`：用于标记单个常量值，但要求常量值为指定`value...`中的一个值。
+
+`_spm_const_range` 和 `_spm_const_enum` 均拒绝 `GEOGRAPHY`、`GEOMETRY` 以及包含这两种类型中任意一种的类型。
 
 其中 `placeholdID` 是一个整数，作为参数的唯一标识符，在绑定 Baseline 和改写 Plan 时，查找对应的参数使用。
 

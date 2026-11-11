@@ -1,0 +1,96 @@
+-- name: test_colocate_range_create_table_rollup @cloud
+set enable_range_distribution = true;
+-- result:
+-- !result
+set enable_tablet_pre_split = false;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (k1 int, k2 int, v int)
+    order by(k1, k2)
+    rollup (r2 (k2, k1))
+    properties('replication_num' = '1', 'colocate_with' = 'g_ctr_${uuid0}:k1');
+-- result:
+E: (1064, 'The sort key of rollup r2 of a table in a range colocate group must start with its colocate columns [k1] (same order and types). Got: [k2, k1] A rollup defined in CREATE TABLE is sorted by its key columns; an ORDER BY written in it is not used.')
+-- !result
+show tables;
+-- result:
+-- !result
+create table t (k1 int, k2 int, v int)
+    order by(k1, k2)
+    rollup (r1 (k1, v))
+    properties('replication_num' = '1', 'colocate_with' = 'g_ctr_${uuid0}:k1');
+-- result:
+-- !result
+show tables;
+-- result:
+t
+-- !result
+desc t all;
+-- result:
+t	DUP_KEYS	k1	int	YES	true	None	
+		k2	int	YES	true	None	
+		v	int	YES	true	None	
+							
+r1	DUP_KEYS	k1	int	YES	true	None	
+		v	int	YES	true	None	
+-- !result
+insert into t values (1, 10, 100), (1, 11, 101), (2, 20, 200), (3, 30, 300), (3, 31, 301), (3, 32, 302);
+-- result:
+-- !result
+select k1, count(*) from t group by k1 order by k1;
+-- result:
+1	2
+2	1
+3	3
+-- !result
+select count(*), sum(v) from t;
+-- result:
+6	1304
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+set enable_sync_materialized_view_rewrite = false;
+-- result:
+-- !result
+select k1, count(*), sum(v) from t group by k1 order by k1;
+-- result:
+1	2	201
+2	1	200
+3	3	903
+-- !result
+select k1, count(*), sum(v) from r1 [_SYNC_MV_] group by k1 order by k1;
+-- result:
+1	2	201
+2	1	200
+3	3	903
+-- !result
+select count(*), sum(v) from r1 [_SYNC_MV_];
+-- result:
+6	1304
+-- !result
+create table t_plain (k1 int, k2 int, v int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'g_ctr_${uuid0}:k1');
+-- result:
+-- !result
+show tables;
+-- result:
+t
+t_plain
+-- !result
+drop table t_plain;
+-- result:
+-- !result
+drop table t;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

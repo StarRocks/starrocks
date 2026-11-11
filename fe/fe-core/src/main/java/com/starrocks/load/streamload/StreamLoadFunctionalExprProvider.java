@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.load.FunctionalExprProvider;
+import com.starrocks.load.LoadJobVisibility;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.type.PrimitiveType;
@@ -178,7 +179,11 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Abs
 
     @Override
     protected boolean delegatePostRowFilter(ConnectContext cxt, AbstractStreamLoadTask task) {
-        // validate table privilege at the end of a predicateChain in the `stream().filter()`
+        // Which tasks the user may see, and how much of each, is decided by LoadJobVisibility before filtering.
+        if (LoadJobVisibility.isEnabled()) {
+            return true;
+        }
+        // With the load job privilege check off, the check SHOW STREAM LOAD had before it: INSERT on the table.
         try {
             Authorizer.checkTableAction(
                     cxt,

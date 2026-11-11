@@ -23,6 +23,7 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.OptimizeTask;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.catalog.Database;
@@ -39,6 +40,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
@@ -52,6 +54,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -83,6 +86,9 @@ public class TaskRun implements Comparable<TaskRun> {
     // Fingerprints of the non-ref olap base tables as the job's first run read them, propagated across batch runs so
     // that the last run records their versions only if no batch read a different state, see MVVersionManager.
     public static final String MV_NON_REF_TABLE_FINGERPRINT = "MV_NON_REF_TABLE_FINGERPRINT";
+    // First task run's processStartTime, propagated across batch runs so the terminal run can record
+    // refresh-job duration without looking up task-run history. Written only when processStartTime > 0.
+    public static final String MV_REFRESH_JOB_PROCESS_START_TIME = "MV_REFRESH_JOB_PROCESS_START_TIME";
     public static final String SUBMIT_USER_SYSTEM = "system";
     // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
@@ -172,6 +178,22 @@ public class TaskRun implements Comparable<TaskRun> {
             return;
         }
         newProperties.put(MV_VERSION_MAP_RESET_EPOCH, String.valueOf(versionMapResetEpoch));
+    }
+
+    /**
+     * Seed the batch's first-run process start on the leader's spawn; later runs already carry it
+     * via the property copy. Only writes a real timestamp: the key is absent when processStartTime
+     * is unknown (0), so readers do not have to treat 0 as a sentinel.
+     */
+    public static void seedRefreshJobProcessStartTime(Map<String, String> newProperties, TaskRunStatus status) {
+        if (newProperties == null || status == null
+                || newProperties.containsKey(MV_REFRESH_JOB_PROCESS_START_TIME)) {
+            return;
+        }
+        long processStartTime = status.getProcessStartTime();
+        if (processStartTime > 0) {
+            newProperties.put(MV_REFRESH_JOB_PROCESS_START_TIME, String.valueOf(processStartTime));
+        }
     }
 
     public CompletableFuture<Constants.TaskRunState> getFuture() {
@@ -373,6 +395,25 @@ public class TaskRun implements Comparable<TaskRun> {
                 // Fallback to previous behavior if fetching roles fails
                 context.setCurrentRoleIds(context.getCurrentUserIdentity());
             }
+            Set<String> groups = resolveCreatorGroups(context);
+            context.setGroups(groups);
+            if (!groups.isEmpty()) {
+                AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+                Set<Long> roleIds = new HashSet<>(context.getCurrentRoleIds());
+                groups.forEach(group -> roleIds.addAll(authorizationMgr.getRoleIdListByGroup(group)));
+                context.setCurrentRoleIds(roleIds);
+            }
+        }
+    }
+
+    private Set<String> resolveCreatorGroups(ConnectContext context) {
+        try {
+            return ExecuteAsExecutor.resolveGroups(context, context.getCurrentUserIdentity());
+        } catch (Exception e) {
+            // Unlike a login, a failed lookup does not fail the task: it runs without groups, as EXECUTE AS does.
+            LOG.warn("TaskRun {} failed to resolve the groups of {}, running without them",
+                    taskRunId, context.getCurrentUserIdentity(), e);
+            return Set.of();
         }
     }
 
@@ -464,39 +505,7 @@ public class TaskRun implements Comparable<TaskRun> {
             task.incConsecutiveFailCount();
             LOG.warn("Failed to execute task run, task_id: {}, task_run_id: {}, failCount:{}",
                     taskId, taskRunId, task.getConsecutiveFailCount(), e);
-<<<<<<< HEAD
-            if (Constants.TaskSource.MV.equals(task.getSource())
-                    && MaterializedViewExceptions.isIncrementalBreakingFailure(e)) {
-                MaterializedView mv = TaskBuilder.getMvFromTask(task);
-                // Permanent incremental breakage: inactivate the MV and rethrow. Don't kill/suspend the running
-                // refresh here -- that would eat the actionable error; the consecutive-failure path suspends the task.
-                if (mv != null && mv.isActive()) {
-                    AlterMVJobExecutor.inactiveMvAndLog(mv,
-                            MaterializedViewExceptions.inactiveReasonForBreakingFailure(e, mv.getName()));
-                    throw e;
-                }
-            }
-            if (Constants.TaskSource.MV.equals(task.getSource()) && Config.max_task_consecutive_fail_count > 0 &&
-                    task.getConsecutiveFailCount() >= Config.max_task_consecutive_fail_count) {
-                LOG.warn("Task {} has failed {} times continuously, so we disable it",
-                        task.getName(), task.getConsecutiveFailCount());
-                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-                taskManager.suspendTask(task, false);
-                String mvName = "";
-                MaterializedView mv = TaskBuilder.getMvFromTask(task);
-                if (mv != null) {
-                    // If the task is an mv task, inactive the mv
-                    AlterMVJobExecutor.inactiveForConsecutiveFailures(mv);
-                    mvName = mv.getName();
-                }
-                throw new StarRocksException(String.format("Task %s has continuously failed %d times " +
-                                "and has been suspended. If you want active it again, try `ALTER MATERIALIZED VIEW %s ACTIVE`.",
-                        task.getName(), task.getConsecutiveFailCount(), mvName), e);
-            }
-            throw e;
-=======
             throw processor == null ? e : processor.onFailure(task, e);
->>>>>>> ef227c2e457... [BugFix][RB-390] Handle an MV refresh failure against the status the run saw (#65253)
         }
     }
 

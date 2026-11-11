@@ -33,6 +33,7 @@
 #include "storage/rowset/map_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_helper.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -66,9 +67,7 @@ protected:
         TabletColumn f2_tablet_column = create_varchar_key(2, true);
         struct_column.add_sub_column(f2_tablet_column);
 
-        auto f1_column = Int32Column::create();
-        f1_column->append(1);
-
+        auto f1_column = ColumnTestHelper::build_column<int32_t>({1});
         auto f2_column = BinaryColumn::create();
         f2_column->append_string("Column2");
 

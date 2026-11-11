@@ -29,6 +29,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -48,6 +49,7 @@ import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -55,6 +57,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.LongSupplier;
 import java.util.stream.Collectors;
 
 /**
@@ -64,11 +67,12 @@ import java.util.stream.Collectors;
  *
  * <h3>Architecture</h3>
  * Owned by {@link TabletReshardJobMgr} and invoked from that manager's existing scheduler tick.
- * Holds one piece of state — a {@link ColocateConvergenceCache} that throttles repeated StarOS
- * placement-convergence queries; every other decision is recomputed each tick. Every
- * {@link #runOneCycle} call walks
+ * Holds a {@link ColocateConvergenceCache} that throttles repeated StarOS placement-convergence
+ * queries, the per-table {@link TableAlignmentLatch} and the time of the last stable-group sweep;
+ * every other decision is recomputed each tick. Every {@link #runOneCycle} call walks
  * {@link ColocateTableIndex#getUnstableGroupIds} and either does work or fast-returns when the
- * unstable set is empty (the steady-state). Shares the manager's
+ * unstable set is empty (the steady-state); once per {@link #STABLE_GROUP_SWEEP_INTERVAL} it
+ * first sweeps the stable groups (see below). Shares the manager's
  * {@code tablet_reshard_job_scheduler_interval_ms} cadence; no separate thread, timer, or
  * config. Eliminates the second worker thread and the leader-state reconcile loop that the
  * previous {@code LeaderDaemon} ownership shape required.
@@ -90,9 +94,29 @@ import java.util.stream.Collectors;
  * table per cycle — see {@link SplitTabletJobFactory#forColocateAlignment}). When every peer
  * is range-aligned, {@link ColocateTableIndex#markAllGroupsWithSameColocateGroupIdStable}
  * fires across peers in lock-step.
+ *
+ * <h3>Stable-group sweep</h3>
+ * A stable group is otherwise never visited again, yet it can become misaligned with nothing
+ * marking it unstable: the tablets of a new partition, of a temporary partition swapped in, of a
+ * table joining the group, or of a recovered partition or table are cut against the ColocateRanges
+ * read when they are built, and attached later without comparing with the current ones. A split
+ * that splices a new bound in between, followed by this checker marking the group stable, leaves
+ * them crossing that bound in a stable group, and every colocate plan that reads them fails. So a
+ * cycle first checks every stable range-colocate group, with the index selection and predicate it
+ * uses to mark a group stable, when the checker has not swept yet or {@link
+ * #STABLE_GROUP_SWEEP_INTERVAL} has passed since its last sweep; a misaligned group is marked
+ * unstable and aligned by the rest of the cycle. An aligned group gets no journal entry and no job.
  */
 public class ColocateChecker {
     private static final Logger LOG = LogManager.getLogger(ColocateChecker.class);
+
+    /** How often the stable range colocate groups are checked against their ColocateRanges. */
+    static final Duration STABLE_GROUP_SWEEP_INTERVAL = Duration.ofSeconds(30);
+
+    // Monotonic clock in nanoseconds that times the stable-group sweep.
+    private final LongSupplier nanoClock;
+    // When the last stable-group sweep ended, on nanoClock; null until the first sweep.
+    private Long lastStableGroupSweepNanos;
 
     // Throttles per-tick queryShardGroupStable load; all its semantics live in the cache class.
     private final ColocateConvergenceCache convergenceCache = new ColocateConvergenceCache();
@@ -101,6 +125,15 @@ public class ColocateChecker {
     // unchanged table layout — the fix for the self-sustaining alignment-job storm. All of its state and
     // decision logic live in {@link TableAlignmentLatch}; this checker just consults it each cycle.
     private final TableAlignmentLatch alignmentLatch = new TableAlignmentLatch();
+
+    public ColocateChecker() {
+        this(System::nanoTime);
+    }
+
+    /** Visible for testing: {@code nanoClock} replaces {@link System#nanoTime} as the clock of the sweep. */
+    ColocateChecker(LongSupplier nanoClock) {
+        this.nanoClock = nanoClock;
+    }
 
     /** Visible for testing: whether a table currently has a recorded alignment attempt (is latched). */
     boolean hasRecordedAttempt(long tableId) {
@@ -186,14 +219,25 @@ public class ColocateChecker {
 
     /**
      * Invoked from {@link TabletReshardJobMgr#runAfterCatalogReady} on every scheduler tick.
-     * Fast-returns when there's no work to do; otherwise iterates unstable range-colocate
-     * groups and reconciles each one toward stable. The steady-state fast-path is O(1).
+     * First runs the stable-group sweep when it is due. Then fast-returns when there's no work
+     * to do; otherwise iterates unstable range-colocate groups and reconciles each one toward
+     * stable. The steady-state fast-path is O(1).
      */
     public void runOneCycle() {
         if (!RunMode.isSharedDataMode()) {
             return;
         }
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        if (lastStableGroupSweepNanos == null
+                || nanoClock.getAsLong() - lastStableGroupSweepNanos >= STABLE_GROUP_SWEEP_INTERVAL.toNanos()) {
+            try {
+                sweepStableGroups(colocateTableIndex);
+            } finally {
+                // Timed from the end of the sweep, so that a sweep slower than the interval, or one that failed,
+                // does not run again on every tick.
+                lastStableGroupSweepNanos = nanoClock.getAsLong();
+            }
+        }
         // Steady-state fast-path: no unstable groups → cheap read-lock empty-check, no allocation.
         if (!colocateTableIndex.hasUnstableGroups()) {
             // Nothing left to converge: drop any lingering negative-cache entries so the cache is
@@ -219,6 +263,121 @@ public class ColocateChecker {
                 LOG.warn("failed to process colocate group id {}", groupId.grpId, e);
             }
         }
+    }
+
+    /**
+     * Checks every range-colocate group none of whose peer GroupIds is unstable against its current
+     * ColocateRanges, and marks a misaligned one unstable (every peer, journaled) so that the rest of
+     * this cycle aligns it. See the class comment for why a stable group can become misaligned.
+     */
+    private static void sweepStableGroups(ColocateTableIndex colocateTableIndex) {
+        Set<ColocateTableIndex.GroupId> unstableGroupIds = colocateTableIndex.getUnstableGroupIds();
+        Map<Long, List<ColocateTableIndex.GroupId>> peersByColocateGroupId = new HashMap<>();
+        for (ColocateTableIndex.GroupId groupId : colocateTableIndex.getAllGroupIds()) {
+            peersByColocateGroupId.computeIfAbsent(groupId.grpId, k -> new ArrayList<>()).add(groupId);
+        }
+        for (Map.Entry<Long, List<ColocateTableIndex.GroupId>> entry : peersByColocateGroupId.entrySet()) {
+            if (entry.getValue().stream().anyMatch(unstableGroupIds::contains)) {
+                continue;
+            }
+            try {
+                markUnstableIfMisaligned(colocateTableIndex, entry.getKey(), entry.getValue());
+            } catch (Exception e) {
+                LOG.warn("failed to check stable colocate group id {} against its colocate ranges", entry.getKey(), e);
+            }
+        }
+    }
+
+    private static void markUnstableIfMisaligned(ColocateTableIndex colocateTableIndex, long colocateGroupId,
+                                                 List<ColocateTableIndex.GroupId> peers) {
+        ColocateGroupSchema schema = colocateTableIndex.getGroupSchema(peers.get(0));
+        if (schema == null || !schema.isRangeColocate()) {
+            return;
+        }
+        List<ColocateRange> expectedRanges = colocateTableIndex.getColocateRanges(colocateGroupId);
+        if (expectedRanges.isEmpty()) {
+            return;
+        }
+        for (ColocateTableIndex.GroupId peerGroupId : peers) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(peerGroupId.dbId);
+            if (db == null) {
+                continue;
+            }
+            for (long tableId : colocateTableIndex.getAllTableIds(peerGroupId)) {
+                // A member that is not registered (yet, or any more) is skipped, as processGroup does.
+                if (!(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId)
+                        instanceof OlapTable table)) {
+                    continue;
+                }
+                String misaligned;
+                try {
+                    misaligned = findMisalignedIndex(db, table, expectedRanges, schema.getColocateColumnCount());
+                } catch (Exception e) {
+                    // One table that cannot be checked must not hide a stale attach in another member.
+                    LOG.warn("failed to check table {}.{} of stable colocate group id {} against its colocate ranges",
+                            db.getFullName(), table.getName(), colocateGroupId, e);
+                    continue;
+                }
+                if (misaligned != null) {
+                    // The table lock is released: ColocateTableIndex locks are never taken under a table lock.
+                    LOG.warn("stable colocate group id {} has {} of table {}.{} not aligned with its colocate ranges, "
+                                    + "marking the group unstable to align it",
+                            colocateGroupId, misaligned, db.getFullName(), table.getName());
+                    colocateTableIndex.markAllGroupsWithSameColocateGroupIdUnstable(colocateGroupId, true);
+                    return;
+                }
+            }
+        }
+    }
+
+    /**
+     * Names the first index of {@code table} that {@link #findMisalignedIndexes} reports ("partition p, index i"),
+     * or returns null when there is none. Read-locks the table.
+     */
+    private static String findMisalignedIndex(Database db, OlapTable table, List<ColocateRange> expectedRanges,
+                                              int colocateColumnCount) {
+        try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
+            List<MisalignedIndex> misalignedIndexes = findMisalignedIndexes(table, expectedRanges, colocateColumnCount);
+            if (misalignedIndexes.isEmpty()) {
+                return null;
+            }
+            MisalignedIndex first = misalignedIndexes.get(0);
+            Partition partition = table.getPartition(first.physicalPartition().getParentId());
+            return "partition " + (partition == null ? first.physicalPartition().getId() : partition.getName())
+                    + ", index " + table.getIndexNameByMetaId(first.index().getMetaId());
+        }
+    }
+
+    /** A latest visible index whose tablets are not aligned with the group's ColocateRanges, with its sort key. */
+    private record MisalignedIndex(PhysicalPartition physicalPartition, MaterializedIndex index,
+                                   List<Column> sortKeyColumns) {
+    }
+
+    /**
+     * The latest visible indexes of {@code table} whose tablets are not aligned with {@code expectedRanges}. Both the
+     * alignment of an unstable group and the stable-group sweep decide with this method, so the sweep never finds
+     * misaligned what the alignment considered aligned when it marked the group stable. Only the latest visible
+     * indexes count: a split or merge keeps the index it replaced installed for a while as a non-latest visible
+     * index, which may cross a bound spliced since. The caller holds the table READ lock.
+     */
+    private static List<MisalignedIndex> findMisalignedIndexes(OlapTable table, List<ColocateRange> expectedRanges,
+                                                               int colocateColumnCount) {
+        List<MisalignedIndex> misalignedIndexes = new ArrayList<>();
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                // Each visible index (base + every rollup/MV) can have its own sort-key arity.
+                // Using the base index's sort key for an MV with a shorter prefix would compute
+                // boundaries the MV's tablets can never align with — alignment iteration would
+                // livelock. Resolve per-index here. Use getMetaId() (not getId()) — the
+                // physical id changes after reshard while metaId is stable.
+                List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table, index.getMetaId());
+                if (!RangeColocateScanDispatch.isTabletRangesAligned(
+                        index, sortKeyColumns, expectedRanges, colocateColumnCount)) {
+                    misalignedIndexes.add(new MisalignedIndex(physicalPartition, index, sortKeyColumns));
+                }
+            }
+        }
+        return misalignedIndexes;
     }
 
     /**
@@ -454,8 +613,9 @@ public class ColocateChecker {
      * Reads the actual PACK shard-group membership of the given tablets from StarOS in bounded
      * batches, finds the ones whose membership disagrees with the {@link ColocateRange} their range
      * belongs to, and reassigns each into its expected PACK shard group with the minimal add/remove
-     * delta. Shared by the placement backstop ({@link #reconcileTablePackPlacement}) and the
-     * post-publish split path ({@code SplitTabletJob}).
+     * delta. Shared by the placement backstop ({@link #reconcileTablePackPlacement}), the
+     * post-publish split path ({@code SplitTabletJob}) and the range rewrite job, which places its
+     * shadow tablets into their PACK groups at the end of RUNNING.
      *
      * <p>Best-effort per tablet. Catches the expected StarOS checked failures — the batched
      * {@link StarOSAgent#getShardInfo} {@link StarClientException} and the per-tablet
@@ -470,9 +630,9 @@ public class ColocateChecker {
      *         cannot turn into a bogus add-only reassignment), or any misplaced tablet (reassignment
      *         issued, confirmed by a re-read) ⇒ {@code false}.
      */
-    static boolean reconcileTabletPackPlacement(Map<Long, Range<Tuple>> tabletIdToRange,
-                                                List<ColocateRange> expectedRanges, int colocateColumnCount,
-                                                String logContext) {
+    public static boolean reconcileTabletPackPlacement(Map<Long, Range<Tuple>> tabletIdToRange,
+                                                       List<ColocateRange> expectedRanges, int colocateColumnCount,
+                                                       String logContext) {
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         List<Long> tabletIds = new ArrayList<>(tabletIdToRange.keySet());
         Map<Long, List<Long>> tabletIdToGroupIds = new HashMap<>();
@@ -600,37 +760,25 @@ public class ColocateChecker {
         // old tablet's range. Empty map means every tablet in every visible index is already
         // aligned against expectedRanges.
         Map<Long, Map<Long, Map<Long, List<TabletRange>>>> alignmentMap = new HashMap<>();
-        boolean alignedSoFar = true;
+        List<MisalignedIndex> misalignedIndexes;
 
         try (AutoCloseableLock lock = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
-            for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
-                for (MaterializedIndex index :
-                        physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
-                    // Each visible index (base + every rollup/MV) can have its own sort-key arity.
-                    // Using the base index's sort key for an MV with a shorter prefix would compute
-                    // boundaries the MV's tablets can never align with — alignment iteration would
-                    // livelock. Resolve per-index here. Use getMetaId() (not getId()) — the
-                    // physical id changes after reshard while metaId is stable.
-                    List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table, index.getMetaId());
-                    if (RangeColocateScanDispatch.isTabletRangesAligned(
-                            index, sortKeyColumns, expectedRanges, colocateColumnCount)) {
+            misalignedIndexes = findMisalignedIndexes(table, expectedRanges, colocateColumnCount);
+            for (MisalignedIndex misaligned : misalignedIndexes) {
+                for (Tablet tablet : misaligned.index().getTablets()) {
+                    if (tablet.getRange() == null) {
                         continue;
                     }
-                    alignedSoFar = false;
-                    for (Tablet tablet : index.getTablets()) {
-                        if (tablet.getRange() == null) {
-                            continue;
-                        }
-                        List<TabletRange> newRanges = RangeColocateScanDispatch.computeAlignedTabletRanges(
-                                tablet.getRange().getRange(), sortKeyColumns, expectedRanges, colocateColumnCount);
-                        if (newRanges.isEmpty()) {
-                            continue;
-                        }
-                        alignmentMap
-                                .computeIfAbsent(physicalPartition.getId(), k -> new HashMap<>())
-                                .computeIfAbsent(index.getId(), k -> new HashMap<>())
-                                .put(tablet.getId(), newRanges);
+                    List<TabletRange> newRanges = RangeColocateScanDispatch.computeAlignedTabletRanges(
+                            tablet.getRange().getRange(), misaligned.sortKeyColumns(), expectedRanges,
+                            colocateColumnCount);
+                    if (newRanges.isEmpty()) {
+                        continue;
                     }
+                    alignmentMap
+                            .computeIfAbsent(misaligned.physicalPartition().getId(), k -> new HashMap<>())
+                            .computeIfAbsent(misaligned.index().getId(), k -> new HashMap<>())
+                            .put(tablet.getId(), newRanges);
                 }
             }
         }
@@ -638,7 +786,7 @@ public class ColocateChecker {
         if (alignmentMap.isEmpty()) {
             // Aligned (or nothing splittable): drop any latch entry so a future misalignment re-arms.
             alignmentLatch.forgetTable(table.getId());
-            return alignedSoFar;
+            return misalignedIndexes.isEmpty();
         }
 
         // The factory now only builds local state and journals the job; the StarOS shard

@@ -450,6 +450,41 @@ TEST_F(PageIOTest, test_random_access_file_carries_bundle_offset_into_cache_key)
     ASSERT_NE(rf_a.page_cache_key(0), rf_b.page_cache_key(0));
 }
 
+// A coalesced lake scan reads through a SharedBufferedInputStream laid over the RandomAccessFile of
+// a bundled slice, while a primary key publish reads the same pages through the RandomAccessFile
+// itself. Both must name a page by its absolute position in the physical file: otherwise a page of
+// slice B cached by the scan is returned for the page at the same offset of slice A, which starts
+// at offset 0 of the file.
+TEST_F(PageIOTest, test_shared_buffered_stream_keys_bundle_slices_like_random_access_file) {
+    WritableFileOptions write_opts;
+    write_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ASSERT_FAIL(auto wf, _fs->new_writable_file(write_opts, "/bundle_via_shared_buffer"));
+    const std::string payload_a(1024, 'A');
+    const std::string payload_b(2048, 'B');
+    ASSERT_OK(wf->append(payload_a));
+    ASSERT_OK(wf->append(payload_b));
+    ASSERT_OK(wf->close());
+
+    auto open_slice = [&](int64_t offset, int64_t size) -> std::unique_ptr<RandomAccessFile> {
+        auto raw = _fs->new_random_access_file("/bundle_via_shared_buffer");
+        EXPECT_TRUE(raw.ok());
+        auto bundle = std::make_shared<BundleSeekableInputStream>((*raw)->stream(), offset, size);
+        EXPECT_OK(bundle->init());
+        return std::make_unique<RandomAccessFile>(std::move(bundle), "/bundle_via_shared_buffer",
+                                                  /*is_cache_hit=*/false, offset);
+    };
+    auto rf_a = open_slice(0, payload_a.size());
+    auto rf_b = open_slice(payload_a.size(), payload_b.size());
+    SharedBufferedInputStream coalesced_a(rf_a->stream(), "/bundle_via_shared_buffer", payload_a.size());
+    SharedBufferedInputStream coalesced_b(rf_b->stream(), "/bundle_via_shared_buffer", payload_b.size());
+
+    for (int64_t offset : {int64_t{0}, int64_t{512}}) {
+        EXPECT_EQ(rf_a->page_cache_key(offset), coalesced_a.page_cache_key(offset));
+        EXPECT_EQ(rf_b->page_cache_key(offset), coalesced_b.page_cache_key(offset));
+        EXPECT_NE(rf_a->page_cache_key(offset), coalesced_b.page_cache_key(offset));
+    }
+}
+
 // Two distinct physical files must produce different page-cache keys at the same offset,
 // even though most concrete SeekableInputStream subclasses (S3InputStream, MemoryFileInputStream,
 // HdfsInputStream, ...) leave the inherited _filename member empty and only override the virtual

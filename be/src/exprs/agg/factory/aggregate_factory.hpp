@@ -104,8 +104,6 @@ public:
 
     template <LogicalType LT>
     static auto MakeCountDistinctAggregateFunction();
-    template <LogicalType LT>
-    static auto MakeCountDistinctAggregateFunctionV2();
 
     template <LogicalType LT>
     static AggregateFunctionPtr MakeGroupConcatAggregateFunction();
@@ -180,8 +178,6 @@ public:
 
     template <LogicalType LT>
     static auto MakeSumDistinctAggregateFunction();
-    template <LogicalType LT>
-    static auto MakeSumDistinctAggregateFunctionV2();
     template <LogicalType LT>
     static auto MakeDecimalSumDistinctAggregateFunction();
     template <LogicalType LT, int compute_bits>
@@ -313,11 +309,6 @@ auto AggregateFactory::MakeCountDistinctAggregateFunction() {
 }
 
 template <LogicalType LT>
-auto AggregateFactory::MakeCountDistinctAggregateFunctionV2() {
-    return new DistinctAggregateFunctionV2<LT, AggDistinctType::COUNT>();
-}
-
-template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakeGroupConcatAggregateFunction() {
     return new GroupConcatAggregateFunction<LT>();
 }
@@ -415,11 +406,6 @@ auto AggregateFactory::MakeCorelationAggregateFunction() {
 template <LogicalType LT>
 auto AggregateFactory::MakeSumDistinctAggregateFunction() {
     return new DistinctAggregateFunction<LT, AggDistinctType::SUM>();
-}
-
-template <LogicalType LT>
-auto AggregateFactory::MakeSumDistinctAggregateFunctionV2() {
-    return new DistinctAggregateFunctionV2<LT, AggDistinctType::SUM>();
 }
 
 template <LogicalType LT>

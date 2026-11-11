@@ -359,8 +359,8 @@ Status LocalPartitionTopnContext::_evaluate_agg_input_columns(Chunk* chunk) {
             ASSIGN_OR_RETURN(auto&& col, _pre_agg->_agg_expr_ctxs[i][j]->evaluate(chunk));
             // if first column is const, we have to unpack it. Most agg function only has one arg, and treat it as non-const column
             if (j == 0) {
-                _pre_agg->_agg_input_columns[i][j] =
-                        ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), std::move(col));
+                _pre_agg->_agg_input_columns[i][j] = ColumnHelper::materialize_const_column(
+                        _pre_agg->_agg_expr_ctxs[i][j]->root()->type(), chunk->num_rows(), std::move(col));
             } else {
                 // if function has at least two argument, unpack const column selectively
                 // for function like corr, FE forbid second args to be const, we will always unpack const column for it
@@ -368,8 +368,8 @@ Status LocalPartitionTopnContext::_evaluate_agg_input_columns(Chunk* chunk) {
                 if (_pre_agg->_agg_expr_ctxs[i][j]->root()->is_constant()) {
                     _pre_agg->_agg_input_columns[i][j] = std::move(col);
                 } else {
-                    _pre_agg->_agg_input_columns[i][j] =
-                            ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), std::move(col));
+                    _pre_agg->_agg_input_columns[i][j] = ColumnHelper::materialize_const_column(
+                            _pre_agg->_agg_expr_ctxs[i][j]->root()->type(), chunk->num_rows(), std::move(col));
                 }
             }
             _pre_agg->_agg_input_raw_columns[i][j] = _pre_agg->_agg_input_columns[i][j].get();

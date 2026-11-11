@@ -321,8 +321,7 @@ TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
     LogicalType ltype = scalar_field_type_to_logical_type(ftype);
     DCHECK(ltype != TYPE_UNKNOWN);
 
-    TypeDescriptor ret = TypeDescriptor::from_logical_type(ltype, TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                                           type_info->precision(), type_info->scale());
+    TypeDescriptor ret = TypeDescriptor::from_logical_type(ltype, type_info->precision(), type_info->scale());
     if (is_array) {
         TypeDescriptor arr(TYPE_ARRAY);
         arr.children.emplace_back(ret);
@@ -468,7 +467,7 @@ TypeDescriptor TypeDescriptor::promote_types(const TypeDescriptor& type1, const 
         return TypeDescriptor::create_varbinary_type(len);
     }
     // treat other conflicted types as varchar.
-    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    return TYPE_VARCHAR_DESC;
 }
 
 TypeDescriptor TypeDescriptor::promote_decimal_type(int precision, int scale) {
@@ -476,7 +475,7 @@ TypeDescriptor TypeDescriptor::promote_decimal_type(int precision, int scale) {
     if (precision <= 0 || precision > decimal_precision_limit<int128_t>) {
         // if precision is invalid, use varchar
         LOG(WARNING) << "failed to promote decimal type, use varchar. precision: " << precision;
-        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        return TYPE_VARCHAR_DESC;
     } else if (precision <= decimal_precision_limit<int32_t>) {
         return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, precision, scale);
     } else if (precision <= decimal_precision_limit<int64_t>) {

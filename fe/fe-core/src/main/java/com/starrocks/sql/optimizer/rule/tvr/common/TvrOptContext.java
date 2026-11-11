@@ -40,6 +40,9 @@ public class TvrOptContext {
     // instead of by schema position.
     private Map<Integer, String> ivmStateColumnNameByAggRefId;
 
+    // MV column name -> grouping key ColumnRef id, the same binding for the aggregate's keys.
+    private Map<String, Integer> ivmGroupKeyRefIdByMvColumn = Map.of();
+
     public TvrOptContext(SessionVariable sessionVariable) {
         this.sessionVariable = sessionVariable;
         this.lazyMV = () -> loadTvrTargetMV();
@@ -59,6 +62,15 @@ public class TvrOptContext {
 
     public Map<Integer, String> getIvmStateColumnNameByAggRefId() {
         return ivmStateColumnNameByAggRefId;
+    }
+
+    public void setIvmGroupKeyRefIdByMvColumn(Map<String, Integer> ivmGroupKeyRefIdByMvColumn) {
+        this.ivmGroupKeyRefIdByMvColumn =
+                ivmGroupKeyRefIdByMvColumn == null ? Map.of() : ivmGroupKeyRefIdByMvColumn;
+    }
+
+    public Map<String, Integer> getIvmGroupKeyRefIdByMvColumn() {
+        return ivmGroupKeyRefIdByMvColumn;
     }
 
     private MaterializedView loadTvrTargetMV() {

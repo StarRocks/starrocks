@@ -15,14 +15,20 @@
 package com.starrocks.sql.optimizer.rule.ivm;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OpRuleBit;
@@ -33,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -69,8 +76,15 @@ import java.util.stream.Collectors;
  *           │           └── child...
  *           └── OlapScan(MV)           ← scan existing MV state
  * </pre>
+ *
+ * <p>An aggregate with no aggregate function leaves the MV no state to merge, so it plans the aggregate and the
+ * projection alone, without the join or the MV scan.
  */
 public class IvmDeltaAggregateRule extends TransformationRule {
+    // Measured to saturate here: past the second column the delta spans the whole domain of every later
+    // one, so its filter is always true and only the extra column read is left.
+    private static final int MAX_SORT_KEY_JOIN_COLUMNS = 2;
+
     public IvmDeltaAggregateRule() {
         super(RuleType.TF_IVM_DELTA_AGGREGATE,
                 Pattern.create(OperatorType.LOGICAL_DELTA)
@@ -114,6 +128,19 @@ public class IvmDeltaAggregateRule extends TransformationRule {
         Preconditions.checkState(rowIdColumn != null, "__ROW_ID__ column must exist in MV");
         int encodeRowIdVersion = mv.getEncodeRowIdVersion();
 
+        List<ColumnRefOperator> groupingKeys = inputAggOp.getGroupingKeys();
+        Map<ColumnRefOperator, CallOperator> inputAggMap = inputAggOp.getAggregations();
+        if (inputAggMap.isEmpty()) {
+            // Every MV column is a group key or the row id derived from them, so a group already in the MV is
+            // upserted with the values it holds.
+            LogicalAggregationOperator groupOnlyAgg =
+                    buildIntermediateAggOperator(columnRefFactory, groupingKeys, inputAggMap, Maps.newHashMap());
+            OptExpression groupOnlyAggExpr = OptExpression.create(groupOnlyAgg,
+                    OptExpression.create(new LogicalDeltaOperator(false, delta.getActionColumn()), aggChild));
+            return List.of(OptExpression.create(
+                    new LogicalProjectOperator(upsertProjection(inputAggOp, delta)), groupOnlyAggExpr));
+        }
+
         // Step 2: Create MV scan
         LogicalOlapScanOperator mvScan = MvRewritePreprocessor.createScanMvOperator(
                 mv, columnRefFactory, PCellSortedSet.of(), true);
@@ -124,10 +151,8 @@ public class IvmDeltaAggregateRule extends TransformationRule {
         Map<Column, ColumnRefOperator> mvColMetaToRefMap = mvScan.getColumnMetaToColRefMap();
 
         // Step 3: Collect input aggregate info and the aggregate -> state-column binding
-        // (built by IvmRewriter.bindStateColumnsForAggregate; keyed by ref id so the pairing
+        // (built by IvmRewriter.bindMvColumnsForAggregate; keyed by ref id so the pairing
         // holds for any column layout).
-        List<ColumnRefOperator> groupingKeys = inputAggOp.getGroupingKeys();
-        Map<ColumnRefOperator, CallOperator> inputAggMap = inputAggOp.getAggregations();
         Map<Integer, String> stateColumnByAggRefId =
                 context.getTvrOptContext().getIvmStateColumnNameByAggRefId();
         Preconditions.checkState(stateColumnByAggRefId != null,
@@ -147,22 +172,25 @@ public class IvmDeltaAggregateRule extends TransformationRule {
                 .collect(Collectors.toList());
         ScalarOperator eqPredicate = IvmOpUtils.buildRowIdEqBinaryPredicateOp(
                 encodeRowIdVersion, mvRowIdRef, uniqueKeys);
+        List<ScalarOperator> onConjuncts = Lists.newArrayList(eqPredicate);
+        if (context.getSessionVariable().isEnableIvmMvScanSortKeyJoinKeys() && keepsMvDistribution(mv, mvScan)) {
+            onConjuncts.addAll(buildSortKeyPrefixConjuncts(mv, mvColMetaToRefMap, groupingKeys,
+                    context.getTvrOptContext().getIvmGroupKeyRefIdByMvColumn()));
+        }
 
         // Step 6: Build LEFT OUTER JOIN (intermediate agg ⋈ MV scan)
         // Delta is preserved on the aggregate's child for subsequent iterations.
         LogicalDeltaOperator childDelta = new LogicalDeltaOperator(false, delta.getActionColumn());
         OptExpression intermediateAggExpr = OptExpression.create(intermediateAgg,
                 OptExpression.create(childDelta, aggChild));
-        LogicalJoinOperator joinOp = new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, eqPredicate);
+        LogicalJoinOperator joinOp =
+                new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, Utils.compoundAnd(onConjuncts));
         OptExpression joinExpr = OptExpression.create(joinOp,
                 intermediateAggExpr,
                 OptExpression.create(mvScan));
 
         // Step 7: Build state_union project
-        Map<ColumnRefOperator, ScalarOperator> projMap = Maps.newHashMap();
-        if (inputAggOp.getProjection() != null) {
-            projMap.putAll(inputAggOp.getProjection().getColumnRefMap());
-        }
+        Map<ColumnRefOperator, ScalarOperator> projMap = upsertProjection(inputAggOp, delta);
 
         // Iteration is id-sorted only to keep plans deterministic; the pairing itself is by ref id.
         List<ColumnRefOperator> inputAggCallRefs = inputAggMap.keySet().stream()
@@ -190,14 +218,96 @@ public class IvmDeltaAggregateRule extends TransformationRule {
             projMap.put(origRef, stateUnion);
         }
 
-        // Aggregate MV outputs are all UPSERTs. __ACTION__ = INSERT_ACTION (= __op UPSERT).
+        OptExpression result = OptExpression.create(new LogicalProjectOperator(projMap), joinExpr);
+        return List.of(result);
+    }
+
+    // Aggregate MV outputs are all UPSERTs. __ACTION__ = INSERT_ACTION (= __op UPSERT).
+    private static Map<ColumnRefOperator, ScalarOperator> upsertProjection(LogicalAggregationOperator inputAggOp,
+                                                                           LogicalDeltaOperator delta) {
+        Map<ColumnRefOperator, ScalarOperator> projMap = Maps.newHashMap();
+        if (inputAggOp.getProjection() != null) {
+            projMap.putAll(inputAggOp.getProjection().getColumnRefMap());
+        }
         ColumnRefOperator actionColumn = delta.getActionColumn();
         if (actionColumn != null) {
             projMap.put(actionColumn, ConstantOperator.createTinyInt(IvmRuleUtils.INSERT_ACTION));
         }
+        return projMap;
+    }
 
-        OptExpression result = OptExpression.create(new LogicalProjectOperator(projMap), joinExpr);
-        return List.of(result);
+    /**
+     * Whether the join can leave the mv scan in its own buckets, by the test {@code HashDistributionSpec} applies:
+     * one selected partition, or a stable colocate group. Otherwise the join shuffles on every equi-join key, and
+     * a runtime filter partitioned on more than one expression is not pushed into storage, the row-id one included.
+     */
+    private static boolean keepsMvDistribution(MaterializedView mv, LogicalOlapScanOperator mvScan) {
+        List<Long> partitionIds = mvScan.getSelectedPartitionId();
+        if (partitionIds.size() == 1) {
+            return true;
+        }
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        return !partitionIds.isEmpty() && colocateIndex.isColocateTable(mv.getId())
+                && !colocateIndex.isGroupUnstable(colocateIndex.getGroup(mv.getId()));
+    }
+
+    /**
+     * Equalities between the mv's leading sort-key columns and the delta's matching group keys.
+     *
+     * <p>The row-id equality already implies them — {@code __ROW_ID__} encodes the whole group key tuple —
+     * so the join matches the same rows either way. What they add is a runtime filter on a column the mv is
+     * physically ordered by, which the storage layer turns into a row-range seek. A null
+     * {@code getSortKeyIdxes()} means the sort key IS {@code __ROW_ID__}, which the join already carries.</p>
+     *
+     * <p>A partition column is deliberately not excluded. What a partition holds constant is its partition
+     * <em>key</em>: {@code PARTITION BY date_trunc('day', dt)} leaves {@code dt} itself spanning the day,
+     * measured at 86400 distinct values in one partition, where filtering on it read 7.6% of the mv and
+     * filtering on the next sort column read all of it.</p>
+     */
+    private static List<ScalarOperator> buildSortKeyPrefixConjuncts(MaterializedView mv,
+                                                                    Map<Column, ColumnRefOperator> mvColMetaToRefMap,
+                                                                    List<ColumnRefOperator> groupingKeys,
+                                                                    Map<String, Integer> groupKeyRefIdByMvColumn) {
+        MaterializedIndexMeta indexMeta = mv.getIndexMetaByMetaId(mv.getBaseIndexMetaId());
+        if (indexMeta == null || indexMeta.getSortKeyIdxes() == null) {
+            return List.of();
+        }
+        Map<Integer, ColumnRefOperator> groupKeyByRefId = Maps.newHashMap();
+        groupingKeys.forEach(groupingKey -> groupKeyByRefId.put(groupingKey.getId(), groupingKey));
+        Map<String, ColumnRefOperator> groupKeyByMvColumnName = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        groupKeyRefIdByMvColumn.forEach((mvColumnName, refId) -> {
+            ColumnRefOperator groupingKey = groupKeyByRefId.get(refId);
+            if (groupingKey != null) {
+                groupKeyByMvColumnName.put(mvColumnName, groupingKey);
+            }
+        });
+        Map<String, ColumnRefOperator> mvRefByColumnName = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        mvColMetaToRefMap.forEach((column, columnRef) -> mvRefByColumnName.put(column.getName(), columnRef));
+
+        List<Column> schema = indexMeta.getSchema();
+        List<ScalarOperator> conjuncts = Lists.newArrayList();
+        for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+            if (conjuncts.size() >= MAX_SORT_KEY_JOIN_COLUMNS) {
+                break;
+            }
+            if (sortKeyIdx == null || sortKeyIdx < 0 || sortKeyIdx >= schema.size()) {
+                break;
+            }
+            String columnName = schema.get(sortKeyIdx).getName();
+            ColumnRefOperator groupKey = groupKeyByMvColumnName.get(columnName);
+            ColumnRefOperator mvColumnRef = mvRefByColumnName.get(columnName);
+            // A sort key that is not a group key is an aggregate's output: the mv holds the merged value and
+            // the delta a partial one, so equating them would drop the row; a mismatched type would go
+            // through a cast no filter is built from. Stop rather than skip: every later sort column is
+            // clustered only within this one.
+            if (groupKey == null || mvColumnRef == null || !groupKey.getType().equals(mvColumnRef.getType())) {
+                break;
+            }
+            // Null-safe: a NULL group key is a real group, and = would leave its mv row unmatched, which
+            // state_union reads as "no prior state" and overwrites that group's accumulated value.
+            conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL, mvColumnRef, groupKey));
+        }
+        return conjuncts;
     }
 
     private LogicalAggregationOperator buildIntermediateAggOperator(

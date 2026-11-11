@@ -247,14 +247,13 @@ private:
                                  const int64_t row_cnt, vector<ColumnPtr>* columns);
     Status _update_primary_index(const TabletSchemaCSPtr& tablet_schema, Tablet* tablet,
                                  const EditVersion& edit_version, uint32_t rowset_id,
-                                 std::map<int, ChunkUniquePtr>& segid_to_chunk, int64_t insert_row_cnt,
-                                 PersistentIndexMetaPB& index_meta, vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
-                                 PrimaryIndex& index);
+                                 std::map<int, ChunkUniquePtr>& segid_to_chunk,
+                                 vector<std::pair<uint32_t, DelVectorPtr>>& delvecs, PrimaryIndex& index);
     Status _update_rowset_meta(const RowsetSegmentStat& stat, Rowset* rowset);
 
     Status _insert_new_rows(const TabletSchemaCSPtr& tablet_schema, Tablet* tablet, const EditVersion& edit_version,
-                            Rowset* rowset, uint32_t rowset_id, PersistentIndexMetaPB& index_meta,
-                            vector<std::pair<uint32_t, DelVectorPtr>>& delvecs, PrimaryIndex& index);
+                            Rowset* rowset, uint32_t rowset_id, vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
+                            PrimaryIndex& index);
 
     Status _update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs, const Schema& partial_schema,
                                        Rowset* rowset, OlapReaderStatistics* stats, MemTracker* tracker,
