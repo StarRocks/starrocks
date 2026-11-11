@@ -403,19 +403,13 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
     }
 
     private void addCastChild(Type returnType, ScalarOperator node, int index) {
-        node.getChildren().set(index, makeImplicitCast(returnType, node.getChild(index)));
+        ScalarOperator child = node.getChild(index);
+        checkImplicitCastAllowed(child.getType(), returnType);
+        node.getChildren().set(index, new CastOperator(returnType, child, true));
     }
 
-    public static ScalarOperator makeImplicitCast(Type returnType, ScalarOperator child) {
-        Type sourceType = child.getType();
-        checkImplicitCastAllowed(sourceType, returnType);
-        if (returnType.hasNestedGeoType() && sourceType.hasNestedGeoType()) {
-            if (!TypeManager.canCastTo(sourceType, returnType)) {
-                throw new SemanticException("Implicit cast from " + sourceType + " to " + returnType
-                        + " is not supported for geo types");
-            }
-            return child;
-        }
+    private CastOperator makeImplicitCast(Type returnType, ScalarOperator child) {
+        checkImplicitCastAllowed(child.getType(), returnType);
         return new CastOperator(returnType, child, true);
     }
 

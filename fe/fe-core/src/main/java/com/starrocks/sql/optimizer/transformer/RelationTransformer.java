@@ -144,7 +144,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
 import com.starrocks.type.Type;
@@ -381,11 +380,8 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                     Type outputType = setOperationRelation.getRelationFields().getFieldByIndex(i).getType();
                     if (!outputType.equals(relation.getRelationFields().getFieldByIndex(i).getType())) {
                         ColumnRefOperator c = columnRefFactory.create("cast", outputType, true);
-                        ScalarOperator input = childOutputColumn.get(i);
-                        ScalarOperator cast = outputType.hasNestedGeoType()
-                                ? ImplicitCastRule.makeImplicitCast(outputType, input)
-                                : new CastOperator(outputType, input, true);
-                        projections.put(c, foldCast(cast));
+                        ScalarOperator expr = foldCast(new CastOperator(outputType, childOutputColumn.get(i), true));
+                        projections.put(c, expr);
                         newChildOutputs.add(c);
                     } else {
                         projections.put(childOutputColumn.get(i), childOutputColumn.get(i));

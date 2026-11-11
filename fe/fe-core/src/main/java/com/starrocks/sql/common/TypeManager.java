@@ -397,8 +397,6 @@ public class TypeManager {
             return true;
         } else if (from.isGeoType() || to.isGeoType()) {
             return canCastGeoType(from, to);
-        } else if (from.hasNestedGeoType() && to.hasNestedGeoType()) {
-            return from.equals(to);
         } else if (from.isStringType() && to.isBitmapType()) {
             return true;
         } else if (from.isScalarType() && to.isScalarType()) {
@@ -483,7 +481,7 @@ public class TypeManager {
         }
         if (from.isScalarType()) {
             PrimitiveType primitive = ((ScalarType) from).getPrimitiveType();
-            return primitive != PrimitiveType.HLL && primitive != PrimitiveType.BITMAP &&
+            return !from.isGeoType() && primitive != PrimitiveType.HLL && primitive != PrimitiveType.BITMAP &&
                     primitive != PrimitiveType.PERCENTILE && primitive != PrimitiveType.FUNCTION &&
                     primitive != PrimitiveType.VARBINARY;
         }

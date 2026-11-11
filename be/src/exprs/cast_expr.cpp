@@ -622,7 +622,7 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
             return Status::NotSupported(fmt::format("Native GEO cast from {} to {} requires identical descriptors.",
                                                     from_type.debug_string(), to_type.debug_string()));
         }
-        return std::make_unique<CloneExpr>(node).release();
+        return new CloneExpr(node);
     }
 
     if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) &&
