@@ -202,6 +202,48 @@ Status IcebergTableSinkPipelineBuilder::decompose_to_pipeline(pipeline::OpFactor
     return Status::OK();
 }
 
+// Carry the FE's Parquet Modular Encryption signal onto the data sink context. FE sends only the
+// algorithm and key length -- BE generates a fresh per-file DEK at write time and returns it at
+// commit. A miss here means silently writing plaintext into an encrypted table.
+//
+// Returns an error when encryption is on but no key length came with it. The length is NOT defaulted:
+// choosing one here would write a key weaker than the table's encryption.data-key-length policy and
+// commit it with nothing surfaced. Failing at plan build keeps that out of the table entirely, rather
+// than surfacing later when the first file is opened.
+Status apply_iceberg_encryption_signal(const TIcebergTableSink& t_iceberg_sink,
+                                       connector::IcebergChunkSinkContext* ctx) {
+    if (!t_iceberg_sink.__isset.parquet_encryption_info) {
+        return Status::OK();
+    }
+    const auto& enc = t_iceberg_sink.parquet_encryption_info;
+    ctx->encryption_enabled = true;
+    if (enc.__isset.encryption_algorithm && !enc.encryption_algorithm.empty()) {
+        ctx->encryption_algorithm = enc.encryption_algorithm;
+    }
+    if (enc.__isset.dek_length) {
+        ctx->encryption_dek_length = enc.dek_length;
+    } else {
+        return Status::InvalidArgument(
+                "Iceberg table encryption is enabled but the FE sent no DEK length. Refusing to choose one: "
+                "it could be weaker than the table's encryption.data-key-length policy. This indicates an "
+                "FE/BE version mismatch.");
+    }
+    return Status::OK();
+}
+
+// DELETE and UPDATE / MERGE write Parquet position-delete files, which an encrypted table (always format
+// version 3) cannot accept: Iceberg requires deletion vectors there. FE refuses those statements at
+// planning, so it never sends them an encryption signal. Refuse one if it arrives anyway, rather than
+// write plaintext delete files into an encrypted table.
+Status refuse_iceberg_encryption_signal_for_position_deletes(const TIcebergTableSink& t_iceberg_sink) {
+    if (!t_iceberg_sink.__isset.parquet_encryption_info) {
+        return Status::OK();
+    }
+    return Status::NotSupported(
+            "Writing position delete files into an encrypted Iceberg table is not supported. This indicates an "
+            "FE/BE version mismatch.");
+}
+
 Status IcebergTableSinkPipelineBuilder::create_delete_sink_context(
         const TDataSink& thrift_sink, RuntimeState* runtime_state, pipeline::PipelineBuilderContext* /*context*/,
         IcebergTableDescriptor* iceberg_table_desc, std::unique_ptr<connector::ConnectorSinkProvider>& sink_provider,
@@ -209,6 +251,7 @@ Status IcebergTableSinkPipelineBuilder::create_delete_sink_context(
     auto& t_iceberg_sink = thrift_sink.iceberg_table_sink;
 
     // Create merge sink context for delete files
+    RETURN_IF_ERROR(refuse_iceberg_encryption_signal_for_position_deletes(t_iceberg_sink));
     auto delete_sink_ctx = std::make_shared<connector::IcebergDeleteSinkContext>();
     delete_sink_ctx->path = t_iceberg_sink.data_location;
     delete_sink_ctx->cloud_configuration = t_iceberg_sink.cloud_configuration;
@@ -297,6 +340,7 @@ Status IcebergTableSinkPipelineBuilder::create_data_sink_context(
     if (t_iceberg_sink.__isset.target_max_file_size) {
         data_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
     }
+    RETURN_IF_ERROR(apply_iceberg_encryption_signal(t_iceberg_sink, data_sink_ctx.get()));
     data_sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(_sink.get_output_expr(), runtime_state);
 
     size_t num_evaluators = data_sink_ctx->column_evaluators.size();
@@ -456,6 +500,7 @@ Status IcebergTableSinkPipelineBuilder::create_row_delta_sink_context(
     }
 
     // --- Create delete sub-context ---
+    RETURN_IF_ERROR(refuse_iceberg_encryption_signal_for_position_deletes(t_iceberg_sink));
     auto delete_sink_ctx = std::make_shared<connector::IcebergDeleteSinkContext>();
     delete_sink_ctx->writer_tag = "delete";
     delete_sink_ctx->path = t_iceberg_sink.data_location;

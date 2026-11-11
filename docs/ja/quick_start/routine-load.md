@@ -8,6 +8,7 @@ displayed_sidebar: docs
 
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 
 ## About Routine Load
 
@@ -50,6 +51,10 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 
 `curl` は Compose ファイルとデータを生成するスクリプトをダウンロードするために使用されます。OS のプロンプトで `curl` または `curl.exe` を実行してインストールされているか確認してください。curl がインストールされていない場合は、[こちらから curl を取得してください](https://curl.se/).
 
+### MinIO AIStor ライセンス
+
+このガイドでは、オブジェクトストレージとして MinIO AIStor を使用します。MinIO AIStor にはライセンスが必要です。Free Tier ライセンスで十分です。ライセンスの取得手順は、このガイドの後半で説明します。
+
 ### Python
 
 Python 3 と Apache Kafka 用の Python クライアント `kafka-python` が必要です。
@@ -87,7 +92,7 @@ Object Storage を使用して shared-data で StarRocks を実行するには�
 - コンピュートノード (CN)
 - Object Storage
 
-このガイドでは、S3 互換の Object Storage プロバイダーである MinIO を使用します。MinIO は GNU Affero General Public License の下で提供されています。
+このガイドでは、S3 互換の Object Storage である MinIO AIStor を使用します。MinIO AIStor にはライセンスが必要です。
 
 ### Download the lab files
 
@@ -106,6 +111,10 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/routine-load-shared-data/gen.py
 ```
+
+### MinIO AIStor ライセンスの取得
+
+<AIStorLicense />
 
 ## Start StarRocks, MinIO, and Redpanda
 

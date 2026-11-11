@@ -57,6 +57,7 @@ import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.DUMMY_CON
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintTuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -172,6 +173,32 @@ public class DefaultPreSplitPipelineTest {
                     profile.toRuntimeProfile().getCounter(PreSplitProfile.ESTIMATED_INPUT_BYTES).getValue(),
                     "metadata-only attempts must expose the estimate that sized the split");
         }
+    }
+
+    @Test
+    public void testPreSubmitSizesAgainstTableTargetSize() throws Exception {
+        long tableTargetSize = 128L;
+        when(table.getTabletReshardTargetSizeOverride(anyLong()))
+                .thenAnswer(invocation -> (long) invocation.getArgument(0) > 0 ? tableTargetSize : 0L);
+        AtomicReference<Integer> requestedTabletCount = new AtomicReference<>();
+        MetaTierSampler metaTier = (request, requested) -> {
+            requestedTabletCount.set(requested);
+            return new BoundaryPlannerResult(List.of(bigintTuple(50)));
+        };
+        Sampler dataTier = request -> {
+            throw new StarRocksException("dataTier should not be called");
+        };
+
+        TabletReshardJob fakeJob = mock(TabletReshardJob.class);
+        try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any())).thenReturn(fakeJob);
+            newPipeline(metaTier, dataTier, Clock.systemUTC())
+                    .preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+        }
+
+        // 1024 bytes against a 128-byte target is 8 tablets, rounded up to a multiple of the 3 nodes. Against the
+        // cluster target the same bytes would ask for the 2-tablet floor.
+        Assertions.assertEquals(9, requestedTabletCount.get());
     }
 
     @Test

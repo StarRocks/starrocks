@@ -1,0 +1,49 @@
+-- name: test_colocate_range_add_partition @cloud
+-- SQL integration: partitions can be added (ALTER TABLE and automatic partitioning) to range-colocate
+-- tables whose sort key is longer than the colocate columns, and two such tables still join colocated.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1 (k1 int, k2 int, v int)
+    duplicate key(k1, k2)
+    partition by range(k2) (partition p1 values less than ('100'))
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'g_addp_${uuid0}:k1');
+
+alter table t1 add partition p2 values less than ('200');
+insert into t1 values (1, 10, 100), (2, 20, 200), (1, 110, 300), (3, 120, 400);
+select count(*) from t1;
+select k1, count(*) from t1 group by k1 order by k1;
+
+create table t2 (k1 int, k2 int, w int)
+    duplicate key(k1, k2)
+    partition by range(k2) (partition p1 values less than ('100'))
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'g_addp_${uuid0}:k1');
+
+alter table t2 add partition p2 values less than ('200');
+insert into t2 values (1, 10, 1), (2, 20, 2), (1, 110, 3), (3, 120, 4);
+
+function: assert_explain_contains("select t1.k1, t1.v, t2.w from t1 join t2 on t1.k1 = t2.k1", "INNER JOIN (COLOCATE)")
+select t1.k1, t1.v, t2.w from t1 join t2 on t1.k1 = t2.k1 order by t1.k1, t1.v, t2.w;
+set disable_colocate_join = true;
+select t1.k1, t1.v, t2.w from t1 join t2 on t1.k1 = t2.k1 order by t1.k1, t1.v, t2.w;
+set disable_colocate_join = false;
+
+create table t_auto (tenant_id int, dt date, v int)
+    duplicate key(tenant_id, dt)
+    partition by date_trunc('day', dt)
+    order by(tenant_id, dt)
+    properties('replication_num' = '1', 'colocate_with' = 'g_autop_${uuid0}:tenant_id');
+
+insert into t_auto values (1, '2026-01-01', 10), (2, '2026-01-01', 20);
+insert into t_auto values (1, '2026-01-02', 30), (3, '2026-01-02', 40);
+select count(*) from t_auto;
+select count(*) from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 't_auto' and partition_name like 'p%';
+
+drop table t_auto;
+drop table t2;
+drop table t1;
+drop database db_${uuid0};

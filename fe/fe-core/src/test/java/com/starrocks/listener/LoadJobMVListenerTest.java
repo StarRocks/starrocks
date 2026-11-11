@@ -87,7 +87,7 @@ public class LoadJobMVListenerTest extends MVTestBase {
                 ")\n" +
                 "DUPLICATE KEY(k1);");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lt_mv4\n" +
-                "REFRESH ON_CHANGE\n" +
+                "REFRESH ASYNC\n" +
                 "AS select sum(k1), k2, k3 from lt_base_t4 group by k2, k3;");
         MaterializedView mv = getMv("lt_mv4");
         // Not the constant: going through the producer keeps the marker -> reason -> blocked-set chain covered.

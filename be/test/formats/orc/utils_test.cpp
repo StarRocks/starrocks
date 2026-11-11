@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <limits>
+
 #include "base/time/timezone_utils.h"
 #include "column/column_helper.h"
 #include "formats/orc/orc_min_max_decoder.h"
@@ -195,13 +198,12 @@ TEST(OrcTimestampHelperTest, InstantUsesOffsetAtInstant) {
 static std::pair<std::string, std::string> decode_instant_min_max(int64_t min_ms, int64_t max_ms,
                                                                   const cctz::time_zone& tz) {
     std::unique_ptr<orc::Type> orc_type = orc::createPrimitiveType(orc::TypeKind::TIMESTAMP_INSTANT);
-    TypeDescriptor type(TYPE_DATETIME);
-    SlotDescriptor slot(0, "c0", type);
+    SlotDescriptor slot(0, "c0", TYPE_DATETIME_DESC);
     orc::proto::ColumnStatistics stats;
     stats.mutable_timestampstatistics()->set_minimumutc(min_ms);
     stats.mutable_timestampstatistics()->set_maximumutc(max_ms);
-    auto min_col = ColumnHelper::create_column(type, slot.is_nullable());
-    auto max_col = ColumnHelper::create_column(type, slot.is_nullable());
+    auto min_col = ColumnHelper::create_column(TYPE_DATETIME_DESC, slot.is_nullable());
+    auto max_col = ColumnHelper::create_column(TYPE_DATETIME_DESC, slot.is_nullable());
     // tz_offset_in_seconds (the epoch-offset model) is ignored when the reader zone is given.
     CHECK(OrcMinMaxDecoder::decode(&slot, orc_type.get(), stats, min_col.get(), max_col.get(), 12345, &tz).ok());
     return {min_col->debug_item(0), max_col->debug_item(0)};
@@ -241,6 +243,28 @@ TEST(OrcTimestampHelperTest, InstantMinMaxUsesOffsetAtInstant) {
         }
         EXPECT_GE(max_bound, orc_instant(r.hi, *r.tz).to_string()) << r.hi;
     }
+}
+
+// Row-group bounds with NaN cannot skip a row group: min = max = NaN (an ORC writer whose first value is NaN) would
+// fail every comparison, so they are not decoded. A NaN sum (a NaN anywhere in the row group) does the same, as in
+// the ORC library's search arguments.
+TEST(OrcMinMaxDecoderTest, DoubleBoundsWithNaNAreIgnored) {
+    std::unique_ptr<orc::Type> orc_type = orc::createPrimitiveType(orc::TypeKind::DOUBLE);
+    SlotDescriptor slot(0, "c0", TYPE_DOUBLE_DESC);
+    auto decode = [&](double min, double max, double sum) {
+        orc::proto::ColumnStatistics stats;
+        stats.mutable_doublestatistics()->set_minimum(min);
+        stats.mutable_doublestatistics()->set_maximum(max);
+        stats.mutable_doublestatistics()->set_sum(sum);
+        auto min_col = ColumnHelper::create_column(TYPE_DOUBLE_DESC, slot.is_nullable());
+        auto max_col = ColumnHelper::create_column(TYPE_DOUBLE_DESC, slot.is_nullable());
+        return OrcMinMaxDecoder::decode(&slot, orc_type.get(), stats, min_col.get(), max_col.get(), 0, nullptr);
+    };
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    EXPECT_TRUE(decode(1.0, 10.0, 14.0).ok());
+    EXPECT_TRUE(decode(nan, nan, nan).is_not_found());
+    EXPECT_TRUE(decode(1.0, nan, nan).is_not_found());
+    EXPECT_TRUE(decode(1.0, 10.0, nan).is_not_found());
 }
 
 } // namespace starrocks

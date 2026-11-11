@@ -244,26 +244,35 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits {
 
     @Override
     public Set<String> getUpdatedPartitionNames(LocalDateTime checkTime, int extraSeconds) {
-        List<String> updatedPartitions = Lists.newArrayList();
         try {
-            getPartitionNameWithPartitionInfo().
-                    forEach((partitionName, partitionInfo) -> {
-                        long partitionModifiedTimeMillis = partitionInfo.getModifiedTimeUnit().toMillis(
-                                partitionInfo.getModifiedTime());
-
-                        LocalDateTime partitionUpdateTime = LocalDateTime.ofInstant(
-                                Instant.ofEpochMilli(partitionModifiedTimeMillis).plusSeconds(extraSeconds),
-                                Clock.systemDefaultZone().getZone());
-                        if (partitionUpdateTime.isAfter(checkTime)) {
-                            updatedPartitions.add(partitionName);
-                        }
-                    });
-            return Sets.newHashSet(updatedPartitions);
+            return getUpdatedPartitionNames(getPartitionNameWithPartitionInfo(), checkTime, extraSeconds);
         } catch (Exception e) {
             // some external table traits do not support getPartitionNameWithPartitionInfo, will throw exception,
             // just return null
             return null;
         }
+    }
+
+    /**
+     * The partitions of an already-fetched {@code partitionInfos} map modified after {@code checkTime}. Lets a
+     * caller that also needs the full partition list take both from one {@link #getPartitionNameWithPartitionInfo()}
+     * call instead of asking the connector twice.
+     */
+    public static Set<String> getUpdatedPartitionNames(Map<String, PartitionInfo> partitionInfos,
+                                                       LocalDateTime checkTime, int extraSeconds) {
+        List<String> updatedPartitions = Lists.newArrayList();
+        partitionInfos.forEach((partitionName, partitionInfo) -> {
+            long partitionModifiedTimeMillis = partitionInfo.getModifiedTimeUnit().toMillis(
+                    partitionInfo.getModifiedTime());
+
+            LocalDateTime partitionUpdateTime = LocalDateTime.ofInstant(
+                    Instant.ofEpochMilli(partitionModifiedTimeMillis).plusSeconds(extraSeconds),
+                    Clock.systemDefaultZone().getZone());
+            if (partitionUpdateTime.isAfter(checkTime)) {
+                updatedPartitions.add(partitionName);
+            }
+        });
+        return Sets.newHashSet(updatedPartitions);
     }
 
     @Override

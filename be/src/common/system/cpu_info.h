@@ -164,6 +164,13 @@ public:
     static bool TEST_hwcap_available(unsigned long hwcap) { return _hwcap_available(hwcap); }
 
 private:
+    // OS probes and architecture decoding are supplied by the selected source files.
+    static void _init_cpu_info();
+    static void _init_max_num_cores();
+    static int64_t _detect_hardware_flags(const std::string& cpuinfo_content);
+    static int64_t _compiled_hardware_flags();
+    static int64_t _parse_procfs_flags(const std::string& cpuinfo_content);
+
 #if defined(__aarch64__)
     static int64_t _init_arm_auxval(unsigned long hwcap, unsigned long hwcap2);
     static int64_t _init_arm_procfs(std::istream& stream);
@@ -171,12 +178,12 @@ private:
 #endif
     static int64_t _resolve_arm_flags(bool aux_available, int64_t aux_flags, int64_t procfs_flags);
 
-    // Arch-independent precedence/predicate helpers — no dependency on ARM_*/x86 constants,
+    // Arch-independent precedence/predicate helpers -- no dependency on ARM_*/x86 constants,
     // so they stay testable on any host regardless of which vocabulary Task 3 compiles in.
     static bool _hwcap_available(unsigned long hwcap);
 
-    // This build's single feature vocabulary (see cpu_info.cpp). Exactly one definition exists
-    // per compiled binary -- x86 and ARM64 tokens are never in the same table.
+    // This build's single feature vocabulary (see cpu_info_x86.cpp or cpu_info_arm64.cpp).
+    // Exactly one definition exists per binary; x86 and ARM64 tokens are never in the same table.
     static const std::vector<FlagMapping>& _flag_mappings();
 
     // Arch-independent parsing primitives -- table-driven so unit tests can exercise the

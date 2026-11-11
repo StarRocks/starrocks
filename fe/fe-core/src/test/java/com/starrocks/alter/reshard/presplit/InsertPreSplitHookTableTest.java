@@ -15,12 +15,16 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
@@ -29,7 +33,10 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.mv.RowIdStrategy;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
@@ -57,6 +64,7 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -230,6 +238,34 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
+    public void testShadowRewriteInsertRecordsNothing() throws Exception {
+        // The online range rewrite copies a partition onto itself (INSERT INTO t PARTITION (p) SELECT ... FROM t
+        // PARTITION (p)) while its job owns the target's tablets. Driven against an eligible table and against a view
+        // (whose rewrite runs as a system statement): neither may reach the flow or record a skip.
+        for (boolean viewTarget : List.of(false, true)) {
+            try (SourceFixture fixture = sourceFixture();
+                    MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+                if (viewTarget) {
+                    fixture.withMaterializedViewTarget(null);
+                    when(fixture.insertStmt.isSystem()).thenReturn(true);
+                }
+                fixture.restrictSourceTo(List.of("p1"));
+                fixture.sourcePartition("p1", 1L, 1000L, 100L, null);
+                when(fixture.insertStmt.isSpecifyPartitionNames()).thenReturn(true);
+                when(fixture.insertStmt.getTargetPartitionNames())
+                        .thenReturn(new PartitionRef(List.of("p1"), false, NodePosition.ZERO));
+                when(fixture.insertStmt.isShadowRewrite()).thenReturn(true);
+
+                long skips = recordedSkipsOfAnyReason(
+                        () -> InsertPreSplitHook.maybeRunPreSplit(fixture.insertStmt, fixture.context));
+
+                flow.verifyNoInteractions();
+                Assertions.assertEquals(0L, skips, "viewTarget=" + viewTarget);
+            }
+        }
+    }
+
+    @Test
     public void testInsertWithLoadPropertiesDispatches() throws Exception {
         // A PROPERTIES(...) clause no longer disqualifies the statement. No INSERT load property can
         // move a row to a different tablet: the live ones (strict_mode, max_filter_ratio,
@@ -371,15 +407,125 @@ public class InsertPreSplitHookTableTest {
     // ---------- isPlainTableReference: source-slice modifiers ----------
 
     @Test
-    public void testPartitionModifierOnSourceShortCircuits() throws Exception {
-        // INSERT INTO t SELECT * FROM src PARTITION(p1) — explicit partition slice.
+    public void testTemporaryPartitionSourceShortCircuits() throws Exception {
+        // INSERT INTO t SELECT * FROM src TEMPORARY PARTITION(p1): the sampler cannot name a temporary partition.
         TableRelation sourceRelation = plainTableRelation();
         when(sourceRelation.getPartitionNames())
-                .thenReturn(mock(com.starrocks.sql.ast.PartitionRef.class));
+                .thenReturn(new PartitionRef(List.of("p1"), true, NodePosition.ZERO));
 
         InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(sourceRelation));
         assertHookDoesNotDelegate(() ->
                 InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+    }
+
+    @Test
+    public void testKeyPartitionSourceShortCircuits() throws Exception {
+        // INSERT INTO t SELECT * FROM src PARTITION(k=1): a key-valued slice, not a partition-name list.
+        TableRelation sourceRelation = plainTableRelation();
+        PartitionRef keyRef = mock(PartitionRef.class);
+        when(keyRef.isTemp()).thenReturn(false);
+        when(keyRef.isKeyPartitionNames()).thenReturn(true);
+        when(keyRef.getPartitionNames()).thenReturn(List.of());
+        when(sourceRelation.getPartitionNames()).thenReturn(keyRef);
+
+        InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(sourceRelation));
+        assertHookDoesNotDelegate(() ->
+                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+    }
+
+    @Test
+    public void testEmptyPartitionListSourceDoesNotMatch() {
+        // An empty list would render as PARTITION () in the sampler's own scan.
+        try (SourceFixture fixture = sourceFixture()) {
+            fixture.restrictSourceTo(List.of());
+
+            Assertions.assertFalse(new TablePreSplitSource().matches(fixture.insertStmt,
+                    (SelectRelation) fixture.insertStmt.getQueryStatement().getQueryRelation()));
+        }
+    }
+
+    @Test
+    public void testPartitionPredicateSourceShortCircuits() throws Exception {
+        // A partition predicate restricts the scan to rows the sampler would not read.
+        try (SourceFixture fixture = sourceFixture()) {
+            TableRelation relation = (TableRelation) ((SelectRelation) fixture.insertStmt.getQueryStatement()
+                    .getQueryRelation()).getRelation();
+            SelectRelation selectRelation = (SelectRelation) fixture.insertStmt.getQueryStatement().getQueryRelation();
+            Assertions.assertTrue(new TablePreSplitSource().matches(fixture.insertStmt, selectRelation));
+
+            when(relation.getPartitionPredicate()).thenReturn(mock(Expr.class));
+
+            Assertions.assertFalse(new TablePreSplitSource().matches(fixture.insertStmt, selectRelation));
+        }
+    }
+
+    @Test
+    public void testPartitionRestrictedSourceIsSampled() throws Exception {
+        try (SourceFixture fixture = sourceFixture()) {
+            fixture.restrictSourceTo(List.of("p1", "p2"));
+            // p1 carries a rollup: Partition#getRowCount sums every visible index, so a wrong
+            // implementation would report 100 + 40 + 300 here instead of the base-index rows.
+            Partition p1 = fixture.sourcePartition("p1", 1L, 1000L, 100L, 40L);
+            Partition p2 = fixture.sourcePartition("p2", 2L, 2000L, 300L, null);
+            when(p1.getRowCount()).thenReturn(140L);
+            when(p2.getRowCount()).thenReturn(300L);
+
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+            Assertions.assertNotNull(scanContext);
+            Assertions.assertEquals("`src_t`.`src_db`.`src_t` PARTITION (`p1`, `p2`)", scanContext.sourceFromSql());
+            Assertions.assertEquals(3000L, scanContext.sourceTotalBytes());
+            Assertions.assertEquals(400L, scanContext.sourceTotalRows());
+        }
+    }
+
+    @Test
+    public void testPartitionRestrictedSourceKeepsAliasAfterPartitionList() throws Exception {
+        try (SourceFixture fixture = sourceFixture()) {
+            fixture.restrictSourceTo(List.of("p`1"));
+            fixture.sourcePartition("p`1", 1L, 1000L, 100L, null);
+            TableRelation relation = (TableRelation) ((SelectRelation) fixture.insertStmt.getQueryStatement()
+                    .getQueryRelation()).getRelation();
+            TableName alias = mock(TableName.class);
+            when(alias.getTbl()).thenReturn("s");
+            when(relation.getAlias()).thenReturn(alias);
+
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+            Assertions.assertNotNull(scanContext);
+            Assertions.assertEquals("`src_t`.`src_db`.`src_t` PARTITION (`p``1`) `s`", scanContext.sourceFromSql());
+        }
+    }
+
+    @Test
+    public void testRepeatedSourcePartitionIsCountedOnce() throws Exception {
+        try (SourceFixture fixture = sourceFixture()) {
+            fixture.restrictSourceTo(List.of("p1", "p1"));
+            fixture.sourcePartition("p1", 1L, 1000L, 100L, null);
+
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+            Assertions.assertNotNull(scanContext);
+            Assertions.assertEquals(1000L, scanContext.sourceTotalBytes());
+            Assertions.assertEquals(100L, scanContext.sourceTotalRows());
+        }
+    }
+
+    @Test
+    public void testPartitionRestrictedExternalSourceIsDeclined() throws Exception {
+        // The planner drops a partition list on a non-OLAP scan (a materialized view refresh gives one to a JDBC
+        // base table), so the sampler would read the whole external table. Sized, so only the list can decline it.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            fixture.withExternalSource(connectorStatistics(1_000_000d, 8d, Statistics.StatsSource.TABLE_METADATA));
+            fixture.restrictSourceTo(List.of("p1"));
+
+            InsertPreSplitHook.maybeRunPreSplit(fixture.insertStmt, fixture.context);
+
+            flow.verifyNoInteractions();
+            verify(fixture.metadataMgr, never())
+                    .getTableStatistics(any(), any(), any(), any(), any(), any(), anyLong(), any());
+        }
     }
 
     @Test
@@ -444,15 +590,17 @@ public class InsertPreSplitHookTableTest {
         // MaterializedView extends OlapTable, so resolveOlapTarget would accept it.
         // The hook must reject it before submitting any reshard job: user INSERT into
         // an MV is rejected by InsertAnalyzer, but the hook runs before the analyzer.
-        try (SourceFixture fixture = sourceFixture()) {
-            // Override the target resolution to return a MaterializedView instead of OlapTable.
-            MaterializedView mv = mock(MaterializedView.class);
-            when(mv.getName()).thenReturn("mv_target");
-            fixture.metaUtils.when(() -> MetaUtils.getSessionAwareTable(
-                            any(), Mockito.argThat(db -> db != fixture.sourceDb), any()))
-                    .thenReturn(mv);
+        // The view is otherwise fully eligible and has no row id -- the same view a system
+        // refresh's static overwrite samples -- so only the route can decline it.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            fixture.withMaterializedViewTarget(null);
 
-            fixture.assertNoSubmit();
+            long skips = recordedSkips(SkipReason.MATERIALIZED_VIEW_TARGET,
+                    () -> InsertPreSplitHook.maybeRunPreSplit(fixture.insertStmt, fixture.context));
+
+            flow.verifyNoInteractions();
+            Assertions.assertEquals(1L, skips, "a user INSERT into a view must record materialized_view_target");
         }
     }
 
@@ -481,6 +629,162 @@ public class InsertPreSplitHookTableTest {
         } finally {
             MetricRepo.hasInit = savedHasInit;
         }
+    }
+
+    // ---------- Static overwrite: MV target ----------
+
+    @Test
+    public void testSystemStaticOverwriteOfPctViewIsSampled() throws Exception {
+        // A view without a row id is keyed by ordinary columns, and its refresh is a static
+        // INSERT OVERWRITE the system issues, so it is sampled like a table.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            MaterializedView view = fixture.withMaterializedViewTarget(null);
+
+            long skips = recordedSkips(SkipReason.MATERIALIZED_VIEW_TARGET, () -> fixture.runStaticOverwrite(true));
+
+            flow.verify(() -> PreSplitFlow.runStaticOverwriteFlow(
+                    any(Database.class), eq(view), any(PreSplitFlow.Prepared.class),
+                    eq(LoadKind.INSERT_FROM_TABLE), any(), eq(fixture.context),
+                    any(PreSplitPartitionScope.class)), times(1));
+            Assertions.assertEquals(0L, skips, "a sampled view must not be reported as a declined view");
+        }
+    }
+
+    @Test
+    public void testNonSystemStaticOverwriteOfPctViewIsDeclined() throws Exception {
+        // Only the view's own refresh is a system statement; anything else writing a view stays declined.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            fixture.withMaterializedViewTarget(null);
+
+            long skips = recordedSkips(SkipReason.MATERIALIZED_VIEW_TARGET, () -> fixture.runStaticOverwrite(false));
+
+            flow.verifyNoInteractions();
+            Assertions.assertEquals(1L, skips, "a non-system overwrite of a view must record materialized_view_target");
+        }
+    }
+
+    @Test
+    public void testSystemInsertIntoPctViewIsDeclined() throws Exception {
+        // A system statement admits a view only on the static-overwrite route. A system INSERT INTO a view (an online
+        // rewrite of it, for one) reaches the pre-analysis route, which must keep declining every view.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            fixture.withMaterializedViewTarget(null);
+            when(fixture.insertStmt.isSystem()).thenReturn(true);
+
+            long skips = recordedSkips(SkipReason.MATERIALIZED_VIEW_TARGET,
+                    () -> InsertPreSplitHook.maybeRunPreSplit(fixture.insertStmt, fixture.context));
+
+            flow.verifyNoInteractions();
+            Assertions.assertEquals(1L, skips, "a system INSERT INTO a view must record materialized_view_target");
+        }
+    }
+
+    @Test
+    public void testSystemStaticOverwriteOfPctViewOverExternalSourceIsDeclined() throws Exception {
+        // A refresh samples only an internal OLAP base table: an external one would add a whole-source external scan
+        // to every refresh batch. The source is sized and unrestricted, so only the view target can decline it.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            fixture.withMaterializedViewTarget(null);
+            fixture.withExternalSource(connectorStatistics(1_000_000d, 8d, Statistics.StatsSource.TABLE_METADATA));
+
+            fixture.runStaticOverwrite(true);
+
+            flow.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    public void testSystemStaticOverwriteOfPctViewSkipsTargetAuthorization() throws Exception {
+        // The refresh already required privileges on the view, the INSERT check never applies to a view,
+        // and a denial here would be swallowed into a silent no-op. Every target-side check is stubbed to
+        // deny, so reaching the flow proves none of them ran; the source SELECT re-check still must.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            MaterializedView view = fixture.withMaterializedViewTarget(null);
+            when(fixture.context.isBypassAuthorizerCheck()).thenReturn(false);
+            Warehouse otherWarehouse = mock(Warehouse.class);
+            when(otherWarehouse.getId()).thenReturn(WarehouseManager.DEFAULT_WAREHOUSE_ID + 1);
+            when(otherWarehouse.getName()).thenReturn("other_warehouse");
+            when(GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(anyLong()))
+                    .thenReturn(otherWarehouse);
+            fixture.authorizer.when(() -> Authorizer.checkTableAction(
+                            any(ConnectContext.class), any(String.class), any(String.class), eq(PrivilegeType.INSERT)))
+                    .thenThrow(new AccessDeniedException("simulated: no INSERT on the view"));
+            fixture.authorizer.when(() -> Authorizer.checkWarehouseAction(
+                            any(ConnectContext.class), any(String.class), any(PrivilegeType.class)))
+                    .thenThrow(new AccessDeniedException("simulated: no USAGE on the warehouse"));
+
+            fixture.runStaticOverwrite(true);
+
+            flow.verify(() -> PreSplitFlow.runStaticOverwriteFlow(
+                    any(Database.class), eq(view), any(PreSplitFlow.Prepared.class),
+                    eq(LoadKind.INSERT_FROM_TABLE), any(), eq(fixture.context),
+                    any(PreSplitPartitionScope.class)), times(1));
+            fixture.authorizer.verify(() -> Authorizer.checkWarehouseAction(any(), any(), any()), never());
+            fixture.authorizer.verify(() -> Authorizer.checkTableAction(
+                    any(ConnectContext.class), any(String.class), any(String.class), eq(PrivilegeType.INSERT)), never());
+            fixture.authorizer.verify(() -> Authorizer.checkTableAction(
+                    any(ConnectContext.class), any(String.class), any(String.class), any(String.class),
+                    eq(PrivilegeType.SELECT)), times(1));
+        }
+    }
+
+    @Test
+    public void testSystemStaticOverwriteOfIncrementalViewDeclinedByDerivedTier() throws Exception {
+        // An incremental view is keyed by its hidden row id, which no sampled source can map back to a
+        // column. One the derived tier cannot key either (here: a sort key that is not the row id) must
+        // stay declined rather than reach the sampled path a view without a row id now takes.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            fixture.withMaterializedViewTarget(RowIdStrategy.AUTO_INCREMENT);
+
+            long skips = recordedSkips(SkipReason.MATERIALIZED_VIEW_TARGET, () -> fixture.runStaticOverwrite(true));
+
+            flow.verifyNoInteractions();
+            Assertions.assertEquals(1L, skips,
+                    "an incremental view the derived tier cannot key must record materialized_view_target");
+        }
+    }
+
+    /** Runs {@code invocation} with metrics enabled and returns how many times it recorded {@code reason}. */
+    private static long recordedSkips(SkipReason reason, PresplitTestSupport.HookInvocation invocation)
+            throws Exception {
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            String label = reason.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue();
+            invocation.run();
+            return MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue() - baseline;
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
+    /** Runs {@code invocation} with metrics enabled and returns how many skips it recorded, whatever the reason. */
+    private static long recordedSkipsOfAnyReason(PresplitTestSupport.HookInvocation invocation) throws Exception {
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            long baseline = totalRecordedSkips();
+            invocation.run();
+            return totalRecordedSkips() - baseline;
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
+    private static long totalRecordedSkips() {
+        long total = 0L;
+        for (SkipReason reason : SkipReason.values()) {
+            total += MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(reason.name().toLowerCase()).getValue();
+        }
+        return total;
     }
 
     // ---------- tryRunPreSplit: partition-branch gate ----------
@@ -572,7 +876,7 @@ public class InsertPreSplitHookTableTest {
         // A usable snapshot summary answers without consulting the table statistics at all, so no
         // ConnectContext / MetadataMgr is needed here.
         Assertions.assertEquals(new Estimates(872000000000L, 3500000000L),
-                TablePreSplitSource.sourceEstimates(icebergTable, null));
+                TablePreSplitSource.sourceEstimates(icebergTable, List.of(), null));
     }
 
     @Test
@@ -654,7 +958,7 @@ public class InsertPreSplitHookTableTest {
                 connectorStatistics(1_000_000d, 8d, Statistics.StatsSource.TABLE_METADATA))) {
             Assertions.assertEquals(new Estimates(16_000_000L, 1_000_000L),
                     TablePreSplitSource.sourceEstimates(externalTable("hive_catalog", Table.TableType.HIVE),
-                            mockConnectContextWithSessionPreSplit(true)));
+                            List.of(), mockConnectContextWithSessionPreSplit(true)));
         }
     }
 
@@ -667,7 +971,7 @@ public class InsertPreSplitHookTableTest {
                 connectorStatistics(1d, 8d, Statistics.StatsSource.NONE))) {
             Assertions.assertEquals(Estimates.ZERO,
                     TablePreSplitSource.sourceEstimates(externalTable("jdbc_catalog", Table.TableType.JDBC),
-                            mockConnectContextWithSessionPreSplit(true)));
+                            List.of(), mockConnectContextWithSessionPreSplit(true)));
         }
     }
 
@@ -680,7 +984,7 @@ public class InsertPreSplitHookTableTest {
                     .thenThrow(new RuntimeException("simulated metastore outage"));
             Assertions.assertEquals(Estimates.ZERO,
                     TablePreSplitSource.sourceEstimates(externalTable("hive_catalog", Table.TableType.HIVE),
-                            mockConnectContextWithSessionPreSplit(true)));
+                            List.of(), mockConnectContextWithSessionPreSplit(true)));
         }
     }
 
@@ -693,7 +997,8 @@ public class InsertPreSplitHookTableTest {
         try (MockedStatic<com.starrocks.server.GlobalStateMgr> ignored = mockStatistics(
                 connectorStatistics(500d, 8d, Statistics.StatsSource.TABLE_METADATA))) {
             Assertions.assertEquals(new Estimates(8_000L, 500L),
-                    TablePreSplitSource.sourceEstimates(icebergTable, mockConnectContextWithSessionPreSplit(true)));
+                    TablePreSplitSource.sourceEstimates(icebergTable, List.of(),
+                            mockConnectContextWithSessionPreSplit(true)));
         }
     }
 
@@ -1383,22 +1688,8 @@ public class InsertPreSplitHookTableTest {
             this.context = mockConnectContextWithSessionPreSplit(true);
             when(context.isBypassAuthorizerCheck()).thenReturn(true);
 
-            // Target: single-tier, range-distribution, NORMAL, one index, scalar sort key.
             OlapTable target = mock(OlapTable.class);
             this.targetTable = target;
-            when(target.getName()).thenReturn("target_t");
-            when(target.isCloudNativeTableOrMaterializedView()).thenReturn(true);
-            when(target.isRangeDistribution()).thenReturn(true);
-            when(target.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
-            com.starrocks.catalog.MaterializedIndexMeta baseMeta = mock(com.starrocks.catalog.MaterializedIndexMeta.class);
-            when(baseMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
-            when(target.getVisibleIndexMetas()).thenReturn(List.of(baseMeta));
-            when(target.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
-            when(target.getBaseSchemaWithoutGeneratedColumn()).thenReturn(columnsOf(targetColumns));
-            PartitionInfo targetPartitionInfo = mock(PartitionInfo.class);
-            when(targetPartitionInfo.isPartitioned()).thenReturn(false);
-            when(targetPartitionInfo.getPartitionColumns(any())).thenReturn(List.of());
-            when(target.getPartitionInfo()).thenReturn(targetPartitionInfo);
 
             // Source: OLAP, columns supplied; no generated column by default.
             this.sourceTable = mock(OlapTable.class);
@@ -1459,16 +1750,81 @@ public class InsertPreSplitHookTableTest {
             analyzerUtils.when(() -> com.starrocks.sql.analyzer.AnalyzerUtils.normalizedTableRef(any(), any()))
                     .thenReturn(normalizedRef);
 
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(target))
-                    .thenReturn(List.of(bigintColumn("k")));
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(eq(target), eq(BASE_INDEX_META_ID)))
-                    .thenReturn(List.of(bigintColumn("k")));
+            stubEligibleTarget(target, "target_t", targetColumns);
             metaUtils.when(() -> MetaUtils.getSessionAwareTable(any(), eq(targetDb), any())).thenReturn(target);
             metaUtils.when(() -> MetaUtils.getSessionAwareTable(any(), eq(sourceDb), any())).thenReturn(sourceTable);
 
             // Default: source is authorized with no row / column policy attached.
             authorizer.when(() -> Authorizer.getRowAccessPolicy(any(), any())).thenReturn(null);
             authorizer.when(() -> Authorizer.getColumnMaskingPolicy(any(), any(), any())).thenReturn(Map.of());
+        }
+
+        /** Restricts the fixture's source relation to the named (formal) partitions. */
+        private void restrictSourceTo(List<String> partitionNames) {
+            TableRelation relation = (TableRelation) ((SelectRelation) insertStmt.getQueryStatement()
+                    .getQueryRelation()).getRelation();
+            when(relation.getPartitionNames())
+                    .thenReturn(new PartitionRef(partitionNames, false, NodePosition.ZERO));
+        }
+
+        /**
+         * Registers a formal source partition with one physical partition whose base index holds
+         * {@code baseRows} rows and, when {@code rollupRows} is non-null, a rollup holding that many.
+         */
+        private Partition sourcePartition(String name, long id, long dataSize, long baseRows, Long rollupRows) {
+            Partition partition = mock(Partition.class);
+            when(partition.getId()).thenReturn(id);
+            when(partition.getDataSize()).thenReturn(dataSize);
+            PhysicalPartition physicalPartition = mock(PhysicalPartition.class);
+            MaterializedIndex baseIndex = mock(MaterializedIndex.class);
+            when(baseIndex.getRowCount()).thenReturn(baseRows);
+            when(physicalPartition.getQueryableBaseIndex()).thenReturn(baseIndex);
+            when(partition.getSubPartitions()).thenReturn(List.of(physicalPartition));
+            when(sourceTable.getPartition(name, false)).thenReturn(partition);
+            return partition;
+        }
+
+        /** Stubs {@code table} as an eligible target: single-tier, range-distribution, NORMAL, one index, scalar sort key. */
+        private void stubEligibleTarget(OlapTable table, String name, List<String> columnNames) {
+            when(table.getName()).thenReturn(name);
+            when(table.isCloudNativeTableOrMaterializedView()).thenReturn(true);
+            when(table.isRangeDistribution()).thenReturn(true);
+            when(table.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
+            com.starrocks.catalog.MaterializedIndexMeta baseMeta = mock(com.starrocks.catalog.MaterializedIndexMeta.class);
+            when(baseMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+            when(table.getVisibleIndexMetas()).thenReturn(List.of(baseMeta));
+            when(table.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
+            when(table.getBaseSchemaWithoutGeneratedColumn()).thenReturn(columnsOf(columnNames));
+            PartitionInfo partitionInfo = mock(PartitionInfo.class);
+            when(partitionInfo.isPartitioned()).thenReturn(false);
+            when(partitionInfo.getPartitionColumns(any())).thenReturn(List.of());
+            when(table.getPartitionInfo()).thenReturn(partitionInfo);
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table))
+                    .thenReturn(List.of(bigintColumn("k")));
+            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(eq(table), eq(BASE_INDEX_META_ID)))
+                    .thenReturn(List.of(bigintColumn("k")));
+        }
+
+        /**
+         * Re-points the target resolution at a materialized view with the same eligible shape as the
+         * default target, so only its being a view -- and its row-id strategy -- can decline it.
+         */
+        private MaterializedView withMaterializedViewTarget(RowIdStrategy rowIdStrategy) {
+            MaterializedView view = mock(MaterializedView.class);
+            stubEligibleTarget(view, "mv_target", List.of("k", "v"));
+            when(view.getRowIdStrategy()).thenReturn(rowIdStrategy);
+            metaUtils.when(() -> MetaUtils.getSessionAwareTable(any(), Mockito.argThat(db -> db != sourceDb), any()))
+                    .thenReturn(view);
+            return view;
+        }
+
+        /** Drives the static-overwrite entry point the way InsertOverwriteJobRunner does for this statement. */
+        private void runStaticOverwrite(boolean system) {
+            when(insertStmt.isOverwrite()).thenReturn(true);
+            when(insertStmt.hasOverwriteJob()).thenReturn(true);
+            when(insertStmt.isSystem()).thenReturn(system);
+            InsertPreSplitHook.maybeRunStaticOverwritePreSplit(insertStmt, context,
+                    List.of("mv_target"), List.of("tmp_mv_target"), Estimates.ZERO);
         }
 
         /**

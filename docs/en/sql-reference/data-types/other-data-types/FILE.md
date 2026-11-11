@@ -9,9 +9,9 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 <Experimental />
 
-FILE is a scalar type that describes a file, or a byte range inside a file. A FILE value is read and returned as a whole: it has a fixed set of fields, but the fields are not individually addressable in SQL.
+FILE is a scalar type that describes a file, or a byte range inside a file. A FILE value has a fixed set of fields that can be extracted using the `FL_GET_*` functions.
 
-FILE currently cannot be persisted in StarRocks; FILE values can only be obtained from external catalogs.
+FILE currently cannot be persisted in StarRocks. FILE values can be obtained from external catalogs or constructed using `TO_FILE` or `TRY_TO_FILE`. For syntax and examples, see [FILE functions](../../sql-functions/file-functions/file-functions.mdx).
 
 ## Structure
 
@@ -29,7 +29,7 @@ Every FILE value carries the same fields, in this order. Each field can be NULL.
 A FILE value is one of the following:
 
 - A **reference**: `uri` is set, usually together with `offset` and `size`, and `inline` is NULL.
-- **Inline content**: `inline` holds the bytes and `uri`, `offset`, and `size` are NULL.
+- **Inline content**: `inline` holds the bytes; `uri`, `offset`, and `size` must all be NULL.
 
 ## Output format
 

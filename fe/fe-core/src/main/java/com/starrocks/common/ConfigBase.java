@@ -102,6 +102,9 @@ public class ConfigBase {
          * the /variable page report a set value as {@link CredentialMask#LONG}; the field keeps the real value.
          */
         boolean sensitive() default false;
+
+        /** Whether an explicitly empty property is loaded instead of treated as absent. */
+        boolean acceptEmpty() default false;
     }
 
     // An empty value stays empty, so the output still tells an unset credential from a set one.
@@ -238,17 +241,25 @@ public class ConfigBase {
     }
 
     public String getConfigValue(String confKey, String[] aliases) {
+        return getConfigValue(confKey, aliases, false);
+    }
+
+    private String getConfigValue(String confKey, String[] aliases, boolean acceptEmpty) {
         String confVal = props.getProperty(confKey);
-        if (Strings.isNullOrEmpty(confVal)) {
+        if (isMissingConfigValue(confVal, acceptEmpty)) {
             for (String aliasName : aliases) {
                 confVal = props.getProperty(aliasName);
-                if (!Strings.isNullOrEmpty(confVal)) {
+                if (!isMissingConfigValue(confVal, acceptEmpty)) {
                     break;
                 }
             }
         }
 
         return confVal;
+    }
+
+    private static boolean isMissingConfigValue(String value, boolean acceptEmpty) {
+        return value == null || (!acceptEmpty && value.isEmpty());
     }
 
     private void setFields() throws Exception {
@@ -261,8 +272,8 @@ public class ConfigBase {
             }
 
             // ensure that field has property string
-            String confVal = getConfigValue(f.getName(), anno.aliases());
-            if (Strings.isNullOrEmpty(confVal)) {
+            String confVal = getConfigValue(f.getName(), anno.aliases(), anno.acceptEmpty());
+            if (isMissingConfigValue(confVal, anno.acceptEmpty())) {
                 continue;
             }
 
@@ -314,6 +325,14 @@ public class ConfigBase {
                 if (timeoutMs <= 0) {
                     throw new InvalidConfException("'" + f.getName() + "' must be a positive number of " +
                             "milliseconds, current value: " + confVal);
+                }
+                break;
+            case "starmgr_grpc_server_max_worker_threads":
+                // The starmgr gRPC executor needs at least one thread: in fe.conf a smaller value would stop FE
+                // from starting, and a running pool ignores it, so ADMIN SET FRONTEND CONFIG must not accept it.
+                if (Integer.parseInt(confVal) < 1) {
+                    throw new InvalidConfException("'starmgr_grpc_server_max_worker_threads' must be at least 1, " +
+                            "current value: " + confVal);
                 }
                 break;
             case "db_used_data_quota_update_interval_secs":

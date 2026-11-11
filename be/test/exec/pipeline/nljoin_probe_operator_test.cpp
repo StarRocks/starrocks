@@ -61,7 +61,7 @@ protected:
 
     ChunkPtr make_one_int_column_chunk(SlotId slot_id, bool nullable) {
         auto chunk = std::make_shared<Chunk>();
-        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), nullable);
+        auto col = ColumnHelper::create_column(TYPE_INT_DESC, nullable);
         col->append_default();
         chunk->append_column(std::move(col), slot_id);
         return chunk;

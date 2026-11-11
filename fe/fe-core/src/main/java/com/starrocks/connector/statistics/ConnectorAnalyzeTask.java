@@ -174,6 +174,9 @@ public class ConnectorAnalyzeTask {
                 StatisticUtils.getQueryStatisticsColumnType(table, col)).collect(Collectors.toList());
         // init partition names
         List<String> partitionNames = ConnectorPartitionTraits.build(table).getPartitionNames();
+        // kept so the job can tell whether the updated partitions are the whole table (see
+        // ExternalFullStatisticsCollectJob#scansWholeTable) without listing them again
+        List<String> tablePartitionNames = partitionNames;
         Set<String> updatedPartitions = StatisticUtils.getUpdatedPartitionNames(table, lastAnalyzedTime);
         if (updatedPartitions == null) {
             // assume all partitions is updated if updatedPartitions is null
@@ -201,7 +204,7 @@ public class ConnectorAnalyzeTask {
                 StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
                         catalogName, db, table, partitionNames,
                         columnNames, columnTypes,
-                        analyzeType, StatsConstants.ScheduleType.ONCE, Maps.newHashMap()),
+                        analyzeType, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), tablePartitionNames),
                 analyzeStatus,
                 false, true /* resetWarehouse */);
     }

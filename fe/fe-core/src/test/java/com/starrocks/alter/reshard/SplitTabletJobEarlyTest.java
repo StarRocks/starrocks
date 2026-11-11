@@ -45,6 +45,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -143,11 +144,16 @@ public class SplitTabletJobEarlyTest {
      * be resolved does NOT land here -- the factory propagates that instead.
      */
     private Map<Long, Integer> plan(int computeNodeCount, SplitTabletClause clause) {
+        return plan(computeNodeCount, clause, Config.tablet_reshard_max_split_count);
+    }
+
+    /** As above, against an explicit per-tablet fan-out cap. */
+    private Map<Long, Integer> plan(int computeNodeCount, SplitTabletClause clause, int maxSplitCount) {
         boolean explicitTarget = clause.getProperties() != null
                 && clause.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE);
         int bound = explicitTarget ? 0 : TabletReshardUtils.adaptiveSplitBound(computeNodeCount);
         return Deencapsulation.invoke(SplitTabletJobFactory.class, "planIndexSplits",
-                baseIndex(), clause.getTabletReshardTargetSize(), bound, Config.tablet_reshard_max_split_count);
+                baseIndex(), clause.getTabletReshardTargetSize(), bound, maxSplitCount);
     }
 
     /** Base index gets one tablet of earlyOnlySize; a second visible index gets one of normalSize. */
@@ -258,6 +264,138 @@ public class SplitTabletJobEarlyTest {
         assertTrue(after2 <= 5, "landed on " + after2 + ", bound is 5");
     }
 
+
+    @Test
+    public void threeNodesStalledAtTwoTabletsFillTheThird() {
+        // The stall the fill exists to end. Two 4 GiB tablets on three nodes: the walk aims at 8/3 GiB and
+        // neither tablet is worth two of that, so the index used to sit at two tablets until one of them
+        // reached the 15 GiB size threshold. One of them now splits in two, each child at the 2 GiB floor.
+        List<Long> ids = setTabletDataSizes(4L << 30, 4L << 30);
+        assertEquals(Map.of(ids.get(0), 2), plan(3, new SplitTabletClause()));
+    }
+
+    @Test
+    public void tenNodesStalledAtEightTabletsFillToTen() {
+        // Eight 4 GiB tablets on ten nodes: the walk aims at 3.2 GiB, which none of them is worth twice.
+        // Two slots are left and they go to two different tablets, the first two on equal sizes.
+        long[] sizes = new long[8];
+        Arrays.fill(sizes, 4L << 30);
+        List<Long> ids = setTabletDataSizes(sizes);
+        assertEquals(Map.of(ids.get(0), 2, ids.get(1), 2), plan(10, new SplitTabletClause()));
+    }
+
+    @Test
+    public void theFillCutsTheLargestTabletFirst() {
+        // Three nodes, 5 and 6 GiB: neither is worth two of the 11/3 GiB target. The one slot goes to the
+        // larger tablet, wherever it sits in the index.
+        List<Long> ids = setTabletDataSizes(5L << 30, 6L << 30);
+        assertEquals(Map.of(ids.get(1), 2), plan(3, new SplitTabletClause()));
+    }
+
+    @Test
+    public void theFillSpreadsBeforeItDeepens() {
+        // Six nodes, four 7 GiB tablets, two slots. A third child of the first tablet would still clear the
+        // floor (7/3 GiB), but its children are 3.5 GiB against 7 GiB for an uncut tablet, so the second slot
+        // goes to another tablet.
+        List<Long> ids = setTabletDataSizes(7L << 30, 7L << 30, 7L << 30, 7L << 30);
+        assertEquals(Map.of(ids.get(0), 2, ids.get(1), 2), plan(6, new SplitTabletClause()));
+    }
+
+    @Test
+    public void aSkewedIndexIsFilledOnlyUpToTheBound() {
+        // Six nodes, 9/5/4/1 GiB. The walk (target 19/6 GiB) cuts 9 in two, leaving one slot, which goes to
+        // the 5 GiB tablet. The 9 and 4 GiB tablets could still take a child above the floor, but the index
+        // is at its bound, and one more would put it in auto-merge's range.
+        List<Long> ids = setTabletDataSizes(9L << 30, 5L << 30, 4L << 30, 1L << 30);
+        assertEquals(Map.of(ids.get(0), 2, ids.get(1), 2), plan(6, new SplitTabletClause()));
+    }
+
+    @Test
+    public void theFillLeavesTheSizeRuleAlone() {
+        // Five nodes. The 16 GiB tablet is the size rule's, at two children, and the fill may not add a third
+        // even though its 8 GiB children are the largest in the index: asking BE for more children than the
+        // size rule computed can turn a working split into a no-op. The 5 GiB tablet takes one slot; a third
+        // child of it would be under the floor, so the index stops at four.
+        List<Long> ids = setTabletDataSizes(16L << 30, 5L << 30);
+        assertEquals(Map.of(ids.get(0), 2, ids.get(1), 2), plan(5, new SplitTabletClause()));
+    }
+
+    @Test
+    public void theFillLeavesTheWalksCountsAlone() {
+        // Ten nodes, 14/12/7/4 GiB. The walk aims at 3.7 GiB and cuts 14 and 12 into three each, leaving two
+        // slots. A fourth child of the 14 GiB tablet would clear the floor, but the fill only spends on the
+        // tablets the walk left alone: asking BE for more children than the walk computed could turn its
+        // working split into a no-op. The slots go to 7 GiB, then to 4 GiB.
+        List<Long> ids = setTabletDataSizes(14L << 30, 12L << 30, 7L << 30, 4L << 30);
+        assertEquals(Map.of(ids.get(0), 3, ids.get(1), 3, ids.get(2), 2, ids.get(3), 2),
+                plan(10, new SplitTabletClause()));
+    }
+
+    @Test
+    public void theFillRanksTabletsByTheChildrenTheyHaveNow() {
+        // Twelve nodes, 7/4 GiB and eight tablets of 3.9 GiB, each under two floors. The walk (target 3.52 GiB)
+        // takes nothing, leaving two slots. The first goes to the 7 GiB tablet; the second compares its
+        // 3.5 GiB children against the uncut 4 GiB tablet and goes to the latter. Ranking by the size a cut
+        // would leave instead (7/3 against 4/2 GiB) would wrongly give the 7 GiB tablet a third child.
+        long[] sizes = new long[10];
+        Arrays.fill(sizes, (39L << 30) / 10);
+        sizes[0] = 7L << 30;
+        sizes[1] = 4L << 30;
+        List<Long> ids = setTabletDataSizes(sizes);
+        assertEquals(Map.of(ids.get(0), 2, ids.get(1), 2), plan(12, new SplitTabletClause()));
+    }
+
+    @Test
+    public void theFillStopsAtTheFloor() {
+        // Two 3 GiB tablets on three nodes: one more child of either would be 1.5 GiB, under the 2 GiB floor.
+        setTabletDataSizes(3L << 30, 3L << 30);
+        assertTrue(plan(3, new SplitTabletClause()).isEmpty());
+    }
+
+    @Test
+    public void theFillCanCutOneTabletMoreThanOnce() {
+        // Ten nodes, 70 and 14 GiB. The size rule cuts 70 into seven, leaving two slots; the walk (target
+        // 8.4 GiB) declines 14. Both slots go to the 14 GiB tablet, the only one the fill may touch.
+        List<Long> ids = setTabletDataSizes(70L << 30, 14L << 30);
+        assertEquals(Map.of(ids.get(0), 7, ids.get(1), 3), plan(10, new SplitTabletClause()));
+    }
+
+    @Test
+    public void theFillHonoursTheFanOutCap() {
+        // The same index where a split drags an UNSHARE rewrite behind it, capped at two children per tablet:
+        // the size rule gets two for 70 GiB, and the fill may give the 14 GiB tablet two and no more, although
+        // seven slots are left.
+        List<Long> ids = setTabletDataSizes(70L << 30, 14L << 30);
+        assertEquals(Map.of(ids.get(0), 2, ids.get(1), 2), plan(10, new SplitTabletClause(), 2));
+    }
+
+    @Test
+    public void aMinimumAtTheTargetTurnsTheFillOff() {
+        // The documented off switch of the adaptive behaviour must switch the fill off with it.
+        setTabletDataSizes(4L << 30, 4L << 30);
+        Config.tablet_reshard_min_split_size = Config.tablet_reshard_target_size;
+        assertTrue(plan(3, new SplitTabletClause()).isEmpty());
+    }
+
+    @Test
+    public void aStalledIndexIsFilledByTheFactory() throws Exception {
+        // The planner-level tests above bypass the factory; this one drives the stalled shape from a default
+        // clause to a materialized job, with only the node count stubbed.
+        setTabletDataSizes(4L << 30, 4L << 30);
+        stubNodeCount(3);
+
+        TabletReshardJob job =
+                new SplitTabletJobFactory(db, table, new SplitTabletClause()).createTabletReshardJob();
+        List<ReshardingTablet> reshardingTablets = job.getReshardingPhysicalPartitions().values().stream()
+                .flatMap(p -> p.getReshardingIndexes().values().stream())
+                .flatMap(i -> i.getReshardingTablets().stream())
+                .collect(Collectors.toList());
+        assertEquals(1L, reshardingTablets.stream().filter(t -> t.getSplittingTablet() != null).count(),
+                "one source tablet splits");
+        assertEquals(2L, job.getParallelTablets(), "into two children");
+        assertEquals(3, reshardingTablets.stream().mapToInt(t -> t.getNewTabletIds().size()).sum(),
+                "the index comes out three tablets wide");
+    }
 
     @Test
     public void planningNeverReordersTheCatalogTabletList() {

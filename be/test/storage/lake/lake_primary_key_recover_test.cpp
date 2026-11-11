@@ -115,10 +115,10 @@ public:
         _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
 
-        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        _slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        _slots.emplace_back(2, "c2", TYPE_INT_DESC);
+        _slots.emplace_back(3, "__op", TYPE_INT_DESC);
         _full_slots = {&_slots[0], &_slots[1], &_slots[2], &_slots[3]};
         _partial_slots = {&_slots[0], &_slots[1]};
     }

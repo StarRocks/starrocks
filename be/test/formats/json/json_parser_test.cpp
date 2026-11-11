@@ -20,7 +20,9 @@
 #include <cstring>
 #include <initializer_list>
 #include <memory>
+#include <numeric>
 #include <string>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
@@ -390,6 +392,180 @@ TEST_F(JsonDocumentStreamParserTest, test_truncated_bytes) {
 
     ASSERT_OK(_parser->parse(input.data(), size, padded_size));
     ASSERT_EQ(8, _parser->truncated_bytes());
+}
+
+// simdjson iterate_many stops before an incomplete document at the end of the input and only reports EOF, so
+// truncated_tail() is the only trace of it. It is only known once the stream is exhausted.
+TEST_F(JsonDocumentStreamParserTest, truncated_tail) {
+    EXPECT_TRUE(_parser->truncated_tail().empty());
+
+    std::string input = R"({"key1": 1} {"key2": 2} {"key3":)";
+    size_t size = input.size();
+    input.resize(size + simdjson::SIMDJSON_PADDING);
+    ASSERT_OK(_parser->parse(input.data(), size, input.size()));
+
+    simdjson::ondemand::object row;
+    ASSERT_OK(_parser->get_current(&row));
+    _check_row(row, "key1", 1);
+    EXPECT_TRUE(_parser->truncated_tail().empty());
+
+    ASSERT_OK(_parser->advance());
+    ASSERT_OK(_parser->get_current(&row));
+    _check_row(row, "key2", 2);
+    EXPECT_TRUE(_parser->truncated_tail().empty());
+
+    EXPECT_STATUS(Status::EndOfFile(""), _parser->advance());
+    EXPECT_EQ(R"({"key3":)", std::string(_parser->truncated_tail()));
+}
+
+TEST_F(JsonDocumentStreamParserTest, truncated_tail_without_complete_document) {
+    std::string input = " \n{\"key1\": 1, \"key2\": [1, 2";
+    size_t size = input.size();
+    input.resize(size + simdjson::SIMDJSON_PADDING);
+    ASSERT_OK(_parser->parse(input.data(), size, input.size()));
+
+    simdjson::ondemand::object row;
+    EXPECT_STATUS(Status::EndOfFile(""), _parser->get_current(&row));
+    EXPECT_EQ(R"({"key1": 1, "key2": [1, 2)", std::string(_parser->truncated_tail()));
+}
+
+TEST_F(JsonDocumentStreamParserTest, no_truncated_tail) {
+    for (const std::string data : {R"({"key1": 1} {"key2": 2})", "{\"key1\": 1}\n{\"key2\": 2}\n \t\r\n", " \n\t\r "}) {
+        std::string input = data;
+        size_t size = input.size();
+        input.resize(size + simdjson::SIMDJSON_PADDING);
+        _parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
+        ASSERT_OK(_parser->parse(input.data(), size, input.size()));
+
+        simdjson::ondemand::object row;
+        Status st = _parser->get_current(&row);
+        while (st.ok()) {
+            st = _parser->advance();
+        }
+        EXPECT_TRUE(st.is_end_of_file()) << st;
+        EXPECT_TRUE(_parser->truncated_tail().empty()) << data;
+    }
+}
+
+// With an input larger than the batch, truncated_bytes() is computed from a partial batch until the last batch is
+// parsed, and it underflows there. Only the value of the last batch may be used.
+TEST_F(JsonDocumentStreamParserTest, truncated_tail_multi_batch) {
+    // The constructor copies the batch size, and only honours a size above simdjson::dom::MINIMAL_BATCH_SIZE.
+    config::json_parse_many_batch_size = 64;
+    for (const std::string tail : {"", "\n \n", R"({"key": 100, "val)"}) {
+        std::string input;
+        for (int i = 0; i < 100; i++) {
+            input += "{\"key\": " + std::to_string(i) + "}\n";
+        }
+        input += tail;
+        size_t size = input.size();
+        input.resize(size + simdjson::SIMDJSON_PADDING);
+        _parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
+        ASSERT_OK(_parser->parse(input.data(), size, input.size()));
+
+        simdjson::ondemand::object row;
+        for (int i = 0; i < 100; i++) {
+            ASSERT_OK(_parser->get_current(&row));
+            _check_row(row, "key", i);
+            EXPECT_TRUE(_parser->truncated_tail().empty());
+            Status st = _parser->advance();
+            ASSERT_TRUE(i < 99 ? st.ok() : st.is_end_of_file()) << i << ": " << st;
+        }
+        EXPECT_EQ(tail.find('{') == std::string::npos ? "" : tail, std::string(_parser->truncated_tail()));
+    }
+}
+
+// An incomplete document larger than the batch: the batch size grows until the rest of the input is one batch, which
+// has no document left.
+TEST_F(JsonDocumentStreamParserTest, truncated_tail_larger_than_batch) {
+    config::json_parse_many_batch_size = 64;
+    const std::string tail = "{\"key\": 1, \"val\": \"" + std::string(200, 'x');
+    for (const std::string& head : {std::string(), std::string("{\"key\": 0}\n")}) {
+        std::string input = head + tail;
+        size_t size = input.size();
+        input.resize(size + simdjson::SIMDJSON_PADDING);
+        _parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
+        ASSERT_OK(_parser->parse(input.data(), size, input.size()));
+
+        simdjson::ondemand::object row;
+        if (!head.empty()) {
+            ASSERT_OK(_parser->get_current(&row));
+            _check_row(row, "key", 0);
+            // The next batch fails with CAPACITY, which only get_current() sees.
+            ASSERT_OK(_parser->advance());
+        }
+        EXPECT_STATUS(Status::EndOfFile(""), _parser->get_current(&row));
+        EXPECT_EQ(tail, std::string(_parser->truncated_tail()));
+    }
+}
+
+// A document larger than the batch makes the parser iterate the rest of the input again with a larger batch size.
+TEST_F(JsonDocumentStreamParserTest, truncated_tail_after_batch_size_grows) {
+    config::json_parse_many_batch_size = 64;
+    const std::string tail = R"({"key": 3, "val)";
+    std::string input = "{\"key\": 0}\n{\"key\": 1, \"big\": \"" + std::string(200, 'x') + "\"}\n{\"key\": 2}\n" + tail;
+    size_t size = input.size();
+    input.resize(size + simdjson::SIMDJSON_PADDING);
+    _parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
+    ASSERT_OK(_parser->parse(input.data(), size, input.size()));
+
+    simdjson::ondemand::object row;
+    ASSERT_OK(_parser->get_current(&row));
+    _check_row(row, "key", 0);
+    ASSERT_OK(_parser->advance());
+    ASSERT_OK(_parser->get_current(&row));
+    EXPECT_EQ(1, row.find_field("key").get_int64().value());
+    ASSERT_OK(_parser->advance());
+    ASSERT_OK(_parser->get_current(&row));
+    _check_row(row, "key", 2);
+    EXPECT_STATUS(Status::EndOfFile(""), _parser->advance());
+    EXPECT_EQ(tail, std::string(_parser->truncated_tail()));
+}
+
+// A document larger than the batch makes the parser iterate the rest of the input again, from the last parsed
+// document and with a larger batch size. The offsets of that document stream start at that document, and they used
+// to be taken as offsets in the whole input: at the end of the input, the parser iterated again from a wrong place,
+// which returned documents twice, or failed and hid the incomplete document at the end.
+TEST_F(JsonDocumentStreamParserTest, batch_size_grows_far_from_the_start) {
+    config::json_parse_many_batch_size = 64;
+    for (bool aligned : {true, false}) {
+        for (const std::string tail : {"", R"({"key": 101, "val)"}) {
+            std::string input;
+            for (int key = 0; key < 101; key++) {
+                std::string doc = "{\"key\": " + std::to_string(key);
+                if (key == 60) {
+                    doc += ", \"big\": \"" + std::string(200, 'x') + "\"";
+                }
+                doc += "}";
+                if (aligned) {
+                    // Documents at multiples of 16 bytes: a wrong offset lands on another document.
+                    doc.resize((doc.size() + 16) / 16 * 16 - 1, ' ');
+                }
+                input += doc + "\n";
+            }
+            input += tail;
+            size_t size = input.size();
+            input.resize(size + simdjson::SIMDJSON_PADDING);
+            _parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
+            ASSERT_OK(_parser->parse(input.data(), size, input.size()));
+
+            std::vector<int64_t> keys;
+            simdjson::ondemand::object row;
+            Status st = _parser->get_current(&row);
+            while (st.ok() && keys.size() <= 101) {
+                keys.push_back(row.find_field("key").get_int64().value());
+                st = _parser->advance();
+                if (st.ok()) {
+                    st = _parser->get_current(&row);
+                }
+            }
+            std::vector<int64_t> expected(101);
+            std::iota(expected.begin(), expected.end(), 0);
+            EXPECT_EQ(expected, keys) << "aligned: " << aligned << ", tail: " << tail;
+            EXPECT_TRUE(st.is_end_of_file()) << st;
+            EXPECT_EQ(tail, std::string(_parser->truncated_tail())) << "aligned: " << aligned;
+        }
+    }
 }
 
 TEST_F(JsonDocumentStreamParserTest, with_dynamic_batch_size_6) {

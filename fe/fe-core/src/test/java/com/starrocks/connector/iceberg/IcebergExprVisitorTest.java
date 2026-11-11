@@ -147,6 +147,16 @@ public class IcebergExprVisitorTest {
         Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
                 "Generated equal expression should be correct");
 
+        // timestamps outside 1677..2262 overflow when counted in nanoseconds
+        for (LocalDateTime t : List.of(LocalDateTime.of(1500, 1, 1, 0, 0, 0, 123000),
+                LocalDateTime.of(2300, 1, 1, 0, 0), LocalDateTime.of(9999, 12, 31, 23, 59, 59))) {
+            convertedExpr = converter.convert(Lists.newArrayList(new BinaryPredicateOperator(BinaryType.LT, K4,
+                    ConstantOperator.createDatetime(t))), context);
+            long micros = Math.addExact(Math.multiplyExact(t.toEpochSecond(ZoneOffset.UTC), 1_000_000L),
+                    t.getNano() / 1000);
+            Assertions.assertEquals(Expressions.lessThan("k4", micros).toString(), convertedExpr.toString());
+        }
+
         // notEqual
         value = ConstantOperator.createBoolean(true);
         convertedExpr = converter.convert(Lists.newArrayList(
