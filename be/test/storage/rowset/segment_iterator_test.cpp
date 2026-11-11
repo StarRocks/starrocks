@@ -1317,8 +1317,8 @@ TEST_F(SegmentIteratorTest, BitmapIndexKeepsPartiallyErasedOr) {
     append_row(3002, 1, 3);
     append_row(3003, 2, 1);
 
-    auto segment = write_and_open_segment(_fs, kSegmentDir + "/bitmap_index_partially_erased_or", tablet_schema,
-                                          *chunk, 1024);
+    auto segment =
+            write_and_open_segment(_fs, kSegmentDir + "/bitmap_index_partially_erased_or", tablet_schema, *chunk, 1024);
 
     auto vec_schema = VecSchemaBuilder().add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT).add(2, "c2", TYPE_INT).build();
 
