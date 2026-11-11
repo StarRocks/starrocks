@@ -457,7 +457,7 @@ public class MvRewriteJoinTest extends MVTestBase {
         cluster.runSql("test", "insert into t1_glm_bs values (1,'a',1),(2,'b',2),(3,'c',3),(4,'d',3);");
         createAndRefreshMv("CREATE MATERIALIZED VIEW mv_glm_bs\n" +
                 "DISTRIBUTED BY HASH(c1) BUCKETS 3\n" +
-                "REFRESH ON_CHANGE\n" +
+                "REFRESH MANUAL\n" +
                 "PROPERTIES('replication_num'='1')\n" +
                 "AS SELECT c1, c2, c3 FROM t1_glm_bs;");
         // without row counts the join below is planned as BUCKET_SHUFFLE(S) and the bug does not show
