@@ -158,8 +158,12 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     for (uint32_t i = 0; i < read_columns.size(); ++i) {
         read_columns[i] = ChunkFactory::column_from_field(*read_column_schema.field(i).get())->clone_empty();
     }
+    // No CHAR padding: get_column_values pads CHAR to its declared width for a partial update, which writes the
+    // values back to storage, but these values go to a query (a short-circuit point lookup, dict_mapping), which
+    // must see them as a scan does, with the padding stripped.
     RETURN_IF_ERROR(_tablet->updates()->get_column_values(value_column_ids_by_order, _version, false, rowids_by_rssid,
-                                                          &read_columns, nullptr, tablet_schema));
+                                                          &read_columns, nullptr, tablet_schema, nullptr,
+                                                          /*pad_char=*/false));
 
     // reorder read values to input keys' order and put into values output parameter
     values.reset();

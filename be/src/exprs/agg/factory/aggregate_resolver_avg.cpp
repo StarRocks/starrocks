@@ -29,7 +29,7 @@ struct AvgDispatcher {
         if constexpr (lt_is_aggregate<lt> && !lt_is_string<lt>) {
             auto func = AggregateFactory::MakeAvgAggregateFunction<lt>();
             using AvgState = AvgAggregateState<RunTimeCppType<ImmediateAvgResultLT<lt>>>;
-            resolver->add_aggregate_mapping<lt, AvgResultLT<lt>, AvgState>("avg", true, func);
+            resolver->add_aggregate_mapping<lt, AvgResultLT<lt>, AvgState>("avg", kWithWindow, func);
         }
     }
 };
@@ -40,8 +40,8 @@ struct ArrayAggDispatcher {
         if constexpr (lt_is_aggregate<lt> || lt_is_json<lt>) {
             auto func = new ArrayAggAggregateFunction<lt, false>();
             using AggState = ArrayAggAggregateState<lt, false>;
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg", true,
-                                                                                                   func);
+            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg",
+                                                                                                   kWithWindow, func);
         }
     }
 };
@@ -56,19 +56,19 @@ struct ArrayUniqueAggDispatcher {
                 auto func = new ArrayUnionAggAggregateFunction<pt, true, MyHashSet>();
                 using AggState = ArrayUnionAggAggregateState<pt, true, MyHashSet>;
                 resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_unique_agg", false, func);
+                        "array_unique_agg", kWithoutWindow, func);
             } else if constexpr (lt_is_fixedlength<pt>) {
                 using MyHashSet = phmap::flat_hash_set<CppType, StdHash<CppType>>;
                 auto func = new ArrayUnionAggAggregateFunction<pt, true, MyHashSet>();
                 using AggState = ArrayUnionAggAggregateState<pt, true, MyHashSet>;
                 resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_unique_agg", false, func);
+                        "array_unique_agg", kWithoutWindow, func);
             } else if constexpr (lt_is_string<pt>) {
                 using MyHashSet = SliceHashSet;
                 auto func = new ArrayUnionAggAggregateFunction<pt, true, MyHashSet>();
                 using AggState = ArrayUnionAggAggregateState<pt, true, MyHashSet>;
                 resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_unique_agg", false, func);
+                        "array_unique_agg", kWithoutWindow, func);
             } else {
                 throw std::runtime_error("array_unique_agg does not support " + type_to_string(pt));
             }
@@ -92,8 +92,8 @@ struct ArrayAggDistinctDispatcher {
             }
             auto func = new ArrayAggAggregateFunction<pt, true, MyHashSet>();
             using AggState = ArrayAggAggregateState<pt, true, MyHashSet>;
-            resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg_distinct",
-                                                                                                   false, func);
+            resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
+                    "array_agg_distinct", kWithoutWindow, func);
 
             using WindowAggState = ArrayAggWindowState<pt, true, MyHashSet>;
             auto window_func = new ArrayAggAggregateWindowFunction<pt, true, MyHashSet>();

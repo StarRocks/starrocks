@@ -61,6 +61,10 @@ public class ReplayFromDumpTestBase extends StarRocksTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
+        // Like PlanTestNoneDBBase: the proc profile collector samples every thread with async-profiler, which can
+        // SIGSEGV the forked test JVM while walking a c1 frame (seen on macOS aarch64)
+        Config.proc_profile_cpu_enable = false;
+        Config.proc_profile_mem_enable = false;
         UtFrameUtils.createMinStarRocksCluster();
         // Should disable Dynamic Partition in replay dump test
         Config.show_execution_groups = false;

@@ -15,20 +15,25 @@
 package com.starrocks.connector.delta;
 
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.type.CharType;
 import com.starrocks.type.HLLType;
 import com.starrocks.type.VarcharType;
 import io.delta.kernel.expressions.AlwaysTrue;
 import io.delta.kernel.expressions.And;
 import io.delta.kernel.expressions.Column;
+import io.delta.kernel.expressions.Expression;
 import io.delta.kernel.expressions.Literal;
 import io.delta.kernel.expressions.Or;
 import io.delta.kernel.expressions.Predicate;
@@ -52,9 +57,11 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -155,6 +162,160 @@ public class ScalarOperationToDeltaLakeExprTest {
     }
 
     @Test
+    public void testConvertInPredicate() {
+        ScalarOperationToDeltaLakeExpr converter = new ScalarOperationToDeltaLakeExpr();
+        ScalarOperationToDeltaLakeExpr.DeltaLakeContext context =
+                new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, new HashSet<>());
+
+        // c_int IN (1, 2, 3) becomes an OR of equalities, which the kernel's data skipping understands.
+        ScalarOperator in = new InPredicateOperator(false, cIntCol, ConstantOperator.createInt(1),
+                ConstantOperator.createInt(2), ConstantOperator.createInt(3));
+        Predicate expected = new Or(new Predicate("=", cDeltaIntCol, Literal.ofInt(1)),
+                new Or(new Predicate("=", cDeltaIntCol, Literal.ofInt(2)),
+                        new Predicate("=", cDeltaIntCol, Literal.ofInt(3))));
+        Assertions.assertEquals(expected.toString(), converter.convert(List.of(in), context).toString());
+
+        // A single value is a plain equality.
+        in = new InPredicateOperator(false, cDateCol, ConstantOperator.createVarchar("2020-01-01"));
+        expected = new Predicate("=", cDeltaDateCol,
+                Literal.ofDate((int) java.time.LocalDate.of(2020, 1, 1).toEpochDay()));
+        Assertions.assertEquals(expected.toString(), converter.convert(List.of(in), context).toString());
+
+        // One value that cannot become a literal stops the whole IN from being pushed down.
+        in = new InPredicateOperator(false, cIntCol, ConstantOperator.createInt(1),
+                ConstantOperator.createVarchar("abc"));
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(in), context));
+
+        // NOT IN is not pushed down.
+        in = new InPredicateOperator(true, cIntCol, ConstantOperator.createInt(1), ConstantOperator.createInt(2));
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(in), context));
+
+        // Nor is an over-long list.
+        List<ScalarOperator> args = new ArrayList<>();
+        args.add(cIntCol);
+        for (int i = 0; i <= ScalarOperationToDeltaLakeExpr.MAX_IN_LIST_SIZE; i++) {
+            args.add(ConstantOperator.createInt(i));
+        }
+        in = new InPredicateOperator(false, args);
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(in), context));
+        args.remove(args.size() - 1);
+        in = new InPredicateOperator(false, args);
+        Assertions.assertNotEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(in), context));
+    }
+
+    @Test
+    public void testPartialAndPushdown() {
+        ScalarOperationToDeltaLakeExpr converter = new ScalarOperationToDeltaLakeExpr();
+        ScalarOperationToDeltaLakeExpr.DeltaLakeContext context =
+                new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, new HashSet<>());
+        ScalarOperator convertible = new BinaryPredicateOperator(BinaryType.GT, cIntCol, ConstantOperator.createInt(5));
+        // c_int = 'abc' cannot be converted.
+        ScalarOperator unconvertible = new BinaryPredicateOperator(BinaryType.EQ, cIntCol,
+                ConstantOperator.createVarchar("abc"));
+        Predicate gt = new Predicate(">", cDeltaIntCol, Literal.ofInt(5));
+
+        // AND with one convertible side pushes that side, on either side.
+        ScalarOperator and = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                convertible, unconvertible);
+        Assertions.assertEquals(gt.toString(), converter.convert(List.of(and), context).toString());
+        and = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, unconvertible, convertible);
+        Assertions.assertEquals(gt.toString(), converter.convert(List.of(and), context).toString());
+
+        // Nested under OR it still widens the OR safely.
+        ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ, cLongCol, ConstantOperator.createBigint(7));
+        ScalarOperator or = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, and, eq);
+        Predicate expected = new Or(gt, new Predicate("=", cDeltaLongCol, Literal.ofLong(7)));
+        Assertions.assertEquals(expected.toString(), converter.convert(List.of(or), context).toString());
+
+        // OR is never pushed down partially.
+        ScalarOperator orUnconvertible = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                convertible, unconvertible);
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(orUnconvertible), context));
+
+        // Under NOT, NOT(AND(a, b)) must not become NOT(a).
+        ScalarOperator not = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, and);
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(not), context));
+        ScalarOperator notOr = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, or);
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(notOr), context));
+
+        // NOT state does not leak to the next conjunct.
+        Assertions.assertEquals(gt.toString(), converter.convert(List.of(not, and), context).toString());
+
+        // Neither side convertible.
+        and = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, unconvertible, unconvertible);
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(and), context));
+    }
+
+    @Test
+    public void testSubfieldNotBoundToDottedTopLevelColumn() {
+        // A struct s with field a, and a separate top-level partition column literally named "s.a".
+        StructType dottedSchema = new StructType()
+                .add("s", new StructType().add("a", IntegerType.INTEGER).add("b", StringType.STRING))
+                .add("s.a", IntegerType.INTEGER)
+                .add("s.b", StringType.STRING);
+        ScalarOperationToDeltaLakeExpr converter = new ScalarOperationToDeltaLakeExpr();
+        ScalarOperationToDeltaLakeExpr.DeltaLakeContext context =
+                new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(dottedSchema, Set.of("s.a", "s.b"));
+        ColumnRefOperator structCol = new ColumnRefOperator(20, com.starrocks.type.AnyStructType.ANY_STRUCT, "s",
+                true, false);
+        ScalarOperator subA = new SubfieldOperator(structCol, com.starrocks.type.IntegerType.INT, List.of("a"));
+        ScalarOperator subB = new SubfieldOperator(structCol, VarcharType.VARCHAR, List.of("b"));
+
+        List<ScalarOperator> predicates = List.of(
+                new BinaryPredicateOperator(BinaryType.EQ, subA, ConstantOperator.createInt(1)),
+                new InPredicateOperator(false, subA, ConstantOperator.createInt(1), ConstantOperator.createInt(2)),
+                new LikePredicateOperator(subB, ConstantOperator.createVarchar("abc%")));
+        for (ScalarOperator predicate : predicates) {
+            Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(predicate), context),
+                    predicate.toString());
+        }
+
+        // The top-level column named "s.a" itself is still pushed down.
+        ColumnRefOperator dottedCol = new ColumnRefOperator(21, com.starrocks.type.IntegerType.INT, "s.a", true,
+                false);
+        ScalarOperator in = new InPredicateOperator(false, dottedCol, ConstantOperator.createInt(1),
+                ConstantOperator.createInt(2));
+        Column column = new Column("s.a");
+        Predicate expected = new Or(new Predicate("=", column, Literal.ofInt(1)),
+                new Predicate("=", column, Literal.ofInt(2)));
+        Assertions.assertEquals(expected.toString(), converter.convert(List.of(in), context).toString());
+    }
+
+    @Test
+    public void testConvertLikePrefix() {
+        ScalarOperationToDeltaLakeExpr converter = new ScalarOperationToDeltaLakeExpr();
+        ScalarOperationToDeltaLakeExpr.DeltaLakeContext partitionContext =
+                new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, Set.of("c_string", "c_int"));
+
+        ScalarOperator like = new LikePredicateOperator(cVarcharCol, ConstantOperator.createVarchar("abc%"));
+        Predicate expected = new Predicate("STARTS_WITH", cDeltaVarcharCol, Literal.ofString("abc"));
+        Assertions.assertEquals(expected.toString(), converter.convert(List.of(like), partitionContext).toString());
+
+        // Only a non-empty prefix followed by a single trailing % is pushed down.
+        for (String pattern : List.of("%", "abc", "%abc", "a%c%", "ab_%", "a\\%%", "abc%%")) {
+            like = new LikePredicateOperator(cVarcharCol, ConstantOperator.createVarchar(pattern));
+            Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(like), partitionContext),
+                    pattern);
+        }
+
+        // REGEXP, NOT LIKE and non-string partition columns are not pushed down.
+        like = new LikePredicateOperator(LikePredicateOperator.LikeType.REGEXP, cVarcharCol,
+                ConstantOperator.createVarchar("abc%"));
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(like), partitionContext));
+        like = new LikePredicateOperator(cVarcharCol, ConstantOperator.createVarchar("abc%"));
+        ScalarOperator notLike = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, like);
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(notLike), partitionContext));
+        like = new LikePredicateOperator(cIntCol, ConstantOperator.createVarchar("1%"));
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(like), partitionContext));
+
+        // The kernel's data skipping ignores STARTS_WITH, so a non-partition column is not pushed down.
+        ScalarOperationToDeltaLakeExpr.DeltaLakeContext context =
+                new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, new HashSet<>());
+        like = new LikePredicateOperator(cVarcharCol, ConstantOperator.createVarchar("abc%"));
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(like), context));
+    }
+
+    @Test
     public void testConvertIsNullPredicate() {
         ScalarOperationToDeltaLakeExpr converter = new ScalarOperationToDeltaLakeExpr();
         ScalarOperationToDeltaLakeExpr.DeltaLakeContext context =
@@ -191,10 +352,93 @@ public class ScalarOperationToDeltaLakeExprTest {
         Predicate expected = new Predicate("=", cDeltaIntCol, Literal.ofInt(5));
         Assertions.assertEquals(expected.toString(), converter.convert(List.of(equality, safeEquality), context).toString());
 
+        // An implicit CHAR cast still changes the type, so it is not stripped either.
         ScalarOperator implicitEquality = new BinaryPredicateOperator(BinaryType.EQ,
                 new CastOperator(new CharType(5), cVarcharCol, true), value);
-        expected = new Predicate("=", cDeltaVarcharCol, Literal.ofString("hello"));
-        Assertions.assertEquals(expected.toString(), converter.convert(List.of(implicitEquality), context).toString());
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(implicitEquality), context));
+    }
+
+    @Test
+    public void testTypeChangingCastIsNotPushedDown() {
+        ScalarOperationToDeltaLakeExpr converter = new ScalarOperationToDeltaLakeExpr();
+        ScalarOperationToDeltaLakeExpr.DeltaLakeContext context =
+                new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, new HashSet<>());
+        ConstantOperator ts = ConstantOperator.createDatetime(LocalDateTime.of(2020, 1, 1, 10, 0, 0));
+
+        // cast(c_date AS datetime) < '2020-01-01 10:00:00' must not become c_date < 2020-01-01,
+        // which would prune c_date = 2020-01-01 although it satisfies the original predicate.
+        for (BinaryType op : List.of(BinaryType.LT, BinaryType.LE, BinaryType.EQ, BinaryType.GE, BinaryType.GT)) {
+            ScalarOperator predicate = new BinaryPredicateOperator(op,
+                    new CastOperator(com.starrocks.type.DateType.DATETIME, cDateCol), ts);
+            Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(predicate), context), op.toString());
+        }
+
+        // cast(c_date AS varchar) < '2020-01-01 00:00:01' compares strings, so '2020-01-01' matches;
+        // it must not become c_date < 2020-01-01.
+        ScalarOperator toVarchar = new BinaryPredicateOperator(BinaryType.LT,
+                new CastOperator(VarcharType.VARCHAR, cDateCol), ConstantOperator.createVarchar("2020-01-01 00:00:01"));
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(toVarchar), context));
+
+        // cast(c_long AS int) = 5 must not become c_long = 5: values overflowing int also satisfy it.
+        ScalarOperator narrowing = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(com.starrocks.type.IntegerType.INT, cLongCol), ConstantOperator.createInt(5));
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(narrowing), context));
+
+        // The other conjuncts are still pushed down.
+        ScalarOperator safeEquality = new BinaryPredicateOperator(BinaryType.EQ, cIntCol,
+                ConstantOperator.createInt(5));
+        Predicate expected = new Predicate("=", cDeltaIntCol, Literal.ofInt(5));
+        Assertions.assertEquals(expected.toString(),
+                converter.convert(List.of(narrowing, safeEquality), context).toString());
+
+        // An identity cast is still stripped and pushed down.
+        ScalarOperator identity = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(com.starrocks.type.IntegerType.INT, cIntCol), ConstantOperator.createInt(5));
+        Assertions.assertEquals(expected.toString(), converter.convert(List.of(identity), context).toString());
+    }
+
+    @Test
+    public void testTypeChangingCastInNestedAndCompoundPredicates() {
+        ScalarOperationToDeltaLakeExpr converter = new ScalarOperationToDeltaLakeExpr();
+        ScalarOperationToDeltaLakeExpr.DeltaLakeContext context =
+                new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, new HashSet<>());
+        ScalarOperator castToVarcharLt = new BinaryPredicateOperator(BinaryType.LT,
+                new CastOperator(VarcharType.VARCHAR, cDateCol), ConstantOperator.createVarchar("2020-01-01 00:00:01"));
+        ScalarOperator safeEquality = new BinaryPredicateOperator(BinaryType.EQ, cIntCol, ConstantOperator.createInt(5));
+        Predicate expected = new Predicate("=", cDeltaIntCol, Literal.ofInt(5));
+
+        // Nested casts: a type change anywhere in the chain blocks pushdown; a chain of identity casts does not.
+        ScalarOperator nestedNarrowing = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(com.starrocks.type.IntegerType.INT,
+                        new CastOperator(com.starrocks.type.IntegerType.BIGINT, cIntCol)),
+                ConstantOperator.createInt(5));
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(nestedNarrowing), context));
+        ScalarOperator nestedIdentity = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(com.starrocks.type.IntegerType.INT,
+                        new CastOperator(com.starrocks.type.IntegerType.INT, cIntCol)),
+                ConstantOperator.createInt(5));
+        Assertions.assertEquals(expected.toString(), converter.convert(List.of(nestedIdentity), context).toString());
+
+        // OR: one side through a type-changing cast drops the whole disjunction.
+        ScalarOperator or = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                castToVarcharLt, safeEquality);
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(or), context));
+
+        // NOT: negating the stripped predicate would prune the wrong side, so it is not pushed down either.
+        ScalarOperator not = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, castToVarcharLt);
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(not), context));
+
+        // IS NULL / IS NOT NULL through a type-changing cast stay residual; through an identity cast they are pushed.
+        for (boolean isNotNull : List.of(false, true)) {
+            ScalarOperator castNull = new IsNullPredicateOperator(isNotNull,
+                    new CastOperator(VarcharType.VARCHAR, cDateCol));
+            Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(castNull), context));
+            ScalarOperator identityNull = new IsNullPredicateOperator(isNotNull,
+                    new CastOperator(com.starrocks.type.IntegerType.INT, cIntCol));
+            Predicate expectedNull = new Predicate(isNotNull ? "IS_NOT_NULL" : "IS_NULL", cDeltaIntCol);
+            Assertions.assertEquals(expectedNull.toString(),
+                    converter.convert(List.of(identityNull), context).toString());
+        }
     }
 
     @Test
@@ -467,5 +711,149 @@ public class ScalarOperationToDeltaLakeExprTest {
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("NOT", new Predicate("=", cDeltaIntCol, literal));
         Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
+    }
+
+    /**
+     * Evaluates a converted predicate on one value of c_timestamp (epoch micros); ALWAYS_TRUE keeps every file.
+     */
+    private static boolean eval(Expression expr, long micros) {
+        Predicate p = (Predicate) expr;
+        List<Expression> children = p.getChildren();
+        switch (p.getName()) {
+            case "ALWAYS_TRUE":
+                return true;
+            case "AND":
+                return eval(children.get(0), micros) && eval(children.get(1), micros);
+            case "OR":
+                return eval(children.get(0), micros) || eval(children.get(1), micros);
+            case "NOT":
+                return !eval(children.get(0), micros);
+            default:
+                int cmp = Long.compare(micros, (Long) ((Literal) children.get(1)).getValue());
+                return compare(p.getName(), cmp);
+        }
+    }
+
+    private static boolean compare(String op, int cmp) {
+        switch (op) {
+            case "=":
+                return cmp == 0;
+            case "<":
+                return cmp < 0;
+            case "<=":
+                return cmp <= 0;
+            case ">":
+                return cmp > 0;
+            case ">=":
+                return cmp >= 0;
+            case "!=":
+                return cmp != 0;
+            default:
+                throw new IllegalArgumentException(op);
+        }
+    }
+
+    private static String sqlOp(BinaryType op) {
+        switch (op) {
+            case EQ:
+                return "=";
+            case NE:
+                return "!=";
+            case LT:
+                return "<";
+            case LE:
+                return "<=";
+            case GT:
+                return ">";
+            default:
+                return ">=";
+        }
+    }
+
+    /**
+     * A non-partition TIMESTAMP constant is a local time in the session zone. Across a DST switch it names two
+     * instants or none, and data skipping must still keep every file holding a matching value.
+     */
+    @Test
+    public void testTimestampConstantAcrossDst() {
+        ConnectContext ctx = new ConnectContext();
+        ctx.getSessionVariable().setTimeZone("America/New_York");
+        ctx.setThreadLocalInfo();
+        try {
+            ZoneId zone = ZoneId.of("America/New_York");
+            ScalarOperationToDeltaLakeExpr converter = new ScalarOperationToDeltaLakeExpr();
+            ScalarOperationToDeltaLakeExpr.DeltaLakeContext context =
+                    new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, new HashSet<>());
+            List<Long> values = new ArrayList<>();
+            List<LocalDateTime> constants = new ArrayList<>();
+            for (List<String> range : List.of(List.of("2024-11-03T03:00:00Z", "2024-11-03T09:00:00Z"),
+                    List.of("2024-03-10T04:00:00Z", "2024-03-10T10:00:00Z"))) {
+                for (Instant t = Instant.parse(range.get(0)); t.isBefore(Instant.parse(range.get(1)));
+                        t = t.plusSeconds(300)) {
+                    values.add(ChronoUnit.MICROS.between(Instant.EPOCH, t));
+                }
+            }
+            for (LocalDateTime c = LocalDateTime.of(2024, 11, 3, 0, 30);
+                    c.isBefore(LocalDateTime.of(2024, 11, 3, 2, 45)); c = c.plusMinutes(15)) {
+                constants.add(c);
+            }
+            for (LocalDateTime c = LocalDateTime.of(2024, 3, 10, 1, 30);
+                    c.isBefore(LocalDateTime.of(2024, 3, 10, 3, 45)); c = c.plusMinutes(15)) {
+                constants.add(c);
+            }
+            BinaryType[] ops = {BinaryType.EQ, BinaryType.NE, BinaryType.LT, BinaryType.LE, BinaryType.GT,
+                    BinaryType.GE};
+            for (BinaryType op : ops) {
+                for (LocalDateTime c : constants) {
+                    ScalarOperator predicate = new BinaryPredicateOperator(op, cTimestampCol,
+                            ConstantOperator.createDatetime(c));
+                    for (boolean negate : new boolean[] {false, true}) {
+                        ScalarOperator original = negate ? new CompoundPredicateOperator(
+                                CompoundPredicateOperator.CompoundType.NOT, predicate) : predicate;
+                        Predicate converted = converter.convert(List.of(original), context);
+                        for (long v : values) {
+                            LocalDateTime local = LocalDateTime.ofInstant(
+                                    Instant.EPOCH.plus(v, ChronoUnit.MICROS), zone);
+                            boolean matches = compare(sqlOp(op), local.compareTo(c)) != negate;
+                            if (matches) {
+                                Assertions.assertTrue(eval(converted, v),
+                                        original + " matches " + local + " but " + converted + " skips it");
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 01:30 happens twice on 2024-11-03: both instants stay
+            Predicate eq = converter.convert(List.of(new BinaryPredicateOperator(BinaryType.EQ, cTimestampCol,
+                    ConstantOperator.createDatetime(LocalDateTime.of(2024, 11, 3, 1, 30)))), context);
+            long first = ChronoUnit.MICROS.between(Instant.EPOCH, Instant.parse("2024-11-03T05:30:00Z"));
+            long second = ChronoUnit.MICROS.between(Instant.EPOCH, Instant.parse("2024-11-03T06:30:00Z"));
+            Assertions.assertEquals(new And(new Predicate(">=", cDeltaTimestampCol, Literal.ofTimestamp(first)),
+                    new Predicate("<=", cDeltaTimestampCol, Literal.ofTimestamp(second))).toString(), eq.toString());
+            // an unambiguous constant converts as before
+            Predicate lt = converter.convert(List.of(new BinaryPredicateOperator(BinaryType.LT, cTimestampCol,
+                    ConstantOperator.createDatetime(LocalDateTime.of(2024, 11, 3, 3, 0)))), context);
+            Assertions.assertEquals(new Predicate("<", cDeltaTimestampCol, Literal.ofTimestamp(
+                    ChronoUnit.MICROS.between(Instant.EPOCH, Instant.parse("2024-11-03T08:00:00Z")))).toString(),
+                    lt.toString());
+
+            // IN expands each ambiguous value to the same range as EQ, and keeps unambiguous values as equalities
+            ScalarOperator in = new InPredicateOperator(false, cTimestampCol,
+                    ConstantOperator.createDatetime(LocalDateTime.of(2024, 11, 3, 1, 30)),
+                    ConstantOperator.createDatetime(LocalDateTime.of(2024, 11, 3, 3, 0)));
+            Assertions.assertEquals(new Or(new And(
+                    new Predicate(">=", cDeltaTimestampCol, Literal.ofTimestamp(first)),
+                    new Predicate("<=", cDeltaTimestampCol, Literal.ofTimestamp(second))),
+                    new Predicate("=", cDeltaTimestampCol, Literal.ofTimestamp(ChronoUnit.MICROS.between(
+                            Instant.EPOCH, Instant.parse("2024-11-03T08:00:00Z"))))).toString(),
+                    converter.convert(List.of(in), context).toString());
+            // under a NOT an ambiguous value has no subset, so the whole IN is dropped
+            Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE.toString(), converter.convert(List.of(
+                    new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, in)), context)
+                    .toString());
+        } finally {
+            ConnectContext.remove();
+        }
     }
 }

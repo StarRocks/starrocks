@@ -773,7 +773,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
                     + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
                     + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
             CreateMaterializedViewStatement stmt = analyzeMvDdl(ddl);
-            assertEquals(MaterializedView.RefreshMode.INCREMENTAL, stmt.getAnalyzedRefreshMode());
+            assertEquals(MaterializedView.RefreshMode.INCREMENTAL, stmt.getCurrentRefreshMode());
         } finally {
             connectContext.getSessionVariable().setSqlSelectLimit(previousSelectLimit);
         }

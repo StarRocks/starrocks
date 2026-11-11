@@ -19,13 +19,24 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 public class LockedObject<T> extends AutoCloseableLock {
     private final T object;
 
-    public LockedObject(Long dbId, List<Long> tableList, LockType lockType, T object) {
+    /**
+     * Takes the locks first and only then resolves the object, releasing the locks again if the resolver
+     * throws. Resolve by id here, not before: RENAME TABLE and SWAP take a table out of its database's id map
+     * and put it back under the DB WRITE lock, so a lookup made before the lock is held can find nothing.
+     */
+    public LockedObject(Long dbId, List<Long> tableList, LockType lockType, Supplier<T> resolver) {
         super(dbId, tableList, lockType);
-        this.object = object;
+        try {
+            this.object = resolver.get();
+        } catch (RuntimeException | Error e) {
+            close();
+            throw e;
+        }
     }
 
     public LockedObject(Locker locker, Long dbId, List<Long> tableList, LockType lockType, T object) {
