@@ -168,12 +168,13 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 deltaLakeTable.getDeltaMetadata());
         if (session.getSessionVariable().isEnableDeltaLakeCachedStatistics()
                 && !session.getSessionVariable().enableDeltaLakeColumnStatistics()) {
-            Long rowCount = snapshotStatisticsCache.getRowCount(deltaLakeTable);
+            Long rowCount = snapshotStatisticsCache.getRowCount(snapshotStatisticsKey(deltaLakeTable));
             Tracers.record(EXTERNAL, "DELTA_LAKE.statisticsSource", rowCount == null ? "default" : "snapshot_cache");
             Statistics.Builder statistics = Statistics.buildFrom(StatisticsUtils.buildDefaultStatistics(columns.keySet()))
                     .setTableRowCountMayInaccurate(true);
             if (rowCount != null) {
-                statistics.setOutputRowCount(rowCount).setStatsSource(Statistics.StatsSource.TABLE_METADATA);
+                // This count covers the whole snapshot; partition predicate selectivity still applies.
+                statistics.setOutputRowCount(rowCount).setStatsSource(Statistics.StatsSource.SNAPSHOT_CACHE);
             }
             return statistics.build();
         }
@@ -400,11 +401,16 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         return result;
     }
 
+    private static DeltaLakeSnapshotStatisticsCache.Key snapshotStatisticsKey(DeltaLakeTable table) {
+        return new DeltaLakeSnapshotStatisticsCache.Key(table.getTableLocation(), table.getDeltaMetadata().getId(),
+                ((SnapshotImpl) table.getDeltaSnapshot()).getVersion());
+    }
+
     private RemoteFileInfoSource buildRemoteInfoSource(Table table, GetRemoteFilesParams params) {
         CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> iterator =
                 buildFileScanTaskIterator(table, params.getPredicate(), params.isEnableColumnStats());
         DeltaLakeSnapshotStatisticsCache.Collector statistics = params.getPredicate() == null
-                ? snapshotStatisticsCache.newCollector((DeltaLakeTable) table) : null;
+                ? snapshotStatisticsCache.newCollector(snapshotStatisticsKey((DeltaLakeTable) table)) : null;
         return new RemoteFileInfoSource() {
             private boolean closed;
 
@@ -488,7 +494,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         }
 
         DeltaLakeSnapshotStatisticsCache.Collector snapshotStatistics = operator == null
-                ? snapshotStatisticsCache.newCollector(deltaLakeTable) : null;
+                ? snapshotStatisticsCache.newCollector(snapshotStatisticsKey(deltaLakeTable)) : null;
         List<FileScanTask> files = Lists.newArrayList();
         boolean enableCollectColumnStats = enableCollectColumnStatistics(connectContext);
         String traceLabel = enableCollectColumnStats ? "DELTA_LAKE.updateDeltaLakeFileStats" :

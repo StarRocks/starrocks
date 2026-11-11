@@ -32,11 +32,17 @@ import com.starrocks.connector.delta.DeltaLakeSnapshotStatisticsCache;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.PredicateStatisticsCalculator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.type.IntegerType;
 import io.delta.kernel.internal.SnapshotImpl;
 import org.apache.hadoop.conf.Configuration;
@@ -81,6 +87,11 @@ public class DeltaLakeCachedStatisticsTest {
         ConnectContext.remove();
     }
 
+    private static DeltaLakeSnapshotStatisticsCache.Key cacheKey(DeltaLakeTable table) {
+        return new DeltaLakeSnapshotStatisticsCache.Key(table.getTableLocation(), table.getDeltaMetadata().getId(),
+                ((SnapshotImpl) table.getDeltaSnapshot()).getVersion());
+    }
+
     private DeltaLakeMetadata metadata() {
         return new DeltaLakeMetadata(new HdfsEnvironment(Map.of()), CATALOG, null, null,
                 new ConnectorProperties(ConnectorType.DELTALAKE), cache);
@@ -97,6 +108,10 @@ public class DeltaLakeCachedStatisticsTest {
     }
 
     private DeltaLakeTable createTable(int fileCount, boolean deletionVectors) throws Exception {
+        return createTable(fileCount, deletionVectors, false);
+    }
+
+    private DeltaLakeTable createTable(int fileCount, boolean deletionVectors, boolean partitioned) throws Exception {
         Path logDir = Files.createDirectories(tablePath.resolve("_delta_log"));
         String schema = "{\"type\":\"struct\",\"fields\":[{\"name\":\"id\",\"type\":\"integer\","
                 + "\"nullable\":true,\"metadata\":{}}]}";
@@ -109,12 +124,14 @@ public class DeltaLakeCachedStatisticsTest {
         }
         log.append(GsonUtils.GSON.toJson(Map.of("metaData", Map.of(
                 "id", metadataId, "format", Map.of("provider", "parquet", "options", Map.of()),
-                "schemaString", schema, "partitionColumns", List.of(), "configuration", Map.of())))).append('\n');
+                "schemaString", schema, "partitionColumns", partitioned ? List.of("id") : List.of(),
+                "configuration", Map.of())))).append('\n');
         for (int i = 0; i < fileCount; i++) {
             // Metadata row counts must not cap execution: include empty files as well as non-empty ones.
-            String stats = GsonUtils.GSON.toJson(Map.of("numRecords", i % 2 == 0 ? 0 : 100));
+            String stats = GsonUtils.GSON.toJson(Map.of("numRecords", partitioned ? 100 : (i % 2 == 0 ? 0 : 100)));
             Map<String, Object> add = new HashMap<>(Map.of(
-                    "path", "part-" + i + ".parquet", "partitionValues", Map.of(), "size", 1000,
+                    "path", "part-" + i + ".parquet",
+                    "partitionValues", partitioned ? Map.of("id", Integer.toString(i % 2)) : Map.of(), "size", 1000,
                     "modificationTime", 0, "dataChange", true, "stats", stats));
             if (deletionVectors && i == 1) {
                 add.put("deletionVector", Map.of("storageType", "p", "pathOrInlineDv", "file:///test/dv.bin",
@@ -128,7 +145,7 @@ public class DeltaLakeCachedStatisticsTest {
         SnapshotImpl snapshot = (SnapshotImpl) io.delta.kernel.Table.forPath(engine, tablePath.toUri().toString())
                 .getLatestSnapshot(engine);
         DeltaLakeTable table = new DeltaLakeTable(123456, CATALOG, "deltalake_db", "tbl",
-                List.of(new Column("id", IntegerType.INT)), List.of(), snapshot, engine,
+                List.of(new Column("id", IntegerType.INT)), partitioned ? List.of("id") : List.of(), snapshot, engine,
                 new MetastoreTable("deltalake_db", "tbl", tablePath.toUri().toString(), 0));
         return table;
     }
@@ -138,12 +155,12 @@ public class DeltaLakeCachedStatisticsTest {
         DeltaLakeMetadata first = metadata();
         assertEquals(Config.default_statistics_output_row_count, statistics(first).getOutputRowCount());
         assertTrue(statistics(first).isTableRowCountMayInaccurate());
-        assertNull(cache.getRowCount(table));
+        assertNull(cache.getRowCount(cacheKey(table)));
         assertTrue(Tracers.printVars().contains("default"));
         try (RemoteFileInfoSource source = source(first)) {
             assertEquals(20, source.getAllOutputs().size());
         }
-        assertEquals(1000L, cache.getRowCount(table));
+        assertEquals(1000L, cache.getRowCount(cacheKey(table)));
         // A fresh query metadata instance shares the catalog cache, but keeps its scan iterator independent.
         DeltaLakeMetadata next = metadata();
         assertEquals(1000, statistics(next).getOutputRowCount());
@@ -154,13 +171,43 @@ public class DeltaLakeCachedStatisticsTest {
     }
 
     @Test
+    public void testWarmSnapshotCountRetainsPartitionPredicateSelectivity() throws Exception {
+        table = createTable(20, false, true);
+        try (RemoteFileInfoSource files = source(metadata())) {
+            assertEquals(20, files.getAllOutputs().size());
+        }
+        ColumnRefOperator column = new ColumnRefOperator(1, IntegerType.INT, "id", true);
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, column, ConstantOperator.createInt(1));
+        Map<ColumnRefOperator, Column> columns = Map.of(column, table.getColumn("id"));
+        LogicalDeltaLakeScanOperator scan = new LogicalDeltaLakeScanOperator(table, columns,
+                Map.of(table.getColumn("id"), column), -1, predicate);
+        Statistics snapshotStatistics = metadata().getTableStatistics(
+                OptimizerFactory.initContext(context, new ColumnRefFactory()), table, columns,
+                List.of(), predicate, -1, TvrTableSnapshot.empty());
+        assertEquals(2000, snapshotStatistics.getOutputRowCount());
+        StatisticsCalculator calculator = new StatisticsCalculator();
+        ScalarOperator remaining = calculator.removePartitionPredicate(predicate, scan, snapshotStatistics);
+        assertEquals(predicate, remaining);
+        Statistics filtered = PredicateStatisticsCalculator.statisticsCalculate(remaining, snapshotStatistics);
+        assertTrue(filtered.getOutputRowCount() < snapshotStatistics.getOutputRowCount());
+
+        // The default file-statistics path has already pruned the other partition and must not filter it twice.
+        context.getSessionVariable().setEnableDeltaLakeCachedStatistics(false);
+        Statistics pruned = metadata().getTableStatistics(
+                OptimizerFactory.initContext(context, new ColumnRefFactory()), table, columns,
+                List.of(), predicate, -1, TvrTableSnapshot.empty());
+        assertEquals(1000, pruned.getOutputRowCount());
+        assertEquals(ConstantOperator.TRUE, calculator.removePartitionPredicate(predicate, scan, pruned));
+    }
+
+    @Test
     public void testPartialScanCannotPublish() throws Exception {
         RemoteFileInfoSource partial = source(metadata());
         assertTrue(partial.hasMoreOutput());
         partial.getOutput();
         partial.close();
         assertFalse(partial.hasMoreOutput());
-        assertNull(cache.getRowCount(table));
+        assertNull(cache.getRowCount(cacheKey(table)));
         assertEquals(Config.default_statistics_output_row_count, statistics(metadata()).getOutputRowCount());
     }
 
@@ -170,7 +217,7 @@ public class DeltaLakeCachedStatisticsTest {
                 GetRemoteFilesParams.newBuilder().setPredicate(ConstantOperator.createBoolean(true)).build())) {
             assertEquals(20, source.getAllOutputs().size());
         }
-        assertNull(cache.getRowCount(table));
+        assertNull(cache.getRowCount(cacheKey(table)));
     }
 
     @Test
@@ -179,14 +226,14 @@ public class DeltaLakeCachedStatisticsTest {
         try (RemoteFileInfoSource source = source(metadata())) {
             assertTrue(source.getAllOutputs().isEmpty());
         }
-        assertEquals(0L, cache.getRowCount(table));
+        assertEquals(0L, cache.getRowCount(cacheKey(table)));
     }
 
     @Test
     public void testFullStatisticsStillPopulateSnapshotCache() {
         context.getSessionVariable().setEnableDeltaLakeColumnStatistics(true);
         assertEquals(1000, statistics(metadata()).getOutputRowCount());
-        assertEquals(1000L, cache.getRowCount(table));
+        assertEquals(1000L, cache.getRowCount(cacheKey(table)));
         assertTrue(Tracers.printVars().contains("files"));
     }
 
@@ -199,17 +246,17 @@ public class DeltaLakeCachedStatisticsTest {
 
     @Test
     public void testAbortedCollectorNeverPublishesAndCacheCanBeInvalidated() {
-        DeltaLakeSnapshotStatisticsCache.Collector collector = cache.newCollector(table);
+        DeltaLakeSnapshotStatisticsCache.Collector collector = cache.newCollector(cacheKey(table));
         collector.add(7);
         collector.abort();
         collector.complete();
-        assertNull(cache.getRowCount(table));
-        collector = cache.newCollector(table);
+        assertNull(cache.getRowCount(cacheKey(table)));
+        collector = cache.newCollector(cacheKey(table));
         collector.add(10);
         collector.complete();
-        assertEquals(10L, cache.getRowCount(table));
+        assertEquals(10L, cache.getRowCount(cacheKey(table)));
         cache.invalidateAll();
-        assertNull(cache.getRowCount(table));
+        assertNull(cache.getRowCount(cacheKey(table)));
     }
     @Test
     public void testSnapshotVersionAndTableIdentityIsolateStatistics() throws Exception {
@@ -217,7 +264,7 @@ public class DeltaLakeCachedStatisticsTest {
             source.getAllOutputs();
         }
         DeltaLakeTable original = table;
-        assertEquals(1000L, cache.getRowCount(original));
+        assertEquals(1000L, cache.getRowCount(cacheKey(original)));
         Files.writeString(tablePath.resolve("_delta_log/00000000000000000001.json"),
                 GsonUtils.GSON.toJson(Map.of("add", Map.of("path", "new.parquet", "partitionValues", Map.of(),
                         "size", 1000, "modificationTime", 1, "dataChange", true,
@@ -227,30 +274,30 @@ public class DeltaLakeCachedStatisticsTest {
         table = new DeltaLakeTable(123456, CATALOG, "deltalake_db", "tbl", original.getColumns(), List.of(),
                 next, original.getDeltaEngine(),
                 new MetastoreTable("deltalake_db", "tbl", tablePath.toUri().toString(), 0));
-        assertNull(cache.getRowCount(table));
+        assertNull(cache.getRowCount(cacheKey(table)));
         try (RemoteFileInfoSource source = source(metadata())) {
             source.getAllOutputs();
         }
-        assertEquals(1017L, cache.getRowCount(table));
-        assertEquals(1000L, cache.getRowCount(original));
+        assertEquals(1017L, cache.getRowCount(cacheKey(table)));
+        assertEquals(1000L, cache.getRowCount(cacheKey(original)));
         Files.delete(tablePath.resolve("_delta_log/00000000000000000001.json"));
         metadataId = "recreated-table";
         table = createTable(2, false);
-        assertNull(cache.getRowCount(table));
-        assertEquals(1000L, cache.getRowCount(original));
+        assertNull(cache.getRowCount(cacheKey(table)));
+        assertEquals(1000L, cache.getRowCount(cacheKey(original)));
     }
 
     @Test
     public void testOverflowAndInvalidCounts() {
-        DeltaLakeSnapshotStatisticsCache.Collector collector = cache.newCollector(table);
+        DeltaLakeSnapshotStatisticsCache.Collector collector = cache.newCollector(cacheKey(table));
         collector.add(-1);
         collector.complete();
-        assertNull(cache.getRowCount(table));
-        collector = cache.newCollector(table);
+        assertNull(cache.getRowCount(cacheKey(table)));
+        collector = cache.newCollector(cacheKey(table));
         collector.add(Long.MAX_VALUE);
         collector.add(1);
         collector.complete();
-        assertEquals(Long.MAX_VALUE, cache.getRowCount(table));
+        assertEquals(Long.MAX_VALUE, cache.getRowCount(cacheKey(table)));
     }
 
 }

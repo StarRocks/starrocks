@@ -17,29 +17,22 @@ package com.starrocks.connector.delta;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.math.LongMath;
-import com.starrocks.catalog.DeltaLakeTable;
-import io.delta.kernel.internal.SnapshotImpl;
 
 import java.util.concurrent.TimeUnit;
 
 // Catalog-scoped, bounded summaries only. Never retain query operators, file tasks, or partial scans.
 public class DeltaLakeSnapshotStatisticsCache {
-    private record Key(String location, String tableId, long version) { }
+    public record Key(String location, String tableId, long version) { }
 
     private final Cache<Key, Long> rowCounts = CacheBuilder.newBuilder()
             .maximumSize(1000).expireAfterAccess(1, TimeUnit.HOURS).build();
 
-    private static Key key(DeltaLakeTable table) {
-        return new Key(table.getTableLocation(), table.getDeltaMetadata().getId(),
-                ((SnapshotImpl) table.getDeltaSnapshot()).getVersion());
+    public Long getRowCount(Key key) {
+        return rowCounts.getIfPresent(key);
     }
 
-    public Long getRowCount(DeltaLakeTable table) {
-        return rowCounts.getIfPresent(key(table));
-    }
-
-    public Collector newCollector(DeltaLakeTable table) {
-        return new Collector(key(table));
+    public Collector newCollector(Key key) {
+        return new Collector(key);
     }
 
     public void invalidateAll() {
