@@ -18,10 +18,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.HashMultimap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PredicateSearchKey;
-import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -29,40 +29,41 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.iceberg.BlobMetadata;
 import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DataOperations;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.StatisticsFile;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.puffin.StandardBlobTypes;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
-import org.apache.iceberg.util.SnapshotUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.Iterables.getOnlyElement;
-import static com.google.common.collect.Streams.stream;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
-import static java.util.function.Function.identity;
-import static java.util.stream.Collectors.toMap;
 
 public class IcebergStatisticProvider {
     private static final Logger LOG = LogManager.getLogger(IcebergStatisticProvider.class);
     public static final String NDV_PROP = "ndv";
+    // How far the row count may move from the analyzed snapshot before its Puffin NDV is too stale to use.
+    static final double PUFFIN_NDV_MAX_ROW_DRIFT = 0.1;
 
     // table uuid -> <partition column id -> partition column values>
     private final Map<String, HashMultimap<Integer, Object>> uuidToPartitionFieldIdToValues = new HashMap<>();
@@ -120,12 +121,20 @@ public class IcebergStatisticProvider {
         String uuid = icebergTable.getUUID();
         TvrVersionRange version = params.getTableVersionRange();
         if (version.end().isPresent()) {
-            Set<Integer> primitiveColumnsFieldIds = nativeTable.schema().columns().stream()
+            // The read schema of the queried snapshot: a renamed column must not pick up another column's statistics.
+            Schema readSchema = icebergTable.getReadSchema();
+            Set<Integer> primitiveColumnsFieldIds = readSchema.columns().stream()
                     .filter(column -> column.type().isPrimitiveType())
                     .map(Types.NestedField::fieldId).collect(Collectors.toSet());
             Map<Integer, Long> colIdToNdvs = new HashMap<>();
+            // A Puffin NDV describes a whole snapshot, not the rows an incremental delta added.
+            boolean isIncrementalDelta = version instanceof TvrTableDelta && version.start() != null &&
+                    version.start().isPresent();
             if (session != null && session.getSessionVariable().enableReadIcebergPuffinNdv()) {
-                colIdToNdvs = readNumDistinctValues(icebergTable, primitiveColumnsFieldIds, version);
+                if (!isIncrementalDelta) {
+                    colIdToNdvs = readFreshNumDistinctValues(nativeTable, primitiveColumnsFieldIds, version);
+                }
+                // the partition values come from the scanned files, so they describe a delta too
                 if (uuidToPartitionFieldIdToValues.containsKey(uuid) && !uuidToPartitionFieldIdToValues.get(uuid).isEmpty()) {
                     HashMultimap<Integer, Object> partitionFieldIdToValue = uuidToPartitionFieldIdToValues.get(uuid);
                     Map<Integer, Long> partitionSourceIdToNdv = new HashMap<>();
@@ -151,7 +160,7 @@ public class IcebergStatisticProvider {
 
             statisticsBuilder.setOutputRowCount(icebergFileStats.getRecordCount());
             statisticsBuilder.addColumnStatistics(buildColumnStatistics(
-                    nativeTable, colRefToColumnMetaMap, icebergFileStats, colIdToNdvs));
+                    readSchema, colRefToColumnMetaMap, icebergFileStats, colIdToNdvs));
             statisticsBuilder.setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         } else {
             // empty table
@@ -240,10 +249,10 @@ public class IcebergStatisticProvider {
     }
 
     private Map<ColumnRefOperator, ColumnStatistic> buildColumnStatistics(
-            Table nativeTable, Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+            Schema readSchema, Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
             IcebergFileStats icebergFileStats, Map<Integer, Long> colIdToNdv) {
         Map<ColumnRefOperator, ColumnStatistic> columnStatistics = new HashMap<>();
-        List<Types.NestedField> columns = nativeTable.schema().columns();
+        List<Types.NestedField> columns = readSchema.columns();
         Map<Integer, String> idToColumnNames = columns.stream().
                 filter(column -> !fromIcebergType(column.type()).isUnknown())
                 .collect(Collectors.toMap(Types.NestedField::fieldId, Types.NestedField::name));
@@ -453,16 +462,17 @@ public class IcebergStatisticProvider {
             return;
         }
 
+        Set<Integer> corruptedStats = icebergFileStats.getCorruptedStats(current);
         for (PartitionField field : partitionFields) {
             int id = field.sourceId();
-            if (icebergFileStats.getCorruptedStats().contains(id)) {
+            if (corruptedStats.contains(id)) {
                 continue;
             }
 
             Object newValue = newStats.get(id);
             if (newValue == null) {
                 current.remove(id);
-                icebergFileStats.getCorruptedStats().add(id);
+                corruptedStats.add(id);
                 continue;
             }
 
@@ -476,58 +486,94 @@ public class IcebergStatisticProvider {
         }
     }
 
-    public static Map<Integer, Long> readNumDistinctValues(IcebergTable icebergTable, Set<Integer> columnIds,
-                                                           TvrVersionRange version) {
-        Map<Integer, Long> colIdToNdv = new HashMap<>();
-        Set<Integer> remainingColumnIds = new HashSet<>(columnIds);
-
-        if (version == null || version.isEmpty()) {
-            return colIdToNdv;
+    // The Puffin NDVs that still describe the queried snapshot. An NDV is fresh when the snapshot it was computed
+    // on (the blob's source snapshot) is the queried one, or an ancestor the data has barely moved from since: every
+    // snapshot in between only appended rows or rewrote files (compaction keeps the rows), and total-records moved by
+    // at most PUFFIN_NDV_MAX_ROW_DRIFT. An overwrite or a delete in between, or a missing total-records summary,
+    // makes older NDVs stale. A blob a writer carried over to a newer statistics file (e.g. Trino keeps the blobs of
+    // unchanged columns across OPTIMIZE) is judged by its own source snapshot; if that snapshot has expired, the
+    // statistics file's snapshot stands in for it.
+    @VisibleForTesting
+    static Map<Integer, Long> readFreshNumDistinctValues(Table table, Set<Integer> columnIds, TvrVersionRange version) {
+        if (version == null || version.isEmpty() || table.statisticsFiles().isEmpty()) {
+            return new HashMap<>();
         }
-
-        getLatestStatsFile(icebergTable.getNativeTable(), version).ifPresent(statisticsFile -> {
-            Map<Integer, BlobMetadata> colIdToBlobMeta = statisticsFile.blobMetadata().stream()
-                    .filter(blobMetadata -> blobMetadata.type().equals(StandardBlobTypes.APACHE_DATASKETCHES_THETA_V1))
-                    .filter(blobMetadata -> blobMetadata.fields().size() == 1)
-                    .filter(blobMetadata -> remainingColumnIds.contains(getOnlyElement(blobMetadata.fields())))
-                    .collect(toImmutableMap(blobMetadata -> getOnlyElement(blobMetadata.fields()), identity()));
-
-            for (Map.Entry<Integer, BlobMetadata> entry : colIdToBlobMeta.entrySet()) {
-                int colId = entry.getKey();
-                BlobMetadata blobMetadata = entry.getValue();
-                String ndv = blobMetadata.properties().get(NDV_PROP);
-                remainingColumnIds.remove(colId);
-                if (ndv != null) {
-                    colIdToNdv.put(colId, Long.parseLong(ndv));
-                }
+        Snapshot queried = table.snapshot(version.to().getVersion());
+        if (queried == null) {
+            return new HashMap<>();
+        }
+        // Snapshots the queried data has barely moved from, nearest first.
+        Set<Long> freshSnapshotIds = new LinkedHashSet<>();
+        for (Snapshot snapshot = queried; snapshot != null && withinRowDrift(snapshot, queried); ) {
+            freshSnapshotIds.add(snapshot.snapshotId());
+            if (!DataOperations.APPEND.equals(snapshot.operation())
+                    && !DataOperations.REPLACE.equals(snapshot.operation())) {
+                break;
             }
-        });
+            Long parentId = snapshot.parentId();
+            snapshot = parentId == null ? null : table.snapshot(parentId);
+        }
+        Map<Long, StatisticsFile> snapshotIdToStatsFile = new HashMap<>();
+        for (StatisticsFile statisticsFile : table.statisticsFiles()) {
+            snapshotIdToStatsFile.put(statisticsFile.snapshotId(), statisticsFile);
+        }
+        for (Long snapshotId : freshSnapshotIds) {
+            StatisticsFile statisticsFile = snapshotIdToStatsFile.get(snapshotId);
+            if (statisticsFile != null) {
+                return readNumDistinctValues(statisticsFile, columnIds,
+                        blob -> freshSnapshotIds.contains(blob.sourceSnapshotId())
+                                || table.snapshot(blob.sourceSnapshotId()) == null);
+            }
+        }
+        return new HashMap<>();
+    }
 
+    private static Map<Integer, Long> readNumDistinctValues(StatisticsFile statisticsFile, Set<Integer> columnIds,
+                                                            Predicate<BlobMetadata> blobFilter) {
+        Map<Integer, Long> colIdToNdv = new HashMap<>();
+        for (BlobMetadata blobMetadata : statisticsFile.blobMetadata()) {
+            if (!blobMetadata.type().equals(StandardBlobTypes.APACHE_DATASKETCHES_THETA_V1)
+                    || blobMetadata.fields().size() != 1
+                    || !columnIds.contains(getOnlyElement(blobMetadata.fields()))
+                    || !blobFilter.test(blobMetadata)) {
+                continue;
+            }
+            String ndv = blobMetadata.properties().get(NDV_PROP);
+            if (ndv == null) {
+                continue;
+            }
+            try {
+                colIdToNdv.put(getOnlyElement(blobMetadata.fields()), Long.parseLong(ndv));
+            } catch (NumberFormatException e) {
+                // a malformed property must not fail the query; the column falls back to the estimate
+                LOG.warn("Ignore malformed puffin ndv {} of field {} in {}", ndv, blobMetadata.fields(),
+                        statisticsFile.path());
+            }
+        }
         return colIdToNdv;
     }
 
-    public static Optional<StatisticsFile> getLatestStatsFile(Table table, TvrVersionRange version) {
-        if (table.statisticsFiles().isEmpty()) {
-            return Optional.empty();
+    private static boolean withinRowDrift(Snapshot analyzed, Snapshot queried) {
+        if (analyzed.snapshotId() == queried.snapshotId()) {
+            return true;
         }
-
-        Map<Long, StatisticsFile> snapshotIdToStatsFile = table.statisticsFiles().stream()
-                .collect(toMap(
-                        StatisticsFile::snapshotId,
-                        identity(),
-                        (colId, sf) -> {
-                            throw new StarRocksConnectorException("Unexpected duplicate statistics files %s, %s", colId, sf);
-                        }));
-
-        return stream(lookupSnapshots(table, version))
-                .map(snapshotIdToStatsFile::get)
-                .filter(Objects::nonNull)
-                .findFirst();
+        Long analyzedRows = totalRecords(analyzed);
+        Long queriedRows = totalRecords(queried);
+        if (analyzedRows == null || queriedRows == null) {
+            return false;
+        }
+        return Math.abs(queriedRows - analyzedRows) <= PUFFIN_NDV_MAX_ROW_DRIFT * Math.max(analyzedRows, 1);
     }
 
-    private static Iterable<Long> lookupSnapshots(Table icebergTable, TvrVersionRange version) {
-        return SnapshotUtil.ancestorIdsBetween(version.to().getVersion(), version.from().getVersion(), (Long snapshotId) -> {
-            return icebergTable.snapshot(snapshotId);
-        });
+    private static Long totalRecords(Snapshot snapshot) {
+        String value = snapshot.summary() == null ? null : snapshot.summary().get(SnapshotSummary.TOTAL_RECORDS_PROP);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

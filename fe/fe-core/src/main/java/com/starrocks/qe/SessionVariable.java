@@ -577,6 +577,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
     public static final String CBO_MAX_REORDER_NODE_USE_DP = "cbo_max_reorder_node_use_dp";
     public static final String CBO_ENABLE_GREEDY_JOIN_REORDER = "cbo_enable_greedy_join_reorder";
+    public static final String CBO_JOIN_REORDER_WITH_UNKNOWN_STATS = "cbo_join_reorder_with_unknown_stats";
     public static final String CBO_MAX_REORDER_NODE_USE_GREEDY = "cbo_max_reorder_node_use_greedy";
     public static final String CBO_ENABLE_REPLICATED_JOIN = "cbo_enable_replicated_join";
     public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
@@ -624,6 +625,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
     public static final String CBO_PUSH_DOWN_GROUPINGSET = "cbo_push_down_groupingset";
     public static final String CBO_PUSH_DOWN_GROUPINGSET_RESHUFFLE = "cbo_push_down_groupingset_reshuffle";
+    public static final String CBO_PUSH_DOWN_GROUPINGSET_CASCADE_LEVEL =
+            "cbo_push_down_groupingset_cascade_level";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
     public static final String CBO_PRUNE_SUBFIELD = "cbo_prune_subfield";
     public static final String CBO_PRUNE_JSON_SUBFIELD = "cbo_prune_json_subfield";
@@ -632,6 +635,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_USE_HISTOGRAM_EVALUDATE_LIST_PARTITION = "cbo_use_histogram_evaluate_list_partition";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
+    public static final String ENABLE_OUTER_JOIN_SEMI_JOIN_REDUCTION = "enable_outer_join_semi_join_reduction";
+    public static final String OUTER_JOIN_SEMI_JOIN_REDUCTION_MIN_AGG_ROWS =
+            "outer_join_semi_join_reduction_min_agg_rows";
+    public static final String OUTER_JOIN_SEMI_JOIN_REDUCTION_MAX_KEY_SET_RATIO =
+            "outer_join_semi_join_reduction_max_key_set_ratio";
     public static final String ENABLE_PARTITION_LEVEL_CARDINALITY_ESTIMATION =
             "enable_partition_level_cardinality_estimation";
     public static final String ENABLE_OPTIMIZER_SKEW_JOIN_V1 =
@@ -716,7 +724,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
     public static final String ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION =
             "enable_read_iceberg_equality_delete_with_partition_evolution";
+    public static final String ENABLE_ICEBERG_EQ_DELETE_RUNTIME_FILTER_PRUNING =
+            "enable_iceberg_eq_delete_runtime_filter_pruning";
+    public static final String ENABLE_ICEBERG_FUNCTION_PREDICATE_PRUNING =
+            "enable_iceberg_function_predicate_pruning";
     public static final String ENABLE_DELTA_LAKE_COLUMN_STATISTICS = "enable_delta_lake_column_statistics";
+    public static final String ENABLE_DELTA_LAKE_FUNCTION_PREDICATE_PRUNING =
+            "enable_delta_lake_function_predicate_pruning";
+    public static final String ENABLE_HIVE_FUNCTION_PREDICATE_PRUNING = "enable_hive_function_predicate_pruning";
 
     public static final String DISABLE_TABLE_STATS_FROM_METADATA_FOR_SINGLE_TABLE =
             "disable_table_stats_from_metadata_for_single_table";
@@ -893,6 +908,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
+    // Deprecated: an Iceberg identity partition column always takes its value from the partition metadata.
+    @Deprecated
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
 
     public static final String ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE =
@@ -1425,7 +1442,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean skipBlackList = false;
 
     @VariableMgr.VarAttr(name = BLACKLIST_BACKUP_ROUTING)
-    private String blacklistBackupRouting = BlacklistBackupRoutingPolicy.CIRCULAR.name();
+    private String blacklistBackupRouting = BlacklistBackupRoutingPolicy.getDefault().name();
 
     @VariableMgr.VarAttr(name = DEFAULT_VIEW_SQL_SECURITY)
     private String defaultViewSqlSecurity = DefaultViewSqlSecurity.getDefault().name();
@@ -1458,6 +1475,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // read state is unsafe across sibling scans of the same table. Set true to opt such scans back in.
     @VariableMgr.VarAttr(name = ENABLE_LAKE_PREPARED_SPLIT_ON_DUP_TABLE_SCAN)
     private boolean enableLakePreparedSplitOnDupTableScan = false;
+
+    @VariableMgr.VarAttr(name = "range_scan_execution_mode", flag = VariableMgr.SESSION_ONLY)
+    private String rangeScanExecutionMode = "colocate";
 
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
     // The optional values are "auto" and "force_split".
@@ -2018,6 +2038,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CBO_ENABLE_GREEDY_JOIN_REORDER, flag = VariableMgr.INVISIBLE)
     private boolean cboEnableGreedyJoinReorder = true;
 
+    // By default a multi-join with any unknown column statistics is reordered left-deep only (no DP, no greedy).
+    // When on, DP and greedy reorder still run on the estimates, which then use the known side of a key whose
+    // statistics are unknown on one side.
+    @VariableMgr.VarAttr(name = CBO_JOIN_REORDER_WITH_UNKNOWN_STATS, flag = VariableMgr.INVISIBLE)
+    private boolean cboJoinReorderWithUnknownStats = false;
+
     @VariableMgr.VarAttr(name = CBO_DEBUG_ALIVE_BACKEND_NUMBER, flag = VariableMgr.INVISIBLE)
     private int cboDebugAliveBackendNumber = 0;
 
@@ -2086,6 +2112,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
+
+    // A LEFT JOIN B LEFT JOIN C WHERE (pred on B) OR (pred on C): pre-filter A's aggregation with a
+    // semi join on the join keys that can satisfy the OR. See OuterJoinSemiJoinReductionRule.
+    @VariableMgr.VarAttr(name = ENABLE_OUTER_JOIN_SEMI_JOIN_REDUCTION, flag = VariableMgr.INVISIBLE)
+    private boolean enableOuterJoinSemiJoinReduction = true;
+
+    // The rewrite only pays off when the aggregation it filters is large: below this estimated group count it is
+    // skipped. <= 0 removes the limit.
+    @VariableMgr.VarAttr(name = OUTER_JOIN_SEMI_JOIN_REDUCTION_MIN_AGG_ROWS, flag = VariableMgr.INVISIBLE)
+    private long outerJoinSemiJoinReductionMinAggRows = 1_000_000L;
+
+    // The rewrite is skipped when the key set (bounded by the rows of the right sides it reads) exceeds this
+    // multiple of the aggregation's input. <= 0 removes the limit. Q78 on 1T statistics comes out at 2.19: the
+    // store_sales anti-join (LEFT JOIN store_returns ... IS NULL) is estimated at the 0.1 IS NULL floor although
+    // about 90% of its rows survive, so the bound leaves margin above that.
+    @VariableMgr.VarAttr(name = OUTER_JOIN_SEMI_JOIN_REDUCTION_MAX_KEY_SET_RATIO, flag = VariableMgr.INVISIBLE)
+    private double outerJoinSemiJoinReductionMaxKeySetRatio = 3.0;
 
     @VariableMgr.VarAttr(name = ENABLE_PARTITION_LEVEL_CARDINALITY_ESTIMATION, flag = VariableMgr.INVISIBLE)
     private boolean enablePartitionLevelCardinalityEstimation = true;
@@ -2310,6 +2353,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PUSH_DOWN_GROUPINGSET_RESHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean cboPushDownGroupingSetReshuffle = true;
 
+    // How many levels of the rollup cascade PushDownAggregateGroupingSetsRule may build: each level
+    // re-aggregates from the previous one instead of expanding every level from the finest grouping
+    // set. 1 means the historical single split, and <= 0 is treated as 1 so it doubles as the rollback
+    // switch. The bound also caps the extra CTEs / fragments the rewrite introduces.
+    @VarAttr(name = CBO_PUSH_DOWN_GROUPINGSET_CASCADE_LEVEL, flag = VariableMgr.INVISIBLE)
+    private int cboPushDownGroupingSetCascadeLevel = 5;
+
     @VarAttr(name = CBO_PUSH_DOWN_AGG_WITH_MULTI_COLUMN_STATS)
     private boolean cboPushDownAggWithMultiColumnStats = true;
 
@@ -2412,7 +2462,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long cboPushDownTopNLimit = 1000;
 
     @VarAttr(name = ENABLE_AI_TOPN_PUSHDOWN, flag = VariableMgr.INVISIBLE)
-    private boolean enableAiTopnPushdown = true;
+    private boolean enableAITopnPushdown = true;
 
     // Larger limits use per-instance candidates; zero selects the local path for all eligible limits.
     @VarAttr(name = AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT)
@@ -2756,15 +2806,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboPushDownTopNLimit;
     }
 
-    public boolean isEnableAiTopnPushdown() {
-        return enableAiTopnPushdown;
+    public boolean isEnableAITopnPushdown() {
+        return enableAITopnPushdown;
     }
 
-    public void setEnableAiTopnPushdown(boolean enableAiTopnPushdown) {
-        this.enableAiTopnPushdown = enableAiTopnPushdown;
+    public void setEnableAITopnPushdown(boolean enableAITopnPushdown) {
+        this.enableAITopnPushdown = enableAITopnPushdown;
     }
 
-    public long getAiTopnPushdownMaxGlobalLimit() {
+    public long getAITopnPushdownMaxGlobalLimit() {
         return aiTopnPushdownMaxGlobalLimit;
     }
 
@@ -3530,6 +3580,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION)
     private boolean enableReadIcebergEqDeleteWithPartitionEvolution = true;
 
+    // Let a runtime filter on an identity partition column skip the equality delete files of the partitions it rejects.
+    @VarAttr(name = ENABLE_ICEBERG_EQ_DELETE_RUNTIME_FILTER_PRUNING)
+    private boolean enableIcebergEqDeleteRuntimeFilterPruning = true;
+
+    // Prune Iceberg files on the column preimage of predicates on functions of it (year(), date_trunc(), left(), ...).
+    @VarAttr(name = ENABLE_ICEBERG_FUNCTION_PREDICATE_PRUNING)
+    private boolean enableIcebergFunctionPredicatePruning = true;
+
+    // Prune Delta Lake files and row groups on the column preimage of predicates on functions of it (year(), ...).
+    @VarAttr(name = ENABLE_DELTA_LAKE_FUNCTION_PREDICATE_PRUNING)
+    private boolean enableDeltaLakeFunctionPredicatePruning = true;
+
+    // Prune Hive partitions and row groups on the column preimage of predicates on functions of it (year(), ...).
+    @VarAttr(name = ENABLE_HIVE_FUNCTION_PREDICATE_PRUNING)
+    private boolean enableHiveFunctionPredicatePruning = true;
+
     @VarAttr(name = ENABLE_DELTA_LAKE_COLUMN_STATISTICS)
     private boolean enableDeltaLakeColumnStatistics = false;
 
@@ -3704,6 +3770,38 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableReadIcebergEqDeleteWithPartitionEvolution = enableReadIcebergEqDeleteWithPartitionEvolution;
     }
 
+    public boolean isEnableIcebergEqDeleteRuntimeFilterPruning() {
+        return enableIcebergEqDeleteRuntimeFilterPruning;
+    }
+
+    public void setEnableIcebergEqDeleteRuntimeFilterPruning(boolean enableIcebergEqDeleteRuntimeFilterPruning) {
+        this.enableIcebergEqDeleteRuntimeFilterPruning = enableIcebergEqDeleteRuntimeFilterPruning;
+    }
+
+    public boolean isEnableIcebergFunctionPredicatePruning() {
+        return enableIcebergFunctionPredicatePruning;
+    }
+
+    public void setEnableIcebergFunctionPredicatePruning(boolean enableIcebergFunctionPredicatePruning) {
+        this.enableIcebergFunctionPredicatePruning = enableIcebergFunctionPredicatePruning;
+    }
+
+    public boolean isEnableDeltaLakeFunctionPredicatePruning() {
+        return enableDeltaLakeFunctionPredicatePruning;
+    }
+
+    public void setEnableDeltaLakeFunctionPredicatePruning(boolean enableDeltaLakeFunctionPredicatePruning) {
+        this.enableDeltaLakeFunctionPredicatePruning = enableDeltaLakeFunctionPredicatePruning;
+    }
+
+    public boolean isEnableHiveFunctionPredicatePruning() {
+        return enableHiveFunctionPredicatePruning;
+    }
+
+    public void setEnableHiveFunctionPredicatePruning(boolean enableHiveFunctionPredicatePruning) {
+        this.enableHiveFunctionPredicatePruning = enableHiveFunctionPredicatePruning;
+    }
+
     public boolean enablePaimonColumnStatistics() {
         return enablePaimonColumnStatistics;
     }
@@ -3733,7 +3831,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboPredicateSubfieldPath;
     }
 
-    @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
+    // Deprecated and invisible, no effect: kept so that SET of it still succeeds.
+    @Deprecated
+    @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE, flag = VariableMgr.INVISIBLE)
     private boolean enableIcebergIdentityColumnOptimize = true;
 
     @VarAttr(name = ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE, flag = VariableMgr.INVISIBLE)
@@ -4322,6 +4422,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return queryMemLimit;
     }
 
+    void copyQueryResourcePolicyFrom(SessionVariable caller) {
+        queryMemLimit = caller.queryMemLimit;
+        maxExecMemByte = caller.maxExecMemByte;
+        resourceGroup = caller.resourceGroup;
+        resourceGroupId = caller.resourceGroupId;
+    }
+
     public int getQueryTimeoutS() {
         return queryTimeoutS;
     }
@@ -4851,6 +4958,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboMaxReorderNodeUseDP;
     }
 
+    public boolean isCboJoinReorderWithUnknownStats() {
+        return cboJoinReorderWithUnknownStats;
+    }
+
+    public void setCboJoinReorderWithUnknownStats(boolean cboJoinReorderWithUnknownStats) {
+        this.cboJoinReorderWithUnknownStats = cboJoinReorderWithUnknownStats;
+    }
+
     public boolean isCboEnableGreedyJoinReorder() {
         return cboEnableGreedyJoinReorder;
     }
@@ -5020,6 +5135,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableTopNRuntimeFilter;
     }
 
+    public void setEnableTopNRuntimeFilter(boolean enableTopNRuntimeFilter) {
+        this.enableTopNRuntimeFilter = enableTopNRuntimeFilter;
+    }
+
     public int getAggInFilterLimit() {
         return aggInFilterLimit;
     }
@@ -5085,6 +5204,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setLogRejectedRecordNum(long logRejectedRecordNum) {
         this.logRejectedRecordNum = logRejectedRecordNum;
+    }
+
+    public String getRangeScanExecutionMode() {
+        return rangeScanExecutionMode;
+    }
+
+    public void setRangeScanExecutionMode(String mode) {
+        if (!"colocate".equalsIgnoreCase(mode) && !"parallel".equalsIgnoreCase(mode)
+                && !"grouped".equalsIgnoreCase(mode)) {
+            throw new IllegalArgumentException("Legal values of range_scan_execution_mode are colocate|parallel|grouped");
+        }
+        rangeScanExecutionMode = mode.toLowerCase(Locale.ROOT);
+    }
+
+    public boolean isGroupedRangeScan() {
+        return "grouped".equals(rangeScanExecutionMode);
+    }
+
+    public boolean isRangeScanExecutionOverride() {
+        return isParallelRangeScan() || isGroupedRangeScan();
+    }
+
+    public boolean isParallelRangeScan() {
+        return "parallel".equals(rangeScanExecutionMode);
     }
 
     public boolean isEnablePipelineEngine() {
@@ -5399,6 +5542,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableRewriteGroupingSetsToUnionAll = enableRewriteGroupingSetsToUnionAll;
     }
 
+    public boolean isEnableOuterJoinSemiJoinReduction() {
+        return enableOuterJoinSemiJoinReduction;
+    }
+
+    public void setEnableOuterJoinSemiJoinReduction(boolean enableOuterJoinSemiJoinReduction) {
+        this.enableOuterJoinSemiJoinReduction = enableOuterJoinSemiJoinReduction;
+    }
+
+    public long getOuterJoinSemiJoinReductionMinAggRows() {
+        return outerJoinSemiJoinReductionMinAggRows;
+    }
+
+    public void setOuterJoinSemiJoinReductionMinAggRows(long outerJoinSemiJoinReductionMinAggRows) {
+        this.outerJoinSemiJoinReductionMinAggRows = outerJoinSemiJoinReductionMinAggRows;
+    }
+
+    public double getOuterJoinSemiJoinReductionMaxKeySetRatio() {
+        return outerJoinSemiJoinReductionMaxKeySetRatio;
+    }
+
+    public void setOuterJoinSemiJoinReductionMaxKeySetRatio(double outerJoinSemiJoinReductionMaxKeySetRatio) {
+        this.outerJoinSemiJoinReductionMaxKeySetRatio = outerJoinSemiJoinReductionMaxKeySetRatio;
+    }
+
     public boolean isEnablePartitionLevelCardinalityEstimation() {
         return enablePartitionLevelCardinalityEstimation;
     }
@@ -5575,6 +5742,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPushDownGroupingSetReshuffle(boolean cboPushDownGroupingSetReshuffle) {
         this.cboPushDownGroupingSetReshuffle = cboPushDownGroupingSetReshuffle;
+    }
+
+    public int getCboPushDownGroupingSetCascadeLevel() {
+        return cboPushDownGroupingSetCascadeLevel;
+    }
+
+    public void setCboPushDownGroupingSetCascadeLevel(int cboPushDownGroupingSetCascadeLevel) {
+        this.cboPushDownGroupingSetCascadeLevel = cboPushDownGroupingSetCascadeLevel;
     }
 
     public boolean isCboPushDownAggWithMultiColumnStats() {
@@ -6325,14 +6500,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getLargeDecimalUnderlyingType() {
         return largeDecimalUnderlyingType;
-    }
-
-    public boolean getEnableIcebergIdentityColumnOptimize() {
-        return enableIcebergIdentityColumnOptimize;
-    }
-
-    public void setEnableIcebergIdentityColumnOptimize(boolean enableIcebergIdentityColumnOptimize) {
-        this.enableIcebergIdentityColumnOptimize = enableIcebergIdentityColumnOptimize;
     }
 
     public boolean getEnableIcebergCompactionWithRowLineage() {
@@ -7247,5 +7414,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public boolean isEnableDynamicPruneScanRange() {
+        return enableDynamicPruneScanRange;
     }
 }

@@ -1,0 +1,53 @@
+-- name: test_json_each_bounded_batching
+-- json_each used to materialize every member of every row of an input chunk in one call: a key string
+-- and a copied value sub-tree per member, in a single allocation with no memory-limit check in
+-- between. It now emits at most chunk_size rows per call and can cut inside one JSON value.
+--
+-- That is invisible in the result set - the answers below were already correct - so this case asserts
+-- it on TableFunctionExecCount, the counter that changes: from one call per input chunk to roughly
+-- one call per output chunk. What the result set pins is that the cut does not renumber array keys or
+-- reattach members to the wrong input row.
+--
+-- enable_async_profile = false makes the profile readable by get_query_profile() as soon as the query
+-- returns, which is what the framework's own profile helpers do.
+CREATE TABLE jeb_${uuid0} (
+    `id` int(11) NOT NULL COMMENT "",
+    `j` json NULL COMMENT ""
+)
+DUPLICATE KEY (id)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- 10 object members, 10 array elements, and three shapes that expand to nothing.
+INSERT INTO jeb_${uuid0} VALUES
+    (1, parse_json('{"a":1,"b":2,"c":3,"d":4,"e":5,"f":6,"g":7,"h":8,"i":9,"j":10}')),
+    (2, parse_json('[10,11,12,13,14,15,16,17,18,19]')),
+    (3, parse_json('null')),
+    (4, parse_json('{}')),
+    (5, parse_json('[]'));
+
+SET pipeline_dop = 1;
+SET enable_profile = true;
+SET enable_async_profile = false;
+SET chunk_size = 2;
+
+-- 20 output rows at chunk_size 2, so at least 10 calls: no single call built more than chunk_size
+-- rows. Unbatched this was 1 (one call per input chunk), which is the whole defect.
+SELECT count(1) FROM jeb_${uuid0}, json_each(j);
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 10;
+
+-- One input row whose own expansion (10 members) is larger than a chunk, so the split falls inside the
+-- row. That is the case where a mishandled cursor pairs members with the wrong outer row instead of
+-- failing, so it needs its own assertion: ceil(10/3) = 4 calls minimum.
+SET chunk_size = 3;
+SELECT count(1) FROM jeb_${uuid0}, json_each(j) WHERE id = 2;
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 4;
+
+-- The contents must not depend on where the batch boundaries fell. An array member's key is its index
+-- in the whole array, so a cursor that restarted its numbering per batch would show up here.
+SET chunk_size = 3;
+SELECT id, `key`, `value` FROM jeb_${uuid0}, json_each(j) ORDER BY id, `key`;
+SET chunk_size = 4096;
+SELECT id, `key`, `value` FROM jeb_${uuid0}, json_each(j) ORDER BY id, `key`;
+
+DROP TABLE jeb_${uuid0};

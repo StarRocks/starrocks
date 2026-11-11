@@ -761,18 +761,33 @@ Status TimestampColumnReader<IsInstant>::get_next(orc::ColumnVectorBatch* cvb, C
     auto* values = ColumnHelper::cast_to_raw<TYPE_DATETIME>(data_column)->get_data().data();
     bool use_ns = _reader->use_nanoseconds_in_datetime();
 
+    if constexpr (IsInstant) {
+        const uint8_t* is_null = nullptr;
+        if (cvb->hasNulls) {
+            _is_null.resize(size);
+            for (size_t i = 0; i < size; i++) {
+                _is_null[i] = !cvb->notNull[from + i];
+            }
+            is_null = _is_null.data();
+        }
+        OrcTimestampHelper::orc_instants_to_native_ts(
+                values + column_start, _reader->tzinfo(), data->data.data() + from,
+                use_ns ? data->nanoseconds.data() + from : nullptr, is_null, size, &_offset_cache, &_offsets);
+        return Status::OK();
+    }
+
     if (cvb->hasNulls) {
         for (size_t column_pos = column_start, vb_pos = from; column_pos < column_start + size;
              column_pos++, vb_pos++) {
-            if (!cvb->notNull[column_pos]) {
+            if (!cvb->notNull[vb_pos]) {
                 continue;
             }
             int64_t ns = 0;
             if (use_ns) {
                 ns = data->nanoseconds[vb_pos];
             }
-            OrcTimestampHelper::orc_ts_to_native_ts(&(values[column_pos]), _reader->tzinfo(),
-                                                    _reader->tzoffset_in_seconds(), data->data[vb_pos], ns, IsInstant);
+            OrcTimestampHelper::orc_ts_to_native_ts(&(values[column_pos]), _reader->tzinfo(), data->data[vb_pos], ns,
+                                                    /*is_instant=*/false);
         }
     } else {
         for (size_t column_pos = column_start, vb_pos = from; column_pos < column_start + size;
@@ -781,8 +796,8 @@ Status TimestampColumnReader<IsInstant>::get_next(orc::ColumnVectorBatch* cvb, C
             if (use_ns) {
                 ns = data->nanoseconds[vb_pos];
             }
-            OrcTimestampHelper::orc_ts_to_native_ts(&(values[column_pos]), _reader->tzinfo(),
-                                                    _reader->tzoffset_in_seconds(), data->data[vb_pos], ns, IsInstant);
+            OrcTimestampHelper::orc_ts_to_native_ts(&(values[column_pos]), _reader->tzinfo(), data->data[vb_pos], ns,
+                                                    /*is_instant=*/false);
         }
     }
     return Status::OK();

@@ -189,7 +189,8 @@ public class ExecuteAsExecutor {
             return new ResolvedTarget(defaultGroupProviders, null, null);
         }
         // A pre-created LDAP user reads the FE configuration, exactly as at login. When it was
-        // created with AS '<dn>' the provider refuses memberOf on its own (legacy form).
+        // created with AS '<dn>' the provider refuses memberOf on its own (legacy form) and only
+        // hands back that DN for the group providers.
         LDAPAuthProvider provider =
                 asLdapProvider(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.getProvider(info.getAuthString()));
         return new ResolvedTarget(defaultGroupProviders, provider,

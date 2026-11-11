@@ -71,6 +71,25 @@ public:
         ++_state;
     }
 
+    int lock_shared_until(const timespec& deadline) {
+        int rc = bthread_mutex_timedlock(_mutex.native_handler(), &deadline);
+        if (rc != 0) {
+            return rc;
+        }
+        std::unique_lock<_mutex_type> lk(_mutex, std::adopt_lock);
+        while (_state >= _n_readers) {
+            rc = bthread_cond_timedwait(_gate1_cv.native_handler(), _mutex.native_handler(), &deadline);
+            if (rc != 0) {
+                if (_state < _n_readers) {
+                    _gate1_cv.notify_one();
+                }
+                return rc;
+            }
+        }
+        ++_state;
+        return 0;
+    }
+
     bool try_lock_shared() {
         std::unique_lock<_mutex_type> lk(_mutex, std::try_to_lock);
         if (!lk.owns_lock()) {

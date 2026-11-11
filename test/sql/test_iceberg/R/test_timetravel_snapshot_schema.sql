@@ -50,7 +50,7 @@ select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} ver
 -- result:
 1	100
 -- !result
-select id, c from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of "branch_before_rename" where c >= 100 order by id;
+select id, c_renamed from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} version as of "branch_before_rename" where c_renamed >= 100 order by id;
 -- result:
 1	100
 -- !result

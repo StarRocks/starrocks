@@ -31,6 +31,8 @@
 #include "column/serde/column_array_serde.h"
 #include "column/variant_encoder.h"
 #include "column/variant_path_parser.h"
+#include "testutil/column_test_helper.h"
+#include "testutil/type_test_helper.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
 #include "types/variant.h"
@@ -80,8 +82,7 @@ static MutableColumnPtr build_nullable_varchar_column(const std::vector<std::str
 
 static MutableColumnPtr build_nullable_int_array_column(const std::vector<DatumArray>& values,
                                                         const std::vector<uint8_t>& is_null) {
-    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT));
-    auto col = ColumnHelper::create_column(array_type, true);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_BIGINT_DESC, true);
     DCHECK_EQ(values.size(), is_null.size());
     for (size_t i = 0; i < values.size(); ++i) {
         if (is_null[i] != 0) {
@@ -132,7 +133,7 @@ static auto build_shredded_variant_column_for_ut() {
     MutableColumns typed;
     typed.emplace_back(build_nullable_int64_column({10, 20, 30}, {0, 1, 0}));
 
-    col->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), std::move(metadata),
+    col->set_shredded_columns({"typed_only"}, {TYPE_BIGINT_DESC}, std::move(typed), std::move(metadata),
                               std::move(remain));
     return col;
 }
@@ -159,7 +160,7 @@ static MutableColumnPtr build_single_path_bigint_shredded_variant(std::string pa
     append_primitive_int8_row(metadata.get(), remain.get(), 1);
     MutableColumns typed;
     typed.emplace_back(build_nullable_int64_column({typed_value}, {0}));
-    col->set_shredded_columns({std::move(path)}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), std::move(metadata),
+    col->set_shredded_columns({std::move(path)}, {TYPE_BIGINT_DESC}, std::move(typed), std::move(metadata),
                               std::move(remain));
     return col;
 }
@@ -197,7 +198,7 @@ static void verify_typed_only_into_base_shredded_fast_path(TypedOnlyIntoBaseShre
     auto src = VariantColumn::create();
     MutableColumns src_typed;
     src_typed.emplace_back(build_nullable_int64_column({10, 11}, {0, 0}));
-    src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src_typed), nullptr, nullptr);
+    src->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(src_typed), nullptr, nullptr);
 
     auto dst = VariantColumn::create();
     auto dst_metadata = BinaryColumn::create();
@@ -205,7 +206,7 @@ static void verify_typed_only_into_base_shredded_fast_path(TypedOnlyIntoBaseShre
     append_json_variant_row(dst_metadata.get(), dst_remain.get(), R"({"a":7})");
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_int64_column({7}, {0}));
-    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(dst_typed), std::move(dst_metadata),
+    dst->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(dst_typed), std::move(dst_metadata),
                               std::move(dst_remain));
 
     switch (mode) {
@@ -272,11 +273,10 @@ PARALLEL_TEST(VariantColumnTest, test_remove_first_n_values_from_shredded_varian
 
 PARALLEL_TEST(VariantColumnTest, test_remove_values_from_const_typed_variant) {
     auto column = VariantColumn::create();
-    auto typed_data = Int64Column::create();
-    typed_data->append(42);
+    auto typed_data = ColumnTestHelper::build_column<int64_t>({42});
     MutableColumns typed;
     typed.emplace_back(ConstColumn::create(std::move(typed_data), 3));
-    column->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
+    column->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
 
     column->remove_first_n_values(1);
 
@@ -410,6 +410,194 @@ PARALLEL_TEST(VariantColumnTest, test_create_variant_column) {
     EXPECT_GE(memory_usage, 0);
 }
 
+// The members below are the rest of the ObjectColumn family that a VariantColumn's shredded storage
+// invalidates: rows live in the metadata/remain base payload and the typed columns, never in the
+// inherited `_pool`. Each test pins the takeover by checking that the pool stays empty while the
+// real storage carries the effect - against the inherited bodies they index an empty pool or write
+// rows no reader can reach.
+
+PARALLEL_TEST(VariantColumnTest, test_get_refuses_rather_than_handing_out_a_pool_pointer) {
+    auto column = VariantColumn::create();
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    ASSERT_EQ(1, column->size());
+    // ObjectColumn::get() returns Datum(&_pool[n]); the pool holds no rows at all, so the Datum
+    // carries a wild pointer that its only consumer, append_datum(), then dereferences.
+    ASSERT_TRUE(column->get_pool().empty());
+    EXPECT_THROW((void)column->get(0), std::runtime_error);
+}
+
+PARALLEL_TEST(VariantColumnTest, test_append_strings_lands_in_the_base_payload) {
+    auto column = VariantColumn::create();
+    const std::vector<std::string> jsons = {R"({"a":1})", R"({"b":2})"};
+
+    std::vector<std::string> buffers;
+    for (const auto& json : jsons) {
+        VariantRowValue row = create_variant_row_from_json_text(json);
+        buffers.emplace_back(row.serialize_size(), '\0');
+        row.serialize(reinterpret_cast<uint8_t*>(buffers.back().data()));
+    }
+    std::vector<Slice> slices;
+    slices.reserve(buffers.size());
+    for (auto& buffer : buffers) {
+        slices.emplace_back(buffer.data(), buffer.size());
+    }
+
+    ASSERT_TRUE(column->append_strings(slices.data(), slices.size()));
+
+    // ObjectColumn::append_strings() emplaces into `_pool`, which size() does not count: the rows
+    // would land somewhere no reader ever looks.
+    ASSERT_TRUE(column->get_pool().empty());
+    ASSERT_EQ(2, column->size());
+    for (size_t i = 0; i < jsons.size(); ++i) {
+        assert_variant_row_json(column.get(), i, jsons[i]);
+    }
+    ASSERT_TRUE(column->capacity_limit_reached().ok());
+}
+
+PARALLEL_TEST(VariantColumnTest, test_update_rows_replaces_rows_in_the_real_storage) {
+    auto column = VariantColumn::create();
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    column->append(create_variant_row_from_json_text(R"({"b":2})"));
+    column->append(create_variant_row_from_json_text(R"({"c":3})"));
+
+    auto replacement = VariantColumn::create();
+    replacement->append(create_variant_row_from_json_text(R"({"z":9})"));
+    const uint32_t indexes[] = {1};
+    column->update_rows(*replacement, indexes);
+
+    ASSERT_EQ(3, column->size());
+    ASSERT_TRUE(column->get_pool().empty());
+    assert_variant_row_json(column.get(), 0, R"({"a":1})");
+    assert_variant_row_json(column.get(), 1, R"({"z":9})");
+    assert_variant_row_json(column.get(), 2, R"({"c":3})");
+}
+
+PARALLEL_TEST(VariantColumnTest, test_update_rows_replaces_the_first_and_last_row) {
+    auto column = VariantColumn::create();
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    column->append(create_variant_row_from_json_text(R"({"b":2})"));
+    column->append(create_variant_row_from_json_text(R"({"c":3})"));
+
+    auto replacement = VariantColumn::create();
+    replacement->append(create_variant_row_from_json_text(R"({"y":8})"));
+    replacement->append(create_variant_row_from_json_text(R"({"z":9})"));
+    const uint32_t indexes[] = {0, 2};
+    column->update_rows(*replacement, indexes);
+
+    ASSERT_EQ(3, column->size());
+    assert_variant_row_json(column.get(), 0, R"({"y":8})");
+    assert_variant_row_json(column.get(), 1, R"({"b":2})");
+    assert_variant_row_json(column.get(), 2, R"({"z":9})");
+}
+
+PARALLEL_TEST(VariantColumnTest, test_fill_default_defaults_only_the_selected_rows) {
+    auto column = VariantColumn::create();
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    column->append(create_variant_row_from_json_text(R"({"b":2})"));
+    column->append(create_variant_row_from_json_text(R"({"c":3})"));
+
+    // ObjectColumn::fill_default() assigns `_pool[i] = {}` - an out-of-bounds write on an empty pool.
+    Filter filter{0, 1, 0};
+    column->fill_default(filter);
+
+    ASSERT_EQ(3, column->size());
+    ASSERT_TRUE(column->get_pool().empty());
+    assert_variant_row_json(column.get(), 0, R"({"a":1})");
+    assert_null_base_payload(column.get(), 1);
+    assert_variant_row_json(column.get(), 2, R"({"c":3})");
+}
+
+PARALLEL_TEST(VariantColumnTest, test_memory_usage_does_not_double_count_the_base_payload) {
+    auto column = VariantColumn::create();
+    for (int i = 0; i < 8; ++i) {
+        column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    }
+    ASSERT_EQ(8, column->size());
+    ASSERT_GT(column->byte_size(0, column->size()), 0);
+
+    // The base payload is BinaryColumn, whose every byte lives in its own container, so it has no
+    // referenced memory of its own. Inheriting ObjectColumn's `reference_memory_usage() =
+    // byte_size()` would add those bytes a second time on top of container_memory_usage() and
+    // report a variant chunk at roughly twice its real size.
+    EXPECT_EQ(0, column->reference_memory_usage());
+    EXPECT_EQ(0, column->reference_memory_usage(0, column->size()));
+
+    const size_t children = column->metadata_column()->memory_usage() + column->remain_value_column()->memory_usage();
+    EXPECT_EQ(children, column->memory_usage());
+    EXPECT_EQ(column->container_memory_usage(), column->memory_usage());
+}
+
+PARALLEL_TEST(VariantColumnTest, test_container_memory_usage_follows_the_real_storage) {
+    auto column = VariantColumn::create();
+    const size_t before = column->container_memory_usage();
+
+    for (int i = 0; i < 64; ++i) {
+        column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    }
+
+    // ObjectColumn reports `_pool.capacity() * type_size()`, which stays 0 whatever the column does
+    // - so the rows appended into the base payload would be invisible to the tracker.
+    const size_t after = column->container_memory_usage();
+    EXPECT_GT(after, before);
+    EXPECT_EQ(column->metadata_column()->container_memory_usage() +
+                      column->remain_value_column()->container_memory_usage(),
+              after);
+    EXPECT_TRUE(column->get_pool().empty());
+}
+
+// ObjectColumn::reserve pre-sizes the inherited VariantRowValue pool, which a VariantColumn never
+// writes to. The override has to reach the columns that actually receive the rows, otherwise a
+// caller sizing a variant result up front pays for a vector that stays empty while the base payload
+// it meant to size still grows geometrically.
+PARALLEL_TEST(VariantColumnTest, test_reserve_sizes_base_payload_not_object_pool) {
+    auto column = VariantColumn::create();
+    constexpr size_t kRows = 4096;
+
+    column->reserve(kRows);
+
+    EXPECT_EQ(0, column->get_pool().capacity());
+    EXPECT_GE(column->metadata_column()->capacity(), kRows);
+    EXPECT_GE(column->remain_value_column()->capacity(), kRows);
+    EXPECT_EQ(0, column->size());
+    EXPECT_TRUE(column->empty());
+
+    // A reservation must not disturb what a later append reads back.
+    column->append(create_variant_row_from_json_text(R"({"a":1})"));
+    ASSERT_EQ(1, column->size());
+    VariantRowValue row_buffer;
+    const VariantRowValue* row = column->get_row_value(0, &row_buffer);
+    ASSERT_NE(nullptr, row);
+    auto json = row->to_json();
+    ASSERT_TRUE(json.ok()) << json.status().to_string();
+    EXPECT_EQ(R"({"a":1})", json.value());
+    EXPECT_EQ(0, column->get_pool().capacity());
+}
+
+PARALLEL_TEST(VariantColumnTest, test_reserve_skips_shredded_typed_columns) {
+    auto column = VariantColumn::create();
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    append_json_variant_row(metadata.get(), remain.get(), R"({})");
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
+    column->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(typed), std::move(metadata),
+                                 std::move(remain));
+    const size_t typed_capacity_before = column->typed_columns()[0]->capacity();
+
+    constexpr size_t kRows = 2048;
+    column->reserve(kRows);
+
+    EXPECT_EQ(0, column->get_pool().capacity());
+    EXPECT_GE(column->metadata_column()->capacity(), kRows);
+    EXPECT_GE(column->remain_value_column()->capacity(), kRows);
+    // The shredded schema is data-dependent in both width and element type, so the reservation
+    // stops at the base payload. This typed field is an ARRAY: forwarding would have reserved
+    // kRows inner elements on top of the kRows offsets, for arrays the rows may not contain.
+    ASSERT_EQ(1, column->typed_columns().size());
+    EXPECT_EQ(typed_capacity_before, column->typed_columns()[0]->capacity());
+    EXPECT_EQ(1, column->size());
+}
+
 PARALLEL_TEST(VariantColumnTest, test_clone_shredded_schema_integrity) {
     auto src = VariantColumn::create();
     auto metadata = BinaryColumn::create();
@@ -417,8 +605,7 @@ PARALLEL_TEST(VariantColumnTest, test_clone_shredded_schema_integrity) {
     append_json_variant_row(metadata.get(), remain.get(), R"({})");
     MutableColumns typed;
     typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(typed), std::move(metadata),
-                              std::move(remain));
+    src->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(typed), std::move(metadata), std::move(remain));
 
     auto cloned_holder = src->clone();
     auto* cloned = down_cast<VariantColumn*>(cloned_holder.get());
@@ -556,8 +743,8 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_append_schema_alignment) {
     MutableColumns src_typed;
     src_typed.emplace_back(build_nullable_int64_column({10, 11}, {0, 0})); // a
     src_typed.emplace_back(build_nullable_int64_column({20, 21}, {0, 0})); // b
-    src->set_shredded_columns({"a", "b"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT)},
-                              std::move(src_typed), std::move(src_metadata), std::move(src_remain));
+    src->set_shredded_columns({"a", "b"}, {TYPE_BIGINT_DESC, TYPE_BIGINT_DESC}, std::move(src_typed),
+                              std::move(src_metadata), std::move(src_remain));
 
     auto dst = VariantColumn::create();
     auto dst_metadata = BinaryColumn::create();
@@ -566,8 +753,8 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_append_schema_alignment) {
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_int64_column({200}, {0})); // b
     dst_typed.emplace_back(build_nullable_int64_column({300}, {0})); // c
-    dst->set_shredded_columns({"b", "c"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT)},
-                              std::move(dst_typed), std::move(dst_metadata), std::move(dst_remain));
+    dst->set_shredded_columns({"b", "c"}, {TYPE_BIGINT_DESC, TYPE_BIGINT_DESC}, std::move(dst_typed),
+                              std::move(dst_metadata), std::move(dst_remain));
 
     dst->append(*src, 0, src->size());
 
@@ -599,7 +786,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_schema_alignment_type_conflict) {
     append_primitive_int8_row(src_metadata.get(), src_remain.get(), 1);
     MutableColumns src_typed;
     src_typed.emplace_back(build_nullable_int64_column({10}, {0}));
-    src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src_typed), std::move(src_metadata),
+    src->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(src_typed), std::move(src_metadata),
                               std::move(src_remain));
 
     auto dst = VariantColumn::create();
@@ -608,7 +795,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_schema_alignment_type_conflict) {
     append_primitive_int8_row(dst_metadata.get(), dst_remain.get(), 2);
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(dst_typed), std::move(dst_metadata),
+    dst->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(dst_typed), std::move(dst_metadata),
                               std::move(dst_remain));
 
     ASSERT_FALSE(dst->align_schema_from(*src));
@@ -623,7 +810,7 @@ PARALLEL_TEST(VariantColumnTest, test_append_type_conflict_numeric_widen_via_mer
     append_primitive_int8_row(src_metadata.get(), src_remain.get(), 1);
     MutableColumns src_typed;
     src_typed.emplace_back(build_nullable_int64_column({100000}, {0}));
-    src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src_typed), std::move(src_metadata),
+    src->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(src_typed), std::move(src_metadata),
                               std::move(src_remain));
 
     auto dst = VariantColumn::create();
@@ -632,13 +819,13 @@ PARALLEL_TEST(VariantColumnTest, test_append_type_conflict_numeric_widen_via_mer
     append_primitive_int8_row(dst_metadata.get(), dst_remain.get(), 2);
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_int16_column({12}, {0}));
-    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_SMALLINT)}, std::move(dst_typed), std::move(dst_metadata),
+    dst->set_shredded_columns({"a"}, {TYPE_SMALLINT_DESC}, std::move(dst_typed), std::move(dst_metadata),
                               std::move(dst_remain));
 
     dst->append(*src, 0, src->size());
 
     ASSERT_EQ((std::vector<std::string>{"a"}), dst->shredded_paths());
-    ASSERT_EQ((std::vector<TypeDescriptor>{TypeDescriptor(TYPE_BIGINT)}), dst->shredded_types());
+    ASSERT_EQ((std::vector<TypeDescriptor>{TYPE_BIGINT_DESC}), dst->shredded_types());
     const auto* typed_a = down_cast<const NullableColumn*>(dst->typed_column_by_index(0));
     ASSERT_EQ(12, typed_a->get(0).get_int64());
     ASSERT_EQ(100000, typed_a->get(1).get_int64());
@@ -651,7 +838,7 @@ PARALLEL_TEST(VariantColumnTest, test_append_type_conflict_hoist_variant_via_mer
     append_primitive_int8_row(src_metadata.get(), src_remain.get(), 1);
     MutableColumns src_typed;
     src_typed.emplace_back(build_nullable_int64_column({10}, {0}));
-    src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src_typed), std::move(src_metadata),
+    src->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(src_typed), std::move(src_metadata),
                               std::move(src_remain));
 
     auto dst = VariantColumn::create();
@@ -660,7 +847,7 @@ PARALLEL_TEST(VariantColumnTest, test_append_type_conflict_hoist_variant_via_mer
     append_primitive_int8_row(dst_metadata.get(), dst_remain.get(), 2);
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(dst_typed), std::move(dst_metadata),
+    dst->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(dst_typed), std::move(dst_metadata),
                               std::move(dst_remain));
 
     dst->append(*src, 0, src->size());
@@ -675,7 +862,7 @@ PARALLEL_TEST(VariantColumnTest, test_append_type_conflict_hoist_variant_via_mer
 PARALLEL_TEST(VariantColumnTest, test_shredded_schema_accept_non_empty_path) {
     MutableColumns typed;
     typed.emplace_back(build_nullable_int64_column({10}, {0}));
-    auto st = VariantColumn::validate_shredded_schema({"a"}, {TypeDescriptor(TYPE_BIGINT)}, typed, nullptr, nullptr);
+    auto st = VariantColumn::validate_shredded_schema({"a"}, {TYPE_BIGINT_DESC}, typed, nullptr, nullptr);
     ASSERT_TRUE(st.ok());
 }
 
@@ -684,7 +871,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_append_disjoint_typed_paths_prese
     auto src = VariantColumn::create();
     MutableColumns src_typed;
     src_typed.emplace_back(build_nullable_int64_column({10, 11}, {0, 0}));
-    src->set_shredded_columns({"b"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src_typed), nullptr, nullptr);
+    src->set_shredded_columns({"b"}, {TYPE_BIGINT_DESC}, std::move(src_typed), nullptr, nullptr);
 
     auto dst = VariantColumn::create();
     auto dst_metadata = BinaryColumn::create();
@@ -692,7 +879,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_append_disjoint_typed_paths_prese
     append_json_variant_row(dst_metadata.get(), dst_remain.get(), R"({"a":1})");
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_int64_column({1}, {0}));
-    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(dst_typed), std::move(dst_metadata),
+    dst->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(dst_typed), std::move(dst_metadata),
                               std::move(dst_remain));
 
     dst->append(*src, 0, src->size());
@@ -728,7 +915,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_append_disjoint_variant_typed_pat
     append_json_variant_row(dst_metadata.get(), dst_remain.get(), R"({"a":1})");
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_int64_column({1}, {0}));
-    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(dst_typed), std::move(dst_metadata),
+    dst->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(dst_typed), std::move(dst_metadata),
                               std::move(dst_remain));
 
     dst->append(*src, 0, src->size());
@@ -745,7 +932,7 @@ PARALLEL_TEST(VariantColumnTest, test_single_path_typed_only_scalar_materializat
     auto col = VariantColumn::create();
     MutableColumns typed;
     typed.emplace_back(build_nullable_int64_column({777, 0}, {0, 1}));
-    col->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
+    col->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
 
     ASSERT_TRUE(col->is_typed_only_variant());
     ASSERT_EQ(1, col->shredded_paths().size());
@@ -776,11 +963,10 @@ PARALLEL_TEST(VariantColumnTest, test_single_path_typed_only_scalar_materializat
 // Verifies single-path typed-only supports const typed column row access (row index should map to 0 for const data).
 PARALLEL_TEST(VariantColumnTest, test_single_path_typed_only_const_typed_column) {
     auto col = VariantColumn::create();
-    auto typed_data = Int64Column::create();
-    typed_data->append(42);
+    auto typed_data = ColumnTestHelper::build_column<int64_t>({42});
     MutableColumns typed;
     typed.emplace_back(ConstColumn::create(std::move(typed_data), 3));
-    col->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
+    col->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
 
     ASSERT_EQ(1, col->shredded_paths().size());
     ASSERT_EQ("a", col->shredded_paths()[0]);
@@ -801,8 +987,7 @@ PARALLEL_TEST(VariantColumnTest, test_single_path_typed_only_array_materializati
     auto col = VariantColumn::create();
     MutableColumns typed;
     typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
-    col->set_shredded_columns({"a"}, {TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))}, std::move(typed),
-                              nullptr, nullptr);
+    col->set_shredded_columns({"a"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
 
     ASSERT_EQ(1, col->shredded_paths().size());
     ASSERT_EQ("a", col->shredded_paths()[0]);
@@ -823,8 +1008,7 @@ PARALLEL_TEST(VariantColumnTest, test_multi_key_typed_only_object_materializatio
     MutableColumns typed;
     typed.emplace_back(build_nullable_int64_column({10}, {0}));
     typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    col->set_shredded_columns({"a", "b"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARCHAR)}, std::move(typed),
-                              nullptr, nullptr);
+    col->set_shredded_columns({"a", "b"}, {TYPE_BIGINT_DESC, TYPE_VARCHAR_DESC}, std::move(typed), nullptr, nullptr);
 
     ASSERT_TRUE(col->is_typed_only_variant());
     ASSERT_FALSE(col->shredded_paths().size() == 1 && col->shredded_paths()[0].empty());
@@ -847,7 +1031,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_append_type_conflict_hoist_varian
     append_primitive_int8_row(src_metadata.get(), src_remain.get(), 1);
     MutableColumns src_typed;
     src_typed.emplace_back(build_nullable_int64_column({10}, {0}));
-    src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src_typed), std::move(src_metadata),
+    src->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(src_typed), std::move(src_metadata),
                               std::move(src_remain));
 
     auto dst = VariantColumn::create();
@@ -856,7 +1040,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_append_type_conflict_hoist_varian
     append_primitive_int8_row(dst_metadata.get(), dst_remain.get(), 9);
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(dst_typed), std::move(dst_metadata),
+    dst->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(dst_typed), std::move(dst_metadata),
                               std::move(dst_remain));
 
     dst->append(*src, 0, 1);
@@ -875,7 +1059,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_append_selective_type_conflict_ho
     append_primitive_int8_row(src_metadata.get(), src_remain.get(), 1);
     MutableColumns src_typed;
     src_typed.emplace_back(build_nullable_int64_column({10}, {0}));
-    src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src_typed), std::move(src_metadata),
+    src->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(src_typed), std::move(src_metadata),
                               std::move(src_remain));
 
     auto dst = VariantColumn::create();
@@ -884,7 +1068,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_append_selective_type_conflict_ho
     append_primitive_int8_row(dst_metadata.get(), dst_remain.get(), 9);
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(dst_typed), std::move(dst_metadata),
+    dst->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(dst_typed), std::move(dst_metadata),
                               std::move(dst_remain));
 
     uint32_t indexes[] = {0};
@@ -920,7 +1104,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_append_value_multiple_times_type_
     append_primitive_int8_row(src_metadata.get(), src_remain.get(), 1);
     MutableColumns src_typed;
     src_typed.emplace_back(build_nullable_int64_column({10}, {0}));
-    src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src_typed), std::move(src_metadata),
+    src->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(src_typed), std::move(src_metadata),
                               std::move(src_remain));
 
     auto dst = VariantColumn::create();
@@ -929,7 +1113,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_append_value_multiple_times_type_
     append_primitive_int8_row(dst_metadata.get(), dst_remain.get(), 9);
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(dst_typed), std::move(dst_metadata),
+    dst->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(dst_typed), std::move(dst_metadata),
                               std::move(dst_remain));
 
     dst->append_value_multiple_times(*src, 0, 2);
@@ -950,8 +1134,7 @@ PARALLEL_TEST(VariantColumnTest, test_base_shredded_materialization_typed_overri
 
     MutableColumns typed;
     typed.emplace_back(build_nullable_int64_column({99}, {0}));
-    col->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), std::move(metadata),
-                              std::move(remain));
+    col->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(typed), std::move(metadata), std::move(remain));
 
     VariantRowValue row;
     const VariantRowValue* value = col->get_row_value(0, &row);
@@ -959,6 +1142,29 @@ PARALLEL_TEST(VariantColumnTest, test_base_shredded_materialization_typed_overri
     auto json = value->to_json();
     ASSERT_TRUE(json.ok());
     ASSERT_EQ(R"({"a":99,"b":2})", json.value());
+}
+
+PARALLEL_TEST(VariantColumnTest, test_base_shredded_materialization_nonmonotonic_object_offsets) {
+    auto col = VariantColumn::create();
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    // Residual fields are indexed as [a, b], with b stored before a in the payload.
+    const char metadata_bytes[] = {0x11, 2, 0, 1, 2, 'a', 'b'};
+    const char value_bytes[] = {2, 2, 0, 1, 1, 0, 5, 0, 13, 'x', 'y', 'z'};
+    metadata->append(Slice(metadata_bytes, sizeof(metadata_bytes)));
+    remain->append(Slice(value_bytes, sizeof(value_bytes)));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({99}, {0}));
+    col->set_shredded_columns({"c"}, {TYPE_BIGINT_DESC}, std::move(typed), std::move(metadata), std::move(remain));
+
+    VariantRowValue row;
+    const auto* value = col->get_row_value(0, &row);
+    ASSERT_NE(nullptr, value);
+    auto json = value->to_json();
+    ASSERT_TRUE(json.ok()) << json.status();
+    // Falling back to the residual payload would silently lose c.
+    ASSERT_EQ(R"({"a":"xyz","b":null,"c":99})", json.value());
 }
 
 // Verifies typed NULL acts as tombstone and removes same-path key from materialized object.
@@ -971,8 +1177,7 @@ PARALLEL_TEST(VariantColumnTest, test_base_shredded_materialization_typed_null_t
 
     MutableColumns typed;
     typed.emplace_back(build_nullable_int64_column({0}, {1}));
-    col->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), std::move(metadata),
-                              std::move(remain));
+    col->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(typed), std::move(metadata), std::move(remain));
 
     VariantRowValue row;
     const VariantRowValue* value = col->get_row_value(0, &row);
@@ -1029,8 +1234,8 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_schema_reject_duplicate_paths) {
     MutableColumns typed;
     typed.emplace_back(build_nullable_int64_column({1}, {0}));
     typed.emplace_back(build_nullable_int64_column({2}, {0}));
-    auto st = VariantColumn::validate_shredded_schema(
-            {"a", "a"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT)}, typed, nullptr, nullptr);
+    auto st = VariantColumn::validate_shredded_schema({"a", "a"}, {TYPE_BIGINT_DESC, TYPE_BIGINT_DESC}, typed, nullptr,
+                                                      nullptr);
     ASSERT_FALSE(st.ok());
 }
 
@@ -1038,7 +1243,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_schema_reject_duplicate_paths) {
 PARALLEL_TEST(VariantColumnTest, test_shredded_schema_reject_invalid_paths) {
     MutableColumns typed;
     typed.emplace_back(build_nullable_int64_column({1}, {0}));
-    auto st = VariantColumn::validate_shredded_schema({"a..b"}, {TypeDescriptor(TYPE_BIGINT)}, typed, nullptr, nullptr);
+    auto st = VariantColumn::validate_shredded_schema({"a..b"}, {TYPE_BIGINT_DESC}, typed, nullptr, nullptr);
     ASSERT_FALSE(st.ok());
 }
 
@@ -1048,7 +1253,7 @@ PARALLEL_TEST(VariantColumnTest, test_typed_only_promotion_preserves_historical_
     auto col = VariantColumn::create();
     MutableColumns typed;
     typed.emplace_back(build_nullable_int64_column({7, 8}, {0, 0}));
-    col->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
+    col->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
 
     ASSERT_TRUE(col->is_typed_only_variant());
     ASSERT_FALSE(col->has_metadata_column());
@@ -1102,7 +1307,7 @@ PARALLEL_TEST(VariantColumnTest, test_typed_only_promotion_new_rows_use_remain_p
     auto col = VariantColumn::create();
     MutableColumns typed;
     typed.emplace_back(build_nullable_int64_column({42}, {0}));
-    col->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
+    col->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
 
     VariantRowValue appended = create_variant_row_from_json_text(R"({"k":"v"})");
     col->append(&appended);
@@ -1147,7 +1352,7 @@ PARALLEL_TEST(VariantColumnTest, test_base_shredded_null_metadata_or_remain_row_
     auto remain_col = BinaryColumn::create();
     remain_col->append(value);           // row 0
     remain_col->append(null_remain_str); // row 1: null sentinel (typed-only path)
-    col->set_shredded_columns({"x"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), std::move(metadata_col),
+    col->set_shredded_columns({"x"}, {TYPE_BIGINT_DESC}, std::move(typed), std::move(metadata_col),
                               std::move(remain_col));
 
     VariantRowValue row0;
@@ -1171,8 +1376,7 @@ PARALLEL_TEST(VariantColumnTest, test_base_shredded_const_typed_column_materiali
     std::string metadata(base.get_metadata().raw());
     std::string value(base.get_value().raw());
 
-    auto typed_data = Int64Column::create();
-    typed_data->append(42);
+    auto typed_data = ColumnTestHelper::build_column<int64_t>({42});
     MutableColumns typed;
     typed.emplace_back(ConstColumn::create(std::move(typed_data), 2));
     auto metadata_col = BinaryColumn::create();
@@ -1181,7 +1385,7 @@ PARALLEL_TEST(VariantColumnTest, test_base_shredded_const_typed_column_materiali
     metadata_col->append(metadata);
     remain_col->append(value);
     remain_col->append(value);
-    col->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), std::move(metadata_col),
+    col->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(typed), std::move(metadata_col),
                               std::move(remain_col));
 
     VariantRowValue row0;
@@ -1257,7 +1461,7 @@ PARALLEL_TEST(VariantColumnTest, test_try_get_row_ref_returns_false_when_typed_o
     auto remain_col = BinaryColumn::create();
     metadata_col->append(metadata);
     remain_col->append(value);
-    col->set_shredded_columns({"x"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), std::move(metadata_col),
+    col->set_shredded_columns({"x"}, {TYPE_BIGINT_DESC}, std::move(typed), std::move(metadata_col),
                               std::move(remain_col));
 
     VariantRowRef row_ref;
@@ -1318,7 +1522,7 @@ PARALLEL_TEST(VariantColumnTest, test_equals_and_compare_at_fallback_materialize
         auto remain_col = BinaryColumn::create();
         metadata_col->append(metadata);
         remain_col->append(value);
-        col->set_shredded_columns({"x"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), std::move(metadata_col),
+        col->set_shredded_columns({"x"}, {TYPE_BIGINT_DESC}, std::move(typed), std::move(metadata_col),
                                   std::move(remain_col));
         return col;
     };
@@ -1388,7 +1592,7 @@ static MutableColumnPtr build_bigint_path_with_fallback(const std::vector<std::s
                                                         bool allocate_empty_fallback = true) {
     auto metadata = BinaryColumn::create();
     auto remain = BinaryColumn::create();
-    auto typed = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+    auto typed = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     auto fallback = VariantColumn::create_fallback_column();
     auto path_a = VariantPathParser::parse(std::string("$.a"));
     CHECK(path_a.ok());
@@ -1425,8 +1629,8 @@ static MutableColumnPtr build_bigint_path_with_fallback(const std::vector<std::s
     // Without allocate_empty_fallback, a fallback column without values is left unallocated, as the readers do.
     fallback_columns.emplace_back(allocate_empty_fallback || has_fallback_value ? std::move(fallback) : nullptr);
     auto col = VariantColumn::create();
-    col->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed_columns),
-                              std::move(fallback_columns), std::move(metadata), std::move(remain));
+    col->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(typed_columns), std::move(fallback_columns),
+                              std::move(metadata), std::move(remain));
     return col;
 }
 
@@ -1608,8 +1812,8 @@ PARALLEL_TEST(VariantColumnTest, test_residual_fallback_with_shredded_child) {
     residual_fallback->append_nulls(1);
     fallback.emplace_back(std::move(residual_fallback));
     auto col = VariantColumn::create();
-    col->set_shredded_columns({"a.b", "a"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARIANT)},
-                              std::move(typed), std::move(fallback), std::move(metadata), std::move(remain));
+    col->set_shredded_columns({"a.b", "a"}, {TYPE_BIGINT_DESC, TypeDescriptor(TYPE_VARIANT)}, std::move(typed),
+                              std::move(fallback), std::move(metadata), std::move(remain));
 
     assert_variant_row_json(col.get(), 0, R"({"a":{"b":2,"x":1}})");
     assert_variant_row_json(col.get(), 1, R"({"a":{"b":3}})");

@@ -43,6 +43,10 @@ public class AlterMaterializedViewStatusLog implements Writable {
     // GSON builds the entry without running the constructor, which sets it for every entry written now.
     @SerializedName(value = "clearVersionMap")
     private Boolean clearVersionMap;
+    // INACTIVE only: the inactivation came from a refresh, which leaves the MV's task scheduled so that the next
+    // refresh can activate the MV again. Replay must not suspend the task either. Null in older entries.
+    @SerializedName(value = "keepTaskScheduled")
+    private Boolean keepTaskScheduled;
 
     public AlterMaterializedViewStatusLog(long dbId, long tableId, String status, String reason) {
         this.dbId = dbId;
@@ -99,5 +103,13 @@ public class AlterMaterializedViewStatusLog implements Writable {
 
     public void setClearVersionMap(boolean clearVersionMap) {
         this.clearVersionMap = clearVersionMap;
+    }
+
+    public boolean isKeepTaskScheduled() {
+        return Boolean.TRUE.equals(keepTaskScheduled);
+    }
+
+    public void setKeepTaskScheduled(boolean keepTaskScheduled) {
+        this.keepTaskScheduled = keepTaskScheduled;
     }
 }

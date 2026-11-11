@@ -84,6 +84,20 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
                 dumpInfo.addExternalTableRowCount(entry.getKey(), entry.getValue().getAsLong());
             }
         }
+        if (dumpJsonObject.has("external_table_format_version")) {
+            JsonObject formatVersion = dumpJsonObject.getAsJsonObject("external_table_format_version");
+            for (Map.Entry<String, JsonElement> entry : formatVersion.entrySet()) {
+                dumpInfo.addExternalTableFormatVersion(entry.getKey(), entry.getValue().getAsInt());
+            }
+        }
+        if (dumpJsonObject.has("external_column_row_count")) {
+            JsonObject externalColumnRowCount = dumpJsonObject.getAsJsonObject("external_column_row_count");
+            for (Map.Entry<String, JsonElement> entry : externalColumnRowCount.entrySet()) {
+                for (Map.Entry<String, JsonElement> column : entry.getValue().getAsJsonObject().entrySet()) {
+                    dumpInfo.addExternalColumnRowCount(entry.getKey(), column.getKey(), column.getValue().getAsLong());
+                }
+            }
+        }
         if (dumpJsonObject.has("external_table_partition_names")) {
             JsonObject specObj = dumpJsonObject.has("external_table_partition_spec")
                     ? dumpJsonObject.getAsJsonObject("external_table_partition_spec") : new JsonObject();

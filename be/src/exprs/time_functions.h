@@ -975,11 +975,15 @@ private:
         cctz::time_zone to_tz;
     };
 
-    // Per-execution-thread holder for convert_tz_const's TzOffsetCache (see
+    // Per-execution-thread holder for the TzOffsetCache of convert_tz_const and of the from_unixtime family (see
     // base/time/tz_offset_cache.h for why this needs to be per-thread rather than shared).
     struct ConvertTzThreadState : FunctionThreadState {
         TzOffsetCache cache;
     };
+
+    // This thread's TzOffsetCache of the function, bound to `tz`; it lives as long as the FunctionContext, so its
+    // table of offset changes is built once, not per chunk.
+    static TzOffsetCache& _thread_offset_cache(FunctionContext* context, const cctz::time_zone& tz);
 
     // fmt for string format like "%Y-%m-%d" and "%Y-%m-%d %H:%i:%s"
     struct StrToDateCtx {

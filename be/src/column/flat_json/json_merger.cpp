@@ -115,6 +115,13 @@ void JsonMerger::add_level_paths(const std::vector<std::string>& level_paths) {
 }
 
 void JsonMerger::set_root_path(const std::string& base_path) {
+    _merge_root = JsonFlatPath::normalize_from_path(base_path, _src_root.get());
+    _root_path.clear();
+    for (std::string_view rest = base_path; !rest.empty();) {
+        auto [key, next] = JsonFlatPath::split_path(rest);
+        _root_path.emplace_back(key);
+        rest = next;
+    }
     JsonFlatPath::set_root(base_path, _src_root.get());
 }
 
@@ -133,11 +140,7 @@ ColumnPtr JsonMerger::merge(const Columns& columns) {
         _src_columns.emplace_back(col.get());
     }
 
-    if (_src_root->op == JsonFlatPath::OP_INCLUDE) {
-        _merge_impl<true>(rows, *json_result, *null_result);
-    } else {
-        _merge_impl<false>(rows, *json_result, *null_result);
-    }
+    _merge_impl(rows, *json_result, *null_result);
 
     _src_columns.clear();
     if (_output_nullable) {
@@ -153,43 +156,52 @@ ColumnPtr JsonMerger::merge(const Columns& columns) {
     }
 }
 
-template <bool IN_TREE>
 void JsonMerger::_merge_impl(size_t rows, JsonColumn& json_result, NullColumn& null_result) {
+    const auto* root = _merge_root == nullptr ? _src_root.get() : _merge_root;
     if (_has_remain) {
         auto remain = down_cast<const JsonColumn*>(_src_columns.back());
         for (size_t i = 0; i < rows; i++) {
             auto obj = remain->get_object(i);
             auto vs = obj->to_vslice();
-            if (obj->is_invalid()) {
+            // Start at the requested value: it can be an array/scalar, and {} is distinct from a missing path.
+            for (const auto& key : _root_path) {
+                if (!vs.isObject()) {
+                    vs = vpack::Slice::noneSlice();
+                    break;
+                }
+                vs = vs.get(vpack::StringRef(key.data(), key.size()));
+            }
+            if (obj->is_invalid() || (!_root_path.empty() && vs.isNone())) {
                 vpack::Builder builder;
                 builder.add(vpack::Value(vpack::ValueType::Object));
-                _merge_json(_src_root.get(), &builder, i);
+                _merge_json(root, &builder, i);
                 builder.close();
                 auto slice = builder.slice();
                 json_result.append(JsonValue(slice));
                 null_result.append(slice.isEmptyObject());
             } else if (!vs.isObject()) {
-                for (int k = 0; k < _src_paths.size(); k++) {
-                    // check child column should be null
-                    DCHECK(_src_columns[k]->is_null(i));
+                if (_root_path.empty()) {
+                    for (int k = 0; k < _src_paths.size(); k++) {
+                        DCHECK(_src_columns[k]->is_null(i));
+                    }
                 }
                 json_result.append(JsonValue(vs));
-                null_result.append(vs.isEmptyObject());
+                null_result.append(0);
             } else {
                 vpack::Builder builder;
                 builder.add(vpack::Value(vpack::ValueType::Object));
-                _merge_json_with_remain<IN_TREE>(_src_root.get(), &vs, &builder, i);
+                _merge_json_with_remain<true>(root, &vs, &builder, i);
                 builder.close();
                 auto slice = builder.slice();
                 json_result.append(JsonValue(slice));
-                null_result.append(slice.isEmptyObject());
+                null_result.append(slice.isEmptyObject() && _root_path.empty());
             }
         }
     } else {
         for (size_t i = 0; i < rows; i++) {
             vpack::Builder builder;
             builder.add(vpack::Value(vpack::ValueType::Object));
-            _merge_json(_src_root.get(), &builder, i);
+            _merge_json(root, &builder, i);
             builder.close();
             auto json = builder.slice();
             json_result.append(JsonValue(json));

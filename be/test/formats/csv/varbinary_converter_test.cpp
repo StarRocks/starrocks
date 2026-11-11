@@ -65,11 +65,7 @@ TEST_F(VarBinaryConverterTest, test_read_varbinary_fallback) {
     EXPECT_TRUE(conv->read_string(col.get(), " ZWZnaGlq.", Converter::Options()));
     EXPECT_TRUE(conv->read_string(col.get(), " ZWZnaGlqX2s= ?", Converter::Options()));
 
-    EXPECT_EQ(4, col->size());
-    EXPECT_EQ(Slice("YWJjZA==."), col->get(0).get_slice());
-    EXPECT_EQ(Slice("YQ== !"), col->get(1).get_slice());
-    EXPECT_EQ(Slice(" ZWZnaGlq."), col->get(2).get_slice());
-    EXPECT_EQ(Slice(" ZWZnaGlqX2s= ?"), col->get(3).get_slice());
+    EXPECT_EQ("['YWJjZA==.', 'YQ== !', ' ZWZnaGlq.', ' ZWZnaGlqX2s= ?']", col->debug_string());
 }
 
 // NOLINTNEXTLINE

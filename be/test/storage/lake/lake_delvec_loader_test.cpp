@@ -49,8 +49,8 @@ public:
         _location_provider = std::make_shared<FixedLocationProvider>(kTestDir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager =
-                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1638400000);
+        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(),
+                                                                1638400000, 1638400000);
     }
 
     void TearDown() override { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
@@ -266,7 +266,7 @@ TEST_F(LakeDelvecLoaderTest, test_load_from_file_with_cached_metadata) {
     ASSIGN_OR_ABORT(auto cached_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
     auto meta_path = _tablet_manager->tablet_metadata_location(tablet_id, version);
     ASSERT_TRUE(FileSystem::Default()->delete_file(meta_path).ok());
-    _tablet_manager->metacache()->erase(meta_path);
+    _tablet_manager->metacache()->erase(MetacacheKey::TEST_from_string(meta_path));
 
     DelVectorPtr pdelvec;
     TabletSegmentId tsid(tablet_id, segment_id);
@@ -504,7 +504,6 @@ TEST_F(LakeDelvecLoaderTest, test_refresh_mem_limits) {
     PrimaryKeyManager manager(_location_provider, &primary_key_tracker);
     ASSERT_EQ(1000, manager.index_cache().capacity());
     ASSERT_EQ(300, manager.update_state_mem_tracker()->limit());
-    ASSERT_EQ(300, manager.compaction_state_mem_tracker()->limit());
     ASSERT_EQ(100, manager.block_cache()->cache()->get_capacity());
 
     config::lake_pk_preload_memory_limit_percent = 50;
@@ -512,14 +511,12 @@ TEST_F(LakeDelvecLoaderTest, test_refresh_mem_limits) {
     manager.refresh_mem_limits();
     ASSERT_EQ(2000, manager.index_cache().capacity());
     ASSERT_EQ(1000, manager.update_state_mem_tracker()->limit());
-    ASSERT_EQ(1000, manager.compaction_state_mem_tracker()->limit());
     ASSERT_EQ(200, manager.block_cache()->cache()->get_capacity());
 
     // out-of-range values are clamped to [0, 100]
     config::lake_pk_preload_memory_limit_percent = 200;
     manager.refresh_mem_limits();
     ASSERT_EQ(2000, manager.update_state_mem_tracker()->limit());
-    ASSERT_EQ(2000, manager.compaction_state_mem_tracker()->limit());
 }
 
 TEST_F(LakeDelvecLoaderTest, test_refresh_preload_mem_limit) {
@@ -527,22 +524,18 @@ TEST_F(LakeDelvecLoaderTest, test_refresh_preload_mem_limit) {
     MemTracker primary_key_tracker(1000, "primary_key");
     PrimaryKeyManager manager(_location_provider, &primary_key_tracker);
     ASSERT_EQ(300, manager.update_state_mem_tracker()->limit());
-    ASSERT_EQ(300, manager.compaction_state_mem_tracker()->limit());
 
     config::lake_pk_preload_memory_limit_percent = 50;
     manager.refresh_preload_mem_limit();
     ASSERT_EQ(500, manager.update_state_mem_tracker()->limit());
-    ASSERT_EQ(500, manager.compaction_state_mem_tracker()->limit());
 
     // out-of-range values are clamped to [0, 100]
     config::lake_pk_preload_memory_limit_percent = 200;
     manager.refresh_preload_mem_limit();
     ASSERT_EQ(1000, manager.update_state_mem_tracker()->limit());
-    ASSERT_EQ(1000, manager.compaction_state_mem_tracker()->limit());
     config::lake_pk_preload_memory_limit_percent = -1;
     manager.refresh_preload_mem_limit();
     ASSERT_EQ(0, manager.update_state_mem_tracker()->limit());
-    ASSERT_EQ(0, manager.compaction_state_mem_tracker()->limit());
 }
 
 TEST_F(LakeDelvecLoaderTest, test_refresh_block_cache_mem_limit) {
