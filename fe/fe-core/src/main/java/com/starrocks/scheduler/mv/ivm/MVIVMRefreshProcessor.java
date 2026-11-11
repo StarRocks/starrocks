@@ -643,17 +643,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
 
             try (Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
                 ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
-                boolean previousBypassAuthorizerCheck = ctx.isBypassAuthorizerCheck();
-                try {
-                    // Match PCT by skipping authorization for the trusted refresh INSERT. External column authorization
-                    // launches an auxiliary optimizer before InsertPlanner has bound the IVM aggregate state columns
-                    // required by the rewrite.
-                    ctx.setBypassAuthorizerCheck(true);
-                    ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
-                    mvContext.setExecPlan(execPlan);
-                } finally {
-                    ctx.setBypassAuthorizerCheck(previousBypassAuthorizerCheck);
-                }
+                ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
+                mvContext.setExecPlan(execPlan);
             }
             return insertStmt;
         } finally {
