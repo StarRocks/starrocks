@@ -20,15 +20,19 @@
 #include <signal.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <optional>
 #include <string>
+#include <thread>
 #include <unordered_map>
+#include <vector>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "common/config_path_fwd.h"
 #include "common/config_udf_fwd.h"
 #include "exprs/udf/python/callstub.h"
@@ -303,6 +307,140 @@ TEST_F(PyWorkerManagerEnvTest, remote_worker_has_no_process_lifecycle) {
     worker.reset(); // destructor must not touch any process or socket
 
     ASSERT_TRUE(std::filesystem::exists(sentinel)) << "a remote worker must never unlink a socket file";
+}
+
+// A pooled worker idle past python_worker_expire_time_sec is reclaimed, but not while a call stub is
+// still connected to it: a query that keeps calling the UDF for longer than the expire time would
+// otherwise lose its worker mid-query and fail with "Socket closed".
+TEST_F(PyWorkerManagerEnvTest, worker_in_use_is_not_expired) {
+    create_fake_python_env();
+    auto saved_expire_time_sec = config::python_worker_expire_time_sec;
+    // Every unused worker counts as expired.
+    config::python_worker_expire_time_sec = -1;
+    auto& manager = PyWorkerManager::getInstance();
+    constexpr int32_t driver_id = 0x7fff0001;
+    DeferOp restore([&]() {
+        config::python_worker_expire_time_sec = saved_expire_time_sec;
+        std::lock_guard guard(manager._mutex);
+        manager._processes.erase(driver_id);
+    });
+    auto pooled = [&]() {
+        std::lock_guard guard(manager._mutex);
+        return manager._processes[driver_id].size();
+    };
+
+    std::string url;
+    ASSIGN_OR_ABORT(auto worker, manager._acquire_worker(driver_id, /*reusable=*/1, &url));
+    ASSERT_EQ(1, worker->num_clients());
+    manager.cleanup_expired_worker();
+    ASSERT_EQ(1, pooled());
+    ASSERT_FALSE(worker->is_dead());
+
+    worker->remove_client();
+    manager.cleanup_expired_worker();
+    ASSERT_EQ(0, pooled());
+}
+
+// A driver's stubs are spread over up to python_worker_max_per_driver workers, each going to the
+// worker with the fewest stubs, so that concurrent calls of one driver run in different processes.
+TEST_F(PyWorkerManagerEnvTest, stubs_go_to_the_least_used_worker) {
+    create_fake_python_env();
+    auto saved_max_per_driver = config::python_worker_max_per_driver;
+    config::python_worker_max_per_driver = 3;
+    auto& manager = PyWorkerManager::getInstance();
+    constexpr int32_t driver_id = 0x7fff0002;
+    std::vector<std::shared_ptr<PyWorker>> held;
+    DeferOp restore([&]() {
+        config::python_worker_max_per_driver = saved_max_per_driver;
+        held.clear();
+        std::lock_guard guard(manager._mutex);
+        manager._processes.erase(driver_id);
+        manager._num_starting.erase(driver_id);
+    });
+    auto acquire = [&]() -> std::shared_ptr<PyWorker> {
+        std::string url;
+        auto worker = manager._acquire_worker(driver_id, /*reusable=*/1, &url);
+        EXPECT_OK(worker.status());
+        return worker.ok() ? worker.value() : nullptr;
+    };
+    auto pooled = [&]() {
+        std::lock_guard guard(manager._mutex);
+        return manager._processes[driver_id];
+    };
+
+    // Each of the first three stubs gets a worker of its own.
+    for (int i = 0; i < 3; ++i) {
+        held.push_back(acquire());
+    }
+    auto workers = pooled();
+    ASSERT_EQ(3, workers.size());
+    for (const auto& worker : workers) {
+        ASSERT_EQ(1, worker->num_clients());
+    }
+    // At the limit, further stubs are spread evenly instead of starting more workers.
+    for (int i = 0; i < 3; ++i) {
+        held.push_back(acquire());
+    }
+    ASSERT_EQ(3, pooled().size());
+    for (const auto& worker : workers) {
+        ASSERT_EQ(2, worker->num_clients());
+    }
+
+    // A worker whose stubs are all gone is the next one used.
+    workers[1]->remove_client();
+    workers[1]->remove_client();
+    ASSERT_EQ(workers[1], acquire());
+
+    // A dead worker is dropped from the pool, and a new worker takes its place.
+    workers[0]->mark_dead();
+    auto replacement = acquire();
+    ASSERT_NE(workers[0], replacement);
+    ASSERT_EQ(1, replacement->num_clients());
+    auto now_pooled = pooled();
+    ASSERT_EQ(3, now_pooled.size());
+    ASSERT_EQ(now_pooled.end(), std::find(now_pooled.begin(), now_pooled.end(), workers[0]));
+}
+
+// Workers being started count against the limit, so concurrent acquires do not exceed it.
+TEST_F(PyWorkerManagerEnvTest, concurrent_acquires_respect_the_worker_limit) {
+    create_fake_python_env();
+    auto saved_max_per_driver = config::python_worker_max_per_driver;
+    config::python_worker_max_per_driver = 3;
+    auto& manager = PyWorkerManager::getInstance();
+    constexpr int32_t driver_id = 0x7fff0003;
+    std::vector<std::shared_ptr<PyWorker>> held(8);
+    DeferOp restore([&]() {
+        config::python_worker_max_per_driver = saved_max_per_driver;
+        held.clear();
+        std::lock_guard guard(manager._mutex);
+        manager._processes.erase(driver_id);
+        manager._num_starting.erase(driver_id);
+    });
+
+    std::vector<std::thread> threads;
+    for (size_t i = 0; i < held.size(); ++i) {
+        threads.emplace_back([&, i]() {
+            std::string url;
+            auto worker = manager._acquire_worker(driver_id, /*reusable=*/1, &url);
+            if (worker.ok()) {
+                held[i] = worker.value();
+            }
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    std::lock_guard guard(manager._mutex);
+    const auto& workers = manager._processes[driver_id];
+    ASSERT_GE(workers.size(), 1);
+    ASSERT_LE(workers.size(), 3);
+    ASSERT_EQ(0, manager._num_starting[driver_id]);
+    int total_clients = 0;
+    for (const auto& worker : workers) {
+        total_clients += worker->num_clients();
+    }
+    ASSERT_EQ(static_cast<int>(held.size()), total_clients);
 }
 
 // The Flight descriptor must carry the zip checksum (so an external worker can verify a package it

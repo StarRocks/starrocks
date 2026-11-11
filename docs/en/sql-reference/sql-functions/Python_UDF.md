@@ -25,6 +25,8 @@ Make sure the following requirements are met before proceeding:
 - Python UDF requires the following packages: pyarrow
 - Set the location of the Python interpreter environment in the BE instance using environment variable. Add the variable item `python_envs` and set it to the location of the Python interpreter installation, for example, `/opt/Python-3.8/`.
 
+Optionally, set the BE configuration item `python_worker_max_per_driver` (default: `3`) to change how many local Python worker processes one pipeline driver uses. Each worker runs Python separately, so a larger value lets more UDF calls of a driver run in parallel, for example when the UDF is evaluated in a scan, at the cost of more worker processes. You can change it without restarting the BE.
+
 ## Develop and use Python UDFs
 
 Syntax:

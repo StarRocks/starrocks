@@ -18,6 +18,7 @@
 #include <sys/types.h>
 
 #include <atomic>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -56,6 +57,18 @@ public:
     virtual void terminate_and_wait() {}
     virtual void touch() {}
     virtual bool expired() { return false; }
+
+    // A worker is in use while a call stub is connected to it, and an idle worker that is in use
+    // must not be expired. The idle time counts from when the last stub disconnects.
+    void add_client() { _num_clients.fetch_add(1); }
+    void remove_client() {
+        touch();
+        _num_clients.fetch_sub(1);
+    }
+    int num_clients() const { return _num_clients.load(); }
+
+private:
+    std::atomic<int> _num_clients{0};
 };
 
 // A local Python worker process: PyWorkerManager spawns it, owns its Unix socket, pools it, and
@@ -87,6 +100,7 @@ public:
     void set_url(std::string url) { _url = std::move(url); }
 
     void touch() override { _last_touch_time = MonotonicSeconds(); }
+    // Unused and idle for longer than python_worker_expire_time_sec.
     bool expired() override;
 
     void mark_dead() override { _is_dead = true; }
@@ -99,7 +113,7 @@ private:
     std::string _sock_path;
     pid_t _pid = -1;
     bool _own_pgroup = false;
-    int64_t _last_touch_time = 0;
+    std::atomic<int64_t> _last_touch_time{0};
 };
 
 // A connection to an external, user-run Arrow Flight worker service (the CREATE FUNCTION
@@ -172,9 +186,12 @@ private:
     Status _fork_py_worker(std::unique_ptr<LocalPyWorker>* child_process);
     StatusOr<std::shared_ptr<PyWorker>> _acquire_worker(int32_t driver_id, size_t reusable, std::string* url);
 
-    const size_t max_worker_per_driver = 2;
     std::mutex _mutex;
     std::unordered_map<int32_t, std::vector<std::shared_ptr<PyWorker>>> _processes;
+    // Workers being started per driver, counted against python_worker_max_per_driver so that
+    // concurrent acquires do not start more than the limit.
+    std::unordered_map<int32_t, int32_t> _num_starting;
+    std::condition_variable _worker_started;
 };
 
 // TODO: support config PYTHONPATH
