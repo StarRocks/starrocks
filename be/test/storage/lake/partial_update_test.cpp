@@ -26,7 +26,15 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+<<<<<<< HEAD
 #include "common/config.h"
+=======
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_storage_fwd.h"
+>>>>>>> 586f031 ([Enhancement] Read base rows through the page cache when a PK publish fetches column values (#82863))
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/key_cache.h"
@@ -807,8 +815,9 @@ TEST_P(LakePartialUpdateTest, test_dcg_not_found_and_fallback_to_segment) {
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 == c0 * 7) && (c2 == c0 * 4); }));
 }
 
-// A row mode publish that reads a column out of a `.cols` file opens that file again every time. Its footer read
-// has to fill the local data cache, like the column reads that follow.
+// A row mode publish reads the rows it replaces from the base segment and from its `.cols` file, and opens both
+// again every time. Their footer reads have to fill the local data cache, and the column reads go through the
+// page cache.
 TEST_P(LakePartialUpdateTest, test_dcg_segment_open_fills_data_cache_on_publish) {
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
@@ -860,13 +869,30 @@ TEST_P(LakePartialUpdateTest, test_dcg_segment_open_fills_data_cache_on_publish)
     c0_c2_slots.emplace_back(2, "c2", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> c0_c2_slot_pointers{&c0_c2_slots[0], &c0_c2_slots[1]};
 
+    // The base segment holding the rows this update replaces.
+    ASSIGN_OR_ABORT(auto base_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_GT(base_metadata->rowsets_size(), 0);
+    ASSERT_GT(base_metadata->rowsets(0).segment_metas_size(), 0);
+    const std::string base_segment_name = base_metadata->rowsets(0).segment_metas(0).filename();
+
     std::vector<bool> cols_skip_fill;
+    std::vector<bool> base_skip_fill;
+    std::vector<bool> iter_use_page_cache;
     auto* sync = SyncPoint::GetInstance();
     sync->SetCallBack("Segment::_open:footer_file_options", [&](void* arg) {
         auto* path_and_opts = static_cast<std::pair<const std::string*, const RandomAccessFileOptions*>*>(arg);
         if (path_and_opts->first->ends_with(".cols")) {
             cols_skip_fill.push_back(path_and_opts->second->skip_fill_local_cache);
+        } else if (path_and_opts->first->ends_with(base_segment_name)) {
+            base_skip_fill.push_back(path_and_opts->second->skip_fill_local_cache);
         }
+    });
+    // Take the static open, so the base segment footer is read by this publish even if an earlier step
+    // left the segment in the metacache.
+    sync->SetCallBack("UpdateManager::get_column_values:fill_meta_cache",
+                      [](void* arg) { *static_cast<bool*>(arg) = false; });
+    sync->SetCallBack("UpdateManager::get_column_values:iter_opts", [&](void* arg) {
+        iter_use_page_cache.push_back(static_cast<ColumnIteratorOptions*>(arg)->use_page_cache);
     });
     sync->EnableProcessing();
     DeferOp cleanup([&] {
@@ -876,9 +902,18 @@ TEST_P(LakePartialUpdateTest, test_dcg_segment_open_fills_data_cache_on_publish)
     ASSERT_NO_FATAL_FAILURE(write_and_publish(c0_c2_chunk, &c0_c2_slot_pointers, PartialUpdateMode::ROW_MODE));
     sync->DisableProcessing();
 
+    // The footer reads of both the `.cols` file and the base segment fill the local data cache.
     ASSERT_FALSE(cols_skip_fill.empty());
     for (bool skip_fill : cols_skip_fill) {
         EXPECT_FALSE(skip_fill);
+    }
+    // Other steps of the publish (rebuilding the primary key index, for one) may open the base segment with
+    // their own options, so only require that the open made by get_column_values fills the cache.
+    EXPECT_TRUE(std::any_of(base_skip_fill.begin(), base_skip_fill.end(), [](bool skip_fill) { return !skip_fill; }));
+    // The column reads of the publish go through the page cache.
+    ASSERT_FALSE(iter_use_page_cache.empty());
+    for (bool use_page_cache : iter_use_page_cache) {
+        EXPECT_EQ(!config::disable_storage_page_cache, use_page_cache);
     }
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c1 == c0 * 7 && c2 == c0 * 5; }));
 }

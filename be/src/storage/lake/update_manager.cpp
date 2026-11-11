@@ -14,6 +14,25 @@
 
 #include "storage/lake/update_manager.h"
 
+<<<<<<< HEAD:be/src/storage/lake/update_manager.cpp
+=======
+#include <algorithm>
+
+#include "base/container/lru_cache.h"
+#include "base/debug/trace.h"
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "base/utility/pretty_printer.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "fs/fs_factory.h"
+>>>>>>> 586f031 ([Enhancement] Read base rows through the page cache when a PK publish fetches column values (#82863)):be/src/storage/lake/primary_key_manager.cpp
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/current_thread.h"
@@ -1884,7 +1903,49 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         if (segment_info.bundle_file_offset.has_value()) {
             file_info.bundle_file_offset = segment_info.bundle_file_offset;
         }
+<<<<<<< HEAD:be/src/storage/lake/update_manager.cpp
         auto segment = Segment::open(fs, file_info, segment_id, tablet_schema);
+=======
+        file_info.fs = fs;
+        StatusOr<SegmentPtr> segment;
+        auto* tablet_mgr = params.tablet->tablet_mgr();
+        bool use_segment_cache = allow_segment_cache && tablet_mgr != nullptr && use_segment_cache_for_schema;
+        if (use_segment_cache) {
+            // Take the cache path only while this publish's own base segments can fit in it. A publish
+            // reads every base segment holding a row it updates, so once that set exceeds the cache
+            // there is nothing to gain: entries are evicted as fast as they are filled, the hit rate
+            // stays at zero, and the delete vectors and schemas sharing the cache get flushed out
+            // with it. Going through TabletManager::load_segment anyway would also be strictly more
+            // expensive than the static open, because it hands the Segment a TabletManager and every
+            // column index load then calls update_cache_size(), which walks all of the segment's
+            // column readers and takes a cache lock. The static open leaves that pointer null and
+            // skips the whole accounting path.
+            //
+            // Comparing the cache's own usage against its capacity does NOT work as a signal -- an LRU
+            // evicts to stay under capacity, so it reports room even while it thrashes.
+            const size_t cache_capacity = tablet_mgr->metacache()->segment_metadata_capacity();
+            const size_t shard_capacity = cache_capacity / kNumShards + (cache_capacity % kNumShards != 0);
+            // Even a single segment can fit the aggregate capacity yet exceed its shard's budget.
+            // Such an entry evicts itself as its charge grows and cannot be reused by later publishes.
+            use_segment_cache = estimated_segment_bytes > 0 && estimated_segment_bytes <= shard_capacity &&
+                                publish_segment_count <= cache_capacity / estimated_segment_bytes;
+        }
+        TEST_SYNC_POINT_CALLBACK("UpdateManager::get_column_values:fill_meta_cache", &use_segment_cache);
+        // The column reads below go through the page cache, so a later publish can be served from memory
+        // without touching the file. Nothing would then bring the footer block back into the local data
+        // cache once it is evicted, so the footer read has to fill the data cache itself.
+        const LakeIOOptions segment_io_opts{.fill_data_cache = true};
+        if (use_segment_cache) {
+            // Reuse the metacache entry instead of re-parsing the footer and rebuilding a column
+            // reader per schema column on every publish. Segment::open() is `_open_once` guarded, so
+            // a cached entry turns the open into a no-op.
+            segment = tablet_mgr->load_segment(file_info, segment_id_in_rowset, segment_io_opts,
+                                               /*fill_meta_cache=*/true, tablet_schema);
+        } else {
+            segment = Segment::open(fs, file_info, segment_id_in_rowset, tablet_schema, nullptr, nullptr,
+                                    segment_io_opts);
+        }
+>>>>>>> 586f031 ([Enhancement] Read base rows through the page cache when a PK publish fetches column values (#82863)):be/src/storage/lake/primary_key_manager.cpp
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open rssid: " << segment_id << " path: " << file_info.path << " : "
                          << segment.status();
@@ -1902,8 +1963,12 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
+        // Publishes of a tablet keep reading the same base rows, from the base segment and from its `.cols`
+        // files alike, so keep their pages in the page cache as a scan does.
+        iter_opts.use_page_cache = !config::disable_storage_page_cache;
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file_with_bundling(opts, file_info));
         iter_opts.read_file = read_file.get();
+        TEST_SYNC_POINT_CALLBACK("UpdateManager::get_column_values:iter_opts", &iter_opts);
 
         GetDeltaColumnContext* dcg_ctx = nullptr;
         if (has_any_dcg && dcg_contexts.count(segment_id) > 0 && !dcg_contexts[segment_id].dcgs.empty()) {
