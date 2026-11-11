@@ -84,11 +84,17 @@ a correctness requirement, not a preference.
 <sub>Source: [`diagrams/02-write-flow.puml`](diagrams/02-write-flow.puml) — regenerate per [README](README.md).</sub>
 
 1. **FE decides, from the declaration.** `IcebergEncryption.writeSignalOrNull` treats a table as
-   encrypted iff it declares `encryption.key-id`, and all three write sinks call it:
-   `IcebergTableSink` (INSERT), `IcebergDeleteSink` (DELETE) and `IcebergRowDeltaSink`
-   (UPDATE / MERGE). It reads the property rather than the manager's type deliberately — the commit
-   path reads the same property, and deciding it two different ways would let the BE encrypt a file
-   whose commit records no key, leaving data that nothing can decrypt.
+   encrypted iff it declares `encryption.key-id`, and `IcebergTableSink` (INSERT, INSERT OVERWRITE)
+   calls it. It reads the property rather than the manager's type deliberately — the commit path
+   reads the same property, and deciding it two different ways would let the BE encrypt a file whose
+   commit records no key, leaving data that nothing can decrypt.
+
+   DELETE, UPDATE and MERGE write no encrypted files. Iceberg allows encryption only from format
+   version 3, and v3 accepts position deletes only as deletion vectors, which StarRocks does not
+   write. UPDATE and MERGE are refused on any table that is not v2; a DELETE that would write
+   Parquet position deletes is refused at planning on v3+; and the BE refuses an encryption signal
+   on a position-delete sink. A DELETE that removes whole partitions or data files writes no delete
+   file and works.
 2. **FE → BE, signal only.** `TIcebergTableSink.parquet_encryption_info` carries the **algorithm and
    DEK length — no key material**. The algorithm is always `AES_GCM_V1`: Iceberg exposes no cipher
    table property, and GCM is the only PME mode that authenticates page *data*.
@@ -214,6 +220,9 @@ this work did collide with them.
 | Read | `iceberg_delete_builder_test.cpp` — encrypted position-delete round trip, plus a negative case asserting a read **without** the key fails |
 | Commit | `IcebergMetadataTest` — a data key shorter than the table's policy is refused at commit |
 | Planning | `InsertPlanTest` — the plaintext-manager fixtures, so an unencrypted table stays unencrypted |
+| Planning | `DeletePlanTest` — a row-level DELETE on a real format-version-3 table is refused, and a metadata DELETE on one still plans |
+| End to end | SQL-Tester `test_iceberg_encryption_hive_catalog` — INSERT then SELECT on an encrypted table in a Hive catalog, with a check that the data files on storage cannot be read through `files()` without the key; uses `StaticKeyManagementClient`, a test-only KMS whose master key is in the catalog properties |
+| End to end | SQL-Tester `test_iceberg_encryption_unsupported_catalog` — on a Hadoop catalog, a table that declares `encryption.key-id` is refused on INSERT and SELECT |
 
 The negative assertions matter more than the positive ones: they are what prove the path fails closed
 instead of quietly returning ciphertext, an empty result, or a weaker key than the table asked for.
@@ -260,6 +269,10 @@ symbols entirely.
 - At commit, the key BE returns is checked against that length. A file encrypted below the table's
   declared strength is refused rather than recorded — nothing downstream re-checks it, since the key
   goes straight into `key_metadata`.
+- DELETE, UPDATE and MERGE that would write Parquet position deletes never reach an encrypted table:
+  it is format version 3, which takes position deletes only as deletion vectors. A position-delete
+  file reaching the commit of an encrypted table is refused, and the BE refuses an encryption
+  signal on a position-delete sink.
 
 ## 12. Known gaps
 
@@ -274,13 +287,12 @@ symbols entirely.
    check lives on the cache-miss path. The DEK now reaches the decryptor from the scan range on
    every scan (`ColumnReaderOptions::parquet_encryption_info`), which makes that refusal
    unconditional. Wiping the remaining short-lived copies is the outstanding part.
-2. **Equality-delete files are not written encrypted.** StarRocks does write delete files —
-   `DELETE` plans through `IcebergDeleteSink`, `UPDATE`/`MERGE` through `IcebergRowDeltaSink` — and
-   position deletes are covered: all three sinks derive their write signal from
-   `IcebergEncryption.writeSignalOrNull`, the BE applies it to both delete contexts, and the per-file
-   key is returned at commit and recorded via the shared `encryptionKeyMetadata` helper. StarRocks does
-   not currently emit equality deletes, but if it does, the same treatment is required — an unencrypted
-   equality delete would leak the literal column values the table encryption exists to protect.
+2. **No row-level DELETE, UPDATE or MERGE on an encrypted table.** An encrypted table is format
+   version 3, where Iceberg takes position deletes only as deletion vectors, and StarRocks writes
+   Parquet position deletes. These statements are refused rather than encrypted (§5). Supporting
+   them means writing deletion vectors, encrypted with their own per-file key like any other file.
+   StarRocks does not emit equality deletes either; the commit refuses one, which on an encrypted
+   table would also leak the literal column values the encryption exists to protect.
 3. **ORC delete files cannot be decrypted.** PME is Parquet-only, and no equivalent for ORC is wired
    up here. Iceberg's Standard encryption is format-agnostic at the `AesGcmInputFile`/`Ciphers`
    layer, so this is an implementation gap rather than a spec one — an encrypted ORC delete file
@@ -288,7 +300,8 @@ symbols entirely.
 4. **REST catalogs get no encryption, and upstream fails silently at it** — an upstream gap, not one
    this change can close. StarRocks refuses such a table rather than inheriting the silence; what
    cannot be fixed here is making encryption *work* on those catalogs. Iceberg 1.11.0 wires the
-   client side for Hive only:
+   client side for Hive only, and 1.12.0 is unchanged (Hadoop, JDBC, Glue and Nessie have no encryption
+   wiring either):
    - `RESTTableOperations` never overrides `encryption()`, so `table.encryption()` returns
      `PlaintextEncryptionManager`
    - `EncryptionUtil.createEncryptionManager` and `createKmsClient` have exactly one caller each,
@@ -311,3 +324,10 @@ symbols entirely.
    the table's declaration against the manager `table.encryption()` returned, so today a REST-catalog
    table declaring `encryption.key-id` is refused on both paths; once such a catalog supplies a real
    manager the refusal stops and the declaration alone drives encryption. Only the dependency moves.
+5. **Spilled rows are not encrypted.** Under memory pressure the connector sink spills buffered rows to
+   BE spill storage (`enable_connector_sink_spill`, on by default) before the encrypting Parquet writer
+   sees them, and they are written there in plaintext. This is not specific to the sink: every StarRocks
+   spill is plaintext, including a join or aggregation over an encrypted table on the read side, and
+   Spark behaves the same. Iceberg table encryption protects data at rest in the table's storage; BE
+   spill storage is outside that boundary, so deployments that need it covered must protect it at the
+   disk or volume level.

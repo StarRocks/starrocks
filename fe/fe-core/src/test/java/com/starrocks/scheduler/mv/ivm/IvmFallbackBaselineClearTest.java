@@ -16,7 +16,6 @@ package com.starrocks.scheduler.mv.ivm;
 
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -24,7 +23,6 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskRun;
@@ -32,7 +30,6 @@ import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
-import com.starrocks.scheduler.mv.hybrid.MVHybridRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshPlanBuilder;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
@@ -45,7 +42,6 @@ import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -58,176 +54,129 @@ import java.util.concurrent.TimeUnit;
  * A PCT refresh of an incrementally maintained MV must drop the IVM baseline before it writes: an incremental run
  * from a baseline the data has moved past applies the same changes twice.
  */
-public class IvmFallbackBaselineClearTest extends IvmCloudNativeRefreshTestBase {
-    private static final String DB = "db_ivm_fallback_baseline_clear";
-
-    @BeforeAll
-    public static void beforeClass() throws Exception {
-        setUpSharedDataCluster(DB);
-    }
+public class IvmFallbackBaselineClearTest extends IvmIcebergRefreshJobTestBase {
 
     @Test
     public void testFallbackClearsTheBaselineBeforeItWrites() throws Exception {
-        OlapTable fact = createFact("fact_clear_before_write");
-        loadEveryPartition(fact);
-        MaterializedView mv = createMv("mv_clear_before_write", fact, "AUTO");
+        loadFact();
+        MaterializedView mv = createFactMv("mv_clear_before_write", "auto");
         List<ChangeMaterializedViewRefreshSchemeLog> journal = captureRefreshSchemeJournal();
         List<Boolean> baselineEmptyAtWrite = new ArrayList<>();
         List<Boolean> clearJournaledAtWrite = new ArrayList<>();
-        mockLakeDml(insert -> {
+        onWrite = () -> {
             baselineEmptyAtWrite.add(tvrBaseline(mv).isEmpty());
             clearJournaledAtWrite.add(journal.stream().anyMatch(log -> tvrBaselineIn(log).isEmpty()));
-        });
-        runJob(mv, fact);
+        };
+        runJob(mv);
         Assertions.assertFalse(tvrBaseline(mv).isEmpty(), "the bootstrap must leave a baseline");
 
-        loadEveryPartition(fact);
+        loadFact();
         failIncrementalPlanning();
         journal.clear();
         baselineEmptyAtWrite.clear();
         clearJournaledAtWrite.clear();
         TaskRun batch = runFirstBatch(mv);
         Assertions.assertTrue(runsAsPct(batch), "the job must run as pct");
-        long frozenBookmarkId = frozenBookmarkId(mv);
+        long frozenSnapshotId = frozenSnapshotId(mv, FACT);
         Assertions.assertEquals(List.of(true), clearJournaledAtWrite,
                 "the dropped baseline must be in the journal before the first write, or a restart brings it back");
 
-        for (batch = nextOf(batch); batch != null; batch = nextOf(batch)) {
-            executeBatch(batch);
-        }
+        runRemainingBatches(batch);
+        Assertions.assertEquals(FACT_PARTITIONS.size(), baselineEmptyAtWrite.size());
         Assertions.assertFalse(baselineEmptyAtWrite.contains(false), "no batch may write while a baseline is set");
-        Assertions.assertEquals(frozenBookmarkId, bookmarkIdOf(tvrBaseline(mv), fact),
+        Assertions.assertEquals(frozenSnapshotId, baselineSnapshotId(mv, FACT),
                 "the last batch must promote the frozen snapshot");
     }
 
     @Test
     public void testFallbackKeepsTheBaselineOfATableItDoesNotMove() throws Exception {
-        OlapTable fact = createFact("fact_unmoved_dim");
-        OlapTable dim = createDim("dim_unmoved_dim");
-        loadEveryPartition(fact);
-        loadPartition(dim, dim.getName());
-        MaterializedView mv = createJoinMv("mv_unmoved_dim", fact, dim, "AUTO");
-        mockLakeDml();
-        runJob(mv, fact);
-        long dimBaselineId = bookmarkIdOf(tvrBaseline(mv), dim);
+        loadFact();
+        loadDim();
+        MaterializedView mv = createJoinMv("mv_unmoved_dim", "auto");
+        runJob(mv);
+        long dimBaseline = baselineSnapshotId(mv, DIM);
 
-        loadEveryPartition(fact);
+        loadFact();
         failIncrementalPlanningOnce();
         TaskRun batch = runFirstBatch(mv);
         Assertions.assertTrue(runsAsPct(batch));
-        Assertions.assertTrue(tvrBaseline(mv).keySet().stream().noneMatch(table -> table.getTableId() == fact.getId()),
-                "the write reads the fact table past its baseline");
-        Assertions.assertEquals(dimBaselineId, bookmarkIdOf(tvrBaseline(mv), dim),
+        Assertions.assertFalse(hasBaseline(mv, FACT), "the write reads the fact table past its baseline");
+        Assertions.assertEquals(dimBaseline, baselineSnapshotId(mv, DIM),
                 "the write reads the dim table at its baseline, and nothing would set it again");
 
-        for (batch = nextOf(batch); batch != null; batch = nextOf(batch)) {
-            executeBatch(batch);
-        }
+        runRemainingBatches(batch);
         Assertions.assertFalse(runsAsPct(runFirstBatch(mv)), "with every baseline in place the next refresh is incremental");
     }
 
     @Test
     public void testInterruptedFallbackIsTakenOverByPct() throws Exception {
-        OlapTable fact = createFact("fact_interrupted_fallback");
-        loadEveryPartition(fact);
-        MaterializedView mv = createMv("mv_interrupted_fallback", fact, "AUTO");
-        mockLakeDml();
-        runJob(mv, fact);
+        loadFact();
+        MaterializedView mv = createFactMv("mv_interrupted_fallback", "auto");
+        runJob(mv);
 
-        loadEveryPartition(fact);
+        loadFact();
         failIncrementalPlanningOnce();
         TaskRun leftover = nextOf(runFirstBatch(mv));
         Assertions.assertNotNull(leftover, "partition_refresh_number=1 must split the job into batches");
 
         TaskRun takeover = runFirstBatch(mv);
         Assertions.assertTrue(runsAsPct(takeover), "a job that stopped after writing must be rebuilt, not resumed");
-        for (TaskRun batch = nextOf(takeover); batch != null; batch = nextOf(batch)) {
-            executeBatch(batch);
-        }
+        runRemainingBatches(takeover);
         Assertions.assertEquals(Constants.TaskRunState.SKIPPED, executeBatch(leftover),
                 "a batch of the interrupted job must leave the takeover's state alone");
-        assertRecordsMatchBaseline(mv, fact);
+        Assertions.assertEquals(currentSnapshotId(FACT), baselineSnapshotId(mv, FACT));
     }
 
     @Test
     public void testLeftoverBatchSkipsOnceTheTakeoverReleasedThePinningState() throws Exception {
-        OlapTable fact = createFact("fact_released_takeover");
-        loadEveryPartition(fact);
-        MaterializedView mv = createMv("mv_released_takeover", fact, "AUTO");
-        mockLakeDml();
-        runJob(mv, fact);
+        loadFact();
+        MaterializedView mv = createFactMv("mv_released_takeover", "auto");
+        runJob(mv);
 
-        loadEveryPartition(fact);
+        loadFact();
         failIncrementalPlanningOnce();
         TaskRun leftover = nextOf(runFirstBatch(mv));
         Assertions.assertNotNull(leftover);
-        TaskRun takeover = runFirstBatch(mv);
-        for (TaskRun batch = nextOf(takeover); batch != null; batch = nextOf(batch)) {
-            executeBatch(batch);
-        }
+        runRemainingBatches(runFirstBatch(mv));
         Assertions.assertNull(mv.getRefreshScheme().getAsyncRefreshContext().getTempTvrOwnerStartTaskRunId());
         Map<BaseTableInfo, TvrVersionRange> takeoverBaseline = new HashMap<>(tvrBaseline(mv));
 
-        loadEveryPartition(fact);
-        int writesBefore = SCANNED_VERSIONS.size();
+        loadFact();
+        int writesBefore = writes;
         Assertions.assertEquals(Constants.TaskRunState.SKIPPED, executeBatch(leftover),
                 "a batch of the job the takeover replaced must not run as an unpinned one");
-        Assertions.assertEquals(writesBefore, SCANNED_VERSIONS.size());
+        Assertions.assertEquals(writesBefore, writes);
         Assertions.assertEquals(takeoverBaseline, tvrBaseline(mv));
         Assertions.assertFalse(runsAsPct(runFirstBatch(mv)), "the takeover's baseline serves the next refresh");
     }
 
     @Test
     public void testFailedWriteBackIsTakenOverByPct() throws Exception {
-        OlapTable fact = createFact("fact_failed_write_back");
-        loadEveryPartition(fact);
-        MaterializedView mv = createMv("mv_failed_write_back", fact, "AUTO");
-        mockLakeDml();
-        runJob(mv, fact);
+        loadFact();
+        MaterializedView mv = createFactMv("mv_failed_write_back", "auto");
+        runJob(mv);
 
-        loadEveryPartition(fact);
+        loadFact();
         failIncrementalPlanningOnce();
         failPctMetaUpdateOnce();
-        int writesBefore = SCANNED_VERSIONS.size();
+        int writesBefore = writes;
         Assertions.assertThrows(DmlException.class, () -> runFirstBatch(mv));
-        Assertions.assertEquals(writesBefore + 1, SCANNED_VERSIONS.size(), "the batch must have written its data");
+        Assertions.assertEquals(writesBefore + 1, writes, "the batch must have written its data");
 
         TaskRun takeover = runFirstBatch(mv);
         Assertions.assertTrue(runsAsPct(takeover), "data written without its metadata must be rebuilt, not resumed");
-        for (TaskRun batch = nextOf(takeover); batch != null; batch = nextOf(batch)) {
-            executeBatch(batch);
-        }
-        assertRecordsMatchBaseline(mv, fact);
-    }
-
-    @Test
-    public void testExecutionRejectionClearsTheBaselineBeforeThePctWrite() throws Exception {
-        OlapTable fact = createFact("fact_execution_rejection");
-        loadEveryPartition(fact);
-        MaterializedView mv = createMv("mv_execution_rejection", fact, "AUTO");
-        List<Boolean> baselineEmptyAtWrite = new ArrayList<>();
-        mockLakeDml(insert -> baselineEmptyAtWrite.add(tvrBaseline(mv).isEmpty()));
-        runJob(mv, fact);
-
-        loadEveryPartition(fact);
-        rejectIncrementalExecutionOnce();
-        baselineEmptyAtWrite.clear();
-        TaskRun batch = runFirstBatch(mv);
-
-        Assertions.assertTrue(runsAsPct(batch), "the rejected run must fall back to pct");
-        Assertions.assertEquals(List.of(true), baselineEmptyAtWrite, "the pct write must find the baseline gone");
+        runRemainingBatches(takeover);
+        Assertions.assertEquals(currentSnapshotId(FACT), baselineSnapshotId(mv, FACT));
     }
 
     @Test
     public void testPlanningFailureKeepsTheBaseline() throws Exception {
-        OlapTable fact = createFact("fact_planning_failure");
-        loadEveryPartition(fact);
-        MaterializedView mv = createMv("mv_planning_failure", fact, "AUTO");
-        mockLakeDml();
-        runJob(mv, fact);
-        long baselineId = bookmarkIdOf(tvrBaseline(mv), fact);
+        loadFact();
+        MaterializedView mv = createFactMv("mv_planning_failure", "auto");
+        runJob(mv);
+        long baseline = baselineSnapshotId(mv, FACT);
 
-        loadEveryPartition(fact);
+        loadFact();
         failIncrementalPlanning();
         new MockUp<MVPCTRefreshPlanBuilder>() {
             @Mock
@@ -240,43 +189,38 @@ public class IvmFallbackBaselineClearTest extends IvmCloudNativeRefreshTestBase 
         DmlException failure = Assertions.assertThrows(DmlException.class, () -> runFirstBatch(mv));
         Assertions.assertTrue(failure.getMessage().contains("pct planning failed (simulated)"), failure.getMessage());
 
-        Assertions.assertEquals(baselineId, bookmarkIdOf(tvrBaseline(mv), fact),
+        Assertions.assertEquals(baseline, baselineSnapshotId(mv, FACT),
                 "a fallback that wrote nothing must leave the next run its incremental start");
     }
 
     @Test
-    public void testSkippedFallbackPromotesTheFrozenSnapshotWithoutClearing() throws Exception {
-        OlapTable fact = createFact("fact_skipped_fallback");
-        loadEveryPartition(fact);
-        MaterializedView mv = createMv("mv_skipped_fallback", fact, "AUTO");
-        mockLakeDml();
-        runJob(mv, fact);
+    public void testSkippedFallbackKeepsTheBaseline() throws Exception {
+        loadFact();
+        MaterializedView mv = createFactMv("mv_skipped_fallback", "auto");
+        runJob(mv);
+        long baseline = baselineSnapshotId(mv, FACT);
 
         failIncrementalPlanning();
         List<ChangeMaterializedViewRefreshSchemeLog> journal = captureRefreshSchemeJournal();
-        int writesBefore = SCANNED_VERSIONS.size();
-        runFirstBatch(mv);
+        int writesBefore = writes;
+        Assertions.assertTrue(runsAsPct(runFirstBatch(mv)));
 
-        Assertions.assertEquals(writesBefore, SCANNED_VERSIONS.size(), "nothing changed, so nothing is written");
+        Assertions.assertEquals(writesBefore, writes, "nothing changed, so nothing is written");
         Assertions.assertTrue(journal.stream().noneMatch(log -> tvrBaselineIn(log).isEmpty()),
                 "a fallback that writes nothing must not clear the baseline");
-        MaterializedView.AsyncRefreshContext context = mv.getRefreshScheme().getAsyncRefreshContext();
-        Assertions.assertFalse(context.getBaseTableInfoTvrVersionRangeMap().isEmpty());
-        Assertions.assertEquals(Map.of(), context.getTempBaseTableInfoTvrDeltaMap(),
-                "the skipped fallback must promote the snapshot it froze");
+        Assertions.assertEquals(baseline, baselineSnapshotId(mv, FACT));
     }
 
     @Test
     public void testRefreshWithoutABaselineJournalsNothingBeforeItWrites() throws Exception {
-        OlapTable fact = createFact("fact_no_baseline");
-        loadEveryPartition(fact);
+        loadFact();
         List<ChangeMaterializedViewRefreshSchemeLog> journal = captureRefreshSchemeJournal();
         int[] journalSizeAtBatchStart = {0};
         List<Integer> journaledInBatchBeforeWrite = new ArrayList<>();
-        mockLakeDml(insert -> journaledInBatchBeforeWrite.add(journal.size() - journalSizeAtBatchStart[0]));
+        onWrite = () -> journaledInBatchBeforeWrite.add(journal.size() - journalSizeAtBatchStart[0]);
 
-        for (String refreshMode : List.of("INCREMENTAL", "PCT")) {
-            MaterializedView mv = createMv("mv_no_baseline_" + refreshMode.toLowerCase(), fact, refreshMode);
+        for (String refreshMode : List.of("incremental", "pct")) {
+            MaterializedView mv = createFactMv("mv_no_baseline_" + refreshMode, refreshMode);
             journalSizeAtBatchStart[0] = journal.size();
             TaskRun batch = runFirstBatch(mv);
             for (batch = nextOf(batch); batch != null; batch = nextOf(batch)) {
@@ -284,40 +228,36 @@ public class IvmFallbackBaselineClearTest extends IvmCloudNativeRefreshTestBase 
                 executeBatch(batch);
             }
         }
-        Assertions.assertEquals(2 * PARTITIONS.size(), journaledInBatchBeforeWrite.size());
+        Assertions.assertEquals(2 * FACT_PARTITIONS.size(), journaledInBatchBeforeWrite.size());
         Assertions.assertTrue(journaledInBatchBeforeWrite.stream().allMatch(count -> count == 0),
                 "with no baseline to drop, a batch must not journal before it writes: " + journaledInBatchBeforeWrite);
     }
 
     @Test
     public void testClearThatCannotLockTheMvWritesNothing() throws Exception {
-        OlapTable fact = createFact("fact_clear_lock_timeout");
-        loadEveryPartition(fact);
-        MaterializedView mv = createMv("mv_clear_lock_timeout", fact, "AUTO");
-        mockLakeDml();
-        runJob(mv, fact);
-        long baselineId = bookmarkIdOf(tvrBaseline(mv), fact);
+        loadFact();
+        MaterializedView mv = createFactMv("mv_clear_lock_timeout", "auto");
+        runJob(mv);
+        long baseline = baselineSnapshotId(mv, FACT);
 
-        loadEveryPartition(fact);
+        loadFact();
         failIncrementalPlanning();
         withholdTheMvWriteLockOnceThePctWriteStarts(mv);
-        int writesBefore = SCANNED_VERSIONS.size();
+        int writesBefore = writes;
         Assertions.assertThrows(DmlException.class, () -> runFirstBatch(mv));
 
-        Assertions.assertEquals(writesBefore, SCANNED_VERSIONS.size(), "the batch must stop before it writes");
-        Assertions.assertEquals(baselineId, bookmarkIdOf(tvrBaseline(mv), fact));
+        Assertions.assertEquals(writesBefore, writes, "the batch must stop before it writes");
+        Assertions.assertEquals(baseline, baselineSnapshotId(mv, FACT));
     }
 
     @Test
     public void testClearThatCannotBeJournaledWritesNothing() throws Exception {
-        OlapTable fact = createFact("fact_clear_journal_failure");
-        loadEveryPartition(fact);
-        MaterializedView mv = createMv("mv_clear_journal_failure", fact, "AUTO");
-        mockLakeDml();
-        runJob(mv, fact);
-        long baselineId = bookmarkIdOf(tvrBaseline(mv), fact);
+        loadFact();
+        MaterializedView mv = createFactMv("mv_clear_journal_failure", "auto");
+        runJob(mv);
+        long baseline = baselineSnapshotId(mv, FACT);
 
-        loadEveryPartition(fact);
+        loadFact();
         failIncrementalPlanning();
         boolean[] armed = {true};
         new MockUp<EditLog>() {
@@ -331,24 +271,22 @@ public class IvmFallbackBaselineClearTest extends IvmCloudNativeRefreshTestBase 
                 invocation.proceed();
             }
         };
-        int writesBefore = SCANNED_VERSIONS.size();
+        int writesBefore = writes;
         DmlException failure = Assertions.assertThrows(DmlException.class, () -> runFirstBatch(mv));
         Assertions.assertTrue(failure.getMessage().contains("journal write failed (simulated)"), failure.getMessage());
 
-        Assertions.assertEquals(writesBefore, SCANNED_VERSIONS.size(), "the batch must stop before it writes");
-        Assertions.assertEquals(baselineId, bookmarkIdOf(tvrBaseline(mv), fact));
+        Assertions.assertEquals(writesBefore, writes, "the batch must stop before it writes");
+        Assertions.assertEquals(baseline, baselineSnapshotId(mv, FACT));
     }
 
     @Test
     public void testReplayingTheClearDropsTheBaseline() throws Exception {
-        OlapTable fact = createFact("fact_replay_clear");
-        loadEveryPartition(fact);
-        MaterializedView mv = createMv("mv_replay_clear", fact, "AUTO");
-        mockLakeDml();
-        runJob(mv, fact);
+        loadFact();
+        MaterializedView mv = createFactMv("mv_replay_clear", "auto");
+        runJob(mv);
         Map<BaseTableInfo, TvrVersionRange> baseline = new HashMap<>(tvrBaseline(mv));
 
-        loadEveryPartition(fact);
+        loadFact();
         failIncrementalPlanning();
         List<ChangeMaterializedViewRefreshSchemeLog> journal = captureRefreshSchemeJournal();
         runFirstBatch(mv);
@@ -363,12 +301,10 @@ public class IvmFallbackBaselineClearTest extends IvmCloudNativeRefreshTestBase 
 
     @Test
     public void testPromotionJournalCarriesNoPinningRecord() throws Exception {
-        OlapTable fact = createFact("fact_promotion_journal");
-        loadEveryPartition(fact);
-        MaterializedView mv = createMv("mv_promotion_journal", fact, "AUTO");
-        mockLakeDml();
+        loadFact();
+        MaterializedView mv = createFactMv("mv_promotion_journal", "auto");
         List<ChangeMaterializedViewRefreshSchemeLog> journal = captureRefreshSchemeJournal();
-        runJob(mv, fact);
+        runJob(mv);
 
         ChangeMaterializedViewRefreshSchemeLog promotion = journal.stream()
                 .filter(log -> !tvrBaselineIn(log).isEmpty())
@@ -377,66 +313,6 @@ public class IvmFallbackBaselineClearTest extends IvmCloudNativeRefreshTestBase 
         Assertions.assertNull(journaled.getTempTvrOwnerStartTaskRunId(),
                 "a replayed promotion must not revive the finished job's pinning owner");
         Assertions.assertEquals(Map.of(), journaled.getTempBaseTableInfoTvrDeltaMap());
-    }
-
-    private static boolean runsAsPct(TaskRun taskRun) {
-        return ((MVHybridRefreshProcessor) refreshProcessorOf(taskRun)).getCurrentProcessor()
-                instanceof MVPCTRefreshProcessor;
-    }
-
-    private static Map<BaseTableInfo, TvrVersionRange> tvrBaseline(MaterializedView mv) {
-        return mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
-    }
-
-    private static Map<BaseTableInfo, TvrVersionRange> tvrBaselineIn(ChangeMaterializedViewRefreshSchemeLog log) {
-        return log.getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
-    }
-
-    /** Every refresh scheme journal entry, as it was written: the in-memory scheme keeps changing afterwards. */
-    private static List<ChangeMaterializedViewRefreshSchemeLog> captureRefreshSchemeJournal() {
-        List<ChangeMaterializedViewRefreshSchemeLog> journal = new ArrayList<>();
-        new MockUp<EditLog>() {
-            @Mock
-            public void logMvChangeRefreshScheme(Invocation invocation, ChangeMaterializedViewRefreshSchemeLog log,
-                                                 WALApplier walApplier) {
-                journal.add(GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(log),
-                        ChangeMaterializedViewRefreshSchemeLog.class));
-                invocation.proceed();
-            }
-        };
-        return journal;
-    }
-
-    private static void failIncrementalPlanningOnce() {
-        boolean[] armed = {true};
-        new MockUp<MVIVMRefreshProcessor>() {
-            @Mock
-            public MVRefreshProcessor.ProcessExecPlan getProcessExecPlan(Invocation invocation,
-                                                                          TaskRunContext taskRunContext) {
-                if (armed[0]) {
-                    armed[0] = false;
-                    throw new SemanticException("incremental planning failed (simulated)");
-                }
-                return invocation.proceed();
-            }
-        };
-    }
-
-    private static void rejectIncrementalExecutionOnce() {
-        boolean[] armed = {true};
-        new MockUp<MVIVMRefreshProcessor>() {
-            @Mock
-            public Constants.TaskRunState execProcessExecPlan(Invocation invocation, TaskRunContext taskRunContext,
-                                                              MVRefreshProcessor.ProcessExecPlan processExecPlan,
-                                                              MVRefreshExecutor executor) {
-                if (armed[0]) {
-                    armed[0] = false;
-                    throw new RuntimeException(
-                            "CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CDC for DUP_KEYS does not support delete");
-                }
-                return invocation.proceed();
-            }
-        };
     }
 
     /** The next PCT metadata update fails after its batch has written, as when its lock times out. */

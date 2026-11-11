@@ -23,6 +23,7 @@
 #include "common/storage_define.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -454,17 +455,9 @@ TEST_F(StringFunctionPadTest, lpadNullTest) {
 TEST_F(StringFunctionPadTest, rpadTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto str = BinaryColumn::create();
-    auto len = Int32Column::create();
-    auto fill = BinaryColumn::create();
-
-    str->append("test");
-    len->append(11);
-    fill->append("123");
-
-    str->append("test");
-    len->append(0);
-    fill->append("123");
+    auto str = ColumnTestHelper::build_column<Slice>({"test", "test"});
+    auto len = ColumnTestHelper::build_column<int32_t>({11, 0});
+    auto fill = ColumnTestHelper::build_column<Slice>({"123", "123"});
 
     columns.emplace_back(std::move(str));
     columns.emplace_back(std::move(len));
@@ -483,17 +476,9 @@ TEST_F(StringFunctionPadTest, rpadTest) {
 TEST_F(StringFunctionPadTest, rpadChineseTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto str = BinaryColumn::create();
-    auto len = Int32Column::create();
-    auto fill = BinaryColumn::create();
-
-    str->append("我是中文字符串");
-    len->append(15);
-    fill->append("不，我不是");
-
-    str->append("我是中文字符串");
-    len->append(2);
-    fill->append("不，我没有");
+    auto str = ColumnTestHelper::build_column<Slice>({"我是中文字符串", "我是中文字符串"});
+    auto len = ColumnTestHelper::build_column<int32_t>({15, 2});
+    auto fill = ColumnTestHelper::build_column<Slice>({"不，我不是", "不，我没有"});
 
     columns.emplace_back(std::move(str));
     columns.emplace_back(std::move(len));
@@ -512,16 +497,9 @@ TEST_F(StringFunctionPadTest, rpadChineseTest) {
 TEST_F(StringFunctionPadTest, rpadConstTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto str = BinaryColumn::create();
-    auto len = Int32Column::create();
-    auto fill = BinaryColumn::create();
-
-    str->append("test");
-    len->append(8);
-    fill->append("123");
-
-    str->append("test");
-    len->append(-1);
+    auto str = ColumnTestHelper::build_column<Slice>({"test", "test"});
+    auto len = ColumnTestHelper::build_column<int32_t>({8, -1});
+    auto fill = ColumnTestHelper::build_column<Slice>({"123"});
 
     columns.emplace_back(std::move(str));
     columns.emplace_back(std::move(len));

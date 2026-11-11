@@ -38,11 +38,12 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Stream;
 
-// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.11.0/core/src/main/java/org/apache/iceberg/PartitionData.java
+// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/core/src/main/java/org/apache/iceberg/PartitionData.java
 // KEEP THIS TAG IN SYNC WITH ${iceberg.version} IN fe/pom.xml -- this class shadows the one
 // in iceberg-core, so upstream behaviour changes must be re-applied here on every bump.
 // StarRocks additions on top of upstream: the Caffeine SCHEMA_CACHE/CachedSchema and the
-// PartitionData(PartitionData, Object[]) copy constructor.
+// PartitionData(PartitionData, Object[]) copy constructor. hashCode() intentionally keeps the
+// Guava-hasher implementation rather than upstream 1.12's Arrays.hashCode variant.
 public class PartitionData
         implements IndexedRecord, StructLike, SpecificData.SchemaConstructable, Serializable {
 
@@ -69,6 +70,15 @@ public class PartitionData
             this.stringSchema = schema.toString();
         }
     }
+
+    // Read by iceberg-core's BaseFile (1.12+) for unpartitioned files.
+    static final PartitionData EMPTY =
+            new PartitionData(Types.StructType.of()) {
+                @Override
+                public PartitionData copy() {
+                    return this;
+                }
+            };
 
     private final Types.StructType partitionType;
     private final int size;

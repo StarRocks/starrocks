@@ -200,6 +200,23 @@ message JsonMetaPB {
     optional bool has_remain = 3;
 
     optional bytes remain_filter = 4;
+
+    // Only on a JSON-typed sub-column of a flat JSON column.
+    optional JsonValueStatsPB value_stats = 5;
+}
+
+// What JsonPathDeriver collects for a path from its values, kept for a JSON-typed sub-column so that a later
+// compaction can derive from the segment metadata the type that holds every value of the path exactly.
+message JsonValueStatsPB {
+    // flat_json::get_compatibility_type() over every value
+    optional uint32 json_type = 1;
+    // non-NULL rows
+    optional uint64 values = 2;
+    // values of a base JSON type (flat_json::JSON_BASE_TYPE)
+    optional uint64 base_type_count = 3;
+    // largest non-negative integer and smallest negative integer among the values
+    optional uint64 max_uint = 4;
+    optional int64 min_int = 5;
 }
 
 message ColumnMetaPB {

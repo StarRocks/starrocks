@@ -37,7 +37,7 @@ class AsyncCompactCB {
 public:
     AsyncCompactCB(std::unique_ptr<ThreadPoolToken> token,
                    std::function<Status(const std::vector<PersistentIndexSstablePB>&)> callback);
-    virtual ~AsyncCompactCB() = default;
+    virtual ~AsyncCompactCB();
 
     void add_result(const std::vector<PersistentIndexSstablePB>& ssts);
 

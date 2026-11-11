@@ -29,6 +29,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -173,12 +174,16 @@ public class PartitionTTLScheduler {
         // do drop partitions
         String tableName = olapTable.getName();
         List<DropPartitionClause> dropPartitionClauses = buildDropPartitionClauses(dropPartitionNames);
+        // A load or query planned before the drop may still be writing or reading the partition, so keep
+        // its tablets (non-recoverable) for a while instead of erasing them on the next recycle bin pass.
+        long retentionPeriod = Config.partition_recycle_retention_period_secs;
         for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
             try (AutoCloseableLock ignore = new AutoCloseableLock(
                     new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()), LockType.WRITE)) {
                 AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
                 analyzer.analyze(new ConnectContext(), dropPartitionClause);
-                GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .dropPartition(db, olapTable, dropPartitionClause, retentionPeriod);
                 runtimeInfoCollector.clearDropPartitionFailedMsg(tableName);
             } catch (Exception e) {
                 runtimeInfoCollector.recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());

@@ -537,6 +537,7 @@ def generate_cpp(path):
         "HashFunctions",
         "GroupingSetsFunctions",
         "StructFunctions",
+        "FileFunctions",
         "UtilityFunctions",
         "JsonFunctions",
         "VariantFunctions",
@@ -547,7 +548,6 @@ def generate_cpp(path):
         "ArrayFunctions",
         "MapFunctions",
         "GinFunctions",
-        "AIFunctions",
         "HttpRequestFunctions",
         "DictFunctions",
     ]

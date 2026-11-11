@@ -585,6 +585,11 @@ message TxnLogPB {
         optional TabletMetadataPB tablet_metadata = 5;
         // delta column group metadata for partial update and generated column replication
         optional DeltaColumnGroupMetadataPB dcg_meta = 6;
+        // Target schema is pinned in tablet_metadata.schema. Replay must validate it and
+        // replace rowset schema tracking, irrespective of the current admission config.
+        // Enable the writer only after all target CNs understand this flag. Older readers
+        // cannot safely replay normalized logs; drain them before a downgrade.
+        optional bool normalize_rowset_schema = 7 [default = false];
     }
 
     // Produced by ADD INDEX fast-path schema change (lake-only). Carries

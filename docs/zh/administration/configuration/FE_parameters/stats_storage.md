@@ -188,7 +188,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 设置为 `true` 时，分区创建（手动 `ALTER TABLE ... ADD PARTITION`、导入过程中的自动创建以及动态分区调度器）允许与可证明安全的纯元数据 ALTER 操作并发执行——目前包括存算分离模式下的 ADD/DROP INDEX 快速路径任务，以及 fast schema evolution 的瞬态 `UPDATING_META` 状态——而不再拒绝该 DDL 或取消 ALTER 任务。设置为 `false` 可恢复旧版的互斥行为。该配置仅放宽分区创建，其他所有 ALTER 任务以及所有非 `ADD PARTITION` 的 DDL 仍保持旧版的状态检查。
+- 描述: 设置为 `true` 时，分区创建（手动 `ALTER TABLE ... ADD PARTITION`、导入过程中的自动创建以及动态分区调度器）允许与可证明安全的纯元数据 ALTER 操作并发执行——目前包括存算分离模式下的 ADD/DROP INDEX 快速路径任务，以及 fast schema evolution 的瞬态 `UPDATING_META` 状态——而不再拒绝该 DDL 或取消 ALTER 任务。此外，优化作业在开始执行前会等待表的所有副本都恢复健康，这可能持续整个副本修复过程，在此期间同样允许创建分区。设置为 `false` 可恢复旧版的互斥行为。该配置仅放宽分区创建，其他所有 ALTER 任务以及所有非 `ADD PARTITION` 的 DDL 仍保持旧版的状态检查。
 - 引入版本: -
 
 ### `capacity_used_percent_high_water`
@@ -330,7 +330,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 控制 StarRocks 在创建优化作业时是否使用非阻塞在线优化路径。当 `enable_online_optimize_table` 为 true 且目标表满足兼容性检查（无分区/键/排序规范，分布不是 `RandomDistributionDesc`，存储类型不是 `COLUMN_WITH_ROW`，已启用复制存储，且该表不是云原生表或物化视图）时，规划器会创建一个 `OnlineOptimizeJobV2` 以在不阻塞写入的情况下执行优化。如果为 false 或任何兼容性条件失败，StarRocks 将回退到 `OptimizeJobV2`，这可能会在优化期间阻塞写入操作。
+- 描述: 控制 StarRocks 在创建优化作业时是否使用非阻塞在线优化路径。当 `enable_online_optimize_table` 为 true 且目标表满足兼容性检查（无分区/键/排序规范，分布不是 `RandomDistributionDesc`，未修改分桶方式和分桶键，存储类型不是 `COLUMN_WITH_ROW`，已启用复制存储，且该表不是云原生表或物化视图）时，规划器会创建一个 `OnlineOptimizeJobV2` 以在不阻塞写入的情况下执行优化。如果为 false 或任何兼容性条件失败，StarRocks 将回退到 `OptimizeJobV2`，这可能会在优化期间阻塞写入操作。在线优化路径不支持 `enable_new_publish_mechanism`：如果 `enable_new_publish_mechanism` 也为 true，创建满足兼容性检查的优化作业会失败并返回错误。此时需要将 `enable_new_publish_mechanism` 或 `enable_online_optimize_table` 设置为 false。
 - 引入版本: v3.3.3, v3.4.0, v3.5.0
 
 ### `enable_strict_storage_medium_check`
@@ -393,7 +393,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 秒
 - 是否可变: Yes
-- 描述: INSERT OVERWRITE 或物化视图刷新操作删除的分区的元数据保留时间。请注意，此类元数据无法通过执行 RECOVER 恢复。
+- 描述: 被 INSERT OVERWRITE、物化视图刷新操作或分区 TTL（`partition_live_number`、`partition_ttl`、`partition_retention_condition`）删除的分区，其元数据的保留时间。请注意，此类元数据无法通过执行 RECOVER 恢复。
 - 引入版本: v3.5.9
 
 ### `recover_with_empty_tablet`
@@ -652,7 +652,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: Bytes
 - 是否可变: Yes
-- 描述: 执行 SPLIT 或 MERGE 操作后 Tablet 的目标大小。设置为 `0` 时，将禁用基于大小的 Tablet 自动分裂和合并。存算分离集群在该值为 `0` 时执行在线 Range Rewrite，会以各个最新基表索引当前的 Tablet 数量作为请求数量，并在新的排序键空间中重新计算边界，而不会复用原有边界。如果采样无法生成足够多的不同边界，实际 Tablet 数量可能更少。
+- 描述: 执行 SPLIT 或 MERGE 操作后 Tablet 的目标大小。该值为正数时，设置了同名表属性 `tablet_reshard_target_size` 的 Range 分布表改用该属性值作为目标大小，适用于自动分裂与合并、未指定目标大小的 SPLIT 和 MERGE 语句、Tablet 预分裂，以及在线 Range Rewrite 和 Rollup。设置为 `0` 时，将禁用所有表基于大小的 Tablet 自动分裂和合并，设置了该表属性的表也不例外。存算分离集群在该值为 `0` 时执行在线 Range Rewrite，会以各个最新基表索引当前的 Tablet 数量作为请求数量，并在新的排序键空间中重新计算边界，而不会复用原有边界。如果采样无法生成足够多的不同边界，实际 Tablet 数量可能更少。
 - 引入版本: v4.1.0
 
 ### `tablet_reshard_max_split_count`
@@ -697,7 +697,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: Bytes
 - 是否可变: Yes
-- 描述: Tablet 预分裂（pre-split）产生的 Tablet 的最小大小。该参数同时也是自动分裂所能采用的最小目标大小：当物化索引的 Tablet 数量少于其所属仓库的计算节点数（并受 `tablet_reshard_max_split_count` 上限约束）时，分裂会以“每个此类槽位一个 Tablet”对应的大小为目标，并以该参数为下限，Tablet 达到该目标的两倍时才会分裂。因此调大该参数也会推迟此类分裂；将其设置为大于或等于 `tablet_reshard_target_size` 即可关闭该行为，只保留基于大小的分裂规则。该参数还用于约束预分裂时按计算节点数对齐的行为，避免在节点较多的集群上将数据量较小的导入分裂成大量过小的 Tablet。其值不应大于 `tablet_reshard_target_size`。
+- 描述: Tablet 预分裂（pre-split）产生的 Tablet 的最小大小。该参数同时也是自动分裂所能采用的最小目标大小：当物化索引的 Tablet 数量少于其所属仓库的计算节点数（并受 `tablet_reshard_max_split_count` 上限约束）时，分裂会以“每个此类槽位一个 Tablet”对应的大小为目标，该目标不超过表的目标大小（表设置了表属性 `tablet_reshard_target_size` 时为该属性值，否则为 FE 配置项 `tablet_reshard_target_size`），并以该参数为下限，Tablet 达到该目标的两倍即会分裂。在该目标仍小于表的目标大小时，如果这些分裂之后仍有剩余槽位，会把它们分给这些分裂没有涉及的 Tablet 中最大的几个继续分裂，前提是分裂出的每个 Tablet 都不小于该参数。因此调大该参数也会推迟此类分裂；将其设置为大于或等于某张表的目标大小，即可对该表关闭该行为，只保留基于大小的分裂规则。该参数还用于约束预分裂时按计算节点数对齐的行为，避免在节点较多的集群上将数据量较小的导入分裂成大量过小的 Tablet。其值不应大于 `tablet_reshard_target_size`。
 - 引入版本: v4.1.0
 
 ### `tablet_reshard_history_job_max_keep_ms`
@@ -760,7 +760,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。源表可以是内部 OLAP 表，也可以是 External Catalog 中的表，如 Hive、Iceberg、Paimon、Delta Lake、Hudi、JDBC、Elasticsearch 表，但不支持视图。如果无法根据表统计信息估算外部源表的大小，该导入跳过预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。对于 `INSERT INTO`，也支持手动 Range 分区的目标表：只对已有的空分区做分裂，不会新建任何分区。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
+- 描述: 是否为 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。源表可以是内部 OLAP 表，也可以是 External Catalog 中的表，如 Hive、Iceberg、Paimon、Delta Lake、Hudi、JDBC、Elasticsearch 表，但不支持视图。如果无法根据表统计信息估算外部源表的大小，该导入跳过预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。对于 `INSERT INTO` 和 static `INSERT OVERWRITE`，也支持手动 Range 分区的目标表：`INSERT INTO` 分裂已有的空分区，覆盖写入则分裂用于替换的临时分区，均不会新建任何分区。如果源表是内表，且用 `PARTITION (...)` 限定了分区，则只从这些分区采样。非增量异步物化视图如果定义查询只读取一张内表、不含聚合、连接和集合运算，刷新时也按同样方式采样。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
 - 引入版本: v4.1.0
 
 ### `enable_tablet_pre_split_for_mv_refresh`
@@ -847,7 +847,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 单次基于采样的 Tablet 预分裂调用处理的预测目标分区数上限。超出该上限的预测分区（数据量最小的那部分：若 data tier 只采样了部分文件且分区值取自文件路径，按字节数判断，否则按样本数判断）会被丢弃，回退到 BE 运行时自动建分区且不做预分裂。用于约束病态多分区导入下钩子的耗时。设为 0 或负值可关闭该上限。
+- 描述: 单次基于采样的 Tablet 预分裂调用处理的预测目标分区数上限。对采样导入，超出该上限的预测分区（数据量最小的那部分：若 data tier 只采样了部分文件且分区值取自文件路径，按字节数判断，否则按样本数判断）会被丢弃，回退到 BE 运行时自动建分区且不做预分裂。用于约束病态多分区导入下钩子的耗时。若增量物化视图的 Row ID 是刷新查询计算出的指纹，其刷新写入的临时分区在预分裂之前已经建好：在符合条件的分区中按分区名取前面不超过上限的分区做预分裂，其余分区保持建分区时的单个 tablet。每个分区分到的份额仍按本次刷新写入的全部分区计算。设为 0 或负值可关闭该上限。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_target_size`
@@ -856,7 +856,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: Bytes
 - 是否可变: Yes
-- 描述: 基于采样的 Tablet 预分裂计算分裂数量时使用的目标 Tablet 大小。默认值 `0` 表示沿用 `tablet_reshard_target_size`。调小该值可以让单次导入获得更高的写并行度，同时不会缩小集群中其他 Tablet：后台 Tablet 分裂/合并守护线程仍然按 `tablet_reshard_target_size` 判定，会在导入结束后把这些较小的 Tablet 重新合并回去。该配置对写入全新 Range 分布分区的导入最为关键（例如 `INSERT OVERWRITE` 的替换分区），这类分区初始只有一个覆盖全域的 Tablet，否则只能由单个 BE 节点写入。
+- 描述: 基于采样的 Tablet 预分裂计算分裂数量时使用的目标 Tablet 大小。默认值 `0` 表示沿用 `tablet_reshard_target_size`。在 FE 配置项 `tablet_reshard_target_size` 为正数时，设置了同名表属性的 Range 分布表按该属性值预分裂。优先级从高到低依次为：表属性 `tablet_reshard_target_size`、本参数（大于 `0` 时）、FE 配置项 `tablet_reshard_target_size`。调小该值可以让单次导入获得更高的写并行度，同时不会缩小集群中其他 Tablet：后台 Tablet 分裂/合并守护线程仍然按 `tablet_reshard_target_size` 判定，会在导入结束后把这些较小的 Tablet 重新合并回去。该配置对写入全新 Range 分布分区的导入最为关键（例如 `INSERT OVERWRITE` 的替换分区），这类分区初始只有一个覆盖全域的 Tablet，否则只能由单个 BE 节点写入。
 
 #### 回滚基于采样的 Tablet 预分裂
 
@@ -880,7 +880,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Broker Load 触发载入不对称。** 多分区预分裂钩子在 `BrokerLoadJob.createLoadingTask` 中触发，**晚于** `task.prepare()` 构建该次导入的 sink plan（plan 基于当时的 catalog 状态）。因此 Broker Load 路径下，预建分区和分裂后的 tablet 布局只对**后续**针对同一张表的导入可见 —— 触发本次预分裂的 Broker Load 自身仍按原布局运行，命中的分区走 BE 运行时自动建分区。INSERT-from-FILES 钩子在 `StatementPlanner.plan()` 之前触发，因此触发本次预分裂的 INSERT 本身就能受益。
 - **后续 INSERT 失败时的空分区残留。** 当预建成功，但触发本次预建的 INSERT 因不相关原因失败（FILES schema 不匹配、BE 崩溃、导入超时等），空的预建分区会留在 catalog 中。这与 `ALTER TABLE ADD PARTITION` 在后续失败时的语义一致 —— ALTER 同样不会回滚已建分区。介意残留的运维可以用 `ALTER TABLE ... DROP PARTITION` 手动删除；实际上空分区代价很低，下次重试导入时会复用。
-- **手动 Range 分区的目标表。** 对于用户自行声明 RANGE 分区的表，预分裂不会新建分区。每条采样行按分区范围归入包含它的已有分区，不落在任何已声明范围内的值直接从计划中剔除。只有仍为空且只有一个 tablet 的分区才会被分裂，典型场景是刚通过 `ALTER TABLE ... ADD PARTITION` 新增的分区；如果本次导入的目标分区都已有数据，则不采样源数据，直接跳过预分裂。手动分区表的 `INSERT OVERWRITE`、LIST 分区和表达式分区暂不支持。
+- **手动 Range 分区的目标表。** 对于用户自行声明 RANGE 分区的表，预分裂不会新建分区。每条采样行按分区范围归入包含它的已有分区，不落在任何已声明范围内的值直接从计划中剔除。只有仍为空且只有一个 tablet 的分区才会被分裂，典型场景是刚通过 `ALTER TABLE ... ADD PARTITION` 新增的分区；如果本次导入的目标分区都已有数据，则不采样源数据，直接跳过预分裂。static `INSERT OVERWRITE` 会分裂替换指定分区的新临时分区。手动分区表的 dynamic `INSERT OVERWRITE`、LIST 分区和表达式分区暂不支持。
 
 #### 生产部署建议
 

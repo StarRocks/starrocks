@@ -25,8 +25,8 @@ namespace starrocks {
 class AddStructColumnTest : public ::testing::Test {};
 
 TEST_F(AddStructColumnTest, test_good_json) {
-    TypeDescriptor type_desc = TypeDescriptor::create_struct_type(
-            {"key1", "key2"}, {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(10)});
+    TypeDescriptor type_desc =
+            TypeDescriptor::create_struct_type({"key1", "key2"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
     auto column = ColumnHelper::create_column(type_desc, false);
 
     simdjson::ondemand::parser parser;
@@ -41,8 +41,7 @@ TEST_F(AddStructColumnTest, test_good_json) {
 
 TEST_F(AddStructColumnTest, test_bad_json) {
     TypeDescriptor type_desc = TypeDescriptor::create_struct_type(
-            {"key1", "key2", "key3"}, {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(10),
-                                       TypeDescriptor::create_varchar_type(10)});
+            {"key1", "key2", "key3"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
     auto column = ColumnHelper::create_column(type_desc, false);
 
     simdjson::ondemand::parser parser;
@@ -57,8 +56,7 @@ TEST_F(AddStructColumnTest, test_bad_json) {
 
 TEST_F(AddStructColumnTest, test_bad_json2) {
     TypeDescriptor type_desc = TypeDescriptor::create_struct_type(
-            {"key1", "key2", "key3"}, {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_json_type(),
-                                       TypeDescriptor::create_varchar_type(10)});
+            {"key1", "key2", "key3"}, {TYPE_VARCHAR_DESC, TypeDescriptor::create_json_type(), TYPE_VARCHAR_DESC});
     auto column = ColumnHelper::create_column(type_desc, false);
 
     simdjson::ondemand::parser parser;
@@ -72,8 +70,8 @@ TEST_F(AddStructColumnTest, test_bad_json2) {
 }
 
 TEST_F(AddStructColumnTest, test_field_not_found) {
-    TypeDescriptor type_desc = TypeDescriptor::create_struct_type(
-            {"key1", "key2"}, {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(10)});
+    TypeDescriptor type_desc =
+            TypeDescriptor::create_struct_type({"key1", "key2"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
     auto column = ColumnHelper::create_column(type_desc, false);
 
     simdjson::ondemand::parser parser;

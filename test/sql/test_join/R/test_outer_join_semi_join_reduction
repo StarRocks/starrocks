@@ -1,0 +1,67 @@
+-- name: test_outer_join_semi_join_reduction
+CREATE DATABASE db_${uuid0};
+-- result:
+-- !result
+USE db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_a (k1 int NULL, k2 int NULL, v int NULL) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t_b (k1 int NULL, k2 int NULL, v int NULL) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t_c (k1 int NULL, k2 int NULL, v int NULL) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_a VALUES (1, 1, 10), (1, 1, 5), (1, 2, 7), (2, 1, 3), (NULL, 1, 4), (3, 3, 1);
+-- result:
+-- !result
+INSERT INTO t_b VALUES (1, 1, 2), (1, 1, -1), (1, 2, -5), (NULL, 1, 9), (3, 3, 0);
+-- result:
+-- !result
+INSERT INTO t_c VALUES (2, 1, 6), (1, 2, 1), (1, 2, 1), (3, 3, -2), (4, 4, 1);
+-- result:
+-- !result
+set enable_outer_join_semi_join_reduction = false;
+-- result:
+-- !result
+with a as (select k1, k2, sum(v) q from t_a group by k1, k2), b as (select k1, k2, sum(v) q from t_b group by k1, k2), c as (select k1, k2, sum(v) q from t_c group by k1, k2) select a.k1, a.k2, a.q, b.q bq, c.q cq from a left join b on a.k1 = b.k1 and a.k2 = b.k2 left join c on a.k1 = c.k1 and a.k2 = c.k2 where coalesce(b.q, 0) > 0 or coalesce(c.q, 0) > 0 order by 1, 2;
+-- result:
+1	1	15	1	None
+1	2	7	-5	2
+2	1	3	None	6
+-- !result
+with a as (select k1, k2, sum(v) q from t_a group by k1, k2), b as (select k1, k2, sum(v) q from t_b group by k1, k2), c as (select k1, k2, sum(v) q from t_c group by k1, k2) select a.k1, a.k2, a.q, b.q bq, c.q cq from a left join b on a.k1 = b.k1 and a.k2 = b.k2 left join c on a.k1 = c.k1 and a.k2 = c.k2 where b.q < a.q or c.q > 5 order by 1, 2;
+-- result:
+1	1	15	1	None
+1	2	7	-5	2
+2	1	3	None	6
+3	3	1	0	-2
+-- !result
+set enable_outer_join_semi_join_reduction = true;
+-- result:
+-- !result
+set outer_join_semi_join_reduction_min_agg_rows = 0;
+-- result:
+-- !result
+with a as (select k1, k2, sum(v) q from t_a group by k1, k2), b as (select k1, k2, sum(v) q from t_b group by k1, k2), c as (select k1, k2, sum(v) q from t_c group by k1, k2) select a.k1, a.k2, a.q, b.q bq, c.q cq from a left join b on a.k1 = b.k1 and a.k2 = b.k2 left join c on a.k1 = c.k1 and a.k2 = c.k2 where coalesce(b.q, 0) > 0 or coalesce(c.q, 0) > 0 order by 1, 2;
+-- result:
+1	1	15	1	None
+1	2	7	-5	2
+2	1	3	None	6
+-- !result
+with a as (select k1, k2, sum(v) q from t_a group by k1, k2), b as (select k1, k2, sum(v) q from t_b group by k1, k2), c as (select k1, k2, sum(v) q from t_c group by k1, k2) select a.k1, a.k2, a.q, b.q bq, c.q cq from a left join b on a.k1 = b.k1 and a.k2 = b.k2 left join c on a.k1 = c.k1 and a.k2 = c.k2 where b.q < a.q or c.q > 5 order by 1, 2;
+-- result:
+1	1	15	1	None
+1	2	7	-5	2
+2	1	3	None	6
+3	3	1	0	-2
+-- !result
+function: assert_explain_contains('with a as (select k1, k2, sum(v) q from t_a group by k1, k2), b as (select k1, k2, sum(v) q from t_b group by k1, k2), c as (select k1, k2, sum(v) q from t_c group by k1, k2) select a.k1, a.k2, a.q, b.q bq, c.q cq from a left join b on a.k1 = b.k1 and a.k2 = b.k2 left join c on a.k1 = c.k1 and a.k2 = c.k2 where coalesce(b.q, 0) > 0 or coalesce(c.q, 0) > 0 order by 1, 2', 'LEFT SEMI JOIN')
+-- result:
+None
+-- !result
+DROP DATABASE db_${uuid0};
+-- result:
+-- !result

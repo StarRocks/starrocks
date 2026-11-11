@@ -185,6 +185,11 @@ public class EditLog {
                             .initTransactionId(idInfo.getTxnId() + 1);
                     break;
                 }
+                case OperationType.OP_SAVE_GTID: {
+                    GtidInfo info = (GtidInfo) journal.data();
+                    globalStateMgr.getGtidGenerator().init(info.getBatchEndGtid());
+                    break;
+                }
                 case OperationType.OP_SAVE_AUTO_INCREMENT_ID:
                 case OperationType.OP_DELETE_AUTO_INCREMENT_ID: {
                     AutoIncrementInfo info = (AutoIncrementInfo) journal.data();
@@ -1458,6 +1463,27 @@ public class EditLog {
         }
     }
 
+    /** Keeps provisional metadata changes and their commit/rollback inside the existing WAL fence. */
+    public final class WalScope implements AutoCloseable {
+        private boolean closed;
+
+        private WalScope() {
+            enterGate();
+        }
+
+        @Override
+        public void close() {
+            if (!closed) {
+                closed = true;
+                exitGate();
+            }
+        }
+    }
+
+    public WalScope openWalScope() {
+        return new WalScope();
+    }
+
     private void exitGate() {
         synchronized (editLogFenceLock) {
             if (inFlight <= 0) {
@@ -1679,6 +1705,10 @@ public class EditLog {
 
     public void logSaveTransactionId(long transactionId, WALApplier walApplier) {
         logJsonObject(OperationType.OP_SAVE_TRANSACTION_ID_V2, new TransactionIdInfo(transactionId), walApplier);
+    }
+
+    public void logSaveGtid(long batchEndGtid, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_SAVE_GTID, new GtidInfo(batchEndGtid), walApplier);
     }
 
     public void logSaveAutoIncrementId(AutoIncrementInfo info, WALApplier walApplier) {
@@ -2500,6 +2530,10 @@ public class EditLog {
 
     public void logUpdateTabletReshardJob(TabletReshardJob job) {
         logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, job);
+    }
+
+    public void logUpdateTabletReshardJob(TabletReshardJob snapshot, WALApplier applier) {
+        logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, snapshot, applier);
     }
 
     public void logRemoveTabletReshardJob(long jobId, WALApplier walApplier) {

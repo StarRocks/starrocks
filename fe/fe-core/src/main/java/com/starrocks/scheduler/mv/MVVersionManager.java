@@ -185,14 +185,6 @@ public class MVVersionManager {
         }
     }
 
-<<<<<<< HEAD
-    // Every refresh scheme this run publishes goes through here.
-    // MaterializedView#resetVisibleVersionMap runs without the MV lock this method is called under. A reset since
-    // this run started means its version entries and freshness may describe data computed from a definition
-    // that no longer holds, and the caller's copy may predate the reset: publish neither then. A reset racing the
-    // publish below cleared only the scheme this one replaces, so check again after it and journal the clear.
-    // A run that started while a reset was in flight (odd epoch) may have read the maps before the clear.
-=======
     public void clearTvrBaseline(boolean ownsFrozenSnapshot) {
         MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy();
         MaterializedView.AsyncRefreshContext refreshContext = copiedScheme.getAsyncRefreshContext();
@@ -212,10 +204,12 @@ public class MVVersionManager {
         persistRefreshScheme(copiedScheme);
     }
 
-    // The single place a refresh scheme reaches the edit log, so the executed mode is stamped on every
-    // write; a run that executed nothing passes null and leaves the mode of the run that did. The reason
-    // moves with the mode: read together they must describe one run, not two.
->>>>>>> f7db58ef15c... [BugFix] Clear the IVM baseline before a PCT refresh writes to the MV (#64167)
+    // Every refresh scheme this run publishes goes through here.
+    // MaterializedView#resetVisibleVersionMap runs without the MV lock this method is called under. A reset since
+    // this run started means its version entries and freshness may describe data computed from a definition
+    // that no longer holds, and the caller's copy may predate the reset: publish neither then. A reset racing the
+    // publish below cleared only the scheme this one replaces, so check again after it and journal the clear.
+    // A run that started while a reset was in flight (odd epoch) may have read the maps before the clear.
     private void persistRefreshScheme(MaterializedView.MvRefreshScheme copiedScheme) {
         long runEpoch = mvTaskRunContext == null ? -1 : mvTaskRunContext.getVersionMapResetEpoch();
         boolean resetBeforePublish = runEpoch >= 0
