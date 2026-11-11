@@ -120,6 +120,14 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     // columns (see StatisticUtils#isDirectValuePartitionColumn) across every partition while other
     // columns stay within the sampled subset - see its buildCollectSQLList override.
     protected List<String> allPartitionNames;
+    // Whether this job scans every partition the table has, and how many partitions the table has, as known to
+    // the caller that built it (see StatisticsCollectJobFactory#buildExternalStatisticsCollectJob). A FULL job
+    // that refreshes only some partitions leaves rows of earlier runs for the rest, which may or may not cover
+    // the table, so its result is committed as SAMPLE over the table's partition count and read through the
+    // SAMPLE extrapolation rather than trusted as whole-table values. Defaults describe an unknown table
+    // partition list, which keeps the FULL commit this job always made.
+    private boolean scansWholeTable = true;
+    private int tablePartitionCount = -1;
     private final List<String> sqlBuffer = Lists.newArrayList();
     private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
     // Per-partition total row count from connector metadata (Iceberg PARTITIONS table), used to extrapolate a
@@ -203,6 +211,20 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         this.catalogName = catalogName;
         this.partitionNames = partitionNames;
         this.allPartitionNames = partitionNames;
+    }
+
+    public void setTablePartitions(boolean scansWholeTable, int tablePartitionCount) {
+        this.scansWholeTable = scansWholeTable;
+        this.tablePartitionCount = tablePartitionCount;
+    }
+
+    public boolean scansWholeTable() {
+        return scansWholeTable;
+    }
+
+    // -1 when the caller did not know the table's partition list.
+    public int getTablePartitionCount() {
+        return tablePartitionCount;
     }
 
     @Override

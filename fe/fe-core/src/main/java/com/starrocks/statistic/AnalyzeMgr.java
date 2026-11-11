@@ -825,14 +825,17 @@ public class AnalyzeMgr implements Writable {
         if (meta == null) {
             return SKIPPED;
         }
-        // Only FULL columns. A SAMPLE column's rows are scaled up by the partition count its metadata recorded
+        // Only FULL columns, and the SAMPLE columns of an incremental FULL collection whose rows cover the table
+        // the same way (ColumnStatsMeta#isFullCoverageByRows): those are scaled by the partitions their rows come
+        // from, so deleting a dropped partition's rows brings the estimate back to the live table. Any other
+        // SAMPLE column's rows are scaled up by the partition count its metadata recorded
         // (StatisticsUtils#estimateColumnStatistics), and only a collection rewrites that metadata: deleting rows
         // here would skew the estimate rather than fix it. Its own collection cleans up dropped partitions. FULL
         // also means the collection covered every partition it asked for, so no resume record can skip a
         // partition deleted here. Columns without metadata are left alone too: the optimizer ignores their rows.
         Set<String> columnSet = new TreeSet<>();
         meta.getColumnStatsMetaMap().forEach((column, columnMeta) -> {
-            if (columnMeta.getType() == StatsConstants.AnalyzeType.FULL) {
+            if (columnMeta.isFullCoverageByRows()) {
                 columnSet.add(column);
             }
         });
