@@ -276,6 +276,13 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
         _encryption_info = std::make_unique<FileEncryptionInfo>(opts.encryption_info);
     }
 
+#ifdef BE_TEST
+    {
+        // Lets a test check which cache options a given file's footer read was opened with.
+        std::pair<const std::string*, const RandomAccessFileOptions*> path_and_opts{&_segment_file_info.path, &opts};
+        TEST_SYNC_POINT_CALLBACK("Segment::_open:footer_file_options", &path_and_opts);
+    }
+#endif
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
     RETURN_IF_ERROR(_create_column_readers(&footer));
@@ -664,7 +671,9 @@ Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& 
 }
 
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                            const TabletSchemaCSPtr& read_tablet_schema) {
+                                                            const TabletSchemaCSPtr& read_tablet_schema,
+                                                            const LakeIOOptions& lake_io_opts,
+                                                            OlapReaderStatistics* stats) {
     std::shared_ptr<TabletSchema> tablet_schema;
     if (read_tablet_schema != nullptr) {
         tablet_schema = TabletSchema::create_with_uid(read_tablet_schema, dcg.column_ids()[idx]);
@@ -681,7 +690,9 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     if (idx < dcg.encryption_metas().size()) {
         info.encryption_meta = dcg.encryption_metas()[idx];
     }
-    return Segment::open(_fs, info, 0, tablet_schema, nullptr);
+    auto segment = std::make_shared<Segment>(_fs, std::move(info), 0, std::move(tablet_schema), nullptr);
+    RETURN_IF_ERROR(segment->open(nullptr, nullptr, lake_io_opts, stats));
+    return segment;
 }
 
 Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
