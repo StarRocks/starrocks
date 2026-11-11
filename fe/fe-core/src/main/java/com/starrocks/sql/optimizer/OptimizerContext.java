@@ -77,7 +77,6 @@ public class OptimizerContext {
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
 
-    private boolean isObtainedFromInternalStatistics = false;
     private boolean inMemoPhase = false;
 
     // Is not null predicate can be derived from inner join or semi join,
@@ -233,14 +232,6 @@ public class OptimizerContext {
 
     public void setEnableJoinIsNullPredicateDerive(boolean enableJoinIsNullPredicateDerive) {
         this.enableJoinIsNullPredicateDerive = enableJoinIsNullPredicateDerive;
-    }
-
-    public boolean isObtainedFromInternalStatistics() {
-        return isObtainedFromInternalStatistics;
-    }
-
-    public void setObtainedFromInternalStatistics(boolean obtainedFromInternalStatistics) {
-        isObtainedFromInternalStatistics = obtainedFromInternalStatistics;
     }
 
     public void setInMemoPhase(boolean inMemoPhase) {
