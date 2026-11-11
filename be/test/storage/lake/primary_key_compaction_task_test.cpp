@@ -2529,14 +2529,14 @@ TEST_P(LakePrimaryKeyCompactionTest, test_replace_batch_rows_correctness) {
         return;
     }
     const int32_t saved_batch_rows = config::primary_key_compaction_replace_batch_rows;
-    const int32_t saved_chunk_size = config::vector_chunk_size;
+    const int32_t saved_chunk_size = config::pk_vector_chunk_size;
     DeferOp restore_config([&]() {
         config::primary_key_compaction_replace_batch_rows = saved_batch_rows;
-        config::vector_chunk_size = saved_chunk_size;
+        config::pk_vector_chunk_size = saved_chunk_size;
     });
     // Force the resolver to read multiple chunks per segment so we exercise both
     // the mid-loop flush and the trailing flush paths. kChunkSize (12) / 4 = 3 chunks.
-    config::vector_chunk_size = 4;
+    config::pk_vector_chunk_size = 4;
 
     auto chunk0 = generate_data(kChunkSize, 0);
     auto indexes = std::vector<uint32_t>(kChunkSize);
