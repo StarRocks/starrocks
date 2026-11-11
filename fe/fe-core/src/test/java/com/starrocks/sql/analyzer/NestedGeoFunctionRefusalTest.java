@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.ArrayExpr;
@@ -95,15 +96,17 @@ public class NestedGeoFunctionRefusalTest {
     @MethodSource("types")
     public void testComparedElements(Type item) {
         Type array = new ArrayType(item);
-        for (String name : List.of("array_sort", "array_max", "array_min", "array_distinct", "array_unique_agg",
-                "array_contains", "array_position", "array_remove", "array_contains_all", "array_contains_seq",
-                "array_intersect", "arrays_overlap", "array_top_n", "array_sort_lambda", "nullif", "crc32_hash")) {
+        for (String name : List.of(FunctionSet.ARRAY_SORT, FunctionSet.ARRAY_MAX, FunctionSet.ARRAY_MIN,
+                FunctionSet.ARRAY_DISTINCT, FunctionSet.ARRAY_UNIQUE_AGG, FunctionSet.ARRAY_CONTAINS,
+                FunctionSet.ARRAY_POSITION, FunctionSet.ARRAY_REMOVE, FunctionSet.ARRAY_CONTAINS_ALL,
+                FunctionSet.ARRAY_CONTAINS_SEQ, FunctionSet.ARRAY_INTERSECT, FunctionSet.ARRAYS_OVERLAP,
+                FunctionSet.ARRAY_TOP_N, FunctionSet.ARRAY_SORT_LAMBDA, FunctionSet.NULLIF, FunctionSet.CRC32_HASH)) {
             Type[] args = switch (name) {
-                case "array_contains", "array_position", "array_remove" -> new Type[] {array, item};
-                case "array_contains_all", "array_contains_seq", "array_intersect", "arrays_overlap", "nullif" ->
-                        new Type[] {array, array};
-                case "array_top_n" -> new Type[] {array, IntegerType.INT};
-                case "array_sort_lambda" -> new Type[] {array, FunctionType.FUNCTION};
+                case FunctionSet.ARRAY_CONTAINS, FunctionSet.ARRAY_POSITION, FunctionSet.ARRAY_REMOVE -> new Type[] {array, item};
+                case FunctionSet.ARRAY_CONTAINS_ALL, FunctionSet.ARRAY_CONTAINS_SEQ, FunctionSet.ARRAY_INTERSECT,
+                        FunctionSet.ARRAYS_OVERLAP, FunctionSet.NULLIF -> new Type[] {array, array};
+                case FunctionSet.ARRAY_TOP_N -> new Type[] {array, IntegerType.INT};
+                case FunctionSet.ARRAY_SORT_LAMBDA -> new Type[] {array, FunctionType.FUNCTION};
                 default -> new Type[] {array};
             };
             for (Expr input : List.of(slot(array), NullLiteral.create(array),
@@ -114,14 +117,15 @@ public class NestedGeoFunctionRefusalTest {
                         name + " does not support geo arguments: " + array.toSql());
             }
         }
-        for (String safe : List.of("array_length", "array_append", "array_concat", "array_slice", "reverse",
-                "array_repeat", "array_flatten", "arrays_zip", "null_or_empty")) {
+        for (String safe : List.of(FunctionSet.ARRAY_LENGTH, FunctionSet.ARRAY_APPEND, FunctionSet.ARRAY_CONCAT,
+                FunctionSet.ARRAY_SLICE, FunctionSet.REVERSE, FunctionSet.ARRAY_REPEAT, FunctionSet.ARRAY_FLATTEN,
+                FunctionSet.ARRAYS_ZIP, FunctionSet.NULL_OR_EMPTY)) {
             Type[] args = switch (safe) {
-                case "array_append" -> new Type[] {array, item};
-                case "array_concat", "arrays_zip" -> new Type[] {array, array};
-                case "array_slice" -> new Type[] {array, IntegerType.BIGINT};
-                case "array_repeat" -> new Type[] {item, IntegerType.INT};
-                case "array_flatten" -> new Type[] {new ArrayType(array)};
+                case FunctionSet.ARRAY_APPEND -> new Type[] {array, item};
+                case FunctionSet.ARRAY_CONCAT, FunctionSet.ARRAYS_ZIP -> new Type[] {array, array};
+                case FunctionSet.ARRAY_SLICE -> new Type[] {array, IntegerType.BIGINT};
+                case FunctionSet.ARRAY_REPEAT -> new Type[] {item, IntegerType.INT};
+                case FunctionSet.ARRAY_FLATTEN -> new Type[] {new ArrayType(array)};
                 default -> new Type[] {array};
             };
             FunctionAnalyzer.analyze(call(safe, args));
@@ -131,7 +135,7 @@ public class NestedGeoFunctionRefusalTest {
     @ParameterizedTest
     @MethodSource("types")
     public void testResolvedEmptyAndNull(Type item) {
-        for (String name : List.of("array_contains", "array_position", "array_remove")) {
+        for (String name : List.of(FunctionSet.ARRAY_CONTAINS, FunctionSet.ARRAY_POSITION, FunctionSet.ARRAY_REMOVE)) {
             for (Expr input : List.of(new ArrayExpr(ArrayType.ARRAY_NULL, List.of()), new NullLiteral())) {
                 Function declaration = new ScalarFunction(new FunctionName(name),
                         List.of(AnyArrayType.ANY_ARRAY, AnyElementType.ANY_ELEMENT), BooleanType.BOOLEAN, false);
@@ -154,24 +158,24 @@ public class NestedGeoFunctionRefusalTest {
         for (int arity : List.of(2, 3)) {
             Type[] values = arity == 2 ? new Type[] {array, ArrayType.ARRAY_INT} :
                     new Type[] {array, ArrayType.ARRAY_INT, ArrayType.ARRAY_INT};
-            FunctionCallExpr safe = call("array_sortby", values);
+            FunctionCallExpr safe = call(FunctionSet.ARRAY_SORTBY, values);
             if (item.isGeoType() || item.hasNestedGeoType() || (arity == 3 && item.isComplexType())) {
                 assertThrows(SemanticException.class, () -> visitor.visitFunctionCall(safe, null));
             } else {
                 visitor.visitFunctionCall(safe, null);
                 assertEquals(array, safe.getType());
             }
-            check(call("array_sortby", values), item.isGeoType() || item.hasNestedGeoType(),
+            check(call(FunctionSet.ARRAY_SORTBY, values), item.isGeoType() || item.hasNestedGeoType(),
                     "array_sortby does not support geo arguments: " + array.toSql());
             Type[] keys = arity == 2 ? new Type[] {ArrayType.ARRAY_INT, array} :
                     new Type[] {ArrayType.ARRAY_INT, ArrayType.ARRAY_INT, array};
-            check(call("array_sortby", keys), item.isGeoType() || item.hasNestedGeoType(),
+            check(call(FunctionSet.ARRAY_SORTBY, keys), item.isGeoType() || item.hasNestedGeoType(),
                     "array_sortby does not support geo arguments: " + array.toSql());
         }
-        FunctionCallExpr mapped = new FunctionCallExpr("array_map", List.of(
+        FunctionCallExpr mapped = new FunctionCallExpr(FunctionSet.ARRAY_MAP, List.of(
                 new LambdaFunctionExpr(List.of(NullLiteral.create(item))), slot(ArrayType.ARRAY_INT)));
         FunctionAnalyzer.analyze(mapped);
-        FunctionCallExpr sorted = call("array_sortby", ArrayType.ARRAY_INT, mapped.getType());
+        FunctionCallExpr sorted = call(FunctionSet.ARRAY_SORTBY, ArrayType.ARRAY_INT, mapped.getType());
         sorted.setChild(1, mapped);
         check(sorted, item.isGeoType() || item.hasNestedGeoType(),
                 "array_sortby does not support geo arguments: " + array.toSql());
@@ -180,21 +184,21 @@ public class NestedGeoFunctionRefusalTest {
     @ParameterizedTest
     @MethodSource("types")
     public void testAggregates(Type item) {
-        for (String name : List.of("max_by", "min_by", "array_agg", "map_agg")) {
-            Type result = name.equals("array_agg") ? new ArrayType(item) :
-                    name.equals("map_agg") ? new MapType(IntegerType.INT, item) : item;
-            Type[] args = name.equals("array_agg") ? new Type[] {item} :
-                    name.equals("map_agg") ? new Type[] {IntegerType.INT, item} : new Type[] {item, IntegerType.INT};
+        for (String name : List.of(FunctionSet.MAX_BY, FunctionSet.MIN_BY, FunctionSet.ARRAY_AGG, FunctionSet.MAP_AGG)) {
+            Type result = name.equals(FunctionSet.ARRAY_AGG) ? new ArrayType(item) :
+                    name.equals(FunctionSet.MAP_AGG) ? new MapType(IntegerType.INT, item) : item;
+            Type[] args = name.equals(FunctionSet.ARRAY_AGG) ? new Type[] {item} :
+                    name.equals(FunctionSet.MAP_AGG) ? new Type[] {IntegerType.INT, item} : new Type[] {item, IntegerType.INT};
             FunctionCallExpr call = call(name, args);
             call.setFn(new AggregateFunction(new FunctionName(name), Arrays.asList(args), result, null, false));
             call.setType(result);
-            check(call, (name.equals("max_by") || name.equals("min_by")) && item.hasNestedGeoType(),
+            check(call, (name.equals(FunctionSet.MAX_BY) || name.equals(FunctionSet.MIN_BY)) && item.hasNestedGeoType(),
                     name + " does not support nested geo values");
         }
         for (Type result : List.of(item, new ArrayType(item))) {
-            FunctionCallExpr ordered = new FunctionCallExpr("array_agg", new FunctionParams(false,
+            FunctionCallExpr ordered = new FunctionCallExpr(FunctionSet.ARRAY_AGG, new FunctionParams(false,
                     List.of(slot(item), slot(IntegerType.INT)), List.of(new OrderByElement(slot(IntegerType.INT), true, null))));
-            ordered.setFn(new AggregateFunction(new FunctionName("array_agg"),
+            ordered.setFn(new AggregateFunction(new FunctionName(FunctionSet.ARRAY_AGG),
                     List.of(item, IntegerType.INT), result, null, false));
             ordered.setType(result);
             check(ordered, item.isGeoType() || item.hasNestedGeoType(),

@@ -303,7 +303,7 @@ public class FunctionAnalyzer {
             case FunctionSet.ARRAY_MAX:
             case FunctionSet.ARRAY_MIN:
             case FunctionSet.ARRAY_SORTBY:
-            case "array_top_n":
+            case FunctionSet.ARRAY_TOP_N:
             case FunctionSet.ARRAY_DISTINCT:
             case FunctionSet.ARRAY_CONTAINS:
             case FunctionSet.ARRAY_CONTAINS_ALL:
