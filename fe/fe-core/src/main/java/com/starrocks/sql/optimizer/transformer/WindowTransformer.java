@@ -21,6 +21,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -43,6 +44,11 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
+import com.starrocks.type.DateType;
+>>>>>>> dd8c1bb ([BugFix][RB-1261] Keep reversed FIRST_VALUE/LAST_VALUE windows typed and stable across replanning (#82865))
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
@@ -52,6 +58,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -103,6 +110,9 @@ public class WindowTransformer {
         FunctionCallExpr callExpr = analyticExpr.getFnCall();
         AnalyticWindow windowFrame = analyticExpr.getWindow();
         List<OrderByElement> orderByElements = analyticExpr.getOrderByElements();
+        // The function name the window is evaluated with. It differs from callExpr's when the window is reversed.
+        String fnName = callExpr.getFunctionName();
+        Pair<String, Function> reversedFunction = null;
 
         // Set a window from UNBOUNDED PRECEDING to CURRENT_ROW for row_number().
         if (isRowNumberFn(callExpr.getFn())) {
@@ -181,23 +191,32 @@ public class WindowTransformer {
             String reversedFnName = null;
 
             if (callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)) {
-                reversedFnName = AnalyticExpr.LASTVALUE;
+                reversedFnName = FunctionSet.LAST_VALUE;
             } else if (callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.LASTVALUE)) {
-                reversedFnName = AnalyticExpr.FIRSTVALUE;
+                reversedFnName = FunctionSet.FIRST_VALUE;
             }
 
             if (reversedFnName != null) {
-                callExpr.resetFnName("", reversedFnName);
-                Function reversedFn = ExprUtils.getBuiltinFunction(reversedFnName,
-                        callExpr.getFn().getArgs(), Function.CompareMode.IS_IDENTICAL);
-                callExpr.setFn(reversedFn);
+                Function analyzedFn = callExpr.getFn();
+                Function builtinFn = ExprUtils.getBuiltinFunction(reversedFnName,
+                        analyzedFn.getArgs(), Function.CompareMode.IS_IDENTICAL);
+                Preconditions.checkState(builtinFn != null, "No builtin function %s for %s",
+                        reversedFnName, analyzedFn);
+                // The builtin signature uses wildcard types such as DECIMAL128(-1, -1). Keep the
+                // argument and return types the analyzer resolved, or BE builds the result column
+                // with an invalid precision and scale.
+                // Do not rename callExpr in place: the same AST can be planned more than once (for example
+                // INSERT OVERWRITE and MV refresh), and a renamed function would be reversed a second time.
+                fnName = reversedFnName;
+                reversedFunction = Pair.create(reversedFnName, ScalarOperatorUtil.withConcreteTypes(builtinFn,
+                        analyzedFn.getArgs(), analyzedFn.getReturnType()));
             }
         }
 
         if (windowFrame != null
                 && windowFrame.getLeftBoundary().getBoundaryType() == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING
                 && windowFrame.getRightBoundary().getBoundaryType() != AnalyticWindowBoundary.BoundaryType.PRECEDING
-                && callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE) &&
+                && fnName.equalsIgnoreCase(AnalyticExpr.FIRSTVALUE) &&
                 !callExpr.getIgnoreNulls()) {
             windowFrame.setRightBoundary(new AnalyticWindowBoundary(AnalyticWindowBoundary.BoundaryType.CURRENT_ROW, null));
         }
@@ -213,11 +232,16 @@ public class WindowTransformer {
             Preconditions.checkState(!orderByElements.isEmpty(), "Range window frame requires order by columns");
         }
 
+<<<<<<< HEAD
         // Change first_value/last_value RANGE windows to ROWS
         if ((callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)
                 || callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.LASTVALUE))
                 && windowFrame != null
                 && windowFrame.getType() == AnalyticWindow.Type.RANGE) {
+=======
+        // Change first_value/last_value RANGE windows to ROWS only when peer-group semantics cannot affect the result.
+        if (canRewriteRangeFirstLastValueToRows(fnName, callExpr.getIgnoreNulls(), windowFrame)) {
+>>>>>>> dd8c1bb ([BugFix][RB-1261] Keep reversed FIRST_VALUE/LAST_VALUE windows typed and stable across replanning (#82865))
             windowFrame = new AnalyticWindow(AnalyticWindow.Type.ROWS, windowFrame.getLeftBoundary(),
                     windowFrame.getRightBoundary());
         }
@@ -246,10 +270,107 @@ public class WindowTransformer {
 
         analyticExpr.getOrderByElements().clear();
         analyticExpr.getOrderByElements().addAll(orderings);
+<<<<<<< HEAD
         return new WindowOperator(analyticExpr, analyticExpr.getPartitionExprs(),
+=======
+        windowFrame = withAnalyzedRangeBoundaryExprs(windowFrame, orderByElements);
+        WindowOperator windowOperator = new WindowOperator(analyticExpr, analyticExpr.getPartitionExprs(),
+>>>>>>> dd8c1bb ([BugFix][RB-1261] Keep reversed FIRST_VALUE/LAST_VALUE windows typed and stable across replanning (#82865))
                 orderByElements, windowFrame);
+        if (reversedFunction != null) {
+            windowOperator.reversedFunctions.put(analyticExpr, reversedFunction);
+        }
+        return windowOperator;
     }
 
+<<<<<<< HEAD
+=======
+    private static AnalyticWindow withAnalyzedRangeBoundaryExprs(AnalyticWindow windowFrame,
+                                                                 List<OrderByElement> orderByElements) {
+        if (windowFrame == null || windowFrame.getType() != AnalyticWindow.Type.RANGE) {
+            return windowFrame;
+        }
+        Preconditions.checkState(!orderByElements.isEmpty(), "Range window frame requires order by columns");
+        OrderByElement orderByElement = orderByElements.get(0);
+        if (!hasOffsetBoundary(windowFrame)) {
+            return windowFrame;
+        }
+
+        Expr orderByExpr = orderByElement.getExpr();
+        AnalyticWindowBoundary leftBoundary = withAnalyzedRangeBoundaryExpr(
+                windowFrame.getLeftBoundary(), orderByExpr, orderByElement.getIsAsc());
+        AnalyticWindowBoundary rightBoundary = withAnalyzedRangeBoundaryExpr(
+                windowFrame.getRightBoundary(), orderByExpr, orderByElement.getIsAsc());
+        return new AnalyticWindow(windowFrame.getType(), leftBoundary, rightBoundary, windowFrame.getPos());
+    }
+
+    private static AnalyticWindowBoundary withAnalyzedRangeBoundaryExpr(AnalyticWindowBoundary boundary, Expr orderByExpr,
+                                                                       boolean orderByIsAsc) {
+        if (boundary == null || !boundary.getBoundaryType().isOffset()) {
+            return boundary;
+        }
+        return boundary.withAnalyzedRangeBoundaryExpr(buildRangeBoundaryExpr(boundary, orderByExpr, orderByIsAsc));
+    }
+
+    private static Expr buildRangeBoundaryExpr(AnalyticWindowBoundary boundary, Expr orderByExpr,
+                                               boolean orderByIsAsc) {
+        boolean addOffset =
+                (orderByIsAsc && boundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.FOLLOWING) ||
+                        (!orderByIsAsc && boundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.PRECEDING);
+        ArithmeticExpr.Operator op = addOffset ? ArithmeticExpr.Operator.ADD : ArithmeticExpr.Operator.SUBTRACT;
+        // AnalyticAnalyzer has already normalized RANGE order keys: DATE keys become DATETIME, and numeric
+        // keys become the common key type. This builder only creates the boundary arithmetic expression.
+        if (orderByExpr.getType().isDateType()) {
+            Preconditions.checkState(orderByExpr.getType().isDatetime(),
+                    "DATE RANGE order key should be cast to DATETIME before boundary expression construction");
+            IntervalLiteral interval = (IntervalLiteral) boundary.getExpr();
+            Expr orderKey = orderByExpr.clone();
+            Expr intervalValue = TypeManager.addCastExpr(interval.getValue().clone(), IntegerType.INT);
+            TimestampArithmeticExpr timestampExpr = new TimestampArithmeticExpr(
+                    op, orderKey, intervalValue, interval.getUnitIdentifier().getDescription(), false);
+            timestampExpr.setType(DateType.DATETIME);
+            return timestampExpr;
+        }
+
+        Type rangeKeyType = orderByExpr.getType();
+        Preconditions.checkState(rangeKeyType.isNumericType(), "RANGE boundary requires a numeric order key");
+        Expr orderKey = orderByExpr.clone();
+        Expr offset = TypeManager.addCastExpr(boundary.getExpr().clone(), rangeKeyType);
+        ArithmeticExpr arithmeticExpr = new ArithmeticExpr(op, orderKey, offset);
+        arithmeticExpr.setType(rangeKeyType);
+        return arithmeticExpr;
+    }
+
+    private static boolean hasOffsetBoundary(AnalyticWindow windowFrame) {
+        return windowFrame.getLeftBoundary().getBoundaryType().isOffset() ||
+                windowFrame.getRightBoundary().getBoundaryType().isOffset();
+    }
+
+    private static boolean canRewriteRangeFirstLastValueToRows(String fnName, boolean ignoreNulls,
+                                                               AnalyticWindow windowFrame) {
+        if (windowFrame == null || windowFrame.getType() != AnalyticWindow.Type.RANGE || hasOffsetBoundary(windowFrame)) {
+            return false;
+        }
+
+        boolean isFirstValue = fnName.equalsIgnoreCase(AnalyticExpr.FIRSTVALUE);
+        boolean isLastValue = fnName.equalsIgnoreCase(AnalyticExpr.LASTVALUE);
+        if (!isFirstValue && !isLastValue) {
+            return false;
+        }
+
+        AnalyticWindowBoundary.BoundaryType leftBoundaryType = windowFrame.getLeftBoundary().getBoundaryType();
+        AnalyticWindowBoundary.BoundaryType rightBoundaryType = windowFrame.getRightBoundary().getBoundaryType();
+        if (leftBoundaryType == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING
+                && rightBoundaryType == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING) {
+            return true;
+        }
+
+        return isFirstValue && !ignoreNulls
+                && leftBoundaryType == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING
+                && rightBoundaryType == AnalyticWindowBoundary.BoundaryType.CURRENT_ROW;
+    }
+
+>>>>>>> dd8c1bb ([BugFix][RB-1261] Keep reversed FIRST_VALUE/LAST_VALUE windows typed and stable across replanning (#82865))
     /**
      * Reorder window function and build SortGroup
      * SortGroup represent the window functions that can be calculated in one SortNode
@@ -273,6 +394,14 @@ public class WindowTransformer {
                 ScalarOperator agg =
                         SqlToScalarOperatorTranslator.translate(analyticExpr, subOpt.getExpressionMapping(),
                                 columnRefFactory);
+                Pair<String, Function> reversedFunction = windowOperator.reversedFunctions.get(analyticExpr);
+                if (reversedFunction != null) {
+                    CallOperator call = (CallOperator) agg;
+                    CallOperator reversedCall = new CallOperator(reversedFunction.first, call.getType(),
+                            call.getChildren(), reversedFunction.second, call.isDistinct());
+                    reversedCall.setIgnoreNulls(call.getIgnoreNulls());
+                    agg = reversedCall;
+                }
                 ColumnRefOperator columnRefOperator =
                         columnRefFactory.create(agg.toString(), agg.getType(), agg.isNullable());
                 analyticCall.put(columnRefOperator, (CallOperator) agg);
@@ -640,6 +769,8 @@ public class WindowTransformer {
 
     public static class WindowOperator {
         private final List<AnalyticExpr> windowFunctions = Lists.newArrayList();
+        // first_value/last_value evaluated as the other one because the window is reversed, keyed by identity.
+        private final Map<AnalyticExpr, Pair<String, Function>> reversedFunctions = new IdentityHashMap<>();
         private final List<Expr> partitionExprs;
         private final List<Expr> orderedPartitionExprs;
         private List<OrderByElement> orderByElements;
@@ -686,9 +817,13 @@ public class WindowTransformer {
             }
         }
 
-        public void addFunction(AnalyticExpr analyticExpr) {
+        public void addFunction(AnalyticExpr analyticExpr, WindowOperator standardized) {
             if (!windowFunctions.contains(analyticExpr)) {
                 windowFunctions.add(analyticExpr);
+                Pair<String, Function> reversedFunction = standardized.reversedFunctions.get(analyticExpr);
+                if (reversedFunction != null) {
+                    reversedFunctions.put(analyticExpr, reversedFunction);
+                }
             }
         }
 
