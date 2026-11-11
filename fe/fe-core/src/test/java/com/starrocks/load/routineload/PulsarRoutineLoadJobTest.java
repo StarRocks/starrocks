@@ -31,9 +31,12 @@ import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -44,6 +47,7 @@ import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 import static org.mockito.Mockito.when;
@@ -139,6 +143,87 @@ public class PulsarRoutineLoadJobTest {
         Assertions.assertThrows(StarRocksException.class, () -> {
             job.getAllPulsarPartitions();
         });
+    }
+
+    // StarRocks has no compute resource of a CN group, so this stands in for one: unlike
+    // WarehouseManager.DEFAULT_RESOURCE, it names a fixed CN group (worker group) of a warehouse, and two
+    // resources of the same warehouse and CN group are equal.
+    private static final class CNGroupResource implements ComputeResource {
+        private final long warehouseId;
+        private final long cnGroupId;
+
+        private CNGroupResource(long warehouseId, long cnGroupId) {
+            this.warehouseId = warehouseId;
+            this.cnGroupId = cnGroupId;
+        }
+
+        static CNGroupResource of(long warehouseId, long cnGroupId) {
+            return new CNGroupResource(warehouseId, cnGroupId);
+        }
+
+        @Override
+        public long getWarehouseId() {
+            return warehouseId;
+        }
+
+        @Override
+        public long getWorkerGroupId() {
+            return cnGroupId;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof CNGroupResource)) {
+                return false;
+            }
+            CNGroupResource other = (CNGroupResource) obj;
+            return warehouseId == other.warehouseId && cnGroupId == other.cnGroupId;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(warehouseId, cnGroupId);
+        }
+
+        @Override
+        public String toString() {
+            return "{warehouseId=" + warehouseId + ", cnGroupId=" + cnGroupId + "}";
+        }
+    }
+
+    @Test
+    public void checkCustomPartition_usesAcquiredComputeResource() {
+        PulsarRoutineLoadJob job = new PulsarRoutineLoadJob(1L, "routine_load", 1L, 1L,
+                "http://pulsar-service", "topic1", "sub1");
+        Deencapsulation.setField(job, "customPulsarPartitions", Lists.newArrayList("p1"));
+
+        ComputeResource acquiredResource = CNGroupResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID, 10001L);
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                return acquiredResource;
+            }
+        };
+        List<ComputeResource> fetchedVia = Lists.newArrayList();
+        new MockUp<PulsarUtil>() {
+            @Mock
+            public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
+                                                       ImmutableMap<String, String> properties,
+                                                       ComputeResource computeResource) {
+                fetchedVia.add(computeResource);
+                return Lists.newArrayList("p1", "p2");
+            }
+        };
+
+        Deencapsulation.invoke(job, "checkCustomPartition");
+
+        // the CREATE-time check is routed through a resource acquired for the job's warehouse, not the
+        // default CN group 0 that the not-yet-scheduled job still holds, which may have no alive CN
+        Assertions.assertEquals(Lists.newArrayList(acquiredResource), fetchedVia);
+        Assertions.assertSame(WarehouseManager.DEFAULT_RESOURCE, job.getComputeResource());
     }
 
     @Test

@@ -13,6 +13,8 @@ Routine Load ジョブの実行情報を表示します。
 
 <RoutineLoadPrivNote />
 
+SHOW ROUTINE LOAD は、ロード先テーブルに対して少なくとも 1 つの権限を持つ場合、または OPERATE 権限を持つ場合に、Routine Load ジョブを表示します。ロード先テーブルに対する SELECT 権限がない場合、`JobProperties`、`DataSourceProperties`、`CustomProperties`、`ErrorLogUrls`、`TrackingSQL`、`OtherMsg` は NULL になり、`ReasonOfStateChanged` はエラーコードのみを保持します。`root` ユーザーはすべての Routine Load ジョブの完全な情報を参照できます。ロード先テーブルが削除された Routine Load ジョブは、`root` ユーザーにのみ完全な情報が表示され、OPERATE 権限を持つユーザーには上記のフィールドを除いた情報が表示されます。
+
 ## 構文
 
 ```SQL

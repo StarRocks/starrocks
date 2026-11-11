@@ -7,6 +7,8 @@ description: "stream_loads 提供 Stream Load 作业的信息。"
 
 `stream_loads` 提供有关 Stream Load 作业的信息。
 
+对 Stream Load 作业的每一张目标表都拥有至少一项权限，或者拥有 OPERATE 权限的用户，可以在 `stream_loads` 中看到该作业。如果没有每一张目标表的 SELECT 权限，`ERROR_MSG`、`TRACKING_URL` 和 `TRACKING_SQL` 为 NULL。`root` 用户可以看到所有 Stream Load 作业的完整信息。目标表已被删除的 Stream Load 作业，只有 `root` 用户能看到完整信息，拥有 OPERATE 权限的用户看到的是隐藏上述字段后的信息。
+
 `stream_loads` 提供以下字段：
 
 | **字段**              | **描述**                                         |

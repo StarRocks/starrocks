@@ -35,8 +35,10 @@
 #include "base/time/timezone_utils.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
+#include "column/struct_column.h"
 #include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
+#include "testutil/type_test_helper.h"
 #include "types/datetime_value.h"
 #include "types/type_descriptor.h"
 #include "types/variant_value.h"
@@ -221,47 +223,44 @@ std::tuple<bool, Status> get_conv_func(const TypeDescriptor& type, const TypeDes
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanDirectScalar) {
     auto arrow_type = arrow::int32();
-    TypeDescriptor type_desc(TYPE_INT);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &TYPE_INT_DESC, true, &raw_type_desc, &conv_func,
                                                      need_cast, false));
     ASSERT_FALSE(need_cast);
     ASSERT_EQ(TYPE_INT, raw_type_desc.type);
     ASSERT_NE(nullptr, conv_func.func);
 
-    auto column = create_arrow_column_convert_dest(type_desc, raw_type_desc, need_cast, true);
+    auto column = create_arrow_column_convert_dest(TYPE_INT_DESC, raw_type_desc, need_cast, true);
     ASSERT_TRUE(column->is_nullable());
 }
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanCastNeededScalar) {
     auto arrow_type = arrow::utf8();
-    TypeDescriptor type_desc(TYPE_INT);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, false, &raw_type_desc, &conv_func,
-                                                     need_cast, false));
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &TYPE_INT_DESC, false, &raw_type_desc,
+                                                     &conv_func, need_cast, false));
     ASSERT_TRUE(need_cast);
     ASSERT_EQ(TYPE_VARCHAR, raw_type_desc.type);
     ASSERT_EQ(TypeDescriptor::MAX_VARCHAR_LENGTH, raw_type_desc.len);
     ASSERT_NE(nullptr, conv_func.func);
 
-    auto column = create_arrow_column_convert_dest(type_desc, raw_type_desc, need_cast, false);
+    auto column = create_arrow_column_convert_dest(TYPE_INT_DESC, raw_type_desc, need_cast, false);
     ASSERT_TRUE(column->is_binary());
 }
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanUnwrapsDictionary) {
     auto arrow_type = arrow::dictionary(arrow::int8(), arrow::int32());
-    TypeDescriptor type_desc(TYPE_INT);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &TYPE_INT_DESC, true, &raw_type_desc, &conv_func,
                                                      need_cast, false));
     ASSERT_FALSE(need_cast);
     ASSERT_EQ(TYPE_INT, raw_type_desc.type);
@@ -270,14 +269,12 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanUnwrapsDictionary) {
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanArray) {
     auto arrow_type = arrow::list(arrow::int32());
-    TypeDescriptor type_desc(TYPE_ARRAY);
-    type_desc.children.emplace_back(TYPE_INT);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
-                                                     need_cast, false));
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &TYPE_ARRAY_INT_DESC, true, &raw_type_desc,
+                                                     &conv_func, need_cast, false));
     ASSERT_FALSE(need_cast);
     ASSERT_EQ(TYPE_ARRAY, raw_type_desc.type);
     ASSERT_EQ(1, raw_type_desc.children.size());
@@ -289,7 +286,7 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMap) {
     auto arrow_type = arrow::map(arrow::int32(), arrow::utf8());
     TypeDescriptor type_desc(TYPE_MAP);
     type_desc.children.emplace_back(TYPE_INT);
-    type_desc.children.emplace_back(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+    type_desc.children.emplace_back(TYPE_VARCHAR_DESC);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
@@ -308,7 +305,7 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanStruct) {
     auto arrow_type = arrow::struct_({arrow::field("c0", arrow::int32()), arrow::field("c1", arrow::utf8())});
     TypeDescriptor type_desc(TYPE_STRUCT);
     type_desc.children.emplace_back(TYPE_INT);
-    type_desc.children.emplace_back(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+    type_desc.children.emplace_back(TYPE_VARCHAR_DESC);
     type_desc.field_names = {"c0", "c1"};
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
@@ -346,17 +343,15 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanPrunedStruct) {
 }
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMissingComplexStructChildren) {
-    TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(TYPE_INT);
     TypeDescriptor map_type(TYPE_MAP);
-    map_type.children = {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
+    map_type.children = {TYPE_VARCHAR_DESC, TYPE_INT_DESC};
     TypeDescriptor struct_type(TYPE_STRUCT);
     struct_type.field_names = {"value"};
     struct_type.children.emplace_back(TYPE_INT);
     std::vector<std::shared_ptr<arrow::DataType>> arrow_children = {
             arrow::list(arrow::int32()), arrow::map(arrow::utf8(), arrow::int32()),
             arrow::struct_({arrow::field("value", arrow::int32())})};
-    std::vector<TypeDescriptor> children = {array_type, map_type, struct_type};
+    std::vector<TypeDescriptor> children = {TYPE_ARRAY_INT_DESC, map_type, struct_type};
     for (size_t i = 0; i < children.size(); ++i) {
         SCOPED_TRACE(children[i].debug_string());
         auto arrow_type =
@@ -364,7 +359,7 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMissingComplexStructChildr
         auto array = arrow::ArrayFromJSON(arrow_type, R"([{"keep":7},null,{"keep":9}])");
         TypeDescriptor type(TYPE_STRUCT);
         type.field_names = {"new", "keep"};
-        type.children = {children[i], TypeDescriptor(TYPE_INT)};
+        type.children = {children[i], TYPE_INT_DESC};
         TypeDescriptor raw_type;
         ConvertFuncTree plan;
         bool need_cast = false;
@@ -383,14 +378,12 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMissingComplexStructChildr
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanRejectsInvalidNestedType) {
     auto arrow_type = arrow::int32();
-    TypeDescriptor type_desc(TYPE_ARRAY);
-    type_desc.children.emplace_back(TYPE_INT);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    auto st = build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func, need_cast,
-                                              false);
+    auto st = build_arrow_column_convert_plan(arrow_type.get(), &TYPE_ARRAY_INT_DESC, true, &raw_type_desc, &conv_func,
+                                              need_cast, false);
     ASSERT_FALSE(st.ok());
     ASSERT_NE(std::string::npos, st.message().find("does not match"));
 }
@@ -456,6 +449,120 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanVariantAndConvert) {
     ASSERT_TRUE(variant_column->try_get_row_ref(2, &row));
     ASSERT_EQ(kMetadata, row.get_metadata().raw());
     ASSERT_EQ(kValue2, row.get_value().raw());
+}
+
+TEST_F(ArrowConverterTest, NullStructDoesNotFilterHiddenDecimalOverflow) {
+    auto amounts = arrow::ArrayFromJSON(arrow::decimal128(38, 0),
+                                        R"(["42", "99999999999999999999999999999999999999", "7", null,
+                                           "99999999999999999999999999999999999999"])");
+    auto validity = arrow::ArrayFromJSON(arrow::boolean(), "[true, null, true, true, true]");
+    auto array_result = arrow::StructArray::Make({amounts}, {arrow::field("amount", amounts->type())},
+                                                 validity->null_bitmap(), validity->null_count());
+    ASSERT_OK(array_result.status());
+    auto array = array_result.ValueOrDie();
+    ASSERT_OK(array->ValidateFull());
+    TypeDescriptor type(TYPE_STRUCT);
+    type.field_names = {"amount"};
+    type.children = {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 0)};
+
+    for (bool strict : {false, true}) {
+        SCOPED_TRACE(strict);
+        TypeDescriptor raw_type;
+        ConvertFuncTree plan;
+        bool need_cast = false;
+        ASSERT_STATUS_OK(
+                build_arrow_column_convert_plan(array->type().get(), &type, true, &raw_type, &plan, need_cast, strict));
+        ASSERT_FALSE(need_cast);
+        auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
+        Filter filter(5, 1);
+        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, nullptr));
+        auto sliced = array->Slice(1);
+        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 2, sliced.get(), column.get(), 0, 1, &filter, nullptr));
+        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 2, sliced.get(), column.get(), 2, 3, &filter, nullptr));
+        column->check_or_die();
+        EXPECT_EQ(5, column->size());
+        EXPECT_EQ("{amount:42}", column->debug_item(0));
+        EXPECT_TRUE(column->is_null(1));
+        EXPECT_EQ("{amount:7}", column->debug_item(2));
+        EXPECT_EQ("{amount:NULL}", column->debug_item(3));
+        // Hidden overflow must not discard the row; visible overflow still follows strict mode.
+        EXPECT_EQ(Filter({1, 1, 1, 1, static_cast<uint8_t>(strict ? 0 : 1)}), filter);
+    }
+}
+
+TEST_F(ArrowConverterTest, NestedStructNullMasksVariantPayloadAcrossSlices) {
+    constexpr std::string_view kMetadata("\x01\x00\x00", 3);
+    constexpr std::string_view kValue("\x09ok", 3);
+    constexpr std::string_view kVariantNull("\x00", 1);
+    auto values = std::make_shared<arrow::BinaryBuilder>();
+    auto metadata = std::make_shared<arrow::BinaryBuilder>();
+    auto variant_type = arrow::struct_(
+            {arrow::field("value", arrow::binary(), false), arrow::field("metadata", arrow::binary(), false)});
+    arrow::StructBuilder variants(variant_type, arrow::default_memory_pool(), {values, metadata});
+    for (int i = 0; i < 6; ++i) {
+        ASSERT_OK(variants.Append(i != 3));
+        // Required physical children may hold empty placeholders under a NULL ancestor.
+        ASSERT_OK(values->Append(i >= 1 && i <= 3 ? std::string_view{} : (i == 4 ? kVariantNull : kValue)));
+        ASSERT_OK(metadata->Append(i >= 1 && i <= 3 ? std::string_view{} : kMetadata));
+    }
+    std::shared_ptr<arrow::Array> payload;
+    ASSERT_OK(variants.Finish(&payload));
+    auto inner_validity = arrow::ArrayFromJSON(arrow::boolean(), "[true, true, null, true, true, true]");
+    auto inner_result = arrow::StructArray::Make({payload}, {arrow::field("payload", variant_type)},
+                                                 inner_validity->null_bitmap(), inner_validity->null_count());
+    ASSERT_OK(inner_result.status());
+    auto inner = inner_result.ValueOrDie();
+    auto outer_validity = arrow::ArrayFromJSON(arrow::boolean(), "[true, null, true, true, true, true]");
+    auto array_result = arrow::StructArray::Make({inner}, {arrow::field("inner", inner->type())},
+                                                 outer_validity->null_bitmap(), outer_validity->null_count());
+    ASSERT_OK(array_result.status());
+    auto array = array_result.ValueOrDie();
+    ASSERT_OK(array->ValidateFull());
+
+    TypeDescriptor inner_type(TYPE_STRUCT);
+    inner_type.field_names = {"payload"};
+    inner_type.children = {TypeDescriptor(TYPE_VARIANT)};
+    TypeDescriptor type(TYPE_STRUCT);
+    type.field_names = {"inner"};
+    type.children = {inner_type};
+    TypeDescriptor raw_type;
+    ConvertFuncTree plan;
+    bool need_cast = false;
+    ASSERT_STATUS_OK(
+            build_arrow_column_convert_plan(array->type().get(), &type, true, &raw_type, &plan, need_cast, true));
+    ASSERT_FALSE(need_cast);
+    auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
+    Filter filter(6, 1);
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 1, array.get(), column.get(), 0, 0, &filter, nullptr));
+    auto sliced = array->Slice(1);
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 2, sliced.get(), column.get(), 0, 1, &filter, nullptr));
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 3, sliced.get(), column.get(), 2, 3, &filter, nullptr));
+    column->check_or_die();
+    ASSERT_EQ(6, column->size());
+    EXPECT_EQ(Filter(6, 1), filter);
+    EXPECT_TRUE(column->is_null(1));
+    auto* outer_column = down_cast<StructColumn*>(down_cast<NullableColumn*>(column.get())->data_column_raw_ptr());
+    auto inner_column_result = outer_column->field_column_raw_ptr("inner");
+    ASSERT_TRUE(inner_column_result.ok());
+    auto* inner_column = down_cast<NullableColumn*>(inner_column_result.value());
+    EXPECT_TRUE(inner_column->is_null(1));
+    EXPECT_TRUE(inner_column->is_null(2));
+    auto payload_result =
+            down_cast<StructColumn*>(inner_column->data_column_raw_ptr())->field_column_raw_ptr("payload");
+    ASSERT_TRUE(payload_result.ok());
+    auto* payload_column = down_cast<NullableColumn*>(payload_result.value());
+    for (int i = 1; i <= 3; ++i) {
+        ASSERT_TRUE(payload_column->is_null(i)) << "row " << i;
+    }
+    auto* variant_column = down_cast<VariantColumn*>(payload_column->data_column_raw_ptr());
+    for (int i : {0, 4, 5}) {
+        ASSERT_FALSE(payload_column->is_null(i));
+        VariantRowRef row;
+        ASSERT_TRUE(variant_column->try_get_row_ref(i, &row));
+        EXPECT_EQ(kMetadata, row.get_metadata().raw());
+        EXPECT_EQ(i == 4 ? kVariantNull : kValue, row.get_value().raw());
+        EXPECT_EQ(i == 4, row.is_null());
+    }
 }
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanRejectsInvalidVariantLayout) {
@@ -1949,15 +2056,12 @@ static std::shared_ptr<arrow::Array> create_list_array(int64_t num_elements, ssi
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_list_array) {
-    TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(LogicalType::TYPE_INT);
-
     ConvertFuncTree cf;
-    auto [need_cast, st] = get_conv_func(array_type, array_type, cf);
+    auto [need_cast, st] = get_conv_func(TYPE_ARRAY_INT_DESC, TYPE_ARRAY_INT_DESC, cf);
     ASSERT_STATUS_OK(st);
     ASSERT_FALSE(need_cast);
 
-    auto column = ColumnHelper::create_column(array_type, false);
+    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
     column->reserve(4096);
     ssize_t counter = 0;
     int num = 100;
@@ -1992,10 +2096,8 @@ static std::shared_ptr<arrow::Array> create_nest_list_array(int64_t num_parents,
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_nest_list_array) {
-    TypeDescriptor array_type0(TYPE_ARRAY);
-    array_type0.children.emplace_back(LogicalType::TYPE_BIGINT);
     TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(array_type0);
+    array_type.children.emplace_back(TYPE_ARRAY_BIGINT_DESC);
 
     ConvertFuncTree cf;
     auto [need_cast, st] = get_conv_func(array_type, array_type, cf);
@@ -2015,15 +2117,12 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_nest_list_array) {
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_nullable_list_array) {
-    TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(LogicalType::TYPE_INT);
-
     ConvertFuncTree cf;
-    auto [need_cast, st] = get_conv_func(array_type, array_type, cf, true);
+    auto [need_cast, st] = get_conv_func(TYPE_ARRAY_INT_DESC, TYPE_ARRAY_INT_DESC, cf, true);
     ASSERT_STATUS_OK(st);
     ASSERT_FALSE(need_cast);
 
-    auto column = ColumnHelper::create_column(array_type, true);
+    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     column->reserve(4096);
     ssize_t counter = 0;
     int num = 100;
@@ -2088,8 +2187,8 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_pruned_map) {
 
     for (int pruned_child : {0, 1}) {
         TypeDescriptor type(TYPE_MAP);
-        type.children = {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
-        type.children[pruned_child] = TypeDescriptor(TYPE_UNKNOWN);
+        type.children = {TYPE_VARCHAR_DESC, TYPE_INT_DESC};
+        type.children[pruned_child] = TYPE_UNKNOWN_DESC;
         TypeDescriptor raw_type;
         ConvertFuncTree plan;
         bool need_cast = false;

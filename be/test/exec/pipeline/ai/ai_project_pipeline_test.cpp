@@ -73,6 +73,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
+#include "testutil/type_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -87,7 +88,7 @@ public:
 namespace pipeline {
 namespace {
 
-constexpr int64_t kAICompletePromptFid = 200001;
+constexpr int64_t kAICompletePromptFid = 200000;
 constexpr TSlotId kPromptSlotId = 1;
 constexpr TSlotId kCommonSlotId = 2;
 constexpr TSlotId kAnswerSlotId = 3;
@@ -109,7 +110,7 @@ AIProjectModelConfigs provider_model_configs(std::string model = std::string(kMo
 }
 
 TypeDescriptor varchar_type() {
-    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    return TYPE_VARCHAR_DESC;
 }
 
 TExpr make_slot_ref(TTupleId tuple_id, TSlotId slot_id) {
@@ -189,9 +190,9 @@ TExpr make_ai_file_call(TTupleId tuple_id, bool embedding) {
     file.__set_type(file_type);
     auto& call = expression.nodes.front();
     if (embedding) {
-        const auto result_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)).to_thrift();
+        const auto result_type = TYPE_ARRAY_FLOAT_DESC.to_thrift();
         call.fn.name.__set_function_name("ai_embed");
-        call.fn.__set_fid(200004);
+        call.fn.__set_fid(200003);
         call.fn.__set_arg_types({file_type, varchar_type().to_thrift(), varchar_type().to_thrift(),
                                  TypeDescriptor(TYPE_JSON).to_thrift()});
         call.fn.__set_ret_type(result_type);
@@ -199,7 +200,7 @@ TExpr make_ai_file_call(TTupleId tuple_id, bool embedding) {
         call.__set_ai_provider_id("provider:default_embedding");
         expression.nodes[1] = std::move(file);
     } else {
-        call.fn.__set_fid(200002);
+        call.fn.__set_fid(200001);
         call.fn.__set_arg_types({varchar_type().to_thrift(), file_type, varchar_type().to_thrift(),
                                  varchar_type().to_thrift(), TypeDescriptor(TYPE_JSON).to_thrift()});
         call.__set_num_children(5);
@@ -716,12 +717,12 @@ protected:
         std::vector<AIProjectOutputSpec> outputs;
         for (size_t index = 0; index < options.size(); ++index) {
             auto call = make_ai_complete(_tuple_id, kPromptSlotId).nodes.front();
-            const auto result_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)).to_thrift();
+            const auto result_type = TYPE_ARRAY_FLOAT_DESC.to_thrift();
             call.__set_num_children(4);
             call.__set_type(result_type);
             call.__set_ai_provider_id("provider:embedding");
             call.fn.name.__set_function_name("ai_embed");
-            call.fn.__set_fid(200003);
+            call.fn.__set_fid(200002);
             call.fn.__set_arg_types({varchar_type().to_thrift(), varchar_type().to_thrift(), varchar_type().to_thrift(),
                                      TypeDescriptor(TYPE_JSON).to_thrift()});
             call.fn.__set_ret_type(result_type);
@@ -753,7 +754,7 @@ protected:
         call.__set_num_children(4);
         call.__set_type(result_type);
         call.fn.name.__set_function_name("ai_classify");
-        call.fn.__set_fid(200006);
+        call.fn.__set_fid(200005);
         call.fn.__set_arg_types(
                 {varchar_type().to_thrift(), array_type, varchar_type().to_thrift(), varchar_type().to_thrift()});
         call.fn.__set_ret_type(result_type);
@@ -840,8 +841,7 @@ protected:
             const bool embedding = slot_id == kDefaultEmbeddingSlotId || slot_id == kProviderEmbeddingSlotId;
             tuple.add_slot(TSlotDescriptorBuilder()
                                    .id(slot_id)
-                                   .type(embedding ? TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT))
-                                                   : varchar_type())
+                                   .type(embedding ? TYPE_ARRAY_FLOAT_DESC : varchar_type())
                                    .nullable(true)
                                    .build());
         }
@@ -861,17 +861,17 @@ protected:
                                    : make_ai_complete(_tuple_id, kCommonSlotId);
         auto& call = expression.nodes.front();
         if (provider) {
-            call.fn.__set_fid(embedding ? 200003 : 200001);
+            call.fn.__set_fid(embedding ? 200002 : 200000);
             call.fn.name.__set_function_name(embedding ? "ai_embed" : "ai_complete");
             call.__set_ai_provider_id(embedding ? "provider:embedding" : "provider:chat");
             expression.nodes[2].string_literal.__set_value(std::move(provider_name));
         } else if (embedding) {
-            call.fn.__set_fid(200003);
+            call.fn.__set_fid(200002);
             call.fn.name.__set_function_name("ai_embed");
             call.__set_ai_provider_id("provider:default_embedding");
         }
         if (embedding) {
-            const auto type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)).to_thrift();
+            const auto type = TYPE_ARRAY_FLOAT_DESC.to_thrift();
             call.__set_type(type);
             call.fn.__set_ret_type(type);
         }
@@ -1641,13 +1641,13 @@ TEST_F(AIProjectPipelineTest, MixedDefaultAndExplicitProviderRoutesKeepCredentia
     auto make_provider_call = [&](bool embedding) {
         auto expression = make_ai_complete_with_explicit_model(_tuple_id, kPromptSlotId);
         auto& call = expression.nodes.front();
-        call.fn.__set_fid(embedding ? 200003 : 200001);
+        call.fn.__set_fid(embedding ? 200002 : 200000);
         call.fn.name.__set_function_name(embedding ? "ai_embed" : "ai_complete");
         call.__set_ai_provider_id(embedding ? "provider:embedding" : "provider:chat");
         expression.nodes[2].string_literal.__set_value(embedding ? "embed" : "chat");
         expression.nodes[3].string_literal.__set_value(embedding ? "explicit-embed-model" : "explicit-chat-model");
         if (embedding) {
-            const auto type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)).to_thrift();
+            const auto type = TYPE_ARRAY_FLOAT_DESC.to_thrift();
             call.__set_type(type);
             call.fn.__set_ret_type(type);
         }

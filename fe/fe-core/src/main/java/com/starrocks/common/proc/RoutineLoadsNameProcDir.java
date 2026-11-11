@@ -36,8 +36,11 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.load.LoadJobRedaction;
+import com.starrocks.load.LoadJobVisibility;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 
@@ -85,8 +88,15 @@ public class RoutineLoadsNameProcDir implements ProcDirInterface {
         // find all of job named routine load
         RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
         List<RoutineLoadJob> routineLoadJobList = routineLoadManager.getJobByName(jobName);
+        // SHOW PROC needs OPERATE, so every job is listed, but only in full where the caller may read the rows it
+        // loads; with the rule off, every job in full, as before it.
         for (RoutineLoadJob routineLoadJob : routineLoadJobList) {
-            baseProcResult.addRow(routineLoadJob.getShowInfo());
+            LoadJobVisibility.Access access = LoadJobVisibility.isEnabled()
+                    ? LoadJobVisibility.accessOf(ConnectContext.get(), routineLoadJob) : LoadJobVisibility.Access.FULL;
+            if (access != LoadJobVisibility.Access.NONE) {
+                baseProcResult.addRow(access == LoadJobVisibility.Access.FULL ? routineLoadJob.getShowInfo()
+                        : LoadJobRedaction.redactShowRoutineLoad(routineLoadJob.getShowInfo()));
+            }
         }
 
         return baseProcResult;

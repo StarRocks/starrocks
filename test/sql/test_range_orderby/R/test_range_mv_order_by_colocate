@@ -1,0 +1,69 @@
+-- name: test_range_mv_order_by_colocate @cloud
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    k1 int not null,
+    k2 int not null,
+    v int not null
+)
+duplicate key(k1, k2)
+order by(k1, k2)
+properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t values (1, 10, 100), (2, 20, 200), (3, 30, 300);
+-- result:
+-- !result
+create materialized view mv_colocate
+order by (k1, k2)
+refresh deferred manual
+properties('replication_num' = '1', 'colocate_with' = 'grp_mv_${uuid0}:k1')
+as select k1, k2, v from t;
+-- result:
+-- !result
+refresh materialized view mv_colocate with sync mode;
+alter materialized view mv_colocate order by (k2, k1);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The sort key of a materialized view in a range colocate group must start with its colocate columns [k1] (same order and types). Got: [k2, k1].')
+-- !result
+function: assert_schema_change_job_count("db_${uuid0}", "mv_colocate", 0)
+-- result:
+None
+-- !result
+select * from mv_colocate order by k1;
+-- result:
+1	10	100
+2	20	200
+3	30	300
+-- !result
+create materialized view mv_plain
+order by (k1, k2)
+refresh deferred manual
+properties('replication_num' = '1')
+as select k1, k2, v from t;
+-- result:
+-- !result
+refresh materialized view mv_plain with sync mode;
+alter materialized view mv_plain order by (k2, k1);
+-- result:
+-- !result
+function: wait_table_schema_change_finish("db_${uuid0}", "mv_plain", "FINISHED")
+-- result:
+FINISHED
+-- !result
+select * from mv_plain order by k1;
+-- result:
+1	10	100
+2	20	200
+3	30	300
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

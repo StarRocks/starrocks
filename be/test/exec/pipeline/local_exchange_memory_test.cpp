@@ -69,7 +69,7 @@ protected:
 
     static ChunkPtr _make_int_chunk(size_t num_rows) {
         auto chunk = std::make_shared<Chunk>();
-        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        auto col = ColumnHelper::create_column(TYPE_INT_DESC, false);
         for (size_t i = 0; i < num_rows; i++) {
             col->append_datum(Datum(static_cast<int32_t>(i)));
         }
@@ -263,7 +263,7 @@ TEST_F(LocalExchangeMemoryTest, const_column_accounted_after_unpack) {
     constexpr size_t kNumRows = 4096;
 
     // Chunk with a single const-INT column over kNumRows virtual rows.
-    auto inner = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    auto inner = ColumnHelper::create_column(TYPE_INT_DESC, false);
     inner->append_datum(Datum(static_cast<int32_t>(42)));
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ConstColumn::create(std::move(inner), kNumRows), 1);

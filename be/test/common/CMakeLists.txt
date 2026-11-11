@@ -36,6 +36,7 @@ set(COMMON_TEST_FILES
     table_metrics_mgr_test.cpp
     thrift_client_test.cpp
     thrift_plan_redaction_test.cpp
+    util/thrift_key_redaction_test.cpp
     thread/cpu_usage_info_test.cpp
     metrics/thread_pool_metric_group_test.cpp
     thread/priority_thread_pool_test.cpp

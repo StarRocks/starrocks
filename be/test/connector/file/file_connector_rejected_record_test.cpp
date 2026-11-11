@@ -49,8 +49,7 @@ std::shared_ptr<RuntimeState> make_load_state_with_desc_tbl(ObjectPool* pool) {
     TDescriptorTableBuilder desc_builder;
     TTupleDescriptorBuilder tuple_builder;
     TSlotDescriptorBuilder slot_builder;
-    TypeDescriptor int_type(TYPE_INT);
-    slot_builder.type(int_type).length(int_type.len).precision(0).scale(0).nullable(true);
+    slot_builder.type(TYPE_INT_DESC).length(TYPE_INT_DESC.len).precision(0).scale(0).nullable(true);
     tuple_builder.add_slot(slot_builder.build());
     tuple_builder.build(&desc_builder);
 
@@ -158,8 +157,7 @@ TEST_F(FileConnectorRejectedRecordTest, UnsupportedFormatWhenLoggingDisabledDoes
     TDescriptorTableBuilder desc_builder;
     TTupleDescriptorBuilder tuple_builder;
     TSlotDescriptorBuilder slot_builder;
-    TypeDescriptor int_type(TYPE_INT);
-    slot_builder.type(int_type).length(int_type.len).precision(0).scale(0).nullable(true);
+    slot_builder.type(TYPE_INT_DESC).length(TYPE_INT_DESC.len).precision(0).scale(0).nullable(true);
     tuple_builder.add_slot(slot_builder.build());
     tuple_builder.build(&desc_builder);
     DescriptorTbl* tbl = nullptr;

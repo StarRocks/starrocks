@@ -19,6 +19,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
@@ -109,7 +110,8 @@ public class CPBiRel {
                 rhsScanOp.getColumnMetaToColRefMap().entrySet().stream()
                         .collect(Collectors.toMap(e -> e.getKey().getName(), Map.Entry::getValue));
         List<CPBiRel> biRels = Lists.newArrayList();
-        if (lhsTable.hasForeignKeyConstraints() && rhsTable.hasUniqueConstraints()) {
+        // Each row of lhs matches exactly one row of rhs only if rhs reads every row its foreign key can refer to.
+        if (lhsTable.hasForeignKeyConstraints() && rhsTable.hasUniqueConstraints() && !hasTableHints(rhsScanOp)) {
             lhsTable.getForeignKeyConstraints().stream()
                     .filter(fk -> isForeignKeyConstraintReferenceToUniqueKey(lhsTable, fk, rhsTable)).forEach(fk -> {
                         Set<String> lhsColumNames =
@@ -130,7 +132,9 @@ public class CPBiRel {
                     });
         }
 
-        if (lhsTable.getId() == rhsTable.getId() && lhsTable.hasUniqueConstraints()) {
+        // Two scans of a table pair up row for row on a unique key only if both read the whole table.
+        if (lhsTable.getId() == rhsTable.getId() && lhsTable.hasUniqueConstraints() &&
+                !hasTableHints(lhsScanOp) && !hasTableHints(rhsScanOp)) {
             lhsTable.getUniqueConstraints().stream().filter(uk ->
                             lhsColumnName2ColRef.keySet().containsAll(uk.getUniqueColumnNames(lhsTable)) &&
                                     rhsColumnName2ColRef.keySet().containsAll(uk.getUniqueColumnNames(lhsTable))
@@ -144,5 +148,12 @@ public class CPBiRel {
                             biRels.add(new CPBiRel(lhs, rhs, false, leftToRight, ukColumnRefPairs)));
         }
         return biRels;
+    }
+
+    // Table hints (PARTITION, TABLET or REPLICA, or a direct read of a synchronous materialized view) make an OLAP
+    // scan read something other than its whole table: no other scan of the table can stand in for it, and it can miss
+    // rows that a foreign key refers to.
+    private static boolean hasTableHints(LogicalScanOperator scanOp) {
+        return scanOp instanceof LogicalOlapScanOperator && ((LogicalOlapScanOperator) scanOp).hasTableHints();
     }
 }
