@@ -423,6 +423,33 @@ public class ExternalStatsDroppedPartitionCleanupTest extends PlanTestNoneDBBase
     }
 
     @Test
+    public void testPeriodicCleansTheSampleColumnsOfAnIncrementalFullRun() {
+        // c1 is the SAMPLE entry an incremental FULL run leaves (table partition count, no partition set, no
+        // requested count): its rows are scaled by the partitions they come from, so it is cleaned like FULL.
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().resetExternalDroppedPartitionCleanupRound();
+        ExternalBasicStatsMeta meta = new ExternalBasicStatsMeta(CATALOG, DB, TABLE, columns(),
+                StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), Maps.newHashMap());
+        meta.addColumnStatsMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(), 3, 0));
+        meta.addColumnStatsMeta(new ColumnStatsMeta("c2", StatsConstants.AnalyzeType.FULL, LocalDateTime.now()));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddExternalBasicStatsMeta(meta);
+        FakeStatsTable stats = new FakeStatsTable(Lists.newArrayList("par_col=7"), true);
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<String> queryExternalStatPartitionsNotUpdatedSince(ConnectContext ctx, String tableUUID,
+                                                                          List<String> columnNames,
+                                                                          long graceSeconds) {
+                Assertions.assertEquals(List.of("c1", "c2"), columnNames);
+                stats.queries.incrementAndGet();
+                return Lists.newArrayList("par_col=7");
+            }
+        };
+        runPeriodic();
+        Assertions.assertEquals(1, stats.queries.get());
+        Assertions.assertEquals(List.of(List.of("c1", "c2")), stats.deletedColumnBatches);
+    }
+
+    @Test
     public void testPeriodicSkipsATableWithoutFullColumns() {
         // Legacy metadata without per-column entries: the optimizer ignores such rows, nothing to clean.
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddExternalBasicStatsMeta(
