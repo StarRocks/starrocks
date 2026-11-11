@@ -16,16 +16,45 @@ From v3.4.1 onwards, StarRocks supports secure connections encrypted by SSL. Unl
 To enable SSL authentication in StarRocks, configure the following parameters in the FE configuration file **fe.conf**:
 
 - `ssl_keystore_location`: Specifies the path to the keystore file that stores the SSL certificate and key.
+- `ssl_keystore_type`: The keystore type. Default value: empty, which means StarRocks automatically detects JKS and PKCS12. Set this parameter explicitly for formats such as BCFKS.
+- `ssl_keystore_provider`: The security provider used to load the keystore. This parameter is optional.
 - `ssl_keystore_password`: The password for accessing the keystore file. StarRocks requires this password to read the keystore file.
 - `ssl_key_password`: The password for accessing the key. StarRocks requires this password to retrieve the key from the keystore.
+- `ssl_truststore_location`: Specifies the path to the truststore file. This parameter is optional.
+- `ssl_truststore_type`: The truststore type for MySQL SSL. Default value: empty, which means StarRocks automatically detects JKS and PKCS12. Set this parameter explicitly for formats such as BCFKS.
+- `ssl_truststore_provider`: The security provider used to load the truststore for MySQL SSL. This parameter is optional.
+- `ssl_truststore_password`: The password for accessing the truststore file. This parameter is required when `ssl_truststore_location` is set.
+- `ssl_security_provider_class`: The security provider class to register before loading the keystore or truststore. This parameter is optional.
+- `ssl_security_provider_name`: The expected provider name. This parameter is optional.
+- `ssl_security_provider_path`: The provider JAR path. This parameter is optional. If the provider JAR has already been added to the FE classpath, you do not need to set this parameter.
 - `ssl_force_secure_transport`: Whether to force SSL authentication. Default value: `FALSE`. If this item is set to `TRUE`, the system will reject connections that are not encrypted with SSL.
 
 Example:
 
 ```Properties
 ssl_keystore_location = // Path to the keystore file  
+ssl_keystore_type =
 ssl_keystore_password = // Password for the keystore file  
 ssl_key_password = // Password for accessing the key  
+```
+
+To load a BCFKS keystore and truststore with the Bouncy Castle FIPS provider, put the provider JAR in the FE classpath, for example `$STARROCKS_HOME/lib`, or configure `ssl_security_provider_path`, and then add the following configurations. These parameters configure keystore and truststore loading only. They do not by themselves guarantee that the TLS engine uses a FIPS-validated JSSE provider.
+
+```Properties
+ssl_keystore_location = /path/to/starrocks-keystore.bcfks
+ssl_keystore_type = BCFKS
+ssl_keystore_provider = BCFIPS
+ssl_keystore_password = // Password for the keystore file
+ssl_key_password = // Password for accessing the key
+
+ssl_truststore_location = /path/to/starrocks-truststore.bcfks
+ssl_truststore_type = BCFKS
+ssl_truststore_provider = BCFIPS
+ssl_truststore_password = // Password for the truststore file
+
+ssl_security_provider_class = org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider
+ssl_security_provider_name = BCFIPS
+ssl_security_provider_path = /path/to/bc-fips.jar
 ```
 
 ### Generate SSL certificate

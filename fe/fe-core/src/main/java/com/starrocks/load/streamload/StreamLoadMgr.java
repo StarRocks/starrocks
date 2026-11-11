@@ -717,6 +717,31 @@ public class StreamLoadMgr implements MemoryTrackable {
         }
     }
 
+    /**
+     * The registered task {@link #getTaskById} finds {@code id} in: the task itself, or the multi-statement
+     * transaction one of whose statements has the id.
+     */
+    public AbstractStreamLoadTask getRegisteredTaskById(long id) {
+        readLock();
+        try {
+            for (AbstractStreamLoadTask task : idToStreamLoadTask.values()) {
+                if (id == task.getId()) {
+                    return task;
+                }
+                if (task instanceof StreamLoadMultiStmtTask multiTask) {
+                    for (StreamLoadTask child : multiTask.getTasks()) {
+                        if (id == child.getId()) {
+                            return task;
+                        }
+                    }
+                }
+            }
+            return null;
+        } finally {
+            readUnlock();
+        }
+    }
+
     // return all of stream load task named label in all of db
     // return all tasks if label is null
     public List<AbstractStreamLoadTask> getTaskByName(String label) {

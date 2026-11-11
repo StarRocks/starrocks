@@ -43,10 +43,12 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Month;
@@ -233,6 +235,67 @@ public class ImplicitCastRuleTest {
         assertTrue(result1.getChild(1).getType().isDateType());
         assertTrue(result1.getChild(2).getType().isDateType());
 
+    }
+
+    @Test
+    public void testIntegralDecimalBinaryPredicates() {
+        Type decimalType = TypeFactory.createDecimalV3NarrowestType(20, 1);
+        ColumnRefOperator column = new ColumnRefOperator(1, IntegerType.BIGINT, "company_id", true);
+        for (BinaryType binaryType : BinaryType.values()) {
+            for (boolean constantFirst : new boolean[] {false, true}) {
+                ConstantOperator constant = ConstantOperator.createDecimal(new BigDecimal("80940.0"), decimalType);
+                BinaryPredicateOperator predicate = new BinaryPredicateOperator(binaryType,
+                        constantFirst ? constant : column, constantFirst ? column : constant);
+                ScalarOperator result = new ImplicitCastRule().apply(predicate, null);
+                assertEquals(column, result.getChild(constantFirst ? 1 : 0));
+                assertEquals(ConstantOperator.createBigint(80940), result.getChild(constantFirst ? 0 : 1));
+                assertEquals(binaryType, ((BinaryPredicateOperator) result).getBinaryType());
+            }
+        }
+        BinaryPredicateOperator positiveCount = new BinaryPredicateOperator(BinaryType.GT, column,
+                ConstantOperator.createDecimal(new BigDecimal("0.0"), decimalType));
+        ScalarOperator result = new ImplicitCastRule().apply(positiveCount, null);
+        assertEquals(column, result.getChild(0));
+        assertEquals(ConstantOperator.createBigint(0), result.getChild(1));
+    }
+
+    @Test
+    public void testIntegralDecimalInAndNotInPreserveNull() {
+        Type decimalType = TypeFactory.createDecimalV3NarrowestType(20, 1);
+        ColumnRefOperator column = new ColumnRefOperator(1, IntegerType.BIGINT, "action", true);
+        for (boolean notIn : new boolean[] {false, true}) {
+            InPredicateOperator predicate = new InPredicateOperator(notIn, column,
+                    ConstantOperator.createDecimal(new BigDecimal("21.0"), decimalType),
+                    ConstantOperator.createDecimal(new BigDecimal("23.0"), decimalType),
+                    ConstantOperator.createNull(decimalType));
+            InPredicateOperator result = (InPredicateOperator) new ImplicitCastRule().apply(predicate, null);
+            assertEquals(notIn, result.isNotIn());
+            assertEquals(column, result.getChild(0));
+            assertEquals(ConstantOperator.createBigint(21), result.getChild(1));
+            assertEquals(ConstantOperator.createBigint(23), result.getChild(2));
+            assertEquals(ConstantOperator.createNull(IntegerType.BIGINT), result.getChild(3));
+        }
+    }
+
+    @Test
+    public void testDecimalInDoesNotPartiallyNarrow() {
+        Type decimalType = TypeFactory.createDecimalV3NarrowestType(20, 1);
+        ColumnRefOperator column = new ColumnRefOperator(1, IntegerType.BIGINT, "action", true);
+        for (boolean notIn : new boolean[] {false, true}) {
+            for (String value : new String[] {"23.5", "9223372036854775808.0"}) {
+                ConstantOperator fractionalOrOverflow = ConstantOperator.createDecimal(new BigDecimal(value), decimalType);
+                InPredicateOperator predicate = new InPredicateOperator(notIn, column,
+                        ConstantOperator.createDecimal(new BigDecimal("21.0"), decimalType),
+                        fractionalOrOverflow, ConstantOperator.createNull(decimalType));
+                InPredicateOperator result = (InPredicateOperator) new ImplicitCastRule().apply(predicate, null);
+                assertEquals(notIn, result.isNotIn());
+                assertTrue(result.getChild(0) instanceof CastOperator, value);
+                assertEquals(column, result.getChild(0).getChild(0));
+                assertEquals(fractionalOrOverflow, result.getChild(2));
+                assertTrue(((ConstantOperator) result.getChild(3)).isNull());
+                assertEquals(4, result.getChildren().size());
+            }
+        }
     }
 
     @Test

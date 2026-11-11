@@ -25,6 +25,8 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.load.LoadJobVisibility;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.persist.EditLog;
@@ -246,6 +248,20 @@ public class StreamLoadManagerTest {
     @Test
     public void testMultiStatementTrackingSqlFindsOnlyItsSubTask(
             @Mocked LoadMgr loadMgr, @Mocked RoutineLoadMgr routineLoadMgr) throws Exception {
+        // ConnectContext is mocked here, so no caller could be authorized; which jobs a caller may see is covered
+        // by LoadJobVisibilityTest, and here every job is shown in full.
+        new MockUp<LoadJobVisibility>() {
+            @Mock
+            public LoadJobVisibility.Access accessOf(ConnectContext context, LoadJob job) {
+                return LoadJobVisibility.Access.FULL;
+            }
+
+            @Mock
+            public List<LoadJobVisibility.VisibleTask> visibleTasks(ConnectContext context,
+                                                                     AbstractStreamLoadTask task) {
+                return LoadJobVisibility.allTasksInFull(task);
+            }
+        };
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
         StreamLoadMultiStmtTask parent = new StreamLoadMultiStmtTask(
                 1001L, db, "multi_tracking", "", "", 100000L,

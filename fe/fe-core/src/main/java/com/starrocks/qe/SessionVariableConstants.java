@@ -107,7 +107,7 @@ public class SessionVariableConstants {
     public enum BlacklistBackupRoutingPolicy {
         /**
          * Walk the sorted warehouse node id ring starting from the primary worker and return the first eligible
-         * buddy (default, deterministic behavior).
+         * buddy (deterministic behavior).
          */
         CIRCULAR,
         /**
@@ -118,12 +118,12 @@ public class SessionVariableConstants {
          * Rendezvous (highest random weight) hashing on the tablet: among eligible nodes, pick the one with the
          * highest hash of (tablet, node). The tablets of an unavailable node spread evenly over the others, and the
          * same tablet keeps going to the same backup across queries and FEs (as long as they see the same eligible
-         * nodes), so its cache only warms on one node.
+         * nodes), so its cache only warms on one node (default).
          */
         TABLET_HASH;
 
         public static BlacklistBackupRoutingPolicy getDefault() {
-            return CIRCULAR;
+            return TABLET_HASH;
         }
     }
 

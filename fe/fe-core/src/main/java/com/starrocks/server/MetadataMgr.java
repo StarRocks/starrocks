@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.api.client.util.Lists;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.cache.CacheBuilder;
@@ -45,6 +46,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
@@ -105,6 +107,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -303,7 +306,9 @@ public class MetadataMgr {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
                 }
 
-                if (tableExists(context, catalogName, dbName, tableName)) {
+                // Paimon's native create handles existing tables without consulting the read-side table cache.
+                if (!Table.TableType.PAIMON.name().equalsIgnoreCase(stmt.getEngineName())
+                        && tableExists(context, catalogName, dbName, tableName)) {
                     if (stmt.isSetIfNotExists()) {
                         LOG.info("create table[{}] which already exists", tableName);
                         return false;
@@ -864,7 +869,6 @@ public class MetadataMgr {
         if (internalStatistics == null ||
                 internalStatistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             // Get basic stats from connector metadata.
-            session.setObtainedFromInternalStatistics(false);
             // Avoid `analyze table` to collect table statistics from metadata.
             if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
                 return internalStatistics;
@@ -894,20 +898,66 @@ public class MetadataMgr {
                             setOutputRowCount(connectorBasicStats.getOutputRowCount())
                             .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
                 } else {
-                    // A connector serving ANALYZE statistics (query dump replay) keeps the partition predicate in the
-                    // selectivity, exactly like the internal-statistics branch below.
-                    if (connectorBasicStats != null
-                            && connectorBasicStats.getStatsSource() == Statistics.StatsSource.ANALYZE) {
-                        session.setObtainedFromInternalStatistics(true);
-                    }
+                    // A connector serving ANALYZE statistics (query dump replay) keeps that stats source, so the
+                    // partition predicate stays in the selectivity like the internal-statistics branch below.
                     return connectorBasicStats;
                 }
             }
         } else {
-            session.setObtainedFromInternalStatistics(true);
             captureAnalyzedColumnRowCountsToDump(session, catalogName, table, columns);
-            return internalStatistics;
+            return widenWithPartitionSourceRanges(catalogName, table, columns, internalStatistics, versionRange);
         }
+    }
+
+    // ANALYZE min/max are a snapshot of the last collection: partitions ingested since then lie outside them, and a
+    // predicate selecting only those would be estimated at 0 rows. Widen each partition source column to the range
+    // the table version's partitions cover, as table metadata reports it. Row count and NDV stay the ANALYZE values.
+    // The widened statistics are what a query dump records, so replay (without table metadata) sees the same.
+    private Statistics widenWithPartitionSourceRanges(String catalogName, Table table,
+                                                      Map<ColumnRefOperator, Column> columns,
+                                                      Statistics statistics, TvrVersionRange versionRange) {
+        Map<String, Pair<Double, Double>> ranges;
+        try {
+            ranges = getOptionalMetadata(catalogName)
+                    .map(metadata -> metadata.getPartitionSourceColumnRanges(table, versionRange))
+                    .orElse(Map.of());
+        } catch (Exception e) {
+            LOG.warn("Failed to get partition source column ranges of {}.{}", catalogName, table.getName(), e);
+            return statistics;
+        }
+        return widenColumnRanges(statistics, columns, ranges);
+    }
+
+    // Only widens: a range never narrows ANALYZE min/max, and a column without ANALYZE statistics is left alone.
+    @VisibleForTesting
+    static Statistics widenColumnRanges(Statistics statistics, Map<ColumnRefOperator, Column> columns,
+                                        Map<String, Pair<Double, Double>> ranges) {
+        if (ranges.isEmpty()) {
+            return statistics;
+        }
+        Statistics.Builder builder = null;
+        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : statistics.getColumnStatistics().entrySet()) {
+            ColumnStatistic stat = entry.getValue();
+            Column column = columns.get(entry.getKey());
+            if (stat.isUnknown() || column == null) {
+                continue;
+            }
+            Pair<Double, Double> range = ranges.get(column.getName().toLowerCase(Locale.ROOT));
+            if (range == null) {
+                continue;
+            }
+            double min = Math.min(stat.getMinValue(), range.first);
+            double max = Math.max(stat.getMaxValue(), range.second);
+            if (min == stat.getMinValue() && max == stat.getMaxValue()) {
+                continue;
+            }
+            if (builder == null) {
+                builder = Statistics.buildFrom(statistics);
+            }
+            builder.addColumnStatistic(entry.getKey(),
+                    ColumnStatistic.buildFrom(stat).setMinValue(min).setMaxValue(max).build());
+        }
+        return builder == null ? statistics : builder.build();
     }
 
     public Statistics getTableStatistics(OptimizerContext session,

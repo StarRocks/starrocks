@@ -20,12 +20,12 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
-#include "common/config_exec_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/primary_index.h"
 #include "storage/rows_mapper.h"
 #include "storage/tablet_schema.h"
@@ -66,7 +66,7 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                     // only hold pkey, so can use larger chunk size
                     ChunkUniquePtr chunk_shared_ptr;
                     TRY_CATCH_BAD_ALLOC(chunk_shared_ptr =
-                                                ChunkFactory::new_chunk(pkey_schema, config::vector_chunk_size));
+                                                ChunkFactory::new_chunk(pkey_schema, get_pk_vector_chunk_size()));
                     auto chunk = chunk_shared_ptr.get();
                     auto batch_col = pk_column->clone();
                     vector<uint32_t> tmp_deletes;
@@ -186,14 +186,14 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                         LOG(WARNING) << "ignore lost segment in compaction conflict resolution, tablet: "
                                      << params.tablet_id << ", rssid: " << (params.rowset_id + segment_id) << ", left "
                                      << lost_rows << " PK index entries stale (skipped)";
-                        // Advance the mapper in vector_chunk_size batches, reusing one buffer, to bound
+                        // Advance the mapper in pk_vector_chunk_size batches, reusing one buffer, to bound
                         // transient memory (the running CRC accumulates across next_values calls, so a
                         // chunked read is byte-identical to one big read).
                         uint32_t remaining = lost_rows;
                         std::vector<uint64_t> skipped;
                         while (remaining > 0) {
                             const uint32_t n =
-                                    std::min<uint32_t>(remaining, static_cast<uint32_t>(config::vector_chunk_size));
+                                    std::min<uint32_t>(remaining, static_cast<uint32_t>(get_pk_vector_chunk_size()));
                             skipped.clear();
                             RETURN_IF_ERROR(mapper_iter.next_values(n, &skipped));
                             remaining -= n;

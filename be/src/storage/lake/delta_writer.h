@@ -26,6 +26,7 @@
 #include "storage/lake/delta_writer_finish_mode.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/rowset/segment_file_info.h"
+#include "storage_primitive/flat_json_config.h"
 
 namespace starrocks {
 class MemTracker;
@@ -323,6 +324,15 @@ public:
         return *this;
     }
 
+    // The destination table's flat_json.* properties carried by the load request. Decides the shape
+    // of the JSON columns this writer produces. Without it (a table that sets none, or a request from
+    // a sender that predates the field) the writer consults the tablet metadata cache and, on a miss,
+    // follows the be.conf globals.
+    DeltaWriterBuilder& set_flat_json_config(std::shared_ptr<FlatJsonConfig> flat_json_config) {
+        _flat_json_config = std::move(flat_json_config);
+        return *this;
+    }
+
     StatusOr<DeltaWriterPtr> build();
 
 private:
@@ -349,6 +359,7 @@ private:
     bool _multi_node_write = false;
     std::shared_ptr<const TabletSchema> _tablet_schema;
     bool _force_build_vector_index_inline = false;
+    std::shared_ptr<FlatJsonConfig> _flat_json_config;
 };
 
 } // namespace starrocks::lake

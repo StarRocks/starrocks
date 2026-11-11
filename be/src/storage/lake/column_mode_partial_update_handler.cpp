@@ -41,6 +41,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/parallel_task_runner.h"
 #include "storage/lake/primary_key_manager.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -106,7 +107,8 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
 
     // Create segment iterators for update files
     OlapReaderStatistics stats;
-    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, true, &stats));
+    ASSIGN_OR_RETURN(auto segment_iters,
+                     _rowset_ptr->get_each_segment_iterator(pkey_schema, true, &stats, get_pk_vector_chunk_size()));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == num_segments);
     // Only a SPLIT child's cross publish gets one; nullptr on every ordinary publish, and then every
     // row is owned. Held by the handler because the iterators keep referencing it.
@@ -245,10 +247,10 @@ Status ColumnModePartialUpdateHandler::_read_from_source_segment_and_update(
     seg_options.tablet_schema = params.tablet_schema;
     // not use delvec loader
     seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(params.metadata);
-    seg_options.chunk_size = config::vector_chunk_size;
+    seg_options.chunk_size = get_pk_vector_chunk_size();
     ASSIGN_OR_RETURN(auto seg_iter, segment->new_iterator(schema, seg_options));
-    auto source_chunk_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
-    auto tmp_chunk_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
+    auto source_chunk_ptr = ChunkFactory::new_chunk(schema, seg_options.chunk_size);
+    auto tmp_chunk_ptr = ChunkFactory::new_chunk(schema, seg_options.chunk_size);
     uint32_t start_rowid = 0;
     // Accumulate the source bytes incrementally. bytes_usage() may walk every value for
     // object-backed columns, while appending a batch adds exactly that batch's bytes.
@@ -332,7 +334,8 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_update_source_by_upt_us");
     // build iterators
     OlapReaderStatistics stats;
-    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats));
+    ASSIGN_OR_RETURN(auto segment_iters,
+                     _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats, get_pk_vector_chunk_size()));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset_ptr->num_segments());
     // handle upt files one by one
     for (const auto& each : upt_id_to_rowid_pairs) {
@@ -348,7 +351,7 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
             continue;
         }
         // 1. get chunk from upt file
-        ChunkUniquePtr upt_chunk = ChunkFactory::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
+        ChunkUniquePtr upt_chunk = ChunkFactory::new_chunk(partial_schema, get_pk_vector_chunk_size());
         DeferOp iter_defer([&]() {
             if (segment_iters[upt_id] != nullptr) {
                 segment_iters[upt_id]->close();

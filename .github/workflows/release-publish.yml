@@ -1,0 +1,75 @@
+name: RELEASE PUBLISH
+
+# Publishes the GitHub Release of a patch version once its English release notes land on main:
+# the Release body is the `## X.Y.Z` section of docs/en/release_notes/release-X.Y.md, under the
+# existing X.Y.Z tag. Only the sections a push adds are published, never older versions that
+# lack a Release; the tag must already exist, an existing Release or draft is left alone, and
+# the Release is marked Latest only when its version is the highest.
+# Backfill a single version (or one tagged after its notes merged) with workflow_dispatch.
+# Thin caller: the logic is ci-tool lib/release_publish.py.
+
+# A manual run is titled with its version (and "dry run"); a push run with its commit, which
+# names the release-notes PR.
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+  && format('RELEASE PUBLISH {0}{1}', inputs.version, inputs.dry_run && ' (dry run)' || '')
+  || format('RELEASE PUBLISH: {0}', github.event.head_commit.message) }}
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/en/release_notes/release-*.md'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, e.g. 4.0.17 (its tag and release-notes section must exist on main)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Only print what would be published'
+        type: boolean
+        default: false
+
+# Releases are created as starrocks-bot (the author of the release-notes PRs), with a token
+# scoped to contents: write, which also lets the job see existing drafts. Unlike GITHUB_TOKEN,
+# a Release it publishes does trigger `release` workflows.
+permissions:
+  contents: read
+
+# No concurrency group: GitHub keeps only one pending run per group, so a queued push would be
+# cancelled and its new version never published. Parallel runs cannot publish the same version:
+# each run only publishes sections its own push added.
+
+jobs:
+  release-publish:
+    name: release-publish
+    if: github.repository == 'StarRocks/starrocks'
+    runs-on: [self-hosted, quick]
+    env:
+      REPO: ${{ github.repository }}
+      BEFORE: ${{ github.event.before }}
+      AFTER: ${{ github.event.after }}
+      VERSION: ${{ inputs.version }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - name: starrocks-bot token
+        id: bot-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.STARROCKS_BOT_APP_ID }}
+          private-key: ${{ secrets.STARROCKS_BOT_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: release-publish
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && (cd ci-tool && git pull -q || true)
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            args=(--version "${VERSION}")
+            [[ "${DRY_RUN}" == "true" ]] && args+=(--dry-run)
+          else
+            args=(--before "${BEFORE}" --after "${AFTER}")
+          fi
+          python3 ci-tool/lib/release_publish.py --repo "${REPO}" "${args[@]}"

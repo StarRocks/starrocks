@@ -46,5 +46,22 @@ extern const FlatJsonHashMap<LogicalType, JsonFlatMergeFunc> JSON_MERGE_FUNC;
 
 uint8_t get_compatibility_type(vpack::ValueType type1, uint8_t type2);
 
+// What JsonPathDeriver::_visit_json_paths collects for a path, gathered from the values of a JSON-typed
+// sub-column. Kept in the segment (JsonValueStatsPB) so a later derivation from metadata can type the path by
+// its values instead of leaving it JSON.
+struct JsonValueStats {
+    uint8_t json_type = 31; // JSON_NULL_TYPE_BITS
+    // non-NULL rows
+    uint64_t values = 0;
+    // values of a base JSON type (JSON_BASE_TYPE)
+    uint64_t base_type_count = 0;
+    uint64_t max_uint = 0;
+    int64_t min_int = 0;
+
+    // `column` is a JSON column, nullable or not.
+    void update(const Column& column);
+    void merge(const JsonValueStats& other);
+};
+
 } // namespace flat_json
 } // namespace starrocks

@@ -28,6 +28,7 @@
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "common/config_compaction_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_memory.h"
 #include "platform/key_cache.h"
@@ -35,6 +36,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/primary_key_compaction_conflict_resolver.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/rowset_factory.h"
@@ -784,6 +786,95 @@ TEST_F(RowsetUpdateStateTest, compaction_conflict_resolver_uses_binary_column) {
         EXPECT_EQ(expected_indexes, call.replace_indexes) << "segment " << i;
         EXPECT_EQ(expected_keys, call.keys) << "segment " << i;
         EXPECT_EQ(kRowsPerSegment / 10, resolver.num_dels_by_rssid[base_rssid + i]) << "segment " << i;
+    }
+}
+
+// get_pk_vector_chunk_size() gives the segment readers of primary key apply a chunk size they can use: the
+// configured value when it is in range, DEFAULT_CHUNK_SIZE for a value <= 0, and MAX_CHUNK_SIZE above that.
+TEST(PkVectorChunkSizeTest, falls_back_and_caps) {
+    const int32_t old_chunk_size = config::pk_vector_chunk_size;
+    DeferOp restore_config([&]() { config::pk_vector_chunk_size = old_chunk_size; });
+
+    config::pk_vector_chunk_size = 7;
+    EXPECT_EQ(7, get_pk_vector_chunk_size());
+    config::pk_vector_chunk_size = MAX_CHUNK_SIZE;
+    EXPECT_EQ(MAX_CHUNK_SIZE, get_pk_vector_chunk_size());
+    config::pk_vector_chunk_size = MAX_CHUNK_SIZE + 1;
+    EXPECT_EQ(MAX_CHUNK_SIZE, get_pk_vector_chunk_size());
+    config::pk_vector_chunk_size = 0;
+    EXPECT_EQ(DEFAULT_CHUNK_SIZE, get_pk_vector_chunk_size());
+    config::pk_vector_chunk_size = -1;
+    EXPECT_EQ(DEFAULT_CHUNK_SIZE, get_pk_vector_chunk_size());
+}
+
+// Apply and compaction read segments in pk_vector_chunk_size batches. With 7-row batches every 100-row segment
+// takes 15 reads, so the primary keys that load_upserts(), the compaction conflict resolver and CompactionState
+// collect are stitched across batch boundaries, and every key must still keep its newest value.
+TEST_F(RowsetUpdateStateTest, apply_and_compaction_with_small_pk_vector_chunk_size) {
+    const int32_t old_chunk_size = config::pk_vector_chunk_size;
+    const int32_t old_replace_batch_rows = config::primary_key_compaction_replace_batch_rows;
+    DeferOp restore_config([&]() {
+        config::pk_vector_chunk_size = old_chunk_size;
+        config::primary_key_compaction_replace_batch_rows = old_replace_batch_rows;
+    });
+    config::pk_vector_chunk_size = 7;
+    // Hand every chunk to the primary index separately during compaction conflict resolution.
+    config::primary_key_compaction_replace_batch_rows = 1;
+
+    const size_t kSegments = 3;
+    const size_t kRowsPerSegment = 100;
+    _tablet = create_varchar_pk_tablet(rand(), rand());
+    auto expect_rows = [&](int64_t version) {
+        std::map<std::string, int16_t> rows;
+        ASSERT_OK(read_varchar_pk_rows(_tablet, version, &rows));
+        ASSERT_EQ(450u, rows.size());
+        for (size_t k = 0; k < 450; k++) {
+            auto it = rows.find(make_pk(k));
+            ASSERT_TRUE(it != rows.end()) << "missing " << make_pk(k);
+            const int16_t expected = k < 100 ? 3 : (k < 150 ? 1 : 2);
+            ASSERT_EQ(expected, it->second) << make_pk(k);
+        }
+    };
+
+    // version 2: keys [0, 300) with v1 = 1
+    // version 3: keys [150, 450) with v1 = 2
+    // version 4: keys [0, 100) with v1 = 3
+    ASSERT_OK(_tablet->rowset_commit(
+            2, create_multi_segment_varchar_rowset(_tablet, make_segment_keys(kSegments, kRowsPerSegment, 0), 1), 0));
+    ASSERT_OK(_tablet->rowset_commit(
+            3, create_multi_segment_varchar_rowset(_tablet, make_segment_keys(kSegments, kRowsPerSegment, 150), 2), 0));
+    ASSERT_OK(_tablet->rowset_commit(4, create_multi_segment_varchar_rowset(_tablet, make_segment_keys(1, 100, 0), 3),
+                                     0));
+    // read_tablet() waits until version 4 is applied.
+    ASSERT_EQ(450, read_tablet(_tablet, 4));
+    expect_rows(4);
+    ASSERT_EQ(3u, _tablet->updates()->num_rowsets());
+
+    // Light compaction publish (the default) resolves the output rowset through the conflict resolver.
+    ASSERT_OK(_tablet->updates()->compaction(_compaction_mem_tracker.get()));
+    _tablet->updates()->wait_apply_done();
+    EditVersion applied_version;
+    ASSERT_OK(_tablet->updates()->get_latest_applied_version(&applied_version));
+    ASSERT_EQ(EditVersion(4, 1), applied_version);
+    ASSERT_EQ(1u, _tablet->updates()->num_rowsets());
+    ASSERT_OK(_tablet->verify());
+    expect_rows(4);
+
+    // CompactionState loads a compaction output's primary keys when light compaction publish is off.
+    auto segment_keys = make_segment_keys(kSegments, kRowsPerSegment, 0);
+    RowsetSharedPtr rowset = create_multi_segment_varchar_rowset(_tablet, segment_keys, 1);
+    CompactionState state;
+    ASSERT_OK(state.load(rowset.get()));
+    ASSERT_EQ(kSegments, state.pk_cols.size());
+    for (uint32_t i = 0; i < kSegments; i++) {
+        ASSERT_OK(state.load_segments(rowset.get(), i));
+        const auto& pks = state.pk_cols[i];
+        ASSERT_NE(nullptr, pks) << "segment " << i;
+        ASSERT_EQ(kRowsPerSegment, pks->size()) << "segment " << i;
+        for (size_t j = 0; j < kRowsPerSegment; j++) {
+            ASSERT_EQ(segment_keys[i][j], pks->get(j).get_slice().to_string()) << "segment " << i << " row " << j;
+        }
+        state.release_segment(i);
     }
 }
 
