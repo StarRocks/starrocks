@@ -15,14 +15,10 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.planner.ScanNode;
-<<<<<<< HEAD
-=======
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.type.IntegerType;
-import com.starrocks.utframe.UtFrameUtils;
->>>>>>> 11ddfe0 ([BugFix][RB-1398] Declare the ___count___ placeholder column as BIGINT in the simple agg rewrite (#82904))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
