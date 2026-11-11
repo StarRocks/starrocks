@@ -80,6 +80,16 @@ a Catalog requiring cleanup. Tests that generate or modify data must use a
 separate `tmp/<case-name>/<UUID>/` prefix, not this persistent warehouse.
 See [T/test_paimon_reader_modes](T/test_paimon_reader_modes) for an example.
 
+`test_paimon_hms_files` also needs HiveServer2 and the Hive metastore. It creates a unique
+temporary Hive database using HiveServer2, then registers the existing `pk_merge_v1` fixture
+directly in HMS as an external Paimon table. This avoids requiring Paimon classes on the
+HiveServer2 classpath. The case reads `$files` through an HMS Paimon catalog with the JNI
+reader. Cleanup drops only the external table metadata and temporary database, leaving the
+fixture data untouched.
+For local HDFS runs, override `paimon_hms_prefix`, `paimon_hms_warehouse`, and
+`paimon_hms_fixture_location` in a private SQL-tester config. This SQL test checks the
+end-to-end path; the Java compatibility tests exercise the Hive/Thrift dependency failure.
+
 ## DDL tests
 
 `T/test_paimon_catalog_ddl` creates and drops native databases and tables through SQL.

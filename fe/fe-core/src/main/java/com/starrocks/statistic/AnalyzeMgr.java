@@ -699,7 +699,7 @@ public class AnalyzeMgr implements Writable {
     // partitioned, has a pending or running analyze (which does its own cleanup), or its partition list cannot be
     // obtained or is empty. Never throws.
     //
-    // Only the leader's statistics cache is expired here. Nothing is journaled, so followers keep serving the
+    // Only the leader's statistics cache is refreshed here. Nothing is journaled, so followers keep serving the
     // cached statistics until their cache entries expire (statistic_update_interval_sec) or the table's next
     // collection invalidates them; the rows were already at least a grace period old.
     public void clearStatisticFromExternalDroppedPartition() {
@@ -825,14 +825,17 @@ public class AnalyzeMgr implements Writable {
         if (meta == null) {
             return SKIPPED;
         }
-        // Only FULL columns. A SAMPLE column's rows are scaled up by the partition count its metadata recorded
+        // Only FULL columns, and the SAMPLE columns of an incremental FULL collection whose rows cover the table
+        // the same way (ColumnStatsMeta#isFullCoverageByRows): those are scaled by the partitions their rows come
+        // from, so deleting a dropped partition's rows brings the estimate back to the live table. Any other
+        // SAMPLE column's rows are scaled up by the partition count its metadata recorded
         // (StatisticsUtils#estimateColumnStatistics), and only a collection rewrites that metadata: deleting rows
         // here would skew the estimate rather than fix it. Its own collection cleans up dropped partitions. FULL
         // also means the collection covered every partition it asked for, so no resume record can skip a
         // partition deleted here. Columns without metadata are left alone too: the optimizer ignores their rows.
         Set<String> columnSet = new TreeSet<>();
         meta.getColumnStatsMetaMap().forEach((column, columnMeta) -> {
-            if (columnMeta.getType() == StatsConstants.AnalyzeType.FULL) {
+            if (columnMeta.isFullCoverageByRows()) {
                 columnSet.add(column);
             }
         });
@@ -856,7 +859,10 @@ public class AnalyzeMgr implements Writable {
         }
         ExternalDroppedPartitionStats.DeleteResult result =
                 ExternalDroppedPartitionStats.deleteInBatches(context, executor, table, dropped, columns);
-        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+        // Refresh rather than invalidate: the old values stay served until the reload lands, as after a
+        // collection. Invalidating would make the next query plan with unknown statistics until it reloads.
+        GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .refreshConnectorTableColumnStatistics(table, columns, false);
         if (result.failedBatches > 0) {
             LOG.warn("[ExternalStats] periodic dropped partition stats cleanup partially failed | catalog={} db={} " +
                             "table={} droppedPartitions={} batches={} failedBatches={}",

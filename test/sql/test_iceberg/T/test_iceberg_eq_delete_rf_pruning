@@ -178,8 +178,8 @@ function: assert_explain_not_contains('select m.* from iceberg_eq_rf_${uuid0}.eq
 select m.* from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.mixed m join dim_p d on m.p = d.p order by m.id;
 set enable_read_iceberg_equality_delete_with_partition_evolution = false;
 
--- data files without the partition column (hive-written, registered with add_files): with
--- enable_iceberg_identity_column_optimize off the data-file scan would read p as NULL, so the match keeps $partition_key
+-- data files without the partition column (hive-written, registered with add_files): p takes the partition value,
+-- also when a session sets the deprecated (no-op) enable_iceberg_identity_column_optimize to false, so the deletes match and p is not NULL
 create table hive_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated_src(
     id int,
     v string,
@@ -207,8 +207,8 @@ alter table iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated execute add_equali
 
 select v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated order by v;
 set enable_iceberg_identity_column_optimize = false;
-function: assert_explain_contains('select v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated', '$partition_key')
 select v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated order by v;
+select p, v from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated order by v;
 select count(*) from iceberg_eq_rf_${uuid0}.eq_rf_db_${uuid0}.migrated;
 set enable_iceberg_identity_column_optimize = true;
 

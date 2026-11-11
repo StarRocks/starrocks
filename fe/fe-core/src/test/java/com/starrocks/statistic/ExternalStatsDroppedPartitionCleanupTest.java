@@ -21,6 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.type.Type;
@@ -312,6 +313,32 @@ public class ExternalStatsDroppedPartitionCleanupTest extends PlanTestNoneDBBase
         Assertions.assertEquals(Lists.newArrayList("par_col=7"), stats.deleted());
     }
 
+    // The cleaned columns' cached statistics are refreshed, not invalidated: an invalidated entry makes the next
+    // query plan with unknown statistics until it is reloaded.
+    @Test
+    public void testPeriodicRefreshesTheCleanedColumnsCache() {
+        addStatsMeta(TABLE);
+        new FakeStatsTable(Lists.newArrayList("par_col=7"), true);
+        List<List<String>> refreshed = new ArrayList<>();
+        AtomicInteger expired = new AtomicInteger();
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
+                Assertions.assertEquals(hiveTable.getUUID(), table.getUUID());
+                Assertions.assertFalse(isSync);
+                refreshed.add(new ArrayList<>(columns));
+            }
+
+            @Mock
+            public void expireConnectorTableColumnStatistics(Table table, List<String> columns) {
+                expired.incrementAndGet();
+            }
+        };
+        runPeriodic();
+        Assertions.assertEquals(List.of(columns()), refreshed);
+        Assertions.assertEquals(0, expired.get());
+    }
+
     @Test
     public void testPeriodicRunsAtMostOncePerInterval() {
         addStatsMeta(TABLE);
@@ -393,6 +420,33 @@ public class ExternalStatsDroppedPartitionCleanupTest extends PlanTestNoneDBBase
             Assertions.assertEquals(1, stats.queries.get());
             Assertions.assertEquals(List.of(List.of("c2")), stats.deletedColumnBatches);
         }
+    }
+
+    @Test
+    public void testPeriodicCleansTheSampleColumnsOfAnIncrementalFullRun() {
+        // c1 is the SAMPLE entry an incremental FULL run leaves (table partition count, no partition set, no
+        // requested count): its rows are scaled by the partitions they come from, so it is cleaned like FULL.
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().resetExternalDroppedPartitionCleanupRound();
+        ExternalBasicStatsMeta meta = new ExternalBasicStatsMeta(CATALOG, DB, TABLE, columns(),
+                StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), Maps.newHashMap());
+        meta.addColumnStatsMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(), 3, 0));
+        meta.addColumnStatsMeta(new ColumnStatsMeta("c2", StatsConstants.AnalyzeType.FULL, LocalDateTime.now()));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddExternalBasicStatsMeta(meta);
+        FakeStatsTable stats = new FakeStatsTable(Lists.newArrayList("par_col=7"), true);
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<String> queryExternalStatPartitionsNotUpdatedSince(ConnectContext ctx, String tableUUID,
+                                                                          List<String> columnNames,
+                                                                          long graceSeconds) {
+                Assertions.assertEquals(List.of("c1", "c2"), columnNames);
+                stats.queries.incrementAndGet();
+                return Lists.newArrayList("par_col=7");
+            }
+        };
+        runPeriodic();
+        Assertions.assertEquals(1, stats.queries.get());
+        Assertions.assertEquals(List.of(List.of("c1", "c2")), stats.deletedColumnBatches);
     }
 
     @Test

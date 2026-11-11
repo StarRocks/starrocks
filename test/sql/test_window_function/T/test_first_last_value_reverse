@@ -1,0 +1,65 @@
+-- name: test_first_last_value_reverse
+CREATE TABLE t_rev_dec (
+    id INT,
+    grp INT,
+    kind INT,
+    amt DECIMAL(38, 10)
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+INSERT INTO t_rev_dec VALUES
+    (1, 1, 1, 1.5), (2, 1, 14, 2.25), (3, 1, 1, 3.125), (4, 1, 14, 4.0625), (5, 1, 1, 5),
+    (6, 2, 14, -6.5), (7, 2, 1, 7), (8, 2, 1, NULL);
+
+-- FIRST_VALUE ... IGNORE NULLS over a frame that ends at UNBOUNDED FOLLOWING is planned as a
+-- reversed LAST_VALUE. The result must keep the DECIMAL(38, 10) type of its argument.
+SELECT id, FIRST_VALUE(CASE WHEN kind = 14 THEN amt END IGNORE NULLS)
+    OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS v
+FROM t_rev_dec ORDER BY id;
+SELECT grp, group_concat(concat(id, '=', ifnull(CAST(v AS STRING), 'N')) ORDER BY id)
+FROM (SELECT id, grp, FIRST_VALUE(CASE WHEN kind = 14 THEN amt END IGNORE NULLS)
+          OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS v
+      FROM t_rev_dec) x
+GROUP BY grp ORDER BY grp;
+SELECT id, LAST_VALUE(amt IGNORE NULLS)
+    OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS v
+FROM t_rev_dec ORDER BY id;
+SELECT id, FIRST_VALUE(amt)
+    OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN 1 PRECEDING AND UNBOUNDED FOLLOWING) AS v
+FROM t_rev_dec ORDER BY id;
+
+CREATE TABLE t_rev_dec_sink (
+    id INT,
+    v DECIMAL(38, 10)
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+INSERT INTO t_rev_dec_sink
+SELECT id, FIRST_VALUE(CASE WHEN kind = 14 THEN amt END IGNORE NULLS)
+    OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+FROM t_rev_dec;
+SELECT id, v FROM t_rev_dec_sink ORDER BY id;
+
+-- INSERT OVERWRITE and MV refresh plan the statement twice; the reversed window must stay reversed once.
+INSERT OVERWRITE t_rev_dec_sink
+SELECT id, FIRST_VALUE(CASE WHEN kind = 14 THEN amt END IGNORE NULLS)
+    OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+FROM t_rev_dec;
+SELECT id, v FROM t_rev_dec_sink ORDER BY id;
+INSERT OVERWRITE t_rev_dec_sink
+SELECT id, LAST_VALUE(amt)
+    OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+FROM t_rev_dec;
+SELECT id, v FROM t_rev_dec_sink ORDER BY id;
+CREATE MATERIALIZED VIEW mv_rev_dec
+DISTRIBUTED BY HASH(id) BUCKETS 4
+REFRESH DEFERRED MANUAL
+PROPERTIES ("replication_num" = "1")
+AS SELECT id, FIRST_VALUE(CASE WHEN kind = 14 THEN amt END IGNORE NULLS)
+    OVER (PARTITION BY grp ORDER BY id ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS v
+FROM t_rev_dec;
+REFRESH MATERIALIZED VIEW mv_rev_dec WITH SYNC MODE;
+SELECT id, v FROM mv_rev_dec ORDER BY id;
+DROP MATERIALIZED VIEW mv_rev_dec;

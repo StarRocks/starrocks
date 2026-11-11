@@ -41,6 +41,7 @@
 #include "storage/lake/txn_log_applier.h"
 #include "storage/lake/vector_index_utils.h"
 #include "storage/olap_common.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
@@ -1047,7 +1048,8 @@ Status RowsetUpdateState::prepare(const RowsetUpdateStateParams& params) {
         // is what lets it hold its encode buffer across chunks.
         ASSIGN_OR_RETURN(_row_selector, CrossPublishRowSelector::create_if_needed(
                                                 *params.metadata, params.tablet_schema, params.op_write.rowset()));
-        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(_pkey_schema, false, &_stats));
+        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(_pkey_schema, false, &_stats,
+                                                                                get_pk_vector_chunk_size()));
     }
     if (_column_to_expr_value.empty() && params.op_write.has_txn_meta()) {
         for (auto& entry : params.op_write.txn_meta().column_to_expr_value()) {

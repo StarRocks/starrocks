@@ -18,6 +18,7 @@
 #include <chrono>
 #include <future>
 #include <new>
+#include <numeric>
 #include <optional>
 #include <thread>
 #include <unordered_set>
@@ -36,6 +37,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/constexpr.h"
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
@@ -2037,6 +2039,50 @@ TEST_F(LakeRowsetTest, test_get_each_segment_iterator_with_delvec_respects_table
     ASSIGN_OR_ABORT(auto seg_iters, rowset->get_each_segment_iterator_with_delvec(input_schema, 1, nullptr, &stats));
 
     ASSERT_EQ(count_rows_from_iters(seg_iters), 3 * 2);
+}
+
+// Primary key apply passes pk_vector_chunk_size to get_each_segment_iterator: a positive chunk size caps the rows
+// of every get_next(), and 0 keeps the SegmentReadOptions default.
+TEST_F(LakeRowsetTest, test_get_each_segment_iterator_chunk_size) {
+    create_rowsets_for_testing();
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    // Row counts of every get_next() over all segments, in order.
+    auto read_batches = [&](size_t chunk_size, std::vector<size_t>* batches) {
+        OlapReaderStatistics stats;
+        ASSIGN_OR_ABORT(auto iters, rowset->get_each_segment_iterator(input_schema, false, &stats, chunk_size));
+        ASSERT_EQ(3u, iters.size());
+        for (auto& it : iters) {
+            ASSERT_NE(nullptr, it);
+            ASSERT_OK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+            ASSERT_OK(it->init_output_schema(std::unordered_set<uint32_t>()));
+            auto chunk = ChunkFactory::new_chunk(it->schema(), DEFAULT_CHUNK_SIZE);
+            while (true) {
+                chunk->reset();
+                auto st = it->get_next(chunk.get());
+                if (st.is_end_of_file()) {
+                    break;
+                }
+                ASSERT_OK(st);
+                batches->push_back(chunk->num_rows());
+            }
+            it->close();
+        }
+    };
+
+    // Each of the 3 segments holds 22 + 12 = 34 rows, one batch apiece by default.
+    std::vector<size_t> default_batches;
+    read_batches(0, &default_batches);
+    EXPECT_EQ((std::vector<size_t>{34, 34, 34}), default_batches);
+
+    std::vector<size_t> small_batches;
+    read_batches(16, &small_batches);
+    EXPECT_GE(small_batches.size(), 3u * 3);
+    EXPECT_EQ(3u * 34, std::accumulate(small_batches.begin(), small_batches.end(), size_t{0}));
+    for (size_t rows : small_batches) {
+        EXPECT_LE(rows, 16u);
+    }
 }
 
 TEST_F(LakeRowsetTest, test_zero_row_segment_positional_iterator_contracts) {

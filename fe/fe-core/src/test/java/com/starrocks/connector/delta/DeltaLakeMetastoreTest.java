@@ -18,7 +18,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.cache.Cache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.connector.ConnectorMetadataCache;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
@@ -163,6 +166,77 @@ public class DeltaLakeMetastoreTest {
         jsonCache.put(createJsonCacheKey(), Lists.newArrayList());
 
         Assertions.assertTrue(fallbackCalls.get() > 0);
+    }
+
+    // With the global ratios at 0 (the default) each catalog keeps private checkpoint and log caches sized by its
+    // properties as before; a kind whose global ratio is above 0 goes to the store all Delta Lake catalogs share.
+    // Dropping a catalog drops its entries from either.
+    @Test
+    public void testPrivateByDefaultSharedWhenGlobalRatioSet() throws Exception {
+        DeltaLakeMetastore first = createMetastoreForTest();
+        DeltaLakeMetastore second = createMetastoreForTest();
+        ConnectorMetadataCache.Store checkpoints = Deencapsulation.getField(first, "checkpointStore");
+        Assertions.assertNotSame(checkpoints, Deencapsulation.getField(second, "checkpointStore"));
+        Assertions.assertEquals(Math.round(Runtime.getRuntime().maxMemory() * 0.1), checkpoints.maximum());
+
+        double old = Config.deltalake_json_meta_cache_global_memory_ratio;
+        Config.deltalake_json_meta_cache_global_memory_ratio = 0.05;
+        DeltaLakeMetastore sharedA;
+        DeltaLakeMetastore sharedB;
+        try {
+            sharedA = createMetastoreForTest();
+            sharedB = createMetastoreForTest();
+        } finally {
+            Config.deltalake_json_meta_cache_global_memory_ratio = old;
+        }
+        ConnectorMetadataCache.Store logs = Deencapsulation.getField(sharedA, "jsonStore");
+        Assertions.assertSame(logs, Deencapsulation.getField(sharedB, "jsonStore"));
+        Assertions.assertEquals(Math.round(Runtime.getRuntime().maxMemory() * 0.05), logs.maximum());
+        Assertions.assertNotSame(Deencapsulation.getField(sharedA, "checkpointStore"),
+                Deencapsulation.getField(sharedB, "checkpointStore"));
+
+        // the same file in two catalogs is two entries, and one catalog's release leaves the other's
+        Cache<DeltaLakeFileStatus, List<JsonNode>> logsA = getJsonCache(sharedA);
+        Cache<DeltaLakeFileStatus, List<JsonNode>> logsB = getJsonCache(sharedB);
+        logsA.put(createJsonCacheKey(), Lists.newArrayList());
+        Assertions.assertNull(logsB.getIfPresent(createJsonCacheKey()));
+        logsB.put(createJsonCacheKey(), Lists.newArrayList());
+        Assertions.assertEquals(1, ((ConnectorMetadataCache.ScopedGuavaCache<?, ?>) logsA).keys().size());
+        sharedA.releaseCaches();
+        Assertions.assertNull(logsA.getIfPresent(createJsonCacheKey()));
+        Assertions.assertNotNull(logsB.getIfPresent(createJsonCacheKey()));
+        sharedB.releaseCaches();
+        first.releaseCaches();
+        second.releaseCaches();
+    }
+
+    // The catalog-level wrapper reports its delegate's file caches by the delegate's own ledger, so a catalog's
+    // report does not move when another catalog sharing the store caches more.
+    @Test
+    public void testWrapperReportsTheDelegateLedger() throws Exception {
+        double old = Config.deltalake_json_meta_cache_global_memory_ratio;
+        Config.deltalake_json_meta_cache_global_memory_ratio = 0.05;
+        DeltaLakeMetastore a;
+        DeltaLakeMetastore b;
+        try {
+            a = createMetastoreForTest();
+            b = createMetastoreForTest();
+        } finally {
+            Config.deltalake_json_meta_cache_global_memory_ratio = old;
+        }
+        CachingDeltaLakeMetastore wrapperA =
+                CachingDeltaLakeMetastore.createCatalogLevelInstance(a, Runnable::run, 3600, -1, 100);
+        try {
+            getJsonCache(a).put(createJsonCacheKey(), Lists.newArrayList());
+            long before = wrapperA.estimateSize();
+            Assertions.assertTrue(before >= a.estimateSize() && a.estimateSize() > 0);
+            getJsonCache(b).put(DeltaLakeFileStatus.of(FileStatus.of("s3://bucket/other.json", 100, 123)),
+                    Lists.newArrayList());
+            Assertions.assertEquals(before, wrapperA.estimateSize());
+        } finally {
+            a.releaseCaches();
+            b.releaseCaches();
+        }
     }
 
     private DeltaLakeMetastore createMetastoreForTest() {
