@@ -745,11 +745,7 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     }
     auto segment = std::make_shared<Segment>(_fs, std::move(info), 0, std::move(tablet_schema), nullptr);
     RETURN_IF_ERROR(segment->open(nullptr, nullptr, lake_io_opts, stats));
-<<<<<<< HEAD
     return segment;
-=======
-    return std::move(segment);
->>>>>>> 393a5f802ee... [BugFix] Fill the data cache and report IO when a scan opens a .cols segment (#69085)
 }
 
 Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
