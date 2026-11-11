@@ -16,6 +16,7 @@
 
 #include <glog/logging.h>
 
+#include <optional>
 #include <ostream>
 #include <string>
 #include <unordered_map>
@@ -71,8 +72,11 @@ protected:
 
 class ParquetMetaHelper : public MetaHelper {
 public:
-    ParquetMetaHelper(const FileMetaData* file_metadata, bool case_sensitive)
-            : MetaHelper(file_metadata, case_sensitive) {}
+    // `lake_schema` is the Iceberg schema of a file without field ids (nullptr otherwise): a column the file does
+    // not store under its current name is looked up under the older names that the table's name mapping keeps.
+    ParquetMetaHelper(const FileMetaData* file_metadata, bool case_sensitive,
+                      const TIcebergSchema* lake_schema = nullptr)
+            : MetaHelper(file_metadata, case_sensitive), _lake_schema(lake_schema) {}
     ~ParquetMetaHelper() override = default;
 
     void prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
@@ -82,6 +86,14 @@ public:
 
 private:
     bool _is_valid_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const;
+    // Returns the file column index and the Iceberg field it was found for, or -1.
+    std::pair<int32_t, const TIcebergSchemaField*> _find_field_idx_by_mapped_names(
+            const FormatColumnInfo& materialized_column) const;
+
+    const std::vector<std::string>& _stored_top_level_names() const;
+
+    const TIcebergSchema* _lake_schema = nullptr;
+    mutable std::optional<std::vector<std::string>> _stored_names;
 };
 
 class LakeMetaHelper : public MetaHelper {

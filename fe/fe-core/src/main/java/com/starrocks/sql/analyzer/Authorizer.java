@@ -274,6 +274,11 @@ public class Authorizer {
         doCheckTableLikeObject(context, dbName, tableBasicInfo, null);
     }
 
+    public static void checkActionOnTableLikeObject(ConnectContext context, String dbName, BasicTable tableBasicInfo,
+                                                    PrivilegeType privilegeType) throws AccessDeniedException {
+        doCheckTableLikeObject(context, dbName, tableBasicInfo, privilegeType);
+    }
+
     private static void doCheckTableLikeObject(ConnectContext context, String dbName,
                                                BasicTable tbl, PrivilegeType privilegeType) throws AccessDeniedException {
         if (tbl == null) {

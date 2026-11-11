@@ -70,6 +70,9 @@ public:
     // Use to filter the data by range distribution key
     std::optional<SeekRange> tablet_range;
 
+    // Independent AND of query ranges and physical tablet ownership.
+    std::optional<SeekRange> task_range;
+
     PredicateTree pred_tree;
     PredicateTree pred_tree_for_zone_map;
     RuntimeFilterPredicates runtime_filter_preds;

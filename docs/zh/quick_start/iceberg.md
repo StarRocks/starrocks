@@ -8,6 +8,7 @@ keywords: ['iceberg']
 
 import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 
 # Apache Iceberg Lakehouse
 
@@ -96,8 +97,10 @@ services:
       - CATALOG_S3_ENDPOINT=http://minio:9000
 
   minio:
-    image: minio/minio:RELEASE.2024-10-29T16-01-48Z
+    image: quay.io/minio/aistor/minio:latest
     container_name: minio
+    volumes:
+      - ./minio.license:/minio.license:ro
     environment:
       - MINIO_ROOT_USER=admin
       - MINIO_ROOT_PASSWORD=password
@@ -113,7 +116,7 @@ services:
   mc:
     depends_on:
       - minio
-    image: minio/mc:RELEASE.2024-10-29T15-34-59Z
+    image: quay.io/minio/aistor/mc:latest
     container_name: mc
     networks:
       iceberg_net:
@@ -123,15 +126,19 @@ services:
       - AWS_REGION=us-east-1
     entrypoint: >
       /bin/sh -c "
-      until (/usr/bin/mc config host add minio http://minio:9000 admin password) do echo '...waiting...' && sleep 1; done;
+      until (/usr/bin/mc alias set minio http://minio:9000 admin password) do echo '...waiting...' && sleep 1; done;
       /usr/bin/mc rm -r --force minio/warehouse;
       /usr/bin/mc mb minio/warehouse;
-      /usr/bin/mc policy set public minio/warehouse;
+      /usr/bin/mc anonymous set public minio/warehouse;
       tail -f /dev/null
       "
 networks:
   iceberg_net:
 ```
+
+MinIO AIStor 需要许可证。在启动容器之前，请获取许可证：
+
+<AIStorLicense />
 
 接下来，使用以下命令启动 docker 容器：
 

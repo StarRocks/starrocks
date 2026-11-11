@@ -371,6 +371,17 @@ struct TOlapTableColumnParam {
     3: required i32 short_key_column_count
 }
 
+// Table-level flat JSON settings (the flat_json.* table properties). Defined here rather than in
+// AgentService.thrift because DataSinks.thrift carries it on TOlapTableSink and AgentService.thrift
+// already includes DataSinks.thrift through InternalService.thrift.
+struct TFlatJsonConfig {
+    1: optional bool flat_json_enable;
+    2: optional double flat_json_null_factor;
+    3: optional double flat_json_sparsity_factor;
+    4: optional i64 flat_json_column_max;
+    5: optional i64 version;
+}
+
 struct TOlapTableIndexSchema {
     // Because multiple versions of a materialized index cannot be loaded simultaneously,
     // the `id` is set to the `index meta id`.

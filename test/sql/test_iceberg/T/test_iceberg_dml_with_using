@@ -1,0 +1,43 @@
+-- name: test_iceberg_dml_with_using
+-- WITH in DELETE and UPDATE, and USING in DELETE.
+
+create external catalog iceberg_dml_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create database iceberg_dml_${uuid0}.db_${uuid0};
+set catalog iceberg_dml_${uuid0};
+use db_${uuid0};
+
+create table t(
+    id int,
+    v string,
+    p int
+) partition by(p) properties ("format-version" = "2", "location" = "oss://${oss_bucket}/dml_${uuid0}/t");
+insert into t values (1, 'a', 1), (2, 'b', 1), (3, 'c', 2), (4, 'd', 2);
+
+create table k(
+    k int
+) properties ("location" = "oss://${oss_bucket}/dml_${uuid0}/k");
+insert into k values (1), (1), (1), (3), (3);
+
+-- 1. USING deletes a row matched several times once; no USING match deletes nothing, even with a partition predicate
+delete from t using k where t.p = 1 and k.k = 999;
+select count(*) from t;
+delete from t using k where t.id = k.k;
+select * from t order by id;
+select content, record_count from t$files where content = 1 order by record_count;
+
+-- 2. WITH in DELETE and UPDATE
+with c as (select 4 as x) delete from t where id in (select x from c);
+with c as (select 2 as x) update t set v = 'B' where id in (select x from c);
+select * from t order by id;
+
+drop table t force;
+drop table k force;
+drop database db_${uuid0};
+drop catalog iceberg_dml_${uuid0};

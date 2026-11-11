@@ -1,0 +1,63 @@
+-- name: test_decimal_null_row_error_if_overflow
+-- Under ERROR_IF_OVERFLOW a decimal cast or decimal arithmetic must not report an error for a NULL row,
+-- whatever its data slot holds. Each query mixes a NULL row with a valid row in the same chunk.
+create database test_decimal_null_row_${uuid0};
+use test_decimal_null_row_${uuid0};
+CREATE TABLE t (
+  k int,
+  s varchar(32),
+  d1 decimal(10,2),
+  d2 decimal(10,2),
+  b bigint,
+  big decimal(38,0)
+)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+INSERT INTO t VALUES
+  (1, NULL,   1.00, NULL, NULL, NULL),
+  (2, '1.25', 3.00, 2.00, 1,    1),
+  (3, '',     5.00, 4.00, 2,    2);
+set sql_mode = 'ERROR_IF_OVERFLOW';
+
+-- string -> decimal: NULLIF leaves '' in the NULL row (issue #82140)
+select k, cast(nullif(s, '') as decimal(36,18)) from t order by k;
+select k, cast(s as decimal(9,2)) from t where k < 3 order by k;
+select max(cast(nullif(s, '') as decimal(36,18))), min(cast(nullif(s, '') as decimal(36,18))) from t;
+select cast(nullif(if(generate_series = 1, '', '1.25'), '') as decimal(36,18)) from table(generate_series(1, 2)) order by 1;
+
+-- the NULL row's slot holds a value computed by an upstream `a + b`
+select k, cast(b + if(k = 1, 10000000000, 0) as decimal(18,9)) from t order by k;
+select k, cast(cast(b as double) + if(k = 1, 1e300, 0) as decimal(9,2)) from t order by k;
+select k, cast(big + if(k = 1, 100000000000000000000, 0) as decimal(18,0)) from t order by k;
+select k, cast(big + if(k = 1, 10000000000, 0) as decimal(38,30)) from t order by k;
+select k, cast(big + if(k = 1, 1000, 0) as tinyint) from t order by k;
+select k, cast(big + if(k = 1, 99, 0) as time) from t order by k;
+
+-- nested casts
+select k, cast([s, null] as array<decimal(10,2)>) from t where k < 3 order by k;
+select k, cast(map{1: s, 2: null} as map<int, decimal(10,2)>) from t where k < 3 order by k;
+select k, cast(row(s) as struct<a decimal(10,2)>) from t where k < 3 order by k;
+
+-- decimal arithmetic: a NULL divisor holds 0
+select k, d1 / d2, d1 % d2, mod(d1, d2) from t order by k;
+select k, 1.00 / d2, 1.00 % d2 from t order by k;
+select k, (big + if(k = 1, 90000000000000000000000000000000000000, 0)) + 90000000000000000000000000000000000000 from t order by k;
+select k, (big + if(k = 1, 90000000000000000000000000000000000000, 0)) - (-90000000000000000000000000000000000000) from t order by k;
+select k, (big + if(k = 1, 10000000000000000000000000000000000000, 0)) * cast(100 as decimal(38,0)) from t order by k;
+select k, (big + if(k = 1, 100000000000000000000, 0)) div cast(1 as decimal(38,0)) from t order by k;
+
+-- a zero divisor yields NULL as in the other sql modes, whatever the dividend
+select k, d1 / cast(0 as decimal(10,2)), d1 % cast(0 as decimal(10,2)), mod(d1, cast(0 as decimal(10,2))) from t order by k;
+select k, d1 / (d2 - d2), d1 % (d2 - d2), d1 div (d2 - d2) from t order by k;
+select k, d1 / if(k = 3, 0, d2) from t order by k;
+select k, (big + 90000000000000000000000000000000000000) / (big - big), big % (big - big) from t order by k;
+select k, 90000000000000000000000000000000000000 / (big - big) from t order by k;
+
+-- a non-null row that overflows is still reported
+select k, cast(s as decimal(9,2)) from t order by k;
+select k, cast(big + if(k = 2, 1000, 0) as tinyint) from t order by k;
+select k, (big + 90000000000000000000000000000000000000) / if(k = 3, 0.1, 0) from t order by k;
+
+set sql_mode = default;
+drop database test_decimal_null_row_${uuid0};

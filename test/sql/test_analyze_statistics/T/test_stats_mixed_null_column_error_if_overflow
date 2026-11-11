@@ -1,0 +1,33 @@
+-- name: test_stats_mixed_null_column_error_if_overflow @sequential
+ori_sql_mode=select @@GLOBAL.sql_mode;
+set global sql_mode = 'ERROR_IF_OVERFLOW';
+create database analyze_test_${uuid0};
+use analyze_test_${uuid0};
+CREATE TABLE `mixed_null_decimal` (
+  `k1` int,
+  `c1` decimal(20,8)
+)
+DUPLICATE KEY(`k1`)
+PARTITION BY RANGE(`k1`) (
+  PARTITION p1 VALUES LESS THAN ("10"),
+  PARTITION p2 VALUES LESS THAN ("20")
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- p1 is all NULL (empty min/max in its stats row), p2 holds values
+INSERT INTO mixed_null_decimal VALUES (1, null), (2, null), (11, 1.25), (12, 2.50);
+analyze table mixed_null_decimal;
+select partition_name, length(`max`) > 0, length(`min`) > 0 from default_catalog._statistics_.column_statistics where table_name='analyze_test_${uuid0}.mixed_null_decimal' and column_name='c1' order by partition_name;
+-- loading the table-level stats merges an empty and a non-empty min/max under ERROR_IF_OVERFLOW
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 5, "desc": "wait column stats cache load under ERROR_IF_OVERFLOW"}
+  result=explain costs select c1 from mixed_null_decimal;
+  CHECK: re.search("c1-->\[1.25, 2.5, .*ESTIMATE", ${result}) != None
+} END LOOP
+set global sql_mode = '${ori_sql_mode}';
+drop database analyze_test_${uuid0};
+
+CLEANUP {
+    set global sql_mode = '${ori_sql_mode}';
+    drop database if exists analyze_test_${uuid0};
+} END CLEANUP

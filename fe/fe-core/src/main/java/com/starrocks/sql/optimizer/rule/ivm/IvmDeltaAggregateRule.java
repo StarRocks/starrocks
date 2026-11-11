@@ -21,11 +21,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.ast.JoinOperator;
-<<<<<<< HEAD
-import com.starrocks.sql.common.PCellSortedSet;
-=======
 import com.starrocks.sql.ast.expression.BinaryType;
->>>>>>> fcf3f5f7ae9... [Enhancement] Join the mv's sort-key prefix on the IVM state-merge scan (#63299)
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;

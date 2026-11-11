@@ -1,0 +1,20 @@
+-- name: test_geo_insert_assignment
+CREATE TABLE geo_insert_src (id INT, wkt VARCHAR(160)) PROPERTIES('replication_num'='1');
+INSERT INTO geo_insert_src VALUES (1,'POINT (1 2)'),(2,NULL),(3,'POINT EMPTY');
+CREATE TABLE geo_insert_text (id INT, payload VARCHAR(256)) PROPERTIES('replication_num'='1');
+CREATE TABLE geo_insert_binary (id INT, payload VARBINARY) PROPERTIES('replication_num'='1');
+function: assert_query_error_contains("INSERT INTO geo_insert_text SELECT id,ST_GeogFromText(wkt) FROM geo_insert_src", "native geo assignments require identical types")
+function: assert_query_error_contains("INSERT INTO geo_insert_binary SELECT id,ST_GeogFromText(wkt) FROM geo_insert_src", "native geo assignments require identical types")
+function: assert_query_error_contains("INSERT INTO geo_insert_text SELECT id,ST_GeomFromText(wkt,'EPSG:3857') FROM geo_insert_src", "native geo assignments require identical types")
+function: assert_query_error_contains("INSERT INTO geo_insert_binary SELECT id,ST_GeomFromText(wkt,'EPSG:3857') FROM geo_insert_src", "native geo assignments require identical types")
+function: assert_query_error_contains("INSERT INTO geo_insert_text SELECT id,ST_GeomFromText(wkt,'EPSG:4326') FROM geo_insert_src", "native geo assignments require identical types")
+function: assert_query_error_contains("INSERT INTO geo_insert_binary SELECT id,ST_GeomFromText(wkt,'EPSG:4326') FROM geo_insert_src", "native geo assignments require identical types")
+function: assert_query_error_contains("INSERT INTO geo_insert_text SELECT id,ST_GeomFromText(wkt,'LOCAL:linear') FROM geo_insert_src", "native geo assignments require identical types")
+function: assert_query_error_contains("INSERT INTO geo_insert_binary SELECT id,ST_GeomFromText(wkt,'LOCAL:linear') FROM geo_insert_src", "native geo assignments require identical types")
+INSERT INTO geo_insert_text SELECT id,ST_AsText(ST_GeogFromText(wkt)) FROM geo_insert_src;
+[ORDER]SELECT id,payload FROM geo_insert_text ORDER BY id;
+TRUNCATE TABLE geo_insert_text;
+INSERT INTO geo_insert_text SELECT id,id FROM geo_insert_src;
+[ORDER]SELECT id,payload FROM geo_insert_text ORDER BY id;
+INSERT INTO geo_insert_binary SELECT id,ST_AsBinary(ST_GeomFromText(wkt,'EPSG:3857')) FROM geo_insert_src;
+[ORDER]SELECT id,hex(payload) FROM geo_insert_binary ORDER BY id;

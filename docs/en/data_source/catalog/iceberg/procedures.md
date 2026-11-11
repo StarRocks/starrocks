@@ -39,6 +39,52 @@ ALTER TABLE iceberg.sales.order
 EXECUTE rollback_to_snapshot(98765);
 ```
 
+### Rollback to timestamp
+
+Rolls back the table to the latest snapshot that was committed before the specified timestamp. The timestamp is interpreted in the session time zone.
+
+#### `rollback_to_timestamp` Syntax
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE rollback_to_timestamp(<timestamp>)
+```
+
+#### Parameters
+
+`timestamp`: The table is rolled back to the latest snapshot committed before this point in time. Format: 'YYYY-MM-DD HH:MM:SS'. An error is returned if no snapshot was committed before it.
+
+#### Example
+
+Roll back the table to its state before 2025-01-01 00:00:00:
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE rollback_to_timestamp('2025-01-01 00:00:00');
+```
+
+### Set current snapshot
+
+Sets the table's current snapshot to the specified snapshot ID. Unlike `rollback_to_snapshot`, the snapshot does not need to be an ancestor of the current snapshot, so you can use it to move the table forward again to a snapshot that was rolled back.
+
+#### `set_current_snapshot` Syntax
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE set_current_snapshot(<snapshot_id>)
+```
+
+#### Parameters
+
+`snapshot_id`: ID of the snapshot to set as the current snapshot of the table.
+
+#### Example
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE set_current_snapshot(98765);
+```
+
 ### Cherry pick a snapshot
 
 Cherry picks a specific snapshot and applies it to the current state of the table. This operation creates a new snapshot based on an existing snapshot, while the original snapshot remains unchanged.
@@ -136,6 +182,20 @@ EXECUTE rewrite_data_files
 - Unit: -
 - Type: Int
 - Default: 1
+
+###### `delete_ratio_threshold`
+
+- Description: Data files larger than `min_file_size_bytes` are also rewritten when the rows deleted by their deletion vector or file-scoped position delete files reach this fraction of their rows. Valid range: [0, 1]. Equality delete files and partition-scoped position delete files do not count towards the ratio.
+- Unit: -
+- Type: Double
+- Default: 0.3
+
+###### `delete_file_threshold`
+
+- Description: Data files larger than `min_file_size_bytes` are also rewritten when at least this number of delete files apply to them. It must be a positive integer.
+- Unit: -
+- Type: Int
+- Default: No limit
 
 ##### `WHERE` clause
 

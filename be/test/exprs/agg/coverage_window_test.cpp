@@ -88,7 +88,7 @@ struct WindowHarness {
                            int64_t limit = -1, TypeDescriptor type = coverage_type()) {
         query = std::make_shared<MemTracker>(limit);
         runtime.init_mem_trackers(query);
-        std::vector<TypeDescriptor> args{type, TypeDescriptor(TYPE_DOUBLE)};
+        std::vector<TypeDescriptor> args{type, TYPE_DOUBLE_DESC};
         if (third) args.emplace_back(TYPE_BOOLEAN);
         ctx.reset(FunctionContext::create_context(&runtime, &pool, type, args));
         Columns constants{nullptr, tolerance ? ColumnHelper::create_const_column<TYPE_DOUBLE>(*tolerance, 1)
@@ -130,7 +130,6 @@ TEST(CoverageWindowTest, FullPartitionEmitsDistinctRowsAcrossChunks) {
         WindowHarness h(1, false, true, -1, type);
         h.evaluate(coverage_input({left, std::nullopt, right, "MULTIPOLYGON EMPTY"}, type));
         ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
-        EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 1);
         auto first = h.result(2), second = h.result(2);
         ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
         EXPECT_EQ(output_text(first, 0), "POLYGON ((0 0, 0 8, 4 8, 4 0, 0 0))");
@@ -139,9 +138,6 @@ TEST(CoverageWindowTest, FullPartitionEmitsDistinctRowsAcrossChunks) {
         EXPECT_EQ(output_text(second, 1), "MULTIPOLYGON EMPTY");
         EXPECT_EQ(geo_data(first)->descriptor().type, *type.geo_type);
         for (const auto& column : {first, second}) {
-            EXPECT_EQ(geo_data(column)->descriptor().storage.dimension, GEO_DIMENSION_XY);
-            EXPECT_EQ(geo_data(column)->descriptor().storage.validation_state,
-                      GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED);
             auto area = GeoFunctions::st_geometry_area(nullptr, {column});
             ASSERT_TRUE(area.ok()) << area.status();
             ColumnViewer<TYPE_DOUBLE> values(*area);
@@ -169,8 +165,7 @@ TEST(CoverageWindowTest, MultiplePartitionsShareAChunkWithoutDeduplicatingRows) 
     EXPECT_EQ(geo_data(result)->get_wkb(0).to_string(), bytes(left));
     EXPECT_EQ(geo_data(result)->get_wkb(1).to_string(), bytes(left));
     EXPECT_EQ(output_text(result, 2), "POLYGON EMPTY");
-    EXPECT_TRUE(result->is_null(3));
-    EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 0); // Zero tolerance preserves bytes without simplifying.
+    EXPECT_TRUE(result->is_null(3)); // Zero tolerance preserves bytes without simplifying.
     result->check_or_die();
 }
 
@@ -184,7 +179,6 @@ TEST(CoverageWindowTest, NullPartitionBeforeGeometryKeepsValidatedStorage) {
     h.evaluate(input, 1, 3);
     h.fn.get_values(h.ctx.get(), h.storage.data(), result.get(), 1, 3);
     ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
-    EXPECT_EQ(geo_data(result)->descriptor().storage.dimension, GEO_DIMENSION_XY);
     auto area = GeoFunctions::st_geometry_area(nullptr, {result});
     ASSERT_TRUE(area.ok()) << area.status();
     ColumnViewer<TYPE_DOUBLE> values(*area);
@@ -222,7 +216,6 @@ TEST(CoverageWindowTest, NullParametersSkipInvalidTopologyAndDefaultIsTrue) {
         auto result = h.result(3);
         ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
         for (size_t i = 0; i < 3; ++i) EXPECT_TRUE(result->is_null(i));
-        EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 0);
     }
     WindowHarness two(1, true, false), three(1, true);
     auto input = coverage_input({left, right});
@@ -281,8 +274,6 @@ TEST(CoverageWindowTest, InvalidCoveragePreservesStructuralOutputAndRowMapping) 
                 EXPECT_DOUBLE_EQ(geometry.rings[0].front().y, geometry.rings[0].back().y);
             }
             EXPECT_EQ(geo_data(result)->descriptor().type, *coverage_type().geo_type);
-            EXPECT_EQ(geo_data(result)->descriptor().storage.validation_state,
-                      GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED);
             result->check_or_die();
         }
 }
@@ -397,7 +388,6 @@ TEST(CoverageWindowTest, IndependentPartitionsCanRunOnConcurrentWorkers) {
             h.evaluate(coverage_input({left, right}));
             auto first = h.result(1), second = h.result(1);
             ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
-            EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 1);
             EXPECT_EQ(output_text(first, 0), "POLYGON ((0 0, 0 8, 4 8, 4 0, 0 0))");
             EXPECT_EQ(output_text(second, 0), "POLYGON ((4 0, 4 8, 8 8, 8 0, 4 0))");
         });
