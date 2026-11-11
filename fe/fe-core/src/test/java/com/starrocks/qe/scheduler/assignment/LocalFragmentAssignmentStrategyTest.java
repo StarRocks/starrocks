@@ -148,4 +148,54 @@ public class LocalFragmentAssignmentStrategyTest {
             }).sum());
         }
     }
+
+    @Test
+    public void groupedLayoutKeepsEveryGroupOnOneLogicalDriverAndPadsEmptyQueues() throws Exception {
+        for (int groups : List.of(3, 9, 128)) {
+            var f = com.starrocks.qe.QueryGroupBackendSelectorTest.fixture(groups, 1, 8);
+            com.starrocks.qe.QueryGroupBackendSelectorTest.limit(f, 128, 16);
+            new LocalFragmentAssignmentStrategy(f.context(), f.provider(), true, false, false)
+                    .assignFragmentToWorker(f.fragment());
+            Assertions.assertEquals(1, f.fragment().getInstances().size());
+            var instance = f.fragment().getInstances().get(0);
+            int physical = Math.min(8, groups);
+            int logical = ((groups + physical - 1) / physical) * physical;
+            Assertions.assertEquals(physical, instance.getPipelineDop());
+            Assertions.assertEquals(logical, instance.getGroupExecutionScanDop());
+            Assertions.assertTrue(f.fragment().getPlanFragment().isUseGroupExecution());
+            Assertions.assertTrue(instance.getNode2ScanRanges().isEmpty());
+            var queues = instance.getNode2DriverSeqToScanRanges().get(0);
+            Assertions.assertEquals(logical, queues.size());
+            Assertions.assertEquals(logical - groups, queues.values().stream().filter(List::isEmpty).count());
+            for (int driver = 0; driver < groups; driver++) {
+                Assertions.assertEquals(2, queues.get(driver).size());
+                for (var range : queues.get(driver)) {
+                    Assertions.assertEquals(driver, range.getScan_range().getGrouped_range_task().getGroup_id());
+                    Assertions.assertEquals(driver, range.getScan_range().getInternal_scan_range().getBucket_sequence());
+                    Assertions.assertFalse(range.isHas_more());
+                }
+            }
+            Assertions.assertEquals(logical, instance.getDeployedScanRangeLayout(0).orElseThrow().getDriverSeqCount());
+        }
+    }
+
+    @Test
+    public void groupedExplicitlyRejectsIncrementalNonpipelineAndMultipleInstances() throws Exception {
+        for (int mode = 0; mode < 5; mode++) {
+            var f = com.starrocks.qe.QueryGroupBackendSelectorTest.fixture(3, 1, 8);
+            if (mode == 2) {
+                f.fragment().getPlanFragment().setParallelExecNum(2);
+            }
+            if (mode == 3) {
+                f.fragment().getPlanFragment().enableAdaptiveDop();
+            }
+            if (mode == 4) {
+                f.fragment().getPlanFragment().setWithLocalShuffleIfTrue(true);
+            }
+            var strategy = new LocalFragmentAssignmentStrategy(f.context(), f.provider(), mode != 0, false, mode == 1);
+            Assertions.assertThrows(com.starrocks.common.StarRocksException.class,
+                    () -> strategy.assignFragmentToWorker(f.fragment()));
+            Assertions.assertTrue(f.fragment().getInstances().isEmpty());
+        }
+    }
 }
