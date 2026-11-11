@@ -2393,9 +2393,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             return statistics;
         }
 
+        // Chain the estimation so every predicate's selectivity is applied, not only the last one.
         Statistics result = statistics;
         for (ScalarOperator predicate : predicateList) {
-            result = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics);
+            result = PredicateStatisticsCalculator.statisticsCalculate(predicate, result);
         }
 
         // avoid sample statistics filter all data, save one rows least
