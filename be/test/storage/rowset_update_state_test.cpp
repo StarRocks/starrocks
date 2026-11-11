@@ -28,6 +28,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/olap_common.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/storage_engine.h"
@@ -36,8 +37,10 @@
 #include "storage/tablet_reader_params.h"
 #include "storage/tablet_schema.h"
 #include "storage/union_iterator.h"
+#include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -372,6 +375,83 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     }
 
     manager->index_cache().release(index_entry);
+}
+
+// get_pk_vector_chunk_size() gives the segment readers of primary key apply a chunk size they can use: the
+// configured value when it is in range, DEFAULT_CHUNK_SIZE for a value <= 0, and MAX_CHUNK_SIZE above that.
+TEST(PkVectorChunkSizeTest, falls_back_and_caps) {
+    const int32_t old_chunk_size = config::pk_vector_chunk_size;
+    DeferOp restore_config([&]() { config::pk_vector_chunk_size = old_chunk_size; });
+
+    config::pk_vector_chunk_size = 7;
+    EXPECT_EQ(7, get_pk_vector_chunk_size());
+    config::pk_vector_chunk_size = MAX_CHUNK_SIZE;
+    EXPECT_EQ(MAX_CHUNK_SIZE, get_pk_vector_chunk_size());
+    config::pk_vector_chunk_size = MAX_CHUNK_SIZE + 1;
+    EXPECT_EQ(MAX_CHUNK_SIZE, get_pk_vector_chunk_size());
+    config::pk_vector_chunk_size = 0;
+    EXPECT_EQ(DEFAULT_CHUNK_SIZE, get_pk_vector_chunk_size());
+    config::pk_vector_chunk_size = -1;
+    EXPECT_EQ(DEFAULT_CHUNK_SIZE, get_pk_vector_chunk_size());
+}
+
+// Apply and compaction read segments in pk_vector_chunk_size batches. With 7-row batches every 100-row segment
+// takes 15 reads, so the primary keys that apply, a partial update, the compaction conflict resolver and
+// CompactionState collect are stitched across batch boundaries; no row may be lost or duplicated.
+TEST_F(RowsetUpdateStateTest, apply_and_compaction_with_small_pk_vector_chunk_size) {
+    const int32_t old_chunk_size = config::pk_vector_chunk_size;
+    DeferOp restore_config([&]() { config::pk_vector_chunk_size = old_chunk_size; });
+    config::pk_vector_chunk_size = 7;
+
+    const int N = 100;
+    _tablet = create_tablet(rand(), rand());
+    // version 2: keys [0, 100), version 3: keys [50, 150), version 4: keys [0, 100)
+    std::vector<std::vector<int64_t>> version_keys(3);
+    for (int i = 0; i < N; i++) {
+        version_keys[0].push_back(i);
+        version_keys[1].push_back(i + N / 2);
+        version_keys[2].push_back(i);
+    }
+    for (int i = 0; i < 3; i++) {
+        auto st = _tablet->rowset_commit(i + 2, create_rowset(_tablet, version_keys[i]), 0);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+    }
+    // read_tablet() waits until version 4 is applied.
+    ASSERT_EQ(N + N / 2, read_tablet(_tablet, 4));
+
+    // A partial update loads its primary keys and the old values of the rows it updates.
+    std::vector<int32_t> column_indexes = {0, 1};
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
+    RowsetSharedPtr partial_rowset = create_partial_rowset(_tablet, version_keys[0], column_indexes, partial_schema);
+    RowsetUpdateState state;
+    ASSERT_OK(state.load(_tablet.get(), partial_rowset.get()));
+    const std::vector<PartialUpdateState>& partial_update_states = state.parital_update_states();
+    ASSERT_EQ(1, partial_update_states.size());
+    ASSERT_EQ(N, partial_update_states[0].src_rss_rowids.size());
+    for (int i = 0; i < N; i++) {
+        ASSERT_EQ((int32_t)(i % 1000 + 2), partial_update_states[0].write_columns[0]->get(i).get_int32());
+    }
+
+    // Light compaction publish (the default) resolves the output rowset through the conflict resolver.
+    ASSERT_OK(_tablet->updates()->compaction(_compaction_mem_tracker.get()));
+    _tablet->updates()->wait_apply_done();
+    EditVersion applied_version;
+    ASSERT_OK(_tablet->updates()->get_latest_applied_version(&applied_version));
+    ASSERT_EQ(EditVersion(4, 1), applied_version);
+    ASSERT_EQ(1u, _tablet->updates()->num_rowsets());
+    ASSERT_OK(_tablet->verify());
+    ASSERT_EQ(N + N / 2, read_tablet(_tablet, 4));
+
+    // CompactionState loads the primary keys of a compaction output when light compaction publish is off.
+    RowsetSharedPtr rowset = create_rowset(_tablet, version_keys[1]);
+    CompactionState compaction_state;
+    ASSERT_OK(compaction_state.load(rowset.get()));
+    ASSERT_OK(compaction_state.load_segments(rowset.get(), 0));
+    ASSERT_EQ(N, compaction_state.pk_cols[0]->size());
+    for (int i = 0; i < N; i++) {
+        ASSERT_EQ(version_keys[1][i], compaction_state.pk_cols[0]->get(i).get_int64());
+    }
+    compaction_state.release_segment(0);
 }
 
 } // namespace starrocks

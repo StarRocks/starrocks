@@ -963,6 +963,15 @@ This topic introduces the following types of BE configurations:
 - Description: When `enable_pk_index_eager_build` is set to true, the system will eagerly build PK index files only if the data generated during import or compaction exceeds this threshold. Default is 100MB.
 - Introduced in: -
 
+### pk_vector_chunk_size
+
+- Default: 4096
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: The number of rows per batch that a Primary Key table reads from segments in the apply phase, that is, when it applies a load or a compaction. Applies to both shared-nothing and shared-data clusters. It covers reading the primary keys of the loaded data, the columns that partial updates read, and the primary keys of the compaction output. This item is independent of `vector_chunk_size`, so you can tune it without affecting query execution. A smaller value reduces the memory that each batch holds, and a larger value reduces the number of reads. A value of `0` or less is treated as `4096`, and a value greater than `65535` is treated as `65535`. Rebuilding the primary key index from segments does not use this item.
+- Introduced in: -
+
 ### primary_key_limit_size
 
 - Default: 128

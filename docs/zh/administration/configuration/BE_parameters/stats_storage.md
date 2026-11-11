@@ -954,6 +954,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：当 `enable_pk_index_eager_build` 设置为 `true` 后，导入或 Compaction 生成的数据大于该阈值时，系统才会即时构建主键索引文件。默认为 100MB。
 - 引入版本：-
 
+### pk_vector_chunk_size
+
+- 默认值：4096
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：主键表在 apply 阶段（应用导入或 Compaction 的结果）从 Segment 读取数据时，每批读取的行数。存算一体和存算分离集群均适用，涵盖导入数据的主键、部分列更新需要读取的列，以及 Compaction 输出的主键。该参数独立于 `vector_chunk_size`，调整它不影响查询执行。调小可以减少每批数据占用的内存，调大可以减少读取次数。设为 `0` 或负数时按 `4096` 处理，大于 `65535` 时按 `65535` 处理。从 Segment 重建主键索引时不使用该参数。
+- 引入版本：-
+
 ### primary_key_limit_size
 
 - 默认值：128
