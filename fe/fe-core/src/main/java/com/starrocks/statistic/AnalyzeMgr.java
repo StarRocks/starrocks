@@ -699,7 +699,7 @@ public class AnalyzeMgr implements Writable {
     // partitioned, has a pending or running analyze (which does its own cleanup), or its partition list cannot be
     // obtained or is empty. Never throws.
     //
-    // Only the leader's statistics cache is expired here. Nothing is journaled, so followers keep serving the
+    // Only the leader's statistics cache is refreshed here. Nothing is journaled, so followers keep serving the
     // cached statistics until their cache entries expire (statistic_update_interval_sec) or the table's next
     // collection invalidates them; the rows were already at least a grace period old.
     public void clearStatisticFromExternalDroppedPartition() {
@@ -856,7 +856,10 @@ public class AnalyzeMgr implements Writable {
         }
         ExternalDroppedPartitionStats.DeleteResult result =
                 ExternalDroppedPartitionStats.deleteInBatches(context, executor, table, dropped, columns);
-        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+        // Refresh rather than invalidate: the old values stay served until the reload lands, as after a
+        // collection. Invalidating would make the next query plan with unknown statistics until it reloads.
+        GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .refreshConnectorTableColumnStatistics(table, columns, false);
         if (result.failedBatches > 0) {
             LOG.warn("[ExternalStats] periodic dropped partition stats cleanup partially failed | catalog={} db={} " +
                             "table={} droppedPartitions={} batches={} failedBatches={}",
