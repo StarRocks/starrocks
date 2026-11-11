@@ -16,8 +16,12 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.AnalyticEvalNode;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -2001,6 +2005,67 @@ public class WindowTest extends PlanTestBase {
                 "  |  \n" +
                 "  1:SORT\n" +
                 "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 DESC");
+    }
+
+    @Test
+    public void testFirstLastValueReverseKeepsDecimalType() throws Exception {
+        String decimal64Slice = "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
+                "scalar_type:TScalarType(type:DECIMAL64, precision:10, scale:2))])";
+        String decimal128Slice = "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
+                "scalar_type:TScalarType(type:DECIMAL128, precision:38, scale:10))])";
+        String[] sqls = {
+                "select first_value(id_decimal ignore nulls) over (partition by t1c order by id_datetime" +
+                        " rows between current row and unbounded following) from test_all_type",
+                "select first_value(id_decimal) over (partition by t1c order by id_datetime" +
+                        " rows between 1 preceding and unbounded following) from test_all_type",
+                "select last_value(id_decimal ignore nulls) over (partition by t1c order by id_datetime" +
+                        " rows between current row and unbounded following) from test_all_type",
+        };
+        for (String sql : sqls) {
+            String plan = getThriftPlan(sql);
+            assertContains(plan, decimal64Slice);
+            assertNotContains(plan, "precision:-1");
+        }
+
+        String sql = "select first_value(case when t1c = 14 then cast(id_decimal as decimal(38, 10)) end ignore nulls)" +
+                " over (partition by t1b order by id_datetime, t1c" +
+                " rows between current row and unbounded following) from test_all_type";
+        String plan = getThriftPlan(sql);
+        assertContains(plan, "fn:TFunction(name:TFunctionName(function_name:last_value)");
+        assertContains(plan, decimal128Slice);
+        assertNotContains(plan, "precision:-1");
+
+        sql = "select first_value([id_decimal] ignore nulls) over (partition by t1c order by id_datetime" +
+                " rows between current row and unbounded following) from test_all_type";
+        plan = getThriftPlan(sql);
+        assertContains(plan, "fn:TFunction(name:TFunctionName(function_name:last_value)");
+        // BE builds the result column from ret_type; the array argument keeps the analyzer's signature.
+        assertContains(plan, "ret_type:TTypeDesc(types:[TTypeNode(type:ARRAY), TTypeNode(type:SCALAR, " +
+                "scalar_type:TScalarType(type:DECIMAL64, precision:10, scale:2))])");
+    }
+
+    @Test
+    public void testFirstLastValueReverseIsStableAcrossReplanning() throws Exception {
+        // INSERT OVERWRITE and MV refresh plan the same analyzed statement more than once. Reversing the
+        // window must not rename the function in the AST, or the second plan reverses it back.
+        String[] sqls = {
+                "select v1, v2, first_value(v3 ignore nulls) over (partition by v1 order by v2" +
+                        " rows between current row and unbounded following) from t0",
+                "select v1, v2, last_value(v3) over (partition by v1 order by v2" +
+                        " rows between current row and unbounded following) from t0",
+        };
+        String[] expects = {
+                "functions: [, last_value(3: v3), ]",
+                "functions: [, first_value(3: v3), ]",
+        };
+        for (int i = 0; i < sqls.length; i++) {
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sqls[i], connectContext);
+            String first = StatementPlanner.plan(stmt, connectContext).getExplainString(TExplainLevel.NORMAL);
+            String second = StatementPlanner.plan(stmt, connectContext).getExplainString(TExplainLevel.NORMAL);
+            assertContains(first, expects[i]);
+            assertContains(first, "order by: 2: v2 DESC");
+            Assertions.assertEquals(first, second);
+        }
     }
 
     @Test
