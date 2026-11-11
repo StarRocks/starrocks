@@ -21,6 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.type.Type;
@@ -310,6 +311,32 @@ public class ExternalStatsDroppedPartitionCleanupTest extends PlanTestNoneDBBase
         FakeStatsTable stats = new FakeStatsTable(Lists.newArrayList("par_col=1", "par_col=7"), true);
         runPeriodic();
         Assertions.assertEquals(Lists.newArrayList("par_col=7"), stats.deleted());
+    }
+
+    // The cleaned columns' cached statistics are refreshed, not invalidated: an invalidated entry makes the next
+    // query plan with unknown statistics until it is reloaded.
+    @Test
+    public void testPeriodicRefreshesTheCleanedColumnsCache() {
+        addStatsMeta(TABLE);
+        new FakeStatsTable(Lists.newArrayList("par_col=7"), true);
+        List<List<String>> refreshed = new ArrayList<>();
+        AtomicInteger expired = new AtomicInteger();
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
+                Assertions.assertEquals(hiveTable.getUUID(), table.getUUID());
+                Assertions.assertFalse(isSync);
+                refreshed.add(new ArrayList<>(columns));
+            }
+
+            @Mock
+            public void expireConnectorTableColumnStatistics(Table table, List<String> columns) {
+                expired.incrementAndGet();
+            }
+        };
+        runPeriodic();
+        Assertions.assertEquals(List.of(columns()), refreshed);
+        Assertions.assertEquals(0, expired.get());
     }
 
     @Test
