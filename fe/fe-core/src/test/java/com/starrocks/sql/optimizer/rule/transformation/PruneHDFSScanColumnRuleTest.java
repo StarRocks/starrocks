@@ -19,7 +19,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OdpsTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.connector.paimon.PaimonIndexTable;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -27,6 +29,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOdpsScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonIndexScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -69,6 +72,19 @@ public class PruneHDFSScanColumnRuleTest {
             put(unknownColumnOperator, new Column("name", UnknownType.UNKNOWN_TYPE));
         }
     };
+
+    @Test
+    public void copyIndexScanPredicates(@Mocked PaimonTable table) {
+        LogicalPaimonIndexScanOperator scan = new LogicalPaimonIndexScanOperator(
+                new PaimonIndexTable(table), Map.of(), Map.of(), -1, null);
+        scan.getScanOperatorPredicates().getNonPartitionConjuncts().add(ConstantOperator.createBoolean(true));
+        LogicalPaimonIndexScanOperator copied = new LogicalPaimonIndexScanOperator.Builder().withOperator(scan).build();
+        Assertions.assertNotSame(scan.getScanOperatorPredicates(), copied.getScanOperatorPredicates());
+        Assertions.assertEquals(scan.getScanOperatorPredicates().getNonPartitionConjuncts(),
+                copied.getScanOperatorPredicates().getNonPartitionConjuncts());
+        copied.getScanOperatorPredicates().getNonPartitionConjuncts().clear();
+        Assertions.assertEquals(1, scan.getScanOperatorPredicates().getNonPartitionConjuncts().size());
+    }
 
     @Test
     public void transformIcebergWithPredicate(@Mocked IcebergTable table,

@@ -1652,6 +1652,35 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v4.2
 
+### paimon_global_index_scan_stage
+
+* **Description**: Controls Paimon Global Index evaluation for the current query. The original SQL filter is always retained. Change the value with `SET`; no restart is required.
+* **Default**: 1
+* **Data type**: Integer
+* **Introduced in**: v4.2
+
+| Value | Behavior |
+| --- | --- |
+| `0` | Disables index discovery and SDK global-index evaluation, including during statistics planning. |
+| `1` | Uses Paimon Java SDK split planning. |
+| `2` | Attempts distributed scalar BTree evaluation on BEs during execution planning; uses SDK split planning when ineligible or unsuccessful. |
+
+```sql
+SET paimon_global_index_scan_stage = 2;
+```
+
+The distributed stage currently requires BTree to be the only global-index provider on each participating field. Fields with mixed providers use SDK planning.
+
+Stage `2` runs internal queries as the caller and checks privileges on the `<table>$global_index` virtual table separately from the base table. Under native RBAC, `SELECT` on the base table alone does not authorize the virtual table; privileges must cover both objects (for example, `SELECT` on all tables in the database). If the caller can query the base table but the internal query is denied, planning falls back to the SDK without executing the distributed index scan. A caller without base-table access is still denied by the outer query. The virtual table is reserved for internal execution. Query the base table to use the distributed index.
+
+Distributed evaluation requires compatible key encoding throughout each indexed field's schema history. If an index relevant to the query has an incompatible historical encoding or its compatibility cannot be verified, SDK planning disables global index evaluation for that scan. Rebuilding an index does not remove this restriction. Renames and nullability-only changes remain eligible. If a BE detects a schema change while opening the index, the query falls back to SDK planning.
+
+Stage `2` also falls back to SDK planning when a row access or column masking policy applies to the virtual table. The base table's access policies still apply. Stage `0` disables SDK index evaluation during statistics planning as well, and stage `2` defers index evaluation until execution planning. Cancelling the outer query cancels its internal index query without starting fallback work.
+
+Distributed evaluation is limited to data-evolution tables on the main branch, with every required index completely covering the pinned snapshot. Primary-key tables, incremental scans, partially covered snapshots, unsupported predicates, and evaluation or result-application failures use SDK split planning. Stage `2` distributed BTree evaluation requires `paimon-cpp`. Data scans over `IndexedSplit` objects, including those returned by SDK planning, select the Paimon native or JNI reader according to `paimon_reader_mode` and schema, file-format, and split compatibility. Explicit `NATIVE` mode fails for unsupported splits instead of falling back to JNI. An `IndexedSplit` wrapping a `FallbackDataSplit` is unsupported by both readers and is rejected. EXPLAIN distinguishes a recognized index condition from an applied distributed result, SDK fallback, or distributed evaluation that was not attempted.
+
+`ORDER BY ... LIMIT` on approximate vector expressions retains ordinary scan and TopN evaluation. Eligible scalar `WHERE` predicates can still use scalar indexes independently; this variable does not enable ANN planning or execution.
+
 ### parallel_exchange_instance_num
 
 Used to set the number of exchange nodes that an upper-level node uses to receive data from a lower-level node in the execution plan. The default value is -1, meaning the number of exchange nodes is equal to the number of execution instances of the lower-level node. When  this variable is set to be greater than 0 but smaller than the number of execution instances of the lower-level node, the number of exchange nodes equals the set value.

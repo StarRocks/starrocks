@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
@@ -39,6 +41,33 @@ TEST_F(HiveConnectorTest, test_create_data_source) {
     auto data_source = provider.create_data_source(scan_range);
     EXPECT_NE(data_source, nullptr);
     EXPECT_EQ(data_source->name(), "HiveDataSource");
+}
+
+TEST_F(HiveConnectorTest, test_paimon_global_index_range_does_not_affect_memory_estimate) {
+    THdfsScanNode hdfs_scan_node;
+    HiveDataSourceProvider provider(0, hdfs_scan_node);
+    THdfsScanRange index_range;
+    index_range.__set_file_length(std::numeric_limits<int64_t>::max());
+    index_range.__set_paimon_global_index_scan_range(TPaimonGlobalIndexScanRange());
+    TScanRangeParams index_params;
+    index_params.scan_range.__set_hdfs_scan_range(index_range);
+
+    provider.prepare_scan_ranges({index_params});
+    int64_t min_bytes = 0;
+    int64_t max_bytes = 0;
+    provider.default_data_source_mem_bytes(&min_bytes, &max_bytes);
+    EXPECT_EQ(DataSourceProvider::MIN_DATA_SOURCE_MEM_BYTES, min_bytes);
+    EXPECT_EQ(min_bytes, max_bytes);
+
+    constexpr int64_t file_bytes = 32 * 1024 * 1024;
+    THdfsScanRange file_range;
+    file_range.__set_file_length(file_bytes);
+    TScanRangeParams file_params;
+    file_params.scan_range.__set_hdfs_scan_range(file_range);
+    provider.prepare_scan_ranges({index_params, file_params});
+    provider.default_data_source_mem_bytes(&min_bytes, &max_bytes);
+    EXPECT_EQ(file_bytes * 3 / 2, min_bytes);
+    EXPECT_EQ(min_bytes, max_bytes);
 }
 
 // Test open with no data (file_length = 0) - covers early return path

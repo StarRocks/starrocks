@@ -31,10 +31,18 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
+import com.starrocks.connector.index.ConnectorIndexMetadata;
+import com.starrocks.connector.index.ConnectorIndexResult;
+import com.starrocks.connector.index.ConnectorIndexShard;
+import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.MetadataTable;
+import com.starrocks.connector.metadata.MetadataTableName;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.metadata.TableMetaMetadata;
+import com.starrocks.connector.unified.UnifiedMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -91,12 +99,19 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
         this.tableMetadata = tableMetadata;
     }
 
-    private ConnectorMetadata metadataOfTable(String tableName) {
+    private ConnectorMetadata metadataOfTable(String dbName, String tableName) {
         // Paimon system table shares the same pattern, ignore it here
-        if (getTableType() != Table.TableType.PAIMON && TableMetaMetadata.isMetadataTable(tableName)) {
+        if (tableMetadata != null && getTableType() != Table.TableType.PAIMON
+                && TableMetaMetadata.isMetadataTable(tableName)) {
+            if (normal instanceof UnifiedMetadata unified && !isInfoSchemaDb(dbName)
+                    && unified.isPaimonSystemTableConflict(dbName, MetadataTableName.from(tableName))) {
+                throw new StarRocksConnectorException(
+                        "Paimon system table %s.%s is not supported in a unified catalog. Use a Paimon catalog.",
+                        dbName, tableName);
+            }
             return tableMetadata;
         }
-        return null;
+        return metadataOfDb(dbName);
     }
 
     private ConnectorMetadata metadataOfTable(Table table) {
@@ -147,21 +162,12 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
 
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
-        ConnectorMetadata metadata = metadataOfTable(tblName);
-        if (metadata == null) {
-            metadata = metadataOfDb(dbName);
-        }
-
-        return metadata.getTable(context, dbName, tblName);
+        return metadataOfTable(dbName, tblName).getTable(context, dbName, tblName);
     }
 
     @Override
     public String getTableComment(ConnectContext context, String dbName, String tblName) {
-        ConnectorMetadata metadata = metadataOfTable(tblName);
-        if (metadata == null) {
-            metadata = metadataOfDb(dbName);
-        }
-        return metadata.getTableComment(context, dbName, tblName);
+        return metadataOfTable(dbName, tblName).getTableComment(context, dbName, tblName);
     }
 
     @Override
@@ -254,6 +260,23 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     public ConnectorMetadata delegateFor(Table table) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata == null ? normal : metadata;
+    }
+
+    @Override
+    public ConnectorIndexMetadata getIndexMetadata(Table table, TvrVersionRange versionRange) {
+        return delegateFor(table).getIndexMetadata(table, versionRange);
+    }
+
+    @Override
+    public Optional<ConnectorIndexResult> evaluateIndex(
+            Table table, IndexCondition condition, TvrVersionRange versionRange) {
+        return delegateFor(table).evaluateIndex(table, condition, versionRange);
+    }
+
+    @Override
+    public List<ConnectorIndexShard> getIndexShards(
+            Table table, long snapshotId, Map<Integer, IndexType> requiredIndexes) {
+        return delegateFor(table).getIndexShards(table, snapshotId, requiredIndexes);
     }
 
     @Override

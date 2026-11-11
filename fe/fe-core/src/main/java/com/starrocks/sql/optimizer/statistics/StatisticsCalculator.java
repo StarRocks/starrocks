@@ -107,6 +107,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonIndexScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator;
@@ -152,6 +153,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonIndexScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
@@ -759,6 +761,25 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalPaimonScan(PhysicalPaimonScanOperator node, ExpressionContext context) {
         return computePaimonScanNode(node, context, node.getTable(),
                 node.getColRefToColumnMetaMap(), TvrTableSnapshot.empty());
+    }
+
+    @Override
+    public Void visitLogicalPaimonIndexScan(LogicalPaimonIndexScanOperator node, ExpressionContext context) {
+        return computeIndexScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalPaimonIndexScan(PhysicalPaimonIndexScanOperator node, ExpressionContext context) {
+        return computeIndexScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeIndexScanNode(Operator node, ExpressionContext context, Table table,
+                                     Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(
+                table, columnRefOperatorColumnMap, optimizerContext);
+        builder.setOutputRowCount(1);
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
     }
 
     private Void computePaimonScanNode(Operator node, ExpressionContext context, Table table,
