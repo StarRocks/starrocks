@@ -29,11 +29,8 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-=======
->>>>>>> f17c92d150b... [BugFix] Derive a pinned refresh's scope from the frozen snapshot, not from live (#62148)
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -586,22 +583,16 @@ public abstract class MVPCTRefreshPartitioner {
                     pinnedRange)) {
                 return true;
             }
-<<<<<<< HEAD
-            if (hasDeletedPartitions(mv, snapshotTable, /* pinnedVersionRange */ null)) {
+            if (hasDeletedPartitions(mv, snapshotTable, pinnedRange)) {
                 return true;
             }
             if (hasUntrackedRows(mv, snapshotTable)) {
-=======
-            // Check if any partitions have been deleted from external tables
-            if (hasDeletedPartitions(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, pinnedRange)) {
->>>>>>> f17c92d150b... [BugFix] Derive a pinned refresh's scope from the frozen snapshot, not from live (#62148)
                 return true;
             }
         }
         return false;
     }
 
-<<<<<<< HEAD
     /**
      * Fetch, before the detection lock is taken, the external partition infos that change detection
      * ({@link #getMVPartitionsToRefreshWithCheck}) reads under it. The lock covers only the MV, so these
@@ -643,12 +634,7 @@ public abstract class MVPCTRefreshPartitioner {
 
     /** The snapshot the scan reads: a pinned run must answer base-state questions from it, not from live. */
     private TvrVersionRange pinnedRangeFor(Table baseTable) {
-        return mvContext.getRefreshRuntimeState().getPinnedTvrMap().get(baseTable.getUUID());
-=======
-    /** The snapshot the scan reads: a pinned run must answer base-state questions from it, not from live. */
-    private TvrVersionRange pinnedRangeFor(Table baseTable) {
         return mvContext.getRefreshRuntimeState().getPinnedRange(baseTable);
->>>>>>> f17c92d150b... [BugFix] Derive a pinned refresh's scope from the frozen snapshot, not from live (#62148)
     }
 
     public void dropPartition(Database db, MaterializedView materializedView, String mvPartitionName) {

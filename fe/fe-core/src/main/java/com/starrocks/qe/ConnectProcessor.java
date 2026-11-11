@@ -568,6 +568,7 @@ public class ConnectProcessor {
         executeInvoked = false;
         ctx.setExecutor(null);
         ctx.setQueryDetail(null);
+        ctx.setResourceGroup(null);
         ctx.getState().reset();
         ctx.resetReturnRows();
         ctx.setStartTime();

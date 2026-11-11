@@ -542,6 +542,37 @@ TEST_F(MemTableTest, testWriteBufferRowLimit) {
     }
 }
 
+// A load whose slots were planned against one version of the table schema and whose write schema against the
+// next, a fast ADD COLUMN having committed in between: the write schema has a column no slot fills. insert()
+// would leave that column empty while the others fill up, and the sort at flush would read rows it does not
+// have (SIGSEGV). prepare() must refuse such a load and accept a consistent one.
+TEST_F(MemTableTest, testPrepareRejectsSlotsThatMissAWriteSchemaColumn) {
+    MemTracker mem_tracker(-1, "root");
+    const std::vector<SlotDescriptor*>* slots =
+            create_tuple_desc_slots(&_runtime_state, "pk int,name varchar,pv int", _obj_pool);
+    for (KeysType keys_type : {KeysType::DUP_KEYS, KeysType::AGG_KEYS, KeysType::UNIQUE_KEYS}) {
+        auto added_column = create_tablet_schema("pk int,name varchar,pv int,extra int", 1, keys_type);
+        Schema added_column_schema = MemTable::convert_schema(added_column, slots);
+        MemTable mismatched(1, &added_column_schema, slots, nullptr, &mem_tracker);
+        Status st = mismatched.prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE);
+        ASSERT_TRUE(st.is_internal_error()) << static_cast<int>(keys_type) << ": " << st;
+        ASSERT_NE(std::string::npos, st.message().find("the load carries 3 columns but its write schema has 4")) << st;
+
+        auto same_columns = create_tablet_schema("pk int,name varchar,pv int", 1, keys_type);
+        Schema same_columns_schema = MemTable::convert_schema(same_columns, slots);
+        MemTable consistent(1, &same_columns_schema, slots, nullptr, &mem_tracker);
+        ASSERT_OK(consistent.prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE));
+    }
+
+    // The "__op" slot of a primary key load has a memtable column of its own.
+    const std::vector<SlotDescriptor*>* slots_with_op =
+            create_tuple_desc_slots(&_runtime_state, "pk int,name varchar,pv int,__op tinyint", _obj_pool);
+    auto primary_key = create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::PRIMARY_KEYS);
+    Schema primary_key_schema = MemTable::convert_schema(primary_key, slots_with_op);
+    MemTable with_op(1, &primary_key_schema, slots_with_op, nullptr, &mem_tracker);
+    ASSERT_OK(with_op.prepare(PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+}
+
 TEST_F(MemTableTest, test_metrics) {
     const string path = "./MemTableTest_test_metrics";
     MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::DUP_KEYS), "pk int,name varchar,pv int",

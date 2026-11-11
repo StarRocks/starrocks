@@ -64,8 +64,8 @@ public class MVRefreshParams {
         if (Boolean.parseBoolean(properties.get(TaskRun.FORCE))) {
             return true;
         }
-        // What follows are standing settings, not the per-request keyword the analyzer already rejects on
-        // such a view. Honouring them refuses the same thing for the life of the view rather than once.
+        // What follows are standing settings. On an incrementally maintained view they would turn every
+        // refresh into a full rebuild, so only the per-request keyword counts there.
         if (mv.getCurrentRefreshMode().isIncrementalOrAuto()) {
             return false;
         }

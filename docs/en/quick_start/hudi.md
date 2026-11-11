@@ -6,6 +6,7 @@ toc_max_heading_level: 3
 ---
 import DataLakeIntro from '../_assets/commonMarkdown/datalakeIntro.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
+import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
@@ -28,6 +29,12 @@ Clone the [StarRocks demo repository](https://github.com/StarRocks/demo/) to you
 
 All the steps in this guide will be run from the `demo/documentation-samples/hudi/` directory in the directory where you cloned the `demo` GitHub repo.
 
+### MinIO AIStor license
+
+<AIStorLicense />
+
+For this guide, that is the `demo/documentation-samples/hudi/` directory.
+
 ### Docker
 
 - Docker Setup: For Mac, Please follow the steps as defined in [Install Docker Desktop on Mac](https://docs.docker.com/desktop/setup/install/mac-install/). For running Spark-SQL queries, please ensure at least 5 GB memory and 4 CPUs are allocated to Docker (See Docker → Preferences → Advanced). Otherwise, spark-SQL queries could be killed because of memory issues.
@@ -49,7 +56,7 @@ Change directory into `demo/documentation-samples/hudi` and look at the files. T
 | **`starrocks-be`**       | Running query plans                                                 |
 | **`metastore_db`**       | Postgres DB used to store the Hive metadata                         |
 | **`hive_metastore`**     | Provides the Apache Hive metastore                                  |
-| **`minio`** and **`mc`** | MinIO Object Storage and MinIO command line client                  |
+| **`minio`** and **`mc`** | MinIO AIStor Object Storage and MinIO command line client           |
 | **`spark-hudi`**         | Distributed computing and Transactional data lake platform          |
 
 ### Configuration files

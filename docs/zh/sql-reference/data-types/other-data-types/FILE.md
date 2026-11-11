@@ -9,9 +9,9 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 <Experimental />
 
-FILE 是一种标量类型，用于描述一个文件或文件内部的一段字节。FILE 值整体读取、整体返回：它包含一组固定的字段，但这些字段不能在 SQL 中单独访问。
+FILE 是一种标量类型，用于描述一个文件或文件内部的一段字节。FILE 值包含一组固定字段，可通过 `FL_GET_*` 函数提取。
 
-目前 FILE 类型不支持持久化，只能从 External Catalog 获取。
+目前 FILE 类型不支持持久化。FILE 值可以从 External Catalog 获取，也可以通过 `TO_FILE` 或 `TRY_TO_FILE` 构造。函数语法和示例参见 [FILE 函数](../../sql-functions/file-functions/file-functions.mdx)。
 
 ## 结构
 
@@ -29,7 +29,7 @@ FILE 是一种标量类型，用于描述一个文件或文件内部的一段字
 一个 FILE 值属于以下两种形式之一：
 
 - **引用**：`uri` 有值，通常同时带有 `offset` 和 `size`，`inline` 为 NULL。
-- **内联内容**：`inline` 保存内容字节，`uri`、`offset` 和 `size` 为 NULL。
+- **内联内容**：`inline` 保存内容字节，`uri`、`offset` 和 `size` 必须均为 NULL。
 
 ## 输出格式
 

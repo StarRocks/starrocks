@@ -958,11 +958,7 @@ PARALLEL_TEST(ArrayColumnTest, test_update_rows) {
     std::vector<uint32_t> replace_idxes = {1, 3};
     column->update_rows(*replace_col1.get(), replace_idxes.data());
 
-    ASSERT_EQ(4, column->size());
-    ASSERT_EQ("[1,2,3]", column->debug_item(0));
-    ASSERT_EQ("[101,102]", column->debug_item(1));
-    ASSERT_EQ("[7,8,9]", column->debug_item(2));
-    ASSERT_EQ("[103,104]", column->debug_item(3));
+    ASSERT_EQ("[[1,2,3], [101,102], [7,8,9], [103,104]]", column->debug_string());
 
     auto offset_col2 = UInt32Column::create();
     auto element_col2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
@@ -979,11 +975,7 @@ PARALLEL_TEST(ArrayColumnTest, test_update_rows) {
 
     column->update_rows(*replace_col2.get(), replace_idxes.data());
 
-    ASSERT_EQ(4, column->size());
-    ASSERT_EQ("[1,2,3]", column->debug_item(0));
-    ASSERT_EQ("[201,202]", column->debug_item(1));
-    ASSERT_EQ("[7,8,9]", column->debug_item(2));
-    ASSERT_EQ("[203,204]", column->debug_item(3));
+    ASSERT_EQ("[[1,2,3], [201,202], [7,8,9], [203,204]]", column->debug_string());
 }
 
 PARALLEL_TEST(ArrayColumnTest, test_assign) {
@@ -1005,11 +997,7 @@ PARALLEL_TEST(ArrayColumnTest, test_assign) {
 
     // assign
     column->assign(4, 0);
-    ASSERT_EQ(4, column->size());
-    ASSERT_EQ("[1,2,3]", column->debug_item(0));
-    ASSERT_EQ("[1,2,3]", column->debug_item(1));
-    ASSERT_EQ("[1,2,3]", column->debug_item(2));
-    ASSERT_EQ("[1,2,3]", column->debug_item(3));
+    ASSERT_EQ("[[1,2,3], [1,2,3], [1,2,3], [1,2,3]]", column->debug_string());
 
     /// test assign [null]
     offsets = UInt32Column::create();
@@ -1061,24 +1049,18 @@ PARALLEL_TEST(ArrayColumnTest, test_empty_null_array) {
     auto res = column->empty_null_in_complex_column(null_map->immutable_data(),
                                                     column->offsets_column()->immutable_data());
     ASSERT_FALSE(res);
-    ASSERT_EQ(2, column->size());
-    ASSERT_EQ("[1,2,3]", column->debug_item(0));
-    ASSERT_EQ("[4,5,6]", column->debug_item(1));
+    ASSERT_EQ("[[1,2,3], [4,5,6]]", column->debug_string());
 
     auto mutable_null_map = NullColumn::static_pointer_cast(null_map->as_mutable_ptr());
     mutable_null_map->get_data()[0] = 1;
     res = column->empty_null_in_complex_column(null_map->immutable_data(), column->offsets_column()->immutable_data());
     ASSERT_TRUE(res);
-    ASSERT_EQ(2, column->size());
-    ASSERT_EQ("[]", column->debug_item(0));
-    ASSERT_EQ("[4,5,6]", column->debug_item(1));
+    ASSERT_EQ("[[], [4,5,6]]", column->debug_string());
 
     mutable_null_map->get_data()[1] = 1;
     res = column->empty_null_in_complex_column(null_map->immutable_data(), column->offsets_column()->immutable_data());
     ASSERT_TRUE(res);
-    ASSERT_EQ(2, column->size());
-    ASSERT_EQ("[]", column->debug_item(0));
-    ASSERT_EQ("[]", column->debug_item(1));
+    ASSERT_EQ("[[], []]", column->debug_string());
 }
 
 PARALLEL_TEST(ArrayColumnTest, test_replicate) {

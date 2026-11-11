@@ -248,7 +248,6 @@ public class MvRefreshArbiter {
      * The base table partitions the mv still tracks a refreshed version for, but which no longer exist in the base
      * table.
      *
-<<<<<<< HEAD
      * @param pinnedVersionRange the frozen snapshot to answer from, null to answer from the live table
      */
     public static Set<String> getDroppedTrackedPartitions(MaterializedView mv, Table table,
@@ -256,24 +255,10 @@ public class MvRefreshArbiter {
         Map<String, MaterializedView.BasePartitionInfo> versionMap = getTrackedPartitionVersions(mv, table);
         if (MapUtils.isEmpty(versionMap)) {
             return Sets.newHashSet();
-=======
-     * @param mv the materialized view
-     * @param baseTableInfo the base table info
-     * @param table the base table
-     * @param pinnedVersionRange the frozen snapshot to answer from, null to answer from the live table
-     * @return true if partitions have been deleted from the base table, false otherwise
-     */
-    public static boolean hasDeletedPartitions(MaterializedView mv, BaseTableInfo baseTableInfo, Table table,
-                                               TvrVersionRange pinnedVersionRange) {
-        // Only check for external tables (Iceberg, Hive, etc.)
-        if (table.isNativeTableOrMaterializedView()) {
-            return false;
->>>>>>> f17c92d150b... [BugFix] Derive a pinned refresh's scope from the frozen snapshot, not from live (#62148)
         }
 
         Set<String> dropped;
         try {
-<<<<<<< HEAD
             if (table instanceof OlapTable olapTable) {
                 dropped = versionMap.keySet().stream()
                         .filter(name -> olapTable.getPartition(name) == null)
@@ -290,12 +275,6 @@ public class MvRefreshArbiter {
                     table.getName(), e.getMessage());
             return Sets.newHashSet();
         }
-=======
-            // Get current partitions from the base table
-            ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(mv, table, pinnedVersionRange);
-            Map<String, com.starrocks.connector.PartitionInfo> latestPartitionInfo =
-                    traits.getPartitionNameWithPartitionInfo();
->>>>>>> f17c92d150b... [BugFix] Derive a pinned refresh's scope from the frozen snapshot, not from live (#62148)
 
         if (!dropped.isEmpty()) {
             logMVPrepare(mv, String.format("Base table %s partitions %s have been dropped", table.getName(), dropped));

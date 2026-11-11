@@ -25,6 +25,7 @@ import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.util.SerializableSupplier;
+import org.apache.iceberg.util.SerializationUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -252,6 +253,41 @@ public class IcebergCachingFileIOTest {
                 return (SerializableSupplier<Configuration>) () -> confToSerialize;
             });
         });
+    }
+
+    @Test
+    void testWrappedIOSharesConfigurationAndSerializesACopy() throws IOException {
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.initialize(new HashMap<>());
+        Configuration conf = new Configuration(false);
+        conf.set("test.key", "test.value");
+        cachingFileIO.setConf(conf);
+
+        // shared by reference: a per-table FileIO must not retain its own copies of the catalog configuration
+        Assertions.assertSame(conf, cachingFileIO.getConf());
+        HadoopConfigurable wrappedIO = (HadoopConfigurable) cachingFileIO.getWrappedIO();
+        Assertions.assertSame(conf, wrappedIO.getConf());
+
+        // The wrapped IO is what a metadata split ships to the BE, which has no fe-core classes. A concurrent
+        // newInputFile can put the shared supplier back on it after SerializableTable installed its own, so
+        // write it with a plain ObjectOutputStream (SerializationUtil would replace the supplier first): its
+        // serialized form must not name an fe-core class.
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        try (java.io.ObjectOutputStream out = new java.io.ObjectOutputStream(bytes)) {
+            out.writeObject(cachingFileIO.getWrappedIO());
+        }
+        byte[] wrapped = bytes.toByteArray();
+        // a lambda names its capturing class with slashes, a class descriptor with dots
+        String stream = new String(wrapped, java.nio.charset.StandardCharsets.ISO_8859_1).replace('/', '.');
+        Assertions.assertFalse(stream.contains("com.starrocks.connector.iceberg."), stream);
+        FileIO wrappedCopy = SerializationUtil.deserializeFromBytes(wrapped);
+        Assertions.assertEquals("test.value", ((HadoopConfigurable) wrappedCopy).getConf().get("test.key"));
+
+        // serialization still carries the values, as SerializableConfiguration did
+        IcebergCachingFileIO copy = SerializationUtil.deserializeFromBytes(SerializationUtil.serializeToBytes(cachingFileIO));
+        Assertions.assertEquals("test.value", copy.getConf().get("test.key"));
+        Assertions.assertEquals("test.value",
+                ((HadoopConfigurable) copy.getWrappedIO()).getConf().get("test.key"));
     }
 
     /**

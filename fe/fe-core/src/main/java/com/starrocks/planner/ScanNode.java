@@ -45,11 +45,13 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.datacache.DataCacheOptions;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TConnectorScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -58,18 +60,25 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jetbrains.annotations.TestOnly;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
  * Representation of the common elements of all scan nodes.
  */
 public abstract class ScanNode extends PlanNode {
+    private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
+    private final AtomicReference<String> credentialRefreshToken = new AtomicReference<>();
     protected TupleDescriptor desc;
     protected Map<String, PartitionColumnFilter> columnFilters;
     protected String sortColumn = null;
@@ -286,6 +295,38 @@ public abstract class ScanNode extends PlanNode {
 
     public void prepareRetry() {
         // default no-op: subclasses that maintain streaming scan state should override
+    }
+
+    /**
+     * Answers a backend whose credentials for this scan are due for refresh (their
+     * {@code refresh_after_ms} has passed) while the query is still running.
+     *
+     * @return the configuration the backend should switch to, renewed first if it is due, or null when this
+     *         scan has nothing refreshable; the backend then keeps what it has
+     */
+    public TCloudConfiguration refreshScanCredentials(ConnectContext context) {
+        return null;
+    }
+
+    /**
+     * Random, made the first time refreshable credentials of this scan are serialized and sent with them: a
+     * refresh request must return it, so only a holder of the credentials can ask for their renewal. Query and
+     * fragment instance ids cannot serve, they are derivable and printed in logs and profiles.
+     */
+    protected final String credentialRefreshToken() {
+        if (credentialRefreshToken.get() == null) {
+            byte[] bytes = new byte[16];
+            TOKEN_RANDOM.nextBytes(bytes);
+            credentialRefreshToken.compareAndSet(null, HexFormat.of().formatHex(bytes));
+        }
+        return credentialRefreshToken.get();
+    }
+
+    /** Constant-time; false until this scan has sent refreshable credentials. */
+    public final boolean acceptsCredentialRefreshToken(String token) {
+        String own = credentialRefreshToken.get();
+        return own != null && token != null
+                && MessageDigest.isEqual(own.getBytes(StandardCharsets.UTF_8), token.getBytes(StandardCharsets.UTF_8));
     }
 
     protected void setConnectorCatalogType(TPlanNode msg) {

@@ -54,6 +54,9 @@ Status SchemaLoadTrackingLogsScanner::start(RuntimeState* state) {
     if (nullptr != _param->type) {
         load_params.__set_load_type(*(_param->type));
     }
+    if (nullptr != _param->current_user_ident) {
+        load_params.__set_current_user_ident(*(_param->current_user_ident));
+    }
 
     RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
     RETURN_IF_ERROR(SchemaHelper::get_tracking_loads(_ss_state, load_params, &_result));

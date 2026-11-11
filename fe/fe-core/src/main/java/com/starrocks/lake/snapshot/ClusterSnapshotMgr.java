@@ -31,6 +31,7 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.proto.RetainSnapshotPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
@@ -472,6 +473,10 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         for (Long removeId : removeIds) {
             automatedSnapshotJobs.remove(removeId);
         }
+    }
+
+    public List<RetainSnapshotPB> getVacuumRetainSnapshots(long dbId, long tableId, long partId, long physicalPartId) {
+        return Lists.newArrayList();
     }
 
     // keep this interface and do not remove it

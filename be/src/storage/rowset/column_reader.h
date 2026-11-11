@@ -219,6 +219,8 @@ public:
 
     bool is_flat_json() const { return _is_flat_json; }
     bool has_remain_json() const { return _has_remain; }
+    // Value stats of a JSON-typed flat JSON sub-column, nullptr when the segment has none.
+    const JsonValueStatsPB* json_value_stats() const { return _json_value_stats.get(); }
 
     // Return the pointer to the remain filter if it exists, otherwise return nullptr.
     const BloomFilter* get_remain_filter() const { return _remain_filter ? _remain_filter.get() : nullptr; }
@@ -363,6 +365,7 @@ private:
     bool _is_flat_json = false;
     bool _has_remain = false;
     std::unique_ptr<BloomFilter> _remain_filter;
+    std::unique_ptr<JsonValueStatsPB> _json_value_stats;
 
     // only used for inverted index load
     OnceFlag _inverted_index_load_once;

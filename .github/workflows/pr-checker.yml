@@ -139,8 +139,24 @@ jobs:
           echo "::error::Branch PR does not contain the backport option!"
           exit 1
 
+  # The backport versions come from the branch map (ci-tool conf/sync_branch_map.json:
+  # `versions --repo sr`, the StarRocks branches paired with CelerData), so a
+  # new or retired release branch needs no workflow edit. The static list is the fallback when
+  # the map cannot be read.
+  backport-versions:
+    runs-on: [ self-hosted, quick ]
+    outputs:
+      versions: ${{ steps.map.outputs.versions || '["4.2", "4.1", "4.0"]' }}
+    steps:
+      - name: read the backport versions
+        id: map
+        continue-on-error: true
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull -q || true)
+          echo "versions=$(python3 lib/sync_branch_map.py versions --repo sr)" >> "$GITHUB_OUTPUT"
+
   backport-check-subtask:
-    needs: title-check
+    needs: [ title-check, backport-versions ]
     runs-on: ubuntu-latest
     if: >
       (
@@ -152,8 +168,55 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["4.1", "4.0", "3.5", "3.4", "3.3"]
+        version: ${{ fromJSON(needs.backport-versions.outputs.versions) }}
     steps:
+      - name: Check backport section against the PR template
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          import os
+          import re
+          import subprocess
+          from urllib.parse import quote
+
+          with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as event_file:
+              pr = json.load(event_file)["pull_request"]
+          endpoint = "repos/{}/contents/.github/PULL_REQUEST_TEMPLATE.md?ref={}".format(
+              os.environ["GITHUB_REPOSITORY"], quote(pr["base"]["ref"], safe=""))
+          template = subprocess.check_output(
+              ["gh", "api", endpoint, "-H", "Accept: application/vnd.github.raw+json"], text=True)
+
+          def section(text):
+              lines = (text or "").splitlines()
+              starts = [i for i, line in enumerate(lines)
+                        if re.match(r"^##\s*Bugfix cherry-pick branch check", line)]
+              if len(starts) != 1:
+                  raise ValueError("Expected exactly one Bugfix cherry-pick branch check section.")
+              start = starts[0]
+              end = next((i for i in range(start + 1, len(lines))
+                          if re.match(r"^#{1,2}\s", lines[i])), len(lines))
+              result = []
+              for line in lines[start:end]:
+                  line = line.rstrip()
+                  if not line or re.fullmatch(r"<!-- backport-boxes: ticked [\d., ]* -->", line):
+                      continue
+                  result.append(re.sub(r"^(\s*- )\[[ xX]\]( )", r"\1[ ]\2", line))
+              return result
+
+          try:
+              expected = section(template)
+              if expected[0] != "## Bugfix cherry-pick branch check:" or len(expected) < 3:
+                  raise ValueError("The base branch PR template has an invalid backport section.")
+              if section(pr.get("body")) != expected:
+                  raise ValueError("Backport section text or version list differs from the base branch PR template.")
+          except ValueError as error:
+              print("::error::{} Copy the full Bugfix cherry-pick branch check section from "
+                    "the PR base branch's .github/PULL_REQUEST_TEMPLATE.md; checkbox selections may differ.".format(error))
+              raise SystemExit(1)
+          PYTHON
+
       - name: add ${{ matrix.version }} label
         if: contains(toJson(github.event.pull_request.body), format('[x] {0}', matrix.version))
         uses: actions-ecosystem/action-add-labels@v1

@@ -81,12 +81,7 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
                 return MvUpdateInfo.fullRefresh(mv);
             }
 
-<<<<<<< HEAD
             if (hasDeletedPartitions(mv, table, /* pinnedVersionRange */ null)) {
-=======
-            // Check if any partitions have been deleted from external tables
-            if (hasDeletedPartitions(mv, tableInfo, table, /* pinnedVersionRange */ null)) {
->>>>>>> f17c92d150b... [BugFix] Derive a pinned refresh's scope from the frozen snapshot, not from live (#62148)
                 logMVPrepare(mv, "Non-partitioned base table has deleted partitions, need refresh totally.");
                 return MvUpdateInfo.fullRefresh(mv);
             }

@@ -597,7 +597,8 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, 
     // incremental scan ranges deployment.
     if (!t_request.__isset.fragment) {
         TExecPlanFragmentResult t_result;
-        Status code = orchestration::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request, &t_result);
+        Status code = orchestration::FragmentExecutor::append_incremental_scan_ranges(_exec_env, std::move(t_request),
+                                                                                      &t_result);
         copy_result_from_thrift_to_protobuf(t_result, response);
         return code;
     }

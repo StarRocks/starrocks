@@ -123,7 +123,8 @@ public class ManifestReaderTest {
         ManifestReader<DataFile> reader = ManifestFiles.read(manifest, FILE_IO, Map.of(TEST_SPEC.specId(), TEST_SPEC))
                 .select(SCAN_COLUMNS_WITHOUT_STATS)
                 .dataFileCache(dataFileCache)
-                .cacheWithMetrics(true);
+                .cacheWithMetrics(true)
+                .cacheStatsColumnLimit(100);
 
         try (CloseableIterable<ManifestEntry<DataFile>> entries = reader.liveEntries();
                 CloseableIterator<ManifestEntry<DataFile>> iterator = entries.iterator()) {
@@ -139,6 +140,7 @@ public class ManifestReaderTest {
         Assertions.assertEquals(file.upperBounds(), cachedFile.upperBounds());
         Assertions.assertEquals(file.valueCounts(), cachedFile.valueCounts());
         Assertions.assertEquals(file.nullValueCounts(), cachedFile.nullValueCounts());
+        Assertions.assertEquals(file.columnSizes(), cachedFile.columnSizes());
     }
 
     @Test

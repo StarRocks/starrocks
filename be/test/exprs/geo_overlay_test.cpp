@@ -63,13 +63,12 @@ ColumnPtr geometries(std::initializer_list<const char*> values, const TypeDescri
     ColumnPtr input = NullableColumn::create(text, nulls);
     auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>(type.geo_type->crs, input->size());
     std::unique_ptr<FunctionContext> ctx(
-            FunctionContext::create_test_context({TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)}, type));
+            FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}, type));
     return GeoFunctions::st_geom_from_text(ctx.get(), {input, crs}).value();
 }
 
 ColumnPtr raw_geometry(std::string_view wkb) {
-    GeoColumnDescriptor descriptor{geo_type().geo_type.value(),
-                                   {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}};
+    GeoColumnDescriptor descriptor{geo_type().geo_type.value()};
     auto column = GeoColumn::create(descriptor);
     column->append_datum(Datum(Slice(wkb)));
     return column;
@@ -416,30 +415,6 @@ TEST(GeoOverlayTest, RegistryUsesPrepareAndCloseAndReservesGeography) {
     }
 }
 
-TEST(GeoOverlayTest, CancellationAndQueryMemoryLimit) {
-    RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
-    state.init_mem_trackers(TUniqueId());
-    ASSERT_NE(nullptr, state.runtime_profile());
-    ASSERT_NE(nullptr, state.query_mem_tracker_ptr());
-    ASSERT_EQ(state.query_mem_tracker_ptr().get(), state.instance_mem_tracker()->parent());
-    auto type = geo_type();
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_context(&state, nullptr, type, {type, type}));
-    auto a = geometries({square}), b = geometries({shifted});
-    state.set_is_cancelled(true);
-    for (auto fn : {functions[0], functions[1], functions[2], GeoFunctions::st_geometry_intersection}) {
-        auto result = fn(ctx.get(), {a, b});
-        ASSERT_FALSE(result.ok());
-        EXPECT_TRUE(result.status().is_cancelled());
-    }
-    state.set_is_cancelled(false);
-    ASSERT_TRUE(state.set_mem_limit_exceeded(state.instance_mem_tracker(), 1, "overlay test").is_mem_limit_exceeded());
-    for (auto fn : {functions[0], functions[1], functions[2], GeoFunctions::st_geometry_intersection}) {
-        auto result = fn(ctx.get(), {a, b});
-        ASSERT_FALSE(result.ok());
-        EXPECT_TRUE(result.status().is_mem_limit_exceeded());
-    }
-}
-
 TEST(GeoOverlayTest, CoordinateAndPairWorkLimits) {
     WkbGeometry polygon;
     polygon.type = WkbGeometryType::POLYGON;
@@ -500,10 +475,9 @@ TEST(GeoOverlayTest, RejectsMalformedNonFiniteDimensionsAndReturnDescriptor) {
         }
         auto bad_return = context(geo_type("EPSG:4326"));
         EXPECT_FALSE(fn(bad_return.get(), {geometries({square}), geometries({square})}).ok());
-        auto wrong_kind = GeoColumn::create(
-                GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326},
-                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}});
+        auto wrong_kind =
+                GeoColumn::create(GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
+                                                       GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326}});
         wrong_kind->append_datum(Datum(Slice(wkb)));
         EXPECT_FALSE(fn(ctx.get(), {wrong_kind, geometries({square})}).ok());
     }
@@ -634,26 +608,6 @@ TEST(GeoOverlayTest, ExpressionOwnerAndCloneShareImmutablePreparationAndCleanUpO
     }
 }
 
-TEST(GeoOverlayTest, SymmetricDifferenceChecksCancellationBetweenPrimitives) {
-    auto a = geometries({square}), b = geometries({shifted});
-    auto wkb_a = GeoFunctions::st_geometry_as_wkb(nullptr, {a});
-    auto wkb_b = GeoFunctions::st_geometry_as_wkb(nullptr, {b});
-    ASSERT_TRUE(wkb_a.ok());
-    ASSERT_TRUE(wkb_b.ok());
-    auto left = PreparedGeoPolygon::prepare(ColumnViewer<TYPE_VARBINARY>(*wkb_a).value(0));
-    auto right = PreparedGeoPolygon::prepare(ColumnViewer<TYPE_VARBINARY>(*wkb_b).value(0));
-    ASSERT_TRUE(left.ok());
-    ASSERT_TRUE(right.ok());
-    size_t checkpoints = 0;
-    // Entry and post-translation checks precede the first difference.
-    auto result = (*left)->overlay(**right, GeoOverlayKind::SYMMETRIC_DIFFERENCE, [&]() {
-        return ++checkpoints == 3 ? Status::Cancelled("cancel after first difference") : Status::OK();
-    });
-    ASSERT_FALSE(result.ok());
-    EXPECT_TRUE(result.status().is_cancelled());
-    EXPECT_EQ(3, checkpoints);
-}
-
 TEST(GeoOverlayTest, IntersectionReturnsAreaLinePointAndEmptyWithInputCrs) {
     auto fn = GeoFunctions::st_geometry_intersection;
     auto ctx = context();
@@ -675,7 +629,6 @@ TEST(GeoOverlayTest, IntersectionReturnsAreaLinePointAndEmptyWithInputCrs) {
         ASSERT_TRUE(result.ok()) << result.status();
         const auto* data = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(*result));
         EXPECT_EQ(type.geo_type.value(), data->descriptor().type);
-        EXPECT_EQ(GEO_DIMENSION_XY, data->descriptor().storage.dimension);
     }
 }
 TEST(GeoOverlayTest, IntersectionCrossingsRemainPolygonForDownstreamOverlays) {
