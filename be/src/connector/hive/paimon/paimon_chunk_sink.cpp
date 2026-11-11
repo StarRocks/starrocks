@@ -799,7 +799,7 @@ public:
         return state()->check_mem_limit("Paimon native writer");
     }
 
-    Status prepare() {
+    Status prepare_commit() {
         RETURN_IF_CANCELLED(state());
         RETURN_IF_ERROR(ensure_writer()); // Empty drivers must still validate schema and emit a terminal marker.
         ASSIGN_OR_RETURN(auto fresh, load_frozen_schema(context->sink, native_fs));
@@ -860,7 +860,7 @@ public:
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state()->query_mem_tracker_ptr().get());
                 Status result;
                 try {
-                    result = prepare();
+                    result = prepare_commit();
                 } catch (const std::bad_alloc&) {
                     result = Status::MemoryLimitExceeded("Paimon prepare allocation failed");
                 } catch (const std::exception&) {
