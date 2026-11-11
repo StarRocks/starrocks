@@ -1,0 +1,26 @@
+-- name: test_paimon_hms_files
+-- Preserve the generated name for CLEANUP, which runs outside UUID substitution.
+paimon_hms_test_id=select '${uuid0}';
+hive: create schema ${paimon_hms_prefix}${uuid0};
+-- Register the existing fixture directly in HMS; HiveServer2 need not load Paimon classes.
+shell: python3 sql/test_paimon_catalog/hms_fixture.py register '${hive_metastore_uris}' '${paimon_hms_prefix}${uuid0}' '${paimon_hms_prefix}files' '${paimon_hms_fixture_location}'
+create external catalog ${paimon_hms_prefix}${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "hive",
+"hive.metastore.uris" = "${hive_metastore_uris}",
+"paimon.catalog.warehouse" = "${paimon_hms_warehouse}",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+set paimon_force_jni_reader = true;
+select count(*) > 0, coalesce(sum(record_count), 0) > 0 from ${paimon_hms_prefix}${uuid0}.${paimon_hms_prefix}${uuid0}.`${paimon_hms_prefix}files$files`;
+function: assert_query_contains("trace values external select record_count from ${paimon_hms_prefix}${uuid0}.${paimon_hms_prefix}${uuid0}.`${paimon_hms_prefix}files$files`", "Paimon.metadata.reader.${paimon_hms_prefix}files$files.jniReaderReadNum: ", "Paimon.metadata.reader.${paimon_hms_prefix}files$files.nativeReaderReadNum: 0")
+function: assert_query_not_contains("trace values external select record_count from ${paimon_hms_prefix}${uuid0}.${paimon_hms_prefix}${uuid0}.`${paimon_hms_prefix}files$files`", "Paimon.metadata.reader.${paimon_hms_prefix}files$files.jniReaderReadNum: 0")
+CLEANUP {
+  set catalog default_catalog;
+  drop catalog if exists ${paimon_hms_prefix}${paimon_hms_test_id};
+  shell: python3 sql/test_paimon_catalog/hms_fixture.py drop '${hive_metastore_uris}' '${paimon_hms_prefix}${paimon_hms_test_id}' '${paimon_hms_prefix}files'
+  hive: drop schema if exists ${paimon_hms_prefix}${paimon_hms_test_id};
+} END CLEANUP
