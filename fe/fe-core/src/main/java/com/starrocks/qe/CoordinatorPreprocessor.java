@@ -237,11 +237,9 @@ public class CoordinatorPreprocessor {
         jobSpec.getFragments().forEach(PlanFragment::reset);
     }
 
-    /**
-     * Capture available workers and optionally restrict to connector-catalog label backends
-     * (L) union fixed-location scan backends (N). Shared-data mode is left unrestricted.
-     */
-    private WorkerProvider captureWorkerProvider() {
+    // Restrict to connector-catalog label backends (L) union fixed-location scan backends (N); shared-data stays open.
+    @VisibleForTesting
+    WorkerProvider captureWorkerProvider() {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         WorkerProvider provider = workerProviderFactory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),

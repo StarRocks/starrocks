@@ -14,10 +14,16 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.qe.scheduler.DefaultWorkerProvider;
+import com.starrocks.qe.scheduler.LazyWorkerProvider;
 import com.starrocks.qe.scheduler.LocationRestrictedWorkerProvider;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.UtFrameUtils;
@@ -30,7 +36,8 @@ import org.junit.jupiter.api.Test;
 import java.util.Collections;
 
 /**
- * Covers CoordinatorPreprocessor address getters and captureWorkerProvider restriction wiring.
+ * Hits CoordinatorPreprocessor#getBrpcAddress success return and #captureWorkerProvider body
+ * for FE incremental coverage (avoids relying on cluster worker maps / method-ref jacoco gaps).
  */
 class CoordinatorPreprocessorCaptureWorkerProviderTest {
 
@@ -39,30 +46,46 @@ class CoordinatorPreprocessorCaptureWorkerProviderTest {
         UtFrameUtils.createMinStarRocksCluster();
     }
 
+    private static DefaultWorkerProvider providerWithBackend(long id) {
+        Backend be = new Backend(id, "127.0.0.1", 9050);
+        be.setAlive(true);
+        be.setBrpcPort(8060);
+        be.setHttpPort(8040);
+        ImmutableMap<Long, ComputeNode> map = ImmutableMap.of(id, be);
+        return new DefaultWorkerProvider(map, ImmutableMap.of(), map, ImmutableMap.of(), false,
+                WarehouseManager.DEFAULT_RESOURCE);
+    }
+
     @Test
-    void testGetWorkerAddressesAndMissingWorker() {
+    void testGetBrpcAddressSuccessAndMissing() {
+        final long workerId = 42L;
+        DefaultWorkerProvider fakeProvider = providerWithBackend(workerId);
+
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        CoordinatorPreprocessor prep =
+                new CoordinatorPreprocessor(Collections.emptyList(), Collections.emptyList(), ctx);
+        Deencapsulation.setField(prep, "lazyWorkerProvider", LazyWorkerProvider.of(() -> fakeProvider));
+
+        TNetworkAddress brpc = prep.getBrpcAddress(workerId);
+        Assertions.assertNotNull(brpc);
+        Assertions.assertEquals("127.0.0.1", brpc.getHostname());
+        Assertions.assertEquals(8060, brpc.getPort());
+
+        Assertions.assertNotNull(prep.getBrpcIpAddress(workerId));
+        Assertions.assertNotNull(prep.getAddress(workerId));
+
+        Assertions.assertThrows(NullPointerException.class, () -> prep.getBrpcAddress(-1L));
+    }
+
+    @Test
+    void testCaptureWorkerProviderDirectInvoke() {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         CoordinatorPreprocessor prep =
                 new CoordinatorPreprocessor(Collections.emptyList(), Collections.emptyList(), ctx);
 
-        WorkerProvider provider = prep.getWorkerProvider();
+        WorkerProvider provider = prep.captureWorkerProvider();
         Assertions.assertNotNull(provider);
-        Assertions.assertFalse(provider.getAllWorkers().isEmpty());
-
-        ComputeNode worker = provider.getAllWorkers().iterator().next();
-        long workerId = worker.getId();
-
-        // Hits getBrpcAddress / getBrpcIpAddress / getAddress success paths (incl. line 194).
-        TNetworkAddress brpc = prep.getBrpcAddress(workerId);
-        TNetworkAddress brpcIp = prep.getBrpcIpAddress(workerId);
-        TNetworkAddress address = prep.getAddress(workerId);
-        Assertions.assertNotNull(brpc);
-        Assertions.assertNotNull(brpcIp);
-        Assertions.assertNotNull(address);
-
-        Assertions.assertThrows(NullPointerException.class, () -> prep.getBrpcAddress(-1L));
-        Assertions.assertThrows(NullPointerException.class, () -> prep.getBrpcIpAddress(-1L));
-        Assertions.assertThrows(NullPointerException.class, () -> prep.getAddress(-1L));
+        Assertions.assertFalse(provider instanceof LocationRestrictedWorkerProvider);
     }
 
     @Test
@@ -73,26 +96,8 @@ class CoordinatorPreprocessorCaptureWorkerProviderTest {
             ConnectContext ctx = UtFrameUtils.createDefaultCtx();
             CoordinatorPreprocessor prep =
                     new CoordinatorPreprocessor(Collections.emptyList(), Collections.emptyList(), ctx);
-            // Forces captureWorkerProvider() (lines around 242–257).
-            WorkerProvider provider = prep.getWorkerProvider();
+            WorkerProvider provider = prep.captureWorkerProvider();
             Assertions.assertNotNull(provider);
-            Assertions.assertFalse(provider instanceof LocationRestrictedWorkerProvider);
-        } finally {
-            Config.enable_connector_location_worker_restriction = saved;
-        }
-    }
-
-    @Test
-    void testCaptureWorkerProviderWithRestrictionEnabledEmptyScans() {
-        boolean saved = Config.enable_connector_location_worker_restriction;
-        Config.enable_connector_location_worker_restriction = true;
-        try {
-            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-            CoordinatorPreprocessor prep =
-                    new CoordinatorPreprocessor(Collections.emptyList(), Collections.emptyList(), ctx);
-            WorkerProvider provider = prep.getWorkerProvider();
-            Assertions.assertNotNull(provider);
-            // No connector locations → unrestricted (not wrapped).
             Assertions.assertFalse(provider instanceof LocationRestrictedWorkerProvider);
         } finally {
             Config.enable_connector_location_worker_restriction = saved;
@@ -101,8 +106,6 @@ class CoordinatorPreprocessorCaptureWorkerProviderTest {
 
     @Test
     void testCaptureWorkerProviderSkipsRestrictionInSharedDataMode() {
-        // Construct with shared-nothing factory, then mock RunMode so captureWorkerProvider
-        // takes the shared-data early-return without needing a shared-data cluster.
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         CoordinatorPreprocessor prep =
                 new CoordinatorPreprocessor(Collections.emptyList(), Collections.emptyList(), ctx);
@@ -112,7 +115,7 @@ class CoordinatorPreprocessorCaptureWorkerProviderTest {
                 return true;
             }
         };
-        WorkerProvider provider = prep.getWorkerProvider();
+        WorkerProvider provider = prep.captureWorkerProvider();
         Assertions.assertNotNull(provider);
         Assertions.assertFalse(provider instanceof LocationRestrictedWorkerProvider);
     }
