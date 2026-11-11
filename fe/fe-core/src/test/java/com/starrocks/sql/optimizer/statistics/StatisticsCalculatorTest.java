@@ -933,6 +933,64 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
+    public void testJoinEstimateAppliesAllResidualPredicates() {
+        ColumnRefOperator l1 = columnRefFactory.create("l1", IntegerType.INT, true);
+        ColumnRefOperator l2 = columnRefFactory.create("l2", IntegerType.INT, true);
+        ColumnRefOperator r1 = columnRefFactory.create("r1", IntegerType.INT, true);
+        ColumnRefOperator r2 = columnRefFactory.create("r2", IntegerType.INT, true);
+        ColumnRefOperator r3 = columnRefFactory.create("r3", IntegerType.INT, true);
+        columnRefFactory.updateColumnToRelationIds(l1.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(l2.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(r1.getId(), 1);
+        columnRefFactory.updateColumnToRelationIds(r2.getId(), 1);
+        columnRefFactory.updateColumnToRelationIds(r3.getId(), 1);
+
+        Statistics.Builder leftBuilder = Statistics.builder();
+        leftBuilder.setOutputRowCount(10000);
+        leftBuilder.addColumnStatistics(ImmutableMap.of(l1, new ColumnStatistic(0, 100, 0, 10, 50)));
+        leftBuilder.addColumnStatistics(ImmutableMap.of(l2, new ColumnStatistic(0, 50, 0, 10, 50)));
+        Group leftGroup = new Group(0);
+        leftGroup.setStatistics(leftBuilder.build());
+        leftGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(l1, l2))));
+
+        Statistics.Builder rightBuilder = Statistics.builder();
+        rightBuilder.setOutputRowCount(20000);
+        rightBuilder.addColumnStatistics(ImmutableMap.of(r1, new ColumnStatistic(0, 100, 0, 10, 100)));
+        rightBuilder.addColumnStatistics(ImmutableMap.of(r2, new ColumnStatistic(0, 50, 0, 10, 50)));
+        rightBuilder.addColumnStatistics(ImmutableMap.of(r3, new ColumnStatistic(0, 50, 0, 10, 50)));
+        Group rightGroup = new Group(1);
+        rightGroup.setStatistics(rightBuilder.build());
+        rightGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(r1, r2, r3))));
+
+        BinaryPredicateOperator eq = new BinaryPredicateOperator(BinaryType.EQ, l1, r1);
+        BinaryPredicateOperator ge = new BinaryPredicateOperator(BinaryType.GE, l2, r2);
+        BinaryPredicateOperator le = new BinaryPredicateOperator(BinaryType.LE, l2, r3);
+
+        // ON l1 = r1
+        double eqRows = estimateJoin(JoinOperator.INNER_JOIN, eq, leftGroup, rightGroup).getOutputRowCount();
+        Assertions.assertTrue(eqRows > 1);
+
+        // ON l1 = r1 AND l2 >= r2: one column-to-column residual, unknown coefficient 0.5
+        Statistics oneResidual =
+                estimateJoin(JoinOperator.INNER_JOIN, Utils.compoundAnd(eq, ge), leftGroup, rightGroup);
+        Assertions.assertEquals(eqRows * 0.5, oneResidual.getOutputRowCount(), 0.0001);
+
+        // ON l1 = r1 AND l2 >= r2 AND l2 <= r3: both residuals must apply, 0.5 * 0.5
+        Statistics twoResiduals =
+                estimateJoin(JoinOperator.INNER_JOIN, Utils.compoundAnd(eq, ge, le), leftGroup, rightGroup);
+        Assertions.assertEquals(eqRows * 0.25, twoResiduals.getOutputRowCount(), 0.0001);
+
+        // ON l1 = r1 AND l2 <= 25 AND l2 >= r2: the constant range residual is not the last conjunct,
+        // its column statistics narrowing must survive the following residual
+        BinaryPredicateOperator constRange =
+                new BinaryPredicateOperator(BinaryType.LE, l2, ConstantOperator.createInt(25));
+        Statistics withConstRange =
+                estimateJoin(JoinOperator.INNER_JOIN, Utils.compoundAnd(eq, constRange, ge), leftGroup, rightGroup);
+        Assertions.assertEquals(25, withConstRange.getColumnStatistic(l2).getMaxValue(), 0.0001);
+        Assertions.assertTrue(withConstRange.getOutputRowCount() < oneResidual.getOutputRowCount());
+    }
+
+    @Test
     public void testNotFoundColumnStatistics() {
         ColumnRefOperator v1 = columnRefFactory.create("v1", IntegerType.INT, true);
         ColumnRefOperator v2 = columnRefFactory.create("v2", IntegerType.INT, true);
