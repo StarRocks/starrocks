@@ -13,12 +13,27 @@
 // limitations under the License.
 package com.starrocks.http;
 
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.RowBatch;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TDescriptorTable;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
+import okhttp3.Call;
+import okhttp3.Connection;
+import okhttp3.EventListener;
+import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -31,6 +46,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.IOException;
+import java.io.InterruptedIOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
@@ -212,6 +230,106 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         jsonObject = new JSONObject(respStr);
         Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
         Assertions.assertTrue(jsonObject.get("msg").toString().contains("Unknown system variable"));
+    }
+
+    @Test
+    public void testPlanningErrorOnReusedConnection(@Mocked DefaultCoordinator coordinator) throws Exception {
+        mockQueryCoordinator(coordinator);
+        RowBatch batch = new RowBatch();
+        batch.setEos(true);
+        new Expectations() {
+            {
+                coordinator.getNext();
+                result = batch;
+            }
+        };
+
+        List<Connection> connections = new ArrayList<>();
+        OkHttpClient client = networkClient.newBuilder()
+                .retryOnConnectionFailure(false)
+                .callTimeout(10, TimeUnit.SECONDS)
+                .eventListener(new EventListener() {
+                    @Override
+                    public void connectionAcquired(Call call, Connection connection) {
+                        connections.add(connection);
+                    }
+                })
+                .build();
+        try {
+            int connectionId;
+            try (Response response = client.newCall(sqlRequest("select 1")).execute()) {
+                Assertions.assertEquals(200, response.code());
+                String body = Objects.requireNonNull(response.body()).string();
+                connectionId = new JSONObject(body.split("\n", 2)[0]).getInt("connectionId");
+                Assertions.assertTrue(body.contains("\"statistics\""));
+            }
+
+            String missingTable = DB_NAME + ".missing_table";
+            try (Response response = client.newCall(sqlRequest("select * from " + missingTable)).execute()) {
+                Assertions.assertEquals(500, response.code());
+                JSONObject body = new JSONObject(Objects.requireNonNull(response.body()).string());
+                Assertions.assertEquals("FAILED", body.getString("status"));
+                Assertions.assertEquals("1", body.getString("code"));
+                Assertions.assertTrue(body.getString("msg").contains("Unknown table '" + missingTable + "'"));
+                Assertions.assertEquals(body.getString("msg"), body.getString("message"));
+            }
+
+            // A complete response after the error proves the connection is still usable.
+            try (Response response = client.newCall(sqlRequest("select 1")).execute()) {
+                Assertions.assertEquals(200, response.code());
+                String body = Objects.requireNonNull(response.body()).string();
+                Assertions.assertEquals(connectionId, new JSONObject(body.split("\n", 2)[0]).getInt("connectionId"));
+                Assertions.assertTrue(body.contains("\"statistics\""));
+            }
+            Assertions.assertEquals(3, connections.size());
+            Assertions.assertSame(connections.get(0), connections.get(1), "The error must use the original connection");
+            Assertions.assertSame(connections.get(0), connections.get(2), "The error must not force a new connection");
+        } finally {
+            client.connectionPool().evictAll();
+        }
+    }
+
+    @Test
+    public void testStreamingErrorClosesConnection(@Mocked DefaultCoordinator coordinator) throws Exception {
+        mockQueryCoordinator(coordinator);
+        new Expectations() {
+            {
+                coordinator.getNext();
+                result = new StarRocksException("test streaming failure");
+            }
+        };
+
+        OkHttpClient client = networkClient.newBuilder()
+                .retryOnConnectionFailure(false)
+                .callTimeout(10, TimeUnit.SECONDS)
+                .build();
+        try (Response response = client.newCall(sqlRequest("select 1")).execute()) {
+            Assertions.assertEquals(200, response.code(), "The streaming response has already started");
+            IOException error = Assertions.assertThrows(IOException.class,
+                    () -> Objects.requireNonNull(response.body()).string());
+            Assertions.assertFalse(error instanceof InterruptedIOException, "The connection must close without timing out");
+        } finally {
+            client.connectionPool().evictAll();
+        }
+    }
+
+    private Request sqlRequest(String sql) {
+        return new Request.Builder()
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + QUERY_EXECUTE_API)
+                .post(RequestBody.create(JSON, new JSONObject().put("query", sql).toString()))
+                .build();
+    }
+
+    private void mockQueryCoordinator(DefaultCoordinator coordinator) {
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                           List<ScanNode> scanNodes, TDescriptorTable descTable,
+                                                           ExecPlan plan) {
+                return coordinator;
+            }
+        };
     }
 
     @Test
