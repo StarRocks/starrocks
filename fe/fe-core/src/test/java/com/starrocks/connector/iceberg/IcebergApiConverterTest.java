@@ -280,6 +280,44 @@ public class IcebergApiConverterTest {
     }
 
     @Test
+    public void testPartitionNamesEscapeSlashAndPercent() throws Exception {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        fields.add(Types.NestedField.optional(1, "host", new Types.StringType()));
+        fields.add(Types.NestedField.optional(2, "ts", Types.TimestampType.withoutZone()));
+
+        Schema schema = new Schema(fields);
+        PartitionSpec partitionSpec = PartitionSpec.builderFor(schema).identity("host").day("ts").build();
+        org.apache.iceberg.Table table = mock(org.apache.iceberg.Table.class);
+        when(table.spec()).thenReturn(partitionSpec);
+        when(table.schema()).thenReturn(schema);
+
+        // raw identity value -> expected partition name segment
+        String[][] cases = {
+                {"https://a.b.com", "host=https:%2F%2Fa.b.com"},
+                {"a%20b", "host=a%2520b"},
+                {"50%/x", "host=50%25%2Fx"},
+                {"10:00:00", "host=10:00:00"},
+        };
+        for (String[] c : cases) {
+            try (MockedStatic<Partitioning> mockedStatic = Mockito.mockStatic(Partitioning.class)) {
+                mockedStatic.when(() -> Partitioning.partitionType(table)).thenReturn(partitionSpec.partitionType());
+
+                // build the struct directly: a path string cannot carry a raw '/' in a value
+                org.apache.iceberg.PartitionData partitionData =
+                        new org.apache.iceberg.PartitionData(partitionSpec.partitionType());
+                partitionData.set(0, c[0]);
+                partitionData.set(1, (int) java.time.LocalDate.parse("2025-04-14").toEpochDay());
+                StructProjection partition = StructProjection.create(schema, schema);
+                partition.wrap(partitionData);
+                String partitionName = convertIcebergPartitionToPartitionName(table, partitionSpec, partition);
+                assertEquals(c[1] + "/ts_day=2025-04-14", partitionName);
+                assertEquals(List.of(c[0], "2025-04-14"),
+                        com.starrocks.connector.PartitionUtil.toPartitionValues(partitionName));
+            }
+        }
+    }
+
+    @Test
     public void testNonIdentityPartitionNames() throws Exception {
         List<Types.NestedField> fields = Lists.newArrayList();
         fields.add(Types.NestedField.optional(1, "id", new Types.IntegerType()));
