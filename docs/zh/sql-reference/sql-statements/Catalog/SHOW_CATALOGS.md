@@ -28,9 +28,9 @@ SHOW CATALOGS [LIKE '<pattern>']
 ## 返回结果说明
 
 ```SQL
-+----------+--------+----------+
-| Catalog  | Type   | Comment  |
-+----------+--------+----------+
++----------+--------+----------+----------+
+| Catalog  | Type   | Comment  | Location |
++----------+--------+----------+----------+
 ```
 
 返回结果中的字段说明如下：
@@ -40,6 +40,7 @@ SHOW CATALOGS [LIKE '<pattern>']
 | Catalog  | Catalog 名称。                                               |
 | Type     | Catalog 类型。如果是 `default_catalog`，则返回 `Internal`。如果是 external catalog，则返回 external catalog 的类型，例如 `Hive`, `Hudi`, `Iceberg`。          |
 | Comment  | Catalog 的备注。<ul><li>在创建 external catalog 时不支持为 external catalog 添加备注，所以如果是 external catalog，则返回的 `Comment` 为 `NULL`。</li><li>如果是 `default_catalog`，则默认返回的 `Comment` 为 `An internal catalog contains this cluster's self-managed tables.`。`default_catalog` 是 StarRocks 集群中唯一的 internal catalog，不允许删除。</li></ul> |
+| Location | Catalog 属性 [`labels.location`](../../../administration/management/resource_management/be_label.md) 的值。未设置时为空。在存算一体集群中用于将 connector 扫描任务调度到匹配标签的 BE。 |
 
 ## 示例
 
@@ -48,17 +49,20 @@ SHOW CATALOGS [LIKE '<pattern>']
 ```SQL
 SHOW CATALOGS\G
 *************************** 1. row ***************************
-Catalog: default_catalog
-   Type: Internal
-Comment: An internal catalog contains this cluster's self-managed tables.
+ Catalog: default_catalog
+    Type: Internal
+ Comment: An internal catalog contains this cluster's self-managed tables.
+Location: 
 *************************** 2. row ***************************
-Catalog: hudi_catalog
-   Type: Hudi
-Comment: NULL
+ Catalog: hudi_catalog
+    Type: Hudi
+ Comment: NULL
+Location: 
 *************************** 3. row ***************************
-Catalog: iceberg_catalog
-   Type: Iceberg
-Comment: NULL
+ Catalog: iceberg_catalog
+    Type: Iceberg
+ Comment: NULL
+Location: rack:rack1
 ```
 
 查看名称匹配特定模式的 catalog。
@@ -66,7 +70,8 @@ Comment: NULL
 ```SQL
 SHOW CATALOGS LIKE 'iceberg%'\G
 *************************** 1. row ***************************
-Catalog: iceberg_catalog
-   Type: Iceberg
-Comment: NULL
+ Catalog: iceberg_catalog
+    Type: Iceberg
+ Comment: NULL
+Location: rack:rack1
 ```

@@ -26,9 +26,9 @@ SHOW CATALOGS [LIKE '<pattern>']
 ## Output
 
 ```SQL
-+----------+--------+----------+
-| Catalog  | Type   | Comment  |
-+----------+--------+----------+
++----------+--------+----------+----------+
+| Catalog  | Type   | Comment  | Location |
++----------+--------+----------+----------+
 ```
 
 The following table describes the fields returned by this statement.
@@ -38,6 +38,7 @@ The following table describes the fields returned by this statement.
 | Catalog       | The catalog name.                                            |
 | Type          | The catalog type. `Internal` is returned if the catalog is `default_catalog`. The corresponding catalog type is returned if the catalog is an external catalog, such as `Hive`, `Hudi`, or `Iceberg`. |
 | Comment       | The comments of a catalog. StarRocks does not support adding comments to an external catalog. Therefore, the value is `NULL` for an external catalog. If the catalog is `default_catalog`, the comment is `An internal catalog contains this cluster's self-managed tables.` by default. `default_catalog` is the only internal catalog in a StarRocks cluster. |
+| Location      | The value of the catalog property [`labels.location`](../../../administration/management/resource_management/be_label.md). Empty when the property is not set. Used to pin connector scan workers to matching backends in shared-nothing clusters. |
 
 ## Examples
 
@@ -46,17 +47,20 @@ Query all catalogs in the current cluster.
 ```SQL
 SHOW CATALOGS\G
 *************************** 1. row ***************************
-Catalog: default_catalog
-   Type: Internal
-Comment: An internal catalog contains this cluster's self-managed tables.
+ Catalog: default_catalog
+    Type: Internal
+ Comment: An internal catalog contains this cluster's self-managed tables.
+Location: 
 *************************** 2. row ***************************
-Catalog: hudi_catalog
-   Type: Hudi
-Comment: NULL
+ Catalog: hudi_catalog
+    Type: Hudi
+ Comment: NULL
+Location: 
 *************************** 3. row ***************************
-Catalog: iceberg_catalog
-   Type: Iceberg
-Comment: NULL
+ Catalog: iceberg_catalog
+    Type: Iceberg
+ Comment: NULL
+Location: rack:rack1
 ```
 
 Query the catalogs whose names match a specific pattern.
@@ -64,7 +68,8 @@ Query the catalogs whose names match a specific pattern.
 ```SQL
 SHOW CATALOGS LIKE 'iceberg%'\G
 *************************** 1. row ***************************
-Catalog: iceberg_catalog
-   Type: Iceberg
-Comment: NULL
+ Catalog: iceberg_catalog
+    Type: Iceberg
+ Comment: NULL
+Location: rack:rack1
 ```

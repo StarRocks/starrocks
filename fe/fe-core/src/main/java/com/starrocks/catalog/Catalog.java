@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.util.PropertyAnalyzer;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Map;
@@ -84,8 +85,17 @@ public class Catalog implements Writable {
         return CatalogUtils.addEscapeCharacter(comment);
     }
 
+    public String getLocation() {
+        if (config == null) {
+            return "";
+        }
+        String location = config.get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+        return location == null ? "" : location;
+    }
+
     public void getProcNodeData(BaseProcResult result) {
-        result.addRow(Lists.newArrayList(this.getName(), StringUtils.capitalize(config.get(CATALOG_TYPE)), this.getComment()));
+        result.addRow(Lists.newArrayList(this.getName(), StringUtils.capitalize(config.get(CATALOG_TYPE)),
+                this.getComment(), getLocation()));
     }
 
 }
