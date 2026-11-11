@@ -381,10 +381,7 @@ public class WindowTransformer {
                 // eg. select sum(v1), sum(v1) over(order by v2) from foo
                 ScalarOperator agg =
                         SqlToScalarOperatorTranslator.translate(analyticExpr, subOpt.getExpressionMapping(),
-<<<<<<< HEAD
                                 columnRefFactory);
-=======
-                                context);
                 Pair<String, Function> reversedFunction = windowOperator.reversedFunctions.get(analyticExpr);
                 if (reversedFunction != null) {
                     CallOperator call = (CallOperator) agg;
@@ -393,7 +390,6 @@ public class WindowTransformer {
                     reversedCall.setIgnoreNulls(call.getIgnoreNulls());
                     agg = reversedCall;
                 }
->>>>>>> 854ea731750... [BugFix][RB-1261] Keep reversed FIRST_VALUE/LAST_VALUE windows typed and stable across replanning (#68630)
                 ColumnRefOperator columnRefOperator =
                         columnRefFactory.create(agg.toString(), agg.getType(), agg.isNullable());
                 analyticCall.put(columnRefOperator, (CallOperator) agg);

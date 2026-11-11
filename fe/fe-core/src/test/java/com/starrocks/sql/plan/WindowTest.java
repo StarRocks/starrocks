@@ -18,12 +18,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.thrift.TExplainLevel;
->>>>>>> 854ea731750... [BugFix][RB-1261] Keep reversed FIRST_VALUE/LAST_VALUE windows typed and stable across replanning (#68630)
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
