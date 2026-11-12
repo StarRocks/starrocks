@@ -2573,13 +2573,28 @@ TEST_F(JsonScannerTruncatedDocTest, mid_document_syntax_error_positions) {
         EXPECT_EQ(1, first_res.filtered) << bad;
     }
 
-    // 7. Trailing missing-comma record at the end of a single buffer: stage 1 truncates at the missing comma,
-    // so skipping the failed record in advance() hits INCOMPLETE_ARRAY_OR_OBJECT and surfaces a non-EOF error.
+    // 7. Trailing or single-record missing-comma / missing-colon record where stage 1 cuts inside the failed
+    // record (truncated_bytes() > 0): advance() ends the stream with EndOfFile so preceding valid rows are
+    // preserved and the failed record is counted once as a single filtered row.
     auto trailing_missing_comma = scan({v + "\n" + v + "\n" + R"({"k1":"x" "k2":9})"});
-    EXPECT_TRUE(trailing_missing_comma.status.is_data_quality_error()) << trailing_missing_comma.status;
-    EXPECT_EQ(2, trailing_missing_comma.filtered);
+    EXPECT_TRUE(trailing_missing_comma.status.is_end_of_file()) << trailing_missing_comma.status;
+    EXPECT_EQ(2, trailing_missing_comma.rows);
+    EXPECT_EQ(1, trailing_missing_comma.filtered);
 
-    // 8. Multi-batch stream with a mid-document error in the middle of the buffer recovers all remaining rows.
+    for (const std::string& single_cut : {std::string(R"({"k1":"x" "k2":9})"), std::string(R"({"k1":"x","k2" "9"})")}) {
+        auto single_cut_res = scan({single_cut});
+        EXPECT_TRUE(single_cut_res.status.is_end_of_file()) << single_cut << ": " << single_cut_res.status;
+        EXPECT_EQ(0, single_cut_res.rows) << single_cut;
+        EXPECT_EQ(1, single_cut_res.filtered) << single_cut;
+    }
+
+    // 8. Mid-buffer unclosed container followed by a complete record (truncated_bytes() == 0): skipping the
+    // failed record in advance() hits INCOMPLETE_ARRAY_OR_OBJECT and surfaces a non-EOF parse error.
+    auto mid_unclosed_array = scan({v + "\n" + R"({"k1":"x","k2":[1,2})" + "\n" + v});
+    EXPECT_TRUE(mid_unclosed_array.status.is_data_quality_error()) << mid_unclosed_array.status;
+    EXPECT_EQ(2, mid_unclosed_array.filtered);
+
+    // 9. Multi-batch stream with a mid-document error in the middle of the buffer recovers all remaining rows.
     config::json_parse_many_batch_size = 64;
     std::string multi_batch_body;
     for (int i = 0; i < 40; i++) {
