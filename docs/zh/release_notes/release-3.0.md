@@ -15,7 +15,7 @@ displayed_sidebar: docs
 
 ### 功能优化
 
-- 系统变量 [sql_mode](https://docs.starrocks.io/zh/docs/reference/System_variable#sql_mode) 增加 `GROUP_CONCAT_LEGACY` 选项，用以兼容 [group_concat](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/group_concat/) 函数在 2.5（不含）版本之前的实现逻辑。[#36150](https://github.com/StarRocks/starrocks/pull/36150)
+- 系统变量 [sql_mode](https://docs.starrocks.io/zh/docs/sql-reference/System_variable/#sql_mode) 增加 `GROUP_CONCAT_LEGACY` 选项，用以兼容 [group_concat](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/group_concat/) 函数在 2.5（不含）版本之前的实现逻辑。[#36150](https://github.com/StarRocks/starrocks/pull/36150)
 - 使用 JDK 时 GC 算法默认采用 G1。[#37386](https://github.com/StarRocks/starrocks/pull/37386)
 - 在 `be_tablets` 表中增加 `INDEX_DISK` 记录持久化索引的磁盘使用量，单位是 Bytes。[#35615](https://github.com/StarRocks/starrocks/pull/35615)
 - 支持 MySQL 外部表和 JDBC Catalog 外部表的 WHERE 子句中包含关键字。[#35917](https://github.com/StarRocks/starrocks/pull/35917)
@@ -149,7 +149,7 @@ displayed_sidebar: docs
 ### 新增特性
 
 - 聚合函数 [group_concat](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/group_concat/) 支持使用 DISTINCT 关键词和 ORDER BY 子句。[#28778](https://github.com/StarRocks/starrocks/pull/28778)
-- 分区中数据可以随着时间推移自动进行降冷操作（[List 分区方式](https://docs.starrocks.io/zh/docs/table_design/list_partitioning/)还不支持）。[#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
+- 分区中数据可以随着时间推移自动进行降冷操作（[List 分区方式](https://docs.starrocks.io/zh/docs/table_design/data_distribution/list_partitioning/)还不支持）。[#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
 
 ### 功能优化
 
@@ -184,7 +184,7 @@ displayed_sidebar: docs
 
 - 在报错信息 `xxx too many versions xxx` 中增加了如何处理的建议说明。[#28397](https://github.com/StarRocks/starrocks/pull/28397)
 - 动态分区新增支持分区粒度为年。[#28386](https://github.com/StarRocks/starrocks/pull/28386)
-- [INSERT OVERWRITE 中使用表达式分区时](https://docs.starrocks.io/zh/docs/table_design/expression_partitioning#%E5%AF%BC%E5%85%A5%E6%95%B0%E6%8D%AE%E8%87%B3%E5%88%86%E5%8C%BA)，分区字段大小写不敏感。[#28309](https://github.com/StarRocks/starrocks/pull/28309)
+- [INSERT OVERWRITE 中使用表达式分区时](https://docs.starrocks.io/zh/docs/table_design/data_distribution/expression_partitioning/#将数据加载到分区)，分区字段大小写不敏感。[#28309](https://github.com/StarRocks/starrocks/pull/28309)
 
 ### 问题修复
 
@@ -239,7 +239,7 @@ displayed_sidebar: docs
 ### 功能优化
 
 - StarRocks 外表元数据的同步改为数据加载时进行。 [#24739](https://github.com/StarRocks/starrocks/pull/24739)
-- 对于使用[表达式分区](https://docs.starrocks.io/zh/docs/table_design/expression_partitioning/)的表，INSERT OVERWRITE 支持指定分区。 [#25005](https://github.com/StarRocks/starrocks/pull/25005)
+- 对于使用[表达式分区](https://docs.starrocks.io/zh/docs/table_design/data_distribution/expression_partitioning/)的表，INSERT OVERWRITE 支持指定分区。 [#25005](https://github.com/StarRocks/starrocks/pull/25005)
 - 优化了非分区表增加分区时的报错信息。 [#25266](https://github.com/StarRocks/starrocks/pull/25266)
 
 ### 问题修复
@@ -282,14 +282,14 @@ displayed_sidebar: docs
 
 ### 新增特性
 
-- [公测中] 支持大查询算子落盘 ([Spill to disk](https://docs.starrocks.io/zh/docs/administration/spill_to_disk/))，通过将中间结果落盘来降低大查询的内存消耗。
-- [Routine Load](https://docs.starrocks.io/zh/docs/loading/RoutineLoad#导入-avro-数据) 支持导入 Avro 格式的数据。
-- 支持 [Microsoft Azure Storage](https://docs.starrocks.io/zh/docs/integrations/authenticate_to_azure_storage/) (包括 Azure Blob Storage 和 Azure Data Lake Storage)。
+- [公测中] 支持大查询算子落盘 ([Spill to disk](https://docs.starrocks.io/zh/docs/administration/management/resource_management/spill_to_disk/))，通过将中间结果落盘来降低大查询的内存消耗。
+- [Routine Load](https://docs.starrocks.io/zh/docs/loading/kafka/RoutineLoad/#导入-avro-数据) 支持导入 Avro 格式的数据。
+- 支持 [Microsoft Azure Storage](https://docs.starrocks.io/zh/docs/integrations/csp_auth/authenticate_to_azure_storage/) (包括 Azure Blob Storage 和 Azure Data Lake Storage)。
 
 ### 功能优化
 
 - 存算分离集群 (shared-data) 支持通过 StarRocks 外表来同步其他 StarRocks 集群的数据。
-- [Information Schema](https://docs.starrocks.io/zh/docs/reference/information_schema/load_tracking_logs/) 增加 `load_tracking_logs` 来记录最近的导入错误信息。
+- [Information Schema](https://docs.starrocks.io/zh/docs/sql-reference/information_schema/load_tracking_logs/) 增加 `load_tracking_logs` 来记录最近的导入错误信息。
 - 忽略建表语句中的中文空格。[#23885](https://github.com/StarRocks/starrocks/pull/23885)
 
 ### 问题修复
@@ -317,10 +317,10 @@ displayed_sidebar: docs
 
 **存储和导入**
 
-- 支持自增列属性 [AUTO_INCREMENT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/auto_increment/)，提供表内全局唯一 ID，简化数据管理。
+- 支持自增列属性 [AUTO_INCREMENT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/table_bucket_part_index/auto_increment/)，提供表内全局唯一 ID，简化数据管理。
 - 支持导入时自动创建分区和使用分区表达式定义分区规则，提高了分区创建的易用性和灵活性。
 - 主键表支持更丰富的 [UPDATE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/UPDATE/) 和 [DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/DELETE/) 语法，包括使用 CTE 和对多表的引用。
-- Broker Load 和 INSERT INTO 增加 Load Profile，支持通过 profile 查看并分析导入作业详情。使用方法与 [查看分析 Query Profile](https://docs.starrocks.io/zh/docs/administration/query_profile_overview/) 相同。
+- Broker Load 和 INSERT INTO 增加 Load Profile，支持通过 profile 查看并分析导入作业详情。使用方法与 [查看分析 Query Profile](https://docs.starrocks.io/zh/docs/best_practices/query_tuning/query_profile_overview/) 相同。
 
 **数据湖分析**
 
@@ -330,8 +330,8 @@ displayed_sidebar: docs
 
 **权限与安全**
 
-- 提供了新版的完整 RBAC 功能，支持角色的继承和默认角色。更多信息，参见[权限系统总览](https://docs.starrocks.io/zh/docs/administration/privilege_overview/)。
-- 提供更多权限管理对象和更细粒度的权限。更多信息，参见[权限项](https://docs.starrocks.io/zh/docs/administration/privilege_item/)。
+- 提供了新版的完整 RBAC 功能，支持角色的继承和默认角色。更多信息，参见[权限系统总览](https://docs.starrocks.io/zh/docs/administration/user_privs/authorization/user_privs/)。
+- 提供更多权限管理对象和更细粒度的权限。更多信息，参见[权限项](https://docs.starrocks.io/zh/docs/administration/user_privs/authorization/privilege_item/)。
 
 **查询**
 
@@ -354,18 +354,18 @@ displayed_sidebar: docs
 
 **部署**
 
-- 更新 3.0 版本的 Docker 镜像和相关[部署文档](https://docs.starrocks.io/zh/docs/quick_start/deploy_with_docker/)。 [#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021)
+- 更新 3.0 版本的 Docker 镜像和相关[部署文档](https://docs.starrocks.io/zh/docs/quick_start/shared-nothing/)。 [#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021)
 
 **存储与导入**
 
-- 数据导入提供了更丰富的 CSV 格式参数，包括 `skip_header`、`trim_space`、`enclose` 和 `escape`。参见 [STREAM LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/STREAM_LOAD/)、[BROKER LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/BROKER_LOAD/) 和 [ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/CREATE_ROUTINE_LOAD/)。
+- 数据导入提供了更丰富的 CSV 格式参数，包括 `skip_header`、`trim_space`、`enclose` 和 `escape`。参见 [STREAM LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/STREAM_LOAD/)、[BROKER LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/BROKER_LOAD/) 和 [ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD/)。
 - [主键表](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)解耦了主键和排序键，支持通过 `ORDER BY` 单独指定排序键。
 - 优化主键表在大数据导入、部分列更新、以及开启持久化索引等场景的内存占用。 [#12068](https://github.com/StarRocks/starrocks/pull/12068) [#14187](https://github.com/StarRocks/starrocks/pull/14187) [#15729](https://github.com/StarRocks/starrocks/pull/15729)
 - 提供异步 ETL 命令接口，支持创建异步 INSERT 任务。更多信息，参考[INSERT](https://docs.starrocks.io/zh/docs/loading/InsertInto/) 和 [SUBMIT TASK](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK/)。 ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
 
 **物化视图**
 
-- 优化 [物化视图](https://docs.starrocks.io/zh/docs/using_starrocks/Materialized_view/) 的改写能力：
+- 优化 [物化视图](https://docs.starrocks.io/zh/docs/using_starrocks/async_mv/Materialized_view/) 的改写能力：
   - 支持 view delta join, 可以改写。
   - 支持对 Outer Join 和 Cross Join 的改写。
   - 优化带分区时 UNION 的 SQL rewrite。
@@ -376,7 +376,7 @@ displayed_sidebar: docs
 **查询**
 
 - 完善算子对 Pipeline 的支持，所有算子都支持 Pipeline。
-- 完善[大查询定位](https://docs.starrocks.io/zh/docs/administration/monitor_manage_big_queries/)。[SHOW PROCESSLIST](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/Administration/SHOW_PROCESSLIST/) 支持查看 CPU 内存信息，增加大查询日志。
+- 完善[大查询定位](https://docs.starrocks.io/zh/docs/administration/management/monitor_manage_big_queries/)。[SHOW PROCESSLIST](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST/) 支持查看 CPU 内存信息，增加大查询日志。
 - 优化 Outer Join Reorder 能力。
 - 优化 SQL 解析阶段的报错信息，查询的报错位置更明确，信息更清晰。
 
@@ -421,4 +421,4 @@ displayed_sidebar: docs
 
 升级到 3.0 会默认采用新的 RBAC 权限管理系统，升级后只支持回滚到 2.5。
 
-回滚后需要手动执行 [ALTER SYSTEM CREATE IMAGE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/Administration/ALTER_SYSTEM/) 命令，触发创建新的 image 并等待该 image 同步给所有的 follower 节点。如不执行该命令，可能会导致部分回滚失败。ALTER SYSTEM CREATE IMAGE 在 2.5.3 版本及以后支持。
+回滚后需要手动执行 [ALTER SYSTEM CREATE IMAGE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM/) 命令，触发创建新的 image 并等待该 image 同步给所有的 follower 节点。如不执行该命令，可能会导致部分回滚失败。ALTER SYSTEM CREATE IMAGE 在 2.5.3 版本及以后支持。
