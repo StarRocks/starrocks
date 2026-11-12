@@ -552,8 +552,8 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 ### enable_adaptive_sink_dop
 
-* **説明**: データロードの適応並行性を有効にするかどうかを指定します。この機能を有効にすると、システムは INSERT INTO および Broker Load ジョブのロード並行性を自動的に設定し、`pipeline_dop` のメカニズムと同等になります。新しくデプロイされた v2.5 StarRocks クラスタでは、デフォルトで `true` に設定されています。v2.4 からアップグレードされた v2.5 クラスタでは、デフォルトで `false` に設定されています。
-* **デフォルト**: false
+* **説明**: データロードの適応並行性を有効にするかどうかを指定します。この機能を有効にすると、システムは INSERT INTO および Broker Load ジョブのロード並行性を自動的に設定し、`pipeline_dop` のメカニズムと同等になります。デフォルト値は `true` です。永続化されたメタデータにこの変数の値がすでに保存されているクラスタでは、その値が維持されます。たとえば、v2.4 以前からアップグレードされたクラスタでは `false` が維持されます。`SET enable_adaptive_sink_dop = DEFAULT` または `SET GLOBAL enable_adaptive_sink_dop = DEFAULT` を実行すると、クラスタの現在の値が `false` であっても、この変数は `true` に設定されます。
+* **デフォルト**: true
 * **導入バージョン**: v2.5
 
 ### enable_bucket_aware_execution_on_lake

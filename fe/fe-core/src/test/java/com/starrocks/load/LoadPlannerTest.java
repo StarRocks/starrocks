@@ -128,6 +128,8 @@ public class LoadPlannerTest {
         idToBackendTmp.put(1L, b2);
         idToBackend = ImmutableMap.copyOf(idToBackendTmp);
         ctx = UtFrameUtils.createDefaultCtx();
+        // These cases verify load_parallel_instance_num, which only applies when adaptive sink DOP is off.
+        ctx.getSessionVariable().setEnableAdaptiveSinkDop(false);
 
         new Expectations() {
             {
