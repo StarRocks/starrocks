@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -271,6 +272,25 @@ public class TableFunctionTest extends PlanTestBase {
         });
 
         Assertions.assertTrue(e.getMessage().contains("Not unique table/alias: 'table_function_unnest'"));
+    }
+
+    @Test
+    public void testUnnestNullArgument() throws Exception {
+        // A NULL array argument keeps the table function in the plan instead of folding it away.
+        String plan = getFragmentPlan("select v1, x from t0, unnest(cast(null as array<int>)) as t(x)");
+        assertContains(plan, "tableFunctionName: unnest", "<slot 5> : NULL");
+
+        plan = getFragmentPlan("select v1, x from t0 left join unnest(cast(null as array<int>)) as t(x) on true");
+        assertContains(plan, "tableFunctionName: unnest", "<slot 5> : NULL");
+
+        // The other arrays keep their elements.
+        plan = getFragmentPlan("select v1, x, y from t0, unnest([v2, v3], cast(null as array<int>)) as t(x, y)");
+        assertContains(plan, "tableFunctionName: unnest", "<slot 6> : [2: v2,3: v3]", "<slot 7> : NULL");
+
+        // Other table functions still reject a NULL argument.
+        Exception e = Assertions.assertThrows(StarRocksPlannerException.class,
+                () -> getFragmentPlan("select v1, x from t0, generate_series(1, null) as t(x)"));
+        Assertions.assertEquals("table function not support null parameter", e.getMessage());
     }
 
     @Test
