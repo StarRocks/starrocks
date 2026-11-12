@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -116,7 +117,7 @@ public class MVPCTMetaRepairer {
     }
 
     public static boolean isTableSupportedPCTRepair(Table baseTable) {
-        return baseTable instanceof HiveTable;
+        return baseTable instanceof HiveTable || baseTable instanceof DeltaLakeTable;
     }
 
     /**
@@ -138,6 +139,11 @@ public class MVPCTMetaRepairer {
         // consider __HIVE_DEFAULT_PARTITION__
         LOG.info("base table:{} identifier has changed from:{} to:{}",
                 baseTableInfo.getTableName(), baseTableInfo.getTableIdentifier(), table.getTableIdentifier());
+        if (!MVPCTRefreshPartitioner.isPartitionRefreshSupported(table)) {
+            // no partition-level refresh state (non-PCT, e.g. Delta): only swap the identifier
+            repairMvBaseTableMeta(mv, baseTableInfo, table, List.of(), Map.of());
+            return;
+        }
         Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap =
                 mv.getBaseTableRefreshInfo(baseTableInfo);
         if (partitionInfoMap == null || partitionInfoMap.isEmpty()) {
