@@ -1326,6 +1326,23 @@ public class TrinoQueryTest extends TrinoTestBase {
             plan = getFragmentPlan("select hour(with_timezone(ts, 'utc') AT TIME ZONE 'GMT+8') " +
                     "from (values TIMESTAMP '2024-08-19 14:36:41') t(ts)");
             Assertions.assertTrue(plan.contains("'UTC', '+08:00')"), plan);
+
+            // Zone-free consumers in between keep it exact; consumers that show the zone don't, since a DATETIME
+            // doesn't carry it
+            getFragmentPlan("select cast(date(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC')) AS VARCHAR)");
+            getFragmentPlan("select with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC') >= TIMESTAMP '2024-08-19 00:00:00'");
+            for (String sql : List.of(
+                    "select format_datetime(with_timezone(ts, 'UTC'), 'yyyy-MM-dd HH:mm:ss ZZ') " +
+                            "from (values TIMESTAMP '2024-08-19 14:36:41') t(ts)",
+                    "select cast(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC') AS VARCHAR)",
+                    "select to_iso8601(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'))",
+                    "select cast(date_trunc('day', with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC')) AS VARCHAR)",
+                    "select format_datetime(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'Asia/Tokyo') " +
+                            "AT TIME ZONE 'UTC', 'yyyy-MM-dd z')")) {
+                UnsupportedException e = Assertions.assertThrows(UnsupportedException.class,
+                        () -> SqlParser.parse(sql, connectContext.getSessionVariable()), sql);
+                Assertions.assertTrue(e.getMessage().contains("time zone is shown"), e.getMessage());
+            }
         } finally {
             connectContext.getSessionVariable().setTimeZone(timeZone);
         }
@@ -1358,6 +1375,16 @@ public class TrinoQueryTest extends TrinoTestBase {
             UnsupportedException e = Assertions.assertThrows(UnsupportedException.class,
                     () -> SqlParser.parse(sql, connectContext.getSessionVariable()), sql);
             Assertions.assertTrue(e.getMessage().contains("does not support the time zone"), e.getMessage());
+        }
+        // A zone read from a column can't be normalized, and the BE looks it up case-sensitively
+        for (String sql : List.of(
+                "select cast(with_timezone(ts, z) AT TIME ZONE 'UTC' AS TIMESTAMP) " +
+                        "from (values (TIMESTAMP '2024-08-19 00:00:00', 'utc')) t(ts, z)",
+                "select hour(with_timezone(ts, 'UTC') AT TIME ZONE z) " +
+                        "from (values (TIMESTAMP '2024-08-19 00:00:00', 'Asia/Tokyo')) t(ts, z)")) {
+            UnsupportedException e = Assertions.assertThrows(UnsupportedException.class,
+                    () -> SqlParser.parse(sql, connectContext.getSessionVariable()), sql);
+            Assertions.assertTrue(e.getMessage().contains("only literal time zones"), e.getMessage());
         }
     }
 
