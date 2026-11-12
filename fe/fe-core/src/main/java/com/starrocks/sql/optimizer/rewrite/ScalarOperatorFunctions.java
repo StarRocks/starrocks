@@ -482,6 +482,11 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetimeOrNull(date.getDatetime().plus(millisecond.getInt(), ChronoUnit.MILLIS));
     }
 
+    @ConstantFunction(name = "microseconds_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator microsecondsAdd(ConstantOperator date, ConstantOperator microsecond) {
+        return ConstantOperator.createDatetimeOrNull(date.getDatetime().plus(microsecond.getInt(), ChronoUnit.MICROS));
+    }
+
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATETIME}, returnType = DATETIME, isMonotonic = true),
             @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATE}, returnType = DATE, isMonotonic = true)
@@ -743,6 +748,11 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "milliseconds_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator millisecondsSub(ConstantOperator date, ConstantOperator millisecond) {
         return ConstantOperator.createDatetimeOrNull(date.getDatetime().minus(millisecond.getInt(), ChronoUnit.MILLIS));
+    }
+
+    @ConstantFunction(name = "microseconds_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator microsecondsSub(ConstantOperator date, ConstantOperator microsecond) {
+        return ConstantOperator.createDatetimeOrNull(date.getDatetime().minus(microsecond.getInt(), ChronoUnit.MICROS));
     }
 
     @ConstantFunction.List(list = {
