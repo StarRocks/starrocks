@@ -50,6 +50,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -355,6 +357,52 @@ public class ConnectorAnalyzeTaskTest {
         Assertions.assertDoesNotThrow(() -> mgr.checkAndUpdateTableStats(columnStats));
         // Both columns are treated as due rather than silently dropped.
         Assertions.assertEquals(1, mgr.getConnectorAnalyzeTaskQueue().getPendingTaskSize());
+    }
+
+    // The interval is measured from the stats meta's collection time (FE JVM clock), like native tables, not from
+    // the statistics rows' update_time: that one is written by SQL now() in whatever time_zone the collecting
+    // session has (global, the warehouse's override, or the caller's for a manual ANALYZE), so it can be hours off
+    // the JVM clock in either direction.
+    @Test
+    public void testTriggerIntervalIsMeasuredFromTheStatsMeta() {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
+                "partitioned_db", "orders");
+        String tableUUID = table.getUUID();
+        long interval = Config.connector_table_query_trigger_analyze_small_table_interval;
+        DateTimeFormatter format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        // UTC+14 / UTC-12: ahead of / behind any FE JVM zone a cluster runs in.
+        String rowAhead = LocalDateTime.now(ZoneId.of("Pacific/Kiritimati")).format(format);
+        String rowBehind = LocalDateTime.now(ZoneId.of("Etc/GMT+12")).minusSeconds(interval + 60).format(format);
+
+        // collected a minute longer ago than the interval, the row looks fresh: due
+        putColumnUpdateTime(tableUUID, "o_orderkey", LocalDateTime.now().minusSeconds(interval + 60));
+        ConnectorTableTriggerAnalyzeMgr mgr = new ConnectorTableTriggerAnalyzeMgr();
+        mgr.checkAndUpdateTableStats(Map.of(new ConnectorTableColumnKey(tableUUID, "o_orderkey"),
+                Optional.of(new ConnectorTableColumnStats(ColumnStatistic.unknown(), 100, rowAhead))));
+        Assertions.assertEquals(1, mgr.getConnectorAnalyzeTaskQueue().getPendingTaskSize());
+
+        // collected just now, the row looks stale: not due
+        putColumnUpdateTime(tableUUID, "o_orderkey", LocalDateTime.now());
+        mgr = new ConnectorTableTriggerAnalyzeMgr();
+        mgr.checkAndUpdateTableStats(Map.of(new ConnectorTableColumnKey(tableUUID, "o_orderkey"),
+                Optional.of(new ConnectorTableColumnStats(ColumnStatistic.unknown(), 100, rowBehind))));
+        Assertions.assertEquals(0, mgr.getConnectorAnalyzeTaskQueue().getPendingTaskSize());
+
+        // no meta for the column: the row's update_time is still used
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().clear();
+        mgr = new ConnectorTableTriggerAnalyzeMgr();
+        mgr.checkAndUpdateTableStats(Map.of(new ConnectorTableColumnKey(tableUUID, "o_orderkey"),
+                Optional.of(new ConnectorTableColumnStats(ColumnStatistic.unknown(), 100,
+                        LocalDateTime.now().minusSeconds(interval + 60).format(format)))));
+        Assertions.assertEquals(1, mgr.getConnectorAnalyzeTaskQueue().getPendingTaskSize());
+    }
+
+    private static void putColumnUpdateTime(String tableUUID, String column, LocalDateTime updateTime) {
+        ExternalBasicStatsMeta meta = new ExternalBasicStatsMeta("hive0", "partitioned_db", "orders",
+                Lists.newArrayList(column), StatsConstants.AnalyzeType.FULL, updateTime, Maps.newHashMap());
+        meta.setTableUUID(tableUUID);
+        meta.addColumnStatsMeta(new ColumnStatsMeta(column, StatsConstants.AnalyzeType.FULL, updateTime));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddExternalBasicStatsMeta(meta);
     }
 
     @Test
