@@ -196,8 +196,9 @@ jobs:
               ["gh", "api", endpoint, "-H", "Accept: application/vnd.github.raw+json"], text=True)
 
           def section_rows(text):
-              """The checkbox rows of the one Bugfix cherry-pick branch check section,
-              as (version or None, text); other lines in it are not read."""
+              """The checkbox rows of the one Bugfix cherry-pick branch check section: the
+              versions listed as the label steps read them ("[x] 4.0" / "[ ] 4.0"), and the
+              other rows as (text, ticked). Other lines in the section are not read."""
               lines = (text or "").splitlines()
               starts = [i for i, line in enumerate(lines)
                         if re.match(r"^##\s*Bugfix cherry-pick branch check", line)]
@@ -206,35 +207,42 @@ jobs:
               start = starts[0]
               end = next((i for i in range(start + 1, len(lines))
                           if re.match(r"^#{1,2}\s", lines[i])), len(lines))
-              rows = []
+              versions, others = set(), []
               for line in lines[start + 1:end]:
-                  box = re.match(r"^\s*- \[[ xX]\]\s+(.*?)\s*$", line)
-                  if box:
-                      version = re.fullmatch(r"\d+\.\d+(?:\.\d+)?", box.group(1))
-                      rows.append((version.group(0) if version else None, box.group(1)))
-              return rows
+                  box = re.match(r"^\s*- \[([ xX])\]\s+(.*?)\s*$", line)
+                  if not box:
+                      continue
+                  version = re.fullmatch(r"\s*- \[[ xX]\] (\d+\.\d+(?:\.\d+)?)", line.rstrip())
+                  if version:
+                      versions.add(version.group(1))
+                  elif not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", box.group(2)):
+                      others.append((box.group(2), box.group(1) != " "))
+              return versions, others
 
-          # Every version row of the base branch template must be listed (ticked or not), plus
-          # the acknowledgement row, whose wording is not compared. Extra rows are ignored.
+          # Every version row of the base branch template must be listed (ticked or not), and the
+          # acknowledgement -- the first other checkbox row, its wording not compared -- ticked.
+          # Extra rows are ignored.
           expected = []
           try:
-              template_rows = section_rows(template)
-              expected = [version for version, _ in template_rows if version]
-              if not expected or all(version for version, _ in template_rows):
+              template_versions, template_others = section_rows(template)
+              expected = sorted(template_versions, key=lambda v: [int(n) for n in v.split(".")], reverse=True)
+              if not expected or not template_others:
                   raise ValueError("The base branch PR template has an invalid backport section.")
-              rows = section_rows(pr.get("body"))
-              missing = [version for version in expected if version not in {v for v, _ in rows}]
+              versions, others = section_rows(pr.get("body"))
+              missing = [version for version in expected if version not in versions]
               problems = []
-              if all(version for version, _ in rows):
+              if not others:
                   problems.append("the acknowledgement checkbox row is missing")
+              elif not others[0][1]:
+                  problems.append("the acknowledgement checkbox row is not ticked")
               if missing:
                   problems.append("version rows missing: " + ", ".join(missing))
               if problems:
                   raise ValueError("Backport section: {}.".format("; ".join(problems)))
           except ValueError as error:
               print("::error::{} The section must list every version of the PR base branch's "
-                    ".github/PULL_REQUEST_TEMPLATE.md ({}); tick the ones to backport.".format(
-                        error, ", ".join(expected) or "see the template"))
+                    ".github/PULL_REQUEST_TEMPLATE.md ({}) as \"- [ ] <version>\"; tick the ones "
+                    "to backport.".format(error, ", ".join(expected) or "see the template"))
               raise SystemExit(1)
           PYTHON
 
