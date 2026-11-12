@@ -226,10 +226,9 @@ TEST_F(PaimonWriteColumnConverterTest, NativeTimestampPrecisionIsNotInferredOnly
     auto timestamp = TimestampColumn::create();
     timestamp->append(TimestampValue::create(1969, 12, 31, 23, 59, 59, 120000));
     for (int precision = 0; precision <= 9; ++precision) {
-        auto unit = precision == 0   ? arrow::TimeUnit::SECOND
-                    : precision <= 3 ? arrow::TimeUnit::MILLI
-                    : precision <= 6 ? arrow::TimeUnit::MICRO
-                                     : arrow::TimeUnit::NANO;
+        auto unit = precision == 0 ? arrow::TimeUnit::SECOND
+                                   : precision <= 3 ? arrow::TimeUnit::MILLI
+                                                    : precision <= 6 ? arrow::TimeUnit::MICRO : arrow::TimeUnit::NANO;
         const auto target = arrow::field(
                 "t", arrow::timestamp(unit), true,
                 arrow::key_value_metadata({"starrocks.paimon.timestamp.precision"}, {std::to_string(precision)}));
