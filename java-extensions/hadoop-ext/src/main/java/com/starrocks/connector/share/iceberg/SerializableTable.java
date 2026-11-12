@@ -132,6 +132,9 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
 
                     TableOperations ops =
                             new StaticTableOperations(metadataFileLocation, io());
+                    // StaticTableOperations.current() loads the metadata without synchronization, and the table
+                    // can be shared by concurrent scan tasks: load it before publishing the table.
+                    ops.current();
                     this.lazyTable = newTable(ops, name);
                 }
             }

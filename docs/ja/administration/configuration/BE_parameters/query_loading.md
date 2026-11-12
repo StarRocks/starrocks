@@ -391,6 +391,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: ヘッジドリードを開始する前に待機するミリ秒数を指定します。たとえば、このパラメーターを `30` に設定したとします。この状況で、ブロックからの読み取りが30ミリ秒以内に返されない場合、HDFS クライアントはすぐに別のブロックレプリカに対して新しい読み取りを開始します。これは、`dfs.client.hedged.read.threshold.millis` パラメーターに相当します。**hdfs-site.xml**HDFS クラスターのファイル。
 - 導入バージョン: v3.0
 
+### iceberg_metadata_table_cache_capacity
+
+- デフォルト: 128
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: Iceberg メタデータテーブル（`t$files`、`t$partitions` など）の JNI スキャナーが BE または CN ノード上で保持する、未使用のデシリアライズ済み Iceberg テーブルの最大数。1 つのクエリのすべてのスキャンタスクは、タスクごとに個別にデシリアライズする代わりに、1 つのデシリアライズ済みテーブルを共有します。そのため、JVM ヒープの使用量は同時実行のスキャンタスク数に依存しません。60 秒間使用されなかったテーブルは解放されます。`0` 以下の値を指定すると、それ以降に開始するスキャンでは共有が無効になります。
+- 導入バージョン: -
+
 ### io_coalesce_adaptive_lazy_active
 
 - デフォルト: true

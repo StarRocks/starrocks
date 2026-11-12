@@ -367,6 +367,10 @@ CONF_Int32(max_hdfs_scanner_num, "50");
 // once they are due. Not retried: on failure the scan keeps its current credentials and asks
 // again a minute later. A value <= 0 turns the refresh off for scans that start afterwards.
 CONF_mInt32(scan_credential_refresh_rpc_timeout_ms, "10000");
+// Max number of idle deserialized Iceberg tables the JNI metadata scanner keeps on one BE/CN. The scan tasks
+// of one Iceberg metadata table query share one deserialized table instead of each deserializing its own copy.
+// A value <= 0 turns the sharing off for scans that start afterwards.
+CONF_mInt32(iceberg_metadata_table_cache_capacity, "128");
 // Number of max scan keys.
 CONF_mInt32(max_scan_key_num, "1024");
 // The max number of push down values of a single column.
