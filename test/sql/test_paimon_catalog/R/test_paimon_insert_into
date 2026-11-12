@@ -101,6 +101,18 @@ set pipeline_dop = 4;
 create database paimon_write_${uuid0}.writer_db;
 -- result:
 -- !result
+-- Creating and reading an input-changelog table remain supported; writes require SDK changelog support.
+create table paimon_write_${uuid0}.writer_db.input_changelog_rows (id int not null, value int) primary key(id) properties ('bucket'='1', 'file.format'='parquet', 'changelog-producer'='input', 'write-only'='true');
+-- result:
+-- !result
+function: assert_query_error_contains("insert into paimon_write_${uuid0}.writer_db.input_changelog_rows values (1, 2)", "changelog-producer=input")
+-- result:
+None
+-- !result
+select count(*) from paimon_write_${uuid0}.writer_db.input_changelog_rows;
+-- result:
+0
+-- !result
 create table paimon_write_${uuid0}.writer_db.pk_rows (id bigint not null, p varchar(32) not null, value varchar(64)) primary key(id, p) partition by(p) properties ('bucket'='4', 'file.format'='parquet');
 -- result:
 -- !result
@@ -178,6 +190,7 @@ select count(*), count(distinct id), sum(value - id) from paimon_write_reader_${
 -- !result
 CLEANUP {
   set catalog default_catalog;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.input_changelog_rows;
   drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.pk_bulk;
   drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.fixed_append;
   drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.pk_rows;
@@ -265,5 +278,109 @@ CLEANUP {
   set catalog default_catalog;
   drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.boolean_rows;
   drop database if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_write_${paimon_ddl_warehouse_id};
+} END CLEANUP
+
+-- name: test_paimon_insert_into_utf8
+function: create_paimon_ddl_catalog("paimon_write_${uuid0}", "${uuid0}")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+set pipeline_dop = 4;
+-- result:
+-- !result
+create database paimon_write_${uuid0}.writer_db;
+-- result:
+-- !result
+create table paimon_write_${uuid0}.writer_db.utf8_rows (id int not null, value varchar(2)) primary key(id) properties ('bucket'='1', 'file.format'='parquet');
+-- result:
+-- !result
+insert into paimon_write_${uuid0}.writer_db.utf8_rows values (1, '中文'), (2, '中a'), (3, '😀文'), (4, NULL);
+-- result:
+-- !result
+function: assert_query_error_contains("insert into paimon_write_${uuid0}.writer_db.utf8_rows values (5, '中文a')", "character length exceeded")
+-- result:
+None
+-- !result
+function: assert_query_error_contains("insert into paimon_write_${uuid0}.writer_db.utf8_rows values (6, 'abc')", "character length exceeded")
+-- result:
+None
+-- !result
+-- An upsert forces native merging rather than the direct Parquet fast path.
+insert into paimon_write_${uuid0}.writer_db.utf8_rows values (1, '更新');
+-- result:
+-- !result
+function: assert_paimon_readers("select id, value from paimon_write_${uuid0}.writer_db.utf8_rows", "utf8_rows", "native")
+-- result:
+None
+-- !result
+[ORDER]select id, value, char_length(value), length(value) from paimon_write_${uuid0}.writer_db.utf8_rows order by id;
+-- result:
+1	更新	2	6
+2	中a	2	4
+3	😀文	2	7
+4	None	None	None
+-- !result
+function: create_paimon_ddl_catalog("paimon_write_reader_${uuid0}", "${uuid0}")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select id, value, char_length(value), length(value) from paimon_write_reader_${uuid0}.writer_db.utf8_rows order by id;
+-- result:
+1	更新	2	6
+2	中a	2	4
+3	😀文	2	7
+4	None	None	None
+-- !result
+-- Exercise a multibyte primary key and nested string leaves after an upsert.
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+create table paimon_write_${uuid0}.writer_db.utf8_nested (id varchar(2) not null, a array<varchar(2)>, m map<varchar(2), varchar(2)>, r struct<field_value varchar(2), nested array<varchar(2)>>) primary key(id) properties ('bucket'='1', 'file.format'='parquet');
+-- result:
+-- !result
+insert into paimon_write_${uuid0}.writer_db.utf8_nested select '中文', ['旧值', NULL], map{'中文':'旧值'}, named_struct('field_value', '旧值', 'nested', ['旧值']);
+-- result:
+-- !result
+insert into paimon_write_${uuid0}.writer_db.utf8_nested select '中a', ['😀文', '中a'], map{'中文':'你好'}, named_struct('field_value', '😀文', 'nested', ['中文']);
+-- result:
+-- !result
+insert into paimon_write_${uuid0}.writer_db.utf8_nested values ('空值', NULL, NULL, NULL);
+-- result:
+-- !result
+insert into paimon_write_${uuid0}.writer_db.utf8_nested select '中文', ['更新', NULL], map{'中文':'😀文'}, named_struct('field_value', '你好', 'nested', ['😀文']);
+-- result:
+-- !result
+function: assert_paimon_readers("select id, a, m, r from paimon_write_${uuid0}.writer_db.utf8_nested", "utf8_nested", "native")
+-- result:
+None
+-- !result
+[ORDER]select id, a[1], a[2], m['中文'], r.field_value, r.nested[1] from paimon_write_${uuid0}.writer_db.utf8_nested order by id;
+-- result:
+中a	😀文	中a	你好	😀文	中文
+中文	更新	None	😀文	你好	😀文
+空值	None	None	None	None	None
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select id, a[1], a[2], m['中文'], r.field_value, r.nested[1] from paimon_write_reader_${uuid0}.writer_db.utf8_nested order by id;
+-- result:
+中a	😀文	中a	你好	😀文	中文
+中文	更新	None	😀文	你好	😀文
+空值	None	None	None	None	None
+-- !result
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.utf8_nested;
+  drop table if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db.utf8_rows;
+  drop database if exists paimon_write_${paimon_ddl_warehouse_id}.writer_db;
+  drop catalog if exists paimon_write_reader_${paimon_ddl_warehouse_id};
   drop catalog if exists paimon_write_${paimon_ddl_warehouse_id};
 } END CLEANUP

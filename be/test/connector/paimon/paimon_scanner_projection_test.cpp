@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <limits>
+
 #include <arrow/testing/builder.h>
 #include <arrow/testing/gtest_util.h>
 #include <gtest/gtest.h>
@@ -100,6 +102,105 @@ TEST_F(PaimonScannerProjectionTest, missing_arrow_column_reports_error) {
     auto status = scanner.do_get_next(nullptr, &chunk);
     ASSERT_FALSE(status.ok());
     ASSERT_NE(std::string::npos, status.message().find("missing column v"));
+}
+
+TEST_F(PaimonScannerProjectionTest, varchar_is_read_as_string) {
+    auto type = arrow::utf8();
+    auto array = arrow::ArrayFromJSON(type, R"(["中文", "中a", "😀文", "already stored longer text", null, ""])");
+    for (int length : {2, std::numeric_limits<int>::max()}) {
+        SlotDescriptor slot(1, "v", TypeDescriptor::create_varchar_type(length));
+        HdfsScannerContext context;
+        PaimonScanner scanner;
+        prepare(&scanner, &context, &slot, type, array);
+        for (int row = 0; row < array->length(); ++row) {
+            ChunkPtr chunk;
+            ASSERT_TRUE(scanner.do_get_next(nullptr, &chunk).ok());
+            ASSERT_EQ(1, chunk->num_rows()) << "row " << row;
+            auto value = chunk->get_column_by_slot_id(1)->get(0);
+            if (array->IsNull(row)) {
+                ASSERT_TRUE(value.is_null());
+            } else {
+                ASSERT_EQ(std::static_pointer_cast<arrow::StringArray>(array)->GetString(row),
+                          value.get_slice().to_string());
+            }
+        }
+        ASSERT_EQ(array->length(), scanner._app_stats.raw_rows_read);
+    }
+}
+
+TEST_F(PaimonScannerProjectionTest, string_read_preserves_large_external_values) {
+    const int characters = TypeDescriptor::MAX_VARCHAR_LENGTH / 3 + 1;
+    std::string text;
+    text.reserve(characters * 3);
+    for (int i = 0; i < characters; ++i) text += "中";
+    arrow::StringBuilder builder;
+    ASSERT_TRUE(builder.Append(text).ok());
+    std::shared_ptr<arrow::Array> array;
+    ASSERT_TRUE(builder.Finish(&array).ok());
+    SlotDescriptor slot(1, "v", TypeDescriptor::create_varchar_type(characters));
+    HdfsScannerContext context;
+    PaimonScanner scanner;
+    prepare(&scanner, &context, &slot, arrow::utf8(), array);
+    ChunkPtr chunk;
+    ASSERT_TRUE(scanner.do_get_next(nullptr, &chunk).ok());
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ(text, chunk->get_column_by_slot_id(1)->get(0).get_slice().to_string());
+}
+
+TEST_F(PaimonScannerProjectionTest, nested_multibyte_strings_preserve_values_and_nulls) {
+    auto text = arrow::utf8();
+    auto list = arrow::list(text);
+    auto map = arrow::map(text, text);
+    auto type = arrow::struct_({arrow::field("s", text), arrow::field("a", list), arrow::field("m", map)});
+    auto array = arrow::ArrayFromJSON(type, R"([{"s":"中","a":["😀文",null],"m":[["中文","你好"]]},null])");
+    TypeDescriptor projected(TYPE_STRUCT);
+    projected.field_names = {"s", "a", "m"};
+    TypeDescriptor varchar = TypeDescriptor::create_varchar_type(2);
+    TypeDescriptor projected_list(TYPE_ARRAY);
+    projected_list.children = {varchar};
+    TypeDescriptor projected_map(TYPE_MAP);
+    projected_map.children = {varchar, varchar};
+    projected.children = {TypeDescriptor::create_varchar_type(1), projected_list, projected_map};
+    SlotDescriptor slot(1, "v", projected);
+    HdfsScannerContext context;
+    PaimonScanner scanner;
+    prepare(&scanner, &context, &slot, type, array);
+    ChunkPtr first;
+    ASSERT_TRUE(scanner.do_get_next(nullptr, &first).ok());
+    ASSERT_EQ(1, first->num_rows());
+    const auto row = first->get_column_by_slot_id(1)->get(0).get_struct();
+    ASSERT_EQ("中", row[0].get_slice().to_string());
+    const auto elements = row[1].get_array();
+    ASSERT_EQ(2, elements.size());
+    ASSERT_EQ("😀文", elements[0].get_slice().to_string());
+    ASSERT_TRUE(elements[1].is_null());
+    const auto entries = row[2].get_map();
+    ASSERT_EQ(1, entries.size());
+    ASSERT_EQ("中文", std::get<Slice>(entries.begin()->first).to_string());
+    ASSERT_EQ("你好", entries.begin()->second.get_slice().to_string());
+    ChunkPtr second;
+    ASSERT_TRUE(scanner.do_get_next(nullptr, &second).ok());
+    ASSERT_EQ(1, second->num_rows());
+    ASSERT_TRUE(second->get_column_by_slot_id(1)->is_null(0));
+    ASSERT_EQ(2, scanner._app_stats.raw_rows_read);
+}
+
+TEST_F(PaimonScannerProjectionTest, binary_bounds_remain_in_bytes) {
+    TypeDescriptor binary = TYPE_VARBINARY_DESC;
+    binary.len = 2;
+    SlotDescriptor slot(1, "v", binary);
+    HdfsScannerContext context;
+    PaimonScanner scanner;
+    auto array = arrow::ArrayFromJSON(arrow::binary(), R"(["中文","ab"])");
+    prepare(&scanner, &context, &slot, arrow::binary(), array);
+    ChunkPtr first;
+    ASSERT_TRUE(scanner.do_get_next(nullptr, &first).ok());
+    ASSERT_EQ(0, first->num_rows());
+    ChunkPtr second;
+    ASSERT_TRUE(scanner.do_get_next(nullptr, &second).ok());
+    ASSERT_EQ(1, second->num_rows());
+    ASSERT_EQ("ab", second->get_column_by_slot_id(1)->get(0).get_slice().to_string());
+    ASSERT_EQ(2, scanner._convert_context.current_type_length);
 }
 
 } // namespace starrocks

@@ -31,6 +31,7 @@
 #include <unordered_set>
 #include <utility>
 
+#include "base/string/utf8.h"
 #include "base/string/utf8_check.h"
 #include "base/time/timezone_utils.h"
 #include "column/array_column.h"
@@ -358,7 +359,10 @@ StatusOr<Conversion> make_conversion(const TypeDescriptor& source, const std::sh
                 if (parsed.ec != std::errc() || parsed.ptr != text.data() + text.size() || bound <= 0) {
                     return Status::InvalidArgument("Invalid starrocks.paimon.length metadata");
                 }
-                result.length = source.len > 0 ? std::min<int64_t>(source.len, bound) : bound;
+                // Native VARCHAR bounds count code points; the SR source length hint must not narrow them.
+                result.length = source.type == TYPE_VARCHAR
+                                        ? bound
+                                        : (source.len > 0 ? std::min<int64_t>(source.len, bound) : bound);
             }
         }
         break;
@@ -691,12 +695,19 @@ Status append_cell(const Column* column, size_t row, const Conversion& conversio
         const auto* binary = dynamic_cast<const BinaryColumn*>(cell.data);
         if (binary == nullptr) return Status::InvalidArgument("Source binary physical column type mismatch");
         const auto value = binary->get_slice(cell.row);
-        if ((conversion.length >= 0 && value.size > conversion.length) ||
-            value.size > std::numeric_limits<int32_t>::max()) {
+        if (value.size > std::numeric_limits<int32_t>::max()) {
             return Status::InvalidArgument("Paimon string/binary byte length exceeded");
         }
         if (conversion.source.type != TYPE_VARBINARY && !validate_utf8(value.data, value.size)) {
             return Status::InvalidArgument("Invalid UTF-8 in Paimon string");
+        }
+        // Byte length is an upper bound on the code point count, so short values need no extra scan.
+        if (conversion.length >= 0 && value.size > conversion.length &&
+            (conversion.source.type != TYPE_VARCHAR ||
+             utf8_len(value.data, value.data + value.size) > conversion.length)) {
+            return Status::InvalidArgument(conversion.source.type == TYPE_VARCHAR
+                                                   ? "Paimon VARCHAR character length exceeded"
+                                                   : "Paimon string/binary byte length exceeded");
         }
         if (conversion.source.type == TYPE_VARBINARY) {
             return from_arrow(static_cast<arrow::BinaryBuilder*>(builder)->Append(value.data, value.size));

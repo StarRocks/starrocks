@@ -79,6 +79,9 @@ public final class PaimonWriteCapabilities {
         if (!schema.primaryKeys().isEmpty() && options.mergeEngine() != CoreOptions.MergeEngine.DEDUPLICATE) {
             throw new StarRocksConnectorException("Paimon writes currently support only the deduplicate merge engine");
         }
+        if (options.changelogProducer() == CoreOptions.ChangelogProducer.INPUT) {
+            throw new StarRocksConnectorException("Paimon C++ 0.3 writes do not support changelog-producer=input");
+        }
         if (options.dataEvolutionEnabled() || options.rowTrackingEnabled()) {
             throw new StarRocksConnectorException("Paimon writes do not support data evolution or row tracking");
         }
