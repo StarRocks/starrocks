@@ -51,11 +51,16 @@ package com.starrocks.connector.iceberg.io;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
+import com.google.common.hash.Hasher;
+import com.google.common.hash.Hashing;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.common.util.concurrent.lock.LockInvariantViolationException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.connector.share.iceberg.AzurePathNormalizingFileIO;
 import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
@@ -88,9 +93,11 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -265,7 +272,13 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     public Configuration buildConfFromProperties(Map<String, String> properties, String path) throws StarRocksException {
         // build Hadoop configuration from properties for HadoopFileIO
         Configuration copied = new Configuration(conf.get());
-        disableSharedFileSystemCache(copied, path);
+        applyVendedCredentials(copied, properties, path);
+        keyFileSystemCacheOnCredentials(copied, path);
+        return copied;
+    }
+
+    private static void applyVendedCredentials(Configuration copied, Map<String, String> properties, String path)
+            throws StarRocksException {
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             if (entry.getKey().startsWith(ADLS_SAS_TOKEN) && entry.getKey().endsWith(ADLS_ENDPOINT)) {
                 // Handle Azure ADLS SAS token
@@ -274,14 +287,14 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                         "SAS");
                 copied.set(String.format("fs.azure.sas.fixed.token.%s", endpoint),
                         entry.getValue());
-                return copied;
+                return;
             } else if (entry.getKey().startsWith(ADLS_SAS_TOKEN) && (entry.getKey().endsWith(BLOB_ENDPOINT))) {
                 // Handle Azure Blob SAS token
                 AzBlobURI uri = AzBlobURI.parse(path);
                 String key =
                         String.format("fs.azure.sas.%s.%s.blob.core.windows.net", uri.getContainer(), uri.getAccount());
                 copied.set(key, entry.getValue());
-                return copied;
+                return;
             } else if (entry.getKey().equals(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN)) {
                 // Handle GCS access token
                 copied.set(GCPCloudConfigurationProvider.AUTH_TYPE_KEY,
@@ -297,29 +310,55 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 copied.set(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY,
                         properties.getOrDefault(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT,
                                 String.valueOf(Long.MAX_VALUE)));
-                return copied;
+                return;
             }
         }
-        return copied;
     }
 
-    // GCSFileIO/ADLSFileIO are absent from the FE classpath, so ResolvingFileIO falls back to
-    // HadoopFileIO, whose FileSystem cache key is (scheme, authority, ugi) and excludes the
-    // Configuration holding the credential — one shared instance would serve every catalog on a bucket
-    // with whichever credential created it first. Kept to Azure and GCS deliberately: bypassing the
-    // cache leaks an unclosed FileSystem per call, so other schemes wait for a credential-keyed cache.
-    private static final Set<String> SCHEMES_REQUIRING_FS_ISOLATION =
-            Set.of("gs", "abfs", "abfss", "wasb", "wasbs", "adl");
+    // GCSFileIO/ADLSFileIO are absent from the FE classpath, so ResolvingFileIO falls back to HadoopFileIO and
+    // Hadoop's FileSystem cache. The FileSystem reads its credential once, at initialize(), so the cache key
+    // has to separate credentials. The catalog's CloudConfiguration string is already in the key, but it
+    // records config resources by file name only and knows nothing of vended tokens, so the final auth
+    // settings of these schemes are fingerprinted into HadoopExt.HADOOP_DYNAMIC_CREDENTIAL_PREFIX entries,
+    // which hadoop-ext adds to the key and evicts once idle.
+    //
+    // Applied to the schemes below only, so hdfs/oss/cosn keep today's cache behavior. Within them the
+    // entries do not depend on the path: ResolvingFileIO hands this Configuration to the HadoopFileIO it
+    // creates for the first path of an impl and keeps it for every later path of that impl, and one ADLS
+    // impl serves abfs, abfss, wasb and wasbs.
+    private static final Set<String> CREDENTIAL_KEYED_SCHEMES = Set.of("gs", "abfs", "abfss", "wasb", "wasbs", "adl");
+    // hadoop.security.credential.* covers secrets kept in a credential provider (e.g. JCEKS), which the
+    // connectors read through Configuration.getPassword().
+    private static final Map<String, List<String>> CREDENTIAL_FINGERPRINT_PREFIXES = Map.of(
+            "gs", List.of("fs.gs.", "google.cloud.", "hadoop.security.credential."),
+            "azure", List.of("fs.azure.", "fs.adl.", "dfs.adls.", "hadoop.security.credential."));
 
-    private static void disableSharedFileSystemCache(Configuration conf, String path) {
+    @VisibleForTesting
+    static void keyFileSystemCacheOnCredentials(Configuration conf, String path) {
         String scheme = new Path(path).toUri().getScheme();
         if (scheme == null) {
-            // FileSystem.get() resolves a scheme-less path through fs.defaultFS and only then consults
-            // the flag, so the flag has to be keyed on the default scheme rather than skipped.
+            // FileSystem.get() resolves a scheme-less path through fs.defaultFS.
             scheme = FileSystem.getDefaultUri(conf).getScheme();
         }
-        if (scheme != null && SCHEMES_REQUIRING_FS_ISOLATION.contains(scheme)) {
-            conf.setBoolean(String.format("fs.%s.impl.disable.cache", scheme), true);
+        if (scheme == null || !CREDENTIAL_KEYED_SCHEMES.contains(scheme)) {
+            return;
+        }
+        for (Map.Entry<String, List<String>> family : CREDENTIAL_FINGERPRINT_PREFIXES.entrySet()) {
+            Map<String, String> entries = new TreeMap<>();
+            for (Map.Entry<String, String> entry : conf) {
+                for (String prefix : family.getValue()) {
+                    if (entry.getKey().startsWith(prefix)) {
+                        entries.put(entry.getKey(), conf.get(entry.getKey()));
+                        break;
+                    }
+                }
+            }
+            Hasher hasher = Hashing.sha256().newHasher();
+            for (Map.Entry<String, String> entry : entries.entrySet()) {
+                hasher.putString(entry.getKey(), StandardCharsets.UTF_8).putByte((byte) 0);
+                hasher.putString(Strings.nullToEmpty(entry.getValue()), StandardCharsets.UTF_8).putByte((byte) 0);
+            }
+            conf.set(HadoopExt.HADOOP_DYNAMIC_CREDENTIAL_PREFIX + family.getKey(), hasher.hash().toString());
         }
     }
 
