@@ -235,7 +235,9 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         try {
             String normalizedPath = normalizeAzurePath(path);
             setWrappedConf(buildConfFromProperties(properties, normalizedPath));
-            return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(normalizedPath));
+            // Keep the caller's path as location(): the content cache and the parsed-manifest caches
+            // (seeded under ManifestFile.path()) are keyed by it. Only the storage access is normalized.
+            return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(normalizedPath), path);
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new input file for path: %s, properties: %s", path, properties);
             LOG.error(errorMessage, e);
@@ -269,10 +271,9 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         // No cache in front of a delete: it always goes out. Reached by table purge and by the cleanup of
         // a failed commit, both of which can run inside a DDL's database lock.
         BlockingCallValidator.validateNotUnderLock("remote-storage");
-        String normalizedPath = normalizeAzurePath(path);
-        wrappedIO.deleteFile(normalizedPath);
-        // remove from cache.
-        fileContentCache.invalidate(normalizedPath);
+        wrappedIO.deleteFile(normalizeAzurePath(path));
+        // remove from cache, keyed by the caller's path like CachingInputFile.location().
+        fileContentCache.invalidate(path);
     }
 
     public FileIO getWrappedIO() {
@@ -742,10 +743,12 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private static class CachingInputFile implements InputFile {
         private final ContentCache contentCache;
         private final InputFile wrappedInputFile;
+        private final String location;
 
-        private CachingInputFile(ContentCache cache, InputFile inFile) {
+        private CachingInputFile(ContentCache cache, InputFile inFile, String location) {
             this.contentCache = cache;
             this.wrappedInputFile = inFile;
+            this.location = location;
         }
 
         @Override
@@ -786,7 +789,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
         @Override
         public String location() {
-            return wrappedInputFile.location();
+            return location;
         }
 
         @Override
