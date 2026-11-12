@@ -75,6 +75,15 @@ struct FormatScannerStats {
     // on-demand (suggests active/lazy classification could be improved).
     int64_t parquet_lazy_full_trigger_count = 0;
 
+    // Parquet VARIANT: rows read through the typed-only fast path, which reads neither the metadata nor the base payload.
+    int64_t parquet_variant_typed_only_rows = 0;
+    // Parquet VARIANT: rows of batches where the typed-only fast path found per-field fallback values and the batch
+    // was read again together with the base payload.
+    int64_t parquet_variant_fast_path_fallback_rows = 0;
+    // Parquet VARIANT: rows read together with the metadata and the base payload (the typed-only fast path did not
+    // apply to the query).
+    int64_t parquet_variant_base_payload_rows = 0;
+
     // Join runtime filters evaluated against decoded rows. Names mirror the OLAP
     // storage layer's rf_cond_* stats so profiles diff directly against an OLAP run.
     int64_t rf_cond_input_rows = 0;

@@ -412,18 +412,17 @@ public:
     // Constructor that accepts pre-built ScalarColumnReader objects and optional shredded paths.
     // parsed_shredded_paths: exact leaf or array-boundary paths to expose as typed_columns.
     // If empty, no typed_columns optimization is applied (overlay reconstruction still works).
-    explicit VariantColumnReader(const ParquetField* parquet_field,
-                                 std::unique_ptr<ScalarColumnReader>&& metadata_reader,
-                                 std::unique_ptr<ScalarColumnReader>&& value_reader,
-                                 std::vector<ShreddedFieldNode>&& shredded_fields,
-                                 std::vector<VariantPath> parsed_shredded_paths = {},
-                                 ColumnReaderPtr&& root_typed_value_reader = nullptr,
-                                 std::unique_ptr<TypeDescriptor> root_typed_value_type = nullptr)
+    explicit VariantColumnReader(
+            const ParquetField* parquet_field, std::unique_ptr<ScalarColumnReader>&& metadata_reader,
+            std::unique_ptr<ScalarColumnReader>&& value_reader, std::vector<ShreddedFieldNode>&& shredded_fields,
+            std::vector<VariantPath> parsed_shredded_paths = {}, ColumnReaderPtr&& root_typed_value_reader = nullptr,
+            std::unique_ptr<TypeDescriptor> root_typed_value_type = nullptr, FormatScannerStats* stats = nullptr)
             : ColumnReader(parquet_field),
               _top_level(std::move(metadata_reader), std::move(value_reader), std::move(root_typed_value_reader),
                          std::move(root_typed_value_type)),
               _shredded_fields(std::move(shredded_fields)),
-              _requested_shredded_paths(std::move(parsed_shredded_paths)) {
+              _requested_shredded_paths(std::move(parsed_shredded_paths)),
+              _stats(stats) {
         // Both readers must be non-null for VariantColumnReader to function correctly
         DCHECK(_top_level.metadata_reader != nullptr) << "VariantColumnReader: metadata reader cannot be null";
         DCHECK(_top_level.value_reader != nullptr) << "VariantColumnReader: value reader cannot be null";
@@ -489,6 +488,8 @@ private:
     // In that case metadata/value base payload columns are never needed and can be skipped
     // entirely (IO range, offset-index selection, and data read).
     bool _skip_base_payload = false;
+    // Scan statistics for the row counts by read path; null when the caller does not collect them.
+    FormatScannerStats* _stats = nullptr;
 };
 
 // A thin, read-only wrapper ColumnReader that exposes zone-map filtering for a specific

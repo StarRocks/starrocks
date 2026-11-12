@@ -5462,4 +5462,65 @@ TEST_F(FileReaderTest, test_read_variant_shredding_full_column_ignores_extended_
     ASSERT_EQ(R"({"extra":1,"kind":"identity","note":"n1"})", variant_row_json(variant_col, 2));
 }
 
+// The ParquetVariant* scan counters count the rows of a VARIANT column by read path: the typed-only fast path (only the
+// requested shredded leaves are read), a fast path that found a fallback value in a leaf (the batch is read again with
+// the base payload), and a read of the whole variant (metadata and base payload).
+TEST_F(FileReaderTest, test_read_variant_counts_rows_by_read_path) {
+    struct RowCounts {
+        int64_t typed_only = 0;
+        int64_t fast_path_fallback = 0;
+        int64_t base_payload = 0;
+    };
+    // Reads one file with the given top-level field paths requested (none: the whole variant) and returns the change of
+    // the counters. g_hdfs_stats is shared by the tests of this file, so only the difference is meaningful.
+    auto read_counts = [&](const std::string& file, const std::vector<std::string>& fields, size_t expected_rows,
+                           RowCounts* counts) {
+        const RowCounts before{g_hdfs_stats.parquet_variant_typed_only_rows,
+                               g_hdfs_stats.parquet_variant_fast_path_fallback_rows,
+                               g_hdfs_stats.parquet_variant_base_payload_rows};
+        const std::string variant_file_path = "./be/test/formats/parquet/test_data/" + file;
+        auto file_reader = _create_file_reader(variant_file_path);
+        TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+        Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+        auto ctx = _create_scan_context(slot_descs, variant_file_path);
+        if (!fields.empty()) {
+            auto root_or = ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0);
+            ASSERT_TRUE(root_or.ok()) << root_or.status().to_string();
+            auto root = std::move(root_or).value();
+            for (const auto& field : fields) {
+                auto field_or = ColumnAccessPath::create(TAccessPathType::FIELD, field, 0, root->absolute_path());
+                ASSERT_TRUE(field_or.ok()) << field_or.status().to_string();
+                root->children().emplace_back(std::move(field_or).value());
+            }
+            ctx->format_scan_context.column_access_paths.emplace_back(std::move(root));
+        }
+        Status status = file_reader->init(&ctx->format_scan_context);
+        ASSERT_TRUE(status.ok()) << status.message();
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+        status = file_reader->get_next(&chunk);
+        ASSERT_TRUE(status.ok()) << status.message();
+        ASSERT_EQ(expected_rows, chunk->num_rows());
+        counts->typed_only = g_hdfs_stats.parquet_variant_typed_only_rows - before.typed_only;
+        counts->fast_path_fallback = g_hdfs_stats.parquet_variant_fast_path_fallback_rows - before.fast_path_fallback;
+        counts->base_payload = g_hdfs_stats.parquet_variant_base_payload_rows - before.base_payload;
+    };
+
+    RowCounts counts;
+    read_counts("variant_shredding_sparse.parquet", {"id"}, 5, &counts);
+    EXPECT_EQ(5, counts.typed_only);
+    EXPECT_EQ(0, counts.fast_path_fallback);
+    EXPECT_EQ(0, counts.base_payload);
+
+    read_counts("variant_shredding_sparse.parquet", {}, 5, &counts);
+    EXPECT_EQ(0, counts.typed_only);
+    EXPECT_EQ(0, counts.fast_path_fallback);
+    EXPECT_EQ(5, counts.base_payload);
+
+    read_counts("variant_shredding_field_fallback.parquet", {"a"}, 3, &counts);
+    EXPECT_EQ(0, counts.typed_only);
+    EXPECT_EQ(3, counts.fast_path_fallback);
+    EXPECT_EQ(0, counts.base_payload);
+}
+
 } // namespace starrocks::parquet

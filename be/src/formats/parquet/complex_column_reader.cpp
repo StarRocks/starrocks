@@ -37,6 +37,7 @@
 #include "exprs/literal.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/schema.h"
+#include "formats/scan_context.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "storage_primitive/column_expr_predicate.h"
@@ -2570,9 +2571,13 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     // If the fast path detects per-field fallback rows it returns false; shredded fields are
     // already populated so we fall through to the normal path skipping shredded re-reads.
     bool shredded_already_read = false;
+    const size_t rows_before = dst->size();
     if (_skip_base_payload) {
         ASSIGN_OR_RETURN(bool handled, _read_range_skip_base_payload(range, filter, variant_column, nullable_column));
         if (handled) {
+            if (_stats != nullptr) {
+                _stats->parquet_variant_typed_only_rows += dst->size() - rows_before;
+            }
             return Status::OK();
         }
         shredded_already_read = true;
@@ -2725,6 +2730,12 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
         DCHECK_EQ(variant_column->size(), num_rows) << "Final variant column size must equal num_rows";
     }
 
+    if (_stats != nullptr) {
+        // The batch is counted once: as fallback rows when the typed-only fast path ran first and found fallback
+        // values, otherwise as rows read together with the base payload.
+        (shredded_already_read ? _stats->parquet_variant_fast_path_fallback_rows
+                               : _stats->parquet_variant_base_payload_rows) += dst->size() - rows_before;
+    }
     return Status::OK();
 }
 

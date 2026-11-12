@@ -710,6 +710,15 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     // triggered on-demand (suggests active/lazy classification misprediction).
     _scanner_ctx.profile.parquet_lazy_full_trigger_count_counter =
             ADD_COUNTER(_runtime_profile, "ParquetLazyFullTriggerCount", TUnit::UNIT);
+
+    // Row counts of VARIANT columns by read path: the typed-only fast path, a fast path that found fallback values, and
+    // reads that include the metadata and the base payload.
+    _scanner_ctx.profile.parquet_variant_typed_only_rows_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetVariantTypedOnlyRows", TUnit::UNIT);
+    _scanner_ctx.profile.parquet_variant_fast_path_fallback_rows_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetVariantFastPathFallbackRows", TUnit::UNIT);
+    _scanner_ctx.profile.parquet_variant_base_payload_rows_counter =
+            ADD_COUNTER(_runtime_profile, "ParquetVariantBasePayloadRows", TUnit::UNIT);
     _scanner_ctx.profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
     _scanner_ctx.profile.scan_ranges_size = ADD_COUNTER(_runtime_profile, "ScanRangesSize", TUnit::BYTES);
     _scan_ranges_pruned_by_partition_value_counter =
