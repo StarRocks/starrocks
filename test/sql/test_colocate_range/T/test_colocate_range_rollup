@@ -1,9 +1,11 @@
 -- name: test_colocate_range_rollup @cloud
--- Rollups and synchronous materialized views on range colocate tables. One whose sort key starts with the
+-- Test Point: Rollups and synchronous materialized views on range colocate tables. One whose sort key starts with the
 -- group's colocate columns (same order and types) is accepted: it is cut along every ColocateRange of the
 -- group, a join on the colocate column that reads it is still planned colocated and returns what a
 -- non-colocated join returns, and it keeps up with later loads and partitions. One that moves, reorders
 -- or drops a colocate column is rejected, and a sort-key rewrite of a table that has a rollup stays rejected.
+-- Method: Check bucket counts with SHOW PARTITIONS, compare colocated and non-colocated join results,
+-- and verify accepted and rejected rollup sort keys before and after further loads and partitions.
 set enable_range_distribution = true;
 -- A load-time pre-split would add tablet boundaries that this case does not control.
 set enable_tablet_pre_split = false;
@@ -32,7 +34,8 @@ function: set_first_tablet_id("t1")
 alter table t1 split tablet (${tablet_id}) properties ('tablet_reshard_target_size' = '-3');
 function: wait_reshard_job_finish("t1", "SPLIT_TABLET", 1, 120)
 shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "g_rollup_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
-select buckets from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 't1';
+-- Read this table's buckets directly from FE rather than scanning cluster-wide partition metadata.
+function: print_query_columns("show partitions from t1", "Buckets")
 
 -- t2 joins the group after the split, so it gets one tablet per ColocateRange.
 create table t2 (
@@ -134,7 +137,7 @@ function: set_first_tablet_id("tp1")
 alter table tp1 split tablet (${tablet_id}) properties ('tablet_reshard_target_size' = '-3');
 function: wait_reshard_job_finish("tp1", "SPLIT_TABLET", 1, 120)
 shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "g_rollup_part_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
-select buckets from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'tp1';
+function: print_query_columns("show partitions from tp1", "Buckets")
 
 alter table tp1 add rollup rp (k1, k2, v) order by (k1);
 function: wait_alter_table_finish("ROLLUP", 8)
@@ -157,7 +160,7 @@ alter table tp1 add partition p2 values less than ('200000');
 alter table tp2 add partition p2 values less than ('200000');
 insert into tp1 values (3, 100001, 1), (15, 100002, 2), (25, 100003, 3), (15, 100004, 4);
 insert into tp2 values (3, 100001, 10), (15, 100002, 20), (25, 100003, 30), (15, 100004, 40);
-select buckets >= 3 from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'tp1' and partition_name = 'p2';
+function: print_query_columns("show partitions from tp1 where PartitionName = 'p2' and Buckets >= 3", "PartitionName")
 
 select count(*), sum(v) from tp1;
 select count(*), sum(v) from rp [_SYNC_MV_];
