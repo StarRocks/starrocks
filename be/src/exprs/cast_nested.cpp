@@ -57,6 +57,9 @@ StatusOr<ColumnPtr> CastMapExpr::evaluate_checked(ExprContext* context, Chunk* p
     auto casted_map = MapColumn::create(casted_key_column, casted_value_column,
                                         ColumnHelper::as_column<UInt32Column>(std::move(*src_offsets_column).mutate()));
     RETURN_IF_ERROR(down_cast<MapColumn*>(casted_map->as_mutable_raw_ptr())->unfold_const_children(_type));
+    if (orig_column->is_constant()) {
+        return ConstColumn::create(std::move(casted_map), orig_column->size());
+    }
     if (!orig_column->is_nullable()) {
         return casted_map;
     }
