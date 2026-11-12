@@ -3,8 +3,6 @@ displayed_sidebar: docs
 keywords: ['FE', 'Coordinator Node','memory', 'OOM', 'JVM', 'troubleshooting', 'heap']
 ---
 
-import MetaRecv from '../_assets/best_practices/fe_mem_meta_recv.mdx'
-import MetaRecvStep from '../_assets/best_practices/fe_mem_meta_recv_step.mdx'
 
 # FE / コーディネーターノードのメモリ不足問題のトラブルシューティング
 
@@ -209,7 +207,7 @@ GCログを[https://gceasy.io/](https://gceasy.io/)にアップロードし、**
 
 ### 3. FEプログラムの内部バグによってクラッシュが発生した
 
-<MetaRecv />
+この状況はここでの説明の範囲外です。[メタデータの復元](../administration/Meta_recovery.md)ドキュメントを参照してください。
 
 ### 4. JVMのバグによってFEがクラッシュした
 
@@ -701,7 +699,7 @@ SIMPLE_MAJORITY required 1 replica. But none were active with this master.
 
 **処理方法**：FEのJVMメモリ設定を増やしてください。本番環境では最低16GBを推奨し、その後はメタデータの増加に応じて調整してください。
 
-<MetaRecvStep />
+復旧については、[メタデータの復旧](../administration/Meta_recovery.md)ドキュメントのステップ8と9を参照してください。
 
 ***
 

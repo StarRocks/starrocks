@@ -4,8 +4,6 @@ sidebar_position: 100
 
 # Authentication and Authorization
 
-import AuthConcept from '../_assets/best_practices/auth_concept.mdx'
-import AuthFeature from '../_assets/best_practices/auth_feature.mdx'
 import AuthSeeAlso from '../_assets/best_practices/auth_see_also.mdx'
 
 This topic aims to provide a coherent guide for best practices on developing your own authentication and authorization workflow.
@@ -69,7 +67,28 @@ LDAP can be used:
 - As an **authentication** source (to validate usernames and passwords).
 - As a **group information** provider for access control.
 
-<AuthConcept />
+### UNIX Groups
+
+Sometimes users mirror LDAP groups locally (on the host OS) for security or isolation reasons, avoiding direct communication with external LDAP servers. These local UNIX groups can be used for authentication or access control enforcement.
+
+### OAuth, OIDC, and JWT
+
+:::tip
+
+**Quick Explanation of Terms**
+
+- **ID Token**: Proof of identity (I am me.)
+- **Access Token**: Proof of permission to access certain resources (I can do certain things.)
+- **OAuth 2.0**: Authorization framework that provides access tokens.
+- **OIDC**: Authentication layer on top of OAuth. Provides ID and Access Tokens.
+- **JWT**: Token format. Used by both OAuth and OIDC.
+
+:::
+
+**Practical Use:**
+
+- **OAuth-based login**: Redirects to an external login page (for example, Google), then back to the cluster. Requires browser access and redirect URL setup in advance.
+- **JWT-based login**: The user passes a token directly to the cluster, which requires a public key or endpoint setup in advance.
 
 ## Features
 
@@ -85,7 +104,11 @@ From v3.5 onward, StarRocks provides a modular, composable model to support vari
 
 ![Authentication and Authorization](../_assets/best_practices/auth_feature.png)
 
-<AuthFeature />
+From the feature's perspective:
+
+1. **Authentication Provider** – Supported protocols: Native user, LDAP, OIDC, and OAuth 2.0.
+2. **Group Provider** – Supported sources: LDAP, Operating System, and File-based Configuration.
+3. **Authorization System** – Supported systems: Native RBAC & IBAC, and Apache Ranger.
 
 ### Authentication
 
