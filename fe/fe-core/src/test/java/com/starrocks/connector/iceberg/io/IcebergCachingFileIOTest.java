@@ -86,22 +86,6 @@ public class IcebergCachingFileIOTest {
     }
 
     @Test
-    public void testNormalizeAzurePath() {
-        Assertions.assertNull(IcebergCachingFileIO.normalizeAzurePath(null));
-        Assertions.assertEquals("wasbs://c@acct.blob.core.windows.net/a/b.avro",
-                IcebergCachingFileIO.normalizeAzurePath("abfss://c@acct.blob.core.windows.net/a/b.avro"));
-        Assertions.assertEquals("wasb://c@acct.blob.core.windows.net/a",
-                IcebergCachingFileIO.normalizeAzurePath("abfs://c@acct.blob.core.windows.net/a"));
-        Assertions.assertEquals("wasbs://c@acct.blob.core.windows.net",
-                IcebergCachingFileIO.normalizeAzurePath("abfss://c@acct.blob.core.windows.net"));
-        // dfs endpoints and other schemes are left alone
-        String dfs = "abfss://c@acct.dfs.core.windows.net/a";
-        Assertions.assertEquals(dfs, IcebergCachingFileIO.normalizeAzurePath(dfs));
-        String s3 = "s3://bucket/a";
-        Assertions.assertEquals(s3, IcebergCachingFileIO.normalizeAzurePath(s3));
-    }
-
-    @Test
     public void testNormalizedAzurePathKeepsLogicalLocation() {
         String path = "abfss://c@acct.blob.core.windows.net/metadata/m0.avro";
         String normalized = "wasbs://c@acct.blob.core.windows.net/metadata/m0.avro";

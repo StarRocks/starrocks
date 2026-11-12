@@ -51,10 +51,10 @@ package com.starrocks.connector.iceberg.io;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
-import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.share.iceberg.AzurePathNormalizingFileIO;
 import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import com.starrocks.fs.azure.AzBlobURI;
@@ -122,29 +122,6 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private SerializableSupplier<Configuration> conf;
     private static final Pattern HADOOP_CATALOG_METADATA_JSON_PATTERN =
             Pattern.compile("^v\\d+(\\.gz)?\\.metadata\\.json(\\.gz)?$");
-
-    // Snowflake Horizon and some other Iceberg REST catalogs may return metadata paths using
-    // abfss:// with blob.core.windows.net hostnames. Hadoop's AzureBlobFileSystem (abfss scheme)
-    // expects dfs.core.windows.net endpoints, while NativeAzureFileSystem (wasbs scheme) is the
-    // correct driver for blob.core.windows.net. Normalize abfss://*@*.blob.core.windows.net to
-    // wasbs://*@*.blob.core.windows.net so that Hadoop can resolve the correct filesystem.
-    private static final Pattern ABFSS_BLOB_CORE_PATTERN =
-            Pattern.compile("^(abfss?)://([^@]+@[^.]+)\\.blob\\.core\\.windows\\.net(/.*)?$");
-
-    @VisibleForTesting
-    static String normalizeAzurePath(String path) {
-        if (path == null) {
-            return null;
-        }
-        java.util.regex.Matcher m = ABFSS_BLOB_CORE_PATTERN.matcher(path);
-        if (m.matches()) {
-            String scheme = "wasb" + (m.group(1).equals("abfss") ? "s" : "");
-            String authority = m.group(2);
-            String suffix = m.group(3) != null ? m.group(3) : "";
-            return scheme + "://" + authority + ".blob.core.windows.net" + suffix;
-        }
-        return path;
-    }
 
     @Override
     public void initialize(Map<String, String> properties) {
@@ -231,7 +208,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public InputFile newInputFile(String path) {
         try {
-            String normalizedPath = normalizeAzurePath(path);
+            String normalizedPath = AzurePathNormalizingFileIO.normalizeAzurePath(path);
             setWrappedConf(buildConfFromProperties(properties, normalizedPath));
             // Keep the caller's path as location(): the content cache and the parsed-manifest caches
             // (seeded under ManifestFile.path()) are keyed by it. Only the storage access is normalized.
@@ -246,7 +223,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public OutputFile newOutputFile(String path) {
         try {
-            String normalizedPath = normalizeAzurePath(path);
+            String normalizedPath = AzurePathNormalizingFileIO.normalizeAzurePath(path);
             setWrappedConf(buildConfFromProperties(properties, normalizedPath));
             return wrappedIO.newOutputFile(normalizedPath);
         } catch (StarRocksException e) {
@@ -258,7 +235,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
     @Override
     public void deleteFile(String path) {
-        wrappedIO.deleteFile(normalizeAzurePath(path));
+        wrappedIO.deleteFile(AzurePathNormalizingFileIO.normalizeAzurePath(path));
         // remove from cache, keyed by the caller's path like CachingInputFile.location().
         fileContentCache.invalidate(path);
     }
