@@ -6,7 +6,6 @@ toc_max_heading_level: 5
 
 # BROKER LOAD
 
-import LoadWarehouse from '../../../_assets/commonMarkdown/load_warehouse.mdx'
 
 ## 功能
 
@@ -771,8 +770,6 @@ StarRocks 自 3.2.3 版本起支持导入 JSON 格式的数据，相关参数如
   指定 JSON 数据的 CDC Envelope 格式。有效值：`debezium`。默认不设置（无 Envelope 包装）。设置为 `debezium` 时，StarRocks 将每条 JSON 消息解析为 Debezium CDC 事件，消息中须包含 `op` 字段（`c`=insert、`u`=update、`d`=delete、`r`=快照读取）以及 `after` 字段（c/u/r 操作）或 `before` 字段（d 操作），用于承载实际行数据。`payload` 为 `null` 的 tombstone 消息将被跳过。只能在 `format` 为 `json` 时指定，不能与 `json_root` 或 `strip_outer_array` 同时使用。
 
 另外，导入 JSON 格式的数据时，需要注意单个 JSON 对象的大小不能超过 4 GB。如果 JSON 文件中单个 JSON 对象的大小超过 4 GB，会提示 "This parser can't support a document that big." 错误。
-
-<LoadWarehouse />
 
 ## 列映射
 

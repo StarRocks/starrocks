@@ -5,7 +5,6 @@ description: "同期および非同期マテリアライズドビューを作成
 
 # CREATE MATERIALIZED VIEW
 
-import MVWarehouse from '../../../_assets/commonMarkdown/mv_warehouse.mdx'
 
 ## 説明
 
@@ -445,8 +444,6 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
   - `PCT`: （デフォルト）パーティション化されたマテリアライズドビューの場合、ベーステーブルにデータの変更があると影響を受けたパーティションのみリフレッシュされ、そのパーティションの結果の一貫性が保証されます。パーティション化されていないマテリアライズドビューの場合、ベーステーブルのいずれかが変更されるとマテリアライズドビュー全体がフルリフレッシュされます。
   - `INCREMENTAL`: 増分リフレッシュのみを行うことを保証します。マテリアライズドビューの定義で増分リフレッシュがサポートされていない場合や、非増分データに遭遇した場合、作成やリフレッシュが失敗します。
-
-<MVWarehouse />
 
 **query_statement** (必須)
 
