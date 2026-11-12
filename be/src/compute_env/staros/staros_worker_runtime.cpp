@@ -73,6 +73,8 @@ DECLARE_bool(fs_enable_buffer_prefetch);
 namespace staros::starlet::fslib {
 // Budget of the finished read-ahead blocks starlet keeps in memory. No installed starlet header declares it.
 DECLARE_int64(remote_read_retain_prefetched_bytes);
+// Whether a contended cache disk lets a retained block skip its cache write. No installed starlet header declares it.
+DECLARE_bool(remote_read_skip_contended_cache_writes);
 } // namespace staros::starlet::fslib
 
 namespace starrocks {
@@ -128,6 +130,12 @@ Status update_remote_read_retain_prefetched_bytes() {
     }
     staros::starlet::fslib::FLAGS_remote_read_retain_prefetched_bytes = bytes;
     return Status::OK();
+}
+void apply_remote_read_skip_contended_cache_writes() {
+    // starlet reads the flag only on the fill path of its remote I/O scheduler, and only for a fill whose block is
+    // already retained, so applying it while the scheduler is off or retains nothing changes no behavior.
+    staros::starlet::fslib::FLAGS_remote_read_skip_contended_cache_writes =
+            config::remote_read_skip_contended_cache_writes;
 }
 
 namespace fslib = staros::starlet::fslib;
@@ -330,6 +338,7 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
     if (auto st = update_remote_read_retain_prefetched_bytes(); !st.ok()) {
         LOG(WARNING) << st << "; not applied, starlet keeps no finished read-ahead block in memory";
     }
+    apply_remote_read_skip_contended_cache_writes();
 
     // Goes through UpdateFlagValue rather than a typed FLAGS_ assignment: starlet registers an update
     // hook on this flag that resolves the string to the enum its heartbeat path actually reads, and

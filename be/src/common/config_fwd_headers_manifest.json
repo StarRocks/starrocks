@@ -689,6 +689,7 @@
         "object_storage_max_connection",
         "object_storage_request_timeout_ms",
         "remote_read_retain_prefetched_bytes",
+        "remote_read_skip_contended_cache_writes",
         "s3_multipart_equal_part_size",
         "s3_use_list_objects_v1",
         "starlet_cache_dir",

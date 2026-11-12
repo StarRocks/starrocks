@@ -66,6 +66,7 @@ DECLARE_bool(fslib_s3_multipart_equal_part_size);
 DECLARE_bool(fs_enable_buffer_prefetch);
 namespace staros::starlet::fslib {
 DECLARE_int64(remote_read_retain_prefetched_bytes);
+DECLARE_bool(remote_read_skip_contended_cache_writes);
 } // namespace staros::starlet::fslib
 
 namespace starrocks {
@@ -1281,6 +1282,31 @@ TEST_F(StarOSWorkerTest, remote_read_retain_prefetched_bytes_dynamic_update_roll
     ASSERT_OK(registry->update_config("remote_read_retain_prefetched_bytes", "0"));
     EXPECT_EQ(0, config::remote_read_retain_prefetched_bytes);
     EXPECT_EQ(0, fslib::FLAGS_remote_read_retain_prefetched_bytes);
+}
+
+// The BE default must equal starlet's, so that this config alone changes no behavior.
+TEST_F(StarOSWorkerTest, skip_contended_cache_writes_applied_at_startup) {
+    gflags::FlagSaver flag_saver;
+    namespace fslib = staros::starlet::fslib;
+
+    auto configs = config::list_configs();
+    auto it = std::find_if(configs.begin(), configs.end(), [](const config::ConfigInfo& info) {
+        return info.name == "remote_read_skip_contended_cache_writes";
+    });
+    ASSERT_NE(configs.end(), it);
+    EXPECT_EQ("false", it->defval);
+    EXPECT_TRUE(it->valmutable);
+    gflags::CommandLineFlagInfo flag_info;
+    ASSERT_TRUE(gflags::GetCommandLineFlagInfo("remote_read_skip_contended_cache_writes", &flag_info));
+    EXPECT_EQ(flag_info.default_value, it->defval);
+
+    // Start from the opposite value each time, so both directions are really assigned.
+    for (bool value : {true, false}) {
+        SCOPED_UPDATE(bool, config::remote_read_skip_contended_cache_writes, value);
+        fslib::FLAGS_remote_read_skip_contended_cache_writes = !value;
+        apply_remote_read_skip_contended_cache_writes();
+        EXPECT_EQ(value, fslib::FLAGS_remote_read_skip_contended_cache_writes);
+    }
 }
 
 // `shutdown_staros_worker()` releases the starlet runtime while an in-flight load may still be

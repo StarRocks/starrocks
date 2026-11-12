@@ -561,6 +561,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: The maximum total size of finished read-ahead blocks of segment files that a node keeps in memory in a shared-data cluster. When the remote I/O scheduler (`remote_io_scheduler_enable`) reads blocks ahead for a query scan, a finished block stays in memory while the scan still covers it, and the scan copies its pages from memory instead of reading them back from the Data Cache. The block is still written to the Data Cache. Once the blocks kept in memory reach this size, later blocks are not kept. `0` disables this feature. This item has no effect while the remote I/O scheduler is disabled. Only segment files, which are never overwritten, are kept; other files such as metadata are not. The memory is counted toward the process, not toward any query. A raised value applies to the blocks finished afterwards. After the value is lowered, no new blocks are kept until the total falls below it, and a block already kept is released when it is next read while the total is still above the new value, or when the scan no longer covers it. Nothing is evicted in the background. A negative value is rejected.
 - Introduced in: -
 
+### remote_read_skip_contended_cache_writes
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the remote I/O scheduler in a shared-data cluster may skip writing a fetched block to Data Cache while the cache disk is contended, that is, at least 90% busy with reads taking at least 20% of its service time for two consecutive 250 ms samples. Only blocks fetched for the later part of a large query scan qualify, and only after the block is retained in memory under `remote_read_retain_prefetched_bytes`, from which its readers are served. A later read of a skipped block fetches it from object storage again. Enabling this item can help when the cache disk is slower than the network and scans read back blocks that earlier scans have just cached. It has no effect when `remote_io_scheduler_enable` is `false` or `remote_read_retain_prefetched_bytes` is `0`. A change takes effect on blocks fetched afterwards.
+- Introduced in: -
+
 ### s3_multipart_equal_part_size
 
 - Default: false

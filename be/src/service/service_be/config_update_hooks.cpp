@@ -717,6 +717,10 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     UPDATE_STARLET_CONFIG(s3_multipart_equal_part_size, fslib_s3_multipart_equal_part_size);
 #undef UPDATE_STARLET_CONFIG
     registry->register_callback("remote_read_retain_prefetched_bytes", update_remote_read_retain_prefetched_bytes);
+    registry->register_callback("remote_read_skip_contended_cache_writes", []() {
+        apply_remote_read_skip_contended_cache_writes();
+        return Status::OK();
+    });
 
     // Registered by hand rather than through UPDATE_STARLET_CONFIG, which stringifies a numeric config.
     // The value reaching here already passed the config's enum check, so the update can only fail if

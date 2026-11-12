@@ -184,6 +184,13 @@ CONF_mInt32(remote_prefetch_window_blocks, "128");
 // next read while the total is still over the budget, or when no reader covers it any more. The buffers are charged
 // to the process, not to a query. Must not be negative.
 CONF_mInt64(remote_read_retain_prefetched_bytes, "2147483648");
+// Whether starlet's remote I/O scheduler may skip the local-cache write of a block fill while the cache disk is
+// contended: 90% busy or more with reads taking at least 20% of its service time, for two 250 ms samples in a row. Only
+// a fill of the body of a big query scan qualifies, and only once its block is retained in memory (see
+// remote_read_retain_prefetched_bytes), which then serves its readers; a later reader fetches the block again. Helps when
+// the cache disk is slower than the network and a later scan reads back what an earlier one just cached. Has no effect
+// while the remote I/O scheduler is disabled or retains nothing. Forwarded to the starlet gflag of the same name.
+CONF_mBool(remote_read_skip_contended_cache_writes, "false");
 
 CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
 
