@@ -2279,7 +2279,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private String defaultTableCompressionAlgorithm = "lz4_frame";
 
     @VariableMgr.VarAttr(name = ENABLE_ADAPTIVE_SINK_DOP)
-    private boolean enableAdaptiveSinkDop = false;
+    private boolean enableAdaptiveSinkDop = true;
 
     @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE_V2, alias = JOIN_IMPLEMENTATION_MODE)
     private String joinImplementationMode = "auto"; // auto, merge, hash, nestloop
