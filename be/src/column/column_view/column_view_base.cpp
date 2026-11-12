@@ -158,13 +158,20 @@ void ColumnViewBase::_append_selective(int habitat_idx, const ColumnPtr& src,
 
 void ColumnViewBase::append_to(Column& dest_column, const uint32_t* indexes, uint32_t from, uint32_t count) const {
     _to_view();
-    DCHECK(from + count <= _num_rows);
+    // `from` and `count` window the INDEXES array; they do not range over this column's rows. Each
+    // indexes[i] is a row ordinal here, and the same position may be selected any number of times.
+    // Asserting from + count <= _num_rows compared how many positions were selected against how many
+    // rows exist, which are unrelated quantities, and aborted debug builds on ordinary input: a hash
+    // join selects _probe_state->count positions out of the build column (join_hash_map.hpp,
+    // _copy_build_nullable_column), so any build side smaller than a probe chunk tripped it. What has
+    // to hold is that every ordinal is in range, which is checked per element below.
     if (_concat_column) {
         dest_column.append_selective(*_concat_column, indexes, from, count);
         return;
     }
     for (auto i = from; i < from + count; ++i) {
         const auto n = indexes[i];
+        DCHECK_LT(n, _num_rows);
         const auto& habitat_column = _habitats[_habitat_idx[n]];
         const auto ordinal = habitat_column->is_constant() ? 0 : _row_idx[n];
         if (habitat_column->is_null(ordinal)) {
