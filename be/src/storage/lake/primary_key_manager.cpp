@@ -846,8 +846,12 @@ Status PrimaryKeyManager::_open_upsert_source_segment(const TxnLogPB_OpWrite& op
 
     // This is a segment this transaction just wrote and reads exactly once, so it is deliberately kept
     // out of the metacache: there is nothing for a later reader to reuse.
-    ASSIGN_OR_RETURN(*segment, Segment::open(fs, file_info, seg, tschema));
+    // Read as the publish that applies the write, or as a load of its own on a thread with no context.
+    LakeIOOptions lake_io_opts;
+    lake_io_opts.remote_read = ScopedRemoteReadContext::current_or_load();
+    ASSIGN_OR_RETURN(*segment, Segment::open(fs, file_info, seg, tschema, nullptr, nullptr, lake_io_opts));
     RandomAccessFileOptions opts;
+    opts.remote_read = lake_io_opts.remote_read;
     if (!file_info.encryption_meta.empty()) {
         ASSIGN_OR_RETURN(auto unwrap, KeyCache::instance().unwrap_encryption_meta(file_info.encryption_meta));
         opts.encryption_info = std::move(unwrap);
@@ -1844,6 +1848,7 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_lake_dcg_column_iterator(
     const auto& dcg_segment = dcg_segment_result.value();
     if (ctx.dcg_read_files.count(dcg_segment->file_name()) == 0) {
         RandomAccessFileOptions ropts;
+        ropts.remote_read = ScopedRemoteReadContext::current_or_load();
         if (!dcg_segment->file_info().encryption_meta.empty()) {
             ASSIGN_OR_RETURN(auto info,
                              KeyCache::instance().unwrap_encryption_meta(dcg_segment->file_info().encryption_meta));
@@ -2005,7 +2010,8 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
         // The column reads below go through the page cache, so a later publish can be served from memory
         // without touching the file. Nothing would then bring the footer block back into the local data
         // cache once it is evicted, so the footer read has to fill the data cache itself.
-        const LakeIOOptions segment_io_opts{.fill_data_cache = true};
+        const LakeIOOptions segment_io_opts{.fill_data_cache = true,
+                                            .remote_read = ScopedRemoteReadContext::current_or_load()};
         if (use_segment_cache) {
             // Reuse the metacache entry instead of re-parsing the footer and rebuilding a column
             // reader per schema column on every publish. Segment::open() is `_open_once` guarded, so
@@ -2026,6 +2032,7 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
         }
 
         RandomAccessFileOptions opts;
+        opts.remote_read = segment_io_opts.remote_read;
         if (!file_info.encryption_meta.empty()) {
             ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(file_info.encryption_meta));
             opts.encryption_info = std::move(info);

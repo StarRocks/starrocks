@@ -226,9 +226,9 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
     });
 }
 
-Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
+Status QueryContext::init_spill_manager(const TQueryOptions& query_options, const RemoteReadContext& remote_read) {
     Status st;
-    std::call_once(_init_spill_manager_once, [this, &st, &query_options]() {
+    std::call_once(_init_spill_manager_once, [this, &st, &query_options, &remote_read]() {
         auto* services = runtime_services(_query_execution_services);
         auto* g_spill_manager = services != nullptr ? services->global_spill_manager : nullptr;
         auto* spill_dir_mgr = services != nullptr ? services->spill_dir_mgr : nullptr;
@@ -238,7 +238,7 @@ Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
         }
         _spill_manager = std::make_unique<spill::QuerySpillManager>(query_id(), g_spill_manager, spill_dir_mgr);
         _query_runtime_state.set_query_spill_manager(_spill_manager.get());
-        st = _spill_manager->init_block_manager(query_options);
+        st = _spill_manager->init_block_manager(query_options, remote_read);
     });
     return st;
 }

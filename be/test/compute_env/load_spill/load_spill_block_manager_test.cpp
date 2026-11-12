@@ -21,9 +21,11 @@
 #include "base/container/raw_container.h"
 #include "base/testutil/assert.h"
 #include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "common/runtime_profile.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
+#include "fs/remote_read_context.h"
 
 namespace starrocks {
 
@@ -118,6 +120,50 @@ TEST_F(LoadSpillBlockManagerTest, test_clear_parent_path) {
     // The parent directory should have been deleted
     status = FileSystem::Default()->iterate_dir(parent_path, [](std::string_view) -> bool { return true; });
     ASSERT_TRUE(status.is_not_found()) << "Expected parent path to be deleted, but got: " << status;
+}
+
+namespace {
+std::vector<RemoteReadContext> g_load_spill_reads;
+
+Status record_load_spill_read(const RemoteReadContext& ctx, int64_t, const std::function<int64_t()>& read) {
+    g_load_spill_reads.push_back(ctx);
+    read();
+    return Status::OK();
+}
+} // namespace
+
+// A load reads its spill on remote storage back as a load, one flow per load.
+TEST_F(LoadSpillBlockManagerTest, test_remote_reads_are_the_loads) {
+    TUniqueId load_id;
+    load_id.hi = 12345;
+    load_id.lo = 67890;
+    auto block_manager = std::make_unique<LoadSpillBlockManager>(load_id, TUniqueId(), kTestDir, nullptr,
+                                                                 _local_spill_dir_mgr.get());
+    ASSERT_OK(block_manager->init());
+    g_scheduled_remote_read.store(&record_load_spill_read);
+    DeferOp reset([]() {
+        g_scheduled_remote_read.store(nullptr);
+        g_load_spill_reads.clear();
+    });
+
+    ASSIGN_OR_ABORT(auto block, block_manager->acquire_block(1024, /*force_remote=*/true));
+    ASSERT_TRUE(block->is_remote());
+    ASSERT_OK(block->append({Slice("test_data")}));
+    ASSERT_OK(block_manager->release_block(block));
+    ASSIGN_OR_ABORT(auto input_stream, block->get_readable());
+    raw::RawString buffer;
+    buffer.resize(9);
+    ASSERT_OK(input_stream->read_fully(buffer.data(), 9));
+    ASSERT_EQ(buffer, "test_data");
+
+    ASSERT_FALSE(g_load_spill_reads.empty());
+    for (const auto& ctx : g_load_spill_reads) {
+        EXPECT_TRUE(ctx.is_set);
+        EXPECT_EQ(RemoteReadContext::Workload::LOAD, ctx.workload);
+        EXPECT_EQ(RemoteReadContext::flow_id_of(load_id.hi, load_id.lo), ctx.flow_id);
+    }
+    block.reset();
+    ASSERT_OK(block_manager->clear_parent_path());
 }
 
 // Test that destroying LoadSpillBlockManager does NOT clean up the spill parent directory.

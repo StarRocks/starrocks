@@ -95,6 +95,33 @@ inline CacheOptions::ReadMode to_fslib_read_mode(bool skip_read_cache, bool skip
     return skip_fill_cache ? CacheOptions::ReadMode::READ_THROUGH_NO_FILL : CacheOptions::ReadMode::READ_THROUGH;
 }
 
+// Hands the BE's read attribution to the remote read scheduler of starlet. Without a started scheduler starlet
+// ignores it, and reads are done exactly as before.
+inline staros::starlet::fslib::RemoteReadContext to_fslib_remote_read(const RemoteReadContext& ctx) {
+    namespace fslib = staros::starlet::fslib;
+    fslib::RemoteReadContext out;
+    out.is_set = ctx.is_set;
+    switch (ctx.workload) {
+    case RemoteReadContext::Workload::QUERY:
+        out.workload = fslib::ReadWorkload::QUERY;
+        break;
+    case RemoteReadContext::Workload::COMPACTION:
+        out.workload = fslib::ReadWorkload::COMPACTION;
+        break;
+    case RemoteReadContext::Workload::OTHER_BACKGROUND:
+        out.workload = fslib::ReadWorkload::OTHER_BACKGROUND;
+        break;
+    case RemoteReadContext::Workload::LOAD:
+        out.workload = fslib::ReadWorkload::LOAD;
+        break;
+    }
+    out.group_id = ctx.group_id;
+    out.group_weight = ctx.group_weight;
+    out.group_config_version = ctx.group_config_version;
+    out.flow_id = ctx.flow_id;
+    return out;
+}
+
 static const std::string kFileTagType = "type";
 static const std::string kFileTagTypeData = "data";
 static const std::string kFileTagTypeMeta = "meta";
@@ -229,7 +256,7 @@ public:
 
         const auto& read_stats = (*stream_st)->get_io_stats();
         auto stats = std::make_unique<io::NumericStatistics>();
-        stats->reserve(11);
+        stats->reserve(14);
         stats->append(kBytesReadLocalDisk, read_stats.bytes_read_local_disk);
         stats->append(kBytesWriteLocalDisk, read_stats.bytes_write_local_disk);
         stats->append(kBytesReadRemote, read_stats.bytes_read_remote);
@@ -241,6 +268,9 @@ public:
         stats->append(kPrefetchHitCount, read_stats.prefetch_hit_count);
         stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
         stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
+        stats->append(kRemoteQueueWaitNs, read_stats.remote_queue_wait_ns);
+        stats->append(kRemoteFillWaitNs, read_stats.remote_fill_wait_ns);
+        stats->append(kRemoteFillJoins, read_stats.remote_fill_joins);
         return std::move(stats);
     }
 
@@ -369,6 +399,8 @@ public:
         auto opt = ReadOptions();
         opt.cache.read_mode = to_fslib_read_mode(opts.skip_disk_cache, opts.skip_fill_local_cache);
         opt.buffer_size = opts.buffer_size;
+        // A file opened without a context of its own takes the work running on this thread, if any.
+        opt.remote_read = to_fslib_remote_read(ScopedRemoteReadContext::or_current(opts.remote_read));
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }
@@ -398,6 +430,8 @@ public:
         auto opt = ReadOptions();
         opt.cache.read_mode = to_fslib_read_mode(opts.skip_disk_cache, opts.skip_fill_local_cache);
         opt.buffer_size = opts.buffer_size;
+        // A sequential file has no context of its own: it takes the work running on this thread.
+        opt.remote_read = to_fslib_remote_read(ScopedRemoteReadContext::or_current(RemoteReadContext{}));
         auto file_st = (*fs_st)->open(pair.first, opt);
 
         if (!file_st.ok()) {

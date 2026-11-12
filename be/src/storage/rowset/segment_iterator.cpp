@@ -894,6 +894,10 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
           _bitmap_index_evaluator(_schema, _opts.pred_tree),
           _predicate_columns(_opts.pred_tree.num_columns()),
           _enable_predicate_col_late_materialize(_opts.enable_predicate_col_late_materialize) {
+    // A file is attributed when it is opened, and the column files are opened lazily, on whatever thread reads first
+    // -- a publish's partial update thread pool, say. Without a context of its own, the iterator takes the work that
+    // builds it.
+    _opts.lake_io_opts.remote_read = ScopedRemoteReadContext::or_current(_opts.lake_io_opts.remote_read);
     // Only a vector (ANN) query truncates the candidate set by rank, so only it needs deletes folded in
     // before the search. For the lake split-child path (precomputed scan range) this stays true because
     // the seed already applied it to the range the child inherits.
@@ -2012,7 +2016,8 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
 
     RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
                                  .buffer_size = _opts.lake_io_opts.buffer_size,
-                                 .skip_disk_cache = _opts.lake_io_opts.skip_disk_cache};
+                                 .skip_disk_cache = _opts.lake_io_opts.skip_disk_cache,
+                                 .remote_read = _opts.lake_io_opts.remote_read};
 
     std::string dcg_filename;
     FileEncryptionInfo dcg_encryption_info;
@@ -5012,6 +5017,12 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile, bool keep_ba
             _opts.stats->prefetch_wait_finish_ns += value;
         } else if (name == kPrefetchPendingNs) {
             _opts.stats->prefetch_pending_ns += value;
+        } else if (name == kRemoteQueueWaitNs) {
+            _opts.stats->remote_io_queue_wait_ns += value;
+        } else if (name == kRemoteFillWaitNs) {
+            _opts.stats->remote_io_fill_wait_ns += value;
+        } else if (name == kRemoteFillJoins) {
+            _opts.stats->remote_io_fill_joins += value;
         }
     }
 }

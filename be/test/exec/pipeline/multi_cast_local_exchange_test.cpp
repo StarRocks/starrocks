@@ -112,7 +112,7 @@ TEST(MultiCastLocalExchangeTest, spillableExchangerReportsPendingTasks) {
     query_ctx->set_query_execution_services(&query_execution_services);
     query_ctx->init_mem_tracker(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit(),
                                 RuntimeEnv::GetInstance()->query_pool_mem_tracker());
-    ASSERT_OK(query_ctx->init_spill_manager(options));
+    ASSERT_OK(query_ctx->init_spill_manager(options, RemoteReadContext{}));
     query_ctx->set_query_execution_services(nullptr);
 
     RuntimeState state(query_ctx->query_id(), generate_uuid(), options, TQueryGlobals{}, &query_execution_services,

@@ -34,6 +34,7 @@
 #include "compute_env/global_dict/parser.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/query/partition_scan_range_pruner.h"
+#include "compute_env/query/query_remote_read.h"
 #include "compute_env/query/query_runtime_state.h"
 #include "compute_env/query/query_scan_metrics.h"
 #include "compute_env/runtime_range_pruner.hpp"
@@ -530,6 +531,8 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
             !config::disable_storage_page_cache && _scan_range.fill_data_cache && !_scan_range.skip_page_cache;
     _params.lake_io_opts.fill_data_cache = _scan_range.fill_data_cache;
     _params.lake_io_opts.skip_disk_cache = _scan_range.skip_disk_cache;
+    // Set on the files themselves: some are opened on other threads (parallel segment loads).
+    _params.lake_io_opts.remote_read = query_remote_read_context(_runtime_state);
 
     if (thrift_lake_scan_node.__isset.sorted_by_keys_per_tablet) {
         _params.sorted_by_keys_per_tablet = thrift_lake_scan_node.sorted_by_keys_per_tablet;
@@ -1599,6 +1602,10 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _prefetch_hit_counter = ADD_CHILD_COUNTER(_runtime_profile, "PrefetchHitCount", TUnit::UNIT, io_statistics_name);
     _prefetch_wait_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchWaitFinishTime", io_statistics_name);
     _prefetch_pending_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchPendingTime", io_statistics_name);
+    _remote_io_queue_wait_timer = ADD_CHILD_TIMER(_runtime_profile, "RemoteIOQueueWaitTime", io_statistics_name);
+    _remote_io_fill_wait_timer = ADD_CHILD_TIMER(_runtime_profile, "RemoteIOFillWaitTime", io_statistics_name);
+    _remote_io_fill_join_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemoteIOFillJoinCount", TUnit::UNIT, io_statistics_name);
 }
 
 void LakeDataSource::update_realtime_counter(Chunk* chunk) {
@@ -1815,6 +1822,9 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_prefetch_hit_counter, reader_stats.prefetch_hit_count);
     COUNTER_UPDATE(_prefetch_wait_finish_timer, reader_stats.prefetch_wait_finish_ns);
     COUNTER_UPDATE(_prefetch_pending_timer, reader_stats.prefetch_pending_ns);
+    COUNTER_UPDATE(_remote_io_queue_wait_timer, reader_stats.remote_io_queue_wait_ns);
+    COUNTER_UPDATE(_remote_io_fill_wait_timer, reader_stats.remote_io_fill_wait_ns);
+    COUNTER_UPDATE(_remote_io_fill_join_counter, reader_stats.remote_io_fill_joins);
 
     // update cache related info for CACHE SELECT
     if (_runtime_state->query_options().__isset.query_type &&

@@ -650,6 +650,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
             // check, or a narrowed publish stalls forever on the mismatch above.
             size_t footer_size_hint = 16 * 1024;
             LakeIOOptions lake_io_opts{.fill_data_cache = false, .buffer_size = -1};
+            lake_io_opts.remote_read = ScopedRemoteReadContext::current_or_load();
             ASSIGN_OR_RETURN(auto segment, params.tablet->tablet_mgr()->load_segment(
                                                    src, segment_id, &footer_size_hint, lake_io_opts,
                                                    false /*fill_meta_cache*/, params.tablet_schema));
@@ -1178,6 +1179,7 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     const auto& del_meta = params.op_write.dels_meta(del_id);
     const std::string& path = del_meta.name();
     RandomAccessFileOptions opts;
+    opts.remote_read = ScopedRemoteReadContext::current_or_load();
     if (del_meta.has_encryption_meta()) {
         // When upgrade from old version, `encryption_meta` could be empty.
         auto& meta = del_meta.encryption_meta();

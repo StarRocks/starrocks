@@ -126,7 +126,8 @@ public:
     const std::shared_ptr<MemTracker>& mem_tracker() const { return _mem_tracker; }
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
 
-    Status init_spill_manager(const TQueryOptions& query_options);
+    // `remote_read` is whom the reads of the query's spill on remote storage are for.
+    Status init_spill_manager(const TQueryOptions& query_options, const RemoteReadContext& remote_read);
     Status init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue);
     /// Release the workgroup token only once to avoid double-free.
     /// This method should only be invoked while the QueryContext is still valid,

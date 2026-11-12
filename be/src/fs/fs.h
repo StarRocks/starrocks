@@ -22,6 +22,7 @@
 #include "common/statusor.h"
 #include "fs/encryption.h"
 #include "fs/fs_options.h"
+#include "fs/remote_read_context.h"
 #include "io/input_stream.h"
 #include "io/seekable_input_stream.h"
 
@@ -60,6 +61,8 @@ struct RandomAccessFileOptions {
     int64_t buffer_size = -1;
     FileEncryptionInfo encryption_info;
     bool skip_disk_cache = false;
+    // Who the remote reads of this file are for; only the starlet filesystem uses it.
+    RemoteReadContext remote_read;
 };
 
 struct DirEntry {
