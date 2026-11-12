@@ -39,9 +39,11 @@ import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.mv.hybrid.MVHybridRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
@@ -54,14 +56,19 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
 
 /**
  * EXPLAIN / TRACE REFRESH plans the pct path against a snapshot it freezes for itself; the change window a refresh in
@@ -77,6 +84,103 @@ public class IvmExplainPinStateIsolationTest extends MVIVMIcebergTestBase {
         Config.proc_profile_cpu_enable = false;
         Config.proc_profile_mem_enable = false;
         MVIVMIcebergTestBase.beforeClass();
+    }
+
+    private static Stream<Arguments> explainCases() {
+        List<Arguments> cases = new ArrayList<>();
+        for (String mode : List.of("auto", "pct")) {
+            for (String prefix : List.of("EXPLAIN", "EXPLAIN ANALYZE", "TRACE TIMES")) {
+                for (String level : List.of("NORMAL", "ANALYZE")) {
+                    for (boolean force : List.of(false, true)) {
+                        for (boolean pending : List.of(false, true)) {
+                            cases.add(Arguments.of(mode, prefix, level, force, pending));
+                        }
+                    }
+                }
+            }
+        }
+        return cases.stream();
+    }
+
+    @ParameterizedTest
+    @MethodSource("explainCases")
+    void testRepeatedExplainPreservesSharedWindow(String mode, String prefix, String level,
+                                                         boolean force, boolean pending) throws Exception {
+        mockLiveVersion(2L);
+        MaterializedView mv = createView(mode, false);
+        seedTvrBaselineAtVersionZero(mv);
+        failIncrementalPlanning();
+        MaterializedView.AsyncRefreshContext shared = mv.getRefreshScheme().getAsyncRefreshContext();
+        if (pending) {
+            shared.replaceTempBaseTableInfoTvrDeltaMap("running-refresh-job",
+                    Map.of(mv.getBaseTableInfos().get(0), TvrTableDelta.of(0L, 1L)));
+        }
+        Map<BaseTableInfo, TvrVersionRange> window = Map.copyOf(shared.getTempBaseTableInfoTvrDeltaMap());
+        Map<BaseTableInfo, TvrVersionRange> baseline = Map.copyOf(tvrBaseline(mv));
+        Set<String> transactions = transactionIds(mv);
+        String owner = shared.getTempTvrOwnerStartTaskRunId();
+        new MockUp<InsertPlanner>() {
+            @Mock
+            public ExecPlan plan(Invocation invocation, InsertStmt insert, ConnectContext ctx) throws Exception {
+                // Check while the fallback is planning too: restoring shared state afterwards is insufficient.
+                assertSharedState(mv, owner, window, baseline, transactions);
+                return invocation.proceed(insert, ctx);
+            }
+        };
+        String previousLevel = Config.query_explain_level;
+        try {
+            Config.query_explain_level = level;
+            for (int i = 0; i < 3; i++) {
+                Explained explained = explain(mv, prefix, force);
+                TaskRun run = explained.run();
+                Assertions.assertEquals("PCT", run.getStatus().getMvTaskRunExtraMessage().getRefreshMode());
+                assertSharedState(mv, owner, window, baseline, transactions);
+                if (mode.equals("auto")) {
+                    MVTaskRunProcessor processor = getMVTaskRunProcessor(run);
+                    Map<String, TvrVersionRange> pins = processor.getMvTaskRunContext()
+                            .getRefreshRuntimeState().getPinnedTvrMap();
+                    Assertions.assertFalse(pins.isEmpty(), "EXPLAIN must still plan with its own frozen window");
+                    pins.values().forEach(pin -> Assertions.assertEquals(2L, pin.to().getVersion()));
+                    Assertions.assertTrue(explained.plan().getExplainString(TExplainLevel.NORMAL).contains("Snapshot@(2)"));
+                    Assertions.assertFalse(run.getStatus().getMvTaskRunExtraMessage()
+                            .getPinnedSnapshotIdMap().isEmpty());
+                }
+            }
+        } finally {
+            Config.query_explain_level = previousLevel;
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"NORMAL, false", "ANALYZE, false", "NORMAL, true", "ANALYZE, true"})
+    void testFailedPctPlanningPreservesSharedWindow(String level, boolean force) throws Exception {
+        mockLiveVersion(2L);
+        MaterializedView mv = createView("auto", false);
+        seedTvrBaselineAtVersionZero(mv);
+        failIncrementalPlanning();
+        MaterializedView.AsyncRefreshContext shared = mv.getRefreshScheme().getAsyncRefreshContext();
+        Map<BaseTableInfo, TvrVersionRange> window = Map.of(mv.getBaseTableInfos().get(0), TvrTableDelta.of(0L, 1L));
+        shared.replaceTempBaseTableInfoTvrDeltaMap("running-refresh-job", window);
+        Map<BaseTableInfo, TvrVersionRange> baseline = Map.copyOf(tvrBaseline(mv));
+        Set<String> transactions = transactionIds(mv);
+        new MockUp<InsertPlanner>() {
+            @Mock
+            public ExecPlan plan(InsertStmt insert, ConnectContext ctx) throws Exception {
+                assertSharedState(mv, "running-refresh-job", window, baseline, transactions);
+                throw new SemanticException("PCT planning failed (simulated)");
+            }
+        };
+        String previousLevel = Config.query_explain_level;
+        try {
+            Config.query_explain_level = level;
+            for (int i = 0; i < 3; i++) {
+                DmlException error = Assertions.assertThrows(DmlException.class, () -> explain(mv, "EXPLAIN", force));
+                Assertions.assertTrue(error.getMessage().contains("PCT planning failed"), error.getMessage());
+                assertSharedState(mv, "running-refresh-job", window, baseline, transactions);
+            }
+        } finally {
+            Config.query_explain_level = previousLevel;
+        }
     }
 
     @ParameterizedTest
@@ -122,13 +226,17 @@ public class IvmExplainPinStateIsolationTest extends MVIVMIcebergTestBase {
         TaskRun batch = nextOf(first);
         Assertions.assertNotNull(batch, "the fallback was not batched");
         live.set(3L);
+        Map<BaseTableInfo, TvrVersionRange> baseline = Map.copyOf(tvrBaseline(mv));
+        Set<String> transactions = transactionIds(mv);
 
-        for (String prefix : List.of("EXPLAIN", "TRACE TIMES")) {
+        for (String prefix : List.of("EXPLAIN", "EXPLAIN ANALYZE", "TRACE TIMES")) {
             for (boolean force : List.of(false, true)) {
                 explain(mv, prefix, force);
                 String step = prefix + ", force=" + force;
                 Assertions.assertEquals(job, refreshContext(mv).getTempTvrOwnerStartTaskRunId(), step);
                 Assertions.assertEquals(frozen, refreshContext(mv).getTempBaseTableInfoTvrDeltaMap(), step);
+                Assertions.assertEquals(baseline, tvrBaseline(getMv(mv.getName())), step);
+                Assertions.assertEquals(transactions, transactionIds(getMv(mv.getName())), step);
             }
         }
 
@@ -207,9 +315,10 @@ public class IvmExplainPinStateIsolationTest extends MVIVMIcebergTestBase {
     private MaterializedView createView(String mode, boolean partitioned) throws Exception {
         String name = "mv_explain_pin_" + VIEWS.incrementAndGet();
         String source = partitioned ? "`partitioned_db`.`t1`" : "`unpartitioned_db`.`t0`";
+        String ddlMode = mode.equals("pct") ? "pct" : "incremental";
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + name +
                 (partitioned ? " PARTITION BY `date`" : "") +
-                " REFRESH DEFERRED MANUAL PROPERTIES (\"refresh_mode\" = \"incremental\"" +
+                " REFRESH DEFERRED MANUAL PROPERTIES (\"refresh_mode\" = \"" + ddlMode + "\"" +
                 (partitioned ? ", \"partition_refresh_number\" = \"1\"" : "") +
                 ") AS SELECT id, data, date FROM `iceberg0`." + source);
         MaterializedView mv = getMv(name);
@@ -322,5 +431,25 @@ public class IvmExplainPinStateIsolationTest extends MVIVMIcebergTestBase {
 
     private static Object commitInfoOf(TransactionState txnState) {
         return ((InsertTxnCommitAttachment) txnState.getTxnCommitAttachment()).getIvmRefreshCommitInfo();
+    }
+
+    private static Set<String> transactionIds(MaterializedView mv) throws Exception {
+        var manager = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getDatabaseTransactionMgr(mv.getDbId());
+        Set<String> ids = new TreeSet<>();
+        for (boolean running : List.of(true, false)) {
+            manager.getTxnStateInfoList(running, Integer.MAX_VALUE).forEach(row -> ids.add(row.get(0)));
+        }
+        return ids;
+    }
+
+    private void assertSharedState(MaterializedView mv, String owner,
+                                 Map<BaseTableInfo, TvrVersionRange> window,
+                                 Map<BaseTableInfo, TvrVersionRange> baseline,
+                                 Set<String> transactions) throws Exception {
+        MaterializedView.AsyncRefreshContext shared = getMv(mv.getName()).getRefreshScheme().getAsyncRefreshContext();
+        Assertions.assertEquals(owner, shared.getTempTvrOwnerStartTaskRunId());
+        Assertions.assertEquals(window, shared.getTempBaseTableInfoTvrDeltaMap());
+        Assertions.assertEquals(baseline, Map.copyOf(tvrBaseline(getMv(mv.getName()))));
+        Assertions.assertEquals(transactions, transactionIds(mv), "EXPLAIN must not start or abort INSERT transactions");
     }
 }

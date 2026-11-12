@@ -111,11 +111,8 @@ public class IvmExplainRefreshIsolationTest extends MVIVMIcebergTestBase {
                 Assertions.assertEquals(transactions, transactionIds(mv),
                         "failed EXPLAIN must not even create an aborted transaction");
                 Assertions.assertEquals(baseline, baseline(mv));
-                // Upstream AUTO fallback still freezes a shared PCT window; its isolation is a separate issue.
-                if (mode.equals("incremental")) {
-                    Assertions.assertTrue(mv.getRefreshScheme().getAsyncRefreshContext()
-                            .getTempBaseTableInfoTvrDeltaMap().isEmpty());
-                }
+                Assertions.assertTrue(mv.getRefreshScheme().getAsyncRefreshContext()
+                        .getTempBaseTableInfoTvrDeltaMap().isEmpty());
             }
         } finally {
             Config.query_explain_level = previousLevel;
