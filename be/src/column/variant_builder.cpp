@@ -279,9 +279,7 @@ StatusOr<std::vector<std::string_view>> strict_metadata_keys(std::string_view ra
     RETURN_IF_ERROR(budget->consume(0, raw.size()));
     RETURN_IF_ERROR(VariantRowValue::validate_metadata(raw));
     const uint8_t header = static_cast<uint8_t>(raw[0]);
-    if ((header & 0x20) != 0) {
-        return Status::InvalidArgument("Reserved VARIANT metadata header bit");
-    }
+    // Metadata bit 5 is reserved and must be ignored by readers.
     const uint8_t width = (header >> 6) + 1;
     if (raw.size() < size_t{1} + width) {
         return Status::InvalidArgument("Truncated VARIANT dictionary size");

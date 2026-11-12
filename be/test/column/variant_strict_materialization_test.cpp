@@ -274,3 +274,57 @@ PARALLEL_TEST(VariantStrictMaterializationTest, array_with_nested_variant_uses_s
 }
 
 } // namespace starrocks
+
+namespace starrocks {
+PARALLEL_TEST(VariantStrictMaterializationTest, accepts_nonunique_dictionary_without_sorted_flag) {
+    const char metadata[] = {0x01, 2, 0, 1, 2, 'a', 'a'};
+    // The single object field references the second dictionary entry: {"a":7}.
+    const char value[] = {2, 1, 1, 0, 2, 12, 7};
+    ASSERT_TRUE(VariantBuilder::validate_row_strict(std::string_view(metadata, sizeof(metadata)),
+                                                    std::string_view(value, sizeof(value)))
+                        .ok());
+    auto column = VariantColumn::create();
+    column->append_shredded(Slice(metadata, sizeof(metadata)), Slice(value, sizeof(value)));
+    auto materialized = column->materialize_row_strict(0);
+    ASSERT_TRUE(materialized.ok()) << materialized.status();
+    auto a = materialized->get_value().get_object_by_key(materialized->get_metadata(), "a");
+    ASSERT_TRUE(a.ok()) << a.status();
+    ASSERT_EQ(7, a->get_int8().value());
+}
+
+PARALLEL_TEST(VariantStrictMaterializationTest, ignores_metadata_reserved_bit) {
+    for (const uint8_t header : {0x21, 0x31}) {
+        const char metadata[] = {static_cast<char>(header), 2, 0, 1, 2, 'a', 'b'};
+        const char value[] = {2, 1, 1, 0, 2, 12, 7};
+        auto column = VariantColumn::create();
+        column->append_shredded(Slice(metadata, sizeof(metadata)), Slice(value, sizeof(value)));
+        auto result = column->materialize_row_strict(0);
+        ASSERT_TRUE(result.ok()) << result.status();
+        ASSERT_EQ(std::string_view(metadata, sizeof(metadata)), result->get_metadata().raw());
+        auto b = result->get_value().get_object_by_key(result->get_metadata(), "b");
+        ASSERT_TRUE(b.ok()) << b.status();
+        ASSERT_EQ(7, b->get_int8().value());
+    }
+}
+
+PARALLEL_TEST(VariantStrictMaterializationTest, metadata_relaxation_preserves_required_validation) {
+    const char null_value[] = {0};
+    for (const uint8_t header : {0x11, 0x31}) {
+        for (const auto& names : {std::string("aa"), std::string("ba")}) {
+            const char metadata[] = {static_cast<char>(header), 2, 0, 1, 2, names[0], names[1]};
+            ASSERT_FALSE(VariantBuilder::validate_row_strict(std::string_view(metadata, sizeof(metadata)),
+                                                             std::string_view(null_value, sizeof(null_value)))
+                                 .ok());
+        }
+    }
+    // Nonunique dictionary entries do not allow two same-named fields in one object.
+    const char metadata[] = {0x01, 2, 0, 1, 2, 'a', 'a'};
+    const char duplicate_fields[] = {2, 2, 0, 1, 0, 2, 4, 12, 7, 12, 8};
+    ASSERT_FALSE(VariantBuilder::validate_row_strict(std::string_view(metadata, sizeof(metadata)),
+                                                     std::string_view(duplicate_fields, sizeof(duplicate_fields)))
+                         .ok());
+    const char invalid_extent[] = {0x21, 1, 0, 9, 'a'};
+    ASSERT_FALSE(
+            VariantBuilder::validate_metadata_strict(std::string_view(invalid_extent, sizeof(invalid_extent))).ok());
+}
+} // namespace starrocks

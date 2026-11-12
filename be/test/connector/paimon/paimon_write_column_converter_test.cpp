@@ -226,9 +226,10 @@ TEST_F(PaimonWriteColumnConverterTest, NativeTimestampPrecisionIsNotInferredOnly
     auto timestamp = TimestampColumn::create();
     timestamp->append(TimestampValue::create(1969, 12, 31, 23, 59, 59, 120000));
     for (int precision = 0; precision <= 9; ++precision) {
-        auto unit = precision == 0 ? arrow::TimeUnit::SECOND
-                                   : precision <= 3 ? arrow::TimeUnit::MILLI
-                                                    : precision <= 6 ? arrow::TimeUnit::MICRO : arrow::TimeUnit::NANO;
+        auto unit = precision == 0   ? arrow::TimeUnit::SECOND
+                    : precision <= 3 ? arrow::TimeUnit::MILLI
+                    : precision <= 6 ? arrow::TimeUnit::MICRO
+                                     : arrow::TimeUnit::NANO;
         const auto target = arrow::field(
                 "t", arrow::timestamp(unit), true,
                 arrow::key_value_metadata({"starrocks.paimon.timestamp.precision"}, {std::to_string(precision)}));
@@ -367,11 +368,32 @@ TEST_F(PaimonWriteColumnConverterTest, VariantSqlNullIsDistinctFromVariantNullAn
     EXPECT_TRUE(convert_one(nullable(empty, {1}), TypeDescriptor::create_variant_type(), variant_field()).ok());
 }
 
+TEST_F(PaimonWriteColumnConverterTest, VariantAcceptsNonuniqueDictionaryAndIgnoresMetadataReservedBit) {
+    // Each object has only one field, referencing the second (possibly duplicate) dictionary entry.
+    const auto value = bytes({2, 1, 1, 0, 2, 12, 7});
+    for (const auto& metadata : {bytes({0x01, 2, 0, 1, 2, 'a', 'a'}), bytes({0x21, 2, 0, 1, 2, 'a', 'a'}),
+                                 bytes({0x21, 2, 0, 1, 2, 'a', 'b'}), bytes({0x31, 2, 0, 1, 2, 'a', 'b'})}) {
+        auto variant = VariantColumn::create();
+        variant->append_shredded(Slice(metadata), Slice(value));
+        auto batch = convert_one(variant, TypeDescriptor::create_variant_type(), variant_field());
+        ASSERT_TRUE(batch.ok()) << batch.status();
+        const auto& result = static_cast<const arrow::StructArray&>(*batch.value()->column(0));
+        EXPECT_EQ(metadata, static_cast<const arrow::BinaryArray&>(*result.field(1)).GetString(0));
+        EXPECT_EQ(value, static_cast<const arrow::BinaryArray&>(*result.field(0)).GetString(0));
+    }
+}
+
 TEST_F(PaimonWriteColumnConverterTest, VariantRejectsMalformedMetadataValuesAndUnsupportedPublicTags) {
     const auto valid_metadata = std::string(VariantMetadata::kEmptyMetadata);
     const auto valid_object_metadata = bytes({0x11, 2, 0, 1, 2, 'a', 'b'});
     const std::vector<std::pair<std::string, std::string>> invalid = {
-            {bytes({1, 1, 0, 8, 'a'}), bytes({0})},                       // metadata end offset outside bytes
+            {bytes({1, 1, 0, 8, 'a'}), bytes({0})},            // metadata end offset outside bytes
+            {bytes({0x11, 2, 0, 1, 2, 'a', 'a'}), bytes({0})}, // sorted dictionary must be unique
+            {bytes({0x31, 2, 0, 1, 2, 'a', 'a'}), bytes({0})}, // reserved bit does not relax sorted flag
+            {bytes({0x31, 2, 0, 1, 2, 'b', 'a'}), bytes({0})}, // reserved bit does not relax ordering
+            {bytes({0x21, 1, 0, 8, 'a'}), bytes({0})},         // reserved bit does not relax bounds
+            {bytes({0x01, 2, 0, 1, 2, 'a', 'a'}),
+             bytes({2, 2, 0, 1, 0, 2, 4, 12, 7, 12, 8})},                 // duplicate object names remain invalid
             {bytes({0x11, 2, 0, 1, 2, 'b', 'a'}), bytes({0})},            // sorted flag violated
             {valid_metadata, bytes({12})},                                // truncated int8
             {valid_metadata, bytes({0, 0})},                              // primitive trailing bytes
