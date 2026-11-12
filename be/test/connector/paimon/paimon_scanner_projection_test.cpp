@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <limits>
-
 #include <arrow/testing/builder.h>
 #include <arrow/testing/gtest_util.h>
 #include <gtest/gtest.h>
+
+#include <limits>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
