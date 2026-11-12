@@ -107,6 +107,10 @@ public:
         _column_pbs.back().set_length(length);
         return *this;
     }
+    TabletSchemaBuilder& set_bitmap_index() {
+        _column_pbs.back().set_has_bitmap_index(true);
+        return *this;
+    }
 
     std::unique_ptr<TabletSchema> build() { return TabletSchemaHelper::create_tablet_schema(_column_pbs); }
 };
@@ -1092,6 +1096,99 @@ TEST_F(SegmentIteratorTest, testCharToVarcharZoneMapFilter) {
         ASSERT_EQ(0, stats.segment_stats_filtered);
         ASSERT_EQ(0, stats.rows_stats_filtered);
     }
+}
+
+// (c1 = 1 AND (c2 IN (1, 2))) OR (c1 = 2 AND c2 = 3), with bitmap indexes on c1 and c2. The inner OR fails the
+// bitmap selectivity gate (2 of 10 c2 values) while both AND chains pass it, so the outer OR is used and the second
+// chain is fully erased. The residual must still keep that chain, or row 3001 (c1 = 2, c2 = 3) is lost.
+TEST_F(SegmentIteratorTest, BitmapIndexKeepsPartiallyErasedOr) {
+    using namespace starrocks::test;
+
+    std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaBuilder()
+                                                          .create(0, false, TYPE_INT, true)
+                                                          .create(1, false, TYPE_INT, false)
+                                                          .set_bitmap_index()
+                                                          .create(2, false, TYPE_INT, false)
+                                                          .set_bitmap_index()
+                                                          .build();
+
+    auto chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema(tablet_schema), 4096);
+    auto append_row = [&](int32_t id, int32_t c1, int32_t c2) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(id));
+        chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(c1));
+        chunk->get_column_by_index(2)->as_mutable_ptr()->append_datum(Datum(c2));
+    };
+    for (int32_t i = 0; i < 3000; i++) {
+        append_row(i, 1000 + i, i % 10);
+    }
+    append_row(3000, 1, 1);
+    append_row(3001, 2, 3);
+    append_row(3002, 1, 3);
+    append_row(3003, 2, 1);
+
+    const std::string file_name = kSegmentDir + "/bitmap_index_partially_erased_or";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    SegmentWriterOptions writer_opts;
+    writer_opts.num_rows_per_block = 1024;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, writer_opts);
+    ASSERT_OK(writer.init());
+    ASSERT_OK(writer.append_chunk(*chunk));
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+    ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema));
+
+    auto vec_schema = VecSchemaBuilder().add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT).add(2, "c2", TYPE_INT).build();
+
+    const auto type_int = get_type_info(TYPE_INT);
+    std::unique_ptr<ColumnPredicate> c1_eq_1(new_column_eq_predicate(type_int, 1, "1"));
+    std::unique_ptr<ColumnPredicate> c2_in_1_2(new_column_in_predicate(type_int, 2, {"1", "2"}));
+    std::unique_ptr<ColumnPredicate> c1_eq_2(new_column_eq_predicate(type_int, 1, "2"));
+    std::unique_ptr<ColumnPredicate> c2_eq_3(new_column_eq_predicate(type_int, 2, "3"));
+
+    PredicateOrNode inner_or;
+    inner_or.add_child(PredicateColumnNode{c2_in_1_2.get()});
+    PredicateAndNode chain1;
+    chain1.add_child(PredicateColumnNode{c1_eq_1.get()});
+    chain1.add_child(std::move(inner_or));
+    PredicateAndNode chain2;
+    chain2.add_child(PredicateColumnNode{c1_eq_2.get()});
+    chain2.add_child(PredicateColumnNode{c2_eq_3.get()});
+    PredicateOrNode outer_or;
+    outer_or.add_child(std::move(chain1));
+    outer_or.add_child(std::move(chain2));
+    PredicateAndNode pred_root;
+    pred_root.add_child(std::move(outer_or));
+
+    SegmentReadOptions seg_opts;
+    OlapReaderStatistics stats;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
+
+    std::vector<int32_t> ids;
+    auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), config::vector_chunk_size);
+    while (true) {
+        res_chunk->reset();
+        auto st = chunk_iter->get_next(res_chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        auto id_col = ColumnHelper::cast_to_raw<TYPE_INT>(res_chunk->get_column_by_index(0));
+        for (size_t i = 0; i < res_chunk->num_rows(); i++) {
+            ids.push_back(id_col->get_data()[i]);
+        }
+    }
+
+    ASSERT_EQ(3001, stats.rows_bitmap_index_filtered);
+    ASSERT_EQ((std::vector<int32_t>{3000, 3001}), ids);
 }
 
 // A `.cols` segment is opened by every scan and never cached, so its footer read has to follow the
