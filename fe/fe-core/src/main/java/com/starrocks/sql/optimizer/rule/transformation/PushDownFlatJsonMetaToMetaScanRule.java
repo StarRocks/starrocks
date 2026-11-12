@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -31,7 +32,6 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import com.starrocks.type.ArrayType;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
@@ -104,7 +104,7 @@ public class PushDownFlatJsonMetaToMetaScanRule extends TransformationRule {
             // The meta reader produces flat_json_meta as ARRAY<VARCHAR>, and the slot built from this column
             // is sent to the backend with the column's type, so describe the meta column, not the JSON column.
             Column c = metaScan.getColRefToColumnMetaMap().get(usedColumn).deepCopy();
-            c.setType(ArrayType.ARRAY_VARCHAR);
+            c.setType(Type.ARRAY_VARCHAR);
             newScanColumnRefs.put(metaRef, c);
             newAggGroupBys.add(metaRef);
             aggColumnIdToColumns.put(metaRef.getId(), Pair.create(aggFuncName, c));

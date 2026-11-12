@@ -14,17 +14,17 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.MetaScanNode;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TSlotDescriptor;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNodeType;
-import com.starrocks.type.JsonType;
-import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -122,8 +122,8 @@ public class MetaScanSlotTypeTest extends PlanTestBase {
         metaScanSlots("select flat_json_meta(j) from meta_slot_t [_META_]");
         OlapTable table = (OlapTable) starRocksAssert.getTable("test", "meta_slot_t");
         // The rules rewrite copies of the table's columns; the table itself keeps VARCHAR(64) and JSON.
-        Assertions.assertEquals(TypeFactory.createVarcharType(64), table.getColumn("c").getType());
-        Assertions.assertEquals(JsonType.JSON, table.getColumn("j").getType());
+        Assertions.assertEquals(ScalarType.createVarcharType(64), table.getColumn("c").getType());
+        Assertions.assertEquals(Type.JSON, table.getColumn("j").getType());
     }
 
     @Test

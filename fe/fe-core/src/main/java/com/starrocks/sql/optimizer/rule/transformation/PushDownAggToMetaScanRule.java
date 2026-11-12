@@ -168,17 +168,13 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
                 // this variable is introduced to solve compatibility issues,
                 // see more details in the description of https://github.com/StarRocks/starrocks/pull/17619
-<<<<<<< HEAD
                 copiedColumn.setType(Type.BIGINT);
-=======
-                copiedColumn.setType(IntegerType.BIGINT);
             } else if (aggCall.getFnName().equals(FunctionSet.DICT_MERGE)) {
                 // The slot built from this column is sent to the backend with the column's type, and the
                 // meta reader produces a dict_merge column as ARRAY<VARCHAR>, not as the table column's
                 // VARCHAR. A one-phase aggregate sends that column through an exchange, and a receiver that
                 // decodes it with the VARCHAR layout fails or crashes.
                 copiedColumn.setType(columnType);
->>>>>>> 0fd4cbd ([BugFix] Give dict_merge and flat_json_meta meta columns their real type (#82915))
             }
             copiedColumn.setIsAllowNull(true);
             newScanColumnRefs.put(metaColumn, copiedColumn);
