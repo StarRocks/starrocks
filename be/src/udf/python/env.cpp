@@ -39,15 +39,7 @@
 
 namespace starrocks {
 
-<<<<<<< HEAD:be/src/udf/python/env.cpp
 void PyWorker::terminate() {
-=======
-bool LocalPyWorker::expired() {
-    return num_clients() == 0 && MonotonicSeconds() - _last_touch_time > config::python_worker_expire_time_sec;
-}
-
-void LocalPyWorker::terminate() {
->>>>>>> 4ecb76f ([BugFix] Stop expiring a Python UDF worker that a query is still using (#82775)):be/src/exprs/udf/python/env.cpp
     if (_pid != -1) {
         kill(_pid, SIGKILL);
     }
@@ -191,17 +183,13 @@ StatusOr<std::shared_ptr<PyWorker>> PyWorkerManager::_acquire_worker(int32_t dri
         std::lock_guard guard(_mutex);
         auto& workers = _processes[driver_id];
         if (workers.size() > max_worker_per_driver) {
-<<<<<<< HEAD:be/src/udf/python/env.cpp
             worker = workers[rand() % max_worker_per_driver];
-=======
-            worker = workers[ThreadLocalRandomUniform(static_cast<int32_t>(max_worker_per_driver))];
             // Take the worker while holding the lock, so that cleanup_expired_worker cannot expire
             // it before the caller connects.
             if (!worker->is_dead()) {
                 worker->touch();
                 worker->add_client();
             }
->>>>>>> 4ecb76f ([BugFix] Stop expiring a Python UDF worker that a query is still using (#82775)):be/src/exprs/udf/python/env.cpp
         }
     }
     if (worker && worker->is_dead()) {
