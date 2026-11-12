@@ -104,7 +104,7 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
         // the sync path fires before it aligns partitions against the frozen snapshot.
         // Subsequent batches reuse the persisted owner and do not enter this branch.
         if (mvRefreshParams.isCompleteRefresh()) {
-            mv.getRefreshScheme().getAsyncRefreshContext().clearTempBaseTableInfoTvrDeltaState();
+            pinState().clear();
             pctProcessor.setBeforePartitionAlignHook(() -> {
                 MaterializedView.AsyncRefreshContext refreshContext =
                         mv.getRefreshScheme().getAsyncRefreshContext();
@@ -120,7 +120,7 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
                             snapshotInfo.getBaseTableInfo().getTableName(), changedVersionRange);
                     frozen.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
                 }
-                refreshContext.replaceTempBaseTableInfoTvrDeltaMap(getStartTaskRunId(), frozen);
+                pinState().freeze(getStartTaskRunId(), frozen);
             });
         }
 
