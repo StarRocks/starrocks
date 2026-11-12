@@ -73,24 +73,16 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
-import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
->>>>>>> eb350d193d3... [BugFix][RB-817] Skip statistics lookup for struct fields of expressions to avoid "Unknown column" errors (#69269)
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
-<<<<<<< HEAD
-=======
-import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
->>>>>>> eb350d193d3... [BugFix][RB-817] Skip statistics lookup for struct fields of expressions to avoid "Unknown column" errors (#69269)
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
