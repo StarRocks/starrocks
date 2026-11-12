@@ -683,6 +683,7 @@ if [[ -d $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE ]] ; then
         fi
         if [ ! -f $PATCHED_MARK ]; then
             apply_patch -p1 $TP_PATCH_DIR/aws-cpp-sdk-1.11.267-disable-chunked-upload.patch
+            apply_patch -p1 $TP_PATCH_DIR/aws-cpp-sdk-1.11.267-sts-web-identity-fips.patch
             touch $PATCHED_MARK
         fi
     fi
