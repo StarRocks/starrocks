@@ -62,6 +62,7 @@
 #include "data_workflows/load/batch_write/batch_write_mgr.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
+#include "fs/remote_read_context.h"
 #include "runtime/memory/jemalloc_conf_updater.h"
 #include "runtime/runtime_env.h"
 #include "service/core_dump_resource_releaser.h"
@@ -518,7 +519,20 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     });
 #ifdef USE_STAROS
     registry->register_callback("starlet_use_star_cache", [=]() -> Status {
+        if (remote_io_scheduler_enabled() && !config::starlet_use_star_cache) {
+            return Status::NotSupported(
+                    "starlet_use_star_cache cannot be turned off while the remote I/O scheduler is enabled; restart "
+                    "the node with remote_io_scheduler_enable=false first");
+        }
         update_staros_starcache();
+        return Status::OK();
+    });
+    registry->register_callback("io_coalesce_lake_read_enable", [=]() -> Status {
+        if (remote_io_scheduler_enabled() && config::io_coalesce_lake_read_enable) {
+            return Status::NotSupported(
+                    "io_coalesce_lake_read_enable stays off while the remote I/O scheduler is enabled; restart the "
+                    "node with remote_io_scheduler_enable=false to use it");
+        }
         return Status::OK();
     });
     registry->register_callback("starlet_star_cache_mem_size_percent", [=]() -> Status {
@@ -663,7 +677,19 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
 
     UPDATE_STARLET_CONFIG(starlet_cache_thread_num, cachemgr_threadpool_size);
     UPDATE_STARLET_CONFIG(starlet_fs_stream_buffer_size_bytes, fs_stream_buffer_size_bytes);
-    UPDATE_STARLET_CONFIG(starlet_fs_read_prefetch_enable, fs_enable_buffer_prefetch);
+    registry->register_callback("starlet_fs_read_prefetch_enable", [=]() -> Status {
+        if (remote_io_scheduler_enabled() && config::starlet_fs_read_prefetch_enable) {
+            return Status::NotSupported(
+                    "starlet_fs_read_prefetch_enable stays off while the remote I/O scheduler is enabled; restart the "
+                    "node with remote_io_scheduler_enable=false to use it");
+        }
+        auto val = std::to_string(config::starlet_fs_read_prefetch_enable && !remote_io_scheduler_enabled());
+        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_enable_buffer_prefetch", val).empty()) {
+            LOG(WARNING) << "Failed to update fs_enable_buffer_prefetch";
+            return Status::InvalidArgument("Failed to update starlet_fs_read_prefetch_enable.");
+        }
+        return Status::OK();
+    });
     UPDATE_STARLET_CONFIG(starlet_fs_read_prefetch_threadpool_size, fs_buffer_prefetch_threadpool_size);
     UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_max_retries, fslib_s3client_nonread_max_retries);
     UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_retry_scale_factor, fslib_s3client_nonread_retry_scale_factor);

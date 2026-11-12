@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 
 namespace starrocks {
@@ -101,5 +102,15 @@ private:
     const RemoteReadContext _ctx;
     const RemoteReadContext* const _prev;
 };
+
+// Set once at startup, before any lake read, when the remote I/O scheduler of starlet was enabled
+// (remote_io_scheduler_enable); it never changes afterwards. While it is set, the lake scans read ahead through
+// SegmentPrefetchWindow, and the read-ahead strategies it replaces are off: io_coalesce_lake_read_enable was set to
+// false, and the starlet buffer prefetch is forced off.
+inline std::atomic<bool> g_remote_io_scheduler_enabled{false};
+
+inline bool remote_io_scheduler_enabled() {
+    return g_remote_io_scheduler_enabled.load(std::memory_order_relaxed);
+}
 
 } // namespace starrocks

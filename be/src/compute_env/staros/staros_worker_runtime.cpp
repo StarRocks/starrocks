@@ -15,9 +15,11 @@
 #ifdef USE_STAROS
 #include "compute_env/staros/staros_worker_runtime.h"
 
+#include <fmt/format.h>
 #include <fslib/fslib_all_initializer.h>
 #include <starlet.h>
 
+#include <algorithm>
 #include <limits>
 #include <utility>
 
@@ -25,11 +27,17 @@
 #include "common/gflags_utils.h"
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
+#include "common/system/cpu_info.h"
 #include "common/util/table_metrics.h"
+#include "compute_env/staros/staros_status.h"
 #include "compute_env/staros/staros_worker.h"
+#include "fs/remote_read_context.h"
+#include "fslib/cache_fill.h"
+#include "fslib/remote_read_scheduler.h"
 #include "fslib/star_cache_configuration.h"
 #include "fslib/star_cache_handler.h"
 #include "gflags/gflags.h"
+#include "runtime/current_thread.h"
 
 // cachemgr thread pool size
 DECLARE_int32(cachemgr_threadpool_size);
@@ -120,6 +128,136 @@ std::optional<int32_t> starlet_request_timeout_ms(int64_t configured_timeout_ms,
     return static_cast<int32_t>(configured_timeout_ms);
 }
 
+namespace {
+
+bool remote_io_scheduler_has_cache() {
+    return config::datacache_enable && config::starlet_use_star_cache;
+}
+
+// A block fill's buffer is allocated on the scheduler's IO pool, which charges no query, and released by the last
+// reader of the block, a scan thread that charges its query. Charged to the query, every block it waited for would
+// credit its tracker with memory it never allocated. Both ends are charged to the process instead, as the writes to
+// the cache are; the fills in flight are bounded by the scheduler.
+char* allocate_fill_buffer(size_t size) {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+    return new char[size];
+}
+
+void release_fill_buffer(char* buffer) {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+    delete[] buffer;
+}
+
+bool update_starlet_flag(const char* name, const std::string& value) {
+    return !staros::starlet::common::GFlagsUtils::UpdateFlagValue(name, value).empty();
+}
+
+} // namespace
+
+Status validate_remote_io_scheduler_config() {
+    if (!config::remote_io_scheduler_enable || !remote_io_scheduler_has_cache()) {
+        return Status::OK();
+    }
+    if (config::remote_read_io_threads < 0) {
+        return Status::InvalidArgument(
+                fmt::format("remote_read_io_threads must not be negative (got {})", config::remote_read_io_threads));
+    }
+    if (config::remote_read_query_weight <= 0 || config::remote_read_load_weight <= 0 ||
+        config::remote_read_compaction_weight <= 0 || config::remote_read_background_weight <= 0) {
+        return Status::InvalidArgument(
+                fmt::format("remote_read_query_weight, remote_read_load_weight, remote_read_compaction_weight and "
+                            "remote_read_background_weight must be positive (got {}, {}, {} and {})",
+                            config::remote_read_query_weight, config::remote_read_load_weight,
+                            config::remote_read_compaction_weight, config::remote_read_background_weight));
+    }
+    if (config::remote_read_adaptive_min_inflight <= 0 || config::remote_read_weight_decay_ios < 0 ||
+        !(config::remote_read_weight_decay_min > 0 && config::remote_read_weight_decay_min <= 1)) {
+        return Status::InvalidArgument(fmt::format(
+                "remote_read_adaptive_min_inflight must be positive, remote_read_weight_decay_ios not negative and "
+                "remote_read_weight_decay_min in (0, 1] (got {}, {} and {})",
+                config::remote_read_adaptive_min_inflight, config::remote_read_weight_decay_ios,
+                config::remote_read_weight_decay_min));
+    }
+    return Status::OK();
+}
+
+fslib::RemoteReadSchedulerOptions remote_read_scheduler_options() {
+    fslib::RemoteReadSchedulerOptions opts;
+    // One IO is a GET of a cache block: what a scan reads ahead and what a cache miss fetches.
+    opts.block_bytes = std::max<int64_t>(1, config::starlet_star_cache_block_size_bytes);
+    // As many threads as the lake scan threads by default: without the scheduler, the scan threads blocked in their
+    // reads are what bounds the GETs in flight.
+    const auto scan_threads = std::max<int32_t>(
+            1, static_cast<int32_t>(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores()));
+    opts.io_threads = config::remote_read_io_threads > 0 ? config::remote_read_io_threads : scan_threads;
+    opts.adaptive_limit = config::remote_read_adaptive_limit;
+    opts.adaptive_min_inflight = config::remote_read_adaptive_min_inflight;
+    opts.weight_decay_ios = config::remote_read_weight_decay_ios;
+    opts.weight_decay_min = config::remote_read_weight_decay_min;
+    auto weight = [&](fslib::ReadWorkload workload) -> int32_t& {
+        return opts.workload_weights[static_cast<size_t>(workload)];
+    };
+    weight(fslib::ReadWorkload::QUERY) = config::remote_read_query_weight;
+    weight(fslib::ReadWorkload::LOAD) = config::remote_read_load_weight;
+    weight(fslib::ReadWorkload::COMPACTION) = config::remote_read_compaction_weight;
+    weight(fslib::ReadWorkload::OTHER_BACKGROUND) = config::remote_read_background_weight;
+    return opts;
+}
+
+Status enable_remote_io_scheduler() {
+    if (!config::remote_io_scheduler_enable) {
+        LOG(INFO) << "remote I/O scheduler disabled (remote_io_scheduler_enable=false); remote reads run unscheduled";
+        return Status::OK();
+    }
+    if (!remote_io_scheduler_has_cache()) {
+        // The scheduler fills the cache blocks it fetches; without the cache the remote reads keep their old paths.
+        LOG(WARNING) << "remote I/O scheduler not enabled: it needs datacache_enable=true and "
+                        "starlet_use_star_cache=true (got datacache_enable="
+                     << config::datacache_enable << ", starlet_use_star_cache=" << config::starlet_use_star_cache
+                     << "); remote reads run unscheduled";
+        return Status::OK();
+    }
+    RETURN_IF_ERROR(validate_remote_io_scheduler_config());
+    const fslib::RemoteReadSchedulerOptions opts = remote_read_scheduler_options();
+    // Installed before the scheduler exists, so that no fill buffer is ever allocated with another allocator.
+    if (auto st = fslib::set_fill_buffer_allocator(
+                fslib::FillBufferAllocator{&allocate_fill_buffer, &release_fill_buffer});
+        !st.ok()) {
+        LOG(WARNING) << "remote I/O scheduler not enabled: failed to install the fill buffer allocator: " << st
+                     << "; remote reads run unscheduled";
+        return Status::OK();
+    }
+    // The scheduler replaces the starlet buffer prefetch; running both would let two policies decide what to fetch.
+    // The configured value is kept, so a restart without the scheduler brings it back.
+    if (!update_starlet_flag("fs_enable_buffer_prefetch", "false")) {
+        LOG(WARNING) << "remote I/O scheduler not enabled: failed to turn starlet fs_enable_buffer_prefetch off; "
+                        "remote reads run unscheduled";
+        return Status::OK();
+    }
+    if (auto st = fslib::RemoteReadScheduler::init(opts); !st.ok()) {
+        (void)update_starlet_flag("fs_enable_buffer_prefetch", std::to_string(config::starlet_fs_read_prefetch_enable));
+        LOG(WARNING) << "remote I/O scheduler not enabled: " << st << "; remote reads run unscheduled";
+        return Status::OK();
+    }
+    // The scheduler also replaces the coalesced lake read. Turning the config itself off, before any lake read, keeps
+    // every reader of it on one value; be.conf keeps its own, so a restart without the scheduler brings it back.
+    const bool configured_io_coalesce_lake_read = config::io_coalesce_lake_read_enable;
+    config::io_coalesce_lake_read_enable = false;
+    g_remote_io_scheduler_enabled.store(true);
+    LOG(INFO) << "remote I/O scheduler enabled: io_threads=" << opts.io_threads
+              << " adaptive_limit=" << opts.adaptive_limit << " adaptive_min_inflight=" << opts.adaptive_min_inflight
+              << " block_bytes=" << opts.block_bytes << " weight_decay_ios=" << opts.weight_decay_ios
+              << " weight_decay_min=" << opts.weight_decay_min
+              << " query:load:compaction:background=" << config::remote_read_query_weight << ":"
+              << config::remote_read_load_weight << ":" << config::remote_read_compaction_weight << ":"
+              << config::remote_read_background_weight
+              << " remote_prefetch_window_blocks=" << config::remote_prefetch_window_blocks
+              << "; effective starlet_fs_read_prefetch_enable=false (configured "
+              << config::starlet_fs_read_prefetch_enable << "), io_coalesce_lake_read_enable set to false (configured "
+              << configured_io_coalesce_lake_read << ")";
+    return Status::OK();
+}
+
 std::shared_ptr<StarOSWorker> get_staros_worker() {
     // May return nullptr once `shutdown_staros_worker()` has run. Callers must check it: an
     // in-flight load can still reach a starlet filesystem after worker teardown, and dereferencing
@@ -192,6 +330,9 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
     fslib::FLAGS_star_cache_disk_size_percent = config::starlet_star_cache_disk_size_percent;
     fslib::FLAGS_star_cache_disk_size_bytes = config::starlet_star_cache_disk_size_bytes;
     fslib::FLAGS_star_cache_block_size_bytes = config::starlet_star_cache_block_size_bytes;
+
+    // Before the starlet runtime exists, so that no read stream is ever created unscheduled.
+    EXIT_IF_ERROR(enable_remote_io_scheduler());
 
     staros::starlet::StarletConfig starlet_config;
     starlet_config.rpc_port = config::starlet_port;
