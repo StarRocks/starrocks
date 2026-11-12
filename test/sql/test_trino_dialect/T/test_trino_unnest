@@ -1,0 +1,5 @@
+-- name: testTrinoStandaloneUnnest
+set sql_dialect='trino';
+select x from unnest(array[1, 2, 3]) as t(x) order by x;
+select * from unnest(array[1, 2], array['a', 'b', 'c']) as t(x, y) order by y;
+select t.x, s.v from unnest(array[1, 2]) as t(x) join (select 2 as k, 'two' as v) s on t.x = s.k;
