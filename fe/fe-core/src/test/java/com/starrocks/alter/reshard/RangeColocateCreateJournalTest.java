@@ -119,7 +119,7 @@ public class RangeColocateCreateJournalTest {
         // The reshard daemon also runs the colocate checker, which would mark groups stable behind the test.
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            protected void runAfterLeaseValid() {
+            protected void runAfterCatalogReady() {
             }
         };
         new MockUp<StarOSAgent>() {

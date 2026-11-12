@@ -813,7 +813,7 @@ public class ColocateTableIndex implements Writable {
             editLog.logColocateAddTable(ColocatePersistInfo.createForAddTable(groupId, tableId,
                     getBackendsPerBucketSeq(groupId), ranges));
             if (unstableGroups.contains(groupId)) {
-                editLog.logColocateMarkUnstable(ColocatePersistInfo.createForMarkUnstable(groupId), null);
+                editLog.logColocateMarkUnstable(ColocatePersistInfo.createForMarkUnstable(groupId));
             }
         } finally {
             writeUnlock();
