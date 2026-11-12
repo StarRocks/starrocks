@@ -264,6 +264,33 @@ static Status build_array_readers_for_variant_node(const ColumnReaderOptions& op
     return Status::OK();
 }
 
+// The variant primitive a typed_value is read raw for, from its Parquet logical type. Timestamps in milliseconds are not
+// shredded types and keep the usual mapping.
+static ShreddedRawEncoding shredded_raw_encoding(const ParquetField& field) {
+    const auto& element = field.schema_element;
+    if (!element.__isset.logicalType) {
+        return ShreddedRawEncoding::NONE;
+    }
+    const auto& logical = element.logicalType;
+    if (logical.__isset.UUID && field.physical_type == tparquet::Type::FIXED_LEN_BYTE_ARRAY) {
+        return ShreddedRawEncoding::UUID;
+    }
+    if (logical.__isset.TIME && field.physical_type == tparquet::Type::INT64 && !logical.TIME.isAdjustedToUTC &&
+        logical.TIME.unit.__isset.MICROS) {
+        return ShreddedRawEncoding::TIME_NTZ_MICROS;
+    }
+    if (logical.__isset.TIMESTAMP && field.physical_type == tparquet::Type::INT64) {
+        const bool utc = logical.TIMESTAMP.isAdjustedToUTC;
+        if (logical.TIMESTAMP.unit.__isset.MICROS) {
+            return utc ? ShreddedRawEncoding::TIMESTAMP_TZ_MICROS : ShreddedRawEncoding::TIMESTAMP_NTZ_MICROS;
+        }
+        if (logical.TIMESTAMP.unit.__isset.NANOS) {
+            return utc ? ShreddedRawEncoding::TIMESTAMP_TZ_NANOS : ShreddedRawEncoding::TIMESTAMP_NTZ_NANOS;
+        }
+    }
+    return ShreddedRawEncoding::NONE;
+}
+
 // SCALAR typed_value is simpler than ARRAY, but still worth centralizing:
 // build the typed reader and fail immediately if reader creation fails.
 static Status build_scalar_reader_for_variant_node(const ColumnReaderOptions& opts, const ParquetField* typed_field,
@@ -273,6 +300,11 @@ static Status build_scalar_reader_for_variant_node(const ColumnReaderOptions& op
     }
 
     TypeDescriptor file_type = variant_typed_desc_from_parquet_field(typed_field);
+    node->raw_encoding = shredded_raw_encoding(*typed_field);
+    if (node->raw_encoding != ShreddedRawEncoding::NONE && node->raw_encoding != ShreddedRawEncoding::UUID) {
+        // The value is the plain int64 of the file, with no time zone shift.
+        file_type = TypeDescriptor::from_logical_type(TYPE_BIGINT);
+    }
     node->kind = ShreddedFieldNode::Kind::SCALAR;
 
     // Keep the read type on heap before creating reader. ScalarColumnReader stores
@@ -665,6 +697,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
     std::vector<ShreddedFieldNode> shredded_fields;
     ColumnReaderPtr root_typed_value_reader = nullptr;
     std::unique_ptr<TypeDescriptor> root_typed_value_type = nullptr;
+    ShreddedRawEncoding root_raw_encoding = ShreddedRawEncoding::NONE;
     if (top_fields.typed_value != nullptr) {
         const ParquetField* typed_value_field = top_fields.typed_value;
         if (typed_value_field->type == ColumnType::STRUCT) {
@@ -672,6 +705,10 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
             RETURN_IF_ERROR(collect_variant_shredded_fields(opts, typed_value_field, &root_path, &shredded_fields));
         } else {
             TypeDescriptor file_type = variant_typed_desc_from_parquet_field(typed_value_field);
+            root_raw_encoding = shredded_raw_encoding(*typed_value_field);
+            if (root_raw_encoding != ShreddedRawEncoding::NONE && root_raw_encoding != ShreddedRawEncoding::UUID) {
+                file_type = TypeDescriptor::from_logical_type(TYPE_BIGINT);
+            }
             root_typed_value_type = std::make_unique<TypeDescriptor>(file_type);
             auto root_reader_or = ColumnReaderFactory::create(opts, typed_value_field, *root_typed_value_type);
             if (!root_reader_or.ok()) {
@@ -682,9 +719,12 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
             root_typed_value_reader = std::move(root_reader_or).value();
         }
     }
-    return std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
-                                                 std::move(shredded_fields), std::move(hints.parsed_shredded_paths),
-                                                 std::move(root_typed_value_reader), std::move(root_typed_value_type));
+    auto reader =
+            std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
+                                                  std::move(shredded_fields), std::move(hints.parsed_shredded_paths),
+                                                  std::move(root_typed_value_reader), std::move(root_typed_value_type));
+    reader->set_root_raw_encoding(root_raw_encoding);
+    return ColumnReaderPtr(std::move(reader));
 }
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr raw_reader, const GlobalDictMap* dict,

@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <random>
 #include <set>
@@ -5460,6 +5461,69 @@ TEST_F(FileReaderTest, test_read_variant_shredding_full_column_ignores_extended_
               variant_row_json(variant_col, 0));
     // `note` lives only in its own fallback `value` column.
     ASSERT_EQ(R"({"extra":1,"kind":"identity","note":"n1"})", variant_row_json(variant_col, 2));
+}
+
+static int64_t variant_primitive_int64(const VariantValue& value) {
+    const std::string_view raw = value.raw();
+    int64_t result = 0;
+    std::memcpy(&result, raw.data() + 1, sizeof(result));
+    return result;
+}
+
+// A shredded timestamp is written as the variant type of its Parquet logical type, with the value of the file: no
+// time zone shift, and nanoseconds are kept. Written values: 2025-01-02 03:04:05.123456[789] and ...123 for millis.
+TEST_F(FileReaderTest, test_read_variant_shredding_timestamps_keep_type_and_instant) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_timestamps.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << status.message();
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(1, chunk->num_rows());
+
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    VariantRowValue row;
+    ASSERT_NE(variant_col->get_row_value(0, &row), nullptr);
+
+    constexpr int64_t kEpochSeconds = 1735787045; // 2025-01-02 03:04:05 UTC
+    const auto check = [&](const char* key, VariantType expected_type, int64_t expected_value) {
+        auto field = row.get_value().get_object_by_key(row.get_metadata(), key);
+        ASSERT_TRUE(field.ok()) << key << ": " << field.status().to_string();
+        EXPECT_EQ(expected_type, field.value().type()) << key;
+        EXPECT_EQ(expected_value, variant_primitive_int64(field.value())) << key;
+    };
+    check("ts_utc_us", VariantType::TIMESTAMP_TZ, kEpochSeconds * 1000000 + 123456);
+    check("ts_ntz_us", VariantType::TIMESTAMP_NTZ, kEpochSeconds * 1000000 + 123456);
+    check("ts_utc_ns", VariantType::TIMESTAMP_TZ_NANOS, kEpochSeconds * 1000000000 + 123456789);
+    // Milliseconds are not a shredded variant type: they keep the usual mapping, a datetime in microseconds.
+    check("ts_ntz_ms", VariantType::TIMESTAMP_NTZ, kEpochSeconds * 1000000 + 123000);
+}
+// A list of shredded variants whose typed_value is an object. The levels of the leaves below the variants have one entry
+// per element, so they cannot tell the presence of an object per row: the column must still read as before.
+TEST_F(FileReaderTest, test_read_variant_shredding_in_array_reads_objects_with_typed_scalars) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_in_array.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+    TypeDescriptor array_of_variant = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
+    Utils::SlotDesc slot_descs[] = {{"arr", array_of_variant}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << status.message();
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(array_of_variant, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(2, chunk->num_rows());
+    EXPECT_EQ(R"([{"x":1},{"x":2}])", chunk->get_column_by_index(0)->debug_item(0));
+    EXPECT_EQ(R"([{"x":3}])", chunk->get_column_by_index(0)->debug_item(1));
 }
 
 } // namespace starrocks::parquet
