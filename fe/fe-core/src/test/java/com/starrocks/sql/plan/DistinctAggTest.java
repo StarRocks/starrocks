@@ -81,6 +81,30 @@ public class DistinctAggTest extends PlanTestBase {
     }
 
     @Test
+    void testGroupByCountDistinctRewriteKeepsDecimalType() throws Exception {
+        // The distinct column is the distribution key, so GroupByCountDistinctRewriteRule turns
+        // multi_distinct_sum into sum. The sum must keep the analyzed decimal type instead of the
+        // builtin's wildcard DECIMAL128(-1, -1).
+        starRocksAssert.withTable("CREATE TABLE t_distinct_decimal (\n" +
+                "  k int NULL,\n" +
+                "  d decimal(38, 10) NULL\n" +
+                ") DUPLICATE KEY(k)\n" +
+                "DISTRIBUTED BY HASH(d) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        try {
+            String sql = "select k, multi_distinct_sum(d) from t_distinct_decimal group by k";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "output: sum(2: d)");
+            String thrift = getThriftPlan(sql);
+            assertContains(thrift, "fn:TFunction(name:TFunctionName(function_name:sum)");
+            assertContains(thrift, "scalar_type:TScalarType(type:DECIMAL128, precision:38, scale:10)");
+            assertNotContains(thrift, "precision:-1");
+        } finally {
+            starRocksAssert.dropTable("t_distinct_decimal");
+        }
+    }
+
+    @Test
     void testDistinctConstants() throws Exception {
         String sql = "select count(distinct 1, 2, 3, 4), sum(distinct 1), avg(distinct 1), " +
                 "group_concat(distinct 1, 2 order by 1), array_agg(distinct 1 order by 1) from t0 group by v2;";

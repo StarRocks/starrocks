@@ -134,20 +134,7 @@ StatusOr<std::shared_ptr<arrow::RecordBatch>> ArrowFlightFuncCallStub::do_evalua
 auto PyWorkerManager::get_client(const PyFunctionDescriptor& func_desc) -> StatusOr<WorkerClientPtr> {
     std::shared_ptr<PyWorker> handle;
     std::string url;
-<<<<<<< HEAD:be/src/udf/python/callstub.cpp
     ASSIGN_OR_RETURN(handle, _acquire_worker(func_desc.driver_id, config::python_worker_reuse, &url));
-=======
-    if (!func_desc.service_url.empty()) {
-        // External-worker mode: connect to the user-provided Arrow Flight worker service (the
-        // CREATE FUNCTION "service_url" property) instead of spawning and managing a local worker.
-        // The user owns its lifecycle and isolation.
-        handle = std::make_shared<RemotePyWorker>(func_desc.service_url);
-        url = handle->url();
-        handle->add_client();
-    } else {
-        ASSIGN_OR_RETURN(handle, _acquire_worker(func_desc.driver_id, config::python_worker_reuse, &url));
-    }
->>>>>>> 4ecb76f ([BugFix] Stop expiring a Python UDF worker that a query is still using (#82775)):be/src/exprs/udf/python/callstub.cpp
     auto arrow_client = std::make_unique<ArrowFlightWithRW>();
     RETURN_IF_ERROR(arrow_client->init(url, func_desc, std::move(handle)));
     return arrow_client;

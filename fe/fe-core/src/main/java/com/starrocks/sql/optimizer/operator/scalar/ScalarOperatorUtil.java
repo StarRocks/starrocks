@@ -114,6 +114,23 @@ public class ScalarOperatorUtil {
         return Expr.getBuiltinFunction(fnName, argsType, IS_IDENTICAL);
     }
 
+    /**
+     * Returns a copy of a builtin function pinned to the given argument and return types.
+     * Builtins are registered with wildcard types such as DECIMAL128(-1, -1), which the analyzer
+     * rectifies. A rule that looks a builtin up again after analysis must pin the types itself,
+     * or BE builds the result column with an invalid precision and scale.
+     */
+    public static Function withConcreteTypes(Function builtin, Type[] argTypes, Type retType) {
+        Function fn = builtin.copy();
+        fn.setArgsType(argTypes);
+        fn.setRetType(retType);
+        if (fn instanceof AggregateFunction aggFn
+                && builtin.getReturnType().equals(aggFn.getIntermediateType())) {
+            aggFn.setIntermediateType(retType);
+        }
+        return fn;
+    }
+
     public static Function findSumFn(Type[] argTypes) {
         Function sumFn = findArithmeticFunction(argTypes, FunctionSet.SUM);
         Preconditions.checkState(sumFn != null);
