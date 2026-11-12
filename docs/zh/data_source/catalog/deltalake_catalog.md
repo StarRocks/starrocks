@@ -3,12 +3,23 @@ sidebar_position: 60
 description: 直接从 Delta Lake 查询数据
 displayed_sidebar: docs
 ---
-import Intro from '../../_assets/catalog/_deltalake_intro.mdx'
 import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
 
 # Delta Lake catalog
 
-<Intro />
+Delta Lake catalog 是一种 external catalog，允许您在不导入的情况下查询 Delta Lake 中的数据。
+
+此外，您还可以通过基于 Delta Lake catalogs 使用 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 直接转换和导入 Delta Lake 中的数据。StarRocks 从 v2.5 开始支持 Delta Lake catalogs。
+
+为了确保在 Delta Lake 集群上成功执行 SQL 工作负载，您的 StarRocks 集群必须能够访问 Delta Lake 集群的存储系统和元存储。StarRocks 支持以下存储系统和元存储：
+
+- 分布式文件系统 (HDFS) 或对象存储，如 AWS S3、Microsoft Azure Storage、Google GCS 或其他兼容 S3 的存储系统（例如 MinIO）
+
+- 元存储如 Hive metastore 或 AWS Glue
+
+:::note
+如果选择 AWS S3 作为存储，可以使用 HMS 或 AWS Glue 作为元存储。如果选择其他存储系统，则只能使用 HMS 作为元存储。
+:::
 
 ## 使用说明
 

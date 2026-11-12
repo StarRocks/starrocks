@@ -3,12 +3,23 @@ sidebar_position: 60
 description: Delta Lake から直接データをクエリする
 displayed_sidebar: docs
 ---
-import Intro from '../../_assets/catalog/_deltalake_intro.mdx'
 import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
 
 # Delta Lake catalog
 
-<Intro />
+Delta Lake カタログは、取り込みなしで Delta Lake からデータをクエリすることを可能にする一種の external catalog です。
+
+また、Delta Lake カタログに基づいて [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) を使用することで、Delta Lake から直接データを変換およびロードすることができます。StarRocks は v2.5 以降の Delta Lake カタログをサポートしています。
+
+Delta Lake クラスターでの SQL ワークロードを成功させるためには、StarRocks クラスターが Delta Lake クラスターのストレージシステムとメタストアにアクセスできる必要があります。StarRocks は以下のストレージシステムとメタストアをサポートしています。
+
+- 分散ファイルシステム (HDFS) または AWS S3、Microsoft Azure Storage、Google GCS、その他の S3 互換ストレージシステム（例: MinIO）などのオブジェクトストレージ
+
+- Hive メタストアや AWS Glue などのメタストア
+
+:::note
+ストレージとして AWS S3 を選択した場合、メタストアとして HMS または AWS Glue を使用できます。他のストレージシステムを選択した場合、メタストアとして使用できるのは HMS のみです。
+:::
 
 ## 使用上の注意
 
