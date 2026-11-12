@@ -19,11 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
->>>>>>> 474a257 ([BugFix][RB-1306] Do not filter Iceberg and Delta Lake scan rows twice with string-to-temporal cast partition conjuncts (#83038))
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;

@@ -352,14 +352,9 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     // Partition columns of string type. Delta partitioning is always identity, so every string partition column is
-<<<<<<< HEAD
-    // an identity string partition column for PartitionCastPredicatePruner.split. Package-private for testing.
-    static Set<String> identityStringPartitionColumns(DeltaLakeTable table, Set<String> partitionColumns) {
-=======
-    // an identity string partition column for ExternalScanPredicates.splitStringPartitionCast. Also used by the
+    // an identity string partition column for PartitionCastPredicatePruner.split. Also used by the
     // scan statistics to tell which conjuncts this residual prunes.
     public static Set<String> identityStringPartitionColumns(DeltaLakeTable table, Set<String> partitionColumns) {
->>>>>>> 474a257 ([BugFix][RB-1306] Do not filter Iceberg and Delta Lake scan rows twice with string-to-temporal cast partition conjuncts (#83038))
         Set<String> lowerPartitionColumns = new HashSet<>();
         for (String name : partitionColumns) {
             lowerPartitionColumns.add(name.toLowerCase(Locale.ROOT));

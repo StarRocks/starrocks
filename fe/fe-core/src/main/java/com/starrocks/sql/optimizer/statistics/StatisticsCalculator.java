@@ -43,12 +43,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PartitionCastPredicatePruner;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
-<<<<<<< HEAD
-=======
-import com.starrocks.connector.benchmark.BenchmarkRowCountCalculator;
-import com.starrocks.connector.benchmark.RowCountEstimate;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
->>>>>>> 474a257 ([BugFix][RB-1306] Do not filter Iceberg and Delta Lake scan rows twice with string-to-temporal cast partition conjuncts (#83038))
 import com.starrocks.connector.delta.ScalarOperationToDeltaLakeExpr;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.iceberg.IcebergMORParams;
@@ -2316,7 +2311,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     // so only conjuncts on columns that are identity-partitioned in every partition spec are removed. Conjuncts the
     // Iceberg expression converter rejects are kept. A string-to-temporal cast on an identity string partition column
     // is not converted, but the connector prunes with it outside the converted predicate (the partition residual of
-    // ExternalScanPredicates.splitStringPartitionCast). It is removed only when that residual prunes on both the
+    // PartitionCastPredicatePruner.split). It is removed only when that residual prunes on both the
     // manifest and the file path: the CAST(c AS DATETIME) <op> <temporal const> shape the manifest range check
     // handles, on a table without partition transform evolution (whose file partition values are not read).
     private static Predicate<ScalarOperator> icebergPushedConjunct(LogicalIcebergScanOperator scan) {
@@ -2360,20 +2355,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 return false;
             }
             ColumnRefOperator ref = column.isColumnRef() ? (ColumnRefOperator) column : column.getChild(0).cast();
-<<<<<<< HEAD
-            return identityPartitionColumns.contains(StringUtils.lowerCase(ref.getName())) &&
-                    !PartitionCastPredicatePruner.containsStringToTemporalCast(conjunct) &&
-                    converter.convertStrict(List.of(conjunct), context) != null;
-=======
             if (!identityPartitionColumns.contains(StringUtils.lowerCase(ref.getName()))) {
                 return false;
             }
-            if (ExternalScanPredicates.containsStringToTemporalCast(conjunct)) {
+            if (PartitionCastPredicatePruner.containsStringToTemporalCast(conjunct)) {
                 // the cast column is the identity partition column checked above, the other side a constant
                 return castResidualPrunes && PartitionCastPredicatePruner.isRangePrunable(conjunct);
             }
             return converter.convertStrict(List.of(conjunct), context) != null;
->>>>>>> 474a257 ([BugFix][RB-1306] Do not filter Iceberg and Delta Lake scan rows twice with string-to-temporal cast partition conjuncts (#83038))
         };
     }
 
@@ -2391,12 +2380,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         metadata.getPartitionColNames());
         ScalarOperationToDeltaLakeExpr converter = new ScalarOperationToDeltaLakeExpr();
         // A string-to-temporal cast on string partition columns is not converted, but DeltaLakeMetadata evaluates it
-        // against each file's partition values when planning (ExternalScanPredicates.splitStringPartitionCast), so the
+        // against each file's partition values when planning (PartitionCastPredicatePruner.split), so the
         // row count already reflects it.
         Set<String> stringPartitionColumns =
                 DeltaLakeMetadata.identityStringPartitionColumns(table, metadata.getPartitionColNames());
         return conjunct -> {
-            if (ExternalScanPredicates.containsStringToTemporalCast(conjunct)) {
+            if (PartitionCastPredicatePruner.containsStringToTemporalCast(conjunct)) {
                 List<ColumnRefOperator> refs = conjunct.getColumnRefs();
                 return !refs.isEmpty() && refs.stream().allMatch(r ->
                         stringPartitionColumns.contains(StringUtils.lowerCase(r.getName())));
