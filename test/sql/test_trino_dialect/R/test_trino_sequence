@@ -1,0 +1,56 @@
+-- name: testTrinoSequence
+set sql_dialect='trino';
+-- result:
+-- !result
+select sequence(1, 5);
+-- result:
+[1,2,3,4,5]
+-- !result
+select sequence(5, 1);
+-- result:
+[5,4,3,2,1]
+-- !result
+select sequence(1, 10, 3);
+-- result:
+[1,4,7,10]
+-- !result
+select sequence(3, 3, -1);
+-- result:
+[3]
+-- !result
+select sequence(a, b) from (select 5 as a, 1 as b union all select 1, 3) t order by a;
+-- result:
+[1,2,3]
+[5,4,3,2,1]
+-- !result
+select sequence(a, b, c) from (select cast(null as bigint) as a, 3 as b, 0 as c) t;
+-- result:
+None
+-- !result
+select sequence(a, NULL) from (select 1 as a) t;
+-- result:
+None
+-- !result
+select sequence(1, 3, 0);
+-- result:
+[REGEX].*step must not be zero.*
+-- !result
+select sequence(1, 3, -1);
+-- result:
+[REGEX].*sequence stop value should be greater than or equal to start value.*
+-- !result
+select cardinality(sequence(1, 10000));
+-- result:
+10000
+-- !result
+select sequence(0, 10000);
+-- result:
+[REGEX].*result of sequence function must not have more than 10000 entries.*
+-- !result
+set sql_dialect='StarRocks';
+-- result:
+-- !result
+select array_generate(5, 1);
+-- result:
+[5,4,3,2,1]
+-- !result
