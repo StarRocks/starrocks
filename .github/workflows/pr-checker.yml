@@ -170,7 +170,14 @@ jobs:
       matrix:
         version: ${{ fromJSON(needs.backport-versions.outputs.versions) }}
     steps:
+      # Only main PRs are compared: the release-branch templates keep stale version lists. PRs
+      # synced in from CelerData or Mirrorship (bot branches *-contributed-pr-* in this repo)
+      # carry the source repo's section.
       - name: Check backport section against the PR template
+        if: >-
+          github.base_ref == 'main' &&
+          !(github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.head_ref, '-contributed-pr-'))
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
