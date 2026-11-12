@@ -148,7 +148,7 @@ Release date: September 12, 2023
 ### New Features
 
 - The aggregate function [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) supports the DISTINCT keyword and the ORDER BY clause. [#28778](https://github.com/StarRocks/starrocks/pull/28778)
-- Data in partitions can be automatically cooled down over time. (This feature is not supported for [list partitioning](https://docs.starrocks.io/docs/table_design/list_partitioning/).) [#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
+- Data in partitions can be automatically cooled down over time. (This feature is not supported for [list partitioning](https://docs.starrocks.io/docs/table_design/data_distribution/list_partitioning/).) [#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
 
 ### Improvements
 
@@ -160,7 +160,7 @@ Release date: September 12, 2023
 - If `enable_orc_late_materialization` is set to `true`, an unexpected result is returned when a Hive catalog is used to query STRUCT-type data in ORC files. [#27971](https://github.com/StarRocks/starrocks/pull/27971)
 - During data queries through Hive Catalog, if a partitioning column and an OR operator are specified in the WHERE clause, the query result is incorrect. [#28876](https://github.com/StarRocks/starrocks/pull/28876)
 - The values returned by the RESTful API action `show_data` for cloud-native tables are incorrect. [#29473](https://github.com/StarRocks/starrocks/pull/29473)
-- If the [shared-data cluster](https://docs.starrocks.io/docs/deployment/shared_data/azure/) stores data in Azure Blob Storage and a table is created, the FE fails to start after the cluster is rolled back to version 3.0. [#29433](https://github.com/StarRocks/starrocks/pull/29433)
+- If the [shared-data cluster](https://docs.starrocks.io/docs/deployment/deploy_shared_data_manually/) stores data in Azure Blob Storage and a table is created, the FE fails to start after the cluster is rolled back to version 3.0. [#29433](https://github.com/StarRocks/starrocks/pull/29433)
 - A user has no permission when querying a table in the Iceberg catalog even if the user is granted permission on that table. [#29173](https://github.com/StarRocks/starrocks/pull/29173)
 - The `Default` field values returned by the [SHOW FULL COLUMNS](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/SHOW_FULL_COLUMNS/) statement for columns of the [BITMAP](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/BITMAP/) or [HLL](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/HLL/) data type are incorrect. [#29510](https://github.com/StarRocks/starrocks/pull/29510)
 - Modifying the FE dynamic parameter `max_broker_load_job_concurrency` using the `ADMIN SET FRONTEND CONFIG` command does not take effect.
@@ -181,7 +181,7 @@ Release date: August 16, 2023
 
 - Added more prompts in the error message `xxx too many versions xxx`. [#28397](https://github.com/StarRocks/starrocks/pull/28397)
 - Dynamic partitioning further supports the partitioning unit to be year. [#28386](https://github.com/StarRocks/starrocks/pull/28386)
-- The partitioning field is case-insensitive when expression partitioning is used at table creation and [INSERT OVERWRITE is used to overwrite data in a specific partition](https://docs.starrocks.io/docs/table_design/expression_partitioning#load-data-into-partitions). [#28309](https://github.com/StarRocks/starrocks/pull/28309)
+- The partitioning field is case-insensitive when expression partitioning is used at table creation and [INSERT OVERWRITE is used to overwrite data in a specific partition](https://docs.starrocks.io/docs/table_design/data_distribution/expression_partitioning/#load-data-into-partitions). [#28309](https://github.com/StarRocks/starrocks/pull/28309)
 
 ### Bug Fixes
 
@@ -236,7 +236,7 @@ Release date: June 28, 2023
 ### Improvements
 
 - Metadata synchronization of StarRocks external tables has been changed to occur during data loading. [#24739](https://github.com/StarRocks/starrocks/pull/24739)
-- Users can specify partitions when they run INSERT OVERWRITE on tables whose partitions are automatically created. For more information, see [Automatic partitioning](https://docs.starrocks.io/docs/table_design/expression_partitioning/). [#25005](https://github.com/StarRocks/starrocks/pull/25005)
+- Users can specify partitions when they run INSERT OVERWRITE on tables whose partitions are automatically created. For more information, see [Automatic partitioning](https://docs.starrocks.io/docs/table_design/data_distribution/expression_partitioning/). [#25005](https://github.com/StarRocks/starrocks/pull/25005)
 - Optimized the error message reported when partitions are added to a non-partitioned table. [#25266](https://github.com/StarRocks/starrocks/pull/25266)
 
 ### Bug Fixes
@@ -279,9 +279,9 @@ Release date: June 1, 2023
 
 ### New Features
 
-- [Preview] Supports spilling intermediate computation results of large operators to disks to reduce the memory consumption of large operators. For more information, see [Spill to disk](https://docs.starrocks.io/docs/administration/spill_to_disk/).
-- [Routine Load](https://docs.starrocks.io/docs/loading/RoutineLoad#load-avro-format-data) supports loading Avro data.
-- Supports [Microsoft Azure Storage](https://docs.starrocks.io/docs/integrations/authenticate_to_azure_storage/) (including Azure Blob Storage and Azure Data Lake Storage).
+- [Preview] Supports spilling intermediate computation results of large operators to disks to reduce the memory consumption of large operators. For more information, see [Spill to disk](https://docs.starrocks.io/docs/administration/management/resource_management/spill_to_disk/).
+- [Routine Load](https://docs.starrocks.io/docs/loading/kafka/RoutineLoad/#load-avro-format-data) supports loading Avro data.
+- Supports [Microsoft Azure Storage](https://docs.starrocks.io/docs/integrations/csp_auth/authenticate_to_azure_storage/) (including Azure Blob Storage and Azure Data Lake Storage).
 
 ### Improvements
 
@@ -310,29 +310,29 @@ Release date: April 28, 2023
 
 #### System architecture
 
-- **Decouple storage and compute.** StarRocks now supports data persistence into S3-compatible object storage, enhancing resource isolation, reducing storage costs, and making compute resources more scalable. Local disks are used as hot data cache for boosting query performance. The query performance of the new shared-data architecture is comparable to the classic architecture (shared-nothing) when local disk cache is hit. For more information, see [Deploy and use shared-data StarRocks](https://docs.starrocks.io/docs/deployment/shared_data/s3/).
+- **Decouple storage and compute.** StarRocks now supports data persistence into S3-compatible object storage, enhancing resource isolation, reducing storage costs, and making compute resources more scalable. Local disks are used as hot data cache for boosting query performance. The query performance of the new shared-data architecture is comparable to the classic architecture (shared-nothing) when local disk cache is hit. For more information, see [Deploy and use shared-data StarRocks](https://docs.starrocks.io/docs/deployment/deploy_shared_data_manually/).
 
 #### Storage engine and data ingestion
 
 - The [AUTO_INCREMENT](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/auto_increment/) attribute is supported to provide globally unique IDs, which simplifies data management.
 - Automatic partitioning and partitioning expressions are supported, which makes partition creation easier to use and more flexible.
 - Primary Key tables support more complete [UPDATE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/UPDATE/) and [DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/DELETE/#primary-key-tables) syntax, including the use of CTEs and references to multiple tables.
-- Added Load Profile for Broker Load and INSERT INTO jobs. You can view the details of a load job by querying the load profile. The usage is the same as [Analyze query profile](https://docs.starrocks.io/docs/administration/query_profile_overview/).
+- Added Load Profile for Broker Load and INSERT INTO jobs. You can view the details of a load job by querying the load profile. The usage is the same as [Analyze query profile](https://docs.starrocks.io/docs/best_practices/query_tuning/query_profile_overview/).
 
 #### Data Lake Analytics
 
-- [Preview] Supports Presto/Trino compatible dialect. Presto/Trino's SQL can be automatically rewritten into StarRocks' SQL pattern. For more information, see [the system variable](https://docs.starrocks.io/docs/reference/System_variable/) `sql_dialect`.
+- [Preview] Supports Presto/Trino compatible dialect. Presto/Trino's SQL can be automatically rewritten into StarRocks' SQL pattern. For more information, see [the system variable](https://docs.starrocks.io/docs/sql-reference/System_variable/) `sql_dialect`.
 - [Preview] Supports [JDBC catalogs](https://docs.starrocks.io/docs/data_source/catalog/jdbc_catalog/).
 - Supports using [SET CATALOG](https://docs.starrocks.io/docs/sql-reference/sql-statements/Catalog/SET_CATALOG/) to manually switch between catalogs in the current session.
 
 #### Privileges and security
 
-- Provides a new privilege system with full RBAC functionalities, supporting role inheritance and default roles. For more information, see [Overview of privileges](https://docs.starrocks.io/docs/administration/privilege_overview/).
-- Provides more privilege management objects and more fine-grained privileges. For more information, see [Privileges supported by StarRocks](https://docs.starrocks.io/docs/administration/privilege_item/).
+- Provides a new privilege system with full RBAC functionalities, supporting role inheritance and default roles. For more information, see [Overview of privileges](https://docs.starrocks.io/docs/administration/user_privs/authorization/user_privs/).
+- Provides more privilege management objects and more fine-grained privileges. For more information, see [Privileges supported by StarRocks](https://docs.starrocks.io/docs/administration/user_privs/authorization/privilege_item/).
 
 #### Query engine
 
-- Allows more queries on joined tables to benefit from the [query cache](https://docs.starrocks.io/docs/using_starrocks/query_cache/). For example, the query cache now supports Broadcast Join and Bucket Shuffle Join.
+- Allows more queries on joined tables to benefit from the [query cache](https://docs.starrocks.io/docs/using_starrocks/caching/query_cache/). For example, the query cache now supports Broadcast Join and Bucket Shuffle Join.
 - Supports [Global UDFs](https://docs.starrocks.io/docs/sql-reference/sql-functions/JAVA_UDF/).
 - Dynamic adaptive parallelism: StarRocks can automatically adjust the `pipeline_dop` parameter for query concurrency.
 
@@ -351,7 +351,7 @@ Release date: April 28, 2023
 
 #### Deployment
 
-- Updated Docker image and the related [Docker deployment document](https://docs.starrocks.io/docs/quick_start/deploy_with_docker/) for version 3.0. [#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021)
+- Updated Docker image and the related [Docker deployment document](https://docs.starrocks.io/docs/quick_start/shared-nothing/) for version 3.0. [#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021)
 
 #### Storage engine and data ingestion
 
@@ -362,7 +362,7 @@ Release date: April 28, 2023
 
 #### Materialized view
 
-- Optimized the rewriting capabilities of [materialized views](https://docs.starrocks.io/docs/using_starrocks/Materialized_view/), including:
+- Optimized the rewriting capabilities of [materialized views](https://docs.starrocks.io/docs/using_starrocks/async_mv/Materialized_view/), including:
   - Supports rewrite of View Delta Join, Outer Join, and Cross Join.
   - Optimized SQL rewrite of Union with partition.
 - Improved materialized view building capabilities: supporting CTE, select *, and Union.
@@ -372,7 +372,7 @@ Release date: April 28, 2023
 #### Query engine
 
 - All operators are supported in the pipeline engine. Non-pipeline code will be removed in later versions.
-- Improved [Big Query Positioning](https://docs.starrocks.io/docs/administration/monitor_manage_big_queries/) and added big query log. [SHOW PROCESSLIST](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST/) supports viewing CPU and memory information.
+- Improved [Big Query Positioning](https://docs.starrocks.io/docs/administration/management/monitor_manage_big_queries/) and added big query log. [SHOW PROCESSLIST](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST/) supports viewing CPU and memory information.
 - Optimized Outer Join Reorder.
 - Optimized error messages in the SQL parsing stage, providing more accurate error positioning and clearer error messages.
 
@@ -422,4 +422,4 @@ The new RBAC privilege system is used by default after you upgrade to v3.0. You 
 
 After a downgrade, run [ALTER SYSTEM CREATE IMAGE](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM/) to create a new image and wait for the new image to be synchronized to all follower FEs. If you do not run this command, some of the downgrade operations may fail. This command is supported from 2.5.3 and later.
 
-For details about the differences between the privilege system of v2.5 and v3.0, see "Upgrade notes" in [Privileges supported by StarRocks](https://docs.starrocks.io/docs/administration/privilege_item/).
+For details about the differences between the privilege system of v2.5 and v3.0, see "Upgrade notes" in [Privileges supported by StarRocks](https://docs.starrocks.io/docs/administration/user_privs/authorization/privilege_item/).

@@ -262,7 +262,7 @@ Release date: January 12, 2024
 ### New Features
 
 - Added a new function, `unnest_bitmap`. [#38136](https://github.com/StarRocks/starrocks/pull/38136)
-- Supports conditional updates for [Broker Load](https://docs.starrocks.io/docs/3.1/sql-reference/sql-statements/data-manipulation/BROKER_LOAD/#opt_properties). [#37400](https://github.com/StarRocks/starrocks/pull/37400)
+- Supports conditional updates for [Broker Load](https://docs.starrocks.io/docs/3.1/sql-reference/sql-statements/loading_unloading/BROKER_LOAD/#opt_properties). [#37400](https://github.com/StarRocks/starrocks/pull/37400)
 
 ### Behavior Change
 
@@ -286,16 +286,16 @@ Release date: January 12, 2024
 - Wen using JDK, the default GC algorithm is G1. [#37386](https://github.com/StarRocks/starrocks/pull/37386)
 - The `date_trunc`, `adddate`, and `time_slice` functions support setting the `interval` parameter to values that are accurate to the millisecond and microsecond. [#36386](https://github.com/StarRocks/starrocks/pull/36386)
 - When the string on the right side of the LIKE operator within the WHERE clause does not include `%` or `_`, the LIKE operator is converted into the `=` operator. [#37515](https://github.com/StarRocks/starrocks/pull/37515)
-- A new field `LatestSourcePosition` is added to the return result of [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/3.1/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) to record the position of the latest message in each partition of the Kafka topic, helping check the latencies of data loading. [#38298](https://github.com/StarRocks/starrocks/pull/38298)
+- A new field `LatestSourcePosition` is added to the return result of [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/3.1/sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD/) to record the position of the latest message in each partition of the Kafka topic, helping check the latencies of data loading. [#38298](https://github.com/StarRocks/starrocks/pull/38298)
 - Added a new resource group property, `spill_mem_limit_threshold`, to control the memory usage threshold (percentage) at which a resource group triggers the spilling of intermediate results when the system variable `spill_mode` is set to `auto`. The valid range is (0, 1). The default value is `1`, indicating the threshold does not take effect. [#37707](https://github.com/StarRocks/starrocks/pull/37707)
-- The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/3.1/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement now includes the timestamps of consumption messages from each partition. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/3.1/sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD/) statement now includes the timestamps of consumption messages from each partition. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
 - The scheduling policy for Routine Load is optimized, so that slow tasks do not block the execution of the other normal tasks. [#37638](https://github.com/StarRocks/starrocks/pull/37638)
 
 ### Bug Fixes
 
 Fixed the following issues:
 
-- The execution of [ANALYZE TABLE](https://docs.starrocks.io/docs/3.1/sql-reference/sql-statements/data-definition/ANALYZE_TABLE/) gets stuck occasionally. [#36836](https://github.com/StarRocks/starrocks/pull/36836)
+- The execution of [ANALYZE TABLE](https://docs.starrocks.io/docs/3.1/sql-reference/sql-statements/cbo_stats/ANALYZE_TABLE/) gets stuck occasionally. [#36836](https://github.com/StarRocks/starrocks/pull/36836)
 - The memory consumption by PageCache exceeds the threshold specified by the BE dynamic parameter `storage_page_cache_limit` in certain circumstances. [#37740](https://github.com/StarRocks/starrocks/pull/37740)
 - Hive metadata in [Hive catalogs](https://docs.starrocks.io/docs/3.1/data_source/catalog/hive_catalog/) is not automatically refreshed when new fields are added to Hive tables. [#37668](https://github.com/StarRocks/starrocks/pull/37668)
 - In some cases, `bitmap_to_string` may return incorrect results due to data type overflow. [#37405](https://github.com/StarRocks/starrocks/pull/37405)
@@ -326,12 +326,12 @@ Release date: December 18, 2023
 
 ### Improvements
 
-- A new value option `GROUP_CONCAT_LEGACY` is added to the session variable [sql_mode](https://docs.starrocks.io/docs/reference/System_variable/#sql_mode) to provide compatibility with the implementation logic of the [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) function in versions earlier than v2.5. [#36150](https://github.com/StarRocks/starrocks/pull/36150)
-- The Primary Key table size returned by the [SHOW DATA](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_DATA/) statement includes the sizes of **.cols** files (these are files related to partial column updates and generated columns) and persistent index files. [#34898](https://github.com/StarRocks/starrocks/pull/34898)
+- A new value option `GROUP_CONCAT_LEGACY` is added to the session variable [sql_mode](https://docs.starrocks.io/docs/sql-reference/System_variable/#sql_mode) to provide compatibility with the implementation logic of the [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) function in versions earlier than v2.5. [#36150](https://github.com/StarRocks/starrocks/pull/36150)
+- The Primary Key table size returned by the [SHOW DATA](https://docs.starrocks.io/docs/sql-reference/sql-statements/Database/SHOW_DATA/) statement includes the sizes of **.cols** files (these are files related to partial column updates and generated columns) and persistent index files. [#34898](https://github.com/StarRocks/starrocks/pull/34898)
 - Queries on MySQL external tables and the external tables within JDBC catalogs support including keywords in the WHERE clause. [#35917](https://github.com/StarRocks/starrocks/pull/35917)
-- Plugin loading failures will no longer cause an error or cause an FE start failure. Instead, the FE can properly start, and the error status of the plug-in can be queried using [SHOW PLUGINS](https://docs.starrocks.io/docs/sql-reference/sql-statements/Administration/SHOW_PLUGINS/). [#36566](https://github.com/StarRocks/starrocks/pull/36566)
+- Plugin loading failures will no longer cause an error or cause an FE start failure. Instead, the FE can properly start, and the error status of the plug-in can be queried using [SHOW PLUGINS](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/plugin/SHOW_PLUGINS/). [#36566](https://github.com/StarRocks/starrocks/pull/36566)
 - Dynamic partitioning supports random distribution. [#35513](https://github.com/StarRocks/starrocks/pull/35513)
-- The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement provides a new field `OtherMsg`, which shows information about the last failed task. [#35806](https://github.com/StarRocks/starrocks/pull/35806)
+- The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD/) statement provides a new field `OtherMsg`, which shows information about the last failed task. [#35806](https://github.com/StarRocks/starrocks/pull/35806)
 - The authentication information `aws.s3.access_key` and `aws.s3.access_secret` for AWS S3 in Broker Load jobs are hidden in audit logs. [#36571](https://github.com/StarRocks/starrocks/pull/36571)
 - The `be_tablets` view in the `information_schema` database provides a new field `INDEX_DISK`, which records the disk usage (measured in bytes) of persistent indexes [#35615](https://github.com/StarRocks/starrocks/pull/35615)
 
@@ -362,7 +362,7 @@ Release date: November 28, 2023
 
 ### Improvements
 
-- The [`COLUMNS`](https://docs.starrocks.io/docs/reference/information_schema/columns/) view in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
+- The [`COLUMNS`](https://docs.starrocks.io/docs/sql-reference/information_schema/columns/) view in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
 - Supports queries against Parquet, ORC, and CSV formatted files that are compressed by using LZO and stored in [Hive](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/). [#30923](https://github.com/StarRocks/starrocks/pull/30923)  [#30721](https://github.com/StarRocks/starrocks/pull/30721)
 - Supports updates onto the specified partitions of an automatically partitioned table. If the specified partitions do not exist, an error is returned. [#34777](https://github.com/StarRocks/starrocks/pull/34777)
 - Supports automatic refresh of materialized views when Swap, Drop, or Schema Change operations are performed on the tables and views (including the other tables and materialized views associated with these views) on which these materialized views are created. [#32829](https://github.com/StarRocks/starrocks/pull/32829)
@@ -401,15 +401,15 @@ Fixed the following issues:
 
 #### FE/BE Parameters
 
-- Added an FE configuration item [`enable_statistics_collect_profile`](https://docs.starrocks.io/docs/administration/FE_configuration#enable_statistics_collect_profile), which controls whether to generate profiles for statistics queries. The default value is `false`. [#33815](https://github.com/StarRocks/starrocks/pull/33815)
-- The FE configuration item [`mysql_server_version`](https://docs.starrocks.io/docs/administration/FE_configuration#mysql_server_version) is now mutable. The new setting can take effect for the current session without requiring an FE restart. [#34033](https://github.com/StarRocks/starrocks/pull/34033)
-- Added a BE/CN configuration item [`update_compaction_ratio_threshold`](https://docs.starrocks.io/docs/administration/BE_configuration#update_compaction_ratio_threshold), which controls the maximum proportion of data that a compaction can merge for a Primary Key table in a StarRocks shared-data cluster. The default value is `0.5`. We recommend shrinking this value if a single tablet becomes excessively large. For a StarRocks shared-nothing cluster, the proportion of data that a compaction can merge for a Primary Key table is still automatically adjusted. [#35129](https://github.com/StarRocks/starrocks/pull/35129)
+- Added an FE configuration item [`enable_statistics_collect_profile`](https://docs.starrocks.io/docs/administration/configuration/FE_parameters/log_server_meta/#enable_statistics_collect_profile), which controls whether to generate profiles for statistics queries. The default value is `false`. [#33815](https://github.com/StarRocks/starrocks/pull/33815)
+- The FE configuration item [`mysql_server_version`](https://docs.starrocks.io/docs/administration/configuration/FE_parameters/log_server_meta/#mysql_server_version) is now mutable. The new setting can take effect for the current session without requiring an FE restart. [#34033](https://github.com/StarRocks/starrocks/pull/34033)
+- Added a BE/CN configuration item [`update_compaction_ratio_threshold`](https://docs.starrocks.io/docs/administration/configuration/BE_parameters/stats_storage/#update_compaction_ratio_threshold), which controls the maximum proportion of data that a compaction can merge for a Primary Key table in a StarRocks shared-data cluster. The default value is `0.5`. We recommend shrinking this value if a single tablet becomes excessively large. For a StarRocks shared-nothing cluster, the proportion of data that a compaction can merge for a Primary Key table is still automatically adjusted. [#35129](https://github.com/StarRocks/starrocks/pull/35129)
 
 #### System Variables
 
 - Added a session variable `cbo_decimal_cast_string_strict`, which controls how the CBO converts data from the DECIMAL type to the STRING type. If this variable is set to `true`, the logic built in v2.5.x and later versions prevails and the system implements strict conversion (namely, the system truncates the generated string and fills 0s based on the scale length). If this variable is set to `false`, the logic built in versions earlier than v2.5.x prevails and the system processes all valid digits to generate a string. The default value is `true`. [#34208](https://github.com/StarRocks/starrocks/pull/34208)
 - Added a session variable `cbo_eq_base_type`, which specifies the data type used for data comparison between DECIMAL-type data and STRING-type data. The default value is `VARCHAR`, and `DECIMAL` is also a valid value. [#34208](https://github.com/StarRocks/starrocks/pull/34208)
-- Added a session variable `big_query_profile_second_threshold`. When the session variable [`enable_profile`](https://docs.starrocks.io/docs/reference/System_variable#enable_profile) is set to `false` and the amount of time taken by a query exceeds the threshold specified by the `big_query_profile_second_threshold` variable, a profile is generated for that query. [#33825](https://github.com/StarRocks/starrocks/pull/33825)
+- Added a session variable `big_query_profile_second_threshold`. When the session variable [`enable_profile`](https://docs.starrocks.io/docs/sql-reference/System_variable/#enable_profile) is set to `false` and the amount of time taken by a query exceeds the threshold specified by the `big_query_profile_second_threshold` variable, a profile is generated for that query. [#33825](https://github.com/StarRocks/starrocks/pull/33825)
 
 ## 3.1.4
 
@@ -469,8 +469,8 @@ Release date: September 25, 2023
 
 - Primary Key tables created in shared-data StarRocks clusters support index persistence onto local disks in the same way as they do in shared-nothing StarRocks clusters.
 - The aggregate function [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) supports the DISTINCT keyword and the ORDER BY clause. [#28778](https://github.com/StarRocks/starrocks/pull/28778)
-- [Stream Load](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/STREAM_LOAD/), [Broker Load](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/BROKER_LOAD/), [Kafka Connector](https://docs.starrocks.io/docs/loading/Kafka-connector-starrocks/), [Flink Connector](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/), and [Spark Connector](https://docs.starrocks.io/docs/loading/Spark-connector-starrocks/) support partial updates in column mode on a Primary Key table. [#28288](https://github.com/StarRocks/starrocks/pull/28288)
-- Data in partitions can be automatically cooled down over time. (This feature is not supported for [list partitioning](https://docs.starrocks.io/docs/table_design/list_partitioning/).) [#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
+- [Stream Load](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/STREAM_LOAD/), [Broker Load](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/BROKER_LOAD/), [Kafka Connector](https://docs.starrocks.io/docs/loading/kafka/Kafka-connector-starrocks/), [Flink Connector](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/), and [Spark Connector](https://docs.starrocks.io/docs/loading/spark/Spark-connector-starrocks/) support partial updates in column mode on a Primary Key table. [#28288](https://github.com/StarRocks/starrocks/pull/28288)
+- Data in partitions can be automatically cooled down over time. (This feature is not supported for [list partitioning](https://docs.starrocks.io/docs/table_design/data_distribution/list_partitioning/).) [#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
 
 ### Improvements
 
@@ -480,15 +480,15 @@ Executing SQL commands with invalid comments now returns results consistent with
 
 Fixed the following issues:
 
-- If the [BITMAP](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/BITMAP/) or [HLL](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/HLL/) data type is specified in the WHERE clause of a [DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/DELETE/) statement to be executed, the statement cannot be properly executed. [#28592](https://github.com/StarRocks/starrocks/pull/28592)
+- If the [BITMAP](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/BITMAP/) or [HLL](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/HLL/) data type is specified in the WHERE clause of a [DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/DELETE/) statement to be executed, the statement cannot be properly executed. [#28592](https://github.com/StarRocks/starrocks/pull/28592)
 - After a follower FE is restarted, CpuCores statistics are not up-to-date, resulting in query performance degradation. [#28472](https://github.com/StarRocks/starrocks/pull/28472) [#30434](https://github.com/StarRocks/starrocks/pull/30434)
 - The execution cost of the [to_bitmap()](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/to_bitmap/) function is incorrectly calculated. As a result, an inappropriate execution plan is selected for the function after materialized views are rewritten. [#29961](https://github.com/StarRocks/starrocks/pull/29961)
 - In certain use cases of the shared-data architecture, after a follower FE is restarted, queries submitted to the follower FE return an error that reads "Backend node not found. Check if any backend node is down". [#28615](https://github.com/StarRocks/starrocks/pull/28615)
-- If data is continuously loaded into a table that is being altered by using the [ALTER TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/ALTER_TABLE/) statement, an error "Tablet is in error state" may be thrown. [#29364](https://github.com/StarRocks/starrocks/pull/29364)
+- If data is continuously loaded into a table that is being altered by using the [ALTER TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE/) statement, an error "Tablet is in error state" may be thrown. [#29364](https://github.com/StarRocks/starrocks/pull/29364)
 - Modifying the FE dynamic parameter `max_broker_load_job_concurrency` using the `ADMIN SET FRONTEND CONFIG` command does not take effect. [#29964](https://github.com/StarRocks/starrocks/pull/29964) [#29720](https://github.com/StarRocks/starrocks/pull/29720)
 - BEs crash if the time unit in the [date_diff()](https://docs.starrocks.io/docs/sql-reference/sql-functions/date-time-functions/date_diff/) function is a constant but the dates are not constants. [#29937](https://github.com/StarRocks/starrocks/issues/29937)
 - In the shared-data architecture, automatic partitioning does not take effect after asynchronous load is enabled. [#29986](https://github.com/StarRocks/starrocks/issues/29986)
-- If users create a Primary Key table by using the [CREATE TABLE LIKE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE/) statement, an error `Unexpected exception: Unknown properties: {persistent_index_type=LOCAL}` is thrown. [#30255](https://github.com/StarRocks/starrocks/pull/30255)
+- If users create a Primary Key table by using the [CREATE TABLE LIKE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE/) statement, an error `Unexpected exception: Unknown properties: {persistent_index_type=LOCAL}` is thrown. [#30255](https://github.com/StarRocks/starrocks/pull/30255)
 - Restoring Primary Key tables causes metadata inconsistency after BEs are restarted. [#30135](https://github.com/StarRocks/starrocks/pull/30135)
 - If users load data into a Primary Key table on which truncate operations and queries are concurrently performed, an error "java.lang.NullPointerException" is thrown in certain cases. [#30573](https://github.com/StarRocks/starrocks/pull/30573)
 - If predicate expressions are specified in materialized view creation statements, the refresh results of those materialized views are incorrect. [#29904](https://github.com/StarRocks/starrocks/pull/29904)
@@ -499,7 +499,7 @@ Fixed the following issues:
 ### Behavior Change
 
 - When using the [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) function, users must use the SEPARATOR keyword to declare the separator.
-- The default value of the session variable [`group_concat_max_len`](https://docs.starrocks.io/docs/reference/System_variable#group_concat_max_len) which controls the default maximum length of the string returned by the [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) function is changed from unlimited to `1024`.
+- The default value of the session variable [`group_concat_max_len`](https://docs.starrocks.io/docs/sql-reference/System_variable/#group_concat_max_len) which controls the default maximum length of the string returned by the [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) function is changed from unlimited to `1024`.
 
 ## 3.1.2
 
@@ -512,13 +512,13 @@ Fixed the following issues:
 - If a user specifies which database is to be connected by default and the user only has permissions on tables in the database but does not have permissions on the database, an error stating that the user does not have permissions on the database is thrown. [#29767](https://github.com/StarRocks/starrocks/pull/29767)
 - The values returned by the RESTful API action `show_data` for cloud-native tables are incorrect. [#29473](https://github.com/StarRocks/starrocks/pull/29473)
 - BEs crash if queries are canceled while the [array_agg()](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_agg/) function is being run. [#29400](https://github.com/StarRocks/starrocks/issues/29400)
-- The `Default` field values returned by the [SHOW FULL COLUMNS](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_FULL_COLUMNS/) statement for columns of the [BITMAP](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/BITMAP/) or [HLL](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/HLL/) data type are incorrect. [#29510](https://github.com/StarRocks/starrocks/pull/29510)
+- The `Default` field values returned by the [SHOW FULL COLUMNS](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/SHOW_FULL_COLUMNS/) statement for columns of the [BITMAP](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/BITMAP/) or [HLL](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/HLL/) data type are incorrect. [#29510](https://github.com/StarRocks/starrocks/pull/29510)
 - If the [array_map()](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_map/) function in queries involves multiple tables, the queries fail due to pushdown strategy issues. [#29504](https://github.com/StarRocks/starrocks/pull/29504)
 - Queries against ORC-formatted files fail because the bugfix ORC-1304 ([apache/orc#1299](https://github.com/apache/orc/pull/1299)) from Apache ORC is not merged. [#29804](https://github.com/StarRocks/starrocks/pull/29804)
 
 ### Behavior Change
 
-For a newly deployed StarRocks v3.1 cluster, you must have the USAGE privilege on the destination external catalog if you want to run [SET CATALOG](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/SET_CATALOG/) to switch to that catalog. You can use [GRANT](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/GRANT/) to grant the required privileges.
+For a newly deployed StarRocks v3.1 cluster, you must have the USAGE privilege on the destination external catalog if you want to run [SET CATALOG](https://docs.starrocks.io/docs/sql-reference/sql-statements/Catalog/SET_CATALOG/) to switch to that catalog. You can use [GRANT](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/GRANT/) to grant the required privileges.
 
 For a v3.1 cluster upgraded from an earlier version, you can run SET CATALOG with inherited privilege.
 
@@ -528,14 +528,14 @@ Release date: August 18, 2023
 
 ### New Features
 
-- Supports Azure Blob Storage for [shared-data clusters](https://docs.starrocks.io/docs/deployment/shared_data/s3/).
-- Supports List partitioning for [shared-data clusters](https://docs.starrocks.io/docs/deployment/shared_data/s3/).
+- Supports Azure Blob Storage for [shared-data clusters](https://docs.starrocks.io/docs/deployment/deploy_shared_data_manually/).
+- Supports List partitioning for [shared-data clusters](https://docs.starrocks.io/docs/deployment/deploy_shared_data_manually/).
 - Supports aggregate functions [COVAR_SAMP](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/covar_samp/), [COVAR_POP](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/covar_pop/), and [CORR](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/corr/).
 - Supports the following [window functions](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function/): COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP.
 
 ### Improvements
 
-Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](https://docs.starrocks.io/docs/reference/System_variable/) `enable_strict_type`. The default value of this session variable is `false`.
+Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](https://docs.starrocks.io/docs/sql-reference/System_variable/) `enable_strict_type`. The default value of this session variable is `false`.
 
 ### Bug Fixes
 
@@ -555,35 +555,35 @@ Release date: August 7, 2023
 #### Shared-data cluster
 
 - Added support for Primary Key tables, on which persistent indexes cannot be enabled.
-- Supports the [AUTO_INCREMENT](https://docs.starrocks.io/docs/sql-reference/sql-statements/auto_increment/) column attribute, which enables a globally unique ID for each data row and thus simplifies data management.
-- Supports [automatically creating partitions during loading and using partitioning expressions to define partitioning rules](https://docs.starrocks.io/docs/table_design/expression_partitioning/), thereby making partition creation easier to use and more flexible.
-- Supports [abstraction of storage volumes](https://docs.starrocks.io/docs/deployment/shared_data/s3#use-your-shared-data-starrocks-cluster), in which users can configure storage location and authentication information, in shared-data StarRocks clusters. Users can directly reference an existing storage volume when creating a database or table, making authentication configuration easier.
+- Supports the [AUTO_INCREMENT](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/auto_increment/) column attribute, which enables a globally unique ID for each data row and thus simplifies data management.
+- Supports [automatically creating partitions during loading and using partitioning expressions to define partitioning rules](https://docs.starrocks.io/docs/table_design/data_distribution/expression_partitioning/), thereby making partition creation easier to use and more flexible.
+- Supports [abstraction of storage volumes](https://docs.starrocks.io/docs/deployment/deploy_shared_data_manually/#use-shared-data-starrocks), in which users can configure storage location and authentication information, in shared-data StarRocks clusters. Users can directly reference an existing storage volume when creating a database or table, making authentication configuration easier.
 
 #### Data Lake analytics
 
 - Supports accessing views created on tables within [Hive catalogs](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/).
 - Supports accessing Parquet-formatted Iceberg v2 tables.
-- Supports [sinking data to Parquet-formatted Iceberg tables](https://docs.starrocks.io/docs/data_source/catalog/iceberg_catalog#sink-data-to-an-iceberg-table).
+- Supports [sinking data to Parquet-formatted Iceberg tables](https://docs.starrocks.io/docs/data_source/catalog/iceberg/DML/#insert).
 - [Preview] Supports accessing data stored in Elasticsearch by using [Elasticsearch catalogs](https://docs.starrocks.io/docs/data_source/catalog/elasticsearch_catalog/). This simplifies the creation of Elasticsearch external tables.
 - [Preview] Supports performing analytics on streaming data stored in Apache Paimon by using [Paimon catalogs](https://docs.starrocks.io/docs/data_source/catalog/paimon_catalog/).
 
 #### Storage engine, data ingestion, and query
 
-- Upgraded automatic partitioning to [expression partitioning](https://docs.starrocks.io/docs/table_design/expression_partitioning/). Users only need to use a simple partition expression (either a time function expression or a column expression) to specify a partitioning method at table creation, and StarRocks will automatically create partitions based on the data characteristics and the rule defined in the partition expression during data loading. This method of partition creation is suitable for most scenarios and is more flexible and user-friendly.
-- Supports [list partitioning](https://docs.starrocks.io/docs/table_design/list_partitioning/). Data is partitioned based on a list of values predefined for a particular column, which can accelerate queries and manage clearly categorized data more efficiently.
-- Added a new table named `loads` to the `Information_schema` database. Users can query the results of [Broker Load](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/BROKER_LOAD/) and [Insert](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/INSERT/) jobs from the `loads` table.
-- Supports logging the unqualified data rows that are filtered out by [Stream Load](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/STREAM_LOAD/), [Broker Load](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/BROKER_LOAD/), and [Spark Load](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SPARK_LOAD/) jobs. Users can use the `log_rejected_record_num` parameter in their load job to specify the maximum number of data rows that can be logged.
-- Supports [random bucketing](https://docs.starrocks.io/docs/table_design/Data_distribution#how-to-choose-the-bucketing-columns). With this feature, users do not need to configure bucketing columns at table creation, and StarRocks will randomly distribute the data loaded into it to buckets. Using this feature together with the capability of automatically setting the number of buckets (`BUCKETS`) that StarRocks has provided since v2.5.7, users no longer need to consider bucket configurations, and table creation statements are greatly simplified. In big data and high performance-demanding scenarios, however, we recommend that users continue using hash bucketing, because this way they can use bucket pruning to accelerate queries.
+- Upgraded automatic partitioning to [expression partitioning](https://docs.starrocks.io/docs/table_design/data_distribution/expression_partitioning/). Users only need to use a simple partition expression (either a time function expression or a column expression) to specify a partitioning method at table creation, and StarRocks will automatically create partitions based on the data characteristics and the rule defined in the partition expression during data loading. This method of partition creation is suitable for most scenarios and is more flexible and user-friendly.
+- Supports [list partitioning](https://docs.starrocks.io/docs/table_design/data_distribution/list_partitioning/). Data is partitioned based on a list of values predefined for a particular column, which can accelerate queries and manage clearly categorized data more efficiently.
+- Added a new table named `loads` to the `Information_schema` database. Users can query the results of [Broker Load](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/BROKER_LOAD/) and [Insert](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/INSERT/) jobs from the `loads` table.
+- Supports logging the unqualified data rows that are filtered out by [Stream Load](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/STREAM_LOAD/), [Broker Load](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/BROKER_LOAD/), and [Spark Load](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/SPARK_LOAD/) jobs. Users can use the `log_rejected_record_num` parameter in their load job to specify the maximum number of data rows that can be logged.
+- Supports [random bucketing](https://docs.starrocks.io/docs/table_design/data_distribution/#how-to-choose-the-bucketing-columns). With this feature, users do not need to configure bucketing columns at table creation, and StarRocks will randomly distribute the data loaded into it to buckets. Using this feature together with the capability of automatically setting the number of buckets (`BUCKETS`) that StarRocks has provided since v2.5.7, users no longer need to consider bucket configurations, and table creation statements are greatly simplified. In big data and high performance-demanding scenarios, however, we recommend that users continue using hash bucketing, because this way they can use bucket pruning to accelerate queries.
 - Supports using the table function FILES() in [INSERT INTO](https://docs.starrocks.io/docs/loading/InsertInto/) to directly load the data of Parquet- or ORC-formatted data files stored in AWS S3. The FILES() function can automatically infer the table schema, which relieves the need to create external catalogs or file external tables before data loading and therefore greatly simplifies the data loading process.
 - Supports [generated columns](https://docs.starrocks.io/docs/sql-reference/sql-statements/generated_columns/). With the generated column feature, StarRocks can automatically generate and store the values of column expressions and automatically rewrite queries to improve query performance.
-- Supports loading data from Spark to StarRocks by using [Spark connector](https://docs.starrocks.io/docs/loading/Spark-connector-starrocks/). Compared to [Spark Load](https://docs.starrocks.io/docs/loading/SparkLoad/), the Spark connector provides more comprehensive capabilities. Users can define a Spark job to perform ETL operations on the data, and the Spark connector serves as the sink in the Spark job.
+- Supports loading data from Spark to StarRocks by using [Spark connector](https://docs.starrocks.io/docs/loading/spark/Spark-connector-starrocks/). Compared to [Spark Load](https://docs.starrocks.io/docs/loading/spark/SparkLoad/), the Spark connector provides more comprehensive capabilities. Users can define a Spark job to perform ETL operations on the data, and the Spark connector serves as the sink in the Spark job.
 - Supports loading data into columns of the [MAP](https://docs.starrocks.io/docs/sql-reference/data-types/semi_structured/Map/) and [STRUCT](https://docs.starrocks.io/docs/sql-reference/data-types/semi_structured/STRUCT/) data types, and supports nesting Fast Decimal values in ARRAY, MAP, and STRUCT.
 
 #### SQL reference
 
-- Added the following storage volume-related statements: [CREATE STORAGE VOLUME](https://docs.starrocks.io/docs/sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME/), [ALTER STORAGE VOLUME](https://docs.starrocks.io/docs/sql-reference/sql-statements/Administration/ALTER_STORAGE_VOLUME/), [DROP STORAGE VOLUME](https://docs.starrocks.io/docs/sql-reference/sql-statements/Administration/DROP_STORAGE_VOLUME/), [SET DEFAULT STORAGE VOLUME](https://docs.starrocks.io/docs/sql-reference/sql-statements/Administration/SET_DEFAULT_STORAGE_VOLUME/), [DESC STORAGE VOLUME](https://docs.starrocks.io/docs/sql-reference/sql-statements/Administration/DESC_STORAGE_VOLUME/), [SHOW STORAGE VOLUMES](https://docs.starrocks.io/docs/sql-reference/sql-statements/Administration/SHOW_STORAGE_VOLUMES/).
+- Added the following storage volume-related statements: [CREATE STORAGE VOLUME](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME/), [ALTER STORAGE VOLUME](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/storage_volume/ALTER_STORAGE_VOLUME/), [DROP STORAGE VOLUME](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/storage_volume/DROP_STORAGE_VOLUME/), [SET DEFAULT STORAGE VOLUME](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME/), [DESC STORAGE VOLUME](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/storage_volume/DESC_STORAGE_VOLUME/), [SHOW STORAGE VOLUMES](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/storage_volume/SHOW_STORAGE_VOLUMES/).
 
-- Supports altering table comments using [ALTER TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/ALTER_TABLE/). [#21035](https://github.com/StarRocks/starrocks/pull/21035)
+- Supports altering table comments using [ALTER TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE/). [#21035](https://github.com/StarRocks/starrocks/pull/21035)
 
 - Added the following functions:
 
@@ -600,7 +600,7 @@ Release date: August 7, 2023
 
 #### Privileges and security
 
-Added [privilege items](https://docs.starrocks.io/docs/administration/privilege_item#storage-volume) related to storage volumes and [privilege items](https://docs.starrocks.io/docs/administration/privilege_item#catalog) related to external catalogs, and supports using [GRANT](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/GRANT/) and [REVOKE](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/REVOKE/) to grant and revoke these privileges.
+Added [privilege items](https://docs.starrocks.io/docs/administration/user_privs/authorization/privilege_item/#storage-volume) related to storage volumes and [privilege items](https://docs.starrocks.io/docs/administration/user_privs/authorization/privilege_item/#catalog) related to external catalogs, and supports using [GRANT](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/GRANT/) and [REVOKE](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/REVOKE/) to grant and revoke these privileges.
 
 ### Improvements
 
@@ -640,7 +640,7 @@ Optimized the data cache in shared-data StarRocks clusters. The optimized data c
 
 - Announced the general availability of the [spill](https://docs.starrocks.io/docs/3.1/administration/management/resource_management/spill_to_disk/) feature, which supports spilling the intermediate computation results of some blocking operators to disk. With the spill feature enabled, when a query contains aggregate, sort, or join operators, StarRocks can cache the intermediate computation results of the operators to disk to reduce memory consumption, thereby minimizing query failures caused by memory limits.
 - Supports pruning on cardinality-preserving joins. If users maintain a large number of tables which are organized in the star schema (for example, SSB) or the snowflake schema (for example, TCP-H) but they query only a small number of these tables, this feature helps prune unnecessary tables to improve the performance of joins.
-- Supports partial updates in column mode. Users can enable the column mode when they perform partial updates on Primary Key tables by using the [UPDATE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/UPDATE/) statement. The column mode is suitable for updating a small number of columns but a large number of rows, and can improve the updating performance by up to 10 times.
+- Supports partial updates in column mode. Users can enable the column mode when they perform partial updates on Primary Key tables by using the [UPDATE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/UPDATE/) statement. The column mode is suitable for updating a small number of columns but a large number of rows, and can improve the updating performance by up to 10 times.
 - Optimized the collection of statistics for the CBO. This reduces the impact of statistics collection on data ingestion and increases statistics collection performance.
 - Optimized the merge algorithm to increase the overall performance by up to 2 times in permutation scenarios.
 - Optimized the query logic to reduce dependency on database locks.
@@ -694,5 +694,5 @@ Fixed the following issues:
 - The FE configuration item `max_routine_load_job_num` is deprecated. Now StarRocks dynamically infers the maximum number of Routine Load tasks supported by each individual BE node based on the `max_routine_load_task_num_per_be` parameter and provides suggestions on task failures.
 - The CN configuration item `thrift_port` is renamed as `be_port`.
 - Two new Routine Load job properties, `task_consume_second` and `task_timeout_second`, are added to control the maximum amount of time to consume data and the timeout duration for individual load tasks within a Routine Load job, making job adjustment more flexible. If users do not specify these two properties in their Routine Load job, the FE configuration items `routine_load_task_consume_second` and `routine_load_task_timeout_second` prevail.
-- The session variable `enable_resource_group` is deprecated because the [Resource Group](https://docs.starrocks.io/docs/administration/resource_group/) feature is enabled by default since v3.1.0.
+- The session variable `enable_resource_group` is deprecated because the [Resource Group](https://docs.starrocks.io/docs/administration/management/resource_management/resource_group/) feature is enabled by default since v3.1.0.
 - Two new reserved keywords, COMPACTION and TEXT, are added.

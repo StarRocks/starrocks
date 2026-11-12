@@ -76,7 +76,7 @@ displayed_sidebar: docs
 
 - 非アクティブなマテリアライズドビューをリフレッシュする際に自動的にアクティブ化する機能をサポートします。[#38521](https://github.com/StarRocks/starrocks/pull/38521)
 - BEログの印刷を最適化し、無関係なログが多すぎるのを防ぎます。[#22820](https://github.com/StarRocks/starrocks/pull/22820) [#36187](https://github.com/StarRocks/starrocks/pull/36187)
-- [Hive UDFs](https://docs.starrocks.io/docs/integrations/hive_bitmap_udf/) を使用してBitmapデータをStarRocksにロードし、StarRocksからHiveにエクスポートすることをサポートします。[#40165](https://github.com/StarRocks/starrocks/pull/40165) [#40168](https://github.com/StarRocks/starrocks/pull/40168)
+- [Hive UDFs](https://docs.starrocks.io/docs/sql-reference/sql-functions/hive_bitmap_udf/) を使用してBitmapデータをStarRocksにロードし、StarRocksからHiveにエクスポートすることをサポートします。[#40165](https://github.com/StarRocks/starrocks/pull/40165) [#40168](https://github.com/StarRocks/starrocks/pull/40168)
 - Apache IcebergテーブルのTIMESTAMPパーティションフィールドをサポートするために、日付フォーマット `yyyy-MM-ddTHH:mm` および `yyyy-MM-dd HH:mm` を追加しました。[#39986](https://github.com/StarRocks/starrocks/pull/39986)
 
 ### バグ修正
@@ -103,12 +103,12 @@ displayed_sidebar: docs
 
 ### 新機能
 
-- ユーザーは、非同期マテリアライズドビューを[CREATE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/#parameters)または[ALTER](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW/)する際にセッション変数を設定または変更できます。[#37401](https://github.com/StarRocks/starrocks/pull/37401)
+- ユーザーは、非同期マテリアライズドビューを[CREATE](https://docs.starrocks.io/docs/sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW/#parameters)または[ALTER](https://docs.starrocks.io/docs/sql-reference/sql-statements/materialized_view/ALTER_MATERIALIZED_VIEW/)する際にセッション変数を設定または変更できます。[#37401](https://github.com/StarRocks/starrocks/pull/37401)
 
 ### 改善点
 
 - JDKを使用する際、デフォルトのGCアルゴリズムはG1です。[#37498](https://github.com/StarRocks/starrocks/pull/37498)
-- [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/)文によって返される結果には、各パーティションからの消費メッセージのタイムスタンプが含まれるようになりました。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD/)文によって返される結果には、各パーティションからの消費メッセージのタイムスタンプが含まれるようになりました。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
 
 ### 動作変更
 
@@ -128,7 +128,7 @@ displayed_sidebar: docs
 
 - NaN（Not a Number）カラムをORDER BYカラムとして使用すると、BEsがクラッシュする可能性があります。[#30759](https://github.com/StarRocks/starrocks/pull/30759)
 - 主キーインデックスの更新に失敗すると、"get_applied_rowsets failed" エラーが発生する可能性があります。[#27488](https://github.com/StarRocks/starrocks/pull/27488)
-- [Hiveカタログ](https://docs.starrocks.io/docs/2.5/data_source/catalog/hive_catalog/)のHiveメタデータが、Hiveテーブルに新しいフィールドが追加されたときに自動的に更新されません。[#37668](https://github.com/StarRocks/starrocks/pull/37668)
+- [Hiveカタログ](https://docs.starrocks.io/docs/3.1/data_source/catalog/hive_catalog/)のHiveメタデータが、Hiveテーブルに新しいフィールドが追加されたときに自動的に更新されません。[#37668](https://github.com/StarRocks/starrocks/pull/37668)
 - `SELECT ... FROM ... INTO OUTFILE` を実行してCSVファイルにデータをエクスポートする際、FROM句に複数の定数が含まれている場合、"Unmatched number of columns" エラーが報告されます。[#38045](https://github.com/StarRocks/starrocks/pull/38045)
 - 一部のケースで、`bitmap_to_string` がデータ型オーバーフローのために不正確な結果を返す可能性があります。[#37405](https://github.com/StarRocks/starrocks/pull/37405)
 
@@ -143,13 +143,13 @@ displayed_sidebar: docs
 
 ### 改善点
 
-- [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 文によって返される結果に新しいフィールド `OtherMsg` が追加され、最後に失敗したタスクに関する情報が表示されます。[#35806](https://github.com/StarRocks/starrocks/pull/35806)
+- [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD/) 文によって返される結果に新しいフィールド `OtherMsg` が追加され、最後に失敗したタスクに関する情報が表示されます。[#35806](https://github.com/StarRocks/starrocks/pull/35806)
 - ゴミファイルのデフォルト保持期間が元の3日から1日に変更されました。[#37113](https://github.com/StarRocks/starrocks/pull/37113)
 - 主キーテーブルのすべてのrowsetでコンパクションが実行されるときの永続性インデックス更新のパフォーマンスを最適化し、ディスク読み取りI/Oを削減しました。[#36819](https://github.com/StarRocks/starrocks/pull/36819)
 - 主キーテーブルのコンパクションスコアを計算するためのロジックを最適化し、他の3つのテーブルタイプとより一貫した範囲内で主キーテーブルのコンパクションスコアを整合させました。[#36534](https://github.com/StarRocks/starrocks/pull/36534)
 - MySQL外部テーブルおよびJDBCカタログ内の外部テーブルに対するクエリがWHERE句にキーワードを含むことをサポートします。[#35917](https://github.com/StarRocks/starrocks/pull/35917)
 - Spark Loadにbitmap_from_binary関数を追加して、バイナリデータのロードをサポートします。[#36050](https://github.com/StarRocks/starrocks/pull/36050)
-- bRPCの有効期限が1時間からセッション変数 [`query_timeout`](https://docs.starrocks.io/zh/docs/3.2/reference/System_variable/#query_timeout) で指定された期間に短縮されました。これにより、RPCリクエストの有効期限切れによるクエリの失敗を防ぎます。[#36778](https://github.com/StarRocks/starrocks/pull/36778)
+- bRPCの有効期限が1時間からセッション変数 [`query_timeout`](https://docs.starrocks.io/zh/docs/3.2/sql-reference/System_variable/#query_timeout) で指定された期間に短縮されました。これにより、RPCリクエストの有効期限切れによるクエリの失敗を防ぎます。[#36778](https://github.com/StarRocks/starrocks/pull/36778)
 
 ### パラメータ変更
 
@@ -382,7 +382,7 @@ displayed_sidebar: docs
 ### 改善点
 
 - パーティションが追加されるときに非パーティションテーブルで報告されるエラーメッセージを最適化しました。[#25266](https://github.com/StarRocks/starrocks/pull/25266)
-- テーブルの[自動tablet分配ポリシー](https://docs.starrocks.io/docs/2.5/table_design/Data_distribution/#determine-the-number-of-tablets)を最適化しました。[#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- テーブルの[自動tablet分配ポリシー](https://docs.starrocks.io/docs/3.1/table_design/data_distribution/#determine-the-number-of-buckets)を最適化しました。[#24543](https://github.com/StarRocks/starrocks/pull/24543)
 - CREATE TABLE文のデフォルトコメントを最適化しました。[#24803](https://github.com/StarRocks/starrocks/pull/24803)
 - 非同期マテリアライズドビューの手動リフレッシュを最適化しました。REFRESH MATERIALIZED VIEW WITH SYNC MODE構文を使用して、マテリアライズドビューのリフレッシュタスクを同期的に呼び出すことをサポートします。[#25910](https://github.com/StarRocks/starrocks/pull/25910)
 
@@ -400,8 +400,8 @@ displayed_sidebar: docs
 
 ### 新機能
 
-- 非アクティブなマテリアライズドビューを `ALTER MATERIALIZED VIEW <mv_name> ACTIVE` を使用して手動でアクティブ化できます。このSQLコマンドを使用して、ベーステーブルが削除されてから再作成されたマテリアライズドビューをアクティブ化できます。詳細については、[ALTER MATERIALIZED VIEW](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW/) を参照してください。[#24001](https://github.com/StarRocks/starrocks/pull/24001)
-- テーブルを作成するかパーティションを追加する際に、適切な数のtabletを自動的に設定することができ、手動操作が不要になります。詳細については、[Determine the number of tablets](https://docs.starrocks.io/docs/2.5/table_design/Data_distribution/#determine-the-number-of-tablets) を参照してください。[#10614](https://github.com/StarRocks/starrocks/pull/10614)
+- 非アクティブなマテリアライズドビューを `ALTER MATERIALIZED VIEW <mv_name> ACTIVE` を使用して手動でアクティブ化できます。このSQLコマンドを使用して、ベーステーブルが削除されてから再作成されたマテリアライズドビューをアクティブ化できます。詳細については、[ALTER MATERIALIZED VIEW](https://docs.starrocks.io/docs/sql-reference/sql-statements/materialized_view/ALTER_MATERIALIZED_VIEW/) を参照してください。[#24001](https://github.com/StarRocks/starrocks/pull/24001)
+- テーブルを作成するかパーティションを追加する際に、適切な数のtabletを自動的に設定することができ、手動操作が不要になります。詳細については、[Determine the number of tablets](https://docs.starrocks.io/docs/3.1/table_design/data_distribution/#determine-the-number-of-buckets) を参照してください。[#10614](https://github.com/StarRocks/starrocks/pull/10614)
 
 ### 改善点
 
@@ -461,7 +461,7 @@ displayed_sidebar: docs
 - **err_state** tabletの数を表示するために `SHOW PROC '/statistic/'` の出力に `ErrorStateTabletNum` カラムを追加しました。
 - **err_state** tabletのIDを表示するために `SHOW PROC '/statistic/<db_id>/'` の出力に `ErrorStateTablets` カラムを追加しました。
 
-詳細については、[SHOW PROC](https://docs.starrocks.io/docs/sql-reference/sql-statements/Administration/SHOW_PROC/) を参照してください。
+詳細については、[SHOW PROC](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC/) を参照してください。
 
 ### 改善点
 
@@ -495,7 +495,7 @@ displayed_sidebar: docs
 - 型推論ロジックを最適化しました。`SELECT sum(CASE WHEN XXX);` のようなクエリに定数 `0` が含まれている場合、`SELECT sum(CASE WHEN k1 = 1 THEN v1 ELSE 0 END) FROM test;` のように、事前集計が自動的に有効になり、クエリが加速されます。[#19474](https://github.com/StarRocks/starrocks/pull/19474)
 - `SHOW CREATE VIEW` を使用してマテリアライズドビューの作成文を表示することをサポートします。[#19999](https://github.com/StarRocks/starrocks/pull/19999)
 - BEノード間の単一bRPCリクエストで2 GB以上のサイズのパケットを送信することをサポートします。[#20283](https://github.com/StarRocks/starrocks/pull/20283) [#20230](https://github.com/StarRocks/starrocks/pull/20230)
-- [SHOW CREATE CATALOG](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG/) を使用して外部カタログの作成文をクエリすることをサポートします。
+- [SHOW CREATE CATALOG](https://docs.starrocks.io/docs/sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG/) を使用して外部カタログの作成文をクエリすることをサポートします。
 
 ### バグ修正
 
@@ -575,7 +575,7 @@ displayed_sidebar: docs
 - 外部カタログに基づいて作成された非同期マテリアライズドビューがクエリ書き換えをサポートします。[#11116](https://github.com/StarRocks/starrocks/issues/11116) [#15791](https://github.com/StarRocks/starrocks/issues/15791)
 - 自動CBO統計収集のための収集期間を指定できるようになり、自動フルコレクションによるクラスターのパフォーマンスのジッターを防ぎます。[#14996](https://github.com/StarRocks/starrocks/pull/14996)
 - Thriftサーバーキューを追加しました。INSERT INTO SELECT中に即座に処理できないリクエストはThriftサーバーキューに保留され、リクエストが拒否されるのを防ぎます。[#14571](https://github.com/StarRocks/starrocks/pull/14571)
-- FEパラメータ `default_storage_medium` を廃止しました。ユーザーがテーブルを作成する際に `storage_medium` を明示的に指定しない場合、システムはBEディスクタイプに基づいてテーブルのストレージメディアを自動的に推論します。詳細については、[CREATE TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_VIEW/) の `storage_medium` の説明を参照してください。[#14394](https://github.com/StarRocks/starrocks/pull/14394)
+- FEパラメータ `default_storage_medium` を廃止しました。ユーザーがテーブルを作成する際に `storage_medium` を明示的に指定しない場合、システムはBEディスクタイプに基づいてテーブルのストレージメディアを自動的に推論します。詳細については、[CREATE TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/View/CREATE_VIEW/) の `storage_medium` の説明を参照してください。[#14394](https://github.com/StarRocks/starrocks/pull/14394)
 
 ### バグ修正
 
@@ -597,41 +597,41 @@ displayed_sidebar: docs
 ### 新機能
 
 - [Hudiカタログ](https://docs.starrocks.io/docs/data_source/catalog/hudi_catalog/)および[Hudi外部テーブル](https://docs.starrocks.io/docs/data_source/External_table#deprecated-hudi-external-table)を使用してMerge On Readテーブルをクエリすることをサポートします。[#6780](https://github.com/StarRocks/starrocks/pull/6780)
-- [Hiveカタログ](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/)、Hudiカタログ、および[Icebergカタログ](https://docs.starrocks.io/docs/data_source/catalog/iceberg_catalog/)を使用してSTRUCTおよびMAPデータをクエリすることをサポートします。[#10677](https://github.com/StarRocks/starrocks/issues/10677)
+- [Hiveカタログ](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/)、Hudiカタログ、および[Icebergカタログ](https://docs.starrocks.io/docs/data_source/catalog/iceberg/)を使用してSTRUCTおよびMAPデータをクエリすることをサポートします。[#10677](https://github.com/StarRocks/starrocks/issues/10677)
 - 外部ストレージシステム（HDFSなど）に保存されたホットデータのアクセスパフォーマンスを向上させるために[Data Cache](https://docs.starrocks.io/docs/data_source/data_cache/)を提供します。[#11597](https://github.com/StarRocks/starrocks/pull/11579)
 - Delta Lakeからのデータに直接クエリを実行できる[Delta Lakeカタログ](https://docs.starrocks.io/docs/data_source/catalog/deltalake_catalog/)を作成することをサポートします。[#11972](https://github.com/StarRocks/starrocks/issues/11972)
 - Hive、Hudi、およびIcebergカタログはAWS Glueと互換性があります。[#12249](https://github.com/StarRocks/starrocks/issues/12249)
 - HDFSおよびオブジェクトストアからParquetおよびORCファイルに直接クエリを実行できる[ファイル外部テーブル](https://docs.starrocks.io/docs/data_source/file_external_table/)を作成することをサポートします。[#13064](https://github.com/StarRocks/starrocks/pull/13064)
-- Hive、Hudi、Icebergカタログ、およびマテリアライズドビューに基づいてマテリアライズドビューを作成することをサポートします。詳細については、[マテリアライズドビュー](https://docs.starrocks.io/docs/using_starrocks/Materialized_view/)を参照してください。[#11116](https://github.com/StarRocks/starrocks/issues/11116) [#11873](https://github.com/StarRocks/starrocks/pull/11873)
+- Hive、Hudi、Icebergカタログ、およびマテリアライズドビューに基づいてマテリアライズドビューを作成することをサポートします。詳細については、[マテリアライズドビュー](https://docs.starrocks.io/docs/using_starrocks/async_mv/Materialized_view/)を参照してください。[#11116](https://github.com/StarRocks/starrocks/issues/11116) [#11873](https://github.com/StarRocks/starrocks/pull/11873)
 - 主キーテーブルを使用するテーブルに対する条件付き更新をサポートします。詳細については、[ロードを通じたデータの変更](https://docs.starrocks.io/docs/loading/Load_to_Primary_Key_tables/)を参照してください。[#12159](https://github.com/StarRocks/starrocks/pull/12159)
-- クエリの中間計算結果を保存し、高度に同時実行される単純なクエリのQPSを向上させ、平均遅延を削減する[Query Cache](https://docs.starrocks.io/docs/using_starrocks/query_cache/)をサポートします。[#9194](https://github.com/StarRocks/starrocks/pull/9194)
-- Broker Loadジョブの優先度を指定することをサポートします。詳細については、[BROKER LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/BROKER_LOAD/)を参照してください。[#11029](https://github.com/StarRocks/starrocks/pull/11029)
-- StarRocks内部テーブルのデータロードに対するレプリカ数を指定することをサポートします。詳細については、[CREATE TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE/)を参照してください。[#11253](https://github.com/StarRocks/starrocks/pull/11253)
-- [クエリキュー](https://docs.starrocks.io/docs/administration/query_queues/)をサポートします。[#12594](https://github.com/StarRocks/starrocks/pull/12594)
-- データロードタスクのリソース消費を制限することにより、データロードが占有する計算リソースを分離することをサポートします。詳細については、[リソースグループ](https://docs.starrocks.io/docs/administration/resource_group/)を参照してください。[#12606](https://github.com/StarRocks/starrocks/pull/12606)
+- クエリの中間計算結果を保存し、高度に同時実行される単純なクエリのQPSを向上させ、平均遅延を削減する[Query Cache](https://docs.starrocks.io/docs/using_starrocks/caching/query_cache/)をサポートします。[#9194](https://github.com/StarRocks/starrocks/pull/9194)
+- Broker Loadジョブの優先度を指定することをサポートします。詳細については、[BROKER LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/loading_unloading/BROKER_LOAD/)を参照してください。[#11029](https://github.com/StarRocks/starrocks/pull/11029)
+- StarRocks内部テーブルのデータロードに対するレプリカ数を指定することをサポートします。詳細については、[CREATE TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/)を参照してください。[#11253](https://github.com/StarRocks/starrocks/pull/11253)
+- [クエリキュー](https://docs.starrocks.io/docs/administration/management/resource_management/query_queues/)をサポートします。[#12594](https://github.com/StarRocks/starrocks/pull/12594)
+- データロードタスクのリソース消費を制限することにより、データロードが占有する計算リソースを分離することをサポートします。詳細については、[リソースグループ](https://docs.starrocks.io/docs/administration/management/resource_management/resource_group/)を参照してください。[#12606](https://github.com/StarRocks/starrocks/pull/12606)
 - StarRocks内部テーブルに対して次のデータ圧縮アルゴリズムを指定することをサポートします: LZ4, Zstd, Snappy, および Zlib。詳細については、[データ圧縮](https://docs.starrocks.io/docs/table_design/data_compression/)を参照してください。[#10097](https://github.com/StarRocks/starrocks/pull/10097) [#12020](https://github.com/StarRocks/starrocks/pull/12020)
-- [ユーザー定義変数](https://docs.starrocks.io/docs/reference/user_defined_variables/)をサポートします。[#10011](https://github.com/StarRocks/starrocks/pull/10011)
+- [ユーザー定義変数](https://docs.starrocks.io/docs/sql-reference/user_defined_variables/)をサポートします。[#10011](https://github.com/StarRocks/starrocks/pull/10011)
 - [ラムダ式](https://docs.starrocks.io/docs/sql-reference/sql-functions/Lambda_expression/)および次の高階関数をサポートします: [array_map](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_map/), [array_sum](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_sum/), および [array_sortby](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_sortby/)。[#9461](https://github.com/StarRocks/starrocks/pull/9461) [#9806](https://github.com/StarRocks/starrocks/pull/9806) [#10323](https://github.com/StarRocks/starrocks/pull/10323) [#14034](https://github.com/StarRocks/starrocks/pull/14034)
 - [ウィンドウ関数](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function/)の結果をフィルタリングするQUALIFY句を提供します。[#13239](https://github.com/StarRocks/starrocks/pull/13239)
-- テーブルを作成する際にuuid()およびuuid_numeric()関数によって返される結果をカラムのデフォルト値として使用することをサポートします。詳細については、[CREATE TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE/)を参照してください。[#11155](https://github.com/StarRocks/starrocks/pull/11155)
+- テーブルを作成する際にuuid()およびuuid_numeric()関数によって返される結果をカラムのデフォルト値として使用することをサポートします。詳細については、[CREATE TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/)を参照してください。[#11155](https://github.com/StarRocks/starrocks/pull/11155)
 - 次の関数をサポートします: [map_size](https://docs.starrocks.io/docs/sql-reference/sql-functions/map-functions/map_size/), [map_keys](https://docs.starrocks.io/docs/sql-reference/sql-functions/map-functions/map_keys/), [map_values](https://docs.starrocks.io/docs/sql-reference/sql-functions/map-functions/map_values/), [max_by](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/max_by/), [sub_bitmap](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/sub_bitmap/), [bitmap_to_base64](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/bitmap_to_base64/), [host_name](https://docs.starrocks.io/docs/sql-reference/sql-functions/utility-functions/host_name/), および [date_slice](https://docs.starrocks.io/docs/sql-reference/sql-functions/date-time-functions/date_slice/)。[#11299](https://github.com/StarRocks/starrocks/pull/11299) [#11323](https://github.com/StarRocks/starrocks/pull/11323) [#12243](https://github.com/StarRocks/starrocks/pull/12243) [#11776](https://github.com/StarRocks/starrocks/pull/11776) [#12634](https://github.com/StarRocks/starrocks/pull/12634) [#14225](https://github.com/StarRocks/starrocks/pull/14225)
 
 ### 改善点
 
-- [Hiveカタログ](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/)、[Hudiカタログ](https://docs.starrocks.io/docs/data_source/catalog/hudi_catalog/)、および[Icebergカタログ](https://docs.starrocks.io/docs/data_source/catalog/iceberg_catalog/)を使用して外部データをクエリする際のメタデータアクセスパフォーマンスを最適化しました。[#11349](https://github.com/StarRocks/starrocks/issues/11349)
+- [Hiveカタログ](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/)、[Hudiカタログ](https://docs.starrocks.io/docs/data_source/catalog/hudi_catalog/)、および[Icebergカタログ](https://docs.starrocks.io/docs/data_source/catalog/iceberg/)を使用して外部データをクエリする際のメタデータアクセスパフォーマンスを最適化しました。[#11349](https://github.com/StarRocks/starrocks/issues/11349)
 - [Elasticsearch外部テーブル](https://docs.starrocks.io/docs/data_source/External_table#deprecated-elasticsearch-external-table)を使用してARRAYデータをクエリすることをサポートします。[#9693](https://github.com/StarRocks/starrocks/pull/9693)
 - マテリアライズドビューの次の側面を最適化しました:
-  - 非同期マテリアライズドビューは、SPJGタイプのマテリアライズドビューに基づいて自動的かつ透過的なクエリ書き換えをサポートします。詳細については、[マテリアライズドビュー](https://docs.starrocks.io/docs/using_starrocks/Materialized_view#rewrite-and-accelerate-queries-with-the-asynchronous-materialized-view)を参照してください。[#13193](https://github.com/StarRocks/starrocks/issues/13193)
-  - 非同期マテリアライズドビューは複数の非同期リフレッシュメカニズムをサポートします。詳細については、[マテリアライズドビュー](https://docs.starrocks.io/docs/using_starrocks/Materialized_view#manually-refresh-an-asynchronous-materialized-view)を参照してください。[#12712](https://github.com/StarRocks/starrocks/pull/12712) [#13171](https://github.com/StarRocks/starrocks/pull/13171) [#13229](https://github.com/StarRocks/starrocks/pull/13229) [#12926](https://github.com/StarRocks/starrocks/pull/12926)
+  - 非同期マテリアライズドビューは、SPJGタイプのマテリアライズドビューに基づいて自動的かつ透過的なクエリ書き換えをサポートします。詳細については、[マテリアライズドビュー](https://docs.starrocks.io/docs/using_starrocks/async_mv/Materialized_view/#rewrite-and-accelerate-queries-with-the-asynchronous-materialized-view)を参照してください。[#13193](https://github.com/StarRocks/starrocks/issues/13193)
+  - 非同期マテリアライズドビューは複数の非同期リフレッシュメカニズムをサポートします。詳細については、[マテリアライズドビュー](https://docs.starrocks.io/docs/using_starrocks/async_mv/Materialized_view/#manually-refresh-an-asynchronous-materialized-view)を参照してください。[#12712](https://github.com/StarRocks/starrocks/pull/12712) [#13171](https://github.com/StarRocks/starrocks/pull/13171) [#13229](https://github.com/StarRocks/starrocks/pull/13229) [#12926](https://github.com/StarRocks/starrocks/pull/12926)
   - マテリアライズドビューのリフレッシュ効率が向上しました。[#13167](https://github.com/StarRocks/starrocks/issues/13167)
 - データロードの次の側面を最適化しました:
-  - "シングルリーダーレプリケーション" モードをサポートすることにより、マルチレプリカシナリオでのロードパフォーマンスを最適化しました。データロードは1倍のパフォーマンス向上を得ます。"シングルリーダーレプリケーション" の詳細については、[CREATE TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE/)の `replicated_storage` を参照してください。[#10138](https://github.com/StarRocks/starrocks/pull/10138)
-  - Broker LoadおよびSpark Loadは、1つのHDFSクラスターまたは1つのKerberosユーザーのみが構成されている場合、データロードのためにブローカーに依存する必要がなくなりました。ただし、複数のHDFSクラスターまたは複数のKerberosユーザーがある場合は、ブローカーをデプロイする必要があります。詳細については、[HDFSまたはクラウドストレージからのデータロード](https://docs.starrocks.io/docs/loading/BrokerLoad/)および[Apache Spark™を使用したバルクロード](https://docs.starrocks.io/docs/loading/SparkLoad/)を参照してください。[#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
+  - "シングルリーダーレプリケーション" モードをサポートすることにより、マルチレプリカシナリオでのロードパフォーマンスを最適化しました。データロードは1倍のパフォーマンス向上を得ます。"シングルリーダーレプリケーション" の詳細については、[CREATE TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/)の `replicated_storage` を参照してください。[#10138](https://github.com/StarRocks/starrocks/pull/10138)
+  - Broker LoadおよびSpark Loadは、1つのHDFSクラスターまたは1つのKerberosユーザーのみが構成されている場合、データロードのためにブローカーに依存する必要がなくなりました。ただし、複数のHDFSクラスターまたは複数のKerberosユーザーがある場合は、ブローカーをデプロイする必要があります。詳細については、[HDFSまたはクラウドストレージからのデータロード](https://docs.starrocks.io/docs/loading/BrokerLoad/)および[Apache Spark™を使用したバルクロード](https://docs.starrocks.io/docs/loading/spark/SparkLoad/)を参照してください。[#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
   - 小さなORCファイルが大量にロードされる場合のBroker Loadのパフォーマンスを最適化しました。[#11380](https://github.com/StarRocks/starrocks/pull/11380)
   - 主キーテーブルにデータをロードする際のメモリ使用量を削減しました。
-- `information_schema` データベースおよびその中の `tables` および `columns` テーブルを最適化しました。新しいテーブル `table_config` を追加しました。詳細については、[Information Schema](https://docs.starrocks.io/docs/reference/overview-pages/information_schema/)を参照してください。[#10033](https://github.com/StarRocks/starrocks/pull/10033)
+- `information_schema` データベースおよびその中の `tables` および `columns` テーブルを最適化しました。新しいテーブル `table_config` を追加しました。詳細については、[Information Schema](https://docs.starrocks.io/docs/sql-reference/information_schema/)を参照してください。[#10033](https://github.com/StarRocks/starrocks/pull/10033)
 - データのバックアップと復元を最適化しました:
-  - データベース内の複数のテーブルから一度にデータをバックアップおよび復元することをサポートします。詳細については、[データのバックアップと復元](https://docs.starrocks.io/docs/administration/Backup_and_restore/)を参照してください。[#11619](https://github.com/StarRocks/starrocks/issues/11619)
+  - データベース内の複数のテーブルから一度にデータをバックアップおよび復元することをサポートします。詳細については、[データのバックアップと復元](https://docs.starrocks.io/docs/administration/management/Backup_and_restore/)を参照してください。[#11619](https://github.com/StarRocks/starrocks/issues/11619)
   - 主キーテーブルからのデータのバックアップおよび復元をサポートします。詳細については、バックアップと復元を参照してください。[#11885](https://github.com/StarRocks/starrocks/pull/11885)
 - 次の関数を最適化しました:
   - [time_slice](https://docs.starrocks.io/docs/sql-reference/sql-functions/date-time-functions/time_slice/) 関数にオプションのパラメータを追加しました。このパラメータは、時間間隔の開始または終了を返すかどうかを決定するために使用されます。[#11216](https://github.com/StarRocks/starrocks/pull/11216)

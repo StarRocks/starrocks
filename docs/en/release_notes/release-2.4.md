@@ -179,23 +179,23 @@ Release date: October 20, 2022
 
 ### New Features
 
-- Supports creating asynchronous materialized views based on multiple base tables to accelerate queries with JOIN operations. Asynchronous materialized views support all [table types](https://docs.starrocks.io/docs/table_design/table_types/table_types/). For more information, see [Materialized View](https://docs.starrocks.io/docs/using_starrocks/Materialized_view/).
+- Supports creating asynchronous materialized views based on multiple base tables to accelerate queries with JOIN operations. Asynchronous materialized views support all [table types](https://docs.starrocks.io/docs/table_design/table_types/). For more information, see [Materialized View](https://docs.starrocks.io/docs/using_starrocks/async_mv/Materialized_view/).
 
 - Supports overwriting data via INSERT OVERWRITE. For more information, see [Load data using INSERT](https://docs.starrocks.io/docs/loading/InsertInto/).
 
 - [Preview] Provides stateless Compute Nodes (CN) that can be horizontally scaled. You can use StarRocks Operator to deploy CN into your Kubernetes (K8s) cluster to achieve automatic horizontal scaling. For more information, see [Deploy and manage CN on Kubernetes with StarRocks Operator](https://docs.starrocks.io/docs/deployment/sr_operator/).
 
-- Outer Join supports non-equi joins in which join items are related by comparison operators including `<`, `<=`, `>`, `>=`, and `<>`. For more information, see [SELECT](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SELECT/).
+- Outer Join supports non-equi joins in which join items are related by comparison operators including `<`, `<=`, `>`, `>=`, and `<>`. For more information, see [SELECT](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/SELECT/).
 
-- Supports creating Iceberg catalogs and Hudi catalogs, which allow direct queries on data from Apache Iceberg and Apache Hudi. For more information, see [Iceberg catalog](https://docs.starrocks.io/docs/data_source/catalog/iceberg_catalog/) and [Hudi catalog](https://docs.starrocks.io/docs/data_source/catalog/hudi_catalog/).
+- Supports creating Iceberg catalogs and Hudi catalogs, which allow direct queries on data from Apache Iceberg and Apache Hudi. For more information, see [Iceberg catalog](https://docs.starrocks.io/docs/data_source/catalog/iceberg/) and [Hudi catalog](https://docs.starrocks.io/docs/data_source/catalog/hudi_catalog/).
 
 - Supports querying ARRAY-type columns from Apache Hive™ tables in CSV format. For more information, see [External table](https://docs.starrocks.io/docs/data_source/External_table/).
 
-- Supports viewing the schema of external data via DESC. For more information, see [DESC](https://docs.starrocks.io/docs/sql-reference/sql-statements/Utility/DESCRIBE/).
+- Supports viewing the schema of external data via DESC. For more information, see [DESC](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/DESCRIBE/).
 
 - Supports granting a specific role or IMPERSONATE permission to a user via GRANT and revoking them via REVOKE, and supports executing an SQL statement with IMPERSONATE permission via  EXECUTE AS. For more information, see [GRANT](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/GRANT/), [REVOKE](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/REVOKE/), and [EXECUTE AS](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/EXECUTE_AS/).
 
-- Supports FDQN access: now you can use domain name or the combination of hostname and port as the unique identification of a BE or an FE node. This prevents access failures caused by changing IP addresses. For more information, see [Enable FQDN Access](https://docs.starrocks.io/docs/administration/enable_fqdn/).
+- Supports FDQN access: now you can use domain name or the combination of hostname and port as the unique identification of a BE or an FE node. This prevents access failures caused by changing IP addresses. For more information, see [Enable FQDN Access](https://docs.starrocks.io/docs/administration/management/enable_fqdn/).
 
 - flink-connector-starrocks supports Primary Key table partial update. For more information, see [Load data by using flink-connector-starrocks](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/).
 
@@ -219,7 +219,7 @@ Release date: October 20, 2022
 
 - Histograms are added to CBO statistics. Full statistics collection is further optimized. For more information, see [Gather CBO statistics](https://docs.starrocks.io/docs/using_starrocks/Cost_based_optimizer/).
 
-- Adaptive multi-threading is enabled for tablet scanning to reduce the dependency of scanning performance on the tablet number. As a result, you can set the number of buckets more easily. For more information, see [Determine the number of buckets](https://docs.starrocks.io/docs/2.4/table_design/Data_distribution/#determine-the-number-of-tablets).
+- Adaptive multi-threading is enabled for tablet scanning to reduce the dependency of scanning performance on the tablet number. As a result, you can set the number of buckets more easily. For more information, see [Determine the number of buckets](https://docs.starrocks.io/docs/3.1/table_design/data_distribution/#determine-the-number-of-buckets).
 
 - Supports querying compressed TXT files in Apache Hive.
 

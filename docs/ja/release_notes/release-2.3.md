@@ -52,8 +52,8 @@ LabelCleaner スレッドがブロックされたことによる FE メモリリ
 - FEs のテーブルレベルのスキャン統計が不正確なため、テーブルクエリとロードに関連するメトリクスが不正確になります。 [#28022](https://github.com/StarRocks/starrocks/pull/28022)
 - Join キーが大きな BINARY 列の場合、BEs がクラッシュする可能性があります。 [#25084](https://github.com/StarRocks/starrocks/pull/25084)
 - 集計オペレーターが特定のシナリオでスレッドセーフティの問題を引き起こし、BEs がクラッシュする可能性があります。 [#26092](https://github.com/StarRocks/starrocks/pull/26092)
-- データが [RESTORE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/RESTORE/) を使用して復元された後、タブレットのバージョン番号が BE と FE の間で一致しません。 [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
-- [RECOVER](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/RECOVER/) を使用してテーブルを復元した後、パーティションが自動的に作成されません。 [#26813](https://github.com/StarRocks/starrocks/pull/26813)
+- データが [RESTORE](https://docs.starrocks.io/docs/sql-reference/sql-statements/backup_restore/RESTORE/) を使用して復元された後、タブレットのバージョン番号が BE と FE の間で一致しません。 [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- [RECOVER](https://docs.starrocks.io/docs/sql-reference/sql-statements/backup_restore/RECOVER/) を使用してテーブルを復元した後、パーティションが自動的に作成されません。 [#26813](https://github.com/StarRocks/starrocks/pull/26813)
 - INSERT INTO を使用してロードされるデータが品質要件を満たさず、データロードの厳密モードが有効になっている場合、ロードトランザクションが保留状態でスタックし、DDL ステートメントがハングします。 [#27140](https://github.com/StarRocks/starrocks/pull/27140)
 - 低基数最適化が有効になっている場合、一部の INSERT ジョブが `[42000][1064] Dict Decode failed, Dict can't take cover all key :0` を返します。 [#27395](https://github.com/StarRocks/starrocks/pull/27395)
 - パイプラインが有効になっていない場合、INSERT INTO SELECT 操作がタイムアウトすることがあります。 [#26594](https://github.com/StarRocks/starrocks/pull/26594)
@@ -380,13 +380,13 @@ LabelCleaner スレッドがブロックされたことによる FE メモリリ
 
 ### 新機能
 
-- 主キーテーブルは完全な DELETE WHERE 構文をサポートします。詳細については、[DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/DELETE#delete-data-by-primary-key) を参照してください。
+- 主キーテーブルは完全な DELETE WHERE 構文をサポートします。詳細については、[DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/DELETE/#delete-data-by-primary-key) を参照してください。
 - 主キーテーブルは永続的な主キーインデックスをサポートします。主キーインデックスをメモリではなくディスクに永続化することを選択でき、メモリ使用量を大幅に削減できます。詳細については、[Primary Key table](https://docs.starrocks.io/docs/table_design/table_types/primary_key_table/) を参照してください。
 - グローバル辞書はリアルタイムデータ取り込み中に更新可能で、クエリパフォーマンスを最適化し、文字列データのクエリパフォーマンスを2倍に向上させます。
-- CREATE TABLE AS SELECT ステートメントは非同期で実行できます。詳細については、[CREATE TABLE AS SELECT](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT/) を参照してください。
+- CREATE TABLE AS SELECT ステートメントは非同期で実行できます。詳細については、[CREATE TABLE AS SELECT](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT/) を参照してください。
 - 次のリソースグループ関連機能をサポートします:
-  - リソースグループの監視: 監査ログでクエリのリソースグループを表示し、API を呼び出してリソースグループのメトリックを取得できます。詳細については、[Monitor and Alerting](https://docs.starrocks.io/docs/administration/Monitor_and_Alert#monitor-and-alerting) を参照してください。
-  - 大規模なクエリによる CPU、メモリ、I/O リソースの消費を制限: クラシファイアを基に、またはセッション変数を設定して、クエリを特定のリソースグループにルーティングできます。詳細については、[Resource group](https://docs.starrocks.io/docs/administration/resource_group/) を参照してください。
+  - リソースグループの監視: 監査ログでクエリのリソースグループを表示し、API を呼び出してリソースグループのメトリックを取得できます。詳細については、[Monitor and Alerting](https://docs.starrocks.io/docs/administration/management/monitoring/alert/) を参照してください。
+  - 大規模なクエリによる CPU、メモリ、I/O リソースの消費を制限: クラシファイアを基に、またはセッション変数を設定して、クエリを特定のリソースグループにルーティングできます。詳細については、[Resource group](https://docs.starrocks.io/docs/administration/management/resource_management/resource_group/) を参照してください。
 - JDBC 外部テーブルを使用して、Oracle、PostgreSQL、MySQL、SQLServer、ClickHouse などのデータベースのデータを便利にクエリできます。StarRocks はまた、述語プッシュダウンをサポートし、クエリパフォーマンスを向上させます。詳細については、[External table for a JDBC-compatible database](https://docs.starrocks.io/docs/data_source/External_table#external-table-for-a-JDBC-compatible-database) を参照してください。
 - [プレビュー] 新しいデータソースコネクタフレームワークがリリースされ、外部カタログをサポートします。外部カタログを使用して、外部テーブルを作成せずに Hive データに直接アクセスしてクエリできます。詳細については、[Use catalogs to manage internal and external data](https://docs.starrocks.io/docs/data_source/catalog/query_external_data/) を参照してください。
 - 次の関数を追加しました:
@@ -404,10 +404,10 @@ LabelCleaner スレッドがブロックされたことによる FE メモリリ
   - TopN とソートオペレーター
   - 関数を含む等価比較オペレーターは、これらのオペレーターがスキャンオペレーターにプッシュダウンされるときに Zone Map インデックスを使用できます。
 - Apache Hive™ 外部テーブルを最適化しました。
-  - Apache Hive™ テーブルが Parquet、ORC、または CSV 形式で保存されている場合、Hive で ADD COLUMN または REPLACE COLUMN によって引き起こされたスキーマ変更は、対応する Hive 外部テーブルで REFRESH ステートメントを実行すると StarRocks に同期されます。詳細については、[Hive external table](https://docs.starrocks.io/docs/2.3/data_source/External_table/#hive-external-table) を参照してください。
-  - Hive リソースに対して `hive.metastore.uris` を変更できます。詳細については、[ALTER RESOURCE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/ALTER_RESOURCE/) を参照してください。
-- Apache Iceberg 外部テーブルのパフォーマンスを最適化しました。カスタムカタログを使用して Iceberg リソースを作成できます。詳細については、[Apache Iceberg external table](https://docs.starrocks.io/docs/2.3/data_source/External_table/#deprecated-iceberg-external-table) を参照してください。
-- Elasticsearch 外部テーブルのパフォーマンスを最適化しました。Elasticsearch クラスター内のデータノードのアドレスのスニッフィングを無効にできます。詳細については、[Elasticsearch external table](https://docs.starrocks.io/docs/2.3/data_source/External_table/#elasticsearch-external-table) を参照してください。
+  - Apache Hive™ テーブルが Parquet、ORC、または CSV 形式で保存されている場合、Hive で ADD COLUMN または REPLACE COLUMN によって引き起こされたスキーマ変更は、対応する Hive 外部テーブルで REFRESH ステートメントを実行すると StarRocks に同期されます。詳細については、[Hive external table](https://docs.starrocks.io/docs/3.1/data_source/External_table/#deprecated-hive-external-table) を参照してください。
+  - Hive リソースに対して `hive.metastore.uris` を変更できます。詳細については、[ALTER RESOURCE](https://docs.starrocks.io/docs/sql-reference/sql-statements/Resource/ALTER_RESOURCE/) を参照してください。
+- Apache Iceberg 外部テーブルのパフォーマンスを最適化しました。カスタムカタログを使用して Iceberg リソースを作成できます。詳細については、[Apache Iceberg external table](https://docs.starrocks.io/docs/3.1/data_source/External_table/#deprecated-iceberg-external-table) を参照してください。
+- Elasticsearch 外部テーブルのパフォーマンスを最適化しました。Elasticsearch クラスター内のデータノードのアドレスのスニッフィングを無効にできます。詳細については、[Elasticsearch external table](https://docs.starrocks.io/docs/3.1/data_source/External_table/#deprecated-elasticsearch-external-table) を参照してください。
 - sum() 関数が数値文字列を受け入れると、数値文字列を暗黙的に変換します。
 - year()、month()、day() 関数は DATE データ型をサポートします。
 
