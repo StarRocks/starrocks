@@ -17,17 +17,32 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <memory>
+#include <new>
+#include <stdexcept>
+#include <thread>
+#include <utility>
 #include <vector>
 
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/system/cpu_info.h"
+#include "storage_primitive/projection_iterator.h"
+#include "storage_primitive/storage_stats.h"
+#include "storage_primitive/union_iterator.h"
 #include "storage_primitive/vector_chunk_iterator.h"
 
 namespace starrocks {
+
+// The parallel prefill tests exercise the compaction opt-in; everything else stays a plain merge.
+static const MergeIteratorOptions kCompactionMerge{.compaction_merge = true};
 
 template <typename T>
 static inline std::string to_string(const std::vector<T>& v) {
@@ -225,6 +240,367 @@ TEST_F(MergeIteratorTest, test_issue_6167) {
     chunk->reset();
     st = iter->get_next(chunk.get());
     ASSERT_TRUE(st.is_end_of_file());
+}
+
+// NOLINTNEXTLINE
+// The parallel prefill must be indistinguishable from the serial one: the same rows, in the same
+// order, with the same source masks. Children get a small chunk size, so the merge runs dry on them
+// repeatedly and refills them on its own thread after the prefill.
+class MergeParallelPrefillTest : public MergeIteratorTest {
+protected:
+    void SetUp() override {
+        MergeIteratorTest::SetUp();
+        CpuInfo::init(); // The focused test binary does not run the BE bootstrap before creating threads.
+        _saved_parallel = config::enable_compaction_parallel_merge_init;
+    }
+    void TearDown() override {
+        config::enable_compaction_parallel_merge_init = _saved_parallel;
+        MergeIteratorTest::TearDown();
+    }
+
+    // Five inputs whose key ranges overlap in different ways: fully disjoint, interleaved, and
+    // duplicated across inputs, so the merge switches between them instead of draining one.
+    static std::vector<std::vector<int32_t>> inputs() {
+        std::vector<std::vector<int32_t>> vs(5);
+        for (int i = 0; i < 200; i++) {
+            vs[0].push_back(i * 4);
+            vs[1].push_back(i * 4 + 1);
+            vs[2].push_back(i * 2);
+            vs[3].push_back(i);
+            vs[4].push_back(500 + i);
+        }
+        return vs;
+    }
+
+    std::vector<ChunkIteratorPtr> children() const {
+        std::vector<ChunkIteratorPtr> subs;
+        for (const auto& v : inputs()) {
+            auto sub = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v));
+            sub->chunk_size(7); // force many refills
+            subs.push_back(sub);
+        }
+        return subs;
+    }
+
+    struct Output {
+        std::vector<int32_t> rows;
+        std::vector<uint16_t> sources;
+    };
+
+    Output run_heap(bool parallel) {
+        config::enable_compaction_parallel_merge_init = parallel;
+        auto iter = new_heap_merge_iterator(children(), kCompactionMerge);
+        EXPECT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        return drain(iter);
+    }
+
+    Output run_mask(bool parallel, const std::vector<uint16_t>& sources) {
+        config::enable_compaction_parallel_merge_init = parallel;
+        std::vector<RowSourceMask> masks;
+        masks.reserve(sources.size());
+        for (uint16_t s : sources) {
+            masks.emplace_back(RowSourceMask(s, false));
+        }
+        // A fresh id per call: the buffer is backed by a file named after it.
+        RowSourceMaskBuffer mask_buffer(_next_mask_id++, config::storage_root_path);
+        EXPECT_TRUE(mask_buffer.write(masks).ok());
+        EXPECT_TRUE(mask_buffer.flush().ok());
+        EXPECT_TRUE(mask_buffer.flip_to_read().ok());
+        auto iter = new_mask_merge_iterator(children(), &mask_buffer, nullptr, kCompactionMerge);
+        EXPECT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        return drain(iter);
+    }
+
+    static Output drain(const ChunkIteratorPtr& iter) {
+        Output out;
+        std::vector<RowSourceMask> masks;
+        ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
+        while (iter->get_next(chunk.get(), &masks).ok()) {
+            ColumnPtr& c = chunk->get_column_by_index(0);
+            for (size_t i = 0; i < c->size(); i++) {
+                out.rows.push_back(c->get(i).get_int32());
+            }
+            chunk->reset();
+        }
+        for (auto& m : masks) {
+            out.sources.push_back(m.get_source_num());
+        }
+        return out;
+    }
+
+    bool _saved_parallel = false;
+    int64_t _next_mask_id = 1000;
+};
+
+// NOLINTNEXTLINE
+TEST_F(MergeParallelPrefillTest, heap_merge_matches_serial) {
+    const Output baseline = run_heap(false);
+    ASSERT_FALSE(baseline.rows.empty());
+    ASSERT_TRUE(std::is_sorted(baseline.rows.begin(), baseline.rows.end()));
+
+    const Output got = run_heap(true);
+    EXPECT_EQ(baseline.rows, got.rows);
+    EXPECT_EQ(baseline.sources, got.sources);
+}
+
+// NOLINTNEXTLINE
+TEST_F(MergeParallelPrefillTest, mask_merge_matches_serial) {
+    // Vertical compaction feeds the mask merge the sources the key group produced.
+    const std::vector<uint16_t> sources = run_heap(false).sources;
+    ASSERT_FALSE(sources.empty());
+
+    const Output baseline = run_mask(false, sources);
+    ASSERT_FALSE(baseline.rows.empty());
+    EXPECT_EQ(baseline.rows, run_mask(true, sources).rows);
+}
+
+// Records the thread of a child's first and last reads. The parallel prefill moves exactly the
+// first read off the merge thread; every refill stays on it.
+class ReadThreadIterator final : public ChunkIterator {
+public:
+    ReadThreadIterator(Schema schema, const std::vector<int32_t>& rows)
+            : ChunkIterator(schema, 7), _inner(std::make_shared<VectorChunkIterator>(schema, COL_INT(rows))) {
+        _inner->chunk_size(7);
+    }
+
+    void close() override { _inner->close(); }
+
+    // Read by the test only after the merge returned, which orders it after every read.
+    std::thread::id first_read_thread;
+    std::thread::id last_read_thread;
+
+protected:
+    Status do_get_next(Chunk* chunk) override {
+        if (_reads++ == 0) {
+            first_read_thread = std::this_thread::get_id();
+        }
+        last_read_thread = std::this_thread::get_id();
+        return _inner->get_next(chunk);
+    }
+
+private:
+    std::shared_ptr<VectorChunkIterator> _inner;
+    int _reads = 0;
+};
+
+// NOLINTNEXTLINE
+TEST_F(MergeParallelPrefillTest, only_compaction_merges_read_on_the_pool) {
+    const Output baseline = run_heap(false);
+    config::enable_compaction_parallel_merge_init = true;
+    for (bool compaction : {false, true}) {
+        std::vector<std::shared_ptr<ReadThreadIterator>> leaves;
+        std::vector<ChunkIteratorPtr> subs;
+        for (const auto& v : inputs()) {
+            leaves.push_back(std::make_shared<ReadThreadIterator>(_schema, v));
+            subs.push_back(leaves.back());
+        }
+        auto iter = new_heap_merge_iterator(subs, MergeIteratorOptions{.compaction_merge = compaction});
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        const Output got = drain(iter);
+        EXPECT_EQ(baseline.rows, got.rows) << "compaction=" << compaction;
+        EXPECT_EQ(baseline.sources, got.sources) << "compaction=" << compaction;
+        for (const auto& leaf : leaves) {
+            EXPECT_EQ(compaction, leaf->first_read_thread != std::this_thread::get_id());
+            EXPECT_EQ(std::this_thread::get_id(), leaf->last_read_thread);
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(MergeParallelPrefillTest, refused_submission_reads_inline) {
+    const Output baseline = run_heap(false);
+    config::enable_compaction_parallel_merge_init = true;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *static_cast<int64_t*>(arg) = 0; });
+    sync->EnableProcessing();
+    DeferOp disable([&]() {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+
+    std::vector<std::shared_ptr<ReadThreadIterator>> leaves;
+    std::vector<ChunkIteratorPtr> subs;
+    for (const auto& v : inputs()) {
+        leaves.push_back(std::make_shared<ReadThreadIterator>(_schema, v));
+        subs.push_back(leaves.back());
+    }
+    auto iter = new_heap_merge_iterator(subs, kCompactionMerge);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    const Output got = drain(iter);
+    sync->DisableProcessing();
+    EXPECT_EQ(baseline.rows, got.rows);
+    EXPECT_EQ(baseline.sources, got.sources);
+    for (const auto& leaf : leaves) {
+        EXPECT_EQ(std::this_thread::get_id(), leaf->first_read_thread);
+    }
+}
+
+class StatisticsIterator final : public ChunkIterator {
+public:
+    StatisticsIterator(Schema schema, const std::vector<int32_t>& rows, OlapReaderStatistics* stats)
+            : ChunkIterator(schema, 4),
+              _inner(std::make_shared<VectorChunkIterator>(schema, COL_INT(rows))),
+              _stats(stats) {
+        _inner->chunk_size(4);
+    }
+
+    OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) override { return std::exchange(_stats, stats); }
+    OlapReaderStatistics* read_stats() const { return _stats; }
+
+    void close() override {
+        _stats->compressed_bytes_read_remote += 17;
+        _inner->close();
+        ++closed;
+    }
+
+    // Throws from this read (1-based); 0 never throws.
+    int throw_on_read = 0;
+    bool throw_bad_alloc = false;
+    std::atomic<int> closed{0};
+    std::atomic<int64_t> delivered{0};
+
+protected:
+    Status do_get_next(Chunk* chunk) override {
+        if (++_reads == throw_on_read) {
+            if (throw_bad_alloc) {
+                throw std::bad_alloc();
+            }
+            throw std::runtime_error("injected read failure");
+        }
+        auto status = _inner->get_next(chunk);
+        _stats->raw_rows_read += chunk->num_rows();
+        _stats->rows_del_filtered += 2 * chunk->num_rows();
+        _stats->flat_json_hits["$.shared"] += 3 * chunk->num_rows();
+        delivered += chunk->num_rows();
+        return status;
+    }
+
+private:
+    std::shared_ptr<VectorChunkIterator> _inner;
+    OlapReaderStatistics* _stats;
+    int _reads = 0;
+};
+
+// NOLINTNEXTLINE
+TEST_F(MergeParallelPrefillTest, parallel_child_stats_preserve_progress_and_union_close) {
+    config::enable_compaction_parallel_merge_init = true;
+    OlapReaderStatistics stats;
+    stats.rows_del_filtered = 7; // counters produced before the iterator is installed survive
+    std::vector<ChunkIteratorPtr> children;
+    std::vector<std::shared_ptr<StatisticsIterator>> leaves;
+    RuntimeProfile::Counter scan_time(TUnit::TIME_NS);
+    for (int source = 0; source < 2; ++source) {
+        std::vector<int32_t> rows;
+        for (int row = 0; row < 24; ++row) rows.push_back(row * 2 + source);
+        auto empty = std::make_shared<StatisticsIterator>(_schema, std::vector<int32_t>{}, &stats);
+        auto live = std::make_shared<StatisticsIterator>(_schema, rows, &stats);
+        leaves.insert(leaves.end(), {empty, live});
+        // The empty first segment closes inside UnionIterator on a pool thread. Its final IO
+        // counters must stay private too, and its EOF must not discard the live segment.
+        auto child = new_union_iterator({empty, live});
+        children.push_back(timed_chunk_iterator(new_projection_iterator(_schema, child), &scan_time));
+    }
+    auto iter = new_heap_merge_iterator(children, kCompactionMerge);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    auto chunk = ChunkFactory::new_chunk(_schema, 0);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    EXPECT_GT(stats.raw_rows_read, 0);
+    EXPECT_NE(leaves[0]->read_stats(), &stats);
+    EXPECT_EQ(leaves[0]->read_stats(), leaves[1]->read_stats());
+    EXPECT_NE(leaves[0]->read_stats(), leaves[2]->read_stats());
+    int64_t rows = chunk->num_rows();
+    Status status;
+    for (;;) {
+        chunk->reset();
+        status = iter->get_next(chunk.get());
+        if (!status.ok()) break;
+        rows += chunk->num_rows();
+    }
+    ASSERT_TRUE(status.is_end_of_file()) << status;
+    iter->close();
+    EXPECT_EQ(48, rows);
+    EXPECT_EQ(48, stats.raw_rows_read);
+    EXPECT_EQ(7 + 2 * 48, stats.rows_del_filtered);
+    EXPECT_EQ(3 * 48, stats.flat_json_hits["$.shared"]);
+    EXPECT_EQ(4 * 17, stats.compressed_bytes_read_remote);
+    for (const auto& leaf : leaves) EXPECT_EQ(1, leaf->closed.load());
+}
+
+// NOLINTNEXTLINE
+TEST_F(MergeParallelPrefillTest, early_close_flushes_child_stats) {
+    config::enable_compaction_parallel_merge_init = true;
+    OlapReaderStatistics stats;
+    const auto vs = inputs();
+    auto left = std::make_shared<StatisticsIterator>(_schema, vs[0], &stats);
+    auto right = std::make_shared<StatisticsIterator>(_schema, vs[1], &stats);
+    auto iter = new_heap_merge_iterator({left, right}, kCompactionMerge);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    auto chunk = ChunkFactory::new_chunk(_schema, 0);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    iter->close();
+    const auto rows_read = left->delivered.load() + right->delivered.load();
+    EXPECT_EQ(rows_read, stats.raw_rows_read);
+    EXPECT_EQ(2 * rows_read, stats.rows_del_filtered);
+    EXPECT_EQ(3 * rows_read, stats.flat_json_hits["$.shared"]);
+    EXPECT_EQ(2 * 17, stats.compressed_bytes_read_remote);
+}
+
+// NOLINTNEXTLINE
+TEST_F(MergeParallelPrefillTest, parallel_read_exception_is_an_error) {
+    config::enable_compaction_parallel_merge_init = true;
+    for (bool bad_alloc : {true, false}) {
+        OlapReaderStatistics stats;
+        const auto vs = inputs();
+        auto left = std::make_shared<StatisticsIterator>(_schema, vs[0], &stats);
+        auto right = std::make_shared<StatisticsIterator>(_schema, vs[1], &stats);
+        left->throw_on_read = 1;
+        left->throw_bad_alloc = bad_alloc;
+        auto iter = new_heap_merge_iterator({left, right}, kCompactionMerge);
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        auto chunk = ChunkFactory::new_chunk(_schema, 0);
+        const auto status = iter->get_next(chunk.get());
+        if (bad_alloc) {
+            EXPECT_TRUE(status.is_mem_limit_exceeded()) << status;
+        } else {
+            EXPECT_EQ(TStatusCode::RUNTIME_ERROR, status.code()) << status;
+            EXPECT_NE(std::string::npos, status.to_string().find("injected read failure"));
+        }
+        iter->close();
+        EXPECT_EQ(1, left->closed.load());
+        EXPECT_EQ(1, right->closed.load());
+    }
+}
+
+class ErrorIterator final : public ChunkIterator {
+public:
+    ErrorIterator(Schema schema, Status error) : ChunkIterator(std::move(schema), 4), _error(std::move(error)) {}
+
+    void close() override {}
+
+protected:
+    Status do_get_next(Chunk* chunk) override { return _error; }
+
+private:
+    Status _error;
+};
+
+// NOLINTNEXTLINE
+TEST_F(MergeParallelPrefillTest, read_errors_surface_in_child_order) {
+    const auto vs = inputs();
+    for (bool parallel : {false, true}) {
+        config::enable_compaction_parallel_merge_init = parallel;
+        std::vector<ChunkIteratorPtr> subs;
+        subs.push_back(std::make_shared<VectorChunkIterator>(_schema, COL_INT(vs[0])));
+        subs.push_back(std::make_shared<ErrorIterator>(_schema, Status::IOError("first error")));
+        subs.push_back(std::make_shared<VectorChunkIterator>(_schema, COL_INT(vs[1])));
+        subs.push_back(std::make_shared<ErrorIterator>(_schema, Status::Corruption("second error")));
+        auto iter = new_heap_merge_iterator(subs, kCompactionMerge);
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        auto chunk = ChunkFactory::new_chunk(_schema, 0);
+        const auto status = iter->get_next(chunk.get());
+        EXPECT_TRUE(status.is_io_error()) << "parallel=" << parallel << " " << status;
+        EXPECT_NE(std::string::npos, status.to_string().find("first error")) << status;
+    }
 }
 
 // NOLINTNEXTLINE

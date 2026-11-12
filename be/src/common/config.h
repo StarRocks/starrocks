@@ -2594,6 +2594,21 @@ CONF_mInt32(lake_compaction_chunk_size, "4096");
 // CPU-bound and proportional to the column count. Memory cost is one set of segment metadata per
 // running task, bounded by the task's input size.
 CONF_mBool(lake_compaction_hold_input_segments, "true");
+// Merge iterator prefills every child once before the merge can start. That prefill is
+// serial, so a task with S inputs pays S round trips before producing a single row. When
+// enabled, a compaction merge reads the first chunk of its children in parallel and then commits
+// them in the original order, which keeps the merge order and the error semantics identical to
+// the serial path. Only the reads are parallel; heap/state updates stay serial. Every read is a
+// demand read of the merge; nothing is read ahead.
+CONF_mBool(enable_compaction_parallel_merge_init, "false");
+// Per-merge-iterator in-flight prefill read limit. Each prefill read also decodes the child's
+// first chunk on the shared pool. Only takes effect when enable_compaction_parallel_merge_init
+// is enabled.
+CONF_Int32(compaction_parallel_merge_init_threads, "16");
+// Maximum threads shared by concurrent compaction prefill reads. Idle threads are reclaimed
+// after 10s. The reads decode on this pool, so increasing the count can increase CPU and memory
+// contention as well as IO concurrency.
+CONF_Int32(compaction_parallel_merge_init_pool_threads, "64");
 
 // Enable tablet write log tracking for write amplification analysis
 CONF_mBool(enable_tablet_write_log, "false");

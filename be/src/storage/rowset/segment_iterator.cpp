@@ -145,6 +145,11 @@ public:
     void close() override;
     Status reset_for_reuse(const SegmentReadOptions& options);
 
+    OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) override {
+        DCHECK(!_inited);
+        return std::exchange(_opts.stats, stats);
+    }
+
     // Public entry point used by the segment_seek_range_to_rowid_range() /
     // segment_seek_ranges_to_rowid_ranges() free functions. The caller
     // must ensure the segment's short-key index has already been loaded; this
