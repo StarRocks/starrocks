@@ -46,21 +46,50 @@
 #   3. metric ctors  new <ALLOWLISTED_CLASS>[<...>](<firstArg> [, MetricUnit.X] ...)
 #        name : literal first-arg, else identifier resolved via the per-file
 #               constant map, else the global UPPER_SNAKE constant map (when
-#               unambiguous), else SKIP (dynamic).
+#               unambiguous), else resolved through the enclosing registration
+#               helper (below), else SKIP (dynamic).
 #        type : derived from the ctor CLASS (see allowlist below).
-#        unit : the second MetricUnit.<X> argument lowercased; `-` when the ctor
-#               declares no unit (the histogram families) or when the name is a
-#               runtime-concatenated fragment so the unit cannot bind statically
-#               (e.g. brpc_pool_).
+#        unit : the second MetricUnit.<X> argument lowercased with Locale.ROOT
+#               (never the default locale: in tr_TR `I` would lowercase to a
+#               dotless `i` and retype every NOUNIT/MILLISECONDS entry); `-` when
+#               the ctor declares no unit (the histogram families) or when the
+#               name is a runtime-concatenated fragment so the unit cannot bind
+#               statically (e.g. brpc_pool_).
+#      Registration helpers: when the first ctor arg is a `String` PARAMETER of the
+#      enclosing method (e.g. `emitGauge(visitor, name, ...)` ->
+#      `new GaugeMetricImpl<>(name, ...)`), the scanner reads that method's call
+#      sites IN THE SAME FILE and takes the argument in the matching position,
+#      accepting a string literal or a resolvable name constant. Such names are
+#      fixed at compile time, so a rename must not slip past the guard. Only
+#      same-file call sites are followed: matching a bare method name across files
+#      would bind unrelated same-named methods and invent entries.
 #   4. codahale  MetricRegistry.name("a","b", dynArg) -> join leading string
 #      literals with "." (here: "a.b"), stop at the first non-literal arg;
 #      type=summary, unit=-.
 # Allowlisted metric classes and their exported type:
-#   counter : LongCounterMetric, DoubleCounterMetric,
+#   counter : LongCounterMetric, DoubleCounterMetric, CounterMetric,
 #             LeaderAwareCounterMetricExternalLong, LeaderAwareCounterMetricLong
 #   gauge   : GaugeMetricImpl, GaugeMetric, LeaderAwareGaugeMetricLong,
 #             LeaderAwareGaugeMetricInteger
 #   summary : HistogramMetric, LeaderAwareHistogramMetric (and codahale name(...))
+# CounterMetric and GaugeMetric are abstract but are instantiated with anonymous
+# bodies (MetricRepo's statistics-cache metrics), so they are classified too.
+#
+# CLASS COVERAGE IS FAIL-CLOSED
+# -----------------------------
+# The scan above only sees classes it knows, so a metric class missing from the
+# allowlist would contribute nothing and this golden file would still match -- the
+# new series would ship with no guard at all. FeMetricsContractGuardTest therefore
+# also runs everyMetricClassIsClassified(), which walks the Metric / Histogram
+# class family declared under the scanned sources and FAILS on any member that is
+# instantiated but neither allowlisted above nor listed in UNINVENTORIED_CLASSES
+# with a reason. Adding a new metric base class breaks the build until it is
+# classified; it can no longer be added invisibly.
+#
+# Currently excluded via UNINVENTORIED_CLASSES:
+#   - PrometheusMetric : wraps externally scraped Prometheus metrics; name, type
+#       and unit all arrive at runtime from the MetricMetadata/snapshot, so there
+#       is no FE-authored name to pin.
 #
 # NOTES ON ENTRY SHAPES
 # ---------------------
@@ -72,16 +101,18 @@
 # - Dotted names (e.g. `query.latency.ms`, `journal.write.bytes`) are codahale
 #   histogram base names assembled by MetricRegistry.name(...); they are `summary -`.
 #
-# KNOWN DYNAMIC EXCLUSIONS (intentionally NOT in this golden; v1 scope)
-# ---------------------------------------------------------------------
-# These metric families build their names from runtime variables, so a static
-# literal scan cannot enumerate them. They are covered by a follow-up:
-#   - ResourceGroupMetricMgr  (metricName / metricsName params; literal prefixes
-#       query_resource_group, query_resource_group_err,
-#       query_resource_group_latency, resource_group_query_queue_total/
-#       pending/timeout)
-#   - ConnectorMetricsMgr     (connectorType param; e.g. iceberg, hive)
-#   - TransactionMetricRegistry (group-name param; e.g. txn_total_latency_ms)
+# KNOWN DYNAMIC EXCLUSIONS (intentionally NOT in this golden)
+# -----------------------------------------------------------
+# These names are assembled from runtime values, so no static scan can enumerate
+# them. Note that a helper whose name PARAMETER is always fed a fixed literal or
+# constant is NOT dynamic -- those are resolved (see step 3) and are listed below
+# in the data section:
+#   - ConnectorMetricsMgr      : names are `connectorType + "_write_total"` style
+#       concatenations of a runtime connector type (iceberg, hive, ...).
+#   - ResourceGroupMetricMgr's query_resource_group_latency : the name reaches the
+#       ctor through an inner-class FIELD assigned from a constructor parameter,
+#       which the helper-parameter resolution (methods only) does not follow. Its
+#       five sibling counters ARE resolved and are in the data section.
 #
 # DO NOT hand-sort or hand-edit the entry list below — regenerate it with the
 # command above so it stays byte-identical to the scanner output.
@@ -190,6 +221,8 @@ mv_global_query_rewrite_queries_total counter requests
 mv_global_refresh_duration summary -
 mv_global_refresh_failed_jobs_total counter requests
 mv_global_refresh_jobs_total counter requests
+mv_global_refresh_pending_jobs gauge nounit
+mv_global_refresh_running_jobs gauge nounit
 mv_global_refresh_success_jobs_total counter requests
 mv_inactive_state gauge nounit
 mv_partition_count gauge nounit
@@ -234,6 +267,8 @@ query_queue_v2_category_running_slots counter requests
 query_queue_v2_category_state counter requests
 query_queue_v2_category_total_allocated_slots counter requests
 query_queue_v2_category_weight gauge requests
+query_resource_group counter requests
+query_resource_group_err counter requests
 query_success counter requests
 query_timeout counter requests
 query_timeout_rate gauge nounit
@@ -244,6 +279,9 @@ recycle_bin_partition_num gauge nounit
 recycle_bin_table_num gauge nounit
 report_queue_size gauge nounit
 request_total counter requests
+resource_group_query_queue_pending counter requests
+resource_group_query_queue_timeout counter requests
+resource_group_query_queue_total counter requests
 routine_load_error_rows counter rows
 routine_load_jobs gauge nounit
 routine_load_max_lag_of_partition gauge nounit
@@ -271,6 +309,12 @@ sql_block_hit_count counter requests
 starmgr_meta_sync_process_time_total counter seconds
 starmgr_meta_sync_shard_deletion_total counter nounit
 starmgr_meta_sync_shard_group_deletion_total counter nounit
+statistics_cache_entries gauge nounit
+statistics_cache_eviction_count counter nounit
+statistics_cache_hit_count counter nounit
+statistics_cache_load_failure_count counter nounit
+statistics_cache_load_success_count counter nounit
+statistics_cache_miss_count counter nounit
 sync_stats_load_budget_exhausted_total counter operations
 table_load_aborted_tasks counter requests
 table_load_bytes counter bytes
@@ -319,6 +363,11 @@ total_stats_collect_job counter requests
 txn_begin counter requests
 txn_failed counter requests
 txn_max_committed_pending_publish_ms gauge milliseconds
+txn_publish_ack_latency_ms summary -
+txn_publish_can_finish_latency_ms summary -
+txn_publish_execute_latency_ms summary -
+txn_publish_latency_ms summary -
+txn_publish_schedule_latency_ms summary -
 txn_reject counter requests
 txn_running gauge nounit
 txn_stream_load_begin_num counter nounit
@@ -330,6 +379,8 @@ txn_stream_load_load_num counter nounit
 txn_stream_load_prepare_num counter nounit
 txn_stream_load_rollback_num counter nounit
 txn_success counter requests
+txn_total_latency_ms summary -
+txn_write_latency_ms summary -
 unfinished_backup_job counter requests
 unfinished_query counter requests
 unfinished_restore_job counter requests
