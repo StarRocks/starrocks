@@ -25,13 +25,26 @@ and flag it for reviewer confirmation (see below).
 
 `Behavior Changes` is **not** a title prefix — it is a cross-cutting category that overrides
 the table above. Promote an entry to `### Behavior Changes` when the change alters
-**existing observable behavior**, regardless of whether the PR was `[BugFix]` or
-`[Enhancement]`. Signals:
+**existing behavior that was correct and that users could rely on**, regardless of whether
+the PR was `[BugFix]` or `[Enhancement]`: a changed default, a removed or renamed option,
+valid input that is now rejected, a new limit, a deliberate change of semantics.
 
-- The **`behavior_changed` label** on the PR. Treat this as authoritative: a PR carrying
-  `behavior_changed` MUST appear in the release notes under `### Behavior Changes` and must
-  never be silently dropped during curation. (These are the entries most often missed in
-  hand-written drafts.)
+**A correction is not a behavior change**, even though output differs after the upgrade: a
+wrong or invalid result that is now right (or now NULL, or now an error), a crash or hang
+that is now an error, a late or misleading error that is now a clear one. Those stay in
+`### Bug fixes`. When such a fix changes what a query returns, its entry says that the
+previous results were wrong and that results change after the upgrade. In semantic
+versioning, behavior (breaking) changes belong in major releases; a patch release fixes
+bugs.
+
+Signals:
+
+- The **`behavior_changed` label** on the PR. A PR carrying `behavior_changed` MUST appear
+  in the release notes and must never be silently dropped during curation. (These are the
+  entries most often missed in hand-written drafts.) Put it under `### Behavior Changes`,
+  unless all it does is correct wrong behavior as above: then keep it under
+  `### Bug fixes` and add it to the "Needs reviewer confirmation" list ("labeled
+  `behavior_changed`, kept as a bug fix: it corrects wrong results").
 - Title/body mentions: changed **default value**, changed **syntax**/parsing, changed
   **type conversion** or display, a **policy** now enabled/disabled by default, a
   feature **removed**, or upgrade/downgrade **compatibility**.
