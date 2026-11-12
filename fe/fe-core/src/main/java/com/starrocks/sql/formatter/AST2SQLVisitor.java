@@ -514,13 +514,18 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     @Override
     public String visitArrayExpr(ArrayExpr node, Void context) {
         StringBuilder sb = new StringBuilder();
-        Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
-        // The type prefix exists to preserve an element type the literal alone would not reproduce, as in
-        // ARRAY<DATE>['2020-01-01']. When the element type is still NULL the literal never carried a type
-        // of its own -- it was inferred from context -- and printing the BOOLEAN stand-in freezes a type
-        // the original did not have, which changes function overload resolution on the way back in.
-        if (type.equals(node.getType())) {
-            sb.append(type.toString());
+        Type nodeType = node.getType();
+        // An unanalyzed [...] has no type yet (the parser leaves it null), e.g. a generated column expression
+        // rendered by SHOW CREATE TABLE. Print the bare literal and let analysis infer the type on the way back in.
+        if (nodeType != null) {
+            Type type = AnalyzerUtils.replaceNullType2Boolean(nodeType);
+            // The type prefix exists to preserve an element type the literal alone would not reproduce, as in
+            // ARRAY<DATE>['2020-01-01']. When the element type is still NULL the literal never carried a type
+            // of its own -- it was inferred from context -- and printing the BOOLEAN stand-in freezes a type
+            // the original did not have, which changes function overload resolution on the way back in.
+            if (type.equals(nodeType)) {
+                sb.append(type.toString());
+            }
         }
         sb.append('[');
         sb.append(node.getChildren().stream().map(this::visit).collect(Collectors.joining(", ")));
@@ -531,8 +536,14 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     @Override
     public String visitMapExpr(MapExpr node, Void context) {
         StringBuilder sb = new StringBuilder();
-        Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
-        sb.append(type.toString());
+        Type nodeType = node.getType();
+        if (nodeType != null && nodeType.isMapType()) {
+            sb.append(AnalyzerUtils.replaceNullType2Boolean(nodeType).toString());
+        } else {
+            // An unanalyzed map{...} / map(k, v) only carries the ANY_MAP placeholder from the parser, whose
+            // toString() is not valid SQL. Print the untyped constructor and let analysis infer the type.
+            sb.append("map");
+        }
         sb.append("{");
         for (int i = 0; i < node.getChildren().size(); i = i + 2) {
             if (i > 0) {
