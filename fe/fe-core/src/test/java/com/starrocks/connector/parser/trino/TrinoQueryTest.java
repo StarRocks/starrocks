@@ -1339,6 +1339,9 @@ public class TrinoQueryTest extends TrinoTestBase {
             // doesn't carry it
             getFragmentPlan("select cast(date(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC')) AS VARCHAR)");
             getFragmentPlan("select with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC') >= TIMESTAMP '2024-08-19 00:00:00'");
+            getFragmentPlan("select with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC') BETWEEN " +
+                    "TIMESTAMP '2024-08-19 00:00:00' AND TIMESTAMP '2024-08-20 00:00:00'");
+            getFragmentPlan("select with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC') IN (TIMESTAMP '2024-08-19 00:00:00')");
             for (String sql : List.of(
                     "select format_datetime(with_timezone(ts, 'UTC'), 'yyyy-MM-dd HH:mm:ss ZZ') " +
                             "from (values TIMESTAMP '2024-08-19 14:36:41') t(ts)",

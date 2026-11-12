@@ -261,9 +261,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     // Trino functions that show the time zone of their argument
     private static final Set<String> ZONE_SHOWING_FUNCTIONS = Set.of("to_iso8601", "timezone_hour", "timezone_minute");
+    private static final String WALL_CLOCK_CONSUMERS = "as a wall-clock time (CAST to TIMESTAMP or DATE, date and field "
+            + "functions, EXTRACT, or date_format and format_datetime with a literal format without the zone)";
 
     private final long sqlMode;
-    // Expressions whose value is only read as a wall-clock time; Trino expressions compare by value, so by identity
+    // Expressions whose value is only read as a wall-clock time, which doesn't show the zone; Trino expressions compare
+    // by value, so by identity
     private final Set<Expression> wallClockOperands = Collections.newSetFromMap(new IdentityHashMap<>());
     // Expressions whose time zone their consumer shows (a cast to a string, format_datetime with a zone pattern,
     // to_iso8601, timezone_hour), and expressions their consumer reads without the zone
@@ -327,7 +330,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         boolean parentZoneShown = zoneShown;
         if (zoneShownOperands.contains(node)) {
             zoneShown = true;
-        } else if (zoneFreeOperands.contains(node)) {
+        } else if (zoneFreeOperands.contains(node) || wallClockOperands.contains(node)) {
             zoneShown = false;
         }
         try {
@@ -1174,12 +1177,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                     throw unsupportedException(String.format("Trino parser on StarRocks does not support %s here: a "
                             + "TIMESTAMP literal with a time zone other than the session time zone %s is supported "
                             + "only in comparisons, to_unixtime, AT TIME ZONE or at_timezone into the session time "
-                            + "zone, or as a wall-clock time (CAST to TIMESTAMP or DATE, date and field functions, "
-                            + "EXTRACT, or date_format and format_datetime with a literal format without the zone)",
-                            node, TimeUtils.getTimeZone().toZoneId()));
+                            + "zone, or %s", node, sessionZone(), WALL_CLOCK_CONSUMERS));
                 }
                 // A wall clock the session time zone repeats stands for two instants, which then compare equal
-                ZoneId sessionZone = TimeUtils.getTimeZone().toZoneId();
+                ZoneId sessionZone = sessionZone();
                 LocalDateTime sessionDateTime =
                         LocalDateTime.ofInstant(dateTime.toInstant(offsets.get(0)), sessionZone);
                 if (sessionZone.getRules().getValidOffsets(sessionDateTime).size() > 1) {
@@ -1271,7 +1272,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     // midnight on a DST change at 00:00). Trino moves such a result to the end of the gap; a round trip through the
     // zone does the same in FE folding and the BE, and leaves every other time as it is
     private Expr resolveSkippedTruncation(Expr truncated, Expression argument) {
-        Optional<ZoneId> zoneId = wallClockZone(argument);
+        Optional<ZoneId> zoneId = wallClockOperands.contains(argument) ? wallClockZone(argument) : Optional.empty();
         if (zoneId.isEmpty()) {
             return truncated;
         }
@@ -1317,15 +1318,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                                            ParseTreeContext context) {
         if (!wallClockOperands.contains(node) && !isSessionTimeZone(toZone)) {
             throw unsupportedException(String.format("Trino parser on StarRocks does not support %s here: a zone "
-                    + "conversion of with_timezone is supported only as a wall-clock time (CAST to TIMESTAMP or DATE, "
-                    + "date and field functions, EXTRACT, or date_format and format_datetime with a literal format "
-                    + "without the zone), or into a session time zone with a fixed offset (session time zone: %s)",
-                    node, TimeUtils.getTimeZone().toZoneId()));
+                    + "conversion of with_timezone is supported only %s, or into a session time zone with a fixed "
+                    + "offset (session time zone: %s)", node, WALL_CLOCK_CONSUMERS, sessionZone()));
         }
         rejectIfZoneShown(node);
         Expr timestamp = (Expr) visit(withTimezone.getArguments().get(0), context);
-        Expr from = convertZone(withTimezone.getArguments().get(1), context);
-        Expr to = convertZone(toZone, context);
+        Expr from = convertZone(withTimezone.getArguments().get(1));
+        Expr to = convertZone(toZone);
         return new FunctionCallExpr("convert_tz", List.of(timestamp, from, to));
     }
 
@@ -1341,7 +1340,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     // A literal zone becomes a name the BE resolves. Zones read from columns are rejected: the BE looks them up
     // case-sensitively at run time, so a value such as 'utc' that Trino accepts would give NULL
-    private Expr convertZone(Expression zone, ParseTreeContext context) {
+    private Expr convertZone(Expression zone) {
         if (!(zone instanceof StringLiteral)) {
             throw unsupportedException(String.format("Trino parser on StarRocks supports only literal time zones in "
                     + "with_timezone and its zone conversions, not %s", zone));
@@ -1368,12 +1367,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         if (!isSessionTimeZone(zone)) {
             throw unsupportedException(String.format("Trino parser on StarRocks does not support %s here: with_timezone "
                     + "is supported only inside AT TIME ZONE or at_timezone, or with a session time zone that has a "
-                    + "fixed offset (session time zone: %s)", node, TimeUtils.getTimeZone().toZoneId()));
+                    + "fixed offset (session time zone: %s)", node, sessionZone()));
         }
         rejectIfZoneShown(node);
-        String zoneId = toBackendZone(parseZoneId(((StringLiteral) zone).getValue()).orElseThrow());
-        return new FunctionCallExpr("convert_tz", List.of(arguments.get(0),
-                new com.starrocks.sql.ast.expression.StringLiteral(zoneId), new VariableExpr("time_zone")));
+        return new FunctionCallExpr("convert_tz", List.of(arguments.get(0), convertZone(zone),
+                new VariableExpr("time_zone")));
     }
 
     // Marks the arguments of node that are read only as a wall-clock time
@@ -1383,7 +1381,6 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         Integer wallClockArgument = WALL_CLOCK_FUNCTIONS.get(name);
         if (wallClockArgument != null && wallClockArgument < arguments.size()) {
             wallClockOperands.add(arguments.get(wallClockArgument));
-            zoneFreeOperands.add(arguments.get(wallClockArgument));
         } else if (name.equals("date_trunc") && arguments.size() == 2 && wallClockOperands.contains(node)
                 && wallClockZone(arguments.get(1)).isPresent()) {
             wallClockOperands.add(arguments.get(1));
@@ -1391,13 +1388,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             if (arguments.get(1) instanceof StringLiteral
                     && !formatReadsZone(name, ((StringLiteral) arguments.get(1)).getValue())) {
                 wallClockOperands.add(arguments.get(0));
-                zoneFreeOperands.add(arguments.get(0));
             } else {
                 zoneShownOperands.add(arguments.get(0));
             }
         } else if (name.equals("to_unixtime") && arguments.size() == 1) {
-            zoneFreeOperands.add(arguments.get(0));
-            instantOperands.add(arguments.get(0));
+            addInstantOperands(arguments);
         } else if (name.equals(AT_TIMEZONE) && arguments.size() == 2) {
             addConvertedInstant(node, arguments.get(0), arguments.get(1));
         } else if (ZONE_SHOWING_FUNCTIONS.contains(name) && arguments.size() == 1) {
@@ -1421,8 +1416,18 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return false;
     }
 
+    // Operands read only as instants, such as compared ones: their consumer doesn't show the zone
+    private void addInstantOperands(List<? extends Expression> operands) {
+        zoneFreeOperands.addAll(operands);
+        instantOperands.addAll(operands);
+    }
+
+    private static ZoneId sessionZone() {
+        return TimeUtils.getTimeZone().toZoneId();
+    }
+
     private static boolean isFixedSessionTimeZone(ZoneId zone) {
-        ZoneId sessionZone = TimeUtils.getTimeZone().toZoneId();
+        ZoneId sessionZone = sessionZone();
         return sessionZone.getRules().isFixedOffset() && (zone.normalized().equals(sessionZone.normalized())
                 || zone.getRules().equals(sessionZone.getRules()));
     }
@@ -1448,7 +1453,6 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private void addResultOperands(Expression node, List<? extends Expression> results) {
         if (wallClockOperands.contains(node)) {
             wallClockOperands.addAll(results);
-            zoneFreeOperands.addAll(results);
         }
         if (instantOperands.contains(node)) {
             instantOperands.addAll(results);
@@ -1466,7 +1470,6 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitExtract(Extract node, ParseTreeContext context) {
         if (!node.getField().name().startsWith("TIMEZONE")) {
             wallClockOperands.add(node.getExpression());
-            zoneFreeOperands.add(node.getExpression());
         } else {
             zoneShownOperands.add(node.getExpression());
         }
@@ -1527,10 +1530,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitComparisonExpression(ComparisonExpression node, ParseTreeContext context) {
-        zoneFreeOperands.add(node.getLeft());
-        zoneFreeOperands.add(node.getRight());
-        instantOperands.add(node.getLeft());
-        instantOperands.add(node.getRight());
+        addInstantOperands(List.of(node.getLeft(), node.getRight()));
         BinaryType binaryOp = COMPARISON_OPERATOR_MAP.get(node.getOperator());
         if (binaryOp == null) {
             throw unsupportedException(String.format("Trino parser on StarRocks does not support the comparison type %s",
@@ -1553,7 +1553,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitBetweenPredicate(BetweenPredicate node, ParseTreeContext context) {
-        instantOperands.addAll(List.of(node.getValue(), node.getMin(), node.getMax()));
+        addInstantOperands(List.of(node.getValue(), node.getMin(), node.getMax()));
         return new com.starrocks.sql.ast.expression.BetweenPredicate(
                 (Expr) visit(node.getValue(), context),
                 (Expr) visit(node.getMin(), context),
@@ -1571,9 +1571,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitInPredicate(InPredicate node, ParseTreeContext context) {
-        instantOperands.add(node.getValue());
+        addInstantOperands(List.of(node.getValue()));
         if (node.getValueList() instanceof InListExpression) {
-            instantOperands.addAll(((InListExpression) node.getValueList()).getValues());
+            addInstantOperands(((InListExpression) node.getValueList()).getValues());
             return new com.starrocks.sql.ast.expression.InPredicate(
                     (Expr) visit(node.getValue(), context),
                     visit(node.getValueList(), context, Expr.class), false);
@@ -1587,6 +1587,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitIsNullPredicate(IsNullPredicate node, ParseTreeContext context) {
+        addInstantOperands(List.of(node.getValue()));
         Expr value = (Expr) visit(node.getValue(), context);
         return new com.starrocks.sql.ast.expression.IsNullPredicate(value, false);
     }
@@ -1658,6 +1659,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitSimpleCaseExpression(SimpleCaseExpression node, ParseTreeContext context) {
         addResultOperands(node, caseResults(node.getWhenClauses(), node.getDefaultValue()));
+        List<Expression> compared = Lists.newArrayList(node.getOperand());
+        node.getWhenClauses().forEach(clause -> compared.add(clause.getOperand()));
+        addInstantOperands(compared);
         return new CaseExpr((Expr) visit(node.getOperand(), context),
                 visit(node.getWhenClauses(), context, CaseWhenClause.class),
                 (Expr) processOptional(node.getDefaultValue(), context));
@@ -1672,7 +1676,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitNullIfExpression(NullIfExpression node, ParseTreeContext context) {
-        addResultOperands(node, List.of(node.getFirst()));
+        // The operands are compared as instants, so the first can't also be read as its own wall-clock time
+        addInstantOperands(List.of(node.getSecond()));
+        if (instantOperands.contains(node)) {
+            addInstantOperands(List.of(node.getFirst()));
+        }
         List<Expr> arguments = visit(ImmutableList.of(node.getFirst(), node.getSecond()), context, Expr.class);
         return new FunctionCallExpr("nullif", arguments);
     }
@@ -1735,7 +1743,6 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitCast(Cast node, ParseTreeContext context) {
         if (isWallClockType(node.getType())) {
             wallClockOperands.add(node.getExpression());
-            zoneFreeOperands.add(node.getExpression());
         } else if (isStringType(node.getType())) {
             zoneShownOperands.add(node.getExpression());
         }

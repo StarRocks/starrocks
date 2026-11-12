@@ -223,6 +223,9 @@ public class TrinoTimestampWithTimeZoneTest extends TrinoTestBase {
         analyzeFail("select * from (VALUES TIMESTAMP '2024-01-01 00:00:00 Asia/Tokyo') t(x)", unsupported);
         analyzeFail("select TIMESTAMP '2024-01-01 00:00:00 Asia/Tokyo' AT TIME ZONE 'America/Los_Angeles'",
                 unsupported);
+        // NULLIF compares its operands as instants, so it can't return the first as its own wall-clock time
+        analyzeFail("select cast(NULLIF(TIMESTAMP '2024-01-01 00:00:00 Asia/Tokyo', " +
+                "TIMESTAMP '2024-01-01 00:00:00 UTC') AS DATE)", unsupported);
         assertPlanContains("select * from tall where th BETWEEN TIMESTAMP '2024-01-01 00:00:00 Asia/Tokyo' AND " +
                 "TIMESTAMP '2024-01-02 00:00:00 Asia/Tokyo'", "'2023-12-31 15:00:00'");
         assertPlanContains("select * from tall where th IN (TIMESTAMP '2024-01-01 00:00:00 Asia/Tokyo')",
