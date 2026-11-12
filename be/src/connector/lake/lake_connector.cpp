@@ -1597,6 +1597,17 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _prefetch_hit_counter = ADD_CHILD_COUNTER(_runtime_profile, "PrefetchHitCount", TUnit::UNIT, io_statistics_name);
     _prefetch_wait_finish_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchWaitFinishTime", io_statistics_name);
     _prefetch_pending_timer = ADD_CHILD_TIMER(_runtime_profile, "PrefetchPendingTime", io_statistics_name);
+    _segment_first_chunk_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentFirstChunks", TUnit::UNIT, io_statistics_name);
+    _segment_first_chunk_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentFirstChunkTime", io_statistics_name);
+    _remote_prefetch_block_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchBlocks", TUnit::UNIT, io_statistics_name);
+    _remote_prefetch_rejected_block_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchRejectedBlocks", TUnit::UNIT, io_statistics_name);
+    _remote_prefetch_range_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchRanges", TUnit::UNIT, io_statistics_name);
+    _remote_prefetch_late_read_ahead_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemotePrefetchLateReadAhead", TUnit::UNIT, io_statistics_name);
 }
 
 void LakeDataSource::update_realtime_counter(Chunk* chunk) {
@@ -1813,6 +1824,12 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_prefetch_hit_counter, reader_stats.prefetch_hit_count);
     COUNTER_UPDATE(_prefetch_wait_finish_timer, reader_stats.prefetch_wait_finish_ns);
     COUNTER_UPDATE(_prefetch_pending_timer, reader_stats.prefetch_pending_ns);
+    COUNTER_UPDATE(_segment_first_chunk_counter, reader_stats.segment_first_chunks);
+    COUNTER_UPDATE(_segment_first_chunk_timer, reader_stats.segment_first_chunk_ns);
+    COUNTER_UPDATE(_remote_prefetch_block_counter, reader_stats.remote_prefetch_blocks);
+    COUNTER_UPDATE(_remote_prefetch_rejected_block_counter, reader_stats.remote_prefetch_rejected_blocks);
+    COUNTER_UPDATE(_remote_prefetch_range_counter, reader_stats.remote_prefetch_ranges);
+    COUNTER_UPDATE(_remote_prefetch_late_read_ahead_counter, reader_stats.remote_prefetch_late_read_ahead);
 
     // update cache related info for CACHE SELECT
     if (_runtime_state->query_options().__isset.query_type &&

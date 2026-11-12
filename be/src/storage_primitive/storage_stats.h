@@ -194,6 +194,19 @@ struct OlapReaderStatistics {
     int64_t prefetch_wait_finish_ns = 0;
     int64_t prefetch_pending_ns = 0;
 
+    // Read-ahead of the segment readers while the remote I/O scheduler is enabled (see SegmentPrefetchWindow): cache
+    // blocks queued for fetching, blocks the scheduler refused because its queue was full, and page ranges handed to
+    // warm_cache_async().
+    int64_t remote_prefetch_blocks = 0;
+    int64_t remote_prefetch_rejected_blocks = 0;
+    int64_t remote_prefetch_ranges = 0;
+    // Segment readers that started to read their late-materialized columns ahead.
+    int64_t remote_prefetch_late_read_ahead = 0;
+    // The first chunk of each segment reader, from its first get_next after it was opened or reused: how many, and
+    // their wall time, so that starting readers cold shows apart from the steady read.
+    int64_t segment_first_chunks = 0;
+    int64_t segment_first_chunk_ns = 0;
+
     // Segments whose footer was read on behalf of this reader, i.e. that were not already open. Only the
     // callers that pass their statistics to Segment::open count them.
     int64_t segments_opened = 0;
@@ -370,6 +383,12 @@ struct OlapReaderStatistics {
         prefetch_hit_count += other.prefetch_hit_count;
         prefetch_wait_finish_ns += other.prefetch_wait_finish_ns;
         prefetch_pending_ns += other.prefetch_pending_ns;
+        remote_prefetch_blocks += other.remote_prefetch_blocks;
+        remote_prefetch_rejected_blocks += other.remote_prefetch_rejected_blocks;
+        remote_prefetch_ranges += other.remote_prefetch_ranges;
+        remote_prefetch_late_read_ahead += other.remote_prefetch_late_read_ahead;
+        segment_first_chunks += other.segment_first_chunks;
+        segment_first_chunk_ns += other.segment_first_chunk_ns;
         lake_prepared_rowsets += other.lake_prepared_rowsets;
         lake_prepared_segments += other.lake_prepared_segments;
         lake_prepared_scan_rows += other.lake_prepared_scan_rows;
@@ -451,5 +470,7 @@ const char* const kIONsWriteRemote = "io_ns_write_remote";
 const char* const kPrefetchHitCount = "prefetch_hit_count";
 const char* const kPrefetchWaitFinishNs = "prefetch_wait_finish_ns";
 const char* const kPrefetchPendingNs = "prefetch_pending_ns";
+const char* const kPrefetchBlocksSubmitted = "prefetch_blocks_submitted";
+const char* const kPrefetchBlocksRejected = "prefetch_blocks_rejected";
 
 } // namespace starrocks

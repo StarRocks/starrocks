@@ -426,6 +426,114 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタにおける主キーインデックスキャッシュの使用量の上限で、キャッシュ容量に対するパーセンテージで指定します。各 Publish の終了時（メモリ制限超過で失敗した場合を除く）に確認され、使用量がこの割合を超えている場合は、使用中でない主キーインデックスを最も長く使われていないものから順に追い出し、この割合以内に収めます。バックグラウンドスレッドが `primary_key_index_memory_high_percent` まで縮小するよりも速くキャッシュが増えた場合の歯止めとなるため、その値より大きい値を設定してください。
 - 導入バージョン: -
 
+### remote_io_scheduler_enable
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: 共有データクラスタでリモート I/O スケジューラを有効にするかどうか。有効にすると、Data Cache にヒットせずにオブジェクトストレージへ発行される GET リクエストは、CN ごとに 1 つのスケジューラで待機し、重みに従って許可されます。クエリ、ロード、Compaction、その他のバックグラウンドタスクは `remote_read_query_weight`、`remote_read_load_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` に従ってオブジェクトストレージの読み取り能力を分け合います。クエリ同士はリソースグループの `cpu_weight` に従って分け合い、同じリソースグループ内では読み取り量が多いクエリほど割り当てが減るため、大きなスキャンは新しい小さなクエリに譲ります。クエリのスキャンは、これから読むページのキャッシュブロックも先読みします（`remote_prefetch_window_blocks` を参照）。スケジューラには `datacache_enable` と `starlet_use_star_cache` の両方が `true` である必要があります。そうでない場合、CN は警告ログを出力し、スケジューラが無効な場合と同じように読み取ります。有効な間は、`io_coalesce_lake_read_enable` が起動時に `false` に設定され、`starlet_fs_read_prefetch_enable` は設定値を変えずに強制的に無効になります。これらを動的に有効にする操作は拒否されます。設定ファイルは変更されないため、スケジューラを無効にして CN を再起動すると両方とも元に戻ります。スケジューラのパラメータに不正な値がある場合、CN は起動を拒否します。
+- 導入バージョン: -
+
+### remote_prefetch_late_read_ahead_ratio
+
+- デフォルト: 0.5
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: 遅延マテリアライゼーションでは、述語を満たす行のためだけに読む列は、それらの行が確定した後にチャンクごとに取得されます。Segment Reader の 4 番目のチャンク以降、それらの行が範囲内のページのうちこの割合以上に触れた場合、これらの列は述語列と同様に先読みされるようになります。1 より大きい値では切り替わりません。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_prefetch_window_blocks
+
+- デフォルト: 128
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: クエリの Segment Reader が、消費中の位置より先に要求する Data Cache ブロックの最大数。キュー中、取得中、取得済みで未読のブロックを含みます。Reader がどこまで先行するかを制限するもので、ブロックをいつ取得するかはスケジューラが決めます。ロード、Compaction などのバックグラウンド読み取りは先読みしません。`0` で先読みを無効にします。変更は以降に開かれる Segment Reader に反映されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_adaptive_limit
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: リモート I/O スケジューラが、実行中の GET リクエスト数を `remote_read_io_threads` 以下で、オブジェクトストレージへの経路が処理できる量に合わせるかどうか。収まらないリクエストはネットワークではなくスケジューラで待機し、重みに従って次に実行するものが決まります。`false` の場合、実行中のリクエストは最大 `remote_read_io_threads` 個です。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_adaptive_min_inflight
+
+- デフォルト: 16
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: 適応的な上限の最小値で、スケジューラが負荷のないリクエストのレイテンシを測定する際に一時的に保持する同時実行数でもあります。正の値である必要があります。`remote_io_scheduler_enable` と `remote_read_adaptive_limit` の両方が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_background_weight
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: すべてが待機している場合の、Compaction 以外のバックグラウンドタスクによるオブジェクトストレージ読み取りの割り当て。`remote_read_query_weight`、`remote_read_load_weight`、`remote_read_compaction_weight` に対する相対値です。正の値である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_compaction_weight
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: すべてが待機している場合の、Compaction によるオブジェクトストレージ読み取りの割り当て。`remote_read_query_weight`、`remote_read_load_weight`、`remote_read_background_weight` に対する相対値です。正の値である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_io_threads
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: スケジュールされた GET リクエストを発行するスレッド数。CN 上で実行中の GET リクエスト数の上限になります。`0` の場合、共有データのスキャンスレッド数、つまり `pipeline_connector_scan_thread_num_per_cpu` と CPU コア数の積になります。負の値は指定できません。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_load_weight
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: すべてが待機している場合の、ロードによるオブジェクトストレージ読み取りの割り当て。Publish、主キーインデックス、削除ファイル、ロードのスピルを含みます。`remote_read_query_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` に対する相対値です。正の値である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_query_weight
+
+- デフォルト: 9
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: すべてが待機している場合の、クエリによるオブジェクトストレージ読み取りの割り当て。`remote_read_load_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` に対する相対値です。正の値である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_weight_decay_ios
+
+- デフォルト: 1024
+- タイプ: Int
+- 単位: -
+- 変更可能: いいえ
+- 説明: 読み取りに応じてクエリのリソースグループ内の割り当てが減る速さ。クエリまたはバックグラウンドタスクが読む n 番目のキャッシュブロックの重みは `max(remote_read_weight_decay_min, 2^(-n / remote_read_weight_decay_ios))` で、大きなスキャンは同じリソースグループの新しいクエリにますます譲ります。`0` で減衰を無効にします。負の値は指定できません。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
+### remote_read_weight_decay_min
+
+- デフォルト: 0.03125
+- タイプ: Double
+- 単位: -
+- 変更可能: いいえ
+- 説明: `remote_read_weight_decay_ios` によって下がる重みの最小値。0 より大きく 1 以下である必要があります。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。
+- 導入バージョン: -
+
 ### s3_multipart_equal_part_size
 
 - デフォルト: false
