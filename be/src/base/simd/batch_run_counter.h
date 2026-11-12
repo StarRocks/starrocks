@@ -23,6 +23,10 @@
 #include <emmintrin.h>
 #endif
 
+#if defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #include <cstdint>
 #include <cstring>
 
@@ -88,6 +92,37 @@ public:
                 return BatchCount(16, 0, true);
             } else if (mask == 0xffff) {
                 // all one
+                return BatchCount(16, 16, true);
+            } else {
+                return BatchCount(16, 0, false);
+            }
+        }
+#endif
+
+#if defined(__ARM_NEON) && defined(__aarch64__)
+        if (batch_size >= 32 && _left >= 32) {
+            uint8x16_t f0 = vld1q_u8(_filter + _offset);
+            uint8x16_t f1 = vld1q_u8(_filter + _offset + 16);
+            _offset += 32;
+            _left -= 32;
+
+            if (vmaxvq_u8(vmaxq_u8(f0, f1)) == 0) {
+                return BatchCount(32, 0, true);
+            } else if (vminvq_u8(vminq_u8(f0, f1)) != 0) {
+                return BatchCount(32, 32, true);
+            } else {
+                return BatchCount(32, 0, false);
+            }
+        }
+
+        if (batch_size >= 16 && _left >= 16) {
+            uint8x16_t f = vld1q_u8(_filter + _offset);
+            _offset += 16;
+            _left -= 16;
+
+            if (vmaxvq_u8(f) == 0) {
+                return BatchCount(16, 0, true);
+            } else if (vminvq_u8(f) != 0) {
                 return BatchCount(16, 16, true);
             } else {
                 return BatchCount(16, 0, false);

@@ -24,12 +24,16 @@
 
 #include "base/bit/rle_encoding.h"
 #include "base/coding.h"
+#include "base/simd/batch_run_counter.h"
 #include "base/string/faststring.h"
 #include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "formats/parquet/column_reader.h"
+#include "formats/parquet/encoding_dict.h"
+#include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/parquet_block_split_bloom_filter.h"
 #include "formats/parquet/schema.h"
 #include "formats/scan_context.h"
 #include "fs/fs.h"
@@ -351,6 +355,403 @@ TEST_F(StoredColumnReaderTest, RepeatedUnselectedSegmentInsideLoadedPage) {
             ASSERT_EQ(expected_def_levels.size(), num_levels) << "range [" << step.begin << ", " << step.end << ")";
             EXPECT_EQ(expected_rep_levels, std::vector<level_t>(rep_levels, rep_levels + num_levels));
             EXPECT_EQ(expected_def_levels, std::vector<level_t>(def_levels, def_levels + num_levels));
+        }
+    }
+}
+
+TEST(ParquetSimdParityTest, BlockSplitBloomFilterBitExactParity) {
+    static constexpr uint32_t kSalt[8] = {0x47b6137bU, 0x44974d91U, 0x8824ad5bU, 0xa2b7289dU,
+                                          0x705495c7U, 0x2df1424bU, 0x9efc4947U, 0x5c6bfb31U};
+    ParquetBlockSplitBloomFilter bf;
+    ASSERT_OK(bf.init(1024, 0.01, Hasher::HashStrategy::XXHASH64, 0));
+    const uint32_t num_bytes = bf.num_bytes();
+    const uint32_t num_blocks = num_bytes / 32;
+    std::vector<uint32_t> expected_words(num_bytes / sizeof(uint32_t), 0);
+
+    for (uint64_t i = 0; i < 200; ++i) {
+        uint64_t h = (i * 0x9E3779B97F4A7C15ULL) ^ (i << 17);
+        bf.add_hash(h);
+
+        uint32_t block_index = static_cast<uint32_t>(((h >> 32) * num_blocks) >> 32);
+        uint32_t key = static_cast<uint32_t>(h);
+        for (int lane = 0; lane < 8; ++lane) {
+            uint32_t bit = (key * kSalt[lane]) >> 27;
+            expected_words[block_index * 8 + lane] |= (1u << bit);
+        }
+    }
+
+    ASSERT_EQ(0, std::memcmp(bf.data(), expected_words.data(), num_bytes));
+
+    for (uint64_t i = 0; i < 200; ++i) {
+        uint64_t h = (i * 0x9E3779B97F4A7C15ULL) ^ (i << 17);
+        EXPECT_TRUE(bf.test_hash(h)) << "inserted i=" << i;
+    }
+
+    for (uint64_t i = 200; i < 700; ++i) {
+        uint64_t h = (i * 0xBF58476D1CE4E5B9ULL) ^ (i << 23);
+        uint32_t block_index = static_cast<uint32_t>(((h >> 32) * num_blocks) >> 32);
+        uint32_t key = static_cast<uint32_t>(h);
+        bool ref_present = true;
+        for (int lane = 0; lane < 8; ++lane) {
+            uint32_t mask = 1u << ((key * kSalt[lane]) >> 27);
+            if ((expected_words[block_index * 8 + lane] & mask) == 0) {
+                ref_present = false;
+                break;
+            }
+        }
+        EXPECT_EQ(ref_present, bf.test_hash(h)) << "probe i=" << i;
+    }
+
+    // Verify single-lane missing bit in each of the 8 lanes returns false.
+    for (int missing_lane = 0; missing_lane < 8; ++missing_lane) {
+        ParquetBlockSplitBloomFilter single_bf;
+        ASSERT_OK(single_bf.init(32, 0.01, Hasher::HashStrategy::XXHASH64, 0));
+        uint64_t h = 0x123456789ABCDEF0ULL;
+        single_bf.add_hash(h);
+        EXPECT_TRUE(single_bf.test_hash(h));
+
+        uint32_t single_num_blocks = single_bf.num_bytes() / 32;
+        uint32_t block_index = static_cast<uint32_t>(((h >> 32) * single_num_blocks) >> 32);
+        uint32_t key = static_cast<uint32_t>(h);
+        uint32_t mask = 1u << ((key * kSalt[missing_lane]) >> 27);
+        auto* block_words = reinterpret_cast<uint32_t*>(single_bf.data() + 32 * block_index);
+        block_words[missing_lane] &= ~mask;
+        EXPECT_FALSE(single_bf.test_hash(h)) << "missing_lane=" << missing_lane;
+    }
+}
+
+TEST(ParquetSimdParityTest, AssignDataWithNullsSparseAndTrailingNulls) {
+    DictDecoder<int32_t> decoder;
+    for (size_t count :
+         {size_t{0}, size_t{15}, size_t{16}, size_t{17}, size_t{31}, size_t{32}, size_t{33}, size_t{64}, size_t{128}}) {
+        // 1. All nulls (num_non_nulls = 0)
+        {
+            std::vector<uint8_t> nulls(count, 1);
+            std::vector<int32_t> src;
+            std::vector<int32_t> dst(count, -1);
+            decoder.assign_data_with_nulls<int32_t>(count, 0, nulls.data(), src.data(), dst.data());
+        }
+        // 2. Single non-null at every position pos in [0, count)
+        const bool is_dense = (1 >= count / 10);
+        for (size_t pos = 0; pos < count; ++pos) {
+            std::vector<uint8_t> nulls(count, 1);
+            nulls[pos] = 0;
+            // Dense expansion (base/simd/expand.h:31-38) requires src to remain readable at index num_valid.
+            // Sparse scatter path is kept unpadded to verify its guarded tail never over-reads.
+            std::vector<int32_t> src = is_dense ? std::vector<int32_t>{4242, 0} : std::vector<int32_t>{4242};
+            std::vector<int32_t> dst(count, -1);
+            decoder.assign_data_with_nulls<int32_t>(count, 1, nulls.data(), src.data(), dst.data());
+            EXPECT_EQ(4242, dst[pos]) << "count=" << count << " pos=" << pos;
+
+            std::vector<int64_t> src64 =
+                    is_dense ? std::vector<int64_t>{9876543210LL, 0} : std::vector<int64_t>{9876543210LL};
+            std::vector<int64_t> dst64(count, -1);
+            decoder.assign_data_with_nulls<int64_t>(count, 1, nulls.data(), src64.data(), dst64.data());
+            EXPECT_EQ(9876543210LL, dst64[pos]) << "count=" << count << " pos=" << pos;
+        }
+        // 3. Multiple sparse non-nulls (< 10%) across 16B chunks and scalar tail
+        if (count >= 32) {
+            std::vector<uint8_t> nulls(count, 1);
+            std::vector<size_t> positions = {3, 19, count - 1};
+            std::vector<int32_t> src;
+            for (size_t idx = 0; idx < positions.size(); ++idx) {
+                nulls[positions[idx]] = 0;
+                src.push_back(static_cast<int32_t>(1000 + idx));
+            }
+            std::vector<int32_t> dst(count, -1);
+            decoder.assign_data_with_nulls<int32_t>(count, src.size(), nulls.data(), src.data(), dst.data());
+            for (size_t idx = 0; idx < positions.size(); ++idx) {
+                EXPECT_EQ(static_cast<int32_t>(1000 + idx), dst[positions[idx]]) << "count=" << count;
+            }
+        }
+    }
+}
+
+TEST(ParquetSimdParityTest, FLBAPlainDecoderNextBatchSlicesAndUnalignedDst) {
+    for (size_t type_len : {size_t{7}, size_t{12}}) {
+        const size_t total_values = 32;
+        std::string backing(total_values * type_len, '\0');
+        for (size_t i = 0; i < backing.size(); ++i) {
+            backing[i] = static_cast<char>('a' + (i % 26));
+        }
+
+        for (size_t count :
+             {size_t{0}, size_t{1}, size_t{3}, size_t{4}, size_t{5}, size_t{8}, size_t{16}, size_t{19}}) {
+            FLBAPlainDecoder decoder;
+            decoder.set_type_length(static_cast<int32_t>(type_len));
+            ASSERT_OK(decoder.set_data(Slice(backing.data(), backing.size())));
+
+            std::vector<Slice> aligned_dst(count + 1);
+            ASSERT_OK(decoder.next_batch(count, reinterpret_cast<uint8_t*>(aligned_dst.data())));
+
+            for (size_t i = 0; i < count; ++i) {
+                EXPECT_EQ(backing.data() + i * type_len, aligned_dst[i].data)
+                        << "type_len=" << type_len << " count=" << count << " i=" << i;
+                EXPECT_EQ(type_len, aligned_dst[i].size) << "type_len=" << type_len << " count=" << count << " i=" << i;
+            }
+
+            // Reading beyond remaining values must return an error.
+            std::vector<Slice> extra_buf(total_values + 1);
+            EXPECT_FALSE(
+                    decoder.next_batch(total_values - count + 1, reinterpret_cast<uint8_t*>(extra_buf.data())).ok());
+        }
+
+#if defined(__ARM_NEON) && defined(__aarch64__)
+        // Verify 1-byte-aligned vst1q_u8 stores in the NEON 4-Slice loop on an odd byte address.
+        for (size_t count : {size_t{0}, size_t{4}, size_t{8}, size_t{16}}) {
+            FLBAPlainDecoder decoder;
+            decoder.set_type_length(static_cast<int32_t>(type_len));
+            ASSERT_OK(decoder.set_data(Slice(backing.data(), backing.size())));
+
+            std::vector<uint8_t> raw_buf((count + 1) * sizeof(Slice) + 8, 0);
+            uint8_t* unaligned_dst = raw_buf.data() + 1;
+            ASSERT_OK(decoder.next_batch(count, unaligned_dst));
+
+            for (size_t i = 0; i < count; ++i) {
+                Slice s;
+                std::memcpy(&s, unaligned_dst + i * sizeof(Slice), sizeof(Slice));
+                EXPECT_EQ(backing.data() + i * type_len, s.data)
+                        << "type_len=" << type_len << " count=" << count << " i=" << i;
+                EXPECT_EQ(type_len, s.size) << "type_len=" << type_len << " count=" << count << " i=" << i;
+            }
+        }
+#endif
+    }
+}
+
+TEST_F(StoredColumnReaderTest, BenchmarkKernelsScalarVsSimdEquivalence) {
+    // 1. ParquetBlockSplitBloomFilter (add_hash + test_hash on 64 hit hashes and 64 miss hashes)
+    {
+        static constexpr uint32_t kSalt[8] = {0x47b6137bU, 0x44974d91U, 0x8824ad5bU, 0xa2b7289dU,
+                                              0x705495c7U, 0x2df1424bU, 0x9efc4947U, 0x5c6bfb31U};
+        ParquetBlockSplitBloomFilter bf;
+        ASSERT_OK(bf.init(4096, 0.01, Hasher::HashStrategy::XXHASH64, 0));
+        const uint32_t num_bytes = bf.num_bytes();
+        const uint32_t num_blocks = num_bytes / 32;
+        std::vector<uint32_t> scalar_words(num_bytes / sizeof(uint32_t), 0);
+
+        std::vector<uint64_t> hit_hashes(64);
+        std::vector<uint64_t> miss_hashes(64);
+        for (size_t i = 0; i < 64; ++i) {
+            hit_hashes[i] = ((i + 1) * 0x9E3779B97F4A7C15ULL) ^ ((i + 1) << 19);
+            miss_hashes[i] = ((i + 1001) * 0xBF58476D1CE4E5B9ULL) ^ ((i + 1001) << 29);
+
+            bf.add_hash(hit_hashes[i]);
+            uint32_t block_index = static_cast<uint32_t>(((hit_hashes[i] >> 32) * num_blocks) >> 32);
+            uint32_t key = static_cast<uint32_t>(hit_hashes[i]);
+            for (int lane = 0; lane < 8; ++lane) {
+                uint32_t bit = (key * kSalt[lane]) >> 27;
+                scalar_words[block_index * 8 + lane] |= (1u << bit);
+            }
+        }
+        EXPECT_EQ(0, std::memcmp(bf.data(), scalar_words.data(), num_bytes));
+
+        for (uint64_t h : hit_hashes) {
+            EXPECT_TRUE(bf.test_hash(h));
+        }
+        for (uint64_t h : miss_hashes) {
+            uint32_t block_index = static_cast<uint32_t>(((h >> 32) * num_blocks) >> 32);
+            uint32_t key = static_cast<uint32_t>(h);
+            bool scalar_hit = true;
+            for (int lane = 0; lane < 8; ++lane) {
+                uint32_t mask = 1u << ((key * kSalt[lane]) >> 27);
+                if ((scalar_words[block_index * 8 + lane] & mask) == 0) {
+                    scalar_hit = false;
+                    break;
+                }
+            }
+            EXPECT_EQ(scalar_hit, bf.test_hash(h));
+        }
+    }
+
+    // 2. BatchRunCounter<32> and BatchRunCounter<16> across 0%, 50%, and 100% selectivities on 4096 elements
+    {
+        const size_t kCount = 4096;
+        for (int selectivity : {0, 50, 100}) {
+            std::vector<uint8_t> filter(kCount, 0);
+            if (selectivity == 100) {
+                std::fill(filter.begin(), filter.end(), 1);
+            } else if (selectivity == 50) {
+                for (size_t i = 0; i < kCount; ++i) {
+                    // Alternate 64-element runs of 0, 64-element runs of 1, and mixed bytes
+                    if ((i / 64) % 3 == 0) {
+                        filter[i] = 0;
+                    } else if ((i / 64) % 3 == 1) {
+                        filter[i] = 1;
+                    } else {
+                        filter[i] = static_cast<uint8_t>(i & 1);
+                    }
+                }
+            }
+
+            size_t scalar_set = 0;
+            for (size_t i = 0; i < kCount; ++i) {
+                scalar_set += (filter[i] != 0) ? 1 : 0;
+            }
+
+            auto count_with_batch_run_counter = [&](auto counter) {
+                size_t total_len = 0;
+                size_t total_set = 0;
+                size_t offset = 0;
+                BatchCount bc = counter.next_batch();
+                while (bc.length > 0) {
+                    if (bc.AllSet()) {
+                        total_set += bc.length;
+                    } else if (!bc.NoneSet()) {
+                        for (size_t j = 0; j < bc.length; ++j) {
+                            total_set += (filter[offset + j] != 0) ? 1 : 0;
+                        }
+                    }
+                    offset += bc.length;
+                    total_len += bc.length;
+                    bc = counter.next_batch();
+                }
+                EXPECT_EQ(kCount, total_len);
+                return total_set;
+            };
+
+            EXPECT_EQ(scalar_set, count_with_batch_run_counter(BatchRunCounter<32>(filter.data(), 0, kCount)))
+                    << "selectivity=" << selectivity;
+            EXPECT_EQ(scalar_set, count_with_batch_run_counter(BatchRunCounter<16>(filter.data(), 0, kCount)))
+                    << "selectivity=" << selectivity;
+        }
+    }
+
+    // 3. FLBAPlainDecoder::next_batch(size_t count, uint8_t* dst) on 4096 elements for type_len in {8, 12, 16}
+    {
+        const size_t kCount = 4096;
+        for (size_t type_len : {size_t{8}, size_t{12}, size_t{16}}) {
+            std::string backing(kCount * type_len, '\0');
+            for (size_t i = 0; i < backing.size(); ++i) {
+                backing[i] = static_cast<char>('A' + (i % 26));
+            }
+
+            FLBAPlainDecoder decoder;
+            decoder.set_type_length(static_cast<int32_t>(type_len));
+            ASSERT_OK(decoder.set_data(Slice(backing.data(), backing.size())));
+
+            std::vector<Slice> simd_slices(kCount);
+            ASSERT_OK(decoder.next_batch(kCount, reinterpret_cast<uint8_t*>(simd_slices.data())));
+
+            for (size_t i = 0; i < kCount; ++i) {
+                Slice expected(backing.data() + i * type_len, type_len);
+                EXPECT_EQ(expected.data, simd_slices[i].data) << "type_len=" << type_len << " i=" << i;
+                EXPECT_EQ(expected.size, simd_slices[i].size) << "type_len=" << type_len << " i=" << i;
+            }
+        }
+    }
+}
+
+TEST_F(StoredColumnReaderTest, BenchmarkKernelsUnalignedAndSliceSparseEquivalence) {
+    auto sparse_dict_scatter_slice_scalar = [](size_t count, const uint8_t* nulls, const Slice* src_data,
+                                               Slice* dst_data) {
+        size_t cnt = 0;
+        for (size_t i = 0; i < count; ++i) {
+            if (!nulls[i]) {
+                dst_data[i] = src_data[cnt++];
+            }
+        }
+    };
+
+    // 1. Unaligned tail counts (4099, 4103, 4111) for FLBAPlainDecoder and BatchRunCounter<32>/<16>
+    for (size_t count : {size_t{4099}, size_t{4103}, size_t{4111}}) {
+        for (size_t type_len : {size_t{8}, size_t{12}, size_t{16}}) {
+            std::string backing(count * type_len, '\0');
+            for (size_t i = 0; i < backing.size(); ++i) {
+                backing[i] = static_cast<char>('a' + (i % 26));
+            }
+            FLBAPlainDecoder decoder;
+            decoder.set_type_length(static_cast<int32_t>(type_len));
+            ASSERT_OK(decoder.set_data(Slice(backing.data(), backing.size())));
+
+            std::vector<Slice> simd_slices(count);
+            ASSERT_OK(decoder.next_batch(count, reinterpret_cast<uint8_t*>(simd_slices.data())));
+            for (size_t i = 0; i < count; ++i) {
+                EXPECT_EQ(backing.data() + i * type_len, simd_slices[i].data)
+                        << "count=" << count << " type_len=" << type_len << " i=" << i;
+                EXPECT_EQ(type_len, simd_slices[i].size) << "count=" << count << " type_len=" << type_len << " i=" << i;
+            }
+        }
+
+        for (int selectivity : {0, 50, 100}) {
+            std::vector<uint8_t> filter(count, 0);
+            if (selectivity == 100) {
+                std::fill(filter.begin(), filter.end(), 1);
+            } else if (selectivity == 50) {
+                for (size_t i = 0; i < count; ++i) {
+                    filter[i] = ((i / 32) % 3 == 0) ? 0 : (((i / 32) % 3 == 1) ? 1 : static_cast<uint8_t>(i & 1));
+                }
+            }
+
+            size_t expected_set = 0;
+            for (size_t i = 0; i < count; ++i) {
+                expected_set += (filter[i] != 0) ? 1 : 0;
+            }
+
+            auto eval_counter = [&](auto counter) {
+                size_t total_len = 0;
+                size_t set_cnt = 0;
+                size_t offset = 0;
+                BatchCount bc = counter.next_batch();
+                while (bc.length > 0) {
+                    if (bc.AllSet()) {
+                        set_cnt += bc.length;
+                    } else if (!bc.NoneSet()) {
+                        for (size_t j = 0; j < bc.length; ++j) {
+                            set_cnt += (filter[offset + j] != 0) ? 1 : 0;
+                        }
+                    }
+                    offset += bc.length;
+                    total_len += bc.length;
+                    bc = counter.next_batch();
+                }
+                EXPECT_EQ(count, total_len);
+                return set_cnt;
+            };
+
+            EXPECT_EQ(expected_set, eval_counter(BatchRunCounter<32>(filter.data(), 0, count)));
+            EXPECT_EQ(expected_set, eval_counter(BatchRunCounter<16>(filter.data(), 0, count)));
+        }
+    }
+
+    // 2. Slice dictionary values (16-byte slices) scattered through sparse (< 10% non-null) loop at 1%, 5%, 9%
+    {
+        const size_t kCount = 4096;
+        std::vector<std::string> dict_Pool(512);
+        for (size_t i = 0; i < dict_Pool.size(); ++i) {
+            dict_Pool[i] = "slice_val_" + std::to_string(i);
+        }
+
+        DictDecoder<Slice> decoder;
+        for (int density_pct : {1, 5, 9}) {
+            const size_t num_non_nulls = (kCount * static_cast<size_t>(density_pct)) / 100;
+            std::vector<uint8_t> nulls(kCount, 1);
+            std::vector<Slice> src_slices;
+            src_slices.reserve(num_non_nulls);
+            for (size_t k = 0; k < num_non_nulls; ++k) {
+                size_t pos = (k * (kCount / num_non_nulls)) + (k % 3);
+                if (pos >= kCount) pos = kCount - 1 - k;
+                while (nulls[pos] == 0) {
+                    pos = (pos + 1) % kCount;
+                }
+                nulls[pos] = 0;
+            }
+            for (size_t k = 0; k < num_non_nulls; ++k) {
+                src_slices.emplace_back(dict_Pool[k % dict_Pool.size()]);
+            }
+
+            std::vector<Slice> simd_dst(kCount, Slice("", 0));
+            std::vector<Slice> scalar_dst(kCount, Slice("", 0));
+            decoder.assign_data_with_nulls<Slice>(kCount, num_non_nulls, nulls.data(), src_slices.data(),
+                                                  simd_dst.data());
+            sparse_dict_scatter_slice_scalar(kCount, nulls.data(), src_slices.data(), scalar_dst.data());
+
+            for (size_t i = 0; i < kCount; ++i) {
+                if (!nulls[i]) {
+                    EXPECT_EQ(scalar_dst[i].data, simd_dst[i].data) << "density=" << density_pct << " i=" << i;
+                    EXPECT_EQ(scalar_dst[i].size, simd_dst[i].size) << "density=" << density_pct << " i=" << i;
+                }
+            }
         }
     }
 }
