@@ -404,6 +404,7 @@ public class MaterializedViewAnalyzer {
 
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
+            SavedSqlGeoValidator.validate(queryStatement);
             AnalyzerUtils.checkNondeterministicFunction(queryStatement);
             AnalyzerUtils.prohibitTimeTravelQuery(queryStatement, "create materialized view");
 
