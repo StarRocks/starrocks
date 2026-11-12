@@ -361,8 +361,9 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     // Partition columns of string type. Delta partitioning is always identity, so every string partition column is
-    // an identity string partition column for ExternalScanPredicates.splitStringPartitionCast. Package-private for testing.
-    static Set<String> identityStringPartitionColumns(DeltaLakeTable table, Set<String> partitionColumns) {
+    // an identity string partition column for ExternalScanPredicates.splitStringPartitionCast. Also used by the
+    // scan statistics to tell which conjuncts this residual prunes.
+    public static Set<String> identityStringPartitionColumns(DeltaLakeTable table, Set<String> partitionColumns) {
         Set<String> lowerPartitionColumns = new HashSet<>();
         for (String name : partitionColumns) {
             lowerPartitionColumns.add(name.toLowerCase(Locale.ROOT));
