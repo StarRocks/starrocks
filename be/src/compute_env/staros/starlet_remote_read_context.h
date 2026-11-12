@@ -22,26 +22,24 @@
 
 namespace starrocks {
 
+// The BE mirrors starlet's workload enum value for value, so a context converts with a cast.
+constexpr bool same_remote_read_workload(RemoteReadContext::Workload be, staros::starlet::fslib::ReadWorkload starlet) {
+    return static_cast<int>(be) == static_cast<int>(starlet);
+}
+static_assert(same_remote_read_workload(RemoteReadContext::Workload::QUERY,
+                                        staros::starlet::fslib::ReadWorkload::QUERY));
+static_assert(same_remote_read_workload(RemoteReadContext::Workload::COMPACTION,
+                                        staros::starlet::fslib::ReadWorkload::COMPACTION));
+static_assert(same_remote_read_workload(RemoteReadContext::Workload::OTHER_BACKGROUND,
+                                        staros::starlet::fslib::ReadWorkload::OTHER_BACKGROUND));
+static_assert(same_remote_read_workload(RemoteReadContext::Workload::LOAD, staros::starlet::fslib::ReadWorkload::LOAD));
+
 // Hands the BE's read attribution to the remote read scheduler of starlet. Without a started scheduler starlet
 // ignores it, and reads are done exactly as before.
 inline staros::starlet::fslib::RemoteReadContext to_fslib_remote_read(const RemoteReadContext& ctx) {
-    namespace fslib = staros::starlet::fslib;
-    fslib::RemoteReadContext out;
+    staros::starlet::fslib::RemoteReadContext out;
     out.is_set = ctx.is_set;
-    switch (ctx.workload) {
-    case RemoteReadContext::Workload::QUERY:
-        out.workload = fslib::ReadWorkload::QUERY;
-        break;
-    case RemoteReadContext::Workload::COMPACTION:
-        out.workload = fslib::ReadWorkload::COMPACTION;
-        break;
-    case RemoteReadContext::Workload::OTHER_BACKGROUND:
-        out.workload = fslib::ReadWorkload::OTHER_BACKGROUND;
-        break;
-    case RemoteReadContext::Workload::LOAD:
-        out.workload = fslib::ReadWorkload::LOAD;
-        break;
-    }
+    out.workload = static_cast<staros::starlet::fslib::ReadWorkload>(ctx.workload);
     out.group_id = ctx.group_id;
     out.group_weight = ctx.group_weight;
     out.group_config_version = ctx.group_config_version;
