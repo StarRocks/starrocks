@@ -20,11 +20,17 @@ import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.Files;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
+import org.apache.iceberg.io.OutputFile;
+import org.apache.iceberg.io.ResolvingFileIO;
 import org.apache.iceberg.util.SerializableSupplier;
+import org.apache.iceberg.util.SerializationUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -77,6 +83,57 @@ public class IcebergCachingFileIOTest {
         long cacheIOInputFileSize = cachingFileIOInputFile.getLength();
         Assertions.assertEquals(cacheIOInputFileSize, 39);
         cachingFileIO.deleteFile(path);
+    }
+
+    @Test
+    public void testNormalizeAzurePath() {
+        Assertions.assertNull(IcebergCachingFileIO.normalizeAzurePath(null));
+        Assertions.assertEquals("wasbs://c@acct.blob.core.windows.net/a/b.avro",
+                IcebergCachingFileIO.normalizeAzurePath("abfss://c@acct.blob.core.windows.net/a/b.avro"));
+        Assertions.assertEquals("wasb://c@acct.blob.core.windows.net/a",
+                IcebergCachingFileIO.normalizeAzurePath("abfs://c@acct.blob.core.windows.net/a"));
+        Assertions.assertEquals("wasbs://c@acct.blob.core.windows.net",
+                IcebergCachingFileIO.normalizeAzurePath("abfss://c@acct.blob.core.windows.net"));
+        // dfs endpoints and other schemes are left alone
+        String dfs = "abfss://c@acct.dfs.core.windows.net/a";
+        Assertions.assertEquals(dfs, IcebergCachingFileIO.normalizeAzurePath(dfs));
+        String s3 = "s3://bucket/a";
+        Assertions.assertEquals(s3, IcebergCachingFileIO.normalizeAzurePath(s3));
+    }
+
+    @Test
+    public void testNormalizedAzurePathKeepsLogicalLocation() {
+        String path = "abfss://c@acct.blob.core.windows.net/metadata/m0.avro";
+        String normalized = "wasbs://c@acct.blob.core.windows.net/metadata/m0.avro";
+        List<String> accessed = new ArrayList<>();
+        new MockUp<ResolvingFileIO>() {
+            @Mock
+            public InputFile newInputFile(String location) {
+                accessed.add(location);
+                return Files.localInput("/tmp/non_existent_file");
+            }
+
+            @Mock
+            public OutputFile newOutputFile(String location) {
+                accessed.add(location);
+                return null;
+            }
+
+            @Mock
+            public void deleteFile(String location) {
+                accessed.add(location);
+            }
+        };
+
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        cachingFileIO.initialize(new HashMap<>());
+
+        // the parsed-manifest caches are keyed by ManifestFile.path(), so location() must stay the caller's path
+        Assertions.assertEquals(path, cachingFileIO.newInputFile(path).location());
+        cachingFileIO.newOutputFile(path);
+        cachingFileIO.deleteFile(path);
+        Assertions.assertEquals(List.of(normalized, normalized, normalized), accessed);
     }
 
     @Test
@@ -252,6 +309,41 @@ public class IcebergCachingFileIOTest {
                 return (SerializableSupplier<Configuration>) () -> confToSerialize;
             });
         });
+    }
+
+    @Test
+    void testWrappedIOSharesConfigurationAndSerializesACopy() throws IOException {
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.initialize(new HashMap<>());
+        Configuration conf = new Configuration(false);
+        conf.set("test.key", "test.value");
+        cachingFileIO.setConf(conf);
+
+        // shared by reference: a per-table FileIO must not retain its own copies of the catalog configuration
+        Assertions.assertSame(conf, cachingFileIO.getConf());
+        HadoopConfigurable wrappedIO = (HadoopConfigurable) cachingFileIO.getWrappedIO();
+        Assertions.assertSame(conf, wrappedIO.getConf());
+
+        // The wrapped IO is what a metadata split ships to the BE, which has no fe-core classes. A concurrent
+        // newInputFile can put the shared supplier back on it after SerializableTable installed its own, so
+        // write it with a plain ObjectOutputStream (SerializationUtil would replace the supplier first): its
+        // serialized form must not name an fe-core class.
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        try (java.io.ObjectOutputStream out = new java.io.ObjectOutputStream(bytes)) {
+            out.writeObject(cachingFileIO.getWrappedIO());
+        }
+        byte[] wrapped = bytes.toByteArray();
+        // a lambda names its capturing class with slashes, a class descriptor with dots
+        String stream = new String(wrapped, java.nio.charset.StandardCharsets.ISO_8859_1).replace('/', '.');
+        Assertions.assertFalse(stream.contains("com.starrocks.connector.iceberg."), stream);
+        FileIO wrappedCopy = SerializationUtil.deserializeFromBytes(wrapped);
+        Assertions.assertEquals("test.value", ((HadoopConfigurable) wrappedCopy).getConf().get("test.key"));
+
+        // serialization still carries the values, as SerializableConfiguration did
+        IcebergCachingFileIO copy = SerializationUtil.deserializeFromBytes(SerializationUtil.serializeToBytes(cachingFileIO));
+        Assertions.assertEquals("test.value", copy.getConf().get("test.key"));
+        Assertions.assertEquals("test.value",
+                ((HadoopConfigurable) copy.getWrappedIO()).getConf().get("test.key"));
     }
 
     /**

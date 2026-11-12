@@ -123,6 +123,7 @@ import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -825,6 +826,15 @@ public class ExpressionAnalyzer {
                         .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
                 throw new SemanticException(msg, node.getPos());
             }
+            String fnName = fn.getFunctionName().getFunction();
+            if (FunctionSet.SECONDS_ADD.equals(fnName) || FunctionSet.SECONDS_SUB.equals(fnName)) {
+                // A literal amount with more than 6 decimals is refused here already, so that a definition that uses it,
+                // such as a generated column or a view, is refused when it is created rather than each time it is used
+                BigDecimal seconds = IntervalSeconds.literalValue(node.getChild(1));
+                if (seconds != null) {
+                    IntervalSeconds.split(seconds, node.getPos());
+                }
+            }
             node.setType(fn.getReturnType());
             return null;
         }
@@ -927,13 +937,17 @@ public class ExpressionAnalyzer {
                         "subquery must return the same number of columns as provided by the IN predicate",
                         node.getPos());
             }
+            if (leftTypes.stream().anyMatch(Type::isGeoType) || rightTypes.stream().anyMatch(Type::isGeoType)) {
+                throw new SemanticException("InPredicate of GEOGRAPHY/GEOMETRY types is not supported", node.getPos());
+            }
             for (int i = 0; i < rightTypes.size(); ++i) {
                 if (leftTypes.get(i).isJsonType() || rightTypes.get(i).isJsonType() || leftTypes.get(i).isMapType() ||
                         rightTypes.get(i).isMapType() || leftTypes.get(i).isStructType() ||
                         rightTypes.get(i).isStructType()) {
                     throw new SemanticException("InPredicate of JSON, Map, Struct types is not supported");
                 }
-                if (!TypeManager.canCastTo(leftTypes.get(i), rightTypes.get(i))) {
+                if (leftTypes.get(i).hasNestedGeoType() || rightTypes.get(i).hasNestedGeoType() ||
+                        !TypeManager.canCastTo(leftTypes.get(i), rightTypes.get(i))) {
                     throw new SemanticException(
                             "in predicate type " + leftTypes.get(i).toSql() + " with type " + rightTypes.get(i).toSql()
                                     + " is invalid");
@@ -1647,7 +1661,8 @@ public class ExpressionAnalyzer {
 
             Type compatibleType = BooleanType.BOOLEAN;
             if (null != caseExpr) {
-                compatibleType = TypeManager.getCompatibleTypeForCaseWhen(whenTypes);
+                compatibleType = whenTypes.stream().anyMatch(Type::hasNestedGeoType) ? InvalidType.INVALID :
+                        TypeManager.getCompatibleTypeForCaseWhen(whenTypes);
             }
 
             for (Type type : whenTypes) {

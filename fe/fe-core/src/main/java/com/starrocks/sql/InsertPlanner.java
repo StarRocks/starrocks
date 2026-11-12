@@ -14,6 +14,7 @@
 
 package com.starrocks.sql;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
@@ -29,6 +30,8 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.TableName;
@@ -220,6 +223,63 @@ public class InsertPlanner {
         return GenColumnDependency.PARTIALLY_DEPEND_ON_TARGET_COLUMNS;
     }
 
+    // A column-subset INSERT into a primary key table only needs the partial update machinery when
+    // its rows may land on existing rows. If no transaction has ever committed to any target
+    // partition there are no existing rows, so the INSERT can be a plain insert that fills the
+    // missing columns with their defaults and skips the publish-time segment rewrite. "Never
+    // committed" is read off the partition's nextVersion, which only advances when a transaction is
+    // assigned its version at commit. The value read here is an optimistic snapshot: the commit
+    // re-checks it under the transaction manager lock (see DatabaseTransactionMgr), so a writer that
+    // got in between cannot have its columns overwritten by the filled defaults.
+    private static boolean canPlanAsPlainInsertOnEmptyPartitions(InsertStmt insertStmt, OlapTable olapTable,
+                                                                 ConnectContext session) {
+        // INSERT OVERWRITE keeps the partial update, both as parsed and after InsertOverwriteJobRunner has
+        // rewritten it onto its temporary partitions (overwrite cleared, isFromOverwrite set) for the
+        // plan that actually runs.
+        if (insertStmt.isOverwrite() || insertStmt.isFromOverwrite() || insertStmt.isShadowRewrite()
+                || insertStmt.getTargetColumnNames() == null) {
+            return false;
+        }
+        // Inside an explicit transaction (BEGIN ... COMMIT) an earlier statement of the same
+        // transaction may already have written rows to these partitions. Those rows are not
+        // committed, so nextVersion cannot show them, and the commit re-check could not catch the
+        // overwrite either; the explicit-transaction path also builds its own commit attachment.
+        // Keep the partial update there: ExplicitTxnStatementValidator already governs it.
+        if (session.getTxnId() != 0) {
+            return false;
+        }
+        Set<String> mentionedColumns = insertStmt.getTargetColumnNames().stream()
+                .map(String::toLowerCase).collect(Collectors.toSet());
+        for (Column column : olapTable.getBaseSchema()) {
+            if (mentionedColumns.contains(column.getName().toLowerCase()) || column.isGeneratedColumn()) {
+                continue;
+            }
+            // The plain insert path must be able to fill the column itself. An auto increment column
+            // is left to the partial update path, which has its own handling for it; a NOT NULL
+            // column without a default cannot be filled at all.
+            if (column.isAutoIncrement()) {
+                return false;
+            }
+            if (column.getDefaultValueType() == Column.DefaultValueType.NULL && !column.isAllowNull()) {
+                return false;
+            }
+        }
+        // An automatic-partition table may have no partition yet: the ones this load creates start at
+        // the initial version, and the commit check covers whatever it actually wrote to.
+        for (Long partitionId : insertStmt.getTargetPartitionIds()) {
+            Partition partition = olapTable.getPartition(partitionId);
+            if (partition == null) {
+                return false;
+            }
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                if (physicalPartition.getNextVersion() != PhysicalPartition.PARTITION_INIT_VERSION + 1) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     private static boolean checkIfUseColumnUpsertMode(ConnectContext session,
                                                       InsertStmt insertStmt,
                                                       OlapTable olapTable) {
@@ -396,7 +456,15 @@ public class InsertPlanner {
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
         Table targetTable = insertStmt.getTargetTable();
 
-        if (insertStmt.usePartialUpdate()) {
+        // Decided per planning attempt and recorded on this attempt's ExecPlan, never on the statement:
+        // planWithRetry re-analyzes and re-plans the same InsertStmt, and a decision left over from an
+        // earlier attempt could flag a plan that is in fact a partial update.
+        final boolean plainInsertOnEmptyPartitions = insertStmt.usePartialUpdate() &&
+                targetTable instanceof OlapTable &&
+                canPlanAsPlainInsertOnEmptyPartitions(insertStmt, (OlapTable) targetTable, session);
+        final boolean partialUpdate = insertStmt.usePartialUpdate() && !plainInsertOnEmptyPartitions;
+
+        if (partialUpdate) {
             inferOutputSchemaForPartialUpdate(insertStmt);
         } else {
             outputBaseSchema = targetTable.getBaseSchema();
@@ -451,6 +519,8 @@ public class InsertPlanner {
         //6. Fill in the shadow column
         optExprBuilder = fillShadowColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
 
+        checkExternalWriteTypes(targetTable, outputFullSchema, outputColumns);
+
         //7. Cast output columns type to target type
         optExprBuilder =
                 castOutputColumnsTypeToTargetColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder);
@@ -476,6 +546,7 @@ public class InsertPlanner {
 
             ExecPlan execPlan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
                     queryRelation, targetTable);
+            execPlan.setPlainInsertOnEmptyPartitions(plainInsertOnEmptyPartitions);
 
             DescriptorTable descriptorTable = execPlan.getDescTbl();
             TupleDescriptor tupleDesc = descriptorTable.createTupleDescriptor();
@@ -563,7 +634,7 @@ public class InsertPlanner {
                         olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentComputeResource());
-                if (insertStmt.usePartialUpdate()) {
+                if (partialUpdate) {
                     TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.AUTO_MODE;
                     if (checkIfUseColumnUpsertMode(session, insertStmt, olapTable)) {
                         partialUpdateMode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
@@ -707,7 +778,7 @@ public class InsertPlanner {
             optimizerContext.setSourceTablesCount(sourceTablesCount);
             if (session.getSessionVariable().isEnableIVMRefresh()) {
                 // Position i of outputColumns writes targetTable fullSchema[i]; IvmRewriter relies on
-                // this pairing to bind aggregates to MV state columns (bindStateColumnsForAggregate).
+                // this pairing to bind aggregates to MV state columns (bindMvColumnsForAggregate).
                 optimizerContext.getTvrOptContext().setIvmInsertOutputColumns(outputColumns);
             }
             Optimizer optimizer = OptimizerFactory.create(optimizerContext);
@@ -1101,6 +1172,7 @@ public class InsertPlanner {
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         List<ScalarOperatorRewriteRule> rewriteRules = Arrays.asList(new FoldConstantsRule());
         for (int columnIdx = 0; columnIdx < outputFullSchema.size(); ++columnIdx) {
+            checkGeoAssignment(outputColumns.get(columnIdx).getType(), outputFullSchema.get(columnIdx));
             if (!outputFullSchema.get(columnIdx).getType().matchesType(outputColumns.get(columnIdx).getType())) {
                 Column c = outputFullSchema.get(columnIdx);
                 ColumnRefOperator k = columnRefFactory.create(c.getName(), c.getType(), c.isAllowNull());
@@ -1113,6 +1185,20 @@ public class InsertPlanner {
             }
         }
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
+
+    @VisibleForTesting
+    static void checkGeoAssignment(Type sourceType, Column targetColumn) {
+        Type targetType = targetColumn.getType();
+        if (!sourceType.equals(targetType) &&
+                (sourceType.isGeoType() || sourceType.hasNestedGeoType() ||
+                        targetType.isGeoType() || targetType.hasNestedGeoType())) {
+            throw new SemanticException("Cannot assign %s to column '%s' of type %s in INSERT: " +
+                    "native geo assignments require identical types (including geo descriptors). " +
+                    "Use ST_AsText/ST_AsBinary for VARCHAR/VARBINARY targets",
+                    sourceType.toSql(), targetColumn.getName(), targetType.toSql());
+        }
     }
 
 
@@ -1260,6 +1346,26 @@ public class InsertPlanner {
             }
         }
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
+    @VisibleForTesting
+    static void checkExternalWriteTypes(Table table, List<Column> columns, List<ColumnRefOperator> outputColumns) {
+        Preconditions.checkState(columns.size() == outputColumns.size(),
+                "columns size %s must equal outputColumns size %s", columns.size(), outputColumns.size());
+        if (!table.isIcebergTable() && !table.isHiveTable() && !table.isTableFunctionTable()) {
+            return;
+        }
+        for (int i = 0; i < columns.size(); i++) {
+            Type targetType = columns.get(i).getType();
+            Type outputType = outputColumns.get(i).getType();
+            if (targetType.isGeoType() || targetType.hasNestedGeoType()
+                    || outputType.isGeoType() || outputType.hasNestedGeoType()) {
+                throw new SemanticException("Cannot write native geo values to external table column '%s' " +
+                        "(target type %s, output type %s). " +
+                        "Use ST_AsText/ST_AsBinary to serialize geo values before writing",
+                        columns.get(i).getName(), targetType.toSql(), outputType.toSql());
+            }
+        }
     }
 
     private boolean needToSkip(InsertStmt stmt, int columnIdx) {

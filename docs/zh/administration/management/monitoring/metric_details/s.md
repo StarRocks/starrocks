@@ -723,11 +723,10 @@ description: "Alphabetical s"
 
 | `reason` | 含义 |
 | --- | --- |
-| `materialized_view_target` | 推导层不支持该物化视图，例如它不是增量物化视图，或排序键不是隐藏的 row-id 列。 |
-| `row_id_span_too_small` | 预估输出太小，无法均匀切分 row-id 范围。 |
-| `row_id_space_not_pristine` | 自增计数器已经发放过 id，无法安全地推导切分点。 |
+| `materialized_view_target` | 目标是增量物化视图，但推导层无法为其确定键：它有多个可见索引，排序键并非仅由隐藏的 row-id 列构成，或者 row id 是按键值顺序编码的，而不是指纹。如果写入物化视图的不是该视图自身的刷新任务，也会记录该值。 |
+| `row_id_span_too_small` | 预估输出太小，无法均匀切分 row-id 范围；或者平摊到刷新覆盖写的每个分区后，不足两个大小为 `tablet_reshard_min_split_size` 的 tablet。刷新覆盖写多个分区时，如果预估输出所需的 tablet 数不超过分区数，也会记录该值。 |
 | `estimate_unavailable` | 没有可用的输出大小估计，无法确定 tablet 数量。从没有表统计信息的 External Catalog 表执行 INSERT 时也会记录该值。 |
-| `multiple_temporary_partitions` | 刷新会写入多个替换分区，切分后大多数 tablet 会是空的。开启该功能也不会改变这一点。 |
+| `multiple_temporary_partitions` | 对于 Row ID 由存储引擎生成的视图，刷新会写入多个替换分区。每个分区的 Row ID 只落在取值范围的一小段内，切分后大多数 tablet 会是空的。开启该功能也不会改变这一点。 |
 | `derivation_failed` | 推导切分点失败，或推导出的切分点未通过校验。 |
 | `stale_catalog_state` | 推导出切分点之后、构建作业之前，物化视图的可见 index 发生了变化。 |
 | `submit_failed` | 推导出的切分点未能生成被接纳的 reshard 作业。 |
@@ -768,7 +767,7 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 类型：累计
-- 描述：多分区路径计数器。grouper 因单次导入的预测分区数超过 `tablet_pre_split_max_partitions_per_load` 而丢弃的分区数。grouper 保留数据量最大的分区（若 data tier 只采样了部分文件且分区值取自文件路径，按字节数判断，否则按样本数判断），丢弃数据量最小的尾部；被丢弃的分区回退到 BE 运行时自动建分区且不做预分裂。持续非零意味着上限正在生效 —— 可考虑调高 `tablet_pre_split_max_partitions_per_load` 或降低载入的分区基数。
+- 描述：多分区路径计数器。因单次导入的分区数超过 `tablet_pre_split_max_partitions_per_load` 而未做预分裂的分区数。对采样导入，grouper 保留数据量最大的预测分区（若 data tier 只采样了部分文件且分区值取自文件路径，按字节数判断，否则按样本数判断），丢弃数据量最小的尾部；被丢弃的分区回退到 BE 运行时自动建分区且不做预分裂。若增量物化视图的 Row ID 是刷新查询计算出的指纹，其刷新中符合条件的分区按分区名排序后超出上限的部分计入其中，这些分区已经建好，保持单个 tablet。持续非零意味着上限正在生效 —— 可考虑调高 `tablet_pre_split_max_partitions_per_load` 或降低载入的分区基数。
 
 ## `starrocks_fe_tablet_pre_split_pre_create`
 

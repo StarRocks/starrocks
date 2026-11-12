@@ -479,20 +479,21 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
 
 参数说明：
 
-- `tablet_reshard_target_size`: 执行 SPLIT 或 MERGE 后的 Tablet 目标大小。默认值：10 GB。如果已明确指定了 Tablet ID，则无需指定此参数。
+- `tablet_reshard_target_size`: 执行 SPLIT 或 MERGE 后的 Tablet 目标大小。默认值：表设置了同名表属性 `tablet_reshard_target_size` 时取该属性值，否则取 FE 配置项 `tablet_reshard_target_size`（默认值：10 GB）。后台自动拆分、合并也使用这一默认值，下文称为“表的目标大小”。如果已明确指定了 Tablet ID，则无需指定此参数。
 
-  手动 SPLIT 未指定 Tablet ID 时，目标大小必须为正数。如果 FE 配置项 `tablet_reshard_target_size` 为 `0`，须在 `PROPERTIES` 中指定正数值；否则语句会报错 `Invalid tablet_reshard_target_size: 0`。下文所述的 1.5 倍拆分阈值仅适用于正数目标大小。
+  手动 SPLIT 未指定 Tablet ID 时，目标大小必须为正数。如果 FE 配置项 `tablet_reshard_target_size` 为 `0`，即使表设置了表属性 `tablet_reshard_target_size`，也须在 `PROPERTIES` 中指定正数值；否则语句会报错 `Invalid tablet_reshard_target_size: 0`。下文所述的 1.5 倍拆分阈值仅适用于正数目标大小。
 
   - 触发拆分（SPLIT）的条件：
-    - Tablet 的大小**大于或等于** `tablet_reshard_target_size` 的 1.5 倍（即 `ceil(1.5 × tablet_reshard_target_size)`）。以默认值 10 GB 为例，Tablet 达到 15 GB 才会拆分。后台自动拆分和手动执行的 `ALTER TABLE ... SPLIT` 均按此阈值判断：自动拆分使用 FE 配置项 `tablet_reshard_target_size`；手动 SPLIT 使用 `PROPERTIES` 中指定的值，未指定时同样使用该 FE 配置项。指定 Tablet ID 时也不例外：小于该阈值的 Tablet 不会被拆分；如果没有任何 Tablet 满足条件，语句会报错 `No tablets need to split in table ...`。
+    - Tablet 的大小**大于或等于** `tablet_reshard_target_size` 的 1.5 倍（即 `ceil(1.5 × tablet_reshard_target_size)`）。以默认值 10 GB 为例，Tablet 达到 15 GB 才会拆分。后台自动拆分和手动执行的 `ALTER TABLE ... SPLIT` 均按此阈值判断：自动拆分使用表的目标大小；手动 SPLIT 使用 `PROPERTIES` 中指定的值，未指定时同样使用表的目标大小。指定 Tablet ID 时也不例外：小于该阈值的 Tablet 不会被拆分；如果没有任何 Tablet 满足条件，语句会报错 `No tablets need to split in table ...`。
     - 当前正在执行 SPLIT 或 MERGE 的 Tablet 数量小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
 
-  - 此外，如果 Tablet 所属物化索引的 Tablet 数量少于其所属仓库的计算节点数（该数量同时受 `tablet_reshard_max_split_count` 上限约束，因此调小该配置会让此行为更早停止），且该 Tablet 的大小达到该规则目标大小的两倍，则无需达到上述阈值即可触发拆分，从而使新建分区更快获得集群级别的写入并行度。该规则的目标大小为“索引数据量按上述槽位数均分”所得的大小，并以 `tablet_reshard_min_split_size` 为下限；因此在其 2 GB 默认值下，数据量尚未超过该下限的索引会在单个 Tablet 达到 4 GB 时触发拆分。该规则适用于后台自动拆分，以及既未指定 Tablet ID、也未指定 `tablet_reshard_target_size` 的手动 SPLIT；指定其中任意一项都会禁用该规则，仅按上述阈值判断。如需在整个集群范围内禁用，可将 `tablet_reshard_min_split_size` 设置为大于或等于 `tablet_reshard_target_size`。
+  - 此外，如果 Tablet 所属物化索引的 Tablet 数量少于其所属仓库的计算节点数（该数量同时受 `tablet_reshard_max_split_count` 上限约束，因此调小该配置会让此行为更早停止），且该 Tablet 的大小达到该规则目标大小的两倍，则无需达到上述阈值即可触发拆分，从而使新建分区更快获得集群级别的写入并行度。该规则的目标大小为“索引数据量按上述槽位数均分”所得的大小，不超过表的目标大小，并以 `tablet_reshard_min_split_size` 为下限；因此在其 2 GB 默认值下，数据量尚未超过该下限的索引会在单个 Tablet 达到 4 GB 时触发拆分。在该目标仍小于表的目标大小时，如果按上述条件拆分后仍有剩余槽位，会把它们分给上述拆分没有涉及的 Tablet 中最大的几个继续拆分，前提是拆分出的每个 Tablet 都不小于 `tablet_reshard_min_split_size`。例如在 3 个计算节点上，已有 2 个 Tablet 的索引会在其中一个 Tablet 达到 4 GB 时拆出第 3 个。该规则适用于后台自动拆分，以及既未指定 Tablet ID、也未指定 `tablet_reshard_target_size` 的手动 SPLIT；指定其中任意一项都会禁用该规则，仅按上述阈值判断。将 `tablet_reshard_min_split_size` 设置为大于或等于表的目标大小，即可对该表禁用该规则；如需在整个集群范围内禁用，该值须同时大于或等于 FE 配置项 `tablet_reshard_target_size` 和各表设置的表属性 `tablet_reshard_target_size`。
 
   - 合并（MERGE）需要将 FE 配置项 `tablet_reshard_enable_tablet_merge` 设置为 `true`（默认值：`false`），否则系统不会自动合并 Tablet，`ALTER TABLE ... MERGE` 也会被拒绝。开启后，合并规则如下：
-    - 自动合并：物化索引中任意两个相邻 Tablet 的大小总和**小于** `tablet_reshard_target_size` 的 80%（即 `ceil(0.8 × tablet_reshard_target_size)`）时触发，此处使用 FE 配置项 `tablet_reshard_target_size`。以默认值 10 GB 为例，相邻两个 Tablet 合计不足 8 GB 时即触发合并。
-    - 自动合并与未指定 Tablet ID 的手动 MERGE 按相同方式选取要合并的 Tablet。手动 MERGE 使用 `PROPERTIES` 中指定的值，未指定时同样使用该 FE 配置项。只有小于 `ceil(0.8 × tablet_reshard_target_size)` 的 Tablet 才会参与合并：相邻的此类 Tablet 按 Range 顺序分组，每组大小总和不超过 `tablet_reshard_target_size`，中间遇到更大的 Tablet 时分组随之断开。合并不会使物化索引的 Tablet 数量低于其并行度下限，即所属仓库的计算节点数（受 `tablet_reshard_max_split_count` 上限约束，且不小于 2）。如果没有可合并的 Tablet，手动执行的语句会报错 `No tablets need to merge in table ...`。
+    - 自动合并：物化索引中任意两个相邻 Tablet 的大小总和**小于** `tablet_reshard_target_size` 的 80%（即 `ceil(0.8 × tablet_reshard_target_size)`）时触发，此处使用表的目标大小。以默认值 10 GB 为例，相邻两个 Tablet 合计不足 8 GB 时即触发合并。
+    - 自动合并与未指定 Tablet ID 的手动 MERGE 按相同方式选取要合并的 Tablet。手动 MERGE 使用 `PROPERTIES` 中指定的值，未指定时同样使用表的目标大小。只有小于 `ceil(0.8 × tablet_reshard_target_size)` 的 Tablet 才会参与合并：相邻的此类 Tablet 按 Range 顺序分组，每组大小总和不超过 `tablet_reshard_target_size`，中间遇到更大的 Tablet 时分组随之断开。合并不会使物化索引的 Tablet 数量低于其并行度下限，即所属仓库的计算节点数（受 `tablet_reshard_max_split_count` 上限约束，且不小于 2）。如果没有可合并的 Tablet，手动执行的语句会报错 `No tablets need to merge in table ...`。
     - 指定 Tablet ID 的手动 MERGE 直接按指定的分组合并，不检查 Tablet 大小，也不受并行度下限约束。每组须由同一分区、同一物化索引内至少两个连续的 Tablet 组成。
+    - 自动合并和手动 MERGE 都只会合并不再与其他 Tablet 共享数据文件的 Tablet。SPLIT 生成的 Tablet 会一直共享原 Tablet 的数据文件，直到 Compaction 重写这些文件为止，因此如需重新合并这些 Tablet，请先对所在分区执行 `ALTER TABLE ... COMPACT`。
     - 无论哪种方式，当前正在执行 SPLIT 或 MERGE 的 Tablet 数量都须小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
 
 :::note
@@ -505,7 +506,7 @@ SPLIT 不受影响；排序键即主键的主键表仍可正常 MERGE。
 
 对于存算分离集群中的范围分布表，同一张表上的拆分、合并任务可以并发执行，前提是目标物理分区不重叠。涉及同一物理分区的任务会相互冲突，即使它们操作的是不同的物化索引。并发导入不同分区时触发的预拆分任务也遵循此规则。
 
-一个任务完成或中止后，其目标物理分区即可接受新的拆分、合并任务。只要表上仍有拆分、合并任务在执行，表就保持 `TABLET_RESHARD` 状态，Schema Change 等不兼容的 ALTER 操作仍会被阻止。所有进行中的拆分、合并任务完成或中止后，表才恢复为 `NORMAL` 状态。
+一个任务完成或中止后，其目标物理分区即可接受新的拆分、合并任务。只要表上仍有拆分、合并任务在执行，表就保持 `TABLET_RESHARD` 状态。此时仍可以增加、删除和替换分区（包括临时分区），清空分区，修改分区属性，重命名表、分区、rollup 和列，修改表注释，以及与其他表执行 SWAP。正在拆分或合并的分区（临时分区除外）只能用 `DROP PARTITION ... FORCE` 删除，删除后不能恢复。Schema Change 等其他 ALTER TABLE 语句会被拒绝，需要等任务结束后再执行。任务状态可以查询 `information_schema.tablet_reshard_jobs`。所有进行中的拆分、合并任务完成或中止后，表才恢复为 `NORMAL` 状态。
 
 参与处理的所有 FE 都必须支持此并发策略。回退到较旧的 FE 版本前，应等待所有拆分、合并任务完成或中止。
 
@@ -771,8 +772,9 @@ PROPERTIES：支持设置超时时间，默认超时时间为一天。
 `ORDER BY`：为 Rollup 定义独立于基表的排序键（可与基表排序键不同）。仅支持存算分离集群中的 Range 分布表（自 v4.2 起），可使按 Rollup 排序键前缀列进行过滤或聚合的查询命中该 Rollup。有以下限制：
 
 - 表必须为明细表（Duplicate Key）、聚合表（Aggregate）或更新表（Unique Key），不支持主键表（Primary Key）。
-- 表不能为 Colocate 表。
-- 支持添加多个此类 Rollup。每条 `ALTER TABLE` 语句添加一个 Rollup（添加多个 Rollup 需分多条语句执行）。该 Rollup 始终基于基表索引构建，不支持 `FROM <其他 Rollup>`。表不能包含同步物化视图。
+- 如果表设置了 `colocate_with`，Rollup 的 `ORDER BY` 必须以 Colocated Column 开头，列的顺序和类型均须与之一致。
+- 不能删除 Rollup 排序键中的列，也不能修改这些列的类型。唯一的例外是：可以单独增加 VARCHAR 列的长度（通过 Fast Schema Evolution 完成），但不能同时调整该列的位置或修改其他属性。此类 Rollup 不支持 `ORDER BY ... FROM <rollup>`。
+- 支持添加多个此类 Rollup。每条 `ALTER TABLE` 语句添加一个 Rollup（添加多个 Rollup 需分多条语句执行）。该 Rollup 始终基于基表索引构建，不支持 `FROM <其他 Rollup>`。
 
 示例：
 
@@ -893,6 +895,7 @@ SET ("key" = "value")
 - `bucket_size`（从3.2起支持）
 - `base_compaction_forbidden_time_ranges`（从v3.2.13起支持）
 - `enable_statistic_auto_collect`
+- `tablet_reshard_target_size`（仅适用于 Range 分布表；设置为 `""` 即可删除）。参见[调整 Tablet 大小](#调整-tablet-大小)。
 
 :::note
 
@@ -1440,7 +1443,7 @@ ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 
 ### 拆分或合并 Tablet
 
-- 将表中所有符合条件的 Tablet 拆分，目标大小为 10 GB（默认值）。
+- 将表中所有符合条件的 Tablet 按表的目标大小（默认为 10 GB）拆分。
 
 ```SQL
 ALTER TABLE table1 SPLIT TABLETS;

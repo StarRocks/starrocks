@@ -65,7 +65,7 @@ public:
     Status append_morsels(int driver_seq, Morsels&& morsels) override;
     StatusOr<int> next_driver_seq() override;
     bool enable_random_append_split_morsel() const override {
-        DCHECK(_could_local_shuffle);
+        DCHECK(!_enable_random_append_split_morsel || _could_local_shuffle);
         return _enable_random_append_split_morsel;
     }
     void add_split_source_morsels(int64_t count) override;

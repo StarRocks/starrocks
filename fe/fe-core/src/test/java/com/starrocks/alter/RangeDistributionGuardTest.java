@@ -232,20 +232,119 @@ public class RangeDistributionGuardTest {
     }
 
     /**
-     * A colocate range table rollup stays rejected (parallel to the sort-key-reorder colocate
-     * rejection): the rollup would build a fresh K-tablet layout independent of the colocate range
-     * manager's expected ranges.
+     * A rollup of a range table whose colocate_with is set but which is not a member of any colocate
+     * group stays rejected: without the group there are no ColocateRanges to lay the rollup out against.
      */
     @Test
     public void testRangeRollupOnColocateRejected() throws Exception {
         starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_colocate"));
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
                 .getLocalMetastore().getTable("test", "t_guard_rollup_colocate");
-        // Simulate colocate membership via the table's group property: the routing predicate now reads
-        // OlapTable.hasColocateGroup(), equivalent to ColocateTableIndex.isColocateTable for a live table.
+        // Set colocate_with without making the table a member of a colocate group.
         table.setColocateGroup("t_guard_rollup_colocate_group");
         assertAlterRejectedWithRangeDistribution(
                 "alter table t_guard_rollup_colocate add rollup r1(k1, k2, v1) order by (k2, k1)");
+    }
+
+    private static final String CREATE_ROLLUP_ON_COLOCATE_ERROR = "The sort key of rollup %s of a table in a range "
+            + "colocate group must start with its colocate columns [k1] (same order and types). Got: %s "
+            + "A rollup defined in CREATE TABLE is sorted by its key columns; an ORDER BY written in it is not used.";
+
+    private static String colocateRangeTableWithRollupDdl(String name, String rollup, String group) {
+        return "create table " + name + " (k1 int, k2 int, v1 int)\n"
+                + "order by(k1, k2)\n"
+                + "rollup (" + rollup + ")\n"
+                + "properties('replication_num' = '1', 'colocate_with' = '" + group + ":k1');";
+    }
+
+    private static boolean tableExists(String name) {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable(name) != null;
+    }
+
+    private static boolean colocateGroupExists(String group) {
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getId();
+        return GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                .getGroupSchema(ColocateTableIndex.getFullGroupName(dbId, group)) != null;
+    }
+
+    /**
+     * CREATE TABLE ... ROLLUP on a range table with colocate_with is rejected when the rollup's sort key
+     * does not start with the colocate columns, and the rejected CREATE leaves no colocate group behind.
+     */
+    @Test
+    public void testCreateTableRollupOnRangeColocateRejected() throws Exception {
+        DdlException e = assertThrowsDdlException(() -> starRocksAssert.withTable(
+                colocateRangeTableWithRollupDdl("t_ctr_colocate", "r1 (k2, k1)", "g_ctr")));
+        assertEquals(String.format(CREATE_ROLLUP_ON_COLOCATE_ERROR, "r1", "[k2, k1]"), e.getMessage());
+        assertFalse(tableExists("t_ctr_colocate"));
+        assertFalse(colocateGroupExists("g_ctr"));
+    }
+
+    /** A rollup that leads on the colocate column is accepted: the table joins the group with the rollup. */
+    @Test
+    public void testCreateTableRollupLeadingOnColocateColumnAccepted() throws Exception {
+        starRocksAssert.withTable(
+                colocateRangeTableWithRollupDdl("t_ctr_colocate_lead", "r1 (k1, v1)", "g_ctr_lead"));
+        assertTrue(tableExists("t_ctr_colocate_lead"));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_ctr_colocate_lead");
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId groupId = colocateIndex.getRangeColocateGroupId(table.getId());
+        assertNotNull(groupId);
+        assertTrue(colocateGroupExists("g_ctr_lead"));
+        assertEquals(List.of(table.getId()), colocateIndex.getAllTableIds(groupId));
+        assertNotNull(table.getIndexMetaIdByName("r1"));
+    }
+
+    /** A range table without colocate_with keeps accepting ROLLUP in CREATE TABLE. */
+    @Test
+    public void testCreateTableRollupOnRangeNonColocateAllowed() throws Exception {
+        starRocksAssert.withTable("create table t_ctr_plain (k1 int, k2 int, v1 int)\n"
+                + "order by(k1, k2)\n"
+                + "rollup (r1 (k2, k1))\n"
+                + "properties('replication_num' = '1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_ctr_plain");
+        assertNotNull(table.getIndexMetaIdByName("r1"));
+    }
+
+    /**
+     * Joining an existing group: the rejected CREATE must not add a member or change the group's
+     * ColocateRanges.
+     */
+    @Test
+    public void testCreateTableRollupIntoExistingRangeColocateGroupRejected() throws Exception {
+        starRocksAssert.withTable("create table t_ctr_ok (k1 int, k2 int, v1 int)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 'g_ctr_exist:k1');");
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        OlapTable okTable = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_ctr_ok");
+        ColocateTableIndex.GroupId groupId = colocateIndex.getGroup(okTable.getId());
+        assertNotNull(groupId);
+        List<Long> membersBefore = colocateIndex.getAllTableIds(groupId);
+        assertEquals(List.of(okTable.getId()), membersBefore);
+        List<?> rangeListBefore = colocateIndex.getColocateRanges(groupId.grpId);
+
+        DdlException e = assertThrowsDdlException(() -> starRocksAssert.withTable(
+                colocateRangeTableWithRollupDdl("t_ctr_candidate", "r3 (k2, k1, v1)", "g_ctr_exist")));
+        assertEquals(String.format(CREATE_ROLLUP_ON_COLOCATE_ERROR, "r3", "[k2, k1, v1]"), e.getMessage());
+        assertFalse(tableExists("t_ctr_candidate"));
+        assertEquals(membersBefore, colocateIndex.getAllTableIds(groupId));
+        assertEquals(rangeListBefore, colocateIndex.getColocateRanges(groupId.grpId));
+    }
+
+    /** Hash colocate tables are aligned by bucket and keep accepting ROLLUP in CREATE TABLE. */
+    @Test
+    public void testCreateTableRollupOnHashColocateAllowed() throws Exception {
+        starRocksAssert.withTable("create table t_ctr_hash (k1 int, k2 int, v1 int)\n"
+                + "duplicate key(k1, k2)\n"
+                + "distributed by hash(k1) buckets 2\n"
+                + "rollup (r1 (k2, k1))\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 'g_ctr_hash');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_ctr_hash");
+        assertNotNull(table.getIndexMetaIdByName("r1"));
     }
 
     /**
@@ -383,6 +482,7 @@ public class RangeDistributionGuardTest {
         String colocate = "t_sync_colocate";
         starRocksAssert.withTable(rangeTableDdl(colocate));
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", colocate);
+        // colocate_with is set, but the table is not a member of any colocate group.
         table.setColocateGroup("sync_colocate_group");
         DdlException error = assertThrowsDdlException(() -> createSync(colocate, "select k2 from " + colocate));
         assertTrue(error.getMessage().contains("range distribution"));
@@ -462,7 +562,7 @@ public class RangeDistributionGuardTest {
                 + "order by(k1,k2) properties('replication_num'='1')");
         DdlException error = assertThrows(DdlException.class, () -> createSync(name, "select k2 from " + name));
         assertEquals("Synchronous materialized view with range distribution requires a shared-data, "
-                + "non-colocate, non-primary-key table. "
+                + "non-primary-key table that is a member of its colocate group when it has colocate_with. "
                 + "Use an asynchronous materialized view instead: declare it with an explicit "
                 + "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, "
                 + "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...",
@@ -713,21 +813,34 @@ public class RangeDistributionGuardTest {
     }
 
     /**
-     * A range-COLOCATE table stays rejected: the rewrite would resample a fresh K-tablet layout
-     * independently of the colocate range manager's expected ranges, desyncing colocate routing after
-     * the flip. The routing predicate must therefore exclude colocate tables, keeping the existing
-     * range-distribution rejection. (Colocate membership is simulated; create-time colocate+range
-     * wiring is orthogonal to the routing decision under test.)
+     * A sort-key reorder on a table in a range colocate group must keep the group's colocate columns
+     * leading the sort key: an ORDER BY that moves the colocate column k1 out of the first position is
+     * rejected with the colocate prefix rule.
      */
     @Test
     public void testColocateRangeTableRejectsSortKeyReorder() throws Exception {
-        starRocksAssert.withTable(rangeTableDdl("t_guard_colocate"));
+        starRocksAssert.withTable("create table t_guard_colocate (k1 int, k2 int, v1 int)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 't_guard_colocate_group:k1');");
+        Throwable e = assertThrows(Throwable.class,
+                () -> starRocksAssert.alterTable("alter table t_guard_colocate order by (k2, k1)"));
+        assertTrue(String.valueOf(e.getMessage()).contains(
+                        "The sort key of a table in a range colocate group must start with its colocate columns"),
+                "Unexpected error: " + e);
+    }
+
+    /**
+     * A range table whose colocate_with is set but that is in no range colocate group, as a crash between
+     * the creation of the table and its colocate group membership can leave it, keeps the range-distribution
+     * rejection of a sort-key reorder: there is no group to keep its new layout aligned with.
+     */
+    @Test
+    public void testColocatePropertyWithoutRangeColocateGroupRejectsSortKeyReorder() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_colocate_orphan"));
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
-                .getLocalMetastore().getTable("test", "t_guard_colocate");
-        // Simulate colocate membership via the table's group property: the routing predicate now reads
-        // OlapTable.hasColocateGroup(), equivalent to ColocateTableIndex.isColocateTable for a live table.
-        table.setColocateGroup("t_guard_colocate_group");
-        assertAlterRejectedWithRangeDistribution("alter table t_guard_colocate order by (k2, k1)");
+                .getLocalMetastore().getTable("test", "t_guard_colocate_orphan");
+        table.setColocateGroup("t_guard_colocate_orphan_group");
+        assertAlterRejectedWithRangeDistribution("alter table t_guard_colocate_orphan order by (k2, k1)");
     }
 
     /**
@@ -966,6 +1079,52 @@ public class RangeDistributionGuardTest {
         // widen, so the relaxation must not apply and it must stay rejected.
         assertAlterRejectedWithRangeDistribution(
                 "alter table t_guard_flip modify column k1 varchar(40)");
+    }
+
+    private static String varcharColocateRangeTableDdl(String name, String colocateWith) {
+        return "create table " + name + " (k1 varchar(10) NOT NULL, k2 varchar(10) NOT NULL, v1 int)\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1', 'colocate_with' = '" + colocateWith + "');";
+    }
+
+    private static void assertColocateWidenRejected(String table, String column, String alterSql) {
+        int jobsBefore = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().size();
+        Throwable e = assertThrows(Throwable.class, () -> starRocksAssert.alterTable(alterSql));
+        assertTrue(e.getMessage().contains("Can not modify colocate column[" + column + "] for colocate table"),
+                "Unexpected message: " + e.getMessage());
+        assertEquals(10, baseColumn(table, column).getStrLen());
+        assertEquals(jobsBefore,
+                GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().size());
+    }
+
+    @Test
+    public void testWidenColocateColumnRejectedOnRangeColocateTable() throws Exception {
+        starRocksAssert.withTable(varcharColocateRangeTableDdl("t_guard_colo_widen", "g_widen:k1"));
+        assertColocateWidenRejected("t_guard_colo_widen", "k1",
+                "alter table t_guard_colo_widen modify column k1 varchar(20) KEY NOT NULL");
+    }
+
+    @Test
+    public void testWidenSortKeyColumnOutsideColocatePrefixAllowedOnRangeColocateTable() throws Exception {
+        starRocksAssert.withTable(varcharColocateRangeTableDdl("t_guard_colo_tail", "g_tail:k1"));
+        starRocksAssert.alterTable("alter table t_guard_colo_tail modify column k2 varchar(20) KEY NOT NULL");
+        assertEquals(20, baseColumn("t_guard_colo_tail", "k2").getStrLen());
+    }
+
+    @Test
+    public void testWidenColocateColumnRejectedWhenAllSortKeyColumnsColocate() throws Exception {
+        starRocksAssert.withTable(varcharColocateRangeTableDdl("t_guard_colo_all", "g_all"));
+        assertColocateWidenRejected("t_guard_colo_all", "k2",
+                "alter table t_guard_colo_all modify column k2 varchar(20) KEY NOT NULL");
+    }
+
+    @Test
+    public void testWidenRenamedColocateColumnStillRejected() throws Exception {
+        starRocksAssert.withTable(varcharColocateRangeTableDdl("t_guard_colo_rename", "g_rename:k1"));
+        starRocksAssert.alterTable("alter table t_guard_colo_rename rename column k1 to k1_renamed");
+        assertColocateWidenRejected("t_guard_colo_rename", "k1_renamed",
+                "alter table t_guard_colo_rename modify column k1_renamed varchar(20) KEY NOT NULL");
     }
 
     /**
@@ -1408,18 +1567,19 @@ public class RangeDistributionGuardTest {
         assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
     }
 
+    /**
+     * A table in a range colocate group is eligible: appending the same NULL sentinel to every tablet bound
+     * keeps each tablet inside its colocate range.
+     */
     @Test
-    public void testColocateTableNotMetadataOnly() throws Exception {
-        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_colocate"));
+    public void testColocateTableMetadataOnly() throws Exception {
+        starRocksAssert.withTable("create table t_meta_colocate (k1 int, k2 int, v1 int)\n"
+                + "DUPLICATE KEY(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 't_meta_colocate_group:k1');");
         OlapTable table = getTable("t_meta_colocate");
         SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
-        new MockUp<ColocateTableIndex>() {
-            @Mock
-            public boolean isColocateTable(long tableId) {
-                return true;
-            }
-        };
-        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+        assertTrue(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
     }
 
     @Test
@@ -1840,24 +2000,28 @@ public class RangeDistributionGuardTest {
     }
 
     /**
-     * Colocate range tables are excluded from range-rewrite routing, so an ADD COLUMN KEY is not
-     * diverted and the existing range-distribution rejection applies (unaffected by the diversion).
+     * A trailing ADD COLUMN KEY on a table in a range colocate group takes the metadata-only route like any
+     * other range table: the tablets keep their colocate ranges.
      */
     @Test
-    public void testColocateRangeAddKeyColUnaffected() throws Exception {
-        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_colo"));
-        // needsRangeRewriteSchemaChange reads the table's colocate-group property while
-        // isMetadataOnlyTrailingKeyAdd reads ColocateTableIndex; set both so the table is colocate to
-        // each guard and the ADD COLUMN KEY stays on the existing range-distribution rejection.
-        getTable("t_add_meta_colo").setColocateGroup("t_add_meta_colo_group");
-        new MockUp<ColocateTableIndex>() {
-            @Mock
-            public boolean isColocateTable(long tableId) {
-                return true;
-            }
-        };
-        DdlException e = assertThrowsDdlException(() ->
+    public void testColocateRangeAddKeyColMetadataOnly() throws Exception {
+        starRocksAssert.withTable("create table t_add_meta_colo (k1 int, k2 int, v1 int)\n"
+                + "DUPLICATE KEY(k1, k2)\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 't_add_meta_colo_group:k1');");
+        assertMetadataOnlyJob(
                 buildAlterJob("t_add_meta_colo", "alter table t_add_meta_colo add column c int key default '0'"));
+    }
+
+    /**
+     * A range table whose colocate_with is set but that is in no range colocate group keeps the
+     * range-distribution rejection of an ADD COLUMN KEY: it is not routed to the metadata-only job.
+     */
+    @Test
+    public void testColocatePropertyWithoutRangeColocateGroupRejectsAddKeyCol() throws Exception {
+        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_colo_orphan"));
+        getTable("t_add_meta_colo_orphan").setColocateGroup("t_add_meta_colo_orphan_group");
+        DdlException e = assertThrowsDdlException(() -> buildAlterJob("t_add_meta_colo_orphan",
+                "alter table t_add_meta_colo_orphan add column c int key default '0'"));
         assertTrue(e.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
                 "Expected 'range distribution' in: " + e.getMessage());
     }

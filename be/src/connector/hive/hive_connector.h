@@ -21,6 +21,7 @@
 #include "connector/hive/hive_chunk_sink.h"
 #include "connector/hive/scanner/hdfs_scanner.h"
 #include "connector_primitive/connector.h"
+#include "fs/credential/refreshable_cloud_configuration.h"
 
 namespace starrocks {
 class HiveTableDescriptor;
@@ -61,6 +62,9 @@ public:
 protected:
     int32_t _plan_node_id;
     const THdfsScanNode _hdfs_scan_node;
+    // Read through this, not _hdfs_scan_node.cloud_configuration: vended credentials are refreshed in it while
+    // the query runs, and every scan range of this node on this instance shares one refresh.
+    const RefreshableCloudConfiguration _cloud_configuration;
     int64_t _max_file_length = 0;
     mutable std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
 };
@@ -117,6 +121,8 @@ private:
     RuntimeState* _runtime_state = nullptr;
 
     HdfsScanner* _scanner = nullptr;
+    // What _init_scanner opened the file system with; FSOptions only points at it, so it lives as long as this.
+    std::shared_ptr<const TCloudConfiguration> _cloud_configuration;
 
     // Partition-level predicate evaluation — not passed to scanners.
     struct PartitionFilter {

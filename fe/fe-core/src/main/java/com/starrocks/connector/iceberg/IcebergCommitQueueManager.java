@@ -62,6 +62,8 @@ public class IcebergCommitQueueManager {
 
     private static final Logger LOG = LogManager.getLogger(IcebergCommitQueueManager.class);
 
+    private static final long EXECUTOR_IDLE_THREAD_TIMEOUT_SECONDS = 60L;
+
     /**
      * Configuration for the commit queue manager.
      */
@@ -235,6 +237,8 @@ public class IcebergCommitQueueManager {
                             " seconds but queue still at capacity. Consider increasing iceberg_commit_queue_max_size " +
                             "or iceberg_commit_queue_timeout_seconds.");
                 }
+                // the idle worker may have timed out before the offer, leaving the task without a thread
+                executor.prestartCoreThread();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new RejectedExecutionException("Interrupted while waiting for commit queue capacity", e);
@@ -418,13 +422,15 @@ public class IcebergCommitQueueManager {
                 // When queue is full, block until capacity is available.
                 // The wait time is set to half of the commit timeout to leave room for actual execution.
                 long maxQueueWaitSeconds = config.getTimeoutSeconds() / 2;
-                ExecutorService executor = new ThreadPoolExecutor(
+                ThreadPoolExecutor executor = new ThreadPoolExecutor(
                         1,  // corePoolSize
                         1,  // maximumPoolSize
-                        0L, TimeUnit.MILLISECONDS,  // idle thread timeout
+                        EXECUTOR_IDLE_THREAD_TIMEOUT_SECONDS, TimeUnit.SECONDS,  // idle thread timeout
                         new LinkedBlockingQueue<>(config.getMaxQueueSize()),  // bounded queue
                         threadFactory,
                         new BlockWhenQueueFullPolicy(maxQueueWaitSeconds));
+                // release the thread of an idle table (e.g. dropped) instead of holding it until cache eviction
+                executor.allowCoreThreadTimeOut(true);
                 LOG.info("Created commit queue executor for {}.{}.{}, max queue size: {}, " +
                                 "max queue wait: {} seconds (commit timeout: {} seconds)",
                         key.catalogName, key.dbName, key.tableName, config.getMaxQueueSize(),

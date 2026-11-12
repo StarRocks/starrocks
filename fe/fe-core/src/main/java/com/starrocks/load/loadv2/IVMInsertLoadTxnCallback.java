@@ -14,6 +14,7 @@
 
 package com.starrocks.load.loadv2;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
@@ -47,10 +48,17 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
     private final Map<BaseTableInfo, TvrVersionRange> baseTableInfoTvrDeltaMap = Maps.newConcurrentMap();
     // Owner captured in beforeCommitted; afterCommitted refuses to clear on mismatch.
     private String capturedOwner;
+    // The refresh that staged the window this insert commits; empty on replay.
+    private final String stagingOwner;
 
     public IVMInsertLoadTxnCallback(long dbId, long tableId) {
+        this(dbId, tableId, "");
+    }
+
+    public IVMInsertLoadTxnCallback(long dbId, long tableId, String stagingOwner) {
         this.dbId = dbId;
         this.tableId = tableId;
+        this.stagingOwner = stagingOwner;
     }
 
     @Override
@@ -74,6 +82,13 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
             return;
         }
         this.capturedOwner = asyncRefreshContext.getTempTvrOwnerStartTaskRunId();
+        // The window is read back from the MV at commit time. If another run has put its own there, that window ends
+        // past what this insert read, and committing it would skip the changes in between for good.
+        if (!Strings.isNullOrEmpty(stagingOwner) && capturedOwner != null && !capturedOwner.equals(stagingOwner)) {
+            throw new TransactionException(String.format("Materialized view %s cannot commit its incremental refresh: "
+                    + "task run %s replaced the change window that task run %s staged",
+                    mv.getName(), capturedOwner, stagingOwner));
+        }
 
         // apply the delta into baseTableInfoTvrDeltaMap
         Map<BaseTableInfo, TvrVersionRange> mvBaseTableInfoTvrDeltaMap =

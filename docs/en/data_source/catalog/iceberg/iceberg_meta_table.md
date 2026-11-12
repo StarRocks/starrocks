@@ -32,7 +32,7 @@ Currently, StarRocks supports the following Iceberg metadata tables:
 
 ## Iceberg v3 Row Lineage Metadata Columns
 
-From v4.1 onwards, for Iceberg v3 tables (format-version = 3), StarRocks supports querying the following Row Lineage metadata columns:
+From v4.1 onwards, for Iceberg tables of format version 3 or later, StarRocks supports querying the following Row Lineage metadata columns:
 
 | Metadata Column                 | Description                                                                                    |
 | :------------------------------ | :--------------------------------------------------------------------------------------------- |
@@ -50,7 +50,7 @@ SELECT _row_id, _last_updated_sequence_number, * FROM [<catalog>.][<database>.]t
 - The `_row_id` column requires data files to have `firstRowId` metadata. If a data file is missing `firstRowId`, the query will fail with an error.
 - For newly inserted data, `_row_id` is computed as `firstRowId + row_position` and `_last_updated_sequence_number` is the file-level `dataSequenceNumber`.
 - After compaction (e.g., Iceberg OPTIMIZE / rewrite-data-files), if the compactor writes `_row_id` and `_last_updated_sequence_number` as physical columns in the data files (as required by the Iceberg v3 spec), StarRocks reads the per-row values from the physical columns, preserving row lineage across compaction.
-- These metadata columns are only available for Iceberg v3 tables (format-version = 3).
+- These metadata columns are only available for Iceberg tables of format version 3 or later.
 
 :::
 
@@ -185,7 +185,7 @@ Output:
 | sort_id            | The ID representing sort order for this file.                |
 | equality_ids       | The set of field IDs used for equality comparison in equality delete files. |
 | key_metadata       | The metadata about the encryption key that is used to encrypt this file, if applicable. |
-| first_row_id       | The ID of the first row in a data file of a format version 3 table. `NULL` for delete files. |
+| first_row_id       | The ID of the first row in a data file of a table of format version 3 or later. `NULL` for delete files. |
 | referenced_data_file | The location of the data file that a deletion vector or a file-scoped position delete file applies to. `NULL` for data files. |
 | content_offset     | The offset of a deletion vector in its Puffin file. `NULL` for other files. |
 | content_size_in_bytes | The size of a deletion vector in its Puffin file. `NULL` for other files. |

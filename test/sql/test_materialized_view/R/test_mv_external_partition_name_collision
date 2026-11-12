@@ -1,0 +1,126 @@
+-- name: test_mv_external_partition_name_collision
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+create database mv_iceberg_${uuid0}.sql_test_db_${uuid0};
+-- result:
+-- !result
+create table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int (v int, k int) partition by (k);
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int values (10, -1), (20, 1), (30, 2), (40, -2), (50, 22);
+-- result:
+-- !result
+create table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str (v int, s string) partition by (s);
+-- result:
+-- !result
+insert into mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str values (1, 'a-b'), (2, 'ab'), (3, 'a_b'), (4, 'a b'), (5, 'a.b');
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create materialized view mv_int partition by k distributed by hash(v) buckets 1
+refresh deferred manual properties ("replication_num" = "1")
+as select v, k from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int;
+-- result:
+-- !result
+refresh materialized view mv_int with sync mode;
+create materialized view mv_str partition by s distributed by hash(v) buckets 1
+refresh deferred manual properties ("replication_num" = "1")
+as select v, s from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str;
+-- result:
+-- !result
+refresh materialized view mv_str with sync mode;
+select count(*) from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'mv_int';
+-- result:
+5
+-- !result
+select k, v from mv_int order by k;
+-- result:
+-2	40
+-1	10
+1	20
+2	30
+22	50
+-- !result
+select count(*) from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'mv_str';
+-- result:
+5
+-- !result
+select s, v from mv_str order by v;
+-- result:
+a-b	1
+ab	2
+a_b	3
+a b	4
+a.b	5
+-- !result
+function: print_hit_materialized_views("select k, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int")
+-- result:
+mv_int
+-- !result
+select k, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int order by k;
+-- result:
+-2	40
+-1	10
+1	20
+2	30
+22	50
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+select k, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int order by k;
+-- result:
+-2	40
+-1	10
+1	20
+2	30
+22	50
+-- !result
+set enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+function: print_hit_materialized_views("select s, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str")
+-- result:
+mv_str
+-- !result
+select s, v from mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str order by v;
+-- result:
+a-b	1
+ab	2
+a_b	3
+a b	4
+a.b	5
+-- !result
+drop materialized view mv_int;
+-- result:
+-- !result
+drop materialized view mv_str;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_int force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.sql_test_db_${uuid0}.t_str force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.sql_test_db_${uuid0} force;
+-- result:
+-- !result
+drop catalog mv_iceberg_${uuid0};
+-- result:
+-- !result

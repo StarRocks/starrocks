@@ -6,7 +6,6 @@ description: "StarRocks provides many system variables that can be set and modif
 
 # System variables
 
-import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
 import EditionSpecificVariable from '../_assets/commonMarkdown/Edition_Specific_Variable.mdx'
 
 StarRocks provides many system variables that can be set and modified to suit your requirements. This section describes the variables supported by StarRocks. You can view the settings of these variables by running the [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) command on your MySQL client. You can also use the [SET](sql-statements/cluster-management/config_vars/SET.md) command to dynamically set or modify variables. You can make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
@@ -635,8 +634,8 @@ Used for MySQL client compatibility. No practical usage.
 
 ### enable_adaptive_sink_dop
 
-* **Description**: Specifies whether to enable adaptive parallelism for data loading. After this feature is enabled, the system automatically sets load parallelism for INSERT INTO and Broker Load jobs, which is equivalent to the mechanism of `pipeline_dop`. For a newly deployed v2.5 StarRocks cluster, the value is `true` by default. For a v2.5 cluster upgraded from v2.4, the value is `false`.
-* **Default**: false
+* **Description**: Specifies whether to enable adaptive parallelism for data loading. After this feature is enabled, the system automatically sets load parallelism for INSERT INTO and Broker Load jobs, which is equivalent to the mechanism of `pipeline_dop`. The default value is `true`. A cluster whose persisted metadata already holds a value for this variable keeps that value. For example, a cluster upgraded from v2.4 or earlier keeps `false`. `SET enable_adaptive_sink_dop = DEFAULT` and `SET GLOBAL enable_adaptive_sink_dop = DEFAULT` set the variable to `true`, even if the cluster currently holds `false`.
+* **Default**: true
 * **Introduced in**: v2.5
 
 ### enable_bucket_aware_execution_on_lake
@@ -707,6 +706,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Whether to enable Cache Sharing. Setting this to `true` enables the feature. Cache Sharing is used to support accessing cache data from other nodes through the network, which can help to reduce performance jitter caused by cache invalidation during cluster scaling. This variable takes effect only when the FE parameter `enable_trace_historical_node` is set to `true`.
 * **Default**: true
 * **Introduced in**: v3.5.1
+
+### enable_delta_lake_function_predicate_pruning
+
+* **Description**: Whether a predicate on a function of a Delta Lake column can skip data files. StarRocks converts such a predicate into a condition on the column itself, for example `year(dt) = 2024` into `dt >= '2024-01-01' AND dt < '2025-01-01'`, so that files are skipped through partition values and file column statistics, and Parquet row groups are skipped through their column statistics. It applies to the same functions as `enable_iceberg_function_predicate_pruning`. The original predicate is still evaluated on the rows. Set it to `false` to plan such queries as before, for example to compare results.
+* **Default**: true
+* **Introduced in**: v26.3
 
 ### enable_distinct_agg_over_window
 
@@ -798,9 +803,21 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v3.1.4
 
+### enable_hive_function_predicate_pruning
+
+* **Description**: Whether a predicate on a function of a date or datetime column of a Hive table can prune partitions. StarRocks converts such a predicate into a condition on the column itself, for example `year(dt) = 2024` into `dt >= '2024-01-01' AND dt < '2025-01-01'`, so that partitions are pruned on a partition column and row groups are skipped through their column statistics. It applies to the date and time functions listed for `enable_iceberg_function_predicate_pruning`. The original predicate is still evaluated on the rows. Set it to `false` to plan such queries as before, for example to compare results.
+* **Default**: true
+* **Introduced in**: v26.3
+
 ### enable_iceberg_eq_delete_runtime_filter_pruning
 
 * **Description**: Whether runtime filters can skip the equality delete files of an Iceberg table. It applies when the table has never changed its partition spec and every partition field is an identity transform of an INT, DATE, or STRING column that the query reads. A runtime filter that a join builds on such a column then skips the equality delete files of the partitions it rejects. Set it to `false` to apply every equality delete file, for example when a query fails with an error that names this variable.
+* **Default**: true
+* **Introduced in**: v26.2
+
+### enable_iceberg_function_predicate_pruning
+
+* **Description**: Whether a predicate on a function of an Iceberg column can skip data files. StarRocks converts such a predicate into a condition on the column itself, for example `year(dt) = 2024` into `dt >= '2024-01-01' AND dt < '2025-01-01'`, so that files are skipped through any partition transform of the column (`year`, `month`, `day`, `hour`, `truncate`) and through file column statistics. It applies to `year()`, `to_date()`, `date()`, `date_trunc()`, `date_format()` with a zero-padded format such as `'%Y-%m'`, `datediff()`, `weeks_add()`/`hours_add()`/`minutes_add()`/`seconds_add()` and their `_sub` forms, `year() = ... AND month()/quarter() = ...`, `left()`/`substr(s, 1, n)` compared for equality, and `starts_with()`. The original predicate is still evaluated on the rows. Set it to `false` to plan such queries as before, for example to compare results.
 * **Default**: true
 * **Introduced in**: v26.2
 
@@ -814,7 +831,7 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 
 ### enable_insert_partial_update
 
-* **Description**: Whether to enable Partial Update for INSERT statements on Primary Key tables. When this item is set to `true` (default), if an INSERT statement specifies only a subset of columns (fewer than the number of all non-generated columns in the table), the system performs a Partial Update to update only the specified columns while preserving existing values in other columns. When set to `false`, the system uses default values for unspecified columns instead of preserving existing values. This feature is particularly useful for updating specific columns in Primary Key tables without affecting other column values.
+* **Description**: Whether to enable Partial Update for INSERT statements on Primary Key tables. When this item is set to `true` (default), if an INSERT statement specifies only a subset of columns (fewer than the number of all non-generated columns in the table), the system performs a Partial Update to update only the specified columns while preserving existing values in other columns. When set to `false`, the system uses default values for unspecified columns instead of preserving existing values. This feature is particularly useful for updating specific columns in Primary Key tables without affecting other column values. If no transaction has ever committed to the target partitions, there are no existing values to preserve, so the INSERT runs as a plain insert that fills the unspecified columns with default values and skips the Partial Update processing. This applies only when every unspecified column can be filled that way (it is nullable or has a default value, and is not an AUTO_INCREMENT column), and not to INSERT OVERWRITE or to an INSERT inside an explicit transaction (`BEGIN ... COMMIT`), which keep the Partial Update. If another write reaches those partitions first, the INSERT is automatically planned and run once more as a Partial Update.
 * **Default**: true
 * **Introduced in**: v3.3.20, v3.4.9, v3.5.8, v4.0.2
 
@@ -1827,11 +1844,19 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Scope**: Session
 * **Default**: `colocate`
 * **Data type**: String
-* **Valid values**: `colocate`, `parallel`
+* **Valid values**: `colocate`, `parallel`, `grouped`
 
 A nonempty parallel scan must select at least two logical partitions and two real tablets, and the selected compute resource must contain at least two eligible CNs. Among aggregates with the DISTINCT modifier, only `COUNT DISTINCT` is supported. Pipeline execution and `parallel_fragment_exec_instance_num = 1` are required. Parallel mode adds network and aggregate-state transfer costs and can increase non-owner remote reads; it does not guarantee a speedup or use of every compute node. Partition and tablet pruning remain unchanged.
 
 Parallel mode rejects writes/refreshes, joins, set operations, CTEs, subqueries, analytic functions, grouping sets, special/historical/metadata/cache-stat or sampled/hinted scans, MV/rollup source replacement, multiple final scans, Query Cache, phased scheduling, prepared physical split scans, single-node plans, and nonpipeline execution. Fully pruned input retains normal empty-aggregate semantics. Unsupported requests fail explicitly without changing other session settings.
+
+`grouped` is a session-only experimental opt-in. It forms temporary groups from tablet range boundaries and aligns scan tasks for the same key range across selected partitions. All input rows for a SQL aggregation group are processed by one aggregate logical driver on one CN, eliminating key-based shuffles of raw rows between CNs and within a CN. Filters, output aliases, HAVING, and final ORDER BY/LIMIT retain their semantics when the complete grouping proof is preserved. Applicability is checked during planning; requests outside the current experimental implementation fail explicitly.
+
+Grouped execution captures source versions and tablet ranges once, then forms complete key-range groups across all selected physical partitions. It requires at least two selected physical partitions and two nonempty key-range groups. Each group feeds one blocking HASH aggregate and only finalized scalar results are gathered. It requires Pipeline and Group Execution, and `parallel_fragment_exec_instance_num = 1`. The parallel-mode exclusions also apply; forced multi-stage aggregation and incompatible global late materialization are unsupported. Sort aggregation and per-bucket aggregation are disabled for this path. Fully pruned input retains normal empty-input semantics. PREPARE/EXECUTE re-plans aggregates under the current mode instead of reusing a complete physical plan.
+
+Grouped scans support ordinary, nonprepared physical rowid splitting when `enable_lake_tablet_internal_parallel` is enabled. Each complete key group still has one aggregate logical driver on one CN; additional I/O tasks feed that same driver without a key shuffle. Disabling `enable_lake_tablet_internal_parallel` retains the unsplit path. The default 16 I/O slots limit live I/O concurrency, not the number of generated child tasks.
+
+A scan supports at most 1,024 groups and 8,192 root clip tasks; these limits do not cap generated I/O children. Group Execution capacity also applies. EXPLAIN reports grouped execution and unique source/group/root-task counts. `RangeClipTasks` counts successfully opened root clips once and excludes children; `MorselsCount` includes roots and children. Use `PeakIOTasks` with scan time, rows and remote bytes to assess I/O concurrency. Ordinary tablet and segment counters may count repeated task reads and are not global unique-source counts. This mode does not guarantee a speedup or constant-memory DISTINCT aggregation. The default remains `colocate`.
 
 ### resource_group
 
@@ -2111,4 +2136,3 @@ The StarRocks version. Cannot be changed.
 
 <EditionSpecificVariable />
 
-<VariableWarehouse />

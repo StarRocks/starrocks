@@ -490,6 +490,30 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 如果此项设置为 `true`，则在存算分离集群中，当子任务之一成功时，系统将认为 Compaction 操作成功。
 - 引入版本: v3.5.2
 
+### `lake_compaction_admission_mode`
+
+- 默认值: `NORMAL`
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 控制新的存算分离 Compaction 作业是否可以调度。有效值为 `NORMAL` 和 `ALLOWLIST`（区分大小写）。`NORMAL` 忽略 `lake_compaction_allow_table_ids`，保持原有调度行为；`ALLOWLIST` 仅允许名单中的表。非法模式会阻止新作业并输出日志警告。配置刷新后生效，无需重启，不取消或等待已运行的作业。两种模式下，原有黑名单和任务数量限制均有效，手动 Compaction 也受此策略限制。
+- 引入版本: -
+
+### `lake_compaction_allow_table_ids`
+
+- 默认值: ""
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 分号分隔的正整数**表 ID**，例如 `12345;98765`。仅在 `ALLOWLIST` 模式下生效，空名单不放行任何表。不支持分区 ID 或 `*`。表 ID 放行该表所有物理分区，包括未来新增的分区。非法名单在 `ALLOWLIST` 模式下阻止新作业并输出警告，但不影响 `NORMAL` 模式。`lake_compaction_disable_ids` 的表级或分区级黑名单优先，`lake_compaction_max_tasks = 0` 仍禁止所有新作业。配置刷新后生效，无需重启。
+- 引入版本: -
+
+用于 replication 迁移时，先保持 `lake_compaction_max_tasks = 0`，清空白名单并切换到 `ALLOWLIST`；开始 replication 前等待已有 Compaction 作业结束。确认模式生效后，再恢复非零任务上限。名单由用户手动维护，无需修改迁移工具，也不自动维护。
+
+仅在整张表的**所有** replication 事务均达到 **VISIBLE**、数据校验完成且没有排队、重试或后续 replication 时加白。一旦交接给目标写入或 Compaction，不得再次对该表启动 replication；如需重新迁移，必须 drop 并重建目标表。移出白名单不能恢复迁移资格。这是使用流程约束：白名单不提供 replication 与 Compaction 的事务互斥，也不实现永久禁止 replication 的状态。
+
+使用 `ADMIN SET FRONTEND CONFIG` 动态更新即可生效，无需逐台修改在线 FE 的配置文件；SQL 修改会转发到在线 FE。为保证重启和 Leader 切换后仍有效，在支持的环境中使用 `WITH PERSISTENT` 持久化两个参数；容器部署则通过部署平台保存配置。离线或新增 FE 在具备成为 Leader 的条件前，也应配置相同的值。
+
 ### `lake_compaction_disable_ids`
 
 - 默认值: ""
@@ -785,7 +809,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 计数
 - 是否可变: Yes
-- 描述: 设置在为 lake（云原生）表构建发布批次时，可能分组的连续事务版本的上限。该值传递给事务图批处理例程（参见 getReadyToPublishTxnListBatch），并与 `lake_batch_publish_min_version_num` 一起确定 TransactionStateBatch 的候选范围大小。较大的值可以通过批处理更多提交来提高发布吞吐量，但会增加原子发布的范围（更长的可见性延迟和更大的回滚表面），并且当版本不连续时可能会在运行时受到限制。根据工作负载和可见性/延迟要求进行调整。
+- 描述: 设置在为 lake（云原生）表构建发布批次时，可能分组的连续事务版本的上限。该值传递给事务图批处理例程（参见 getReadyToPublishTxnListBatch），用于限定 TransactionStateBatch 的候选范围大小。较大的值可以通过批处理更多提交来提高发布吞吐量，但会增加原子发布的范围（更长的可见性延迟和更大的回滚表面），并且当版本不连续时可能会在运行时受到限制。根据工作负载和可见性/延迟要求进行调整。
 - 引入版本: v3.2.0
 
 ### `lake_batch_publish_min_version_num`
@@ -794,7 +818,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 设置构成 lake 表发布批次所需的最小连续事务版本数。DatabaseTransactionMgr.getReadyToPublishTxnListBatch 将此值与 `lake_batch_publish_max_version_num` 一起传递给 transactionGraph.getTxnsWithTxnDependencyBatch 以选择依赖事务。值为 `1` 允许单事务发布（不批处理）。值 `>1` 要求至少有相同数量的连续版本、单表、非复制事务可用；如果版本不连续，出现复制事务，或 schema 更改消耗版本，则批处理中止。增加此值可以通过分组提交来提高发布吞吐量，但可能会在等待足够连续的事务时延迟发布。
+- 描述: 已废弃，设置后不生效。保留该参数只是为了让 **fe.conf** 中已有的配置以及针对该参数的 `ADMIN SET FRONTEND CONFIG` 语句不会报错。存算分离模式下，批量发布每一轮都会从每个无需再等待其他事务的已提交事务开始组成批次，不论批次大小都会发布，每个批次最多包含 `lake_batch_publish_max_version_num` 个事务。此前，该参数指定一个批次至少包含的事务数，事务数不足的批次在当轮不发布。如果某个批次始终达不到这一数量（例如某张表最后几次导入之后再没有新的导入，或者导入排在一个同时写入多张表的事务之后），该批次每一轮都会被跳过，其中已提交的事务一直不可见，后续写入这些表的导入也只能排队等待。
 - 引入版本: v3.2.0
 
 ### `lake_publish_version_retry_interval_ms`
@@ -817,12 +841,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `lake_enable_batch_publish_multi_table`
 
-- 默认值: false
+- 默认值: true
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否允许批量发布（Batch Publish）将连续的多表事务合并为一次发布操作。该功能适用于以较高频率提交小型原子多表事务的负载（例如同时写入多张表的 CDC 数据管道）。在此类负载下，逐事务发布会在共享表的依赖链上串行执行，从而显著增加事务从提交到可见的延迟。仅当 `lake_enable_batch_publish_version` 为 `true` 时生效。请在所有 FE 节点都升级到支持该功能的版本之后再开启此参数：运行旧版本的 FE Follower 在回放多表事务批次时只会应用其中第一张表的 Visible Log。
+- 描述: 是否允许批量发布（Batch Publish）将连续的多表事务合并为一次发布操作。该功能适用于以较高频率提交小型原子多表事务的负载（例如同时写入多张表的 CDC 数据管道）。在此类负载下，逐事务发布会在共享表的依赖链上串行执行，从而显著增加事务从提交到可见的延迟。仅当 `lake_enable_batch_publish_version` 为 `true` 时生效。从 v26.3 开始，默认值从 `false` 更改为 `true`。v4.1.5 之前版本的 FE 不支持该功能，回放多表事务批次时只会应用其中第一张表的 Visible Log。因此，从这类版本升级时，请在每个已升级 FE 节点的 **fe.conf** 中将此参数设为 `false`，直到所有 FE 节点升级完成：升级期间一旦发生 Leader 切换，已升级的 FE 节点可能成为 Leader，而其余 FE 节点仍在运行旧版本。将集群降级到这类版本时，请先将此参数设为 `false`，等待修改之前提交的事务全部变为可见，再创建元数据快照。
 - 引入版本: v4.1.5
+
+### `lake_enable_batch_publish_retry_freeze`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离表的批量发布（Batch Publish）没有完成时，重试是否只包含上一次尝试中的事务，只包含一个事务的批次同样适用，这样重试不会把之后提交的事务加进来。不开启时，重试会重新攒批，把这些事务也加进来，各分区的新版本号随之改变，上一次尝试在旧版本号上已经完成的工作也就无法复用。设为 `false` 可恢复原来的攒批方式，从下一轮发布起生效。仅当 `lake_enable_batch_publish_version` 为 `true` 时生效。
+- 引入版本: v26.2
 
 ### `lake_enable_tablet_creation_optimization`
 
@@ -904,6 +937,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: 每个 Iceberg 表待处理提交操作的最大数量。当使用提交队列 (`enable_iceberg_commit_queue=true`) 时，这限制了可以为一个表排队的提交操作的数量。当达到限制时，额外的提交操作将在调用者线程中执行（阻塞直到容量可用）。此配置在 FE 启动时读取，并应用于新创建的表执行器。需要重启 FE 才能生效。如果您预期对同一表有许多并发提交，请增加此值。如果此值过低，在高并发期间提交可能会在调用者线程中阻塞。
 - 引入版本: v4.1.0
+
+### `deltalake_checkpoint_meta_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Delta Lake Catalog 共用的一份 Delta Log Checkpoint 文件缓存可以使用的 FE JVM 堆比例，无论有多少个 Catalog，总量都受此上限约束。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `deltalake_checkpoint_meta_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `deltalake_json_meta_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Delta Lake Catalog 共用的一份 Delta Log JSON 文件缓存可以使用的 FE JVM 堆比例。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `deltalake_json_meta_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `iceberg_data_file_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Iceberg Catalog 共用的一份 Data File Manifest 缓存可以使用的 FE JVM 堆比例，无论有多少个 Catalog，总量都受此上限约束。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `iceberg_data_file_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `iceberg_delete_file_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Iceberg Catalog 共用的一份 Delete File Manifest 缓存可以使用的 FE JVM 堆比例；由删除文件构建的删除文件索引另有一份同样大小的缓存。默认值 `0` 表示两者都由每个 Catalog 独占，大小由 Catalog 属性 `iceberg_delete_file_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `iceberg_partition_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Iceberg Catalog 共用的一份分区缓存可以使用的 FE JVM 堆比例。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `iceberg_partition_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
 
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
@@ -1295,6 +1373,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: `EXPLAIN VERBOSE` 输出中每个 Scan 节点的 `dict_col` 字段所列出的低基数字典优化列的最大数量。当某个 Scan 节点应用的字典列数量超过该值时，列表将被截断并以省略号结尾。小于或等于 `0` 的值会被视为 `0`，即完全截断该列表。该参数仅影响 `EXPLAIN VERBOSE` 的输出，不会改变字典优化在查询中的实际应用方式。
 - 引入版本: v4.2.0
 
+### `gtid_batch_window_ms`
+
+- 默认值: 5000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 下一条 gtid 将越过当前批次上界时，FE 向前预留的毫秒窗口。小于 `1` 的值按 `1` 处理。窗口还必须落在 snowflake 剩余的 42 位时间戳内；再大则发号失败，而不会把预留上界算溢出。合法范围内值越大，元数据 journal 写入越少。副作用是切主时未用完的预留作废，gtid 的时间戳最多向前跳这整个窗口。
+- 引入版本: -
+
 ### `hive_meta_cache_refresh_interval_s`
 
 - 默认值: 3600 * 2
@@ -1564,6 +1651,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 在物化视图刷新期间，如果需要批量创建多个分区，系统会将其分为每批 64 个分区。为降低频繁创建分区导致失败的风险，每个批次之间设置了默认间隔（以毫秒为单位）以控制创建频率。
 - 引入版本: v3.3
+
+### `mv_incremental_refresh_wait_visible_timeout_ms`
+
+- 默认值: 300000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 物化视图增量刷新在规划前，等待该物化视图上已提交的事务变为可见的最长时间。超时仍有事务未可见时，本次刷新失败且不写入数据，下一次刷新会再次等待。
+- 引入版本: -
 
 ### `mv_plan_cache_max_size`
 

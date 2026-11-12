@@ -51,11 +51,13 @@ package com.starrocks.connector.iceberg.io;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.common.util.concurrent.lock.LockInvariantViolationException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import com.starrocks.fs.azure.AzBlobURI;
 import org.apache.hadoop.conf.Configuration;
@@ -67,7 +69,6 @@ import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
-import org.apache.iceberg.hadoop.SerializableConfiguration;
 import org.apache.iceberg.hadoop.Util;
 import org.apache.iceberg.io.ByteBufferInputStream;
 import org.apache.iceberg.io.FileIO;
@@ -124,6 +125,29 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private static final Pattern HADOOP_CATALOG_METADATA_JSON_PATTERN =
             Pattern.compile("^v\\d+(\\.gz)?\\.metadata\\.json(\\.gz)?$");
 
+    // Snowflake Horizon and some other Iceberg REST catalogs may return metadata paths using
+    // abfss:// with blob.core.windows.net hostnames. Hadoop's AzureBlobFileSystem (abfss scheme)
+    // expects dfs.core.windows.net endpoints, while NativeAzureFileSystem (wasbs scheme) is the
+    // correct driver for blob.core.windows.net. Normalize abfss://*@*.blob.core.windows.net to
+    // wasbs://*@*.blob.core.windows.net so that Hadoop can resolve the correct filesystem.
+    private static final Pattern ABFSS_BLOB_CORE_PATTERN =
+            Pattern.compile("^(abfss?)://([^@]+@[^.]+)\\.blob\\.core\\.windows\\.net(/.*)?$");
+
+    @VisibleForTesting
+    static String normalizeAzurePath(String path) {
+        if (path == null) {
+            return null;
+        }
+        java.util.regex.Matcher m = ABFSS_BLOB_CORE_PATTERN.matcher(path);
+        if (m.matches()) {
+            String scheme = "wasb" + (m.group(1).equals("abfss") ? "s" : "");
+            String authority = m.group(2);
+            String suffix = m.group(3) != null ? m.group(3) : "";
+            return scheme + "://" + authority + ".blob.core.windows.net" + suffix;
+        }
+        return path;
+    }
+
     @Override
     public void initialize(Map<String, String> properties) {
         this.properties = properties;
@@ -131,7 +155,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         wrappedIO.initialize(properties);
 
         if (conf != null) {
-            wrappedIO.setConf(conf.get());
+            setWrappedConf(conf.get());
         }
 
         if (ENABLE_DISK_CACHE) {
@@ -162,9 +186,40 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
     @Override
     public void setConf(Configuration conf) {
-        this.conf = new SerializableConfiguration(conf)::get;
+        this.conf = new SharedConfiguration(conf);
         if (wrappedIO != null) {
-            wrappedIO.setConf(conf);
+            setWrappedConf(conf);
+        }
+    }
+
+    // ResolvingFileIO.setConf copies the configuration into a SerializableConfiguration, which rebuilds a
+    // second Configuration on first use. A table whose REST load response carries its own config or
+    // credentials gets its own FileIO, so those copies (~80-180 KB with a default Hadoop configuration) were
+    // retained per cached table. Hand the wrapped IO a reference instead. serializeConfWith replaces its
+    // supplier in one assignment (its getConf() is null-safe, and the argument is ignored), so a concurrent
+    // newInputFile never sees a half-set configuration.
+    private void setWrappedConf(Configuration conf) {
+        wrappedIO.serializeConfWith(ignored -> new SharedConfiguration(conf));
+    }
+
+    // Shares the Configuration in memory and copies it only when serialized (a table shipped in a split).
+    // The copy is a SerializableTable.SerializableConfSupplier, not a lambda or a class of fe-core: a
+    // concurrent newInputFile can put this supplier back on the wrapped IO after SerializableTable installed
+    // its own, and the BE deserializing the split has neither fe-core nor this class.
+    private static final class SharedConfiguration implements SerializableSupplier<Configuration> {
+        private final transient Configuration conf;
+
+        private SharedConfiguration(Configuration conf) {
+            this.conf = conf;
+        }
+
+        @Override
+        public Configuration get() {
+            return conf;
+        }
+
+        private Object writeReplace() {
+            return new SerializableTable.SerializableConfSupplier(conf);
         }
     }
 
@@ -178,8 +233,11 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public InputFile newInputFile(String path) {
         try {
-            wrappedIO.setConf(buildConfFromProperties(properties, path));
-            return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(path));
+            String normalizedPath = normalizeAzurePath(path);
+            setWrappedConf(buildConfFromProperties(properties, normalizedPath));
+            // Keep the caller's path as location(): the content cache and the parsed-manifest caches
+            // (seeded under ManifestFile.path()) are keyed by it. Only the storage access is normalized.
+            return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(normalizedPath), path);
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new input file for path: %s, properties: %s", path, properties);
             LOG.error(errorMessage, e);
@@ -190,7 +248,8 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public OutputFile newOutputFile(String path) {
         try {
-            wrappedIO.setConf(buildConfFromProperties(properties, path));
+            String normalizedPath = normalizeAzurePath(path);
+            setWrappedConf(buildConfFromProperties(properties, normalizedPath));
             // Wrapped rather than returned as is: newOutputFile itself contacts nothing -- the wait is in
             // create()/createOrOverwrite() on the object handed back, which is where the guard has to be.
             // Returned as the wrapped IO made it, deliberately. The write has no door and cannot have one
@@ -199,7 +258,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             // -- so wrapping it to add a guard would quietly move the writer onto its generic path and take
             // the Hadoop configuration, the block size and native encryption with it. An observability
             // change does not get to cost that; the gap is recorded in BlockingCallValidator's javadoc.
-            return wrappedIO.newOutputFile(path);
+            return wrappedIO.newOutputFile(normalizedPath);
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new output file for path: %s, properties: %s", path, properties);
             LOG.error(errorMessage, e);
@@ -212,8 +271,8 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         // No cache in front of a delete: it always goes out. Reached by table purge and by the cleanup of
         // a failed commit, both of which can run inside a DDL's database lock.
         BlockingCallValidator.validateNotUnderLock("remote-storage");
-        wrappedIO.deleteFile(path);
-        // remove from cache.
+        wrappedIO.deleteFile(normalizeAzurePath(path));
+        // remove from cache, keyed by the caller's path like CachingInputFile.location().
         fileContentCache.invalidate(path);
     }
 
@@ -684,10 +743,12 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private static class CachingInputFile implements InputFile {
         private final ContentCache contentCache;
         private final InputFile wrappedInputFile;
+        private final String location;
 
-        private CachingInputFile(ContentCache cache, InputFile inFile) {
+        private CachingInputFile(ContentCache cache, InputFile inFile, String location) {
             this.contentCache = cache;
             this.wrappedInputFile = inFile;
+            this.location = location;
         }
 
         @Override
@@ -728,7 +789,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
         @Override
         public String location() {
-            return wrappedInputFile.location();
+            return location;
         }
 
         @Override

@@ -13,6 +13,8 @@ import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadP
 
 <RoutineLoadPrivNote />
 
+对 Routine Load 作业的目标表拥有至少一项权限，或者拥有 OPERATE 权限时，SHOW ROUTINE LOAD 会显示该作业。如果没有目标表的 SELECT 权限，`JobProperties`、`DataSourceProperties`、`CustomProperties`、`ErrorLogUrls`、`TrackingSQL` 和 `OtherMsg` 为 NULL，`ReasonOfStateChanged` 只保留错误码。`root` 用户可以看到所有 Routine Load 作业的完整信息。目标表已被删除的 Routine Load 作业，只有 `root` 用户能看到完整信息，拥有 OPERATE 权限的用户看到的是隐藏上述字段后的信息。
+
 ## 语法
 
 ```SQL

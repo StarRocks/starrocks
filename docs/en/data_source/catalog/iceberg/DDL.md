@@ -95,7 +95,7 @@ All non-partition columns must use `NULL` as the default value. Partition column
 
 ##### Default values
 
-From v4.1 onwards, StarRocks supports setting default values for columns in Iceberg tables. This feature requires Iceberg format version 3 (`"format-version" = "3"`).
+From v4.1 onwards, StarRocks supports setting default values for columns in Iceberg tables. This feature requires Iceberg format version 3 or later.
 
 **Usage:**
 
@@ -110,7 +110,7 @@ col_name col_type DEFAULT default_value
 
 **Requirements:**
 
-- The table must use Iceberg format version 3 (`"format-version" = "3"`).
+- The table must use Iceberg format version 3 or later.
 - Default values for numeric types (INT, BIGINT, FLOAT, DOUBLE), BOOLEAN, STRING, and DATE/TIMESTAMP types must be wrapped in quotes. For example: `DEFAULT "18"`, `DEFAULT "100.0"`, `DEFAULT "true"`.
 
 **Examples:**
@@ -172,6 +172,10 @@ Key table properties:
 - `location`: File path for the table. Required when using AWS Glue without database-level location.
 - `file_format`: File format. Only `parquet` (Default) is supported.
 - `compression_codec`: Compression algorithm. Options: SNAPPY, GZIP, ZSTD, LZ4 (Default: `zstd`).
+- `format-version`: Iceberg format version of the table. Options: `1`, `2`, `3`, `4` (Default: `2`). Format version 4 is supported from v26.4 onwards, and StarRocks reads and writes format version 4 tables the same way as format version 3 tables. Iceberg writes the manifests of a format version 4 table as Parquet files. The location of a format version 4 table must include a URI scheme, such as `s3://` or `hdfs://`, so a table whose location has no scheme cannot be upgraded to format version 4.
+- `write.metadata.metrics.default`: Default metrics mode for the column statistics StarRocks writes into data files. Options: `none`, `counts`, `truncate(N)`, `full` (Default: `truncate(16)`). `none` writes no statistics, `counts` writes only value and null counts, `truncate(N)` also writes lower and upper bounds with STRING and BINARY bounds truncated to N characters (bytes), and `full` writes untruncated bounds.
+- `write.metadata.metrics.column.<col>`: Metrics mode for column `<col>`, overriding the default. Options are the same as `write.metadata.metrics.default`.
+- `write.metadata.metrics.max-inferred-column-defaults`: When `write.metadata.metrics.default` is not set, only the first N columns get the default `truncate(16)` and the remaining columns get `none` (Default: `100`).
 
 ### Examples
 

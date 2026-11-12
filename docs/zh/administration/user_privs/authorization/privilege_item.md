@@ -7,8 +7,6 @@ sidebar_label: "权限项"
 
 # 权限项
 
-import PrivCreateWarehouse from '../../../_assets/commonMarkdown/priv_create_warehouse.mdx'
-import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 
 本文详细描述了 StarRocks 中可以用于赋权的权限项及其含义。您可以通过 [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
@@ -20,7 +18,21 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 
 ### 系统级权限 (SYSTEM)
 
-<PrivCreateWarehouse />
+| 权限                    | 用途                                                         |
+| ----------------------- | ------------------------------------------------------------ |
+| NODE                    | 用于操作节点，比如添加，删除，下线节点。为确保集群安全，此权限不可直接授予给用户和角色。`cluster_admin` 角色拥有此权限。 |
+| GRANT                   | 创建用户/角色，更改用户/角色，将权限授予给用户/角色。此权限不可直接授予给用户和角色。`user_admin` 角色拥有此权限。 |
+| CREATE RESOURCE GROUP   | 创建资源组。                                                 |
+| CREATE RESOURCE         | 创建资源给 Spark Load 和外表使用。                           |
+| CREATE EXTERNAL CATALOG | 创建 External Catalog。                                      |
+| PLUGIN                  | 安装、卸载一个插件。                                         |
+| REPOSITORY              | 创建、删除、查看仓库。                                       |
+| BLACKLIST               | 创建、删除、查看 SQL 黑名单和 BE 黑名单。                      |
+| FILE                    | 创建、删除、查看文件。                                       |
+| OPERATE                 | 管理副本、配置项、变量、transaction等。                      |
+| CREATE GLOBAL FUNCTION  | 创建一个全局 UDF。                                           |
+| CREATE STORAGE VOLUME   | 为远程存储系统创建存储卷 (Storage Volume)。                     |
+| SECURITY                | 创建或管理安全集成以及 Group Provider。                      |
 
 ### AI FUNCTION / AI PROVIDER {/* #ai-function-privileges */}
 
@@ -137,8 +149,6 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | DROP  | 删除指定存储卷。                 |
 | USAGE | 查看指定存储卷的信息。   |
 | ALL   | 拥有对该存储卷的上述所有权限。 |
-
-<PrivWarehouse />
 
 ## 升级注意事项
 

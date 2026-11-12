@@ -51,8 +51,8 @@ TEST(HttpResultWriterTest, BasicJsonFormat) {
     auto c1_field = std::make_shared<Field>(1, "c1", TYPE_INT, true);
     schema->append(c0_field);
     schema->append(c1_field);
-    auto c0ref = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0);
-    auto c1ref = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 1);
+    auto c0ref = std::make_unique<ColumnRef>(TYPE_INT_DESC, 0);
+    auto c1ref = std::make_unique<ColumnRef>(TYPE_INT_DESC, 1);
     std::vector<std::unique_ptr<ExprContext>> managed_expr_ctxs;
     std::vector<ExprContext*> expr_ctxs;
     // create c0/c1 ExprContext

@@ -6,7 +6,6 @@ keywords: ['session','variable']
 
 # 系统变量
 
-import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
 import EditionSpecificVariable from '../_assets/commonMarkdown/Edition_Specific_Variable.mdx'
 
 StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) 查看当前变量。也可以通过 [SET](sql-statements/cluster-management/config_vars/SET.md) 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效、仅在当前会话 (session) 中生效、或者仅在单个查询语句中生效。
@@ -551,8 +550,8 @@ FROM test;
 
 ### enable_adaptive_sink_dop
 
-* 描述：是否开启导入自适应并行度。开启后 INSERT INTO 和 Broker Load 自动设置导入并行度，保持和 `pipeline_dop` 一致。新部署的 2.5 版本默认值为 `true`，从 2.4 版本升级上来为 `false`。
-* 默认值：false
+* 描述：是否开启导入自适应并行度。开启后 INSERT INTO 和 Broker Load 自动设置导入并行度，保持和 `pipeline_dop` 一致。默认值为 `true`。如果集群持久化的元数据中已保存该变量的值，则保留该值。例如，从 v2.4 及更早版本升级上来的集群保持 `false`。执行 `SET enable_adaptive_sink_dop = DEFAULT` 或 `SET GLOBAL enable_adaptive_sink_dop = DEFAULT` 会将该变量设为 `true`，即使集群当前的值为 `false`。
+* 默认值：true
 * 引入版本：v2.5
 
 ### enable_bucket_aware_execution_on_lake
@@ -615,6 +614,12 @@ FROM test;
 - 描述：是否启用 Cache Sharing。设置为 `true` 可启用该功能。Cache Sharing 能够在本地缓存未命中时通过网络访问其他节点上的缓存数据，这有助于减少集群扩展过程中缓存失效造成的性能抖动。只有当 FE 参数 `enable_trace_historical_node` 设置为 `true` 时，此变量才会生效。
 - 默认值：true
 - 引入版本：v3.5.1
+
+### enable_delta_lake_function_predicate_pruning
+
+* 描述：对 Delta Lake 表列取函数后的谓词，是否用于跳过数据文件。StarRocks 会把这类谓词转换为该列本身的条件，例如把 `year(dt) = 2024` 转换为 `dt >= '2024-01-01' AND dt < '2025-01-01'`，从而通过分区值和文件列统计信息跳过文件，并通过 Parquet row group 的列统计信息跳过 row group。适用的函数与 `enable_iceberg_function_predicate_pruning` 相同。原谓词仍会对数据行求值。设置为 `false` 时按原方式规划这类查询，例如用于对比结果。
+* 默认值：true
+* 引入版本：v26.3
 
 ### enable_distinct_agg_over_window
 
@@ -685,9 +690,21 @@ FROM test;
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
 
+### enable_hive_function_predicate_pruning
+
+* 描述：对 Hive 表日期或日期时间列取函数后的谓词，是否用于裁剪分区。StarRocks 会把这类谓词转换为该列本身的条件，例如把 `year(dt) = 2024` 转换为 `dt >= '2024-01-01' AND dt < '2025-01-01'`，从而在分区列上裁剪分区，并通过 row group 的列统计信息跳过 row group。适用于 `enable_iceberg_function_predicate_pruning` 中列出的日期和时间函数。原谓词仍会对数据行求值。设置为 `false` 时按原方式规划这类查询，例如用于对比结果。
+* 默认值：true
+* 引入版本：v26.3
+
 ### enable_iceberg_eq_delete_runtime_filter_pruning
 
 * 描述：是否允许 Runtime Filter 跳过 Iceberg 表的 Equality Delete 文件。仅当表从未变更过分区规格（Partition Spec），且每个分区字段都是查询所读取的 INT、DATE 或 STRING 列的 identity 转换时生效。此时，Join 在这些列上生成的 Runtime Filter 会跳过被其过滤掉的分区的 Equality Delete 文件。设置为 `false` 时会应用所有 Equality Delete 文件，例如查询报错且错误信息中提到该变量时。
+* 默认值：true
+* 引入版本：v26.2
+
+### enable_iceberg_function_predicate_pruning
+
+* 描述：对 Iceberg 表列取函数后的谓词，是否用于跳过数据文件。StarRocks 会把这类谓词转换为该列本身的条件，例如把 `year(dt) = 2024` 转换为 `dt >= '2024-01-01' AND dt < '2025-01-01'`，从而通过该列的任意分区转换（`year`、`month`、`day`、`hour`、`truncate`）以及文件列统计信息跳过文件。适用于 `year()`、`to_date()`、`date()`、`date_trunc()`、使用 `'%Y-%m'` 等补零格式的 `date_format()`、`datediff()`、`weeks_add()`/`hours_add()`/`minutes_add()`/`seconds_add()` 及对应的 `_sub` 形式、`year() = ... AND month()/quarter() = ...`、做等值比较的 `left()`/`substr(s, 1, n)`，以及 `starts_with()`。原谓词仍会对数据行求值。设置为 `false` 时按原方式规划这类查询，例如用于对比结果。
 * 默认值：true
 * 引入版本：v26.2
 
@@ -701,7 +718,7 @@ FROM test;
 
 ### enable_insert_partial_update
 
-* **描述**：是否为主键表的 INSERT 语句启用部分更新（Partial Update）。当设置为 `true`（默认）时，如果 INSERT 语句只指定了部分列（少于表中所有非生成列），系统会执行部分更新，即仅更新指定列，并保留其他列的现有值。当设置为 `false` 时，系统会对未指定的列使用默认值，而不是保留已有值。此功能特别适用于对主键表的特定列进行更新，而不影响其他列的值。
+* **描述**：是否为主键表的 INSERT 语句启用部分更新（Partial Update）。当设置为 `true`（默认）时，如果 INSERT 语句只指定了部分列（少于表中所有非生成列），系统会执行部分更新，即仅更新指定列，并保留其他列的现有值。当设置为 `false` 时，系统会对未指定的列使用默认值，而不是保留已有值。此功能特别适用于对主键表的特定列进行更新，而不影响其他列的值。如果目标分区从未有任何事务提交过数据，就不存在需要保留的已有值，此时 INSERT 会作为普通插入执行，未指定的列填充默认值，跳过部分更新的处理。这只在未指定的列都能这样填充（可为空或有默认值，且不是 AUTO_INCREMENT 列）时生效，INSERT OVERWRITE 和显式事务（`BEGIN ... COMMIT`）内的 INSERT 不适用，仍按部分更新执行。如果有其他写入抢先提交到了这些分区，该 INSERT 会自动重新规划并按部分更新再执行一次。
 * **默认值**：true
 * **引入版本**：v3.3.20、v3.4.9、v3.5.8、v4.0.2
 
@@ -1587,11 +1604,19 @@ FROM test;
 * 作用域：Session
 * 默认值：`colocate`
 * 数据类型：String
-* 有效值：`colocate`、`parallel`
+* 有效值：`colocate`、`parallel`、`grouped`
 
 非空并行扫描必须选中至少两个逻辑分区和两个真实 Tablet，所选计算资源中必须至少有两个可用 CN。使用 DISTINCT 修饰符的聚合目前仅支持 `COUNT DISTINCT`。必须启用 Pipeline 执行，且 `parallel_fragment_exec_instance_num = 1`。并行模式会增加网络及聚合状态传输开销，并可能增加非归属节点的远程读取；不保证加速或使用全部计算节点。分区及 Tablet 裁剪保持不变。
 
 并行模式不支持写入/刷新、JOIN、集合运算、CTE、子查询、窗口函数、Grouping Sets、特殊/历史/元数据/缓存统计扫描、采样或扫描 Hint、MV/Rollup 源替换、多个最终扫描、Query Cache、分阶段调度、预备物理分片扫描、单节点计划和非 Pipeline 执行。输入完全裁剪时保留普通空输入聚合语义。不支持的请求会明确报错，不会修改其他会话设置。
+
+`grouped` 是仅限会话的实验性显式选项。它根据 Tablet 范围边界构造临时键范围分组，跨选中分区对齐同一键范围内的扫描任务。同一 SQL 聚合分组的全部输入由同一 CN 上的一个聚合逻辑 driver 处理，从而省去原始行在 CN 之间及节点内的按键 Shuffle。过滤条件、输出别名、HAVING 和最终 ORDER BY/LIMIT 在保留完整分组归属证明时继续生效。该模式的适用性在规划阶段检查，不满足当前实验性实现条件的请求会明确报错。
+
+Grouped 执行一次性捕获源版本和 Tablet 范围，在所有选中物理分区上构造完整键范围分组。至少需要两个选中物理分区和两个非空键范围分组。每个分组交给一个阻塞式 HASH 聚合，仅汇总已最终计算的标量结果。必须启用 Pipeline 和 Group Execution，且 `parallel_fragment_exec_instance_num = 1`。并行模式的限制同样适用；不支持强制多阶段聚合及不兼容的全局延迟物化。此路径禁用排序聚合和逐桶聚合。完全裁剪的输入保留普通空输入语义。PREPARE/EXECUTE 按当前模式重新规划聚合，不复用完整物理计划。
+
+当 `enable_lake_tablet_internal_parallel` 开启时，grouped 扫描支持普通的非 prepared 物理行号拆分。每个完整键分组仍由一个 CN 上的一个聚合逻辑 driver 处理；新增 I/O 任务直接向同一个 driver 提供数据，不引入按键 Shuffle。关闭 `enable_lake_tablet_internal_parallel` 时保留不拆分路径。默认的 16 个 I/O 槽位限制同时活跃的 I/O 数量，并非生成子任务的数量上限。
+
+每次扫描最多支持 1,024 个分组和 8,192 个根裁剪任务；这两个限制不约束生成的 I/O 子任务数量。Group Execution 容量限制仍然适用。EXPLAIN 显示 grouped 执行以及唯一源、分组和根任务数量。`RangeClipTasks` 对成功打开的根裁剪任务计数一次，不包含子任务；`MorselsCount` 包含根任务和子任务。结合 `PeakIOTasks`、扫描时间、行数和远端读取字节数评估 I/O 并发。普通 Tablet 和 Segment 计数可能包含重复任务读取，不代表全局唯一源数量。此模式不保证加速，也不保证 DISTINCT 聚合使用恒定内存。默认模式仍为 `colocate`。
 
 ### resource_group
 
@@ -1822,4 +1847,3 @@ MySQL 服务器的版本，取值等于 FE 参数 `mysql_server_version`。
 
 <EditionSpecificVariable />
 
-<VariableWarehouse />

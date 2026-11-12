@@ -47,6 +47,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.InsertAnalyzer;
 import com.starrocks.sql.analyzer.InsertSourceRefresher;
 import com.starrocks.sql.analyzer.PipeAnalyzer;
@@ -97,6 +98,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.RemoteTransactionMgr;
 import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.type.PrimitiveType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -343,9 +345,24 @@ public class StatementPlanner {
                 refreshRemainingInsertSources(statement, session);
                 takeLock.run();
                 Analyzer.analyze(statement, session);
+                checkQueryOutput(statement);
                 refreshRemainingInsertSources(statement, session);
                 ExplicitTxnStatementValidator.validate(statement, session);
                 return false;
+            }
+        }
+    }
+
+    private static void checkQueryOutput(StatementBase statement) {
+        if (statement instanceof QueryStatement query && !query.hasOutFileClause()) {
+            if (query.isExplain() && !query.isExplainAnalyze()) {
+                return;
+            }
+            for (Field field : query.getQueryRelation().getRelationFields().getAllFields()) {
+                if (field.getType().isScalarType(PrimitiveType.GEOMETRY)) {
+                    throw new SemanticException(
+                            "GEOMETRY query results are not supported; use ST_AsText or ST_AsBinary", query.getPos());
+                }
             }
         }
     }
@@ -640,7 +657,8 @@ public class StatementPlanner {
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         }
 
-        boolean isShortCircuit = ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
+        boolean isShortCircuit = !session.getSessionVariable().isGroupedRangeScan()
+                        && ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
         OptExpression optimizedPlan;
         try (Timer ignored = Tracers.watchScope("Optimizer")) {
             // 2. Optimize logical plan and build physical plan
@@ -730,7 +748,8 @@ public class StatementPlanner {
                 }
 
                 boolean isShortCircuit =
-                        ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
+                        !session.getSessionVariable().isGroupedRangeScan()
+                        && ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
                 OptExpression optimizedPlan;
                 try (Timer ignored = Tracers.watchScope("Optimizer")) {
                     OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
@@ -1014,8 +1033,8 @@ public class StatementPlanner {
                     tbl.getSourceTablePort(),
                     authenticateParams);
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
-                || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
-            // schema table and iceberg and hive table does not need txn
+                || targetTable.isPaimonTable() || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
+            // These targets do not use StarRocks local transactions; their analyzers validate write support.
         } else {
             long dbId = db.getId();
             txnId = transactionMgr.beginTransaction(
@@ -1032,7 +1051,8 @@ public class StatementPlanner {
         stmt.setTxnId(txnId);
     }
 
-    private static void abortTransaction(DmlStmt stmt, ConnectContext session, String errMsg) {
+    /** Aborts the transaction {@link #beginTransaction} opened for stmt, if it opened one. */
+    public static void abortTransaction(DmlStmt stmt, ConnectContext session, String errMsg) {
         long txnId = stmt.getTxnId();
         if (txnId == DmlStmt.INVALID_TXN_ID) {
             return;

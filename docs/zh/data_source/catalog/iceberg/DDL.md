@@ -102,7 +102,7 @@ col_name col_type [COMMENT 'comment'] [DEFAULT default_value]
 
 ##### 默认值
 
-从 v4.1 开始，StarRocks 支持为 Iceberg 表的列设置默认值。此功能需要 Iceberg 格式版本 3（`"format-version" = "3"`）。
+从 v4.1 开始，StarRocks 支持为 Iceberg 表的列设置默认值。此功能需要 Iceberg 格式版本 3 及以上。
 
 **用途：**
 
@@ -117,7 +117,7 @@ col_name col_type DEFAULT default_value
 
 **要求：**
 
-- 表必须使用 Iceberg 格式版本 3（`"format-version" = "3"`）。
+- 表必须使用 Iceberg 格式版本 3 及以上。
 - 数值类型（INT、BIGINT、FLOAT、DOUBLE）、BOOLEAN、STRING 和 DATE/TIMESTAMP 类型的默认值必须使用引号包裹。例如：`DEFAULT "18"`、`DEFAULT "100.0"`、`DEFAULT "true"`。
 
 **示例：**
@@ -179,6 +179,10 @@ ORDER BY (column_name [ASC | DESC] [NULLS FIRST | NULLS LAST], ...)
 - `location`: 表的文件路径。在使用 AWS Glue 且未指定数据库级别位置时是必需的。
 - `file_format`: 文件格式。仅支持 `parquet`（默认）。
 - `compression_codec`: 压缩算法。选项：SNAPPY、GZIP、ZSTD、LZ4（默认：`zstd`）。
+- `format-version`: 表的 Iceberg 格式版本。选项：`1`、`2`、`3`、`4`（默认：`2`）。格式版本 4 从 v26.4 开始支持，StarRocks 对格式版本 4 的表的读写与格式版本 3 相同。Iceberg 将格式版本 4 的表的 Manifest 写为 Parquet 文件。格式版本 4 的表的 location 必须带 URI scheme，例如 `s3://` 或 `hdfs://`，因此 location 不带 scheme 的表无法升级到格式版本 4。
+- `write.metadata.metrics.default`: StarRocks 写入数据文件的列统计信息的默认 metrics 模式。选项：`none`、`counts`、`truncate(N)`、`full`（默认：`truncate(16)`）。`none` 不写统计信息，`counts` 只写值个数和 NULL 个数，`truncate(N)` 还会写上下界，其中 STRING 和 BINARY 的上下界截断为 N 个字符（字节），`full` 写不截断的上下界。
+- `write.metadata.metrics.column.<col>`: 列 `<col>` 的 metrics 模式，覆盖默认模式。选项与 `write.metadata.metrics.default` 相同。
+- `write.metadata.metrics.max-inferred-column-defaults`: 未设置 `write.metadata.metrics.default` 时，只有前 N 列使用默认的 `truncate(16)`，其余列为 `none`（默认：`100`）。
 
 ### 示例
 

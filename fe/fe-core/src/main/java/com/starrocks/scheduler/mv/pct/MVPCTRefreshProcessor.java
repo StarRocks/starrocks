@@ -31,6 +31,8 @@ import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
@@ -78,10 +80,6 @@ import static com.starrocks.scheduler.TaskRun.MV_UNCOPYABLE_PROPERTIES;
  */
 public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
 
-    // One-shot callback invoked after syncAndCheckPCTPartitions and before plan building. Used by
-    // Hybrid fallback to freeze TVR so the pinned state is visible to the plan builder and differ.
-    private Runnable afterSyncHook;
-
     // True when this is a subsequent pinned batch whose job no longer owns the pinning state: a newer
     // job overwrote the owner, or took over and released it when done. Run unpinned, the batch would
     // write past the baseline that job left behind.
@@ -97,10 +95,10 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         if (mvContext.getProperties().get(TaskRun.PINNED_REFRESH_JOB_ID) == null) {
             return false;
         }
-        String owner = mv.getRefreshScheme().getAsyncRefreshContext().getTempTvrOwnerStartTaskRunId();
         String startTaskRunId = getStartTaskRunId();
-        if (owner == null || !owner.equals(startTaskRunId)) {
-            logger.warn("Skip stale pinned batch: pinning owner={}, startTaskRunId={}", owner, startTaskRunId);
+        if (!pinState().isPinnedBy(startTaskRunId)) {
+            logger.warn("Skip stale pinned batch: pinning owner={}, startTaskRunId={}",
+                    pinState().getOwner(), startTaskRunId);
             return true;
         }
         return false;
@@ -113,8 +111,24 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         super(db, mv, mvContext, mvEntity, refreshMode, MVPCTRefreshProcessor.class);
     }
 
-    public void setAfterSyncHook(Runnable afterSyncHook) {
-        this.afterSyncHook = afterSyncHook;
+    private Runnable beforePartitionAlignHook;
+
+    public void setBeforePartitionAlignHook(Runnable beforePartitionAlignHook) {
+        this.beforePartitionAlignHook = beforePartitionAlignHook;
+    }
+
+    /**
+     * Clear-before-run, so the sync loop's retries fire the hook exactly once and every retry reuses
+     * the same frozen snapshot.
+     */
+    @Override
+    public void freezeSnapshotBeforePartitionAlign() {
+        final Runnable hook = this.beforePartitionAlignHook;
+        this.beforePartitionAlignHook = null;
+        if (hook != null) {
+            hook.run();
+        }
+        setupPinnedRangesIfNeeded();
     }
 
     @Override
@@ -138,17 +152,8 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             return ProcessExecPlan.skipped(ProcessExecPlan.SkipReason.STALE_PINNED_BATCH);
         }
 
-        // sync and check partitions of base tables
+        // Also freezes TVR and hydrates the pinned ranges, before it aligns partitions against them.
         mvPctRefreshSynchronizer.syncAndCheckPCTPartitions();
-
-        // Clear-before-run: if the hook throws, the field is still nulled out on retry.
-        final Runnable hook = this.afterSyncHook;
-        this.afterSyncHook = null;
-        if (hook != null) {
-            hook.run();
-        }
-
-        setupPinnedRangesIfNeeded();
 
         // check to refresh partitions of mv and base tables
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
@@ -198,6 +203,7 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                                                       ProcessExecPlan processExecPlan,
                                                       MVRefreshExecutor executor) throws Exception {
         ExecPlan mvExecPlan = processExecPlan.execPlan();
+        clearTvrBaselineBeforeWrite();
         try (Timer ignored = Tracers.watchScope("MVRefreshMaterializedView")) {
             InsertStmt insertStmt = processExecPlan.insertStmt();
             executor.executePlan(mvExecPlan, insertStmt);
@@ -207,6 +213,32 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             updateVersionMeta(mvExecPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions);
         }
         return Constants.TaskRunState.SUCCESS;
+    }
+
+    /**
+     * A batch's write moves the MV past the IVM baseline, so the baseline has to leave the journal before it.
+     * Not on the switch to PCT: a run that then fails to plan, or skips, writes nothing and keeps its baseline.
+     */
+    private void clearTvrBaselineBeforeWrite() {
+        if (mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap().isEmpty()) {
+            return;
+        }
+        Locker locker = new Locker();
+        if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE,
+                Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+            throw new DmlException("refresh of materialized view %s.%s failed before it wrote: failed to acquire " +
+                            "write lock on database %s within %d ms to clear its incremental baseline",
+                    db.getFullName(), mv.getName(), db.getFullName(), Config.mv_refresh_try_lock_timeout_ms);
+        }
+        try {
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mv.getId()) == null) {
+                throw new DmlException("refresh failed: materialized view %s.%s does not exist, " +
+                        "it may have been dropped during refresh", db.getFullName(), mv.getName());
+            }
+            new MVVersionManager(mv, mvContext).clearTvrBaseline(isPinnedMode());
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE);
+        }
     }
 
     private static Map<Table, PCellSortedSet> toTableKeyedRefreshPartitions(
@@ -408,6 +440,7 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                 newProperties.put(TaskRun.MV_NON_REF_TABLE_FINGERPRINT, fingerprint);
             }
         }
+        TaskRun.seedRefreshJobProcessStartTime(newProperties, mvContext.getStatus());
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));

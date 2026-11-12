@@ -50,6 +50,8 @@ import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.zone.ZoneOffsetTransition;
+import java.time.zone.ZoneRules;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -188,6 +190,19 @@ public final class IcebergUtil {
                                                                     Map<Integer, Long> nullValueCounts,
                                                                     Map<Integer, Long> valueCounts,
                                                                     List<SlotDescriptor> slots) {
+        return parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots, false);
+    }
+
+    // `widenTimestampTz`: give a timestamp with time zone bounds that surely contain every value of the file in the
+    // session time zone, for skipping the file, instead of the endpoint conversion the min/max optimization uses.
+    @VisibleForTesting
+    public static Map<Integer, MinMaxValue> parseMinMaxValueBySlots(Schema schema,
+                                                                    Map<Integer, ByteBuffer> lowerBounds,
+                                                                    Map<Integer, ByteBuffer> upperBounds,
+                                                                    Map<Integer, Long> nullValueCounts,
+                                                                    Map<Integer, Long> valueCounts,
+                                                                    List<SlotDescriptor> slots,
+                                                                    boolean widenTimestampTz) {
 
         Preconditions.checkArgument(nullValueCounts != null && valueCounts != null,
                 "nullValueCounts and valueCounts cannot be null");
@@ -233,13 +248,20 @@ public final class IcebergUtil {
                     // Iceberg TIMESTAMP WITH TIME ZONE stores instants in UTC, while StarRocks compares DATETIME
                     // values in the session timezone, so we convert file-level bounds into session-local micros
                     // before sending them to BE.
-                    //
-                    // Note that this is an endpoint conversion on file-level min/max only. For timezones whose
-                    // UTC offset changes over time (for example DST or historical rule changes), UTC->local is
-                    // not strictly monotonic over an arbitrary interval, so the converted low/high remain a
-                    // best-effort approximation rather than an exact local min/max for the full file.
-                    minMaxValue.minValue = adjustTimestampMicrosToSessionTz((Long) low);
-                    minMaxValue.maxValue = adjustTimestampMicrosToSessionTz((Long) high);
+                    if (widenTimestampTz) {
+                        long[] bounds = widenedSessionTzBounds((Long) low, (Long) high);
+                        minMaxValue.minValue = bounds[0];
+                        minMaxValue.maxValue = bounds[1];
+                    } else {
+                        // The min/max optimization answers MIN/MAX with these values, so they must be exact.
+                        // UTC->local is not monotonic across a DST fall-back: give up the whole file there, as
+                        // for a promoted date bound above.
+                        if (!sessionTzEndpointsExact((Long) low, (Long) high)) {
+                            return new HashMap<>();
+                        }
+                        minMaxValue.minValue = adjustTimestampMicrosToSessionTz((Long) low);
+                        minMaxValue.maxValue = adjustTimestampMicrosToSessionTz((Long) high);
+                    }
                 }
             }
         }
@@ -252,6 +274,83 @@ public final class IcebergUtil {
     public static boolean isPromotedDateBound(Type type, ByteBuffer bound) {
         return bound != null && bound.remaining() < 8 &&
                 (type.typeId() == Type.TypeID.TIMESTAMP || type.typeId() == Type.TypeID.TIMESTAMP_NANO);
+    }
+
+    // Session-local micros of a UTC instant are the instant plus the zone offset then. The offset may change inside
+    // the file's range (DST, rule changes), where UTC->local is not monotonic, so no local value of the file is below
+    // low + the least offset in force over [low, high], nor above high + the greatest. A fixed offset is exact.
+    private static final long MAX_ZONE_OFFSET_MICROS = ZoneOffset.MAX.getTotalSeconds() * 1_000_000L;
+    // a range crossing more transitions (centuries of DST) takes the widest offset any zone can have instead
+    private static final int MAX_OFFSET_TRANSITIONS = 1024;
+
+    @VisibleForTesting
+    static long[] widenedSessionTzBounds(long lowMicros, long highMicros) {
+        ZoneRules rules = TimeUtils.getTimeZone().toZoneId().getRules();
+        Instant low = microsToInstant(lowMicros);
+        Instant high = microsToInstant(highMicros);
+        long minOffset = Math.min(rules.getOffset(low).getTotalSeconds(), rules.getOffset(high).getTotalSeconds());
+        long maxOffset = Math.max(rules.getOffset(low).getTotalSeconds(), rules.getOffset(high).getTotalSeconds());
+        int transitions = 0;
+        for (ZoneOffsetTransition t = rules.nextTransition(low); t != null && !t.getInstant().isAfter(high);
+                t = rules.nextTransition(t.getInstant())) {
+            if (++transitions > MAX_OFFSET_TRANSITIONS) {
+                return new long[] {saturatedAdd(lowMicros, -MAX_ZONE_OFFSET_MICROS),
+                        saturatedAdd(highMicros, MAX_ZONE_OFFSET_MICROS)};
+            }
+            minOffset = Math.min(minOffset, t.getOffsetAfter().getTotalSeconds());
+            maxOffset = Math.max(maxOffset, t.getOffsetAfter().getTotalSeconds());
+        }
+        return new long[] {saturatedAdd(lowMicros, minOffset * 1_000_000L),
+                saturatedAdd(highMicros, maxOffset * 1_000_000L)};
+    }
+
+    private static Instant microsToInstant(long micros) {
+        return Instant.ofEpochSecond(Math.floorDiv(micros, 1_000_000L), Math.floorMod(micros, 1_000_000L) * 1000L);
+    }
+
+    private static long saturatedAdd(long a, long b) {
+        long sum = a + b;
+        // overflow only when both operands share a sign the sum does not
+        if (((a ^ sum) & (b ^ sum)) < 0) {
+            return a < 0 ? Long.MIN_VALUE : Long.MAX_VALUE;
+        }
+        return sum;
+    }
+
+    /**
+     * Whether the session-local times of {@code low} and {@code high} are the local min and max of every instant in
+     * [low, high]. UTC->local only steps back at a backward offset shift (a DST fall-back): a value just after the
+     * shift may read below local(low), or one just before it above local(high), only when the shift lies within its
+     * own size of that end, so only the transitions within the widest offset of either end are checked.
+     */
+    @VisibleForTesting
+    static boolean sessionTzEndpointsExact(long lowMicros, long highMicros) {
+        ZoneRules rules = TimeUtils.getTimeZone().toZoneId().getRules();
+        if (rules.isFixedOffset()) {
+            return true;
+        }
+        long localLow = adjustTimestampMicrosToSessionTz(lowMicros);
+        long localHigh = adjustTimestampMicrosToSessionTz(highMicros);
+        Instant low = microsToInstant(lowMicros);
+        Instant high = microsToInstant(highMicros);
+        long window = ZoneOffset.MAX.getTotalSeconds();
+        Instant highWindow = high.minusSeconds(window);
+        for (Instant from : List.of(low, highWindow.isAfter(low) ? highWindow : low)) {
+            Instant until = from.plusSeconds(window).isBefore(high) ? from.plusSeconds(window) : high;
+            for (ZoneOffsetTransition t = rules.nextTransition(from); t != null && !t.getInstant().isAfter(until);
+                    t = rules.nextTransition(t.getInstant())) {
+                if (!t.isOverlap()) {
+                    continue;
+                }
+                long at = t.getInstant().getEpochSecond() * 1_000_000L;
+                // the least local time after the shift, and the bound of those before it
+                if (at + t.getOffsetAfter().getTotalSeconds() * 1_000_000L < localLow
+                        || at + t.getOffsetBefore().getTotalSeconds() * 1_000_000L > localHigh) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private static long adjustTimestampMicrosToSessionTz(long micros) {
@@ -269,9 +368,19 @@ public final class IcebergUtil {
                                                                             Map<Integer, Long> nullValueCounts,
                                                                             Map<Integer, Long> valueCounts,
                                                                             List<SlotDescriptor> slots) {
+        return toThriftMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots, false);
+    }
+
+    public static Map<Integer, TExprMinMaxValue> toThriftMinMaxValueBySlots(Schema schema,
+                                                                            Map<Integer, ByteBuffer> lowerBounds,
+                                                                            Map<Integer, ByteBuffer> upperBounds,
+                                                                            Map<Integer, Long> nullValueCounts,
+                                                                            Map<Integer, Long> valueCounts,
+                                                                            List<SlotDescriptor> slots,
+                                                                            boolean widenTimestampTz) {
         Map<Integer, TExprMinMaxValue> result = new HashMap<>();
-        Map<Integer, MinMaxValue> minMaxValues =
-                parseMinMaxValueBySlots(schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+        Map<Integer, MinMaxValue> minMaxValues = parseMinMaxValueBySlots(schema, lowerBounds, upperBounds,
+                nullValueCounts, valueCounts, slots, widenTimestampTz);
         for (SlotDescriptor slot : slots) {
             Types.NestedField field = schema.findField(slot.getColumn().getName());
             if (field == null) {

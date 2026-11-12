@@ -57,8 +57,7 @@ TEST_F(FileScannerTest, sample_schema) {
         // sample 1 file.
         // file1: col1,int64
         // result: col1,BIGINT
-        const std::vector<std::pair<std::string, TypeDescriptor>> expected_schema = {
-                {"col1", TypeDescriptor::from_logical_type(TYPE_BIGINT)}};
+        const std::vector<std::pair<std::string, TypeDescriptor>> expected_schema = {{"col1", TYPE_BIGINT_DESC}};
 
         RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
         auto scan_range = create_scan_range({test_exec_dir + "/test_data/parquet_data/schema3.parquet",
@@ -85,11 +84,10 @@ TEST_F(FileScannerTest, sample_schema) {
         // file1: col1,int64
         // file3: col2,int32; col3,int32; col4,float
         // result: col1,BIGINT; col2,INT; col3,INT; col4,FLOAT
-        const std::vector<std::pair<std::string, TypeDescriptor>> expected_schema = {
-                {"col1", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
-                {"col2", TypeDescriptor::from_logical_type(TYPE_INT)},
-                {"col3", TypeDescriptor::from_logical_type(TYPE_INT)},
-                {"col4", TypeDescriptor::from_logical_type(TYPE_FLOAT)}};
+        const std::vector<std::pair<std::string, TypeDescriptor>> expected_schema = {{"col1", TYPE_BIGINT_DESC},
+                                                                                     {"col2", TYPE_INT_DESC},
+                                                                                     {"col3", TYPE_INT_DESC},
+                                                                                     {"col4", TYPE_FLOAT_DESC}};
 
         RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
         auto scan_range = create_scan_range({test_exec_dir + "/test_data/parquet_data/schema1.parquet",
@@ -117,11 +115,10 @@ TEST_F(FileScannerTest, sample_schema) {
         // file2: col2,byte_array; col3,int64; col4,double
         // file3: col2,int32; col3,int32; col4,float
         // result: col1,BIGINT; col2,VARCHAR; col3,BIGINT; col4,DOUBLE
-        const std::vector<std::pair<std::string, TypeDescriptor>> expected_schema = {
-                {"col1", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
-                {"col2", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
-                {"col3", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
-                {"col4", TypeDescriptor::from_logical_type(TYPE_DOUBLE)}};
+        const std::vector<std::pair<std::string, TypeDescriptor>> expected_schema = {{"col1", TYPE_BIGINT_DESC},
+                                                                                     {"col2", TYPE_VARCHAR_DESC},
+                                                                                     {"col3", TYPE_BIGINT_DESC},
+                                                                                     {"col4", TYPE_DOUBLE_DESC}};
 
         RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
         auto scan_range = create_scan_range({test_exec_dir + "/test_data/parquet_data/schema1.parquet",
