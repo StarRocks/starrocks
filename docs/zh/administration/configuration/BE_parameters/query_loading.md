@@ -414,6 +414,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：发起 Hedged Read 请求前需要等待多少毫秒。例如，假设该参数设置为 `30`，那么如果一个 Read 任务未能在 30 毫秒内返回结果，则 HDFS 客户端会立即发起一个 Hedged Read，从目标数据块的副本上读取数据。该参数对应 HDFS 集群配置文件 **hdfs-site.xml** 中的 `dfs.client.hedged.read.threshold.millis` 参数。
 - 引入版本：v3.0
 
+### iceberg_metadata_table_cache_capacity
+
+- 默认值：128
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Iceberg 元数据表（例如 `t$files`、`t$partitions`）的 JNI 扫描器在单个 BE 或 CN 节点上保留的空闲的已反序列化 Iceberg 表的最大数量。同一个查询的所有扫描任务共享一份反序列化后的表，而不是每个任务各自反序列化一份，因此 JVM 堆内存占用与并发扫描任务数无关。60 秒未被使用的表会被释放。取值小于或等于 `0` 时，之后开始的扫描不再共享。
+- 引入版本：-
+
 ### io_coalesce_adaptive_lazy_active
 
 - 默认值：true

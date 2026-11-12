@@ -129,7 +129,14 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
                     }
 
                     TableOperations ops =
+<<<<<<< HEAD
                             new StaticTableOperations(metadataFileLocation, io);
+=======
+                            new StaticTableOperations(metadataFileLocation, io());
+                    // StaticTableOperations.current() loads the metadata without synchronization, and the table
+                    // can be shared by concurrent scan tasks: load it before publishing the table.
+                    ops.current();
+>>>>>>> 0489f28 ([Enhancement][RB-225] Share the deserialized Iceberg table across metadata scan tasks (#83094))
                     this.lazyTable = newTable(ops, name);
                 }
             }
