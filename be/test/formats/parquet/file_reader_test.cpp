@@ -3183,6 +3183,61 @@ TEST_F(FileReaderTest, bloom_filter_reader_test_hit) {
     EXPECT_EQ(file_reader->row_group_size(), 1);
 }
 
+/*
+    c1 = [f"a{i:04d}" for i in range(1000) if i != 500] + ["a0999"] + [f"b{i:04d}" for i in range(1000)]
+    table = pa.table({
+        "c0": pa.array(range(len(c1)), pa.int32()),
+        "c_struct": pa.StructArray.from_arrays(
+                [pa.array(range(len(c1)), pa.int32()), pa.array(c1, pa.string())], ["c0", "c1"]),
+    })
+    pq.write_table(table, path, row_group_size=1000, use_dictionary=False, write_page_index=False,
+                   bloom_filter_options={"c_struct.c1": {"ndv": 1000, "fpp": 0.01}})
+ */
+TEST_F(FileReaderTest, StructSubfieldStringBloomFilter) {
+    const std::string file_path = "./be/test/formats/parquet/test_data/struct_subfield_bloom_filter.parquet";
+    TypeDescriptor type_struct = TypeDescriptor::create_struct_type({"c0", "c1"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC});
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {"c_struct", type_struct}, {""}};
+
+    auto scan = [&](const std::string& value, size_t* total_rows, int* bloom_filtered_row_groups) {
+        auto* ctx = _create_scan_context(slot_descs, file_path);
+        auto& conjunct_ctxs = ctx->format_scan_context.conjunct_ctxs_by_slot[1];
+        _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 1, type_struct, {"c1"}, value, &conjunct_ctxs);
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        ParquetUTBase::setup_conjuncts_manager(conjunct_ctxs, nullptr, tuple_desc, _runtime_state, ctx);
+        FormatScannerStats stats;
+        ctx->format_scan_context.stats = &stats;
+
+        auto file_reader = _create_file_reader(file_path);
+        Status status = file_reader->init(&ctx->format_scan_context);
+        ASSERT_OK(status);
+
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+        chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+        *total_rows = 0;
+        while (!status.is_end_of_file()) {
+            chunk->reset();
+            status = file_reader->get_next(&chunk);
+            chunk->check_or_die();
+            *total_rows += chunk->num_rows();
+        }
+        *bloom_filtered_row_groups = stats.bloom_filter_success_counter;
+    };
+
+    size_t total_rows = 0;
+    int bloom_filtered_row_groups = 0;
+
+    // Row group 0 holds 'a0400' and its bloom filter contains it, so it must not be pruned.
+    scan("a0400", &total_rows, &bloom_filtered_row_groups);
+    EXPECT_EQ(1, total_rows);
+    EXPECT_EQ(0, bloom_filtered_row_groups);
+
+    // 'a0500' is inside row group 0's min/max but absent, so only the bloom filter can prune it.
+    scan("a0500", &total_rows, &bloom_filtered_row_groups);
+    EXPECT_EQ(0, total_rows);
+    EXPECT_EQ(1, bloom_filtered_row_groups);
+}
+
 TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop) {
     Utils::SlotDesc slot_descs[] = {{"c0", TYPE_VARCHAR_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_DATETIME_DESC}, {""}};
     const std::string bloom_filter_file =
