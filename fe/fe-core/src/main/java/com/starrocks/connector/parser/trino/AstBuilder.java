@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.ast.CTERelation;
@@ -245,6 +246,9 @@ import static com.starrocks.type.FloatType.FLOAT;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
+    private static final String WITH_TIMEZONE = "with_timezone";
+    private static final String AT_TIMEZONE = "at_timezone";
+
     private final long sqlMode;
 
     public AstBuilder(long sqlMode) {
@@ -799,12 +803,19 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitFunctionCall(FunctionCall node, ParseTreeContext context) {
+        if (node.getName().toString().equalsIgnoreCase(AT_TIMEZONE) && node.getArguments().size() == 2
+                && isWithTimezone(node.getArguments().get(0))) {
+            return convertWithTimezoneToZone((FunctionCall) node.getArguments().get(0), node.getArguments().get(1),
+                    context);
+        }
         List<Expr> arguments = visit(node.getArguments(), context, Expr.class);
 
         Expr callExpr;
         String functionName = node.getName().toString();
         Expr convertedFunctionCall = Trino2SRFunctionCallTransformer.convert(node.getName().toString(), arguments);
-        if (convertedFunctionCall != null) {
+        if (isWithTimezone(node)) {
+            callExpr = convertWithTimezone(node, arguments);
+        } else if (convertedFunctionCall != null) {
             callExpr = convertedFunctionCall;
         } else if (FunctionSet.INFORMATION_FUNCTIONS.contains(functionName)) {
             callExpr = new InformationFunction(node.getName().toString().toUpperCase());
@@ -1128,9 +1139,62 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitAtTimeZone(AtTimeZone node, ParseTreeContext context) {
+        if (isWithTimezone(node.getValue())) {
+            return convertWithTimezoneToZone((FunctionCall) node.getValue(), node.getTimeZone(), context);
+        }
         Expr dt = (Expr) visit(node.getValue(), context);
         Expr tz = (Expr) visit(node.getTimeZone(), context);
         return new FunctionCallExpr("convert_tz", List.of(dt, new VariableExpr("time_zone"), tz));
+    }
+
+    /*
+     * StarRocks DATETIME has no zone, so the dialect represents Trino's TIMESTAMP WITH TIME ZONE as a DATETIME in the
+     * session time zone. with_timezone(ts, zone) is exact under that model only when it is converted straight to
+     * another zone, or when zone is the session time zone. Anywhere else (a projection, a CTE column, date_trunc and
+     * other calendar functions) the result would silently use the session time zone instead of zone, so those uses
+     * are rejected with an UnsupportedException, which also skips the StarRocks-dialect fallback.
+     */
+    private static boolean isWithTimezone(Expression expression) {
+        if (!(expression instanceof FunctionCall)) {
+            return false;
+        }
+        FunctionCall call = (FunctionCall) expression;
+        return call.getName().toString().equalsIgnoreCase(WITH_TIMEZONE) && call.getArguments().size() == 2;
+    }
+
+    // with_timezone(ts, from) AT TIME ZONE to, or at_timezone(with_timezone(ts, from), to) -> convert_tz(ts, from, to),
+    // without going through the session time zone
+    private Expr convertWithTimezoneToZone(FunctionCall withTimezone, Expression toZone, ParseTreeContext context) {
+        List<Expr> arguments = visit(withTimezone.getArguments(), context, Expr.class);
+        Expr to = (Expr) visit(toZone, context);
+        return new FunctionCallExpr("convert_tz", List.of(arguments.get(0), arguments.get(1), to));
+    }
+
+    // with_timezone(ts, zone) anywhere else -> convert_tz(ts, zone, @time_zone), allowed only when zone is a literal
+    // naming the session time zone, so the value keeps its zone
+    private Expr convertWithTimezone(FunctionCall node, List<Expr> arguments) {
+        Expression zone = node.getArguments().get(1);
+        Optional<ZoneId> zoneId = zone instanceof StringLiteral ?
+                parseZoneId(((StringLiteral) zone).getValue()) : Optional.empty();
+        ZoneId sessionZone = TimeUtils.getTimeZone().toZoneId();
+        if (zoneId.isEmpty() || !(zoneId.get().normalized().equals(sessionZone.normalized())
+                || zoneId.get().getRules().equals(sessionZone.getRules()))) {
+            throw unsupportedException(String.format("Trino parser on StarRocks does not support %s here: with_timezone "
+                    + "is supported only inside AT TIME ZONE or at_timezone, or with the session time zone %s",
+                    node, sessionZone));
+        }
+        return new FunctionCallExpr("convert_tz", List.of(arguments.get(0),
+                new com.starrocks.sql.ast.expression.StringLiteral(zoneId.get().getId()), new VariableExpr("time_zone")));
+    }
+
+    // Trino zone names are case-insensitive
+    private static Optional<ZoneId> parseZoneId(String zone) {
+        try {
+            return Optional.of(ZoneId.of(zone, TimeUtils.TIME_ZONE_ALIAS_MAP));
+        } catch (DateTimeException e) {
+            return ZoneId.getAvailableZoneIds().stream().filter(id -> id.equalsIgnoreCase(zone)).findFirst()
+                    .map(ZoneId::of);
+        }
     }
 
     @Override
