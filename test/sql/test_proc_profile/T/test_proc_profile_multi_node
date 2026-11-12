@@ -22,8 +22,8 @@ shell: curl -s -u root: "${url}/proc_profile" | grep -c "BE:"
 -- This should fetch profile list from BE using the JSON API
 shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -c "Process Profiles"
 
--- Test 6: Test accessing BE node and verify tab is active
-shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -c "node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)"
+-- Test 6: Verify the active BE tab uses a URI-encoded node parameter
+shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)" | grep -F -c "<li class=\"active\"><a href=\"/proc_profile?node=BE%3A$(cat be_ip.txt)%3A$(cat be_http_port.txt)\">"
 
 -- Test 7: Test FE /proc_profile/file endpoint with FE node (default)
 -- Get a profile filename from FE page if exists
