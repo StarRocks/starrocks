@@ -456,22 +456,15 @@ public class ExpressionAnalyzer {
         public Void visit(ParseNode node, Scope scope) {
             node.accept(this, scope);
             if (node instanceof Expr expression) {
-                checkNestedGeoType(expression.getType(), expression);
+                PolymorphicFunctionAnalyzer.checkMapKeyType(expression.getType(), expression.getPos());
                 if (expression instanceof FunctionCallExpr call && call.getFn() != null) {
                     // The final argument type also covers varargs.
                     for (Type argumentType : call.getFn().getArgs()) {
-                        checkNestedGeoType(argumentType, expression);
+                        PolymorphicFunctionAnalyzer.checkMapKeyType(argumentType, expression.getPos());
                     }
                 }
             }
             return null;
-        }
-
-        private void checkNestedGeoType(Type type, Expr expression) {
-            if (type.hasNestedGeoType()) {
-                throw new SemanticException("Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT: "
-                        + type.toSql() + " in " + ExprToSql.toSql(expression), expression.getPos());
-            }
         }
 
         @Override
