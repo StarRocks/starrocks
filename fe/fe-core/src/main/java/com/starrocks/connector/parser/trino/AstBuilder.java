@@ -504,42 +504,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitUnnest(Unnest node, ParseTreeContext context) {
         List<Expr> arguments = visit(node.getExpressions(), context, Expr.class);
-        List<Expr> expressions = new ArrayList<>();
-
-        for (Expr arg : arguments) {
-            if (arg instanceof ArrayExpr) {
-                if (!arg.getChildren().isEmpty()) {
-                    // need to covert array[row(1,2), row(3,4))] to array[1,3], array[2,4], so SR could unnest it
-                    Expr firstArrayElement = arg.getChildren().get(0);
-                    if (firstArrayElement instanceof FunctionCallExpr && ((FunctionCallExpr) firstArrayElement).getFunctionName().
-                            equalsIgnoreCase("row")) {
-                        List<List<Expr>> items = new ArrayList<>();
-                        for (Expr row : arg.getChildren()) {
-                            int rowIndex = 0;
-                            for (Expr literal : row.getChildren()) {
-                                if (items.size() <= rowIndex) {
-                                    items.add(new ArrayList<>());
-                                    items.get(rowIndex).add(literal);
-                                } else {
-                                    items.get(rowIndex).add(literal);
-                                }
-                                ++rowIndex;
-                            }
-                        }
-
-                        for (List<Expr> item : items) {
-                            Expr arrayExpr = new ArrayExpr(null, item);
-                            expressions.add(arrayExpr);
-                        }
-                        continue;
-                    }
-                }
-            }
-            expressions.add(arg);
-        }
-
-        FunctionCallExpr functionCallExpr = new FunctionCallExpr("unnest", expressions);
-        TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(functionCallExpr);
+        // Keep each array argument intact. Which ROW fields become columns depends on the analyzed element types,
+        // so the analyzer derives the visible columns and the planner extracts the fields after UNNEST.
+        TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(new FunctionCallExpr("unnest", arguments));
+        tableFunctionRelation.setExpandRowFields(true);
         return tableFunctionRelation;
     }
 

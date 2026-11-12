@@ -144,11 +144,14 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.tuple.Triple;
@@ -1057,9 +1060,22 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                     .setUseSemiAnti(false)
                     .setUnCorrelationSubqueryPredicateColumns(new ColumnRefSet())
                     .setNeedOutputRightChildColumns(true).build();
-            return new LogicalPlan(
-                    new OptExprBuilder(root, Lists.newArrayList(leftPlan.getRootBuilder(), rightPlan.getRootBuilder()),
-                            expressionMapping), expressionMapping.getFieldMappings(), List.of());
+            OptExprBuilder builder = new OptExprBuilder(root,
+                    Lists.newArrayList(leftPlan.getRootBuilder(), rightPlan.getRootBuilder()), expressionMapping);
+            if (node.getRight() instanceof TableFunctionRelation) {
+                // Extract expanded ROW fields above the join, so a LEFT JOIN's NULL-padded row gives NULL fields.
+                Map<ColumnRefOperator, ScalarOperator> rowFields = buildRowFieldProjection(
+                        (TableFunctionRelation) node.getRight(),
+                        ((LogicalTableFunctionOperator) rightPlan.getRootBuilder().getRoot().getOp()).getFnResultColRefs(),
+                        rightFieldMappings);
+                if (rowFields != null) {
+                    Map<ColumnRefOperator, ScalarOperator> projection = new HashMap<>();
+                    leftFieldMappings.forEach(column -> projection.put(column, column));
+                    projection.putAll(rowFields);
+                    builder = builder.withNewRoot(new LogicalProjectOperator(projection));
+                }
+            }
+            return new LogicalPlan(builder, expressionMapping.getFieldMappings(), List.of());
         }
 
         LogicalPlan leftPlan = visit(node.getLeft());
@@ -1185,17 +1201,32 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         }
 
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
+        // The relation's visible columns. They are the table function's output columns, except that a Trino UNNEST
+        // of ROW elements exposes one column per ROW field, which visitJoin extracts after the UNNEST.
+        List<ColumnRefOperator> fieldMappings = new ArrayList<>();
         TableFunction tableFunction = node.getTableFunction();
 
         for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
+            Type type = tableFunction.getTableFnReturnTypes().get(i);
+            if (node.expandsToRowFields(type)) {
+                outputColumns.add(columnRefFactory.create(tableFunction.functionName(), type, true));
+                for (StructField field : ((StructType) type).getFields()) {
+                    String colName = node.getColumnOutputNames().get(fieldMappings.size());
+                    fieldMappings.add(columnRefFactory.create(colName, field.getType(), true));
+                }
+                continue;
+            }
+
             String colName;
             if (node.getColumnOutputNames() == null) {
                 colName = tableFunction.getDefaultColumnNames().get(i);
             } else {
-                colName = node.getColumnOutputNames().get(i);
+                colName = node.getColumnOutputNames().get(fieldMappings.size());
             }
 
-            outputColumns.add(columnRefFactory.create(colName, tableFunction.getTableFnReturnTypes().get(i), true));
+            ColumnRefOperator column = columnRefFactory.create(colName, type, true);
+            outputColumns.add(column);
+            fieldMappings.add(column);
         }
 
         // Translate the arguments one by one instead of as a scalar call: scalar NULL propagation would fold the
@@ -1238,7 +1269,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
         Operator root = new LogicalTableFunctionOperator(outputColumns, node.getTableFunction(), projectMap);
         return new LogicalPlan(new OptExprBuilder(root, Collections.emptyList(),
-                new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputColumns)),
+                new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), fieldMappings)),
                 null, List.of());
     }
 
@@ -1279,6 +1310,32 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                 outputVariables, List.of());
     }
 
+    /**
+     * Maps each visible column of a Trino UNNEST to the table function column it is, or to the immediate ROW field
+     * it extracts from one. Returns null when the relation exposes the table function's columns unchanged.
+     */
+    private static Map<ColumnRefOperator, ScalarOperator> buildRowFieldProjection(TableFunctionRelation node,
+                                                                                 List<ColumnRefOperator> resultColumns,
+                                                                                 List<ColumnRefOperator> fieldMappings) {
+        if (resultColumns.equals(fieldMappings)) {
+            return null;
+        }
+        Map<ColumnRefOperator, ScalarOperator> projection = new HashMap<>();
+        int field = 0;
+        for (ColumnRefOperator column : resultColumns) {
+            if (node.expandsToRowFields(column.getType())) {
+                for (StructField structField : ((StructType) column.getType()).getFields()) {
+                    projection.put(fieldMappings.get(field++),
+                            new SubfieldOperator(column, structField.getType(), List.of(structField.getName())));
+                }
+            } else {
+                projection.put(fieldMappings.get(field++), column);
+            }
+        }
+        Preconditions.checkState(field == fieldMappings.size());
+        return projection;
+    }
+
     @Override
     public LogicalPlan visitNormalizedTableFunction(NormalizedTableFunctionRelation node, ExpressionMapping context) {
         if (node.getRight() instanceof TableFunctionRelation
@@ -1289,7 +1346,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         LogicalPlan plan = visitJoin(node, context);
         // Column prune, only the table function columns should be returned.
         OptExprBuilder rootBuilder = plan.getRootBuilder();
-        rootBuilder.setExpressionMapping(rootBuilder.getInputs().get(1).getExpressionMapping());
+        List<ColumnRefOperator> fields = rootBuilder.getFieldMappings();
+        rootBuilder.setExpressionMapping(new ExpressionMapping(node.getScope(),
+                fields.subList(node.getLeft().getRelationFields().size(), fields.size())));
         return plan;
     }
 
