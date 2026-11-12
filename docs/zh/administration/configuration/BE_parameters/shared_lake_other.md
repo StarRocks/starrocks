@@ -326,6 +326,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：远端 IO 调度器启用时，如果 lake 查询扫描逐个读取一个 Tablet 的 Segment（即该 Tablet 没有切分给多个扫描任务），那么当前 Segment 的块全部发出读取后，扫描会一边读当前 Segment，一边提前读取后面几个 Segment 开头的块。提前预读的 Segment 最多为该值。只有当这些 Segment 已发出读取但还没读的块合计少于 `remote_prefetch_window_blocks` 个缓存块时，才会开始预读下一个 Segment，因此最后开始的那个 Segment 可能让合计达到窗口的两倍左右。设为 `0` 表示关闭，每个 Segment 轮到时才开始预读。切分扫描、导入和 Compaction 不受影响。查询 profile 中的 SegmentReadAheadStarted 记录提前开始预读的 Segment 数。
 - 引入版本：-
 
+### lake_scan_parallel_segment_open
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，查询扫描是否一次性打开 Tablet 所有 Rowset 的 Segment（在 Segment 加载线程池中每个 Segment 一个任务），而不是逐个 Rowset 依次打开，并并行构建各 Rowset 的迭代器。仅对查询扫描生效，且仅在启用远程 I/O 调度器时生效；调度器关闭时该参数不起作用。导入、Compaction 及其他读取仍由 `enable_load_segment_parallel` 控制。Footer 已在 Segment 元数据缓存中打开的 Segment 直接复用，不再提交任务。Query Profile 中，这类 Segment 计入 `TabletPrepareCachedSegments`，Footer 读取计入其他 `TabletPrepare*` 指标。
+- 引入版本：-
+
 ### lake_segment_metadata_cache_limit_percent
 
 - 默认值：10

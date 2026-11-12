@@ -329,6 +329,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: With the remote I/O scheduler active, a lake query scan that reads a tablet's segments one after another (the tablet is not split across scan tasks) starts fetching the first blocks of the next segments while it is still reading the current one, once the current segment has asked for all of its own blocks. At most this many segments are read ahead. A next segment starts only while the blocks that all of them have asked for and not yet read are fewer than `remote_prefetch_window_blocks` cache blocks, so the segment started last can take that total to about twice the window. `0` disables it: each segment starts its read-ahead only when its turn comes. Split scans, loads, and compaction are not affected. The query profile reports SegmentReadAheadStarted.
 - Introduced in: -
 
+### lake_scan_parallel_segment_open
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a query scan in a shared-data cluster opens the segments of all rowsets of a tablet at once, one task per segment on the segment loading thread pool, instead of one rowset after another, and builds the iterators of the rowsets in parallel. It takes effect only for query scans and only while the remote I/O scheduler is enabled; with the scheduler disabled, this item has no effect. Loads, compaction, and other reads keep following `enable_load_segment_parallel`. Segments whose footers are already open in the segment metadata cache are used without a task. The query profile reports them in `TabletPrepareCachedSegments`, and the footer reads in the other `TabletPrepare*` counters.
+- Introduced in: -
+
 ### lake_segment_metadata_cache_limit_percent
 
 - Default: 10

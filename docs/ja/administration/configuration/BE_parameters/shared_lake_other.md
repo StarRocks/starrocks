@@ -329,6 +329,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: リモート IO スケジューラーが有効な場合、Tablet の Segment を順番に読む lake クエリスキャン（Tablet が複数のスキャンタスクに分割されていない場合）は、現在の Segment が自身のブロックをすべて要求し終えると、現在の Segment を読みながら後続の Segment の先頭ブロックの取得を開始します。先読みする Segment はこの値までです。それらが要求済みで未読のブロックの合計が `remote_prefetch_window_blocks` 個のキャッシュブロック未満のときにのみ次の Segment の先読みを開始するため、最後に開始した Segment によって合計がウィンドウの約 2 倍に達することがあります。`0` を指定すると無効になり、各 Segment は自分の順番が来たときに先読みを開始します。分割スキャン、取り込み、Compaction には影響しません。クエリプロファイルの SegmentReadAheadStarted に記録されます。
 - 導入バージョン: -
 
+### lake_scan_parallel_segment_open
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタのクエリスキャンで、タブレットのすべての Rowset の Segment を Rowset ごとに順番に開くのではなく、Segment ロードスレッドプール上で Segment ごとに 1 タスクとして一度に開き、各 Rowset のイテレータを並列に構築するかどうか。クエリスキャンにのみ適用され、リモート I/O スケジューラが有効な場合にのみ有効です。スケジューラが無効な場合、この項目は効果がありません。ロード、コンパクション、その他の読み取りは引き続き `enable_load_segment_parallel` に従います。フッターが Segment メタデータキャッシュですでに開かれている Segment は、タスクを使わずにそのまま使用されます。クエリプロファイルでは、これらは `TabletPrepareCachedSegments` に、フッターの読み取りはその他の `TabletPrepare*` カウンタに報告されます。
+- 導入バージョン: -
+
 ### lake_segment_metadata_cache_limit_percent
 
 - デフォルト: 10
