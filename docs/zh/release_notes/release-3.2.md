@@ -479,7 +479,7 @@ description: "StarRocks 3.2 版本发布说明：统一 Catalog、Hive 托管表
 - 系统变量 [sql_mode](https://docs.starrocks.io/zh/docs/3.2/reference/System_variable/#sql_mode) 增加 `GROUP_CONCAT_LEGACY` 选项，用以兼容 [group_concat](https://docs.starrocks.io/zh/docs/3.2/sql-reference/sql-functions/string-functions/group_concat/) 函数在 2.5（不含）版本之前的实现逻辑。[#36150](https://github.com/StarRocks/starrocks/pull/36150)
 - 隐藏了审计日志（Audit Log）中 [Broker Load 作业里 AWS S3](https://docs.starrocks.io/zh/docs/3.2/loading/s3/) 的鉴权信息 `aws.s3.access_key` 和 `aws.s3.access_secret`。[#36571](https://github.com/StarRocks/starrocks/pull/36571)
 - 在 `be_tablets` 表中增加 `INDEX_DISK` 记录持久化索引的磁盘使用量，单位是 Bytes。[#35615](https://github.com/StarRocks/starrocks/pull/35615)
-- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/3.2/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加 `OtherMsg`，展示最后一个失败的任务的相关信息。[#35806](https://github.com/StarRocks/starrocks/pull/35806)
+- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/3.2/sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD/) 返回结果中增加 `OtherMsg`，展示最后一个失败的任务的相关信息。[#35806](https://github.com/StarRocks/starrocks/pull/35806)
 
 ### 问题修复
 
@@ -522,12 +522,12 @@ description: "StarRocks 3.2 版本发布说明：统一 Catalog、Hive 托管表
   - 支持 `columns_from_path` 参数，能够从文件路径中提取字段信息。
   - 支持导入复杂类型（JSON、ARRAY、MAP 及 STRUCT）的数据。
 - 支持使用 INSERT INTO FILES() 语句将数据导出至 AWS S3 或 HDFS 中的 Parquet 格式的文件。有关详细说明，请参见[使用 INSERT INTO FILES 导出数据](https://docs.starrocks.io/zh/docs/3.2/unloading/unload_using_insert_into_files/)。
-- 通过增强 ALTER TABLE 命令提供了 [optimize table 功能](https://docs.starrocks.io/zh/docs/3.2/table_design/Data_distribution#建表后优化数据分布自-32)，可以调整表结构并重组数据，以优化查询和导入的性能。支持的调整项包括：分桶方式和分桶数、排序键，以及可以只调整部分分区的分桶数。
+- 通过增强 ALTER TABLE 命令提供了 [optimize table 功能](https://docs.starrocks.io/zh/docs/3.2/table_design/data_distribution/#建表后优化数据分布自-32)，可以调整表结构并重组数据，以优化查询和导入的性能。支持的调整项包括：分桶方式和分桶数、排序键，以及可以只调整部分分区的分桶数。
 - 支持使用 PIPE 导入方式从[云存储 S3](https://docs.starrocks.io/zh/docs/3.2/loading/s3/#通过-pipe-导入) 或 [HDFS](https://docs.starrocks.io/zh/docs/3.2/loading/hdfs_load/#通过-pipe-导入) 中导入大规模数据和持续导入数据。在导入大规模数据时，PIPE 命令会自动根据导入数据大小和导入文件数量将一个大导入任务拆分成很多个小导入任务穿行运行，降低任务出错重试的代价、减少导入中对系统资源的占用，提升数据导入的稳定性。同时，PIPE 也能不断监听云存储目录中的新增文件或文件内容修改，并自动将变化的数据文件数据拆分成一个个小的导入任务，持续地将新数据导入到目标表中。
 
 #### 查询
 
-- 支持 [HTTP SQL API](https://docs.starrocks.io/zh/docs/3.2/reference/HTTP_API/SQL/)。用户可以通过 HTTP 方式访问 StarRocks 数据，执行 SELECT、SHOW、EXPLAIN 或 KILL 操作。
+- 支持 [HTTP SQL API](https://docs.starrocks.io/zh/docs/3.2/sql-reference/http_sql_api/)。用户可以通过 HTTP 方式访问 StarRocks 数据，执行 SELECT、SHOW、EXPLAIN 或 KILL 操作。
 - 新增 Runtime Profile，以及基于文本的 Profile 分析指令（SHOW PROFILELIST，ANALYZE PROFILE，EXPLAIN ANALYZE），用户可以通过 MySQL 客户端直接进行 Profile 的分析，方便定位瓶颈点并发现优化机会。
 
 #### SQL 语句和函数
@@ -544,7 +544,7 @@ description: "StarRocks 3.2 版本发布说明：统一 Catalog、Hive 托管表
 
 #### 权限
 
-支持通过 [Apache Ranger](https://docs.starrocks.io/zh/docs/3.2/administration/ranger_plugin/) 实现访问控制，提供更高层次的数据安全保障，并且允许复用原有的外部数据源 Service。StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
+支持通过 [Apache Ranger](https://docs.starrocks.io/zh/docs/3.2/administration/user_privs/ranger_plugin/) 实现访问控制，提供更高层次的数据安全保障，并且允许复用原有的外部数据源 Service。StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 - 访问 StarRocks 内表、外表或其他对象时，可根据在 Ranger 中创建的 StarRocks Service 配置的访问策略来进行访问控制。
 - 访问 External Catalog 时，也可以复用对应数据源原有的 Ranger service（如 Hive Service）来进行访问控制（当前暂未支持导出数据到 Hive 操作的权限控制）。
@@ -581,17 +581,17 @@ description: "StarRocks 3.2 版本发布说明：统一 Catalog、Hive 托管表
 - 数据一致性：
   - 创建物化视图时，添加了 `query_rewrite_consistency` 属性。该属性允许用户基于一致性检查结果定义查询改写规则。
   - 创建物化视图时，添加了 `force_external_table_query_rewrite` 属性。该属性用于定义是否为外表物化视图强制开启查询重写。
-  - 有关详细信息，请参见[CREATE MATERIALIZED VIEW](https://docs.starrocks.io/zh/docs/3.2/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/)。
+  - 有关详细信息，请参见[CREATE MATERIALIZED VIEW](https://docs.starrocks.io/zh/docs/3.2/sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW/)。
 - 增加分区列一致性检查：当创建分区物化视图时，如物化视图的查询中涉及带分区的窗口函数，则窗口函数的分区列需要与物化视图的分区列一致。
 
 #### 导入、导出和存储  
 
 - 优化主键表（Primary Key）表持久化索引功能，优化内存使用逻辑，同时降低 I/O 的读写放大。
 - 主键表（Primary Key）表支持本地多块磁盘间数据均衡。
-- 分区中数据可以随着时间推移自动进行降冷操作（List 分区方式暂不支持）。相对原来的设置，更方便进行分区冷热管理。有关详细信息，请参见[设置数据的初始存储介质、自动降冷时间](https://docs.starrocks.io/zh/docs/3.2/sql-reference/sql-statements/data-definition/CREATE_TABLE#设置数据的初始存储介质自动降冷时间和副本数)。
-- 主键表数据写入时的 Publish 过程由异步改为同步，导入作业成功返回后数据立即可见。有关详细信息，请参见 [enable_sync_publish](https://docs.starrocks.io/zh/docs/3.2/administration/FE_configuration#enable_sync_publish)。
-- 支持 Fast Schema Evolution 模式，由表属性 [`fast_schema_evolution`](https://docs.starrocks.io/zh/docs/3.2/sql-reference/sql-statements/data-definition/CREATE_TABLE#设置-fast-schema-evolution) 控制。启用该模式可以在进行加减列变更时提高执行速度并降低资源使用。该属性默认值是 `false`（即关闭）。不支持建表后通过 ALTER TABLE 修改该表属性。
-- 对于采用随机分桶的**明细表**，系统进行了优化，会根据集群信息及导入中的数据量大小[按需动态调整 Tablet 数量](https://docs.starrocks.io/zh/docs/3.2/table_design/Data_distribution#设置分桶数量)。
+- 分区中数据可以随着时间推移自动进行降冷操作（List 分区方式暂不支持）。相对原来的设置，更方便进行分区冷热管理。有关详细信息，请参见[设置数据的初始存储介质、自动降冷时间](https://docs.starrocks.io/zh/docs/3.2/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/#设置数据的初始存储介质自动降冷时间和副本数)。
+- 主键表数据写入时的 Publish 过程由异步改为同步，导入作业成功返回后数据立即可见。有关详细信息，请参见 [enable_sync_publish](https://docs.starrocks.io/zh/docs/3.2/administration/management/FE_configuration/#enable_sync_publish)。
+- 支持 Fast Schema Evolution 模式，由表属性 [`fast_schema_evolution`](https://docs.starrocks.io/zh/docs/3.2/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/#设置-fast-schema-evolution) 控制。启用该模式可以在进行加减列变更时提高执行速度并降低资源使用。该属性默认值是 `false`（即关闭）。不支持建表后通过 ALTER TABLE 修改该表属性。
+- 对于采用随机分桶的**明细表**，系统进行了优化，会根据集群信息及导入中的数据量大小[按需动态调整 Tablet 数量](https://docs.starrocks.io/zh/docs/3.2/table_design/data_distribution/#设置分桶数量)。
 
 #### 查询
 

@@ -896,8 +896,8 @@ Release date: June 21, 2024
 #### Data Lake Analytics
 
 - **Data Cache enhancements**
-  - Added the [Data Cache Warmup](https://docs.starrocks.io/docs/data_source/data_cache_warmup/) command CACHE SELECT to fetch hotspot data from data lakes, which speeds up queries and minimizes resource usage. CACHE SELECT can work with SUBMIT TASK to achieve periodic cache warmup. This feature supports both tables in external catalogs and internal tables in shared-data clusters.
-  - Added metrics and monitoring methods to enhance the [observability of Data Cache](https://docs.starrocks.io/docs/data_source/data_cache_observe/).
+  - Added the [Data Cache Warmup](https://docs.starrocks.io/docs/data_source/data_cache/block_cache_warmup/) command CACHE SELECT to fetch hotspot data from data lakes, which speeds up queries and minimizes resource usage. CACHE SELECT can work with SUBMIT TASK to achieve periodic cache warmup. This feature supports both tables in external catalogs and internal tables in shared-data clusters.
+  - Added metrics and monitoring methods to enhance the [observability of Data Cache](https://docs.starrocks.io/docs/data_source/data_cache/data_cache_observe/).
 - **Parquet reader performance enhancements**
   - Optimized Page Index, significantly reducing the data scan size.
   - Reduced the occurrence of reading unnecessary pages when Page Index is used.
@@ -907,7 +907,7 @@ Release date: June 21, 2024
   - Optimized the processing logic for ORC tiny stripes.
 - **Iceberg table format enhancements**
   - Significantly improved the metadata access performance of the Iceberg Catalog by refactoring the parallel Scan logic. Resolved the single-threaded I/O bottleneck in the native Iceberg SDK when handling large volumes of metadata files. As a result, queries with metadata bottlenecks now experience more than a 10-fold performance increase.
-  - Queries on Parquet-formatted Iceberg v2 tables support [equality deletes](https://docs.starrocks.io/docs/data_source/catalog/iceberg/iceberg_catalog/#usage-notes).
+  - Queries on Parquet-formatted Iceberg v2 tables support [equality deletes](https://docs.starrocks.io/docs/data_source/catalog/iceberg/#usage-notes).
 - **[Experimental] Paimon Catalog enhancements**
   - Materialized views created based on the Paimon external tables now support automatic query rewriting.
   - Optimized Scan Range scheduling for queries against the Paimon Catalog, improving I/O concurrency.
@@ -944,9 +944,9 @@ Release date: June 21, 2024
 
 #### Storage Optimization and Cluster Management
 
-- **[Enhanced flexibility of range partitioning](https://docs.starrocks.io/docs/table_design/Data_distribution/#range-partitioning).** Three time functions can be used as partitioning columns. These functions convert timestamps or strings in the partitioning columns into date values and then the data can be partitioned based on the converted date values.
+- **[Enhanced flexibility of range partitioning](https://docs.starrocks.io/docs/table_design/data_distribution/#range-partitioning).** Three time functions can be used as partitioning columns. These functions convert timestamps or strings in the partitioning columns into date values and then the data can be partitioned based on the converted date values.
 - **FE memory observability.** Provides detailed memory usage metrics for each module within the FE to better manage resources.
-- **[Optimized metadata locks in FE](https://docs.starrocks.io/docs/administration/management/FE_configuration/#lock_manager_enabled).** Provides Lock manager to achieve centralized management for metadata locks in FE. For example, it can refine the granularity of metadata lock from the database level to the table level, which improves load and query concurrency. In a scenario of 100 concurrent load jobs on a small dataset, the load time can be reduced by 35%.
+- **[Optimized metadata locks in FE](https://docs.starrocks.io/docs/3.3/administration/management/FE_configuration/#lock_manager_enabled).** Provides Lock manager to achieve centralized management for metadata locks in FE. For example, it can refine the granularity of metadata lock from the database level to the table level, which improves load and query concurrency. In a scenario of 100 concurrent load jobs on a small dataset, the load time can be reduced by 35%.
 - **[Supports adding labels on BEs](https://docs.starrocks.io/docs/administration/management/resource_management/be_label/).** Supports adding labels on BEs based on information such as the racks and data centers where BEs are located. It ensures even data distribution among racks and data centers, and facilitates disaster recovery in case of power failures in certain racks or faults in data centers.
 - **[Optimized the sort key](https://docs.starrocks.io/docs/table_design/indexes/Prefix_index_sort_key/#usage-notes).** Duplicate Key tables, Aggregate tables, and Unique Key tables all support specifying sort keys through the `ORDER BY` clause.
 - **[Experimental] Optimized the storage efficiency of non-string scalar data.** This type of data supports dictionary encoding, reducing storage space usage by 12%.
@@ -971,7 +971,7 @@ Release date: June 21, 2024
 
 - DATETIME fields support microsecond precision. The new time unit is supported in related time functions and during data loading.
 - Added the following functions:
-  - [String functions](https://docs.starrocks.io/docs/category/string-1/): crc32, url_extract_host, ngram_search
+  - [String functions](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/): crc32, url_extract_host, ngram_search
   - Array functions: [array_contains_seq](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_contains_seq/)
   - Date and time functions: [yearweek](https://docs.starrocks.io/docs/sql-reference/sql-functions/date-time-functions/yearweek/)
   - Math functions: [cbrt](https://docs.starrocks.io/docs/sql-reference/sql-functions/math-functions/cbrt/)
