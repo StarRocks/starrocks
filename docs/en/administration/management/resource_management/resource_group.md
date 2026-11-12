@@ -5,9 +5,6 @@ keywords: ['resource groups', 'isolation']
 description: "How to use resource groups in StarRocks to isolate resources and run multiple workloads concurrently in a single cluster."
 ---
 
-import ScopeParam from '../../../_assets/commonMarkdown/rg_scope_param.mdx'
-import WhSyntaxExample from '../../../_assets/commonMarkdown/rg_wh_syntax_example.mdx'
-import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.mdx'
 
 # Resource group
 
@@ -104,8 +101,6 @@ To modify this configuration dynamically, use the following command:
 ```SQL
 UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_resource_group_cpu_borrowing";
 ```
-
-<ScopeParam />
 
 #### Memory resource parameters
 
@@ -295,7 +290,40 @@ SET GLOBAL enable_pipeline_engine = true;
 
 Execute the following statement to create a resource group, associate the resource group with a classifier, and allocate computing resources to the resource group:
 
-<WhSyntaxExample />
+```SQL
+CREATE RESOURCE GROUP <group_name> 
+TO (
+    user='string', 
+    role='string', 
+    query_type in ('select'), 
+    source_ip='cidr'
+) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (`,`).
+WITH (
+    "{ cpu_weight | exclusive_cpu_cores }" = "INT",
+    "mem_limit" = "m%",
+    "concurrency_limit" = "INT",
+    "type" = "str" --The type of the resource group. Set the value to normal.
+);
+```
+
+Example:
+
+```SQL
+CREATE RESOURCE GROUP rg1
+TO 
+    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user2', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user3', source_ip='192.168.x.x/24'),
+    (user='rg1_user4'),
+    (db='db1')
+WITH (
+    'exclusive_cpu_cores' = '10',
+    'mem_limit' = '20%',
+    'big_query_cpu_second_limit' = '100',
+    'big_query_scan_rows_limit' = '100000',
+    'big_query_mem_limit' = '1073741824'
+);
+```
 
 ### Specify resource group (Optional)
 
@@ -360,7 +388,12 @@ You can modify the resource quotas for each resource group. You can also add or 
 
 Execute the following statement to modify the resource quotas for an existing resource group:
 
-<WhAlterSyntax />
+```SQL
+ALTER RESOURCE GROUP group_name WITH (
+    'cpu_core_limit' = 'INT',
+    'mem_limit' = 'm%'
+);
+```
 
 Execute the following statement to delete a resource group:
 
