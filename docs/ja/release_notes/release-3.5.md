@@ -578,8 +578,8 @@ description: "StarRocks 3.5 リリースノート: Iceberg ビュー作成、OAu
 ### データレイク分析
 
 - **[Beta]** Hive Metastore 統合による Iceberg Catalog での Iceberg ビューの作成サポートしました。また、ALTER VIEW 文を使って Iceberg ビューの SQL 方言の追加・変更が可能になり、外部システムとの互換性が向上しました。[#56120](https://github.com/StarRocks/starrocks/pull/56120)
-- [Iceberg REST Catalog](https://docs.starrocks.io/ja/docs/data_source/catalog/iceberg/iceberg_catalog/#rest) におけるネストされた名前空間をサポートしました。[#58016](https://github.com/StarRocks/starrocks/pull/58016)
-- [Iceberg REST Catalog](https://docs.starrocks.io/ja/docs/data_source/catalog/iceberg/iceberg_catalog/#rest) にて、`IcebergAwsClientFactory` を使用して AWS クライアントを作成できる、Vended Credential をサポートしました。[#58296](https://github.com/StarRocks/starrocks/pull/58296)
+- [Iceberg REST Catalog](https://docs.starrocks.io/ja/docs/data_source/catalog/iceberg/#rest) におけるネストされた名前空間をサポートしました。[#58016](https://github.com/StarRocks/starrocks/pull/58016)
+- [Iceberg REST Catalog](https://docs.starrocks.io/ja/docs/data_source/catalog/iceberg/#rest) にて、`IcebergAwsClientFactory` を使用して AWS クライアントを作成できる、Vended Credential をサポートしました。[#58296](https://github.com/StarRocks/starrocks/pull/58296)
 - Parquet Reader が Bloom Filter を使用したデータフィルタリングをサポートしました。[#56445](https://github.com/StarRocks/starrocks/pull/56445)
 - Parquet 形式の Hive/Iceberg テーブルに対し、クエリ実行時に低カーディナリティ列のグローバル辞書を自動生成する機能をサポートしました。[#55167](https://github.com/StarRocks/starrocks/pull/55167)
 

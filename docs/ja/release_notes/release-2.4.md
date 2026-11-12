@@ -180,23 +180,23 @@ description: "StarRocks 2.4：複数基本テーブル上の非同期マテリ�
 
 ### 新機能
 
-- 複数のベーステーブルに基づく非同期マテリアライズドビューの作成をサポートし、JOIN 操作を伴うクエリを高速化します。非同期マテリアライズドビューはすべての [テーブルタイプ](https://docs.starrocks.io/docs/table_design/table_types/table_types/) をサポートします。詳細は [Materialized View](https://docs.starrocks.io/docs/using_starrocks/Materialized_view/) を参照してください。
+- 複数のベーステーブルに基づく非同期マテリアライズドビューの作成をサポートし、JOIN 操作を伴うクエリを高速化します。非同期マテリアライズドビューはすべての [テーブルタイプ](https://docs.starrocks.io/docs/table_design/table_types/) をサポートします。詳細は [Materialized View](https://docs.starrocks.io/docs/using_starrocks/async_mv/Materialized_view/) を参照してください。
 
 - INSERT OVERWRITE を介したデータの上書きをサポートします。詳細は [Load data using INSERT](https://docs.starrocks.io/docs/loading/InsertInto/) を参照してください。
 
 - [プレビュー] ステートレスな Compute Nodes (CN) を提供し、水平スケーリングが可能です。StarRocks Operator を使用して CN を Kubernetes (K8s) クラスタにデプロイし、自動水平スケーリングを実現できます。詳細は [Deploy and manage CN on Kubernetes with StarRocks Operator](https://docs.starrocks.io/docs/deployment/sr_operator/) を参照してください。
 
-- 外部結合は、`<`、`<=`、`>`、`>=`、`<>` を含む比較演算子で関連付けられた非等値ジョインをサポートします。詳細は [SELECT](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SELECT/) を参照してください。
+- 外部結合は、`<`、`<=`、`>`、`>=`、`<>` を含む比較演算子で関連付けられた非等値ジョインをサポートします。詳細は [SELECT](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/SELECT/) を参照してください。
 
-- Iceberg カタログと Hudi カタログの作成をサポートし、Apache Iceberg と Apache Hudi からのデータに直接クエリを実行できます。詳細は [Iceberg catalog](https://docs.starrocks.io/docs/data_source/catalog/iceberg_catalog/) および [Hudi catalog](https://docs.starrocks.io/docs/data_source/catalog/hudi_catalog/) を参照してください。
+- Iceberg カタログと Hudi カタログの作成をサポートし、Apache Iceberg と Apache Hudi からのデータに直接クエリを実行できます。詳細は [Iceberg catalog](https://docs.starrocks.io/docs/data_source/catalog/iceberg/) および [Hudi catalog](https://docs.starrocks.io/docs/data_source/catalog/hudi_catalog/) を参照してください。
 
 - Apache Hive™ テーブルの ARRAY 型カラムを CSV 形式でクエリすることをサポートします。詳細は [External table](https://docs.starrocks.io/docs/data_source/External_table/) を参照してください。
 
-- DESC を介して外部データのスキーマを表示することをサポートします。詳細は [DESC](https://docs.starrocks.io/docs/sql-reference/sql-statements/Utility/DESCRIBE/) を参照してください。
+- DESC を介して外部データのスキーマを表示することをサポートします。詳細は [DESC](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/DESCRIBE/) を参照してください。
 
 - GRANT を介して特定のロールまたは IMPERSONATE 権限をユーザーに付与し、REVOKE を介してそれらを取り消すことをサポートし、IMPERSONATE 権限を使用して SQL ステートメントを実行することをサポートします。詳細は [GRANT](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/GRANT/)、[REVOKE](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/REVOKE/)、および [EXECUTE AS](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/EXECUTE_AS/) を参照してください。
 
-- FDQN アクセスをサポートします: 今後は、ドメイン名またはホスト名とポートの組み合わせを BE または FE ノードの一意の識別として使用できます。これにより、IP アドレスの変更によるアクセス障害を防ぎます。詳細は [Enable FQDN Access](https://docs.starrocks.io/docs/administration/enable_fqdn/) を参照してください。
+- FDQN アクセスをサポートします: 今後は、ドメイン名またはホスト名とポートの組み合わせを BE または FE ノードの一意の識別として使用できます。これにより、IP アドレスの変更によるアクセス障害を防ぎます。詳細は [Enable FQDN Access](https://docs.starrocks.io/docs/administration/management/enable_fqdn/) を参照してください。
 
 - flink-connector-starrocks は主キーテーブルの部分更新をサポートします。詳細は [Load data by using flink-connector-starrocks](https://docs.starrocks.io/docs/loading/Flink-connector-starrocks/) を参照してください。
 
@@ -220,7 +220,7 @@ description: "StarRocks 2.4：複数基本テーブル上の非同期マテリ�
 
 - CBO 統計にヒストグラムを追加しました。完全な統計収集がさらに最適化されました。詳細は [Gather CBO statistics](https://docs.starrocks.io/docs/using_starrocks/Cost_based_optimizer/) を参照してください。
 
-- タブレットスキャンのための適応型マルチスレッドを有効にし、スキャンパフォーマンスのタブレット数への依存を減らしました。その結果、バケット数をより簡単に設定できます。詳細は [Determine the number of buckets](https://docs.starrocks.io/docs/2.4/table_design/Data_distribution/#determine-the-number-of-tablets) を参照してください。
+- タブレットスキャンのための適応型マルチスレッドを有効にし、スキャンパフォーマンスのタブレット数への依存を減らしました。その結果、バケット数をより簡単に設定できます。詳細は [Determine the number of buckets](https://docs.starrocks.io/docs/3.1/table_design/data_distribution/#determine-the-number-of-buckets) を参照してください。
 
 - Apache Hive で圧縮された TXT ファイルのクエリをサポートします。
 

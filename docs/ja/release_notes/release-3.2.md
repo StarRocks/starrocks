@@ -481,7 +481,7 @@ description: "StarRocks 3.2：Hive/Iceberg/Hudi/Delta Lake の統合 Catalog、H
 - セッション変数 [sql_mode](https://docs.starrocks.io/docs/3.2/reference/System_variable/#sql_mode) に新しい値オプション `GROUP_CONCAT_LEGACY` を追加し、v2.5 より前のバージョンでの [group_concat](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/string-functions/group_concat/) 関数の実装ロジックとの互換性を提供します。 [#36150](https://github.com/StarRocks/starrocks/pull/36150)
 - [AWS S3 の Broker Load ジョブ](https://docs.starrocks.io/docs/3.2/loading/s3/) の認証情報 `aws.s3.access_key` と `aws.s3.access_secret` を監査ログで非表示にしました。 [#36571](https://github.com/StarRocks/starrocks/pull/36571)
 - `information_schema` データベースの `be_tablets` ビューに新しいフィールド `INDEX_DISK` を追加しました。これは永続インデックスのディスク使用量（バイト単位）を記録します。 [#35615](https://github.com/StarRocks/starrocks/pull/35615)
-- [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) ステートメントが返す結果に新しいフィールド `OtherMsg` を追加しました。これは最後に失敗したタスクに関する情報を示します。 [#35806](https://github.com/StarRocks/starrocks/pull/35806)
+- [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD/) ステートメントが返す結果に新しいフィールド `OtherMsg` を追加しました。これは最後に失敗したタスクに関する情報を示します。 [#35806](https://github.com/StarRocks/starrocks/pull/35806)
 
 ### バグ修正
 
@@ -524,13 +524,13 @@ description: "StarRocks 3.2：Hive/Iceberg/Hudi/Delta Lake の統合 Catalog、H
   - パラメータ `columns_from_path` を使用して、ファイルパスからキー/値ペアの値を抽出し、カラムの値として使用。
   - ARRAY、JSON、MAP、STRUCT などの複雑なデータ型のロード。
 - StarRocks から AWS S3 または HDFS に保存された Parquet 形式のファイルにデータをアンロードすることをサポートしました。詳細な手順については、[INSERT INTO FILES を使用したデータのアンロード](https://docs.starrocks.io/docs/3.2/unloading/unload_using_insert_into_files/)を参照してください。
-- [既存のテーブルで使用されるテーブル構造とデータ分散戦略の手動最適化](https://docs.starrocks.io/docs/3.2/table_design/Data_distribution#optimize-data-distribution-after-table-creation-since-32)をサポートし、クエリとロードのパフォーマンスを最適化します。テーブルに新しいバケットキー、バケット数、またはソートキーを設定できます。また、特定のパーティションに異なるバケット数を設定することもできます。
+- [既存のテーブルで使用されるテーブル構造とデータ分散戦略の手動最適化](https://docs.starrocks.io/docs/3.2/table_design/data_distribution/#optimize-data-distribution-after-table-creation-since-32)をサポートし、クエリとロードのパフォーマンスを最適化します。テーブルに新しいバケットキー、バケット数、またはソートキーを設定できます。また、特定のパーティションに異なるバケット数を設定することもできます。
 - [AWS S3](https://docs.starrocks.io/docs/3.2/loading/s3/#use-pipe) または [HDFS](https://docs.starrocks.io/docs/3.2/loading/hdfs_load/#use-pipe) を使用した PIPE メソッドによる継続的なデータロードをサポートしました。
   - PIPE はリモートストレージディレクトリの新規または変更を検出すると、StarRocks の宛先テーブルに新規または変更されたデータを自動的にロードします。データをロードする際、PIPE は大きなロードタスクを小さなシリアル化されたタスクに自動的に分割し、大規模なデータ取り込みシナリオでの安定性を向上させ、エラーリトライのコストを削減します。
 
 #### クエリ
 
-- [HTTP SQL API](https://docs.starrocks.io/docs/3.2/reference/HTTP_API/SQL/) をサポートし、ユーザーが HTTP 経由で StarRocks データにアクセスし、SELECT、SHOW、EXPLAIN、または KILL 操作を実行できるようにします。
+- [HTTP SQL API](https://docs.starrocks.io/docs/3.2/sql-reference/http_sql_api/) をサポートし、ユーザーが HTTP 経由で StarRocks データにアクセスし、SELECT、SHOW、EXPLAIN、または KILL 操作を実行できるようにします。
 - Runtime Profile とテキストベースの Profile 分析コマンド (SHOW PROFILELIST、ANALYZE PROFILE、EXPLAIN ANALYZE) をサポートし、ユーザーが MySQL クライアントを介して直接プロファイルを分析できるようにし、ボトルネックの特定と最適化の機会を発見するのに役立ちます。
 
 #### SQL リファレンス
@@ -547,12 +547,12 @@ description: "StarRocks 3.2：Hive/Iceberg/Hudi/Delta Lake の統合 Catalog、H
 
 #### 特権とセキュリティ
 
-StarRocks は [Apache Ranger](https://docs.starrocks.io/docs/3.2/administration/ranger_plugin/) を通じてアクセス制御をサポートし、より高いレベルのデータセキュリティを提供し、外部データソースの既存のサービスを再利用できるようにします。Apache Ranger と統合することで、StarRocks は次のアクセス制御方法を有効にします:
+StarRocks は [Apache Ranger](https://docs.starrocks.io/docs/3.2/administration/user_privs/ranger_plugin/) を通じてアクセス制御をサポートし、より高いレベルのデータセキュリティを提供し、外部データソースの既存のサービスを再利用できるようにします。Apache Ranger と統合することで、StarRocks は次のアクセス制御方法を有効にします:
 
 - StarRocks 内の内部テーブル、外部テーブル、またはその他のオブジェクトにアクセスする際、Ranger で StarRocks サービスのために設定されたアクセスポリシーに基づいてアクセス制御を実施できます。
 - 外部カタログにアクセスする際、元のデータソース（Hive サービスなど）の対応する Ranger サービスを利用してアクセスを制御することもできます（現在、Hive へのデータエクスポートのアクセス制御はサポートされていません）。
 
-詳細については、[Apache Ranger を使用した権限管理](https://docs.starrocks.io/docs/3.2/administration/ranger_plugin/)を参照してください。
+詳細については、[Apache Ranger を使用した権限管理](https://docs.starrocks.io/docs/3.2/administration/user_privs/ranger_plugin/)を参照してください。
 
 ### 改善点
 
@@ -586,7 +586,7 @@ StarRocks は [Apache Ranger](https://docs.starrocks.io/docs/3.2/administration/
 - データの一貫性:
   - 非同期マテリアライズドビューの作成に対してプロパティ `query_rewrite_consistency` を追加しました。このプロパティは、一貫性チェックに基づくクエリ書き換えルールを定義します。
   - 外部カタログに基づいて作成された非同期マテリアライズドビューのクエリ書き換えを強制するかどうかを定義するプロパティ `force_external_table_query_rewrite` を追加しました。
-  - 詳細については、[CREATE MATERIALIZED VIEW](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/) を参照してください。
+  - 詳細については、[CREATE MATERIALIZED VIEW](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW/) を参照してください。
 - マテリアライズドビューのパーティションキーの一貫性チェックを追加しました。
   - ユーザーが PARTITION BY 式を含むウィンドウ関数を使用して非同期マテリアライズドビューを作成する場合、ウィンドウ関数のパーティション列はマテリアライズドビューのパーティション列と一致する必要があります。
 
@@ -594,9 +594,9 @@ StarRocks は [Apache Ranger](https://docs.starrocks.io/docs/3.2/administration/
 
 - 主キーテーブルの永続インデックスを最適化し、メモリ使用量のロジックを改善し、I/O 読み取りおよび書き込みの増幅を削減しました。 [#24875](https://github.com/StarRocks/starrocks/pull/24875)  [#27577](https://github.com/StarRocks/starrocks/pull/27577)  [#28769](https://github.com/StarRocks/starrocks/pull/28769)
 - 主キーテーブルのローカルディスク間でのデータ再配布をサポートしました。
-- パーティション化されたテーブルがパーティションの時間範囲とクールダウン時間に基づいて自動クールダウンをサポートしました。元のクールダウンロジックと比較して、パーティションレベルでのホットおよびコールドデータ管理がより便利になりました。詳細については、[初期記憶媒体、自動記憶クールダウン時間、レプリカ数の指定](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/data-definition/CREATE_TABLE#specify-initial-storage-medium-automatic-storage-cooldown-time-replica-number) を参照してください。
-- 主キーテーブルにデータを書き込むロードジョブの Publish フェーズが非同期モードから同期モードに変更されました。そのため、ロードジョブが終了した直後にロードされたデータをクエリできます。詳細については、[enable_sync_publish](https://docs.starrocks.io/docs/3.2/administration/FE_configuration#enable_sync_publish) を参照してください。
-- 高速スキーマ進化をサポートし、テーブルプロパティ [`fast_schema_evolution`](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/data-definition/CREATE_TABLE#set-fast-schema-evolution) によって制御されます。この機能が有効になると、カラムの追加または削除の実行効率が大幅に向上します。このモードはデフォルトで無効です（デフォルト値は `false` です）。既存のテーブルに対して ALTER TABLE を使用してこのプロパティを変更することはできません。
+- パーティション化されたテーブルがパーティションの時間範囲とクールダウン時間に基づいて自動クールダウンをサポートしました。元のクールダウンロジックと比較して、パーティションレベルでのホットおよびコールドデータ管理がより便利になりました。詳細については、[初期記憶媒体、自動記憶クールダウン時間、レプリカ数の指定](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/#specify-initial-storage-medium-automatic-storage-cooldown-time-replica-number) を参照してください。
+- 主キーテーブルにデータを書き込むロードジョブの Publish フェーズが非同期モードから同期モードに変更されました。そのため、ロードジョブが終了した直後にロードされたデータをクエリできます。詳細については、[enable_sync_publish](https://docs.starrocks.io/docs/3.2/administration/management/FE_configuration/#enable_sync_publish) を参照してください。
+- 高速スキーマ進化をサポートし、テーブルプロパティ [`fast_schema_evolution`](https://docs.starrocks.io/docs/3.2/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/#set-fast-schema-evolution) によって制御されます。この機能が有効になると、カラムの追加または削除の実行効率が大幅に向上します。このモードはデフォルトで無効です（デフォルト値は `false` です）。既存のテーブルに対して ALTER TABLE を使用してこのプロパティを変更することはできません。
 - **ランダムバケット法**を使用して作成された**重複キー**テーブルに対して、クラスタ情報とデータのサイズに応じて作成するタブレットの数を動的に調整することをサポートしました。
 
 #### クエリ

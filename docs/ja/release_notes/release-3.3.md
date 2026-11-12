@@ -899,8 +899,8 @@ v3.3.1 以降から v3.2 にクラスタをダウングレードするには、�
 #### データレイク分析
 
 - **Data Cache の強化**
-  - ホットスポットデータをデータレイクから取得するための [Data Cache Warmup](https://docs.starrocks.io/docs/data_source/data_cache_warmup/) コマンド CACHE SELECT を追加し、クエリを高速化し、リソース使用量を最小化します。CACHE SELECT は SUBMIT TASK と組み合わせて定期的なキャッシュウォームアップを実現できます。この機能は、外部カタログ内のテーブルと共有データクラスタ内の内部テーブルの両方をサポートします。
-  - [Data Cache の観測性](https://docs.starrocks.io/docs/data_source/data_cache_observe/) を強化するためにメトリクスと監視方法を追加しました。
+  - ホットスポットデータをデータレイクから取得するための [Data Cache Warmup](https://docs.starrocks.io/docs/data_source/data_cache/block_cache_warmup/) コマンド CACHE SELECT を追加し、クエリを高速化し、リソース使用量を最小化します。CACHE SELECT は SUBMIT TASK と組み合わせて定期的なキャッシュウォームアップを実現できます。この機能は、外部カタログ内のテーブルと共有データクラスタ内の内部テーブルの両方をサポートします。
+  - [Data Cache の観測性](https://docs.starrocks.io/docs/data_source/data_cache/data_cache_observe/) を強化するためにメトリクスと監視方法を追加しました。
 - **Parquet リーダーパフォーマンスの強化**
   - ページインデックスを最適化し、データスキャンサイズを大幅に削減しました。
   - ページインデックスが使用される場合に不要なページを読み取る頻度を減らしました。
@@ -910,7 +910,7 @@ v3.3.1 以降から v3.2 にクラスタをダウングレードするには、�
   - ORC 小さなストライプの処理ロジックを最適化しました。
 - **Iceberg テーブル形式の強化**
   - Iceberg Catalog のメタデータアクセスパフォーマンスを大幅に向上させ、並列スキャンロジックをリファクタリングしました。大量のメタデータファイルを処理する際のネイティブ Iceberg SDK の単一スレッド I/O ボトルネックを解決しました。その結果、メタデータボトルネックを持つクエリは 10 倍以上のパフォーマンス向上を達成しました。
-  - Parquet 形式の Iceberg v2 テーブルに対するクエリが [equality deletes](https://docs.starrocks.io/docs/data_source/catalog/iceberg/iceberg_catalog/#usage-notes) をサポートします。
+  - Parquet 形式の Iceberg v2 テーブルに対するクエリが [equality deletes](https://docs.starrocks.io/docs/data_source/catalog/iceberg/#usage-notes) をサポートします。
 - **[実験的] Paimon Catalog の強化**
   - Paimon 外部テーブルに基づいて作成されたマテリアライズドビューが自動クエリ書き換えをサポートします。
   - Paimon Catalog に対するクエリのスキャン範囲スケジューリングを最適化し、I/O 並行性を向上させました。
@@ -947,9 +947,9 @@ v3.3.1 以降から v3.2 にクラスタをダウングレードするには、�
 
 #### ストレージ最適化とクラスタ管理
 
-- **[レンジパーティション化の柔軟性を強化しました](https://docs.starrocks.io/docs/table_design/Data_distribution/#range-partitioning)。** 3 つの時間関数をパーティション列として使用できます。これらの関数は、パーティション列内のタイムスタンプまたは文字列を日付値に変換し、変換された日付値に基づいてデータをパーティション化します。
+- **[レンジパーティション化の柔軟性を強化しました](https://docs.starrocks.io/docs/table_design/data_distribution/#range-partitioning)。** 3 つの時間関数をパーティション列として使用できます。これらの関数は、パーティション列内のタイムスタンプまたは文字列を日付値に変換し、変換された日付値に基づいてデータをパーティション化します。
 - **FE メモリの観測性。** FE 内の各モジュールの詳細なメモリ使用量メトリクスを提供し、リソースをより適切に管理します。
-- **[FE 内のメタデータロックを最適化しました](https://docs.starrocks.io/docs/administration/management/FE_configuration/#lock_manager_enabled)。** FE 内のメタデータロックを集中管理するためのロックマネージャーを提供します。たとえば、メタデータロックの粒度をデータベースレベルからテーブルレベルに細分化し、ロードおよびクエリの並行性を向上させます。小規模データセットでの 100 の同時ロードジョブのシナリオでは、ロード時間を 35% 削減できます。
+- **[FE 内のメタデータロックを最適化しました](https://docs.starrocks.io/docs/3.3/administration/management/FE_configuration/#lock_manager_enabled)。** FE 内のメタデータロックを集中管理するためのロックマネージャーを提供します。たとえば、メタデータロックの粒度をデータベースレベルからテーブルレベルに細分化し、ロードおよびクエリの並行性を向上させます。小規模データセットでの 100 の同時ロードジョブのシナリオでは、ロード時間を 35% 削減できます。
 - **[BE にラベルを追加することをサポートします](https://docs.starrocks.io/docs/administration/management/resource_management/be_label/)。** BE が配置されているラックやデータセンターなどの情報に基づいて BE にラベルを追加することをサポートします。これにより、ラックやデータセンター間でのデータ分布が均等になり、特定のラックでの停電やデータセンターでの障害が発生した場合の災害復旧が容易になります。
 - **[ソートキーを最適化しました](https://docs.starrocks.io/docs/table_design/indexes/Prefix_index_sort_key/#usage-notes)。** 重複キーテーブル、集計テーブル、およびユニークキーテーブルはすべて、`ORDER BY` 句を使用してソートキーを指定することをサポートします。
 - **[実験的] 非文字列スカラー データのストレージ効率を最適化しました。** このタイプのデータは辞書エンコーディングをサポートし、ストレージスペースの使用量を 12% 削減します。
@@ -974,7 +974,7 @@ v3.3.1 以降から v3.2 にクラスタをダウングレードするには、�
 
 - DATETIME フィールドがマイクロ秒精度をサポートします。新しい時間単位は関連する時間関数およびデータロード中にサポートされます。
 - 次の関数を追加しました:
-  - [文字列関数](https://docs.starrocks.io/docs/category/string-1/): crc32, url_extract_host, ngram_search
+  - [文字列関数](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/): crc32, url_extract_host, ngram_search
   - 配列関数: [array_contains_seq](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_contains_seq/)
   - 日付と時間関数: [yearweek](https://docs.starrocks.io/docs/sql-reference/sql-functions/date-time-functions/yearweek/)
   - 数学関数: [cbrt](https://docs.starrocks.io/docs/sql-reference/sql-functions/math-functions/cbrt/)
