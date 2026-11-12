@@ -3200,15 +3200,15 @@ TEST_F(FileReaderTest, StructSubfieldStringBloomFilter) {
 
     auto scan = [&](const std::string& value, size_t* total_rows, int* bloom_filtered_row_groups) {
         auto* ctx = _create_scan_context(slot_descs, file_path);
-        auto& conjunct_ctxs = ctx->format_scan_context.conjunct_ctxs_by_slot[1];
+        auto& conjunct_ctxs = ctx->conjunct_ctxs_by_slot[1];
         _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 1, type_struct, {"c1"}, value, &conjunct_ctxs);
         TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
         ParquetUTBase::setup_conjuncts_manager(conjunct_ctxs, nullptr, tuple_desc, _runtime_state, ctx);
-        FormatScannerStats stats;
-        ctx->format_scan_context.stats = &stats;
+        HdfsScannerStats stats;
+        ctx->stats = &stats;
 
         auto file_reader = _create_file_reader(file_path);
-        Status status = file_reader->init(&ctx->format_scan_context);
+        Status status = file_reader->init(ctx);
         ASSERT_OK(status);
 
         auto chunk = std::make_shared<Chunk>();
