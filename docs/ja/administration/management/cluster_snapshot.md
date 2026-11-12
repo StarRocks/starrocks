@@ -7,9 +7,6 @@ keywords: ['バックアップ', '復元', '共有データ', 'スナップシ�
 <head><meta name="docsearch:pagerank" content="100"/></head>
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
-import ClusterSnapshotTerm from '../../_assets/commonMarkdown/cluster_snapshot_term.mdx'
-import ManualCreateDropClusterSnapshot from '../../_assets/commonMarkdown/manual_cluster_snapshot.mdx'
-import ClusterSnapshotWarning from '../../_assets/commonMarkdown/cluster_snapshot_warning.mdx'
 
 # クラスタースナップショット
 
@@ -38,8 +35,6 @@ import ClusterSnapshotWarning from '../../_assets/commonMarkdown/cluster_snapsho
 - **クラスタースナップショットの生成**
 
   システムは最新のクラスタ状態に密接に従うスナップショットを自動的に維持します。最新のスナップショットが作成されると、古いスナップショットはすぐに削除され、常に1つのスナップショットのみが利用可能です。
-
-  <ClusterSnapshotTerm />
 
 - **クラスタ復元**
 
@@ -77,8 +72,6 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
 ```
 
 自動クラスタースナップショットが無効になると、システムは自動的に古いスナップショットを削除します。
-
-<ManualCreateDropClusterSnapshot />
 
 ## クラスタースナップショットを表示する
 
@@ -122,8 +115,6 @@ SELECT * FROM information_schema.cluster_snapshot_jobs;
 | error_message      | ジョブのエラーメッセージ（ある場合）。                         |
 
 ## クラスタを復元する
-
-<ClusterSnapshotWarning />
 
 クラスタースナップショットを使用してクラスタを復元する手順は次のとおりです。
 

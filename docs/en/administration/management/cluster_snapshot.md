@@ -6,9 +6,6 @@ keywords: ['backup','restore','shared data','snapshot']
 <head><meta name="docsearch:pagerank" content="100"/></head>
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
-import ClusterSnapshotTerm from '../../_assets/commonMarkdown/cluster_snapshot_term.mdx'
-import ManualCreateDropClusterSnapshot from '../../_assets/commonMarkdown/manual_cluster_snapshot.mdx'
-import ClusterSnapshotWarning from '../../_assets/commonMarkdown/cluster_snapshot_warning.mdx'
 
 # Cluster Snapshot
 
@@ -37,8 +34,6 @@ In shared-data clusters, the CN state (data) is stored in object storage, but th
 - **Generating cluster snapshot**
 
   The system automatically maintains a snapshot closely following the latest cluster state. Historical snapshots will be dropped right after the latest one is created, keeping only one snapshot available all the time.
-
-  <ClusterSnapshotTerm />
 
 - **Cluster Restore**
 
@@ -76,8 +71,6 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
 ```
 
 Once Automated Cluster Snapshot is disabled, the system will automatically purge the historical snapshot.
-
-<ManualCreateDropClusterSnapshot />
 
 ## View cluster snapshot
 
@@ -121,8 +114,6 @@ Return:
 | error_message      | The error message (if any) of the job.                       |
 
 ## Restore the cluster
-
-<ClusterSnapshotWarning />
 
 Follow these steps to restore the cluster with the cluster snapshot.
 
