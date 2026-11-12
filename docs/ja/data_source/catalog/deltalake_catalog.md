@@ -14,6 +14,53 @@ import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
 
 - StarRocks がサポートする Delta Lake のファイル形式は Parquet です。Parquet ファイルは次の圧縮形式をサポートしています: SNAPPY, LZ4, ZSTD, GZIP, NO_COMPRESSION。
 
+## ADLS Gen2 の Unity Catalog REST
+
+`hive.metastore.type` を `unity` に設定すると、Unity Catalog 互換の REST API を通じて Parquet 形式の Delta テーブルを読み取れます。この経路は `dfs.core.windows.net` 配下の ADLS Gen2 をサポートし、サービスが各テーブルに読み取り専用のディレクトリスコープ Azure SAS を返す必要があります。
+
+### 認証
+
+StarRocks の既存の [JWT 認証](../../administration/user_privs/authentication/jwt_authentication.md) で接続します。SQL ログインでは、Catalog サービスも受け入れる認証済みセッショントークンが必要です。StarRocks はメタデータと一時認証情報のリクエストに `Authorization: Bearer <token>` として完全なトークンを転送します。パスワード認証のみのセッションではこのメタストアを使用できません。
+
+StarRocks の SQL 権限と Catalog の権限は別々に検証されます。ID プロバイダーに合わせて SQL アカウントの JWT principal、issuer、audience、公開鍵を設定し、必要な catalog の `USAGE` とテーブルの `SELECT` 権限を付与し、Catalog でもトークンのユーザーを認可してください。このコネクターは認証プラグインを追加せず、トークン交換も行いません。
+
+### catalog の作成とクエリ
+
+```sql
+CREATE EXTERNAL CATALOG unity_delta PROPERTIES (
+    "type" = "deltalake",
+    "hive.metastore.type" = "unity",
+    "unity.catalog.uri" = "https://catalog.example.com/api/2.1/unity-catalog",
+    "unity.catalog.name" = "main"
+);
+
+SHOW DATABASES FROM unity_delta;
+SHOW TABLES FROM unity_delta.example_schema;
+DESCRIBE unity_delta.example_schema.example_table;
+SELECT * FROM unity_delta.example_schema.example_table LIMIT 10;
+```
+
+| プロパティ | 必須 | 説明 |
+| --- | --- | --- |
+| `hive.metastore.type` | はい | `unity` を指定します。 |
+| `unity.catalog.uri` | はい | `/api/2.1/unity-catalog` とデプロイのプレフィックスを含む API ベース URI。HTTP と HTTPS に対応します。Bearer トークンは TLS または信頼できる内部通信で保護してください。リダイレクトには従いません。 |
+| `unity.catalog.name` | はい | 上流の catalog 名。その schema が StarRocks のデータベースに対応します。catalog、schema、テーブルの名前は空にできず、ドット、スラッシュ、制御文字を含められません。 |
+
+コネクターは schema とテーブルを一覧表示し、返されたテーブル ID を使用して `temporary-table-credentials` に `READ` 認証情報を要求します。レスポンスには、テーブルの保存先に一致する `url`、epoch ミリ秒の `expiration_time`、`azure_user_delegation_sas.sas_token` が必要です。SAS は有効期限内で、`sr=d` と一致するディレクトリ深度を持ち、権限は `r` または `rl` のみである必要があります。コンテナー全体の SAS や他のストレージ認証情報には対応しません。HTTPS DFS の保存先は `abfss` に正規化されます。
+
+各クエリは認証トークンを保持し、独立したメタデータキャッシュを使用します。Unity では、キャッシュプロパティが有効でも catalog 全体の Delta テーブル、JSON、checkpoint キャッシュを使用しません。各テーブルには独立したストレージ設定があります。既存のワーカースキャンには固定のテーブル SAS が渡され、Catalog トークンは渡されません。
+
+固定 SAS に対応する Hadoop 設定を使用してください。継承された `fs.azure.sas.token.provider.type.<account>` プロバイダーは固定 SAS より優先されます。既存のクラウド認証情報の転送経路は変更されず、未加工の fragment の DEBUG/VLOG 診断ログには SAS 値が含まれる場合があります。
+
+### 対応範囲と認証情報の有効期間
+
+- 読み取り専用です。テーブル作成、書き込み、クライアント認証情報による認証モードには対応しません。
+- Delta reader protocol はバージョン 3 まで、機能は `columnMapping`、`deletionVectors`、`timestampNtz`、`v2Checkpoint` に対応し、既存の Delta Kernel リーダー検証も適用されます。データファイルと外部削除ベクトルはテーブルのストレージルート内にある必要があります。
+- JWT と SAS は更新されません。JWT の期限切れ後は Catalog への認証済みリクエストが失敗します。計画済みのストレージ読み取りは SAS が有効な間のみ継続できます。必要に応じて新しいトークンで再接続してクエリを実行してください。
+- Catalog リクエストとスナップショット読み込みは、既存の external query profile に `UnityCatalog.request` と `DeltaLake.getSnapshot` として表示されます。既存の Delta ファイル読み取りとスキャン範囲のタイマーも維持されます。
+
+Hive、Glue、DLF catalog の動作は変わりません。使用する Catalog 実装が上記の REST レスポンスと認証情報の要件を満たすことを確認してください。
+
 ## 統合準備
 
 Delta Lake catalog を作成する前に、StarRocks クラスターが Delta Lake クラスターのストレージシステムとメタストアと統合できることを確認してください。
