@@ -320,6 +320,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` のパイプライン化された `.lcrm` 読み取りにおける sub-chunk の粒度。各出力 segment は `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 個の sub-chunk に分割され、独立してパイプライン化されます。値を小さくするほど、少数の大きな出力 segment で達成可能な並列度が上がりますが、その代わりに範囲読み取りが増え、consume 時に追加の memcpy が発生します。デフォルトは 4 MiB で、starcache のディスク層 block サイズと一致させています。
 
+### lake_scan_parallel_segment_open
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタのクエリスキャンで、タブレットのすべての Rowset の Segment を Rowset ごとに順番に開くのではなく、Segment ロードスレッドプール上で Segment ごとに 1 タスクとして一度に開き、各 Rowset のイテレータを並列に構築するかどうか。クエリスキャンにのみ適用され、リモート I/O スケジューラが有効な場合にのみ有効です。スケジューラが無効な場合、この項目は効果がありません。ロード、コンパクション、その他の読み取りは引き続き `enable_load_segment_parallel` に従います。フッターが Segment メタデータキャッシュですでに開かれている Segment は、タスクを使わずにそのまま使用されます。クエリプロファイルでは、これらは `TabletPrepareCachedSegments` に、フッターの読み取りはその他の `TabletPrepare*` カウンタに報告されます。
+- 導入バージョン: -
+
 ### lake_segment_metadata_cache_limit_percent
 
 - デフォルト: 20

@@ -295,6 +295,7 @@ private:
     RuntimeProfile::Counter* _lake_tablet_prepare_io_remote_timer = nullptr;
     RuntimeProfile::Counter* _lake_tablet_prepare_io_count_remote_counter = nullptr;
     RuntimeProfile::Counter* _lake_tablet_prepare_bytes_read_remote_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_cached_segments_counter = nullptr;
     RuntimeProfile::Counter* _lake_initial_coarse_counter = nullptr;
     RuntimeProfile::Counter* _lake_refined_counter = nullptr;
     // SeedPrepareTime breakdown (children of SeedPrepareTime): the seed's one-time per-segment prune cost.
