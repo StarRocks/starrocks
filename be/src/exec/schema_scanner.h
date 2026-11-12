@@ -76,7 +76,7 @@ struct SchemaScannerParam {
     std::vector<TFrontend> frontends;
 
     // schema scanner's predicates
-    const std::vector<ExprContext*>* expr_contexts;
+    const std::vector<ExprContext*>* expr_contexts{nullptr};
     std::unordered_map<SlotId, SlotDescriptor*> slot_id_mapping;
 };
 
