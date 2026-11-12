@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <memory>
 #include <numeric>
+#include <optional>
 
 #include "base/container/raw_container.h"
 #include "base/phmap/phmap.h"
@@ -1843,6 +1844,92 @@ StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& 
     } else {
         return dest_column;
     }
+}
+
+namespace {
+
+constexpr int64_t TRINO_SEQUENCE_MAX_ENTRIES = 10000;
+
+// The number of elements of Trino's sequence from start to stop by step, with Trino's errors for a zero step, a
+// step pointing away from stop, and a result over 10,000 elements. The distance and the step have the same sign
+// once the direction is checked, and 128-bit arithmetic keeps the distance between extreme BIGINTs exact.
+StatusOr<int64_t> trino_sequence_length(int64_t start, int64_t stop, int64_t step) {
+    if (step == 0) {
+        return Status::InvalidArgument("step must not be zero");
+    }
+    if (step > 0 ? stop < start : stop > start) {
+        return Status::InvalidArgument(
+                "sequence stop value should be greater than or equal to start value if step is greater than zero "
+                "otherwise stop should be less than or equal to start");
+    }
+    int128_t length = (static_cast<int128_t>(stop) - start) / step + 1;
+    if (length > TRINO_SEQUENCE_MAX_ENTRIES) {
+        return Status::InvalidArgument(fmt::format(
+                "result of sequence function must not have more than {} entries", TRINO_SEQUENCE_MAX_ENTRIES));
+    }
+    return static_cast<int64_t>(length);
+}
+
+} // namespace
+
+StatusOr<ColumnPtr> ArrayFunctions::trino_sequence_bigint(FunctionContext* ctx, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    RETURN_IF(columns.size() != 2 && columns.size() != 3, Status::InvalidArgument("expect 2 or 3 arguments"));
+
+    const size_t num_rows = columns[0]->size();
+    const bool all_const = ColumnHelper::is_all_const(columns);
+    const size_t num_rows_to_process = all_const ? 1 : num_rows;
+
+    ColumnViewer<TYPE_BIGINT> start_viewer(columns[0]);
+    ColumnViewer<TYPE_BIGINT> stop_viewer(columns[1]);
+    std::optional<ColumnViewer<TYPE_BIGINT>> step_viewer;
+    if (columns.size() == 3) {
+        step_viewer.emplace(columns[2]);
+    }
+
+    auto elements = Int64Column::create();
+    auto offsets = UInt32Column::create();
+    offsets->reserve(num_rows_to_process + 1);
+    offsets->append(0);
+    auto nulls = NullColumn::create();
+    nulls->reserve(num_rows_to_process);
+    bool has_null = false;
+
+    for (size_t row = 0; row < num_rows_to_process; ++row) {
+        // As in Trino, a NULL argument gives NULL before any of the step checks.
+        if (start_viewer.is_null(row) || stop_viewer.is_null(row) || (step_viewer && step_viewer->is_null(row))) {
+            has_null = true;
+            nulls->append(DATUM_NULL);
+            offsets->append(elements->size());
+            continue;
+        }
+        const int64_t start = start_viewer.value(row);
+        const int64_t stop = stop_viewer.value(row);
+        // Without a step, the evaluated bounds choose the direction.
+        const int64_t step = step_viewer ? step_viewer->value(row) : (start <= stop ? 1 : -1);
+        ASSIGN_OR_RETURN(int64_t length, trino_sequence_length(start, stop, step));
+
+        // Each element lies between start and stop; only start + i * step needs the wider type.
+        for (int64_t i = 0; i < length; ++i) {
+            elements->append(static_cast<int64_t>(start + static_cast<int128_t>(i) * step));
+        }
+        nulls->append(DATUM_NOT_NULL);
+        offsets->append(elements->size());
+    }
+
+    const size_t num_elements = elements->size();
+    auto nullable_elements = NullableColumn::create(std::move(elements), NullColumn::create(num_elements, 0));
+    auto result = ArrayColumn::create(std::move(nullable_elements), std::move(offsets));
+    if (all_const) {
+        if (has_null) {
+            return ColumnHelper::create_const_null_column(num_rows);
+        }
+        return ConstColumn::create(std::move(result), num_rows);
+    }
+    if (has_null) {
+        return NullableColumn::create(std::move(result), std::move(nulls));
+    }
+    return std::move(result);
 }
 
 // array_top_n(array_column, count) -> top_n_array
