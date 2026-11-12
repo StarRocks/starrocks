@@ -81,6 +81,44 @@ public class IcebergCachingFileIOTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testNormalizedAzurePathKeepsLogicalLocation() {
+        String path = "abfss://c@acct.blob.core.windows.net/metadata/m0.avro";
+        String normalized = "wasbs://c@acct.blob.core.windows.net/metadata/m0.avro";
+        List<String> accessed = new ArrayList<>();
+        new MockUp<ResolvingFileIO>() {
+            @Mock
+            public InputFile newInputFile(String location) {
+                accessed.add(location);
+                return Files.localInput("/tmp/non_existent_file");
+            }
+
+            @Mock
+            public OutputFile newOutputFile(String location) {
+                accessed.add(location);
+                return null;
+            }
+
+            @Mock
+            public void deleteFile(String location) {
+                accessed.add(location);
+            }
+        };
+
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        cachingFileIO.initialize(new HashMap<>());
+
+        // the parsed-manifest caches are keyed by ManifestFile.path(), so location() must stay the caller's path
+        Assertions.assertEquals(path, cachingFileIO.newInputFile(path).location());
+        cachingFileIO.newOutputFile(path);
+        cachingFileIO.deleteFile(path);
+        Assertions.assertEquals(List.of(normalized, normalized, normalized), accessed);
+    }
+
+    @Test
+>>>>>>> dff22f4 ([BugFix][RB-1548] Normalize Azure blob paths for Iceberg metadata tables read on the BE (#83074))
     public void testNewFileWithException() {
         IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
         cachingFileIO.setConf(new Configuration());
