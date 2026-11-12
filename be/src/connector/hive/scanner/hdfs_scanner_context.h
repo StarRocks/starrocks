@@ -35,6 +35,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "formats/scan_context.h"
+#include "formats/utils.h"
 #include "fs/fs.h"
 #include "runtime/descriptors.h"
 #include "storage_primitive/column_predicate_factory.h"
@@ -222,8 +223,8 @@ struct HdfsScannerContext {
     } predicates;
 
     // ===== methods =====
-    std::string formatted_name(const std::string& name) const {
-        return format_scan_context.options.case_sensitive ? name : boost::algorithm::to_lower_copy(name);
+    std::string formatted_name(std::string_view name) const {
+        return Utils::format_name(name, format_scan_context.options.case_sensitive);
     }
 };
 
