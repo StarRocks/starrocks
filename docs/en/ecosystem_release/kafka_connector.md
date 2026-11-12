@@ -7,7 +7,7 @@ description: "Release notes and changelog for the StarRocks Connector for Apache
 
 ## Notifications
 
-**User guide:** [Load data using Kafka connector](https://docs.starrocks.io/docs/loading/Kafka-connector-starrocks/)
+**User guide:** [Load data using Kafka connector](https://docs.starrocks.io/docs/loading/kafka/Kafka-connector-starrocks/)
 
 **Source codes:** [starrocks-connector-for-kafka](https://github.com/StarRocks/starrocks-connector-for-kafka)
 

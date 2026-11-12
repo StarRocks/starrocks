@@ -149,7 +149,7 @@ description: "StarRocks 3.0：新集約関数（percentile_disc）、GROUP BY �
 ### 新機能
 
 - 集計関数 [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) が DISTINCT キーワードと ORDER BY 句をサポートするようになりました。 [#28778](https://github.com/StarRocks/starrocks/pull/28778)
-- パーティション内のデータを時間の経過とともに自動的にクールダウンできるようになりました。（この機能は [リストパーティション化](https://docs.starrocks.io/docs/table_design/list_partitioning/) ではサポートされていません。） [#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
+- パーティション内のデータを時間の経過とともに自動的にクールダウンできるようになりました。（この機能は [リストパーティション化](https://docs.starrocks.io/docs/table_design/data_distribution/list_partitioning/) ではサポートされていません。） [#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
 
 ### 改善点
 
@@ -161,7 +161,7 @@ description: "StarRocks 3.0：新集約関数（percentile_disc）、GROUP BY �
 - `enable_orc_late_materialization` が `true` に設定されている場合、Hive カタログを使用して ORC ファイル内の STRUCT 型データをクエリすると予期しない結果が返されます。 [#27971](https://github.com/StarRocks/starrocks/pull/27971)
 - Hive カタログを通じてデータをクエリする際、WHERE 句にパーティション列と OR 演算子が指定されている場合、クエリ結果が正しくありません。 [#28876](https://github.com/StarRocks/starrocks/pull/28876)
 - クラウドネイティブテーブルに対して RESTful API アクション `show_data` で返される値が正しくありません。 [#29473](https://github.com/StarRocks/starrocks/pull/29473)
-- [共有データクラスタ](https://docs.starrocks.io/docs/deployment/shared_data/azure/) が Azure Blob Storage にデータを保存し、テーブルが作成されると、クラスタがバージョン 3.0 にロールバックされた後、FE が起動に失敗します。 [#29433](https://github.com/StarRocks/starrocks/pull/29433)
+- [共有データクラスタ](https://docs.starrocks.io/docs/deployment/deploy_shared_data_manually/) が Azure Blob Storage にデータを保存し、テーブルが作成されると、クラスタがバージョン 3.0 にロールバックされた後、FE が起動に失敗します。 [#29433](https://github.com/StarRocks/starrocks/pull/29433)
 - Iceberg カタログ内のテーブルをクエリする際、ユーザーにそのテーブルへの権限が付与されていても、ユーザーに権限がありません。 [#29173](https://github.com/StarRocks/starrocks/pull/29173)
 - [SHOW FULL COLUMNS](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/SHOW_FULL_COLUMNS/) ステートメントで返される [BITMAP](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/BITMAP/) または [HLL](https://docs.starrocks.io/docs/sql-reference/data-types/other-data-types/HLL/) データ型の列の `Default` フィールド値が正しくありません。 [#29510](https://github.com/StarRocks/starrocks/pull/29510)
 - `ADMIN SET FRONTEND CONFIG` コマンドを使用して FE 動的パラメータ `max_broker_load_job_concurrency` を変更しても効果がありません。
@@ -182,7 +182,7 @@ description: "StarRocks 3.0：新集約関数（percentile_disc）、GROUP BY �
 
 - エラーメッセージ `xxx too many versions xxx` により多くのプロンプトを追加しました。 [#28397](https://github.com/StarRocks/starrocks/pull/28397)
 - 動的パーティション化でパーティション単位を年にすることをさらにサポートします。 [#28386](https://github.com/StarRocks/starrocks/pull/28386)
-- テーブル作成時に式に基づくパーティション化が使用され、[INSERT OVERWRITE を使用して特定のパーティションのデータを上書きする](https://docs.starrocks.io/docs/table_design/expression_partitioning#load-data-into-partitions) 場合、パーティションフィールドは大文字小文字を区別しません。 [#28309](https://github.com/StarRocks/starrocks/pull/28309)
+- テーブル作成時に式に基づくパーティション化が使用され、[INSERT OVERWRITE を使用して特定のパーティションのデータを上書きする](https://docs.starrocks.io/docs/table_design/data_distribution/expression_partitioning/#load-data-into-partitions) 場合、パーティションフィールドは大文字小文字を区別しません。 [#28309](https://github.com/StarRocks/starrocks/pull/28309)
 
 ### バグ修正
 
@@ -237,7 +237,7 @@ description: "StarRocks 3.0：新集約関数（percentile_disc）、GROUP BY �
 ### 改善点
 
 - StarRocks 外部テーブルのメタデータ同期がデータロード中に行われるように変更されました。 [#24739](https://github.com/StarRocks/starrocks/pull/24739)
-- 自動的に作成されたパーティションを持つテーブルに対して INSERT OVERWRITE を実行する際にパーティションを指定できます。詳細については、[自動パーティション化](https://docs.starrocks.io/docs/table_design/expression_partitioning/) を参照してください。 [#25005](https://github.com/StarRocks/starrocks/pull/25005)
+- 自動的に作成されたパーティションを持つテーブルに対して INSERT OVERWRITE を実行する際にパーティションを指定できます。詳細については、[自動パーティション化](https://docs.starrocks.io/docs/table_design/data_distribution/expression_partitioning/) を参照してください。 [#25005](https://github.com/StarRocks/starrocks/pull/25005)
 - 非パーティション化テーブルにパーティションを追加する際に報告されるエラーメッセージを最適化しました。 [#25266](https://github.com/StarRocks/starrocks/pull/25266)
 
 ### バグ修正
@@ -280,9 +280,9 @@ description: "StarRocks 3.0：新集約関数（percentile_disc）、GROUP BY �
 
 ### 新機能
 
-- [プレビュー] 大規模なオペレーターの中間計算結果をディスクにスピルして、大規模なオペレーターのメモリ消費を削減することをサポートします。詳細については、[ディスクへのスピル](https://docs.starrocks.io/docs/administration/spill_to_disk/) を参照してください。
-- [Routine Load](https://docs.starrocks.io/docs/loading/RoutineLoad#load-avro-format-data) が Avro データのロードをサポートします。
-- [Microsoft Azure Storage](https://docs.starrocks.io/docs/integrations/authenticate_to_azure_storage/)（Azure Blob Storage および Azure Data Lake Storage を含む）をサポートします。
+- [プレビュー] 大規模なオペレーターの中間計算結果をディスクにスピルして、大規模なオペレーターのメモリ消費を削減することをサポートします。詳細については、[ディスクへのスピル](https://docs.starrocks.io/docs/administration/management/resource_management/spill_to_disk/) を参照してください。
+- [Routine Load](https://docs.starrocks.io/docs/loading/kafka/RoutineLoad/#load-avro-format-data) が Avro データのロードをサポートします。
+- [Microsoft Azure Storage](https://docs.starrocks.io/docs/integrations/csp_auth/authenticate_to_azure_storage/)（Azure Blob Storage および Azure Data Lake Storage を含む）をサポートします。
 
 ### 改善点
 
@@ -311,29 +311,29 @@ description: "StarRocks 3.0：新集約関数（percentile_disc）、GROUP BY �
 
 #### システムアーキテクチャ
 
-- **ストレージとコンピュートの分離。** StarRocks は、S3 互換のオブジェクトストレージへのデータ永続化をサポートし、リソースの分離を強化し、ストレージコストを削減し、コンピュートリソースをよりスケーラブルにします。ローカルディスクはクエリパフォーマンスを向上させるためのホットデータキャッシュとして使用されます。新しい共有データアーキテクチャのクエリパフォーマンスは、ローカルディスクキャッシュがヒットした場合、クラシックアーキテクチャ（共有なし）と同等です。詳細については、[共有データ StarRocks のデプロイと使用](https://docs.starrocks.io/docs/deployment/shared_data/s3/) を参照してください。
+- **ストレージとコンピュートの分離。** StarRocks は、S3 互換のオブジェクトストレージへのデータ永続化をサポートし、リソースの分離を強化し、ストレージコストを削減し、コンピュートリソースをよりスケーラブルにします。ローカルディスクはクエリパフォーマンスを向上させるためのホットデータキャッシュとして使用されます。新しい共有データアーキテクチャのクエリパフォーマンスは、ローカルディスクキャッシュがヒットした場合、クラシックアーキテクチャ（共有なし）と同等です。詳細については、[共有データ StarRocks のデプロイと使用](https://docs.starrocks.io/docs/deployment/deploy_shared_data_manually/) を参照してください。
 
 #### ストレージエンジンとデータ取り込み
 
 - [AUTO_INCREMENT](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/auto_increment/) 属性がサポートされ、グローバルに一意の ID を提供し、データ管理を簡素化します。
 - 自動パーティション化とパーティション化式がサポートされ、パーティション作成がより使いやすく柔軟になります。
 - 主キーテーブルが、CTE の使用や複数のテーブルへの参照を含む、より完全な [UPDATE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/UPDATE/) および [DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/DELETE/#primary-key-tables) 構文をサポートします。
-- Broker Load および INSERT INTO ジョブのロードプロファイルを追加しました。ロードプロファイルをクエリすることで、ロードジョブの詳細を表示できます。使用方法は [クエリプロファイルの分析](https://docs.starrocks.io/docs/administration/query_profile_overview/) と同じです。
+- Broker Load および INSERT INTO ジョブのロードプロファイルを追加しました。ロードプロファイルをクエリすることで、ロードジョブの詳細を表示できます。使用方法は [クエリプロファイルの分析](https://docs.starrocks.io/docs/best_practices/query_tuning/query_profile_overview/) と同じです。
 
 #### データレイク分析
 
-- [プレビュー] Presto/Trino 互換の方言をサポートします。Presto/Trino の SQL は自動的に StarRocks の SQL パターンに書き換えられます。詳細については、[システム変数](https://docs.starrocks.io/docs/reference/System_variable/) `sql_dialect` を参照してください。
+- [プレビュー] Presto/Trino 互換の方言をサポートします。Presto/Trino の SQL は自動的に StarRocks の SQL パターンに書き換えられます。詳細については、[システム変数](https://docs.starrocks.io/docs/sql-reference/System_variable/) `sql_dialect` を参照してください。
 - [プレビュー] [JDBC カタログ](https://docs.starrocks.io/docs/data_source/catalog/jdbc_catalog/) をサポートします。
 - 現在のセッションでカタログ間を手動で切り替えるために [SET CATALOG](https://docs.starrocks.io/docs/sql-reference/sql-statements/Catalog/SET_CATALOG/) を使用することをサポートします。
 
 #### 特権とセキュリティ
 
-- 完全な RBAC 機能を備えた新しい特権システムを提供し、ロールの継承とデフォルトロールをサポートします。詳細については、[特権の概要](https://docs.starrocks.io/docs/administration/privilege_overview/) を参照してください。
-- より多くの特権管理オブジェクトとより細かい特権を提供します。詳細については、[StarRocks がサポートする特権](https://docs.starrocks.io/docs/administration/privilege_item/) を参照してください。
+- 完全な RBAC 機能を備えた新しい特権システムを提供し、ロールの継承とデフォルトロールをサポートします。詳細については、[特権の概要](https://docs.starrocks.io/docs/administration/user_privs/authorization/user_privs/) を参照してください。
+- より多くの特権管理オブジェクトとより細かい特権を提供します。詳細については、[StarRocks がサポートする特権](https://docs.starrocks.io/docs/administration/user_privs/authorization/privilege_item/) を参照してください。
 
 #### クエリエンジン
 
-- 結合されたテーブルに対するより多くのクエリが [クエリキャッシュ](https://docs.starrocks.io/docs/using_starrocks/query_cache/) の利点を享受できるようになりました。たとえば、クエリキャッシュは現在、Broadcast Join および Bucket Shuffle Join をサポートしています。
+- 結合されたテーブルに対するより多くのクエリが [クエリキャッシュ](https://docs.starrocks.io/docs/using_starrocks/caching/query_cache/) の利点を享受できるようになりました。たとえば、クエリキャッシュは現在、Broadcast Join および Bucket Shuffle Join をサポートしています。
 - [グローバル UDF](https://docs.starrocks.io/docs/sql-reference/sql-functions/JAVA_UDF/) をサポートします。
 - 動的適応並行性: StarRocks はクエリの並行性のために `pipeline_dop` パラメータを自動的に調整できます。
 
@@ -352,7 +352,7 @@ description: "StarRocks 3.0：新集約関数（percentile_disc）、GROUP BY �
 
 #### デプロイメント
 
-- バージョン 3.0 用の Docker イメージと関連する [Docker デプロイメントドキュメント](https://docs.starrocks.io/docs/quick_start/deploy_with_docker/) を更新しました。 [#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021)
+- バージョン 3.0 用の Docker イメージと関連する [Docker デプロイメントドキュメント](https://docs.starrocks.io/docs/quick_start/shared-nothing/) を更新しました。 [#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021)
 
 #### ストレージエンジンとデータ取り込み
 
@@ -363,7 +363,7 @@ description: "StarRocks 3.0：新集約関数（percentile_disc）、GROUP BY �
 
 #### マテリアライズドビュー
 
-- [マテリアライズドビュー](https://docs.starrocks.io/docs/using_starrocks/Materialized_view/) の書き換え機能を最適化しました。以下を含みます:
+- [マテリアライズドビュー](https://docs.starrocks.io/docs/using_starrocks/async_mv/Materialized_view/) の書き換え機能を最適化しました。以下を含みます:
   - View Delta Join、Outer Join、Cross Join の書き換えをサポートします。
   - パーティションを持つ Union の SQL 書き換えを最適化しました。
 - マテリアライズドビューの構築機能を改善しました。CTE、select *、および Union をサポートします。
@@ -373,7 +373,7 @@ description: "StarRocks 3.0：新集約関数（percentile_disc）、GROUP BY �
 #### クエリエンジン
 
 - すべてのオペレーターがパイプラインエンジンでサポートされています。非パイプラインコードは後のバージョンで削除されます。
-- [大規模クエリの位置付け](https://docs.starrocks.io/docs/administration/monitor_manage_big_queries/) を改善し、大規模クエリログを追加しました。[SHOW PROCESSLIST](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST/) で CPU とメモリ情報を表示できます。
+- [大規模クエリの位置付け](https://docs.starrocks.io/docs/administration/management/monitor_manage_big_queries/) を改善し、大規模クエリログを追加しました。[SHOW PROCESSLIST](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST/) で CPU とメモリ情報を表示できます。
 - 外部結合の再順序を最適化しました。
 - SQL パース段階でのエラーメッセージを最適化し、より正確なエラーポジショニングと明確なエラーメッセージを提供します。
 
@@ -423,4 +423,4 @@ StarRocks は v3.0 で BDB ライブラリをアップグレードします。�
 
 ダウングレード後、[ALTER SYSTEM CREATE IMAGE](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM/) を実行して新しいイメージを作成し、新しいイメージがすべてのフォロワー FE に同期されるのを待ちます。このコマンドを実行しないと、一部のダウングレード操作が失敗する可能性があります。このコマンドは 2.5.3 以降でサポートされています。
 
-v2.5 と v3.0 の特権システムの違いについては、[StarRocks がサポートする特権](https://docs.starrocks.io/docs/administration/privilege_item/) の「アップグレードノート」を参照してください。
+v2.5 と v3.0 の特権システムの違いについては、[StarRocks がサポートする特権](https://docs.starrocks.io/docs/administration/user_privs/authorization/privilege_item/) の「アップグレードノート」を参照してください。

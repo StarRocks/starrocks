@@ -920,8 +920,8 @@ description: "StarRocks 3.3 版本发布说明：子秒级 DDL、Fast Schema Evo
 #### 数据湖分析
 
 - **Data Cache 增强：**
-  - 新增 [缓存预热 (Warmup)](https://docs.starrocks.io/zh/docs/data_source/data_cache_warmup/) 命令 CACHE SELECT，用于填充查询热点数据，可以结合 SUBMIT TASK 完成周期性填充。该功能同时支持外表和存算分离的内表。
-  - 增加了多项 [Data Cache 可观测性指标](https://docs.starrocks.io/zh/docs/data_source/data_cache_observe/)。
+  - 新增 [缓存预热 (Warmup)](https://docs.starrocks.io/zh/docs/data_source/data_cache/block_cache_warmup/) 命令 CACHE SELECT，用于填充查询热点数据，可以结合 SUBMIT TASK 完成周期性填充。该功能同时支持外表和存算分离的内表。
+  - 增加了多项 [Data Cache 可观测性指标](https://docs.starrocks.io/zh/docs/data_source/data_cache/data_cache_observe/)。
 - **Parquet Reader 性能提升：**
   - 针对 Page Index 的优化，显著减少 Scan 数据规模。
   - 在有 Page Index 的情况下，降低 Page 多读的情况。
@@ -931,7 +931,7 @@ description: "StarRocks 3.3 版本发布说明：子秒级 DDL、Fast Schema Evo
   - 优化 ORC Tiny Stripe 处理逻辑。
 - **Iceberg 文件格式能力升级：**
   - 大幅提升 Iceberg Catalog 的元数据访问性能，重构并行 Scan 逻辑，解决了 Iceberg 原生 SDK 在处理大量元数据文件时的单线程 I/O 瓶颈，在执行有元数据瓶颈的查询时带来 10 倍以上的性能提升。
-  - Parquet 格式的 Iceberg v2 表查询支持 [equality-delete](https://docs.starrocks.io/zh/docs/data_source/catalog/iceberg/iceberg_catalog#使用说明)。
+  - Parquet 格式的 Iceberg v2 表查询支持 [equality-delete](https://docs.starrocks.io/zh/docs/data_source/catalog/iceberg/#使用注意事项)。
 - **[Experimental] Paimon Catalog 优化：**
   - 基于 Paimon 外表创建的物化视图支持自动查询改写。
   - 优化针对 Paimon Catalog 查询的 Scan Range 调度，提高 I/O 并发。
@@ -970,9 +970,9 @@ description: "StarRocks 3.3 版本发布说明：子秒级 DDL、Fast Schema Evo
 
 #### 存储优化与集群管理
 
-- **[增强 Range 分区的灵活性](https://docs.starrocks.io/zh/docs/table_design/Data_distribution/#range-分区)**：新增支持三个特定时间函数作为分区列，可以将时间戳或字符串的分区列值转成日期，然后按转换后的日期划分分区。
+- **[增强 Range 分区的灵活性](https://docs.starrocks.io/zh/docs/table_design/data_distribution/#range-分区)**：新增支持三个特定时间函数作为分区列，可以将时间戳或字符串的分区列值转成日期，然后按转换后的日期划分分区。
 - **FE 内存可观测性**：提供 FE 内各模块的详细内存使用指标，以便更好地管理资源。
-- **[优化 FE 中的元数据锁](https://docs.starrocks.io/zh/docs/administration/management/FE_configuration/#lock_manager_enabled)**：提供 Lock Manager，可以对 FE  中的元数据锁实现集中管理，例如将元数据锁的粒度从库级别细化为表级别，可以提高导入和查询的并发性能。在 100 并发小数据量导入场景下，导入耗时减少 35%。
+- **[优化 FE 中的元数据锁](https://docs.starrocks.io/zh/docs/3.3/administration/management/FE_configuration/#lock_manager_enabled)**：提供 Lock Manager，可以对 FE  中的元数据锁实现集中管理，例如将元数据锁的粒度从库级别细化为表级别，可以提高导入和查询的并发性能。在 100 并发小数据量导入场景下，导入耗时减少 35%。
 - **[使用标签管理 BE](https://docs.starrocks.io/zh/docs/administration/management/resource_management/be_label/)**：支持基于 BE 节点所在机架、数据中心等信息，使用标签对 BE 节点进行分组，以保证数据在机架或数据中心等之间均匀分布，应对某些机架断电或数据中心故障情况下的灾备需求。
 - **[优化排序键](https://docs.starrocks.io/zh/docs/table_design/indexes/Prefix_index_sort_key/)**：明细表、聚合表和更新表均支持通过 `ORDER BY` 子句指定排序键。
 - **[Experimental] 优化非字符串标量类型数据的存储效率**：这类数据支持字典编码，存储空间下降 12%。
@@ -997,7 +997,7 @@ description: "StarRocks 3.3 版本发布说明：子秒级 DDL、Fast Schema Evo
 
 - DATETIME 完整支持微秒（Microsecond），相关的时间函数和导入均支持了新的单位。
 - 新增如下函数：
-  - [字符串函数](https://docs.starrocks.io/zh/docs/category/string-1/)：crc32、url_extract_host、ngram_search
+  - [字符串函数](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/)：crc32、url_extract_host、ngram_search
   - Array 函数：[array_contains_seq](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_contains_seq/)
   - 时间日期函数：[yearweek](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/date-time-functions/yearweek/)
   - 数学函数：[crbt](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/math-functions/cbrt/)
