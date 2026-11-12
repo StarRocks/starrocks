@@ -182,6 +182,26 @@ public class TrinoTimestampWithTimeZoneTest extends TrinoTestBase {
         }
     }
 
+    // Consumers that read only the wall-clock fields read a zoned literal in its own zone in Trino
+    @Test
+    public void testWallClockConsumers() throws Exception {
+        for (String timeZone : SESSION_TIME_ZONES) {
+            setTimeZone(timeZone);
+            assertPlanContains("select year(TIMESTAMP '2024-01-01 00:00:00 Asia/Tokyo')", ": 2024");
+            assertPlanContains("select cast(TIMESTAMP '2024-01-01 00:00:00 Asia/Tokyo' AS DATE)", "'2024-01-01'");
+            assertPlanContains("select cast(date_trunc('day', TIMESTAMP '2024-01-01 05:00:00 Asia/Tokyo') AS TIMESTAMP)",
+                    "'2024-01-01 00:00:00'");
+            // America/Sao_Paulo skipped midnight on 2018-11-04; Trino's date_trunc moves to the end of the gap
+            assertPlanContains("select cast(date_trunc('day', TIMESTAMP '2018-11-04 12:00:00 America/Sao_Paulo') " +
+                    "AS TIMESTAMP)", "'2018-11-04 01:00:00'");
+        }
+        // Elsewhere date_trunc would truncate in the session time zone, unless it is the literal's, with a fixed offset
+        setTimeZone("UTC");
+        analyzeFail("select date_trunc('day', TIMESTAMP '2024-01-01 05:00:00 Asia/Tokyo')",
+                "date_trunc of a TIMESTAMP literal with a time zone");
+        assertPlanContains("select date_trunc('day', TIMESTAMP '2024-01-01 05:00:00 UTC')", "'2024-01-01 00:00:00'");
+    }
+
     @Test
     public void testToUnixTime() throws Exception {
         for (String timeZone : SESSION_TIME_ZONES) {

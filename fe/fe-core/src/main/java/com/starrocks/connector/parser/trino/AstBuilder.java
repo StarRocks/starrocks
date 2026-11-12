@@ -851,6 +851,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                     node.getArguments().get(1), context);
         }
         addWallClockOperands(node);
+        rejectZonedLiteralTruncation(node);
         List<Expr> arguments = visit(node.getArguments(), context, Expr.class);
 
         Expr callExpr;
@@ -1160,6 +1161,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 if (offsets.isEmpty()) {
                     throw new IllegalArgumentException("Invalid TIMESTAMP due to daylight savings transition");
                 }
+                // A consumer that reads only the wall-clock fields (year(), CAST AS DATE, ...) reads them in the
+                // literal's own zone in Trino, which is the wall clock as written
+                if (wallClockOperands.contains(node)) {
+                    return new DateLiteral(dateTime, DateType.DATETIME);
+                }
                 return new FunctionCallExpr("convert_tz", List.of(
                         new DateLiteral(dateTime, DateType.DATETIME),
                         new com.starrocks.sql.ast.expression.StringLiteral(toConvertTzZone(zoneId, offsets.get(0))),
@@ -1236,11 +1242,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     // midnight on a DST change at 00:00). Trino moves such a result to the end of the gap; a round trip through the
     // zone does the same in FE folding and the BE, and leaves every other time as it is
     private Expr resolveSkippedTruncation(Expr truncated, Expression argument) {
-        Optional<Expression> zone = conversionTargetZone(argument);
-        if (zone.isEmpty() || !(zone.get() instanceof StringLiteral)) {
-            return truncated;
-        }
-        Optional<ZoneId> zoneId = parseZoneId(((StringLiteral) zone.get()).getValue());
+        Optional<ZoneId> zoneId = wallClockZone(argument);
         if (zoneId.isEmpty()) {
             return truncated;
         }
@@ -1248,6 +1250,28 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         Expr utc = new com.starrocks.sql.ast.expression.StringLiteral("UTC");
         return new FunctionCallExpr("convert_tz", List.of(
                 new FunctionCallExpr("convert_tz", List.of(truncated, name, utc)), utc, name));
+    }
+
+    // The zone whose wall clock a zoned value is converted to: the target of a with_timezone conversion, or the zone
+    // of a TIMESTAMP '... zone' literal, which is converted to its wall clock under a wall-clock consumer
+    private static Optional<ZoneId> wallClockZone(Expression expression) {
+        Optional<Expression> target = conversionTargetZone(expression);
+        if (target.isPresent()) {
+            return target.get() instanceof StringLiteral ?
+                    parseZoneId(((StringLiteral) target.get()).getValue()) : Optional.empty();
+        }
+        return literalZone(expression);
+    }
+
+    private static Optional<ZoneId> literalZone(Expression expression) {
+        if (!(expression instanceof TimestampLiteral)) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.ofNullable(parseTimeZoneFromString(((TimestampLiteral) expression).getValue()));
+        } catch (IllegalArgumentException | DateTimeException e) {
+            return Optional.empty();
+        }
     }
 
     private static boolean isWithTimezone(Expression expression) {
@@ -1332,7 +1356,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             wallClockOperands.add(arguments.get(wallClockArgument));
             zoneFreeOperands.add(arguments.get(wallClockArgument));
         } else if (name.equals("date_trunc") && arguments.size() == 2 && wallClockOperands.contains(node)
-                && conversionTargetZone(arguments.get(1)).isPresent()) {
+                && wallClockZone(arguments.get(1)).isPresent()) {
             wallClockOperands.add(arguments.get(1));
         } else if ((name.equals("date_format") || name.equals("format_datetime")) && arguments.size() == 2) {
             if (arguments.get(1) instanceof StringLiteral
@@ -1365,16 +1389,34 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return false;
     }
 
+    // date_trunc of a TIMESTAMP '... zone' literal truncates in that zone in Trino and keeps the zone. The literal is
+    // represented in the session time zone, so outside a wall-clock consumer, which reads it in its own zone, the
+    // truncation would happen in the wrong zone unless that zone is the session time zone with a fixed offset
+    private void rejectZonedLiteralTruncation(FunctionCall node) {
+        if (!node.getName().toString().equalsIgnoreCase("date_trunc") || node.getArguments().size() != 2
+                || wallClockOperands.contains(node)) {
+            return;
+        }
+        Optional<ZoneId> zone = literalZone(node.getArguments().get(1));
+        if (zone.isPresent() && !isFixedSessionTimeZone(zone.get())) {
+            throw unsupportedException(String.format("Trino parser on StarRocks does not support %s here: date_trunc "
+                    + "of a TIMESTAMP literal with a time zone is supported only as a wall-clock time (CAST to "
+                    + "TIMESTAMP or DATE, date and field functions, EXTRACT, or date_format and format_datetime with a "
+                    + "literal format without the zone), or in a session time zone with a fixed offset (session time "
+                    + "zone: %s)", node, TimeUtils.getTimeZone().toZoneId()));
+        }
+    }
+
+    private static boolean isFixedSessionTimeZone(ZoneId zone) {
+        ZoneId sessionZone = TimeUtils.getTimeZone().toZoneId();
+        return sessionZone.getRules().isFixedOffset() && (zone.normalized().equals(sessionZone.normalized())
+                || zone.getRules().equals(sessionZone.getRules()));
+    }
+
     // Whether zone is a literal naming the session time zone, and that zone has a fixed offset
     private static boolean isSessionTimeZone(Expression zone) {
-        if (!(zone instanceof StringLiteral)) {
-            return false;
-        }
-        Optional<ZoneId> zoneId = parseZoneId(((StringLiteral) zone).getValue());
-        ZoneId sessionZone = TimeUtils.getTimeZone().toZoneId();
-        return zoneId.isPresent() && sessionZone.getRules().isFixedOffset()
-                && (zoneId.get().normalized().equals(sessionZone.normalized())
-                || zoneId.get().getRules().equals(sessionZone.getRules()));
+        return zone instanceof StringLiteral
+                && parseZoneId(((StringLiteral) zone).getValue()).map(AstBuilder::isFixedSessionTimeZone).orElse(false);
     }
 
     // Trino zone names are case-insensitive; StarRocks' own aliases such as CST aren't Trino zones
