@@ -5,8 +5,6 @@ sidebar_label: "Built-in Roles"
 description: "Reference for the five built-in StarRocks roles: db_admin, cluster_admin, user_admin, security_admin, and public."
 ---
 
-import DBAdmin from '../../../_assets/commonMarkdown/role_db_admin.mdx'
-import ClusterAdmin from '../../../_assets/commonMarkdown/role_cluster_admin.mdx'
 
 # Built-in Roles supported by StarRocks
 
@@ -22,9 +20,44 @@ Each of the `admin` roles is granted with different privileges to allow them to 
 
 For details of the privileges described below, see [Privilege Item](./privilege_item.md).
 
-<DBAdmin />
+## `db_admin`
 
-<ClusterAdmin />
+`db_admin` is the built-in database administrator. It has all data-related privileges and some basic privileges on operations and maintenance.
+
+- Focused on management of databases and data
+- Unavailable for user or cluster management
+- Immutable role
+
+Privilege scope:
+
+| Privilege Level   | Privilege Item |
+| ----------------- | -------------- |
+| SYSTEM            | <ul><li>CREATE RESOURCE</li><li>PLUGIN</li><li>FILE</li><li>BLACKLIST</li><li>OPERATE</li><li>CREATE EXTERNAL CATALOG</li><li>REPOSITORY</li><li>CREATE RESOURCE GROUP</li><li>CREATE GLOBAL FUNCTION</li><li>CREATE STORAGE VOLUME</li><li>SECURITY</li></ul> |
+| CATALOG           | <ul><li>USAGE</li><li>DROP</li><li>ALTER</li><li>CREATE DATABASE</li></ul> |
+| DATABASE          | <ul><li>DROP</li><li>ALTER</li><li>CREATE TABLE</li><li>CREATE VIEW</li><li>CREATE MATERIALIZED VIEW</li><li>CREATE FUNCTION</li><li>CREATE PIPE</li><li>CREATE MASKING POLICY</li><li>CREATE ROW ACCESS POLICY</li></ul> |
+| TABLE             | <ul><li>DROP</li><li>ALTER</li><li>INSERT</li><li>UPDATE</li><li>DELETE</li><li>SELECT</li><li>EXPORT</li></ul> |
+| VIEW              | <ul><li>DROP</li><li>ALTER</li><li>SELECT</li></ul> |
+| MATERIALIZED VIEW | <ul><li>DROP</li><li>ALTER</li><li>SELECT</li><li>REFRESH</li></ul> |
+| RESOURCE          | <ul><li>USAGE</li><li>DROP</li><li>ALTER</li></ul> |
+| RESOURCE GROUP    | <ul><li>DROP</li><li>ALTER</li></ul> |
+| FUNCTION          | <ul><li>USAGE</li><li>DROP</li></ul> |
+| GLOBAL FUNCTION   | <ul><li>USAGE</li><li>DROP</li></ul> |
+| STORAGE VOLUME    | <ul><li>USAGE</li><li>DROP</li><li>ALTER</li></ul> |
+| PIPE              | <ul><li>USAGE</li><li>DROP</li><li>ALTER</li></ul> |
+
+## `cluster_admin`
+
+`cluster_admin` is the built-in cluster administrator.
+
+- Focused on management of cluster infrastructure
+- Granted with privileges on node management
+- Immutable role
+
+Privilege scope:
+
+| Privilege Level   | Privilege Item |
+| ----------------- | -------------- |
+| SYSTEM            | NODE           |
 
 ## `user_admin`
 

@@ -4,9 +4,6 @@ description: "複数ワークロード（短いクエリ、アドホッククエ
 sidebar_position: 10
 ---
 
-import ScopeParam from '../../../_assets/commonMarkdown/rg_scope_param.mdx'
-import WhSyntaxExample from '../../../_assets/commonMarkdown/rg_wh_syntax_example.mdx'
-import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.mdx'
 
 # リソースグループ
 
@@ -102,8 +99,6 @@ CPU ハードアイソレーションは、次のいずれかのパラメータ�
 ```SQL
 UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_resource_group_cpu_borrowing";
 ```
-
-<ScopeParam />
 
 #### メモリリソースパラメータ
 
@@ -282,7 +277,40 @@ SET GLOBAL enable_pipeline_engine = true;
 
 次のステートメントを実行して、リソースグループを作成し、クラシファイアと関連付け、リソースグループに計算リソースを割り当てます。
 
-<WhSyntaxExample />
+```SQL
+CREATE RESOURCE GROUP <group_name> 
+TO (
+    user='string', 
+    role='string', 
+    query_type in ('select'), 
+    source_ip='cidr'
+) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (`,`).
+WITH (
+    "{ cpu_weight | exclusive_cpu_cores }" = "INT",
+    "mem_limit" = "m%",
+    "concurrency_limit" = "INT",
+    "type" = "str" --The type of the resource group. Set the value to normal.
+);
+```
+
+例:
+
+```SQL
+CREATE RESOURCE GROUP rg1
+TO 
+    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user2', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user3', source_ip='192.168.x.x/24'),
+    (user='rg1_user4'),
+    (db='db1')
+WITH (
+    'exclusive_cpu_cores' = '10',
+    'mem_limit' = '20%',
+    'big_query_cpu_second_limit' = '100',
+    'big_query_scan_rows_limit' = '100000',
+    'big_query_mem_limit' = '1073741824'
+);
+```
 
 ### リソースグループを指定する（オプション）
 
@@ -345,7 +373,12 @@ SHOW VERBOSE RESOURCE GROUP group_name;
 
 既存のリソースグループのリソースクォータを変更するには、次のステートメントを実行します。
 
-<WhAlterSyntax />
+```SQL
+ALTER RESOURCE GROUP group_name WITH (
+    'cpu_core_limit' = 'INT',
+    'mem_limit' = 'm%'
+);
+```
 
 リソースグループを削除するには、次のステートメントを実行します。
 

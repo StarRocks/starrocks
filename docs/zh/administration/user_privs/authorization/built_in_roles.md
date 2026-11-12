@@ -5,8 +5,6 @@ sidebar_position: 25
 sidebar_label: "内置角色"
 ---
 
-import DBAdmin from '../../../_assets/commonMarkdown/role_db_admin.mdx'
-import ClusterAdmin from '../../../_assets/commonMarkdown/role_cluster_admin.mdx'
 
 # StarRocks 支持的内置角色
 
@@ -22,9 +20,44 @@ import ClusterAdmin from '../../../_assets/commonMarkdown/role_cluster_admin.mdx
 
 有关下述权限的详细信息，请参见[权限项](./privilege_item.md)。
 
-<DBAdmin />
+## `db_admin`
 
-<ClusterAdmin />
+`db_admin` 是内置的数据库管理员。它拥有所有与数据相关的权限以及一些基本的运维权限。
+
+- 专注于数据库和数据的管理
+- 不可用于用户或集群管理
+- 不可变角色
+
+权限范围：
+
+| 权限级别         | 权限项 |
+| ---------------- | ------ |
+| SYSTEM           | <ul><li>CREATE RESOURCE</li><li>PLUGIN</li><li>FILE</li><li>BLACKLIST</li><li>OPERATE</li><li>CREATE EXTERNAL CATALOG</li><li>REPOSITORY</li><li>CREATE RESOURCE GROUP</li><li>CREATE GLOBAL FUNCTION</li><li>CREATE STORAGE VOLUME</li><li>SECURITY</li></ul> |
+| CATALOG          | <ul><li>USAGE</li><li>DROP</li><li>ALTER</li><li>CREATE DATABASE</li></ul> |
+| DATABASE         | <ul><li>DROP</li><li>ALTER</li><li>CREATE TABLE</li><li>CREATE VIEW</li><li>CREATE MATERIALIZED VIEW</li><li>CREATE FUNCTION</li><li>CREATE PIPE</li><li>CREATE MASKING POLICY</li><li>CREATE ROW ACCESS POLICY</li></ul> |
+| TABLE            | <ul><li>DROP</li><li>ALTER</li><li>INSERT</li><li>UPDATE</li><li>DELETE</li><li>SELECT</li><li>EXPORT</li></ul> |
+| VIEW             | <ul><li>DROP</li><li>ALTER</li><li>SELECT</li></ul> |
+| MATERIALIZED VIEW| <ul><li>DROP</li><li>ALTER</li><li>SELECT</li><li>REFRESH</li></ul> |
+| RESOURCE         | <ul><li>USAGE</li><li>DROP</li><li>ALTER</li></ul> |
+| RESOURCE GROUP   | <ul><li>DROP</li><li>ALTER</li></ul> |
+| FUNCTION         | <ul><li>USAGE</li><li>DROP</li></ul> |
+| GLOBAL FUNCTION  | <ul><li>USAGE</li><li>DROP</li></ul> |
+| STORAGE VOLUME   | <ul><li>USAGE</li><li>DROP</li><li>ALTER</li></ul> |
+| PIPE             | <ul><li>USAGE</li><li>DROP</li><li>ALTER</li></ul> |
+
+## `cluster_admin`
+
+`cluster_admin` 是内置的集群管理员。
+
+- 专注于集群基础设施的管理
+- 拥有节点管理的权限
+- 不可变角色
+
+权限范围：
+
+| 权限级别         | 权限项         |
+| ---------------- | -------------- |
+| SYSTEM           | NODE           |
 
 ## `user_admin`
 

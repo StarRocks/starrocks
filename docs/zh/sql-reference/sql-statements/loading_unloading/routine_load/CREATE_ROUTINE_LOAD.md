@@ -4,8 +4,6 @@ description: "Routine Load 可以持续从 Apache Kafka® 消费消息并导入�
 ---
 
 import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
-import WarehouseExample from '../../../../_assets/sql-reference/sql-statements/loading_unloading/routine_load/_routine_load_warehouse_example.mdx';
-import WarehouseProperty from '../../../../_assets/sql-reference/sql-statements/loading_unloading/routine_load/_routine_load_warehouse_property.mdx';
 
 # CREATE ROUTINE LOAD
 
@@ -107,8 +105,6 @@ PARTITION (p1, p2, p3)
 ```SQL
 PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 ```
-<WarehouseProperty />
-
 #### `desired_concurrent_number`
 
 **必需**：否\
@@ -385,8 +381,6 @@ FROM <data_source>
 有关示例，请参见 [StarRocks 表包含通过表达式生成值的派生列](#starrocks-table-contains-derived-columns-whose-values-are-generated-by-using-expressions)。
 
 ## 示例
-
-<WarehouseExample />
 
 ### 导入 CSV 格式数据
 

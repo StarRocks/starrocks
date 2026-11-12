@@ -5,7 +5,6 @@ description: "CREATE MATERIALIZED VIEW creates a materialized view."
 
 # CREATE MATERIALIZED VIEW
 
-import MVWarehouse from '../../../_assets/commonMarkdown/mv_warehouse.mdx'
 
 CREATE MATERIALIZED VIEW creates a materialized view. For usage information about materialized views, see [Synchronous materialized view](../../../using_starrocks/Materialized_view-single_table.md) and [Asynchronous materialized view](../../../using_starrocks/async_mv/Materialized_view.md).
 
@@ -408,8 +407,6 @@ Properties of the asynchronous materialized view. You can modify the properties 
 
   - `PCT`: (Default) For partitioned materialized views, only the affected partition is refreshed when there is a data change, ensuring result consistency for that partition. For non-partitioned materialized views, any data change in the base table triggers a full refresh of the materialized view.
   - `INCREMENTAL`: Ensures that only incremental refreshes are performed. If the materialized view does not support incremental refresh based on its definition or encounters non-incremental data, creation or refresh will fail.
-
-<MVWarehouse />
 
 **query_statement** (required)
 
