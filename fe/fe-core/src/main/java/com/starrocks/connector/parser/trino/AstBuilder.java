@@ -516,6 +516,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         if (node.getRows().isEmpty()) {
             return null;
         } else {
+            for (Expression row : node.getRows()) {
+                zoneShownOperands.addAll(row instanceof Row ? ((Row) row).getItems() : List.of(row));
+            }
             List<Expr> rows = visit(node.getRows(), context, Expr.class);
             List<ValueList> valueLists = Lists.newArrayList();
 
@@ -543,6 +546,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitUnnest(Unnest node, ParseTreeContext context) {
+        zoneShownOperands.addAll(node.getExpressions());
         List<Expr> arguments = visit(node.getExpressions(), context, Expr.class);
         List<Expr> expressions = new ArrayList<>();
 
@@ -801,6 +805,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             alias = node.getAlias().get().getValue();
         }
 
+        // A column leaves the expression, so its consumer can't be checked here
+        zoneShownOperands.add(node.getExpression());
         Expr expression = (Expr) visit(node.getExpression(), context);
         return new SelectListItem(expression, alias);
     }
@@ -840,9 +846,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitFunctionCall(FunctionCall node, ParseTreeContext context) {
-        if (node.getName().toString().equalsIgnoreCase(AT_TIMEZONE) && node.getArguments().size() == 2
-                && isWithTimezone(node.getArguments().get(0)) && node.getWindow().isEmpty()
-                && node.getFilter().isEmpty() && !node.isDistinct() && node.getOrderBy().isEmpty()) {
+        if (isAtTimezoneOfWithTimezone(node)) {
             return convertWithTimezoneToZone(node, (FunctionCall) node.getArguments().get(0),
                     node.getArguments().get(1), context);
         }
@@ -895,6 +899,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             }
         } else {
             callExpr = new FunctionCallExpr(functionName, arguments);
+        }
+        if (functionName.equalsIgnoreCase("date_trunc") && arguments.size() == 2) {
+            callExpr = resolveSkippedTruncation(callExpr, node.getArguments().get(1));
         }
         if (node.getWindow().isPresent()) {
             return visitWindow((FunctionCallExpr) callExpr, node.getWindow().get(), context);
@@ -1207,6 +1214,42 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
      * BE in a form it resolves (a region ID, UTC or +HH:MM), since its lookup is case-sensitive and doesn't know
      * Java's or Trino's other spellings; a literal that isn't a valid zone is rejected.
      */
+    // at_timezone(with_timezone(ts, from), to) as a plain call, without a window, FILTER, DISTINCT or ORDER BY
+    private static boolean isAtTimezoneOfWithTimezone(FunctionCall call) {
+        return call.getName().toString().equalsIgnoreCase(AT_TIMEZONE) && call.getArguments().size() == 2
+                && isWithTimezone(call.getArguments().get(0)) && call.getWindow().isEmpty()
+                && call.getFilter().isEmpty() && !call.isDistinct() && call.getOrderBy().isEmpty();
+    }
+
+    // The target zone of a zone conversion of with_timezone, if expression is one
+    private static Optional<Expression> conversionTargetZone(Expression expression) {
+        if (expression instanceof AtTimeZone && isWithTimezone(((AtTimeZone) expression).getValue())) {
+            return Optional.of(((AtTimeZone) expression).getTimeZone());
+        }
+        if (expression instanceof FunctionCall && isAtTimezoneOfWithTimezone((FunctionCall) expression)) {
+            return Optional.of(((FunctionCall) expression).getArguments().get(1));
+        }
+        return Optional.empty();
+    }
+
+    // date_trunc of a zone conversion truncates the wall-clock time, which can land on a time the zone skips (e.g.
+    // midnight on a DST change at 00:00). Trino moves such a result to the end of the gap; a round trip through the
+    // zone does the same in FE folding and the BE, and leaves every other time as it is
+    private Expr resolveSkippedTruncation(Expr truncated, Expression argument) {
+        Optional<Expression> zone = conversionTargetZone(argument);
+        if (zone.isEmpty() || !(zone.get() instanceof StringLiteral)) {
+            return truncated;
+        }
+        Optional<ZoneId> zoneId = parseZoneId(((StringLiteral) zone.get()).getValue());
+        if (zoneId.isEmpty()) {
+            return truncated;
+        }
+        Expr name = new com.starrocks.sql.ast.expression.StringLiteral(toBackendZone(zoneId.get()));
+        Expr utc = new com.starrocks.sql.ast.expression.StringLiteral("UTC");
+        return new FunctionCallExpr("convert_tz", List.of(
+                new FunctionCallExpr("convert_tz", List.of(truncated, name, utc)), utc, name));
+    }
+
     private static boolean isWithTimezone(Expression expression) {
         if (!(expression instanceof FunctionCall)) {
             return false;
@@ -1238,7 +1281,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         if (zoneShown) {
             throw unsupportedException(String.format("Trino parser on StarRocks does not support %s here: the "
                     + "result's time zone is shown (a cast to a string, format_datetime with a zone pattern or a "
-                    + "non-literal format, to_iso8601, timezone_hour), and a StarRocks DATETIME doesn't carry it", node));
+                    + "non-literal format, to_iso8601, timezone_hour, or a column of a query, VALUES or UNNEST), and "
+                    + "a StarRocks DATETIME doesn't carry it", node));
         }
     }
 
@@ -1257,18 +1301,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return new com.starrocks.sql.ast.expression.StringLiteral(toBackendZone(zoneId.get()));
     }
 
-    // Region IDs as they are; fixed offsets as UTC or +HH:MM, since the BE doesn't resolve Z, UT, GMT+8 or UTC+08:00
+    // Region IDs as they are; fixed offsets as convert_tz takes them, since the BE doesn't resolve Z, UT, GMT+8 or
+    // UTC+08:00
     private static String toBackendZone(ZoneId zone) {
         ZoneId normalized = zone.normalized();
-        if (!(normalized instanceof ZoneOffset)) {
-            return zone.getId();
-        }
-        int seconds = ((ZoneOffset) normalized).getTotalSeconds();
-        if (seconds == 0) {
-            return "UTC";
-        }
-        return String.format("%s%02d:%02d", seconds < 0 ? "-" : "+", Math.abs(seconds) / 3600,
-                Math.abs(seconds) % 3600 / 60);
+        return normalized instanceof ZoneOffset ? toConvertTzZone(zone, (ZoneOffset) normalized) : zone.getId();
     }
 
     // with_timezone(ts, zone) anywhere else -> convert_tz(ts, zone, @time_zone), allowed only when zone is a literal
@@ -1294,7 +1331,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         if (wallClockArgument != null && wallClockArgument < arguments.size()) {
             wallClockOperands.add(arguments.get(wallClockArgument));
             zoneFreeOperands.add(arguments.get(wallClockArgument));
-        } else if (name.equals("date_trunc") && arguments.size() == 2 && wallClockOperands.contains(node)) {
+        } else if (name.equals("date_trunc") && arguments.size() == 2 && wallClockOperands.contains(node)
+                && conversionTargetZone(arguments.get(1)).isPresent()) {
             wallClockOperands.add(arguments.get(1));
         } else if ((name.equals("date_format") || name.equals("format_datetime")) && arguments.size() == 2) {
             if (arguments.get(1) instanceof StringLiteral

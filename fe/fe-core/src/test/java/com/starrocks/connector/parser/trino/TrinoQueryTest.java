@@ -1294,6 +1294,13 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select cast(date_trunc('day', at_timezone(with_timezone(TIMESTAMP '2024-08-19 20:00:00', 'UTC'), " +
                 "'Asia/Tokyo')) AS TIMESTAMP)";
         assertPlanContains(sql, "2024-08-20 00:00:00");
+        // America/Sao_Paulo skipped midnight on 2018-11-04; Trino's date_trunc moves to the end of the gap (Hubble)
+        sql = "select cast(date_trunc('day', at_timezone(with_timezone(TIMESTAMP '2018-11-04 12:00:00', 'UTC'), " +
+                "'America/Sao_Paulo')) AS TIMESTAMP)";
+        assertPlanContains(sql, "2018-11-04 01:00:00");
+        String truncPlan = getFragmentPlan("select cast(date_trunc('day', at_timezone(with_timezone(ts, 'UTC'), " +
+                "'America/Sao_Paulo')) AS TIMESTAMP) from (values TIMESTAMP '2018-11-04 12:00:00') t(ts)");
+        Assertions.assertTrue(truncPlan.contains("'America/Sao_Paulo', 'UTC'), 'UTC', 'America/Sao_Paulo')"), truncPlan);
         getFragmentPlan("select format_datetime(at_timezone(with_timezone(TIMESTAMP '2024-08-19 20:00:00', 'UTC'), " +
                 "'Asia/Tokyo'), 'yyyy-MM-dd ''zone'' HH:mm')");
         sql = "select cast(with_timezone(TIMESTAMP '2024-08-19 20:00:00', 'UTC') AT TIME ZONE 'Asia/Tokyo' AS DATE)";
@@ -1312,15 +1319,16 @@ public class TrinoQueryTest extends TrinoTestBase {
         try {
             connectContext.getSessionVariable().setTimeZone("UTC");
             // The value keeps its zone, so calendar functions on it match Trino
-            assertPlanContains("select date_trunc('day', with_timezone(TIMESTAMP '2024-08-19 23:36:41', 'UTC'))",
-                    "2024-08-19 00:00:00");
-            assertPlanContains("select with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'utc')", "2024-08-19 14:36:41");
+            assertPlanContains("select cast(date_trunc('day', with_timezone(TIMESTAMP '2024-08-19 23:36:41', 'UTC')) " +
+                    "AS TIMESTAMP)", "2024-08-19 00:00:00");
+            assertPlanContains("select cast(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'utc') AS TIMESTAMP)",
+                    "2024-08-19 14:36:41");
             // Converted into a fixed-offset session time zone, it is also exact as an instant
             assertPlanContains("select to_unixtime(with_timezone(TIMESTAMP '2024-08-19 00:00:00', 'UTC') " +
                     "AT TIME ZONE 'UTC')", "1724025600");
 
             // Literal zones reach the BE as names it resolves: no 'Z', 'utc' or 'GMT+8'
-            String plan = getFragmentPlan("select with_timezone(ts, '+00:00') " +
+            String plan = getFragmentPlan("select cast(with_timezone(ts, '+00:00') AS TIMESTAMP) " +
                     "from (values TIMESTAMP '2024-08-19 14:36:41') t(ts)");
             Assertions.assertTrue(plan.contains("convert_tz(1: ts, 'UTC'"), plan);
             plan = getFragmentPlan("select hour(with_timezone(ts, 'utc') AT TIME ZONE 'GMT+8') " +
@@ -1338,7 +1346,14 @@ public class TrinoQueryTest extends TrinoTestBase {
                     "select to_iso8601(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC'))",
                     "select cast(date_trunc('day', with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC')) AS VARCHAR)",
                     "select format_datetime(with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'Asia/Tokyo') " +
-                            "AT TIME ZONE 'UTC', 'yyyy-MM-dd z')")) {
+                            "AT TIME ZONE 'UTC', 'yyyy-MM-dd z')",
+                    // Columns leave the expression, so their consumers (here a cast to VARCHAR, or the output, which
+                    // Trino shows with the zone) can't be checked
+                    "select with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC')",
+                    "with t as (select with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC') as x) " +
+                            "select cast(x AS VARCHAR) from t",
+                    "select cast(x AS VARCHAR) from (values with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC')) t(x)",
+                    "select cast(x AS VARCHAR) from unnest(array[with_timezone(TIMESTAMP '2024-08-19 14:36:41', 'UTC')]) t(x)")) {
                 UnsupportedException e = Assertions.assertThrows(UnsupportedException.class,
                         () -> SqlParser.parse(sql, connectContext.getSessionVariable()), sql);
                 Assertions.assertTrue(e.getMessage().contains("time zone is shown"), e.getMessage());
@@ -1431,7 +1446,10 @@ public class TrinoQueryTest extends TrinoTestBase {
                             "from (values (TIMESTAMP '2024-08-19 00:00:00', 'yyyy-MM-dd')) t(ts, f)",
                     // A window, FILTER or DISTINCT on at_timezone, and a field function StarRocks doesn't have
                     "select at_timezone(with_timezone(TIMESTAMP '2024-08-19 00:00:00', 'UTC'), 'Asia/Tokyo') over ()",
-                    "select millisecond(with_timezone(TIMESTAMP '2024-08-19 00:00:00', 'UTC') AT TIME ZONE 'Asia/Tokyo')")) {
+                    "select millisecond(with_timezone(TIMESTAMP '2024-08-19 00:00:00', 'UTC') AT TIME ZONE 'Asia/Tokyo')",
+                    // date_trunc passes the check on only to a zone conversion it truncates directly
+                    "select cast(date_trunc('month', date_trunc('day', at_timezone(with_timezone(" +
+                            "TIMESTAMP '2024-08-19 00:00:00', 'UTC'), 'Asia/Tokyo'))) AS TIMESTAMP)")) {
                 UnsupportedException e = Assertions.assertThrows(UnsupportedException.class,
                         () -> SqlParser.parse(sql, connectContext.getSessionVariable()), sql);
                 Assertions.assertTrue(e.getMessage().contains("with_timezone is supported only"), e.getMessage());
