@@ -1,0 +1,43 @@
+-- name: test_generated_column_show_create_collection @native
+-- SHOW CREATE TABLE of a generated column that contains an array or map literal must not fail
+-- and must render executable SQL (no PseudoType prefix).
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE t_arr (id int, a int, b int, c boolean AS array_contains([a, b], 3))
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+CREATE TABLE t_map (id int, s varchar(20), m varchar(20) AS map{'k': s}['k'])
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+CREATE TABLE t_mapf (id int, s varchar(20), m varchar(20) AS map('k', s)['k'])
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+CREATE TABLE t_date (id int, d date, x boolean AS array_contains(ARRAY<DATE>['2020-01-01'], d))
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+
+insert into t_arr values (1, 1, 3), (2, 1, 2);
+insert into t_map values (1, 'v1'), (2, NULL);
+insert into t_mapf values (1, 'v1'), (2, NULL);
+insert into t_date values (1, '2020-01-01'), (2, '2020-01-02');
+
+select * from t_arr order by id;
+select * from t_map order by id;
+select * from t_mapf order by id;
+select * from t_date order by id;
+
+SHOW CREATE TABLE t_arr;
+SHOW CREATE TABLE t_map;
+SHOW CREATE TABLE t_mapf;
+SHOW CREATE TABLE t_date;
+
+-- The rendered generated column definitions can be executed again and compute the same values.
+CREATE TABLE t_arr_copy (id int, a int, b int, c boolean NULL AS array_contains([`a`, `b`], 3))
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+CREATE TABLE t_map_copy (id int, s varchar(20), m varchar(20) NULL AS map{'k':`s`}['k'])
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+insert into t_arr_copy values (1, 1, 3), (2, 1, 2);
+insert into t_map_copy values (1, 'v1'), (2, NULL);
+select * from t_arr_copy order by id;
+select * from t_map_copy order by id;
+SHOW CREATE TABLE t_arr_copy;
+SHOW CREATE TABLE t_map_copy;
+
+drop database db_${uuid0} force;
