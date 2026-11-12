@@ -1282,14 +1282,20 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select cast(with_timezone(TIMESTAMP '2024-03-31 02:30:00', 'Europe/Berlin') " +
                 "AT TIME ZONE 'UTC' AS TIMESTAMP)";
         assertPlanContains(sql, "2024-03-31 01:30:00");
-        sql = "select with_timezone(TIMESTAMP '2024-11-03 09:30:00', 'UTC') AT TIME ZONE 'America/Los_Angeles'";
+        sql = "select cast(with_timezone(TIMESTAMP '2024-11-03 09:30:00', 'UTC') AT TIME ZONE 'America/Los_Angeles' " +
+                "AS TIMESTAMP)";
         assertPlanContains(sql, "2024-11-03 01:30:00");
-        sql = "select at_timezone(with_timezone(TIMESTAMP '2024-11-03 01:30:00', 'America/Los_Angeles'), 'Asia/Tokyo')";
+        sql = "select cast(at_timezone(with_timezone(TIMESTAMP '2024-11-03 01:30:00', 'America/Los_Angeles'), " +
+                "'Asia/Tokyo') AS TIMESTAMP)";
         assertPlanContains(sql, "2024-11-03 17:30:00");
 
-        // The result is the wall-clock time in the target zone, read as such by calendar functions and casts
-        sql = "select date_trunc('day', at_timezone(with_timezone(TIMESTAMP '2024-08-19 20:00:00', 'UTC'), 'Asia/Tokyo'))";
+        // The result is the wall-clock time in the target zone, read as such by casts and calendar functions;
+        // date_trunc keeps the zone in Trino, so it is accepted under a cast
+        sql = "select cast(date_trunc('day', at_timezone(with_timezone(TIMESTAMP '2024-08-19 20:00:00', 'UTC'), " +
+                "'Asia/Tokyo')) AS TIMESTAMP)";
         assertPlanContains(sql, "2024-08-20 00:00:00");
+        getFragmentPlan("select format_datetime(at_timezone(with_timezone(TIMESTAMP '2024-08-19 20:00:00', 'UTC'), " +
+                "'Asia/Tokyo'), 'yyyy-MM-dd ''zone'' HH:mm')");
         sql = "select cast(with_timezone(TIMESTAMP '2024-08-19 20:00:00', 'UTC') AT TIME ZONE 'Asia/Tokyo' AS DATE)";
         assertPlanContains(sql, "2024-08-20");
         // Converted into the session time zone (Asia/Shanghai in these tests), it is also exact as an instant
@@ -1297,7 +1303,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "1724025600");
 
         // Converted directly between the two zones, not through the session time zone
-        sql = "select with_timezone(ts, 'America/Los_Angeles') AT TIME ZONE 'UTC' " +
+        sql = "select cast(with_timezone(ts, 'America/Los_Angeles') AT TIME ZONE 'UTC' AS TIMESTAMP) " +
                 "from (values TIMESTAMP '2024-03-10 02:30:00') t(ts)";
         String plan = getFragmentPlan(sql);
         Assertions.assertTrue(plan.contains("'America/Los_Angeles', 'UTC')"), plan);
@@ -1346,7 +1352,19 @@ public class TrinoQueryTest extends TrinoTestBase {
                     "with t as (select with_timezone(TIMESTAMP '2024-08-19 00:00:00', 'UTC') AT TIME ZONE 'Asia/Tokyo' " +
                             "as x) select cast(x AS TIMESTAMP) from t",
                     "select x from (select at_timezone(with_timezone(TIMESTAMP '2024-08-19 00:00:00', 'UTC'), " +
-                            "'Asia/Tokyo') as x) t")) {
+                            "'Asia/Tokyo') as x) t",
+                    // Output columns are compared by set operations, DISTINCT, GROUP BY and ORDER BY, and shown
+                    // without their zone
+                    "select at_timezone(with_timezone(TIMESTAMP '2024-08-19 00:00:00', 'UTC'), 'Asia/Tokyo')",
+                    "select with_timezone(TIMESTAMP '2024-08-19 00:00:00', 'UTC') AT TIME ZONE 'Asia/Tokyo' union " +
+                            "select with_timezone(TIMESTAMP '2024-08-19 00:00:00', 'UTC') AT TIME ZONE 'UTC'",
+                    "select date_trunc('day', at_timezone(with_timezone(TIMESTAMP '2024-08-19 20:00:00', 'UTC'), " +
+                            "'Asia/Tokyo'))",
+                    // Formats that print the zone, which StarRocks would leave out, or that can't be checked
+                    "select format_datetime(at_timezone(with_timezone(TIMESTAMP '2024-08-19 00:00:00', 'UTC'), " +
+                            "'Asia/Tokyo'), 'yyyy-MM-dd HH:mm:ss ZZ')",
+                    "select format_datetime(at_timezone(with_timezone(ts, 'UTC'), 'Asia/Tokyo'), f) " +
+                            "from (values (TIMESTAMP '2024-08-19 00:00:00', 'yyyy-MM-dd')) t(ts, f)")) {
                 UnsupportedException e = Assertions.assertThrows(UnsupportedException.class,
                         () -> SqlParser.parse(sql, connectContext.getSessionVariable()), sql);
                 Assertions.assertTrue(e.getMessage().contains("with_timezone is supported only"), e.getMessage());

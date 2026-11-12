@@ -250,18 +250,16 @@ import static java.util.stream.Collectors.toList;
 public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private static final String WITH_TIMEZONE = "with_timezone";
     private static final String AT_TIMEZONE = "at_timezone";
-    // Trino functions that only read the wall-clock fields of a timestamp, and the index of that argument
+    // Trino functions that read only the wall-clock fields of a timestamp and return a value without a time zone,
+    // and the index of that argument
     private static final Map<String, Integer> WALL_CLOCK_FUNCTIONS = ImmutableMap.<String, Integer>builder()
-            .put("date_trunc", 1).put("date", 0).put("year", 0).put("quarter", 0).put("month", 0).put("week", 0)
+            .put("date", 0).put("year", 0).put("quarter", 0).put("month", 0).put("week", 0)
             .put("week_of_year", 0).put("day", 0).put("day_of_month", 0).put("day_of_week", 0).put("dow", 0)
             .put("day_of_year", 0).put("doy", 0).put("year_of_week", 0).put("yow", 0).put("hour", 0)
             .put("minute", 0).put("second", 0).put("millisecond", 0).put("last_day_of_month", 0)
-            .put("date_format", 0).put("format_datetime", 0)
             .build();
 
     private final long sqlMode;
-    // Nesting depth of the query being converted; 1 is the outermost query, whose output columns leave the statement
-    private int queryDepth = 0;
     // Expressions whose value is only read as a wall-clock time; Trino expressions compare by value, so by identity
     private final Set<Expression> wallClockOperands = Collections.newSetFromMap(new IdentityHashMap<>());
 
@@ -381,15 +379,6 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitQuery(Query node, ParseTreeContext context) {
-        queryDepth++;
-        try {
-            return convertQuery(node, context);
-        } finally {
-            queryDepth--;
-        }
-    }
-
-    private ParseNode convertQuery(Query node, ParseTreeContext context) {
         QueryRelation queryRelation = (QueryRelation) visit(node.getQueryBody(), context);
         // When trino have a simple query specification followed by order by, offset, limit or fetch,
         // it fold the order by, limit, offset or fetch clauses into the query specification,
@@ -787,9 +776,6 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             alias = node.getAlias().get().getValue();
         }
 
-        if (queryDepth == 1) {
-            wallClockOperands.add(node.getExpression());
-        }
         Expr expression = (Expr) visit(node.getExpression(), context);
         return new SelectListItem(expression, alias);
     }
@@ -834,10 +820,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             return convertWithTimezoneToZone(node, (FunctionCall) node.getArguments().get(0),
                     node.getArguments().get(1), context);
         }
-        Integer wallClockArgument = WALL_CLOCK_FUNCTIONS.get(node.getName().toString().toLowerCase());
-        if (wallClockArgument != null && wallClockArgument < node.getArguments().size()) {
-            wallClockOperands.add(node.getArguments().get(wallClockArgument));
-        }
+        addWallClockOperands(node);
         List<Expr> arguments = visit(node.getArguments(), context, Expr.class);
 
         Expr callExpr;
@@ -1185,10 +1168,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
      * are rejected with an UnsupportedException, which also skips the StarRocks-dialect fallback.
      *
      * Converting to another zone has the same limit one level up: like at_timezone over a plain timestamp, the result
-     * is the wall-clock time in the target zone, so it is exact only where it is read as a wall-clock time (a CAST to
-     * TIMESTAMP or DATE, calendar and format functions, an output column of the statement) or when the target zone is
-     * the session time zone. Other consumers (to_unixtime, comparisons, another zone conversion, a CTE or subquery
-     * column) would read it as an instant in the session time zone, so those are rejected too.
+     * is the wall-clock time in the target zone, so it is exact only where it is read as a wall-clock time and turned
+     * into a value without a time zone (a CAST to TIMESTAMP or DATE, date(), field functions such as hour(), EXTRACT,
+     * or date_format and format_datetime with a literal format that doesn't print the zone), or when the target zone
+     * is the session time zone. date_trunc keeps the zone in Trino, so it passes the check on to its own consumer.
+     * Everything else (to_unixtime, comparisons, another zone conversion, DISTINCT, GROUP BY, ORDER BY or a set
+     * operation over it, an output or CTE column) would read it as an instant in the session time zone or show it
+     * without its zone, so those are rejected too.
      */
     private static boolean isWithTimezone(Expression expression) {
         if (!(expression instanceof FunctionCall)) {
@@ -1205,8 +1191,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         if (!wallClockOperands.contains(node) && !isSessionTimeZone(toZone)) {
             throw unsupportedException(String.format("Trino parser on StarRocks does not support %s here: a zone "
                     + "conversion of with_timezone is supported only as a wall-clock time (CAST to TIMESTAMP or DATE, "
-                    + "calendar and format functions, or an output column of the statement), or into the session time "
-                    + "zone %s", node, TimeUtils.getTimeZone().toZoneId()));
+                    + "date and field functions, EXTRACT, or date_format and format_datetime with a literal format "
+                    + "without the zone), or into the session time zone %s", node, TimeUtils.getTimeZone().toZoneId()));
         }
         List<Expr> arguments = visit(withTimezone.getArguments(), context, Expr.class);
         Expr to = (Expr) visit(toZone, context);
@@ -1225,6 +1211,38 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         String zoneId = parseZoneId(((StringLiteral) zone).getValue()).orElseThrow().getId();
         return new FunctionCallExpr("convert_tz", List.of(arguments.get(0),
                 new com.starrocks.sql.ast.expression.StringLiteral(zoneId), new VariableExpr("time_zone")));
+    }
+
+    // Marks the arguments of node that are read only as a wall-clock time
+    private void addWallClockOperands(FunctionCall node) {
+        String name = node.getName().toString().toLowerCase();
+        List<Expression> arguments = node.getArguments();
+        Integer wallClockArgument = WALL_CLOCK_FUNCTIONS.get(name);
+        if (wallClockArgument != null && wallClockArgument < arguments.size()) {
+            wallClockOperands.add(arguments.get(wallClockArgument));
+        } else if (name.equals("date_trunc") && arguments.size() == 2 && wallClockOperands.contains(node)) {
+            wallClockOperands.add(arguments.get(1));
+        } else if ((name.equals("date_format") || name.equals("format_datetime")) && arguments.size() == 2
+                && arguments.get(1) instanceof StringLiteral
+                && !formatReadsZone(name, ((StringLiteral) arguments.get(1)).getValue())) {
+            wallClockOperands.add(arguments.get(0));
+        }
+    }
+
+    // Whether a date_format (MySQL-style) or format_datetime (Joda) format prints the time zone
+    private static boolean formatReadsZone(String function, String format) {
+        if (function.equals("date_format")) {
+            return format.contains("%z") || format.contains("%Z");
+        }
+        boolean quoted = false;
+        for (char c : format.toCharArray()) {
+            if (c == '\'') {
+                quoted = !quoted;
+            } else if (!quoted && (c == 'z' || c == 'Z')) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Whether zone is a literal naming the session time zone
