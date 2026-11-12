@@ -14,9 +14,23 @@
 
 #pragma once
 
+#include <memory>
+
 #include "io/input_stream.h"
 
 namespace starrocks::io {
+
+// The caller's interest in an asynchronous cache fill started by SeekableInputStream::warm_cache_async().
+// Dropping the handle withdraws that interest: a block nobody else waits for is not fetched if its
+// remote read has not started yet.
+class CacheWarmHandle {
+public:
+    virtual ~CacheWarmHandle() = default;
+    // Cache blocks the call queued for fetching; blocks that were cached already are not counted.
+    virtual size_t submitted_blocks() const = 0;
+    // Queued blocks whose fill has not finished yet.
+    virtual size_t pending_blocks() const = 0;
+};
 
 class SeekableInputStream : public InputStream {
 public:
@@ -82,6 +96,17 @@ public:
     // if not, read from remote and write to cache system
     // stream offset will not change
     virtual Status touch_cache(int64_t offset, size_t length) { return Status::OK(); }
+
+    // Starts filling the local cache with the blocks of [offset, offset+length) that are not cached yet,
+    // and returns at once; a later read of such a block joins the fill in flight instead of issuing a GET
+    // of its own. Only the shared-data cache implements it, and only while the remote I/O scheduler is
+    // enabled. Unlike touch_cache(), a stream that cannot do it says so instead of pretending to succeed.
+    // `urgent` marks blocks the caller is about to read anyway and only wants fetched in parallel: they are
+    // scheduled as a demand, ahead of read-ahead and outside its bounds.
+    virtual StatusOr<std::shared_ptr<CacheWarmHandle>> warm_cache_async(int64_t offset, size_t length,
+                                                                        bool urgent = false) {
+        return Status::NotSupported("warm_cache_async");
+    }
 
     virtual const std::string& filename() const { return _filename; };
 
@@ -159,6 +184,11 @@ public:
     bool is_encrypted() const override { return _impl->is_encrypted(); };
 
     Status touch_cache(int64_t offset, size_t length) override { return _impl->touch_cache(offset, length); }
+
+    StatusOr<std::shared_ptr<CacheWarmHandle>> warm_cache_async(int64_t offset, size_t length,
+                                                                bool urgent = false) override {
+        return _impl->warm_cache_async(offset, length, urgent);
+    }
 
     // Forwarded, unlike page_cache_key below: the slice base is a property of the stream being
     // wrapped, and every wrapper above it keeps the same coordinates.

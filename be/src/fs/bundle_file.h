@@ -112,6 +112,8 @@ public:
     const std::string& filename() const override;
     StatusOr<int64_t> read(void* data, int64_t count) override;
     Status touch_cache(int64_t offset, size_t length) override;
+    StatusOr<std::shared_ptr<io::CacheWarmHandle>> warm_cache_async(int64_t offset, size_t length,
+                                                                    bool urgent = false) override;
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override;
     io::IoStatsSnapshot get_io_stats_snapshot() const override;
 

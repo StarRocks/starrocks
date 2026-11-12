@@ -17,6 +17,7 @@
 
 #include <bvar/bvar.h>
 #include <fmt/core.h>
+#include <fslib/cache_fill.h>
 #include <fslib/configuration.h>
 #include <fslib/file.h>
 #include <fslib/file_system.h>
@@ -95,6 +96,18 @@ inline CacheOptions::ReadMode to_fslib_read_mode(bool skip_read_cache, bool skip
     }
     return skip_fill_cache ? CacheOptions::ReadMode::READ_THROUGH_NO_FILL : CacheOptions::ReadMode::READ_THROUGH;
 }
+
+// Keeps starlet's cache warm-up handle alive for the BE caller; dropping it withdraws the warm-up.
+class StarletCacheWarmHandle final : public io::CacheWarmHandle {
+public:
+    explicit StarletCacheWarmHandle(std::shared_ptr<staros::starlet::fslib::CacheWarmHandle> handle)
+            : _handle(std::move(handle)) {}
+    size_t submitted_blocks() const override { return _handle->submitted_blocks(); }
+    size_t pending_blocks() const override { return _handle->pending_blocks(); }
+
+private:
+    std::shared_ptr<staros::starlet::fslib::CacheWarmHandle> _handle;
+};
 
 static const std::string kFileTagType = "type";
 static const std::string kFileTagTypeData = "data";
@@ -222,6 +235,19 @@ public:
         return to_status(res);
     }
 
+    StatusOr<std::shared_ptr<io::CacheWarmHandle>> warm_cache_async(int64_t offset, size_t length,
+                                                                    bool urgent = false) override {
+        auto stream_st = _file_ptr->stream();
+        if (!stream_st.ok()) {
+            return to_status(stream_st.status());
+        }
+        auto res = (*stream_st)->warm_cache_async(offset, length, urgent);
+        if (!res.ok()) {
+            return to_status(res.status());
+        }
+        return std::make_shared<StarletCacheWarmHandle>(std::move(res).value());
+    }
+
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
         auto stream_st = _file_ptr->stream();
         if (!stream_st.ok()) {
@@ -230,7 +256,7 @@ public:
 
         const auto& read_stats = (*stream_st)->get_io_stats();
         auto stats = std::make_unique<io::NumericStatistics>();
-        stats->reserve(14);
+        stats->reserve(16);
         stats->append(kBytesReadLocalDisk, read_stats.bytes_read_local_disk);
         stats->append(kBytesWriteLocalDisk, read_stats.bytes_write_local_disk);
         stats->append(kBytesReadRemote, read_stats.bytes_read_remote);
@@ -245,6 +271,8 @@ public:
         stats->append(kRemoteQueueWaitNs, read_stats.remote_queue_wait_ns);
         stats->append(kRemoteFillWaitNs, read_stats.remote_fill_wait_ns);
         stats->append(kRemoteFillJoins, read_stats.remote_fill_joins);
+        stats->append(kPrefetchBlocksSubmitted, read_stats.prefetch_blocks_submitted);
+        stats->append(kPrefetchBlocksRejected, read_stats.prefetch_blocks_rejected);
         return std::move(stats);
     }
 

@@ -27,6 +27,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/format.h"
 #include "base/simd/simd.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "column/array_column.h"
@@ -46,6 +47,7 @@
 #include "compute_env/runtime_range_pruner.hpp"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
+#include "fs/remote_read_context.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
@@ -72,7 +74,9 @@
 #include "storage/rowset/fill_subfield_iterator.h"
 #include "storage/rowset/or_match_fallback_visitor.h"
 #include "storage/rowset/rowid_column_iterator.h"
+#include "storage/rowset/scalar_column_iterator.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_prefetch_window.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_filter_predicate.h"
 #include "storage/storage_env.h"
@@ -512,6 +516,32 @@ private:
     void _update_stats(io::SeekableInputStream* rfile, bool keep_baseline);
     // Installs the file of column `cid`, first flushing the statistics of the file it replaces.
     void _set_column_file(ColumnId cid, std::unique_ptr<io::SeekableInputStream> file);
+    // Remote I/O scheduler only: (re)creates the cache read-ahead window of the current scan context, starting at
+    // `start_row`.
+    void _init_prefetch_window(rowid_t start_row);
+    // Whether this reader reads ahead through SegmentPrefetchWindow at all.
+    bool _should_read_ahead() const;
+    void _reset_prefetch_window() {
+        _prefetch_window.reset();
+        _prefetch_late_columns.clear();
+    }
+    // Times the first get_next of the iterator (after it was opened or reused) into the stats.
+    struct FirstChunkTimer {
+        explicit FirstChunkTimer(SegmentIterator* it) : iter(it->_first_chunk_pending ? it : nullptr) {
+            if (iter != nullptr) {
+                start_ns = MonotonicNanos();
+            }
+        }
+        ~FirstChunkTimer() {
+            if (iter != nullptr) {
+                iter->_opts.stats->segment_first_chunks++;
+                iter->_opts.stats->segment_first_chunk_ns += MonotonicNanos() - start_ns;
+                iter->_first_chunk_pending = false;
+            }
+        }
+        SegmentIterator* iter;
+        int64_t start_ns = 0;
+    };
 
     //  This function will search and build the segment from delta column group.
     StatusOr<std::shared_ptr<Segment>> _get_dcg_segment(uint32_t ucid);
@@ -557,6 +587,10 @@ private:
     std::unordered_map<std::string, std::shared_ptr<Segment>> _dcg_segments;
     SegmentReadOptions _opts;
     RawColumnIterators _column_iterators;
+    // Cache read-ahead of the reader (remote I/O scheduler only); null when it does not apply.
+    std::unique_ptr<SegmentPrefetchWindow> _prefetch_window;
+    // Late-materialized columns, warmed per chunk for the rows that survived the predicates.
+    std::vector<SegmentPrefetchWindow::Column> _prefetch_late_columns;
     std::vector<int> _io_coalesce_column_index;
     ColumnDecoders _column_decoders;
     BitmapIndexEvaluator _bitmap_index_evaluator;
@@ -613,6 +647,8 @@ private:
     int _reserve_chunk_size = 0;
 
     bool _inited = false;
+    // Until the first get_next after the iterator was opened or reused returns.
+    bool _first_chunk_pending = true;
     bool _one_time_setup_done = false;
     // The cumulative statistics of each column file at its last flush, so that a flush adds only what was read since.
     std::unordered_map<const io::SeekableInputStream*, std::unordered_map<std::string, int64_t>> _flushed_io_stats;
@@ -987,6 +1023,7 @@ Status SegmentIterator::_init() {
 }
 
 Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
+    _first_chunk_pending = true;
     if (_opts.task_range.has_value() || options.task_range.has_value()) {
         return Status::NotSupported("grouped range task does not support segment iterator reuse");
     }
@@ -1139,10 +1176,71 @@ Status SegmentIterator::_init_scan_range_and_context() {
             RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
         }
     }
+    _init_prefetch_window(0);
     return Status::OK();
 }
 
+bool SegmentIterator::_should_read_ahead() const {
+    // Only a lake query read that fills the cache, in ascending row order, reads ahead. Loads, background work such as
+    // compaction, and reads nobody attributed read what they need as they go.
+    const auto& remote_read = _opts.lake_io_opts.remote_read;
+    return remote_io_scheduler_enabled() && config::remote_prefetch_window_blocks > 0 && _context != nullptr &&
+           remote_read.is_set && remote_read.workload == RemoteReadContext::Workload::QUERY &&
+           _segment->lake_tablet_manager() != nullptr && _opts.lake_io_opts.fill_data_cache &&
+           !_opts.lake_io_opts.skip_disk_cache && !_opts.lake_io_opts.cache_file_only && !_scan_range.empty() &&
+           (_opts.asc_hint || config::desc_hint_split_range <= 0);
+}
+
+void SegmentIterator::_init_prefetch_window(rowid_t start_row) {
+    _reset_prefetch_window();
+    if (!_should_read_ahead()) {
+        return;
+    }
+    // Scalar columns read from the segment file itself; the others (complex types, default values, delta column
+    // groups) are read on demand as before.
+    auto column_of = [&](ColumnId cid, SegmentPrefetchWindow::Column* out) {
+        if (cid >= _column_iterators.size() || _column_iterators[cid] == nullptr) {
+            return false;
+        }
+        auto* scalar = dynamic_cast<ScalarColumnIterator*>(_column_iterators[cid].get());
+        auto file = _column_files.find(cid);
+        if (scalar == nullptr || file == _column_files.end() || file->second == nullptr) {
+            return false;
+        }
+        ColumnReader* reader = scalar->get_column_reader();
+        if (reader == nullptr || reader->num_data_pages() == 0) {
+            return false;
+        }
+        out->reader = reader;
+        out->file = file->second.get();
+        return true;
+    };
+    const size_t num_fields = _schema.num_fields();
+    // With late materialization the read loop reads the predicate columns over the scan range and the other columns
+    // only for the surviving rows of each chunk.
+    const size_t early = _context->_late_materialize ? std::min<size_t>(_predicate_columns, num_fields) : num_fields;
+    std::vector<SegmentPrefetchWindow::Column> columns;
+    for (size_t i = 0; i < num_fields; ++i) {
+        const FieldPtr& f = _schema.field(i);
+        SegmentPrefetchWindow::Column c;
+        if (f->is_virtual() || !column_of(f->id(), &c)) {
+            continue;
+        }
+        (i < early ? columns : _prefetch_late_columns).push_back(c);
+    }
+    if (columns.empty() && _prefetch_late_columns.empty()) {
+        return;
+    }
+    // Cache blocks are counted in the object, where a bundled segment does not start at 0.
+    const int64_t object_offset = _segment->file_info().bundle_file_offset.value_or(0);
+    _prefetch_window = std::make_unique<SegmentPrefetchWindow>(
+            std::move(columns), &_scan_range, start_row, object_offset, config::remote_prefetch_window_blocks,
+            config::remote_prefetch_late_read_ahead_ratio, config::starlet_star_cache_block_size_bytes, _opts.stats);
+}
+
 Status SegmentIterator::_init_reused_scan() {
+    // The window points into the scan range being replaced; drop it before the range goes.
+    _reset_prefetch_window();
     _scan_range.clear();
     _range_iter = SparseRangeIterator<>();
     _non_expr_pred_tree = PredicateTree{};
@@ -2892,6 +2990,7 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk) {
+    FirstChunkTimer first_chunk(this);
     if (!_inited) {
         RETURN_IF_ERROR(_init());
         _inited = true;
@@ -2920,6 +3019,7 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
+    FirstChunkTimer first_chunk(this);
     if (!_inited) {
         RETURN_IF_ERROR(_init());
         _inited = true;
@@ -2937,6 +3037,7 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids) {
+    FirstChunkTimer first_chunk(this);
     if (!_inited) {
         RETURN_IF_ERROR(_init());
         _inited = true;
@@ -3059,6 +3160,10 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     _context->_adapt_global_dict_chunk->reset();
 
     Chunk* chunk = _context->_read_chunk.get();
+
+    if (_prefetch_window != nullptr && _range_iter.has_more()) {
+        _prefetch_window->advance(_range_iter.begin());
+    }
 
     StatusOr<size_t> predicte_result = _predicate_evaluate(rowid);
 
@@ -3651,6 +3756,7 @@ Status SegmentIterator::_exact_search_over_candidates(const roaring::Roaring& ca
 }
 
 Status SegmentIterator::_switch_context(ScanContext* to) {
+    const bool rebuild_prefetch_window = _context != nullptr && _prefetch_window != nullptr;
     if (_context != nullptr) {
         const ordinal_t ordinal = _cur_rowid;
         for (ColumnIterator* iter : to->_column_iterators) {
@@ -3722,6 +3828,10 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
     }
 
     _context = to;
+    if (rebuild_prefetch_window) {
+        // Early and late columns differ between the contexts.
+        _init_prefetch_window(_cur_rowid);
+    }
     return Status::OK();
 }
 
@@ -4384,6 +4494,11 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
     ColumnPtr rowid_column = ctx->_dict_chunk->get_column_by_index(m - 1);
     const auto* ordinals = down_cast<const FixedLengthColumn<rowid_t>*>(rowid_column.get());
 
+    if (_prefetch_window != nullptr && !_prefetch_late_columns.empty()) {
+        // Fetch the pages of all late columns for these rows at once, instead of one column after another.
+        _prefetch_window->warm_rows(_prefetch_late_columns, ordinals->get_data().data(), ordinals->size());
+    }
+
     if (_predicate_columns < _schema.num_fields()) {
         const size_t n = _schema.num_fields();
         const size_t start_pos = ctx->_read_index_map.size();
@@ -5023,6 +5138,10 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile, bool keep_ba
             _opts.stats->remote_io_fill_wait_ns += value;
         } else if (name == kRemoteFillJoins) {
             _opts.stats->remote_io_fill_joins += value;
+        } else if (name == kPrefetchBlocksSubmitted) {
+            _opts.stats->remote_prefetch_blocks += value;
+        } else if (name == kPrefetchBlocksRejected) {
+            _opts.stats->remote_prefetch_rejected_blocks += value;
         }
     }
 }
@@ -5051,6 +5170,8 @@ void flush_segment_iterator_io_stats(ChunkIterator* iter) {
 }
 
 void SegmentIterator::close() {
+    // Before the column files go: the pending warm-ups of this reader are withdrawn.
+    _reset_prefetch_window();
     if (_del_vec) {
         _del_vec.reset();
     }

@@ -432,6 +432,114 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述: 存算分离集群中主键索引缓存的占用上限，以缓存容量的百分比表示。每次 Publish 结束后（因超出内存限制而失败的除外）都会检查一次：占用超过该比例时，按最近最少使用的顺序淘汰未在使用的主键索引，直至占用回落到该比例以内。缓存增长快于后台线程将其回收到 `primary_key_index_memory_high_percent` 的速度时，由该配置项兜底，因此应设置为大于该配置项的值。
 - 引入版本: -
 
+### remote_io_scheduler_enable
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：存算分离集群中是否启用远程 I/O 调度器。启用后，读请求未命中 Data Cache 而向对象存储发出的 GET 请求，都在每个 CN 上唯一的调度器中排队，由调度器按权重放行：查询、导入、Compaction 和其他后台任务按 `remote_read_query_weight`、`remote_read_load_weight`、`remote_read_compaction_weight` 和 `remote_read_background_weight` 分配对象存储的读取能力；查询之间先按资源组的 `cpu_weight` 分配，同一资源组内，查询读得越多份额越低，大查询因此会让位于新来的小查询。查询扫描还会预读即将读取的页面所在的缓存块（见 `remote_prefetch_window_blocks`）。调度器要求 `datacache_enable` 和 `starlet_use_star_cache` 均为 `true`，否则 CN 打印告警日志，按未启用调度器的方式读取。启用期间，`io_coalesce_lake_read_enable` 在启动时被设为 `false`，`starlet_fs_read_prefetch_enable` 不改配置值但强制不生效，动态开启这两项都会被拒绝。配置文件不会被修改，关闭调度器并重启 CN 后两项即恢复。调度器参数取值非法时，CN 拒绝启动。
+- 引入版本：-
+
+### remote_prefetch_late_read_ahead_ratio
+
+- 默认值：0.5
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：启用延迟物化时，只为通过谓词的行读取的列，会在这些行确定后按 Chunk 逐批读取。从 Segment Reader 的第四个 Chunk 起，如果这些行已经触及其所跨页面的比例达到该值，这些列改为与谓词列一样预读。取值大于 1 时从不切换。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_prefetch_window_blocks
+
+- 默认值：128
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：查询的 Segment Reader 最多提前请求多少个 Data Cache 缓存块，包括排队中、读取中以及已读取但尚未消费的缓存块。该参数限制 Reader 超前的距离，缓存块何时读取由调度器决定。导入、Compaction 等后台读取不预读。设为 `0` 关闭预读。修改后对之后打开的 Segment Reader 生效。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_adaptive_limit
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：远程 I/O 调度器是否根据通往对象存储的链路实际能承载的并发，在 `remote_read_io_threads` 以内控制在途 GET 请求数。超出部分在调度器中等待并按权重决定先后，而不是堵在网络上。设为 `false` 时，在途请求最多为 `remote_read_io_threads` 个。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_adaptive_min_inflight
+
+- 默认值：16
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：自适应并发上限的下限，也是调度器测量空载请求延迟时短暂保持的并发数。必须为正数。仅当 `remote_io_scheduler_enable` 和 `remote_read_adaptive_limit` 均为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_background_weight
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，Compaction 以外的后台任务读取对象存储的份额，与 `remote_read_query_weight`、`remote_read_load_weight`、`remote_read_compaction_weight` 相对。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_compaction_weight
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，Compaction 读取对象存储的份额，与 `remote_read_query_weight`、`remote_read_load_weight`、`remote_read_background_weight` 相对。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_io_threads
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：发出调度后 GET 请求的线程数，即 CN 上在途 GET 请求数的上限。设为 `0` 时取存算分离扫描线程数，即 `pipeline_connector_scan_thread_num_per_cpu` 乘以 CPU 核数。不能为负数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_load_weight
+
+- 默认值：5
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，导入读取对象存储的份额，与 `remote_read_query_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` 相对。导入的读取包括 Publish、主键索引、删除文件以及导入的落盘。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_query_weight
+
+- 默认值：9
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：多方同时等待时，查询读取对象存储的份额，与 `remote_read_load_weight`、`remote_read_compaction_weight`、`remote_read_background_weight` 相对。必须为正数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_weight_decay_ios
+
+- 默认值：1024
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：查询在资源组内的份额随读取量下降的速度。查询或后台任务读取的第 n 个缓存块，权重为 `max(remote_read_weight_decay_min, 2^(-n / remote_read_weight_decay_ios))`，大查询因此越来越多地让位于同一资源组中新来的查询。设为 `0` 关闭衰减。不能为负数。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
+### remote_read_weight_decay_min
+
+- 默认值：0.03125
+- 类型：Double
+- 单位：-
+- 是否动态：否
+- 描述：`remote_read_weight_decay_ios` 衰减后的最低权重。取值范围为 (0, 1]。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
+- 引入版本：-
+
 ### s3_multipart_equal_part_size
 
 - 默认值：false
