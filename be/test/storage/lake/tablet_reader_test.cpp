@@ -3135,8 +3135,10 @@ public:
 
 protected:
     // Reads the tablet unsplit; returns key -> values.
-    std::map<int32_t, std::vector<int32_t>> read(bool scheduler, bool refuse_second_rowset) {
-        ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, false);
+    // |general_parallel| is enable_load_segment_parallel, which takes the same parallel path without the scheduler.
+    std::map<int32_t, std::vector<int32_t>> read(bool scheduler, bool refuse_second_rowset,
+                                                 bool general_parallel = false) {
+        ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, general_parallel);
         ParallelSegmentOpenScope scope(scheduler, true);
         auto* sync = SyncPoint::GetInstance();
         sync->EnableProcessing();
@@ -3158,7 +3160,7 @@ protected:
         CHECK_OK(reader->prepare());
         TabletReaderParams params;
         CHECK_OK(reader->open(params));
-        EXPECT_EQ(scheduler ? 2 : 0, submits.load());
+        EXPECT_EQ(scheduler || general_parallel ? 2 : 0, submits.load());
         auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
         while (true) {
             chunk->reset();
@@ -3199,6 +3201,15 @@ TEST_P(LakeParallelRowsetReadOrderTest, test_results_keep_rowset_order) {
     }
     EXPECT_EQ(expected, read(/*scheduler=*/true, /*refuse_second_rowset=*/false));
     EXPECT_EQ(expected, read(/*scheduler=*/true, /*refuse_second_rowset=*/true));
+}
+
+// The pre-existing enable_load_segment_parallel path, scheduler off: a rowset whose submission is refused is built
+// inline, and its iterators still follow those of the earlier rowset still pending on the pool.
+TEST_P(LakeParallelRowsetReadOrderTest, test_general_parallel_submit_failure_keeps_rowset_order) {
+    const auto expected = read(/*scheduler=*/false, /*refuse_second_rowset=*/false);
+    ASSERT_EQ(kRows, expected.size());
+    EXPECT_EQ(expected, read(/*scheduler=*/false, /*refuse_second_rowset=*/false, /*general_parallel=*/true));
+    EXPECT_EQ(expected, read(/*scheduler=*/false, /*refuse_second_rowset=*/true, /*general_parallel=*/true));
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeParallelRowsetReadOrder, LakeParallelRowsetReadOrderTest,
