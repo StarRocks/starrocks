@@ -7,9 +7,12 @@ keywords: ['备份', '恢复', '存算分离', '快照']
 <head><meta name="docsearch:pagerank" content="100"/></head>
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+<<<<<<< HEAD
 import ClusterSnapshotTerm from '../../_assets/commonMarkdown/cluster_snapshot_term.mdx'
 import ManualCreateDropClusterSnapshot from '../../_assets/commonMarkdown/manual_cluster_snapshot.mdx'
 import ClusterSnapshotWarning from '../../_assets/commonMarkdown/cluster_snapshot_warning.mdx'
+=======
+>>>>>>> 227f1a1 ([Doc] Merge the cluster snapshot partials into their page (#82979))
 
 # 集群快照
 
@@ -38,8 +41,6 @@ import ClusterSnapshotWarning from '../../_assets/commonMarkdown/cluster_snapsho
 - **生成集群快照**
 
   系统自动维护紧随最新集群状态的快照。在创建最新快照后，历史快照将被删除，始终只保留一个快照。
-
-  <ClusterSnapshotTerm />
 
 - **集群恢复**
 
@@ -77,8 +78,11 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
 ```
 
 一旦禁用自动化集群快照，系统将自动清除历史快照。
+<<<<<<< HEAD
 
 <ManualCreateDropClusterSnapshot />
+=======
+>>>>>>> 227f1a1 ([Doc] Merge the cluster snapshot partials into their page (#82979))
 
 ## 查看集群快照
 
@@ -123,11 +127,15 @@ SELECT * FROM information_schema.cluster_snapshot_jobs;
 
 ## 恢复集群
 
-<ClusterSnapshotWarning />
-
 按照以下步骤使用集群快照恢复集群。
 
+<<<<<<< HEAD
 1. **（可选）** 如果存储集群快照的存储位置（存储卷）已更改，必须将原始存储路径下的所有文件复制到新路径。为此，您必须修改 Leader FE 节点的 `fe/conf` 目录下的配置文件 **cluster_snapshot.yaml**。有关 **cluster_snapshot.yaml** 的模板，请参见[附录](#appendix)。
+=======
+1. **（可选）** 若需在当前区域内执行跨集群恢复，必须修改 Leader FE 节点 `fe/conf` 目录下的配置文件 **cluster_snapshot.yaml**。否则可跳过此步骤。
+
+   要将数据恢复到新集群，必须将原始存储路径下的所有文件复制到新路径。请务必使用[附录](#附录)中提供的模板。
+>>>>>>> 227f1a1 ([Doc] Merge the cluster snapshot partials into their page (#82979))
 
 2. 启动 Leader FE 节点。
 
@@ -167,7 +175,79 @@ SELECT * FROM information_schema.cluster_snapshot_jobs;
 
 ## 附录
 
+<<<<<<< HEAD
 **cluster_snapshot.yaml** 模板：
+=======
+跨集群恢复使用的 **cluster_snapshot.yaml** 模板：
+
+```Yaml
+# 要下载以进行恢复的集群快照的信息。
+cluster_snapshot:
+    # 快照的 URI。
+    # 示例 1: s3://defaultbucket/test/f7265e80-631c-44d3-a8ac-cf7cdc7adec811019/meta/image/automated_cluster_snapshot_1704038400000
+    # 示例 2: s3://defaultbucket/test/f7265e80-631c-44d3-a8ac-cf7cdc7adec811019/meta
+    cluster_snapshot_path: <cluster_snapshot_uri>
+    # 存储快照的存储卷名称。您必须在 `storage_volumes` 部分中定义它。
+    # 注意：它必须与原始集群中的相同。
+    storage_volume_name: my_s3_volume
+
+# [可选] 要恢复快照的新集群的节点信息。
+# 如果未指定此部分，恢复后的新集群仅具有 Leader FE 节点。
+# CN 节点保留原始集群的信息。
+# 注意：不要在此部分中包含 Leader FE 节点。
+
+frontends:
+    # FE 主机。
+  - host: xxx.xx.xx.x1
+    # FE edit_log_port。
+    edit_log_port: 9010
+    # FE 节点类型。有效值：`follower`（默认）和 `observer`。
+    type: follower
+  - host: xxx.xx.xx.x2
+    edit_log_port: 9010
+    type: observer
+
+compute_nodes:
+    # CN 主机。
+  - host: xxx.xx.xx.x3
+    # CN heartbeat_service_port。
+    heartbeat_service_port: 9050
+  - host: xxx.xx.xx.x4
+    heartbeat_service_port: 9050
+
+# 新集群中存储卷的信息。用于恢复克隆的快照。
+# 注意：存储卷的名称必须与原始集群中的相同。
+storage_volumes:
+  # S3 兼容存储卷的示例。
+  - name: my_s3_volume
+    type: S3
+    location: s3://defaultbucket/test/
+    comment: my s3 volume
+    properties:
+      - key: aws.s3.region
+        value: us-west-2
+      - key: aws.s3.endpoint
+        value: https://s3.us-west-2.amazonaws.com
+      - key: aws.s3.access_key
+        value: xxxxxxxxxx
+      - key: aws.s3.secret_key
+        value: yyyyyyyyyy
+  # HDFS 存储卷的示例。
+  - name: my_hdfs_volume
+    type: HDFS
+    location: hdfs://127.0.0.1:9000/sr/test/
+    comment: my hdfs volume
+    properties:
+      - key: hadoop.security.authentication
+        value: simple
+      - key: username
+        value: starrocks
+```
+
+:::note
+有关 AWS 认证信息的更多信息，请参阅 [配置 AWS 认证信息](../../integrations/csp_auth/authenticate_to_aws_resources.md)。
+:::
+>>>>>>> 227f1a1 ([Doc] Merge the cluster snapshot partials into their page (#82979))
 
 ```Yaml
 # 要下载以进行恢复的集群快照的信息。

@@ -7,9 +7,12 @@ keywords: ['バックアップ', '復元', '共有データ', 'スナップシ�
 <head><meta name="docsearch:pagerank" content="100"/></head>
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
+<<<<<<< HEAD
 import ClusterSnapshotTerm from '../../_assets/commonMarkdown/cluster_snapshot_term.mdx'
 import ManualCreateDropClusterSnapshot from '../../_assets/commonMarkdown/manual_cluster_snapshot.mdx'
 import ClusterSnapshotWarning from '../../_assets/commonMarkdown/cluster_snapshot_warning.mdx'
+=======
+>>>>>>> 227f1a1 ([Doc] Merge the cluster snapshot partials into their page (#82979))
 
 # クラスタースナップショット
 
@@ -38,8 +41,6 @@ import ClusterSnapshotWarning from '../../_assets/commonMarkdown/cluster_snapsho
 - **クラスタースナップショットの生成**
 
   システムは最新のクラスタ状態に密接に従うスナップショットを自動的に維持します。最新のスナップショットが作成されると、古いスナップショットはすぐに削除され、常に1つのスナップショットのみが利用可能です。
-
-  <ClusterSnapshotTerm />
 
 - **クラスタ復元**
 
@@ -77,8 +78,11 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
 ```
 
 自動クラスタースナップショットが無効になると、システムは自動的に古いスナップショットを削除します。
+<<<<<<< HEAD
 
 <ManualCreateDropClusterSnapshot />
+=======
+>>>>>>> 227f1a1 ([Doc] Merge the cluster snapshot partials into their page (#82979))
 
 ## クラスタースナップショットを表示する
 
@@ -123,11 +127,15 @@ SELECT * FROM information_schema.cluster_snapshot_jobs;
 
 ## クラスタを復元する
 
-<ClusterSnapshotWarning />
-
 クラスタースナップショットを使用してクラスタを復元する手順は次のとおりです。
 
+<<<<<<< HEAD
 1. **(オプション)** クラスタースナップショットを保存しているストレージの場所（ストレージボリューム）が変更された場合、元のストレージパスのすべてのファイルを新しいパスにコピーする必要があります。これを実現するには、Leader FE ノードの `fe/conf` ディレクトリにある設定ファイル **cluster_snapshot.yaml** を変更する必要があります。**cluster_snapshot.yaml** のテンプレートについては、[付録](#appendix) を参照してください。
+=======
+1. **(オプション)** リージョン内でクラスタ間リカバリを実行する場合は、リーダーFEノードの `fe/conf` ディレクトリにある設定ファイル **cluster_snapshot.yaml** を必ず変更してください。そうでない場合は、この手順をスキップできます。
+
+   データを新しいクラスターに復元するには、元のストレージパス下の全ファイルを新しいパスにコピーする必要があります。必ず[付録](#付録)で提供されているテンプレートを使用してください。
+>>>>>>> 227f1a1 ([Doc] Merge the cluster snapshot partials into their page (#82979))
 
 2. Leader FE ノードを起動します。
 
@@ -167,7 +175,79 @@ SELECT * FROM information_schema.cluster_snapshot_jobs;
 
 ## 付録
 
+<<<<<<< HEAD
 **cluster_snapshot.yaml** のテンプレート:
+=======
+クロスクラスター復旧用 **cluster_snapshot.yaml** テンプレート:
+
+```Yaml
+# 復元のためにダウンロードされるクラスタースナップショットの情報。
+cluster_snapshot:
+    # スナップショットの URI。
+    # 例 1: s3://defaultbucket/test/f7265e80-631c-44d3-a8ac-cf7cdc7adec811019/meta/image/automated_cluster_snapshot_1704038400000
+    # 例 2: s3://defaultbucket/test/f7265e80-631c-44d3-a8ac-cf7cdc7adec811019/meta
+    cluster_snapshot_path: <cluster_snapshot_uri>
+    # スナップショットを保存するストレージボリュームの名前。`storage_volumes` セクションで定義する必要があります。
+    # 注意: 元のクラスタと同一でなければなりません。
+    storage_volume_name: my_s3_volume
+
+# [オプション] スナップショットが復元される新しいクラスタのノード情報。
+# このセクションが指定されていない場合、復旧後の新しいクラスタには Leader FE ノードのみが含まれます。
+# CN ノードは元のクラスタの情報を保持します。
+# 注意: このセクションには Leader FE ノードを含めないでください。
+
+frontends:
+    # FE ホスト。
+  - host: xxx.xx.xx.x1
+    # FE edit_log_port。
+    edit_log_port: 9010
+    # FE ノードタイプ。有効な値: `follower` (デフォルト) および `observer`。
+    type: follower
+  - host: xxx.xx.xx.x2
+    edit_log_port: 9010
+    type: observer
+
+compute_nodes:
+    # CN ホスト。
+  - host: xxx.xx.xx.x3
+    # CN heartbeat_service_port。
+    heartbeat_service_port: 9050
+  - host: xxx.xx.xx.x4
+    heartbeat_service_port: 9050
+
+# 新しいクラスタのストレージボリュームの情報。クローンされたスナップショットを復元するために使用されます。
+# 注意: ストレージボリュームの名前は元のクラスタと同一でなければなりません。
+storage_volumes:
+  # S3 互換ストレージボリュームの例。
+  - name: my_s3_volume
+    type: S3
+    location: s3://defaultbucket/test/
+    comment: my s3 volume
+    properties:
+      - key: aws.s3.region
+        value: us-west-2
+      - key: aws.s3.endpoint
+        value: https://s3.us-west-2.amazonaws.com
+      - key: aws.s3.access_key
+        value: xxxxxxxxxx
+      - key: aws.s3.secret_key
+        value: yyyyyyyyyy
+  # HDFS ストレージボリュームの例。
+  - name: my_hdfs_volume
+    type: HDFS
+    location: hdfs://127.0.0.1:9000/sr/test/
+    comment: my hdfs volume
+    properties:
+      - key: hadoop.security.authentication
+        value: simple
+      - key: username
+        value: starrocks
+```
+
+:::note
+AWS の認証情報の詳細については、[AWS リソースへの認証](../../integrations/csp_auth/authenticate_to_aws_resources.md)を参照してください。
+:::
+>>>>>>> 227f1a1 ([Doc] Merge the cluster snapshot partials into their page (#82979))
 
 ```Yaml
 # 復元のためにダウンロードされるクラスタースナップショットの情報。
