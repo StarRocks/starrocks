@@ -4,9 +4,6 @@ description: "Resource groups in StarRocks enable resource isolation and multi-t
 keywords: ['fuzai', 'ziyuan', 'ziyuanzu'] 
 ---
 
-import ScopeParam from '../../../_assets/commonMarkdown/rg_scope_param.mdx'
-import WhSyntaxExample from '../../../_assets/commonMarkdown/rg_wh_syntax_example.mdx'
-import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.mdx'
 
 # 资源隔离
 
@@ -103,8 +100,6 @@ import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.md
 ```SQL
 UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_resource_group_cpu_borrowing";
 ```
-
-<ScopeParam />
 
 #### 内存资源相关配置项
 
@@ -289,7 +284,40 @@ SET GLOBAL enable_pipeline_engine = true;
 
 创建资源组，关联分类器，并分配资源。
 
-<WhSyntaxExample />
+```SQL
+CREATE RESOURCE GROUP <group_name> 
+TO (
+    user='string', 
+    role='string', 
+    query_type in ('select'), 
+    source_ip='cidr'
+) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (`,`).
+WITH (
+    "{ cpu_weight | exclusive_cpu_cores }" = "INT",
+    "mem_limit" = "m%",
+    "concurrency_limit" = "INT",
+    "type" = "str" --The type of the resource group. Set the value to normal.
+);
+```
+
+示例：
+
+```SQL
+CREATE RESOURCE GROUP rg1
+TO 
+    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user2', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user3', source_ip='192.168.x.x/24'),
+    (user='rg1_user4'),
+    (db='db1')
+WITH (
+    'exclusive_cpu_cores' = '10',
+    'mem_limit' = '20%',
+    'big_query_cpu_second_limit' = '100',
+    'big_query_scan_rows_limit' = '100000',
+    'big_query_mem_limit' = '1073741824'
+);
+```
 
 ### 指定资源组（可选）
 
@@ -355,7 +383,12 @@ SHOW VERBOSE RESOURCE GROUP group_name;
 
 为已有的资源组修改资源配额。
 
-<WhAlterSyntax />
+```SQL
+ALTER RESOURCE GROUP group_name WITH (
+    'cpu_core_limit' = 'INT',
+    'mem_limit' = 'm%'
+);
+```
 
 删除指定资源组。
 
