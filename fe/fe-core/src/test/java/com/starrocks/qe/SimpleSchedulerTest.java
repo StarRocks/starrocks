@@ -38,6 +38,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -611,7 +612,7 @@ public class SimpleSchedulerTest {
         try {
             blacklist.add(10003L, 100);
             blacklist.add(10003L, 100);
-            node.setLastRecoveryTime(200);
+            Deencapsulation.setField(node, "lastRecoveryTime", 200);
             Assertions.assertFalse(blacklist.add(10003L, 199));
             Assertions.assertTrue(blacklist.contains(10003L));
             // SHOW must not report a count that contradicts the removal decision.
@@ -625,7 +626,7 @@ public class SimpleSchedulerTest {
             Assertions.assertTrue(blacklist.contains(10003L));
             Assertions.assertEquals("2", blacklist.getShowData(true).get(0).get(3));
             blacklist.addByManual(10003L);
-            node.setLastRecoveryTime(300);
+            Deencapsulation.setField(node, "lastRecoveryTime", 300);
             blacklist.refresh();
             Assertions.assertTrue(blacklist.contains(10003L));
             Assertions.assertEquals("MANUAL", blacklist.getShowData(true).get(0).get(1));

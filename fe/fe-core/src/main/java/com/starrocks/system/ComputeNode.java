@@ -394,10 +394,6 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         return lastRecoveryTime;
     }
 
-    public void setLastRecoveryTime(long lastRecoveryTime) {
-        this.lastRecoveryTime = lastRecoveryTime;
-    }
-
     public long getLastStartTime() {
         return this.lastStartTime;
     }

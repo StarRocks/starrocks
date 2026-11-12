@@ -16,6 +16,7 @@ package com.starrocks.qe.scheduler;
 
 import com.starrocks.common.Reference;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
@@ -149,8 +150,8 @@ public class GetNextTest extends SchedulerTestBase {
             }
             DefaultCoordinator scheduler = startScheduling("select count(1) from lineitem");
             for (long nodeId : nodeIds) {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                        .getBackendOrComputeNode(nodeId).setLastRecoveryTime(System.currentTimeMillis());
+                Deencapsulation.setField(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackendOrComputeNode(nodeId), "lastRecoveryTime", System.currentTimeMillis());
             }
 
             Assertions.assertThrows(RpcException.class, scheduler::getNext);
@@ -164,8 +165,8 @@ public class GetNextTest extends SchedulerTestBase {
         } finally {
             for (long nodeId : nodeIds) {
                 SimpleScheduler.removeFromBlocklist(nodeId);
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                        .getBackendOrComputeNode(nodeId).setLastRecoveryTime(0);
+                Deencapsulation.setField(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackendOrComputeNode(nodeId), "lastRecoveryTime", 0L);
             }
         }
     }

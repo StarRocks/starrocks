@@ -185,8 +185,9 @@ public class FragmentInstanceExecState {
         transitionState(State.CREATED, State.EXECUTING);
     }
 
-    public void changeStateIntoDeploying() {
+    public void changeStateIntoDeploying(long deployStartTime) {
         transitionState(State.CREATED, State.DEPLOYING);
+        this.deployStartTime = deployStartTime;
     }
 
     public void setDeployFuture(Future<PExecPlanFragmentResult> deployFuture) {

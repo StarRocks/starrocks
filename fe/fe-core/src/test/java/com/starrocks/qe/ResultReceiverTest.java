@@ -15,6 +15,7 @@
 package com.starrocks.qe;
 
 import com.starrocks.common.Status;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.PBackendService;
@@ -49,7 +50,7 @@ public class ResultReceiverTest {
         ComputeNode node = mockNode(systemInfoService);
         mockRpcFailure();
         // The restart is observed after this request was sent, so the failure it reports is stale.
-        node.setLastRecoveryTime(System.currentTimeMillis() + 60_000);
+        Deencapsulation.setField(node, "lastRecoveryTime", System.currentTimeMillis() + 60_000);
         try {
             new ResultReceiver(new TUniqueId(), BACKEND_ID, ADDRESS, 10_000).getNext(new Status());
             Assertions.assertFalse(SimpleScheduler.isInBlocklist(BACKEND_ID));
@@ -63,7 +64,7 @@ public class ResultReceiverTest {
             throws Exception {
         ComputeNode node = mockNode(systemInfoService);
         mockRpcFailure();
-        node.setLastRecoveryTime(System.currentTimeMillis() - 60_000);
+        Deencapsulation.setField(node, "lastRecoveryTime", System.currentTimeMillis() - 60_000);
         try {
             new ResultReceiver(new TUniqueId(), BACKEND_ID, ADDRESS, 10_000).getNext(new Status());
             Assertions.assertTrue(SimpleScheduler.isInBlocklist(BACKEND_ID));
