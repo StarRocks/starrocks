@@ -417,6 +417,15 @@ This topic introduces the following types of BE configurations:
 - Description: Specifies the number of milliseconds to wait before starting up a hedged read. For example, you have set this parameter to `30`. In this situation, if a read from a block has not returned within 30 milliseconds, your HDFS client immediately starts up a new read against a different block replica. It is equivalent to the `dfs.client.hedged.read.threshold.millis` parameter in the **hdfs-site.xml** file of your HDFS cluster.
 - Introduced in: v3.0
 
+### iceberg_metadata_table_cache_capacity
+
+- Default: 128
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of idle Iceberg tables that the JNI scanner of Iceberg metadata tables (such as `t$files` and `t$partitions`) keeps deserialized on a BE or CN node. All scan tasks of one query share one deserialized table instead of each deserializing its own copy, which keeps the JVM heap usage independent of the number of concurrent scan tasks. A table unused for 60 seconds is released. A value less than or equal to `0` turns the sharing off for scans that start afterwards.
+- Introduced in: -
+
 ### io_coalesce_adaptive_lazy_active
 
 - Default: true

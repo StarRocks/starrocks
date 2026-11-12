@@ -18,6 +18,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
@@ -36,12 +37,19 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SerializableTableTest {
@@ -128,6 +136,59 @@ public class SerializableTableTest {
         // loads the metadata json through io(), then hands the same IO to the table operations
         assertEquals(table.schemas().keySet(), deserialized.schemas().keySet());
         assertInstanceOf(AzurePathNormalizingFileIO.class, deserialized.operations().io());
+    }
+
+    @Test
+    public void testConcurrentMetadataAccessReadsFileOnce() throws Exception {
+        // The JNI metadata scanner shares one deserialized table across scan tasks, so the lazily loaded
+        // metadata is read concurrently: it must be loaded once and published fully built.
+        Table source = createTable(new HashMap<>());
+        AtomicInteger reads = new AtomicInteger();
+        FileIO countingIO = new FileIO() {
+            @Override
+            public InputFile newInputFile(String path) {
+                reads.incrementAndGet();
+                // Widen the window in which concurrent loads overlap.
+                try {
+                    Thread.sleep(20);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(e);
+                }
+                return source.io().newInputFile(path);
+            }
+
+            @Override
+            public OutputFile newOutputFile(String path) {
+                return source.io().newOutputFile(path);
+            }
+
+            @Override
+            public void deleteFile(String path) {
+                source.io().deleteFile(path);
+            }
+        };
+        SerializableTable table = new SerializableTable(source, countingIO);
+        int threads = 16;
+        CyclicBarrier gate = new CyclicBarrier(threads);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            List<Future<TableMetadata>> futures = new ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                futures.add(pool.submit(() -> {
+                    gate.await();
+                    return table.operations().current();
+                }));
+            }
+            TableMetadata first = futures.get(0).get(10, TimeUnit.SECONDS);
+            assertNotNull(first);
+            for (Future<TableMetadata> future : futures) {
+                assertSame(first, future.get(10, TimeUnit.SECONDS));
+            }
+            assertEquals(1, reads.get());
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     private Table createTable(Map<String, String> properties) {

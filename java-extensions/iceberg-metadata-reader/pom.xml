@@ -89,6 +89,13 @@
             <version>${avro.version}</version>
         </dependency>
 
+        <!-- Shared deserialized table cache. iceberg-core already ships it at runtime; pin the same version. -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+            <version>3.2.4</version>
+        </dependency>
+
         <!-- Registers Parquet with Iceberg's InternalData: format-version 4 manifests are Parquet files.
              Pin the parquet jars to the version FE uses instead of iceberg-parquet's own. -->
         <dependency>
