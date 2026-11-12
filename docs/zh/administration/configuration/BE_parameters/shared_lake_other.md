@@ -549,6 +549,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：`remote_read_weight_decay_ios` 衰减后的最低权重。取值范围为 (0, 1]。仅当 `remote_io_scheduler_enable` 为 `true` 时生效。
 - 引入版本：-
 
+### remote_read_retain_prefetched_bytes
+
+- 默认值：2147483648
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群中，节点在内存中保留的 Segment 文件预读完成 Block 的总大小上限。开启 Remote I/O 调度器（`remote_io_scheduler_enable`）后，调度器为查询扫描预读的 Block 读取完成后，只要扫描仍覆盖该 Block，就保留在内存中，扫描直接从内存复制所需的 Page，不再从 Data Cache 读回。该 Block 仍会写入 Data Cache。内存中保留的 Block 总大小达到该值后，之后完成的 Block 不再保留。设置为 `0` 表示关闭该功能。Remote I/O 调度器未开启时，该项不生效。只保留不会被覆盖写的 Segment 文件，元数据等其他文件不保留。这部分内存计入进程，不计入任何查询。调大该值后，对之后完成的 Block 生效。调小后，在保留总量降到新值以下之前不再保留新的 Block，已保留的 Block 若在下次被读取时总量仍超过新值，读取后即释放；扫描不再覆盖时也会释放。不会在后台主动淘汰。不允许设置为负数。
+- 引入版本：-
+
 ### s3_multipart_equal_part_size
 
 - 默认值：false

@@ -34,6 +34,7 @@
 #include "fs/remote_read_context.h"
 #include "fslib/cache_fill.h"
 #include "fslib/remote_read_scheduler.h"
+#include "fmt/format.h"
 #include "fslib/star_cache_configuration.h"
 #include "fslib/star_cache_handler.h"
 #include "gflags/gflags.h"
@@ -68,6 +69,11 @@ DECLARE_bool(fslib_s3_multipart_equal_part_size);
 DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 // switch to turn on/off buffer prefetch when read
 DECLARE_bool(fs_enable_buffer_prefetch);
+
+namespace staros::starlet::fslib {
+// Budget of the finished read-ahead blocks starlet keeps in memory. No installed starlet header declares it.
+DECLARE_int64(remote_read_retain_prefetched_bytes);
+} // namespace staros::starlet::fslib
 
 namespace starrocks {
 
@@ -112,6 +118,16 @@ void apply_starlet_upload_threshold_configs() {
 
     // Shared with the BE S3 filesystem, hence no `starlet_` prefix on the BE config.
     FLAGS_fslib_s3_multipart_equal_part_size = config::s3_multipart_equal_part_size;
+}
+
+Status update_remote_read_retain_prefetched_bytes() {
+    const int64_t bytes = config::remote_read_retain_prefetched_bytes;
+    if (bytes < 0) {
+        return Status::InvalidArgument(
+                fmt::format("remote_read_retain_prefetched_bytes must not be negative, got {}", bytes));
+    }
+    staros::starlet::fslib::FLAGS_remote_read_retain_prefetched_bytes = bytes;
+    return Status::OK();
 }
 
 namespace fslib = staros::starlet::fslib;
@@ -309,6 +325,11 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
     }
     fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
     apply_starlet_upload_threshold_configs();
+    // The budget only matters to the remote I/O scheduler's block fills, so with the scheduler disabled it keeps
+    // nothing whatever its value.
+    if (auto st = update_remote_read_retain_prefetched_bytes(); !st.ok()) {
+        LOG(WARNING) << st << "; not applied, starlet keeps no finished read-ahead block in memory";
+    }
 
     // Goes through UpdateFlagValue rather than a typed FLAGS_ assignment: starlet registers an update
     // hook on this flag that resolves the string to the enum its heartbeat path actually reads, and

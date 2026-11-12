@@ -68,6 +68,10 @@ staros::starlet::fslib::RemoteReadSchedulerOptions remote_read_scheduler_options
 // warning and leaves the remote reads on their old paths. An invalid config is an error. Startup only: the options
 // are fixed once the scheduler runs, and it cannot be turned off again.
 Status enable_remote_io_scheduler();
+// Applies remote_read_retain_prefetched_bytes to the starlet gflag of the same name, which budgets the finished
+// read-ahead blocks starlet keeps in memory. A negative value is refused and the effective budget stays as it was.
+// Called during worker init and on a dynamic config update, which rolls the config back on an error.
+Status update_remote_read_retain_prefetched_bytes();
 
 #ifdef BE_TEST
 void set_staros_worker_for_test(std::shared_ptr<StarOSWorker> worker);

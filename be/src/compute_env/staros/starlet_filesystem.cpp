@@ -403,6 +403,7 @@ public:
         opt.buffer_size = opts.buffer_size;
         // A file opened without a context of its own takes the work running on this thread, if any.
         opt.remote_read = to_fslib_remote_read(ScopedRemoteReadContext::or_current(opts.remote_read));
+        opt.remote_read_retainable = opts.remote_read_retainable;
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }
