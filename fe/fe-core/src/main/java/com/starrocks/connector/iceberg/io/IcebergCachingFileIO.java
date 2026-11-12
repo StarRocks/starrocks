@@ -51,6 +51,7 @@ package com.starrocks.connector.iceberg.io;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -121,6 +122,29 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private SerializableSupplier<Configuration> conf;
     private static final Pattern HADOOP_CATALOG_METADATA_JSON_PATTERN =
             Pattern.compile("^v\\d+(\\.gz)?\\.metadata\\.json(\\.gz)?$");
+
+    // Snowflake Horizon and some other Iceberg REST catalogs may return metadata paths using
+    // abfss:// with blob.core.windows.net hostnames. Hadoop's AzureBlobFileSystem (abfss scheme)
+    // expects dfs.core.windows.net endpoints, while NativeAzureFileSystem (wasbs scheme) is the
+    // correct driver for blob.core.windows.net. Normalize abfss://*@*.blob.core.windows.net to
+    // wasbs://*@*.blob.core.windows.net so that Hadoop can resolve the correct filesystem.
+    private static final Pattern ABFSS_BLOB_CORE_PATTERN =
+            Pattern.compile("^(abfss?)://([^@]+@[^.]+)\\.blob\\.core\\.windows\\.net(/.*)?$");
+
+    @VisibleForTesting
+    static String normalizeAzurePath(String path) {
+        if (path == null) {
+            return null;
+        }
+        java.util.regex.Matcher m = ABFSS_BLOB_CORE_PATTERN.matcher(path);
+        if (m.matches()) {
+            String scheme = "wasb" + (m.group(1).equals("abfss") ? "s" : "");
+            String authority = m.group(2);
+            String suffix = m.group(3) != null ? m.group(3) : "";
+            return scheme + "://" + authority + ".blob.core.windows.net" + suffix;
+        }
+        return path;
+    }
 
     @Override
     public void initialize(Map<String, String> properties) {
@@ -207,8 +231,11 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public InputFile newInputFile(String path) {
         try {
-            setWrappedConf(buildConfFromProperties(properties, path));
-            return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(path));
+            String normalizedPath = normalizeAzurePath(path);
+            setWrappedConf(buildConfFromProperties(properties, normalizedPath));
+            // Keep the caller's path as location(): the content cache and the parsed-manifest caches
+            // (seeded under ManifestFile.path()) are keyed by it. Only the storage access is normalized.
+            return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(normalizedPath), path);
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new input file for path: %s, properties: %s", path, properties);
             LOG.error(errorMessage, e);
@@ -219,8 +246,9 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public OutputFile newOutputFile(String path) {
         try {
-            setWrappedConf(buildConfFromProperties(properties, path));
-            return wrappedIO.newOutputFile(path);
+            String normalizedPath = normalizeAzurePath(path);
+            setWrappedConf(buildConfFromProperties(properties, normalizedPath));
+            return wrappedIO.newOutputFile(normalizedPath);
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new output file for path: %s, properties: %s", path, properties);
             LOG.error(errorMessage, e);
@@ -230,8 +258,8 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
     @Override
     public void deleteFile(String path) {
-        wrappedIO.deleteFile(path);
-        // remove from cache.
+        wrappedIO.deleteFile(normalizeAzurePath(path));
+        // remove from cache, keyed by the caller's path like CachingInputFile.location().
         fileContentCache.invalidate(path);
     }
 
@@ -702,10 +730,12 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private static class CachingInputFile implements InputFile {
         private final ContentCache contentCache;
         private final InputFile wrappedInputFile;
+        private final String location;
 
-        private CachingInputFile(ContentCache cache, InputFile inFile) {
+        private CachingInputFile(ContentCache cache, InputFile inFile, String location) {
             this.contentCache = cache;
             this.wrappedInputFile = inFile;
+            this.location = location;
         }
 
         @Override
@@ -738,7 +768,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
         @Override
         public String location() {
-            return wrappedInputFile.location();
+            return location;
         }
 
         @Override
