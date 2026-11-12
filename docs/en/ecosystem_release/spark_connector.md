@@ -9,7 +9,7 @@ description: "Release notes and changelog for the StarRocks Connector for Apache
 
 **User guide:**
 
-- [Load data into StarRocks using Spark connector](https://docs.starrocks.io/docs/loading/Spark-connector-starrocks/)
+- [Load data into StarRocks using Spark connector](https://docs.starrocks.io/docs/loading/spark/Spark-connector-starrocks/)
 - [Read data from StarRocks using Spark connector](https://docs.starrocks.io/docs/unloading/Spark_connector/)
 
 **Source codes**: [starrocks-connector-for-apache-spark](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
@@ -19,8 +19,8 @@ description: "Release notes and changelog for the StarRocks Connector for Apache
 **Methods to obtain the JAR file:**
 
 - Directly download the Spark connector JAR file from the [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks).
-- Add the Spark connector as a dependency in your Maven project's `pom.xml` file and download it. For specific instructions, see [user guide](https://docs.starrocks.io/docs/loading/Spark-connector-starrocks/#obtain-spark-connector).
-- Compile the source codes into Spark connector JAR file. For specific instructions, see [user guide](https://docs.starrocks.io/docs/loading/Spark-connector-starrocks/#obtain-spark-connector).
+- Add the Spark connector as a dependency in your Maven project's `pom.xml` file and download it. For specific instructions, see [user guide](https://docs.starrocks.io/docs/loading/spark/Spark-connector-starrocks/#obtain-spark-connector).
+- Compile the source codes into Spark connector JAR file. For specific instructions, see [user guide](https://docs.starrocks.io/docs/loading/spark/Spark-connector-starrocks/#obtain-spark-connector).
 
 **Version requirements:**
 
@@ -98,7 +98,7 @@ This release mainly includes some features and improvements for loading data to 
 
 > **NOTICE**
 >
-> Take note of the some changes when you upgrade the Spark connector to this version. For details, see [Upgrade Spark connector](https://docs.starrocks.io/docs/loading/Spark-connector-starrocks/#upgrade-from-version-110-to-111).
+> Take note of the some changes when you upgrade the Spark connector to this version. For details, see [Upgrade Spark connector](https://docs.starrocks.io/docs/loading/spark/Spark-connector-starrocks/#upgrade-from-version-110-to-111).
 
 **Features**
 
