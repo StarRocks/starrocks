@@ -256,7 +256,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             .put("date", 0).put("year", 0).put("quarter", 0).put("month", 0).put("week", 0)
             .put("week_of_year", 0).put("day", 0).put("day_of_month", 0).put("day_of_week", 0).put("dow", 0)
             .put("day_of_year", 0).put("doy", 0).put("year_of_week", 0).put("yow", 0).put("hour", 0)
-            .put("minute", 0).put("second", 0).put("millisecond", 0).put("last_day_of_month", 0)
+            .put("minute", 0).put("second", 0).put("last_day_of_month", 0)
             .build();
 
     private final long sqlMode;
@@ -816,7 +816,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitFunctionCall(FunctionCall node, ParseTreeContext context) {
         if (node.getName().toString().equalsIgnoreCase(AT_TIMEZONE) && node.getArguments().size() == 2
-                && isWithTimezone(node.getArguments().get(0))) {
+                && isWithTimezone(node.getArguments().get(0)) && node.getWindow().isEmpty()
+                && node.getFilter().isEmpty() && !node.isDistinct() && node.getOrderBy().isEmpty()) {
             return convertWithTimezoneToZone(node, (FunctionCall) node.getArguments().get(0),
                     node.getArguments().get(1), context);
         }
@@ -1175,6 +1176,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
      * Everything else (to_unixtime, comparisons, another zone conversion, DISTINCT, GROUP BY, ORDER BY or a set
      * operation over it, an output or CTE column) would read it as an instant in the session time zone or show it
      * without its zone, so those are rejected too.
+     *
+     * The session time zone counts only when it has a fixed offset: in a zone with DST, two instants in the repeated
+     * hour share one wall-clock time, and DATETIME arithmetic ignores the DST jump. Literal zones are passed to the
+     * BE in a form it resolves (a region ID, UTC or +HH:MM), since its lookup is case-sensitive and doesn't know
+     * Java's or Trino's other spellings; a literal that isn't a valid zone is rejected.
      */
     private static boolean isWithTimezone(Expression expression) {
         if (!(expression instanceof FunctionCall)) {
@@ -1192,11 +1198,40 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             throw unsupportedException(String.format("Trino parser on StarRocks does not support %s here: a zone "
                     + "conversion of with_timezone is supported only as a wall-clock time (CAST to TIMESTAMP or DATE, "
                     + "date and field functions, EXTRACT, or date_format and format_datetime with a literal format "
-                    + "without the zone), or into the session time zone %s", node, TimeUtils.getTimeZone().toZoneId()));
+                    + "without the zone), or into a session time zone with a fixed offset (session time zone: %s)",
+                    node, TimeUtils.getTimeZone().toZoneId()));
         }
-        List<Expr> arguments = visit(withTimezone.getArguments(), context, Expr.class);
-        Expr to = (Expr) visit(toZone, context);
-        return new FunctionCallExpr("convert_tz", List.of(arguments.get(0), arguments.get(1), to));
+        Expr timestamp = (Expr) visit(withTimezone.getArguments().get(0), context);
+        Expr from = convertZone(withTimezone.getArguments().get(1), context);
+        Expr to = convertZone(toZone, context);
+        return new FunctionCallExpr("convert_tz", List.of(timestamp, from, to));
+    }
+
+    // A literal zone becomes a name the BE resolves; any other zone expression is passed through
+    private Expr convertZone(Expression zone, ParseTreeContext context) {
+        if (!(zone instanceof StringLiteral)) {
+            return (Expr) visit(zone, context);
+        }
+        Optional<ZoneId> zoneId = parseZoneId(((StringLiteral) zone).getValue());
+        if (zoneId.isEmpty()) {
+            throw unsupportedException(String.format("Trino parser on StarRocks does not support the time zone %s",
+                    zone));
+        }
+        return new com.starrocks.sql.ast.expression.StringLiteral(toBackendZone(zoneId.get()));
+    }
+
+    // Region IDs as they are; fixed offsets as UTC or +HH:MM, since the BE doesn't resolve Z, UT, GMT+8 or UTC+08:00
+    private static String toBackendZone(ZoneId zone) {
+        ZoneId normalized = zone.normalized();
+        if (!(normalized instanceof ZoneOffset)) {
+            return zone.getId();
+        }
+        int seconds = ((ZoneOffset) normalized).getTotalSeconds();
+        if (seconds == 0) {
+            return "UTC";
+        }
+        return String.format("%s%02d:%02d", seconds < 0 ? "-" : "+", Math.abs(seconds) / 3600,
+                Math.abs(seconds) % 3600 / 60);
     }
 
     // with_timezone(ts, zone) anywhere else -> convert_tz(ts, zone, @time_zone), allowed only when zone is a literal
@@ -1205,10 +1240,10 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         Expression zone = node.getArguments().get(1);
         if (!isSessionTimeZone(zone)) {
             throw unsupportedException(String.format("Trino parser on StarRocks does not support %s here: with_timezone "
-                    + "is supported only inside AT TIME ZONE or at_timezone, or with the session time zone %s",
-                    node, TimeUtils.getTimeZone().toZoneId()));
+                    + "is supported only inside AT TIME ZONE or at_timezone, or with a session time zone that has a "
+                    + "fixed offset (session time zone: %s)", node, TimeUtils.getTimeZone().toZoneId()));
         }
-        String zoneId = parseZoneId(((StringLiteral) zone).getValue()).orElseThrow().getId();
+        String zoneId = toBackendZone(parseZoneId(((StringLiteral) zone).getValue()).orElseThrow());
         return new FunctionCallExpr("convert_tz", List.of(arguments.get(0),
                 new com.starrocks.sql.ast.expression.StringLiteral(zoneId), new VariableExpr("time_zone")));
     }
@@ -1245,21 +1280,22 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return false;
     }
 
-    // Whether zone is a literal naming the session time zone
+    // Whether zone is a literal naming the session time zone, and that zone has a fixed offset
     private static boolean isSessionTimeZone(Expression zone) {
         if (!(zone instanceof StringLiteral)) {
             return false;
         }
         Optional<ZoneId> zoneId = parseZoneId(((StringLiteral) zone).getValue());
         ZoneId sessionZone = TimeUtils.getTimeZone().toZoneId();
-        return zoneId.isPresent() && (zoneId.get().normalized().equals(sessionZone.normalized())
+        return zoneId.isPresent() && sessionZone.getRules().isFixedOffset()
+                && (zoneId.get().normalized().equals(sessionZone.normalized())
                 || zoneId.get().getRules().equals(sessionZone.getRules()));
     }
 
-    // Trino zone names are case-insensitive
+    // Trino zone names are case-insensitive; StarRocks' own aliases such as CST aren't Trino zones
     private static Optional<ZoneId> parseZoneId(String zone) {
         try {
-            return Optional.of(ZoneId.of(zone, TimeUtils.TIME_ZONE_ALIAS_MAP));
+            return Optional.of(ZoneId.of(zone));
         } catch (DateTimeException e) {
             return ZoneId.getAvailableZoneIds().stream().filter(id -> id.equalsIgnoreCase(zone)).findFirst()
                     .map(ZoneId::of);
