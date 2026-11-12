@@ -19,9 +19,9 @@
 #include "runtime/exec_env.h"
 
 #ifdef WITH_STARCACHE
+#include "cache/block_cache/peer_cache_wrapper.h"
 #include "cache/block_cache/starcache_wrapper.h"
 #endif
-#include "cache/block_cache/peer_cache_wrapper.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "util/hash_util.hpp"
@@ -60,8 +60,10 @@ Status BlockCache::init(const CacheOptions& options) {
     }
     RETURN_IF_ERROR(_local_cache->init(cache_options));
 
+#ifdef WITH_STARCACHE
     _remote_cache = std::make_shared<PeerCacheWrapper>();
     RETURN_IF_ERROR(_remote_cache->init(cache_options));
+#endif
 
     _refresh_quota();
     _initialized.store(true, std::memory_order_relaxed);
