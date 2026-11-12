@@ -63,6 +63,7 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -321,6 +322,11 @@ public class FunctionAnalyzer {
             case FunctionSet.ENCODE_SORT_KEY:
             case FunctionSet.ENCODE_FINGERPRINT_SHA256:
             case FunctionSet.ENCODE_FINGERPRINT_SHA256_V2:
+                break;
+            case "to_json":
+                if (call.getFn().getBinaryType() != TFunctionBinaryType.BUILTIN) {
+                    return;
+                }
                 break;
             default:
                 return;
