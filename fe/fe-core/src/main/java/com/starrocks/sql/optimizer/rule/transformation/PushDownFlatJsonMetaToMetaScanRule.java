@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.ArrayType;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
@@ -100,7 +101,10 @@ public class PushDownFlatJsonMetaToMetaScanRule extends TransformationRule {
             }
             ColumnRefOperator usedColumn = aggCall.getColumnRefs().get(0);
             String aggFuncName = aggCall.getFnName();
-            Column c = metaScan.getColRefToColumnMetaMap().get(usedColumn);
+            // The meta reader produces flat_json_meta as ARRAY<VARCHAR>, and the slot built from this column
+            // is sent to the backend with the column's type, so describe the meta column, not the JSON column.
+            Column c = metaScan.getColRefToColumnMetaMap().get(usedColumn).deepCopy();
+            c.setType(ArrayType.ARRAY_VARCHAR);
             newScanColumnRefs.put(metaRef, c);
             newAggGroupBys.add(metaRef);
             aggColumnIdToColumns.put(metaRef.getId(), Pair.create(aggFuncName, c));
