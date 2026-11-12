@@ -19,9 +19,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
@@ -29,16 +32,12 @@ import com.starrocks.connector.TableVersionRange;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.JoinOperator;
-import com.starrocks.sql.ast.expression.BinaryType;
->>>>>>> dcd391a ([BugFix][RB-817] Skip statistics lookup for struct fields of expressions to avoid Unknown column errors (#82995))
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.Utils;
@@ -46,11 +45,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.AggType;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.optimizer.operator.Projection;
-import com.starrocks.sql.optimizer.operator.UKFKConstraints;
->>>>>>> dcd391a ([BugFix][RB-817] Skip statistics lookup for struct fields of expressions to avoid Unknown column errors (#82995))
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -59,31 +54,14 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-<<<<<<< HEAD
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.plan.ConnectorPlanTestBase;
-=======
-import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.type.ArrayType;
-import com.starrocks.type.DateType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.StructField;
-import com.starrocks.type.StructType;
-import com.starrocks.type.Type;
-import com.starrocks.type.VarcharType;
->>>>>>> dcd391a ([BugFix][RB-817] Skip statistics lookup for struct fields of expressions to avoid Unknown column errors (#82995))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -340,21 +318,21 @@ public class StatisticsCalculatorTest {
                 .mapToLong(Partition::getId).boxed().collect(Collectors.toList());
 
         Type structType = new StructType(
-                new ArrayList<>(List.of(new StructField("bucket_id", IntegerType.INT))));
+                new ArrayList<>(List.of(new StructField("bucket_id", Type.INT))));
         Type arrayType = new ArrayType(structType);
         Column arrayColumn = new Column("bucket_array", arrayType, true);
         ColumnRefOperator arrayRef = columnRefFactory.create("bucket_array", arrayType, true);
-        ColumnRefOperator outputRef = columnRefFactory.create("bucket_id", IntegerType.INT, true);
+        ColumnRefOperator outputRef = columnRefFactory.create("bucket_id", Type.INT, true);
         CollectionElementOperator arrayElement = new CollectionElementOperator(
                 structType, arrayRef, ConstantOperator.createInt(1), false);
         SubfieldOperator subfield = new SubfieldOperator(
-                arrayElement, IntegerType.INT, List.of("bucket_id"));
+                arrayElement, Type.INT, List.of("bucket_id"));
 
         LogicalOlapScanOperator scanOperator = new LogicalOlapScanOperator(table,
                 ImmutableMap.of(arrayRef, arrayColumn),
                 ImmutableMap.of(arrayColumn, arrayRef),
                 null, -1, null,
-                table.getBaseIndexMetaId(),
+                table.getBaseIndexId(),
                 partitionIds,
                 null,
                 false,
@@ -415,18 +393,18 @@ public class StatisticsCalculatorTest {
                 .mapToLong(Partition::getId).boxed().collect(Collectors.toList());
 
         Type structType = new StructType(
-                new ArrayList<>(List.of(new StructField("bucket_id", IntegerType.INT))));
+                new ArrayList<>(List.of(new StructField("bucket_id", Type.INT))));
         Column structColumn = new Column("bucket_struct", structType, true);
         ColumnRefOperator structRef = columnRefFactory.create("bucket_struct", structType, true);
-        ColumnRefOperator outputRef = columnRefFactory.create("bucket_id", IntegerType.INT, true);
+        ColumnRefOperator outputRef = columnRefFactory.create("bucket_id", Type.INT, true);
         SubfieldOperator subfield = new SubfieldOperator(
-                structRef, IntegerType.INT, List.of("bucket_id"));
+                structRef, Type.INT, List.of("bucket_id"));
 
         LogicalOlapScanOperator scanOperator = new LogicalOlapScanOperator(table,
                 ImmutableMap.of(structRef, structColumn),
                 ImmutableMap.of(structColumn, structRef),
                 null, -1, null,
-                table.getBaseIndexMetaId(),
+                table.getBaseIndexId(),
                 partitionIds,
                 null,
                 false,
