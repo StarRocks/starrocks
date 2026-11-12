@@ -17,6 +17,7 @@
 #include <atomic>
 #include <boost/algorithm/string.hpp>
 #include <optional>
+#include <unordered_set>
 
 #include "cache/cache_options.h"
 #include "connector/deletion_vector/deletion_bitmap.h"
@@ -203,6 +204,11 @@ struct HdfsScannerOptions {
     // and a placeholder materialized column was injected.  Combined with
     // use_min_max_opt to skip reading the placeholder from the data file.
     bool can_use_any_column = false;
+    // Materialized slots the query reads itself although can_use_any_column is set. The FE treats the source column
+    // of an Iceberg partition transform (e.g. `d` of `year(d)`) as a partition column, so a query on it gets a
+    // placeholder column, but a file stores the column as data. Only the placeholder may then be filled with a default
+    // value; these slots keep their min/max value or are read from the file.
+    std::unordered_set<SlotId> any_column_queried_slots;
     bool use_count_opt = false;
     bool orc_use_column_names = false;
     bool parquet_page_index_enable = false;
