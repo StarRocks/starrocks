@@ -185,6 +185,28 @@ public class PartitionCastPredicatePruner {
         return true;
     }
 
+    /**
+     * Whether {@link #rangeMayMatch} can prune a group with this conjunct, i.e. it has the
+     * {@code CAST(<string col> AS DATETIME) <op> <temporal const>} shape with {@code op} one of {@code =, <, <=, >, >=}.
+     * Any other residual conjunct keeps every group.
+     */
+    public static boolean isRangePrunable(ScalarOperator conjunct) {
+        if (!(conjunct instanceof BinaryPredicateOperator)) {
+            return false;
+        }
+        BinaryPredicateOperator bp = (BinaryPredicateOperator) conjunct;
+        switch (bp.getBinaryType()) {
+            case EQ:
+            case LT:
+            case LE:
+            case GT:
+            case GE:
+                return temporalCastColumnName(bp.getChild(0)) != null && asTemporalConstant(bp.getChild(1)) != null;
+            default:
+                return false;
+        }
+    }
+
     // False only if the conjunct provably cannot be satisfied by any value within the ranges. Handles the simple
     // CAST(<string col>) <op> <temporal const> shape (column on the left); everything else keeps the group.
     private static boolean conjunctMayMatchRange(ScalarOperator conjunct, Map<String, LocalDateTime[]> lowerRanges) {

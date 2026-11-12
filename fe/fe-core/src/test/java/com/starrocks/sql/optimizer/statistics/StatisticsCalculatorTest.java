@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -641,12 +642,26 @@ public class StatisticsCalculatorTest {
     public void testRemoveIcebergPartitionPredicateOnlyForPrunedConjuncts() {
         StatisticsCalculator calculator = new StatisticsCalculator();
 
-        // a string-to-temporal cast on the identity partition column is not part of the converted scan predicate
+        // a string-to-temporal cast on the identity string partition column is not converted, but the connector
+        // prunes manifests / files with it against the partition values, so the row count already reflects it
         LogicalIcebergScanOperator identity = icebergScan("partitioned_db", "t1");
         ScalarOperator castEq = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(DateType.DATETIME, icebergColumn(identity, "date")),
+                ConstantOperator.createDatetime(LocalDateTime.of(2020, 1, 1, 0, 0)));
+        Assertions.assertEquals(ConstantOperator.TRUE,
+                calculator.removePartitionPredicate(castEq, identity, ICEBERG_TABLE_METADATA));
+        // ... but not with statistics that do not come from the planned files
+        Assertions.assertEquals(castEq, calculator.removePartitionPredicate(castEq, identity, null));
+        // shapes the manifest range check cannot prune with (a DATE cast, !=) keep every manifest, so they stay
+        ScalarOperator castDateEq = new BinaryPredicateOperator(BinaryType.EQ,
                 new CastOperator(DateType.DATE, icebergColumn(identity, "date")),
                 ConstantOperator.createDate(LocalDateTime.of(2020, 1, 1, 0, 0)));
-        Assertions.assertEquals(castEq, calculator.removePartitionPredicate(castEq, identity, ICEBERG_TABLE_METADATA));
+        Assertions.assertEquals(castDateEq,
+                calculator.removePartitionPredicate(castDateEq, identity, ICEBERG_TABLE_METADATA));
+        ScalarOperator castNe = new BinaryPredicateOperator(BinaryType.NE,
+                new CastOperator(DateType.DATETIME, icebergColumn(identity, "date")),
+                ConstantOperator.createDatetime(LocalDateTime.of(2020, 1, 1, 0, 0)));
+        Assertions.assertEquals(castNe, calculator.removePartitionPredicate(castNe, identity, ICEBERG_TABLE_METADATA));
         // a literal the converter cannot bind to the string column does not prune either
         ScalarOperator intLt = new BinaryPredicateOperator(BinaryType.LT, icebergColumn(identity, "date"),
                 ConstantOperator.createInt(50));
@@ -670,6 +685,16 @@ public class StatisticsCalculatorTest {
         ScalarOperator tsEq = new BinaryPredicateOperator(BinaryType.EQ, icebergColumn(evolved, "ts"),
                 ConstantOperator.createDatetime(LocalDateTime.of(2024, 1, 1, 0, 0)));
         Assertions.assertEquals(tsEq, calculator.removePartitionPredicate(tsEq, evolved, ICEBERG_TABLE_METADATA));
+
+        // after a partition transform evolution the file partition values are not read, so the cast residual keeps
+        // every file and the cast stays
+        new MockUp<IcebergTable>() {
+            @Mock
+            public boolean hasPartitionTransformedEvolution() {
+                return true;
+            }
+        };
+        Assertions.assertEquals(castEq, calculator.removePartitionPredicate(castEq, identity, ICEBERG_TABLE_METADATA));
     }
 
     private static final Statistics ICEBERG_TABLE_METADATA =
