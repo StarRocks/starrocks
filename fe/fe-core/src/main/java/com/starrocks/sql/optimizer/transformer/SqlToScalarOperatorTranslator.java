@@ -58,6 +58,11 @@ import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.IntervalSeconds;
+>>>>>>> bf73116 ([BugFix] Add the fractional seconds of an INTERVAL ... SECOND exactly (#81371))
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.ResolvedField;
@@ -107,9 +112,20 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FunctionType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.Type;
+>>>>>>> bf73116 ([BugFix] Add the fractional seconds of an INTERVAL ... SECOND exactly (#81371))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -554,8 +570,87 @@ public final class SqlToScalarOperatorTranslator {
                 arguments.add(visit(argument, context.clone(node)));
             }
 
+<<<<<<< HEAD
             return new CallOperator(node.getFn().getFunctionName().getFunction(), node.getType(), arguments,
                     node.getFn());
+=======
+            Function fn = ExprUtils.getTimestampArithmeticFunction(node);
+            Preconditions.checkNotNull(fn, "TimestampArithmeticExpr must resolve to a function");
+            String fnName = fn.getFunctionName().getFunction();
+            ScalarOperator fractionalSeconds = splitFractionalSeconds(fnName, node.getType(), arguments, node.getPos());
+            if (fractionalSeconds != null) {
+                return fractionalSeconds;
+            }
+            return new CallOperator(fnName, node.getType(), arguments, fn);
+        }
+
+        // seconds_add and seconds_sub take the amount as an INT, so `ts + INTERVAL '0.5' SECOND` would add NULL and
+        // `ts + INTERVAL 1.5 SECOND` one second. A constant amount that is a decimal, a floating point number or a
+        // string is added as whole seconds and microseconds instead:
+        // `ts + INTERVAL 1.5 SECOND` is `microseconds_add(seconds_add(ts, 1), 500000)`.
+        // Returns null if the call is not such an interval, and then it is built as it is.
+        private static ScalarOperator splitFractionalSeconds(String fnName, Type returnType,
+                                                             List<ScalarOperator> arguments, NodePosition pos) {
+            boolean add = FunctionSet.SECONDS_ADD.equals(fnName);
+            if (!add && !FunctionSet.SECONDS_SUB.equals(fnName)) {
+                return null;
+            }
+            ScalarOperator amount = arguments.get(1);
+            if (!amount.isConstantRef() && amount.isConstant()) {
+                // A constant expression, as in `TIMESTAMPADD(SECOND, 0.25 + 0.25, ts)`, is folded here. Later on the
+                // amount is cast to INT before constants are folded, which would drop the fraction.
+                ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+                amount = rewriter.rewrite(rewriter.rewrite(amount, ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE),
+                        ScalarOperatorRewriter.FOLD_CONSTANT_RULES);
+            }
+            BigDecimal seconds = constantSeconds(amount);
+            if (seconds == null) {
+                return null;
+            }
+            int[] wholeSecondsAndMicroseconds = IntervalSeconds.split(seconds, pos);
+            if (wholeSecondsAndMicroseconds == null) {
+                return null;
+            }
+            int wholeSeconds = wholeSecondsAndMicroseconds[0];
+            int wholeMicroseconds = wholeSecondsAndMicroseconds[1];
+
+            String microsecondsFn = add ? FunctionSet.MICROSECONDS_ADD : FunctionSet.MICROSECONDS_SUB;
+            Type[] argTypes = {DateType.DATETIME, IntegerType.INT};
+            ScalarOperator result = arguments.get(0);
+            if (wholeSeconds != 0 || wholeMicroseconds == 0) {
+                result = new CallOperator(fnName, returnType,
+                        Lists.newArrayList(result, ConstantOperator.createInt(wholeSeconds)),
+                        ExprUtils.getBuiltinFunction(fnName, argTypes, Function.CompareMode.IS_IDENTICAL));
+            }
+            if (wholeMicroseconds != 0) {
+                result = new CallOperator(microsecondsFn, returnType,
+                        Lists.newArrayList(result, ConstantOperator.createInt(wholeMicroseconds)),
+                        ExprUtils.getBuiltinFunction(microsecondsFn, argTypes, Function.CompareMode.IS_IDENTICAL));
+            }
+            return result;
+        }
+
+        // The value of a constant decimal, floating point or string amount, or null for any other amount (also for a
+        // string that is not a number, which is left to the cast to INT of the function argument)
+        private static BigDecimal constantSeconds(ScalarOperator amount) {
+            if (!(amount instanceof ConstantOperator) || ((ConstantOperator) amount).isNull()) {
+                return null;
+            }
+            ConstantOperator constant = (ConstantOperator) amount;
+            Type type = constant.getType();
+            try {
+                if (type.isDecimalOfAnyVersion()) {
+                    return constant.getDecimal();
+                } else if (type.isStringType()) {
+                    return new BigDecimal(constant.getVarchar().trim());
+                } else if (type.isFloatingPointType()) {
+                    return BigDecimal.valueOf(constant.getDouble());
+                }
+            } catch (NumberFormatException e) {
+                return null;
+            }
+            return null;
+>>>>>>> bf73116 ([BugFix] Add the fractional seconds of an INTERVAL ... SECOND exactly (#81371))
         }
 
         private LogicalPlan getSubqueryPlan(QueryStatement queryStatement) {
