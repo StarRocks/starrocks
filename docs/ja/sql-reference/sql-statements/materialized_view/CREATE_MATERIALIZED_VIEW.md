@@ -4,7 +4,6 @@ displayed_sidebar: docs
 
 # CREATE MATERIALIZED VIEW
 
-import MVWarehouse from '../../../_assets/commonMarkdown/mv_warehouse.mdx'
 
 ## 説明
 
@@ -414,7 +413,14 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
   共通パーティション式TTLと`force_mv`セマンティクスの詳細なガイダンスについては、[例6](#例)を参照してください。
 
+<<<<<<< HEAD
 <MVWarehouse />
+=======
+- `refresh_mode`: マテリアライズドビューの更新方法を制御します。StarRocks v4.1 で導入され、Iceberg の追記（append-only）テーブルでのみサポートされています。有効な値：
+
+  - `PCT`: （デフォルト）パーティション化されたマテリアライズドビューの場合、ベーステーブルにデータの変更があると影響を受けたパーティションのみリフレッシュされ、そのパーティションの結果の一貫性が保証されます。パーティション化されていないマテリアライズドビューの場合、ベーステーブルのいずれかが変更されるとマテリアライズドビュー全体がフルリフレッシュされます。
+  - `INCREMENTAL`: 増分リフレッシュのみを行うことを保証します。マテリアライズドビューの定義で増分リフレッシュがサポートされていない場合や、非増分データに遭遇した場合、作成やリフレッシュが失敗します。
+>>>>>>> d83b7a6 ([Doc] Merge the warehouse and privilege partials into their pages (#82999))
 
 **query_statement** (必須)
 

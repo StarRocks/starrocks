@@ -4,7 +4,6 @@ displayed_sidebar: docs
 
 # CREATE MATERIALIZED VIEW
 
-import MVWarehouse from '../../../_assets/commonMarkdown/mv_warehouse.mdx'
 
 CREATE MATERIALIZED VIEW creates a materialized view. For usage information about materialized views, see [Synchronous materialized view](../../../using_starrocks/Materialized_view-single_table.md) and [Asynchronous materialized view](../../../using_starrocks/async_mv/Materialized_view.md).
 
@@ -412,7 +411,14 @@ Properties of the asynchronous materialized view. You can modify the properties 
 
   See [Example 6](#examples) for detailed instructions on the `force_mv` semantic and `partition_retention_condition`.
 
+<<<<<<< HEAD
 <MVWarehouse />
+=======
+- `refresh_mode`: Controls how a materialized view is refreshed. Introduced in StarRocks v4.1, and only supported for Iceberg append-only tables. Valid values:
+
+  - `PCT`: (Default) For partitioned materialized views, only the affected partition is refreshed when there is a data change, ensuring result consistency for that partition. For non-partitioned materialized views, any data change in the base table triggers a full refresh of the materialized view.
+  - `INCREMENTAL`: Ensures that only incremental refreshes are performed. If the materialized view does not support incremental refresh based on its definition or encounters non-incremental data, creation or refresh will fail.
+>>>>>>> d83b7a6 ([Doc] Merge the warehouse and privilege partials into their pages (#82999))
 
 **query_statement** (required)
 

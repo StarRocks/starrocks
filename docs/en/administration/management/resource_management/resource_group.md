@@ -4,6 +4,10 @@ sidebar_position: 10
 keywords: ['resource groups', 'isolation']
 ---
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> d83b7a6 ([Doc] Merge the warehouse and privilege partials into their pages (#82999))
 # Resource group
 
 This topic describes the resource group feature of StarRocks.

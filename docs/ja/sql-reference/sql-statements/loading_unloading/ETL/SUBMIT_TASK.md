@@ -2,7 +2,6 @@
 displayed_sidebar: docs
 ---
 
-import PropertyWarehouse from '../../../../_assets/commonMarkdown/property_warehouse_tip_default.mdx'
 
 # SUBMIT TASK
 
@@ -44,8 +43,6 @@ AS <etl_statement>
 | `session.insert_timeout` | Integer | INSERT 操作のタイムアウト時間。単位: 秒。デフォルト: `14400`。v3.4.0 以降でサポートされています。 |
 | `session.enable_profile` | Boolean | タスクのクエリプロファイルを有効にするかどうか。デフォルト: `false`。 |
 | `session.new_planner_optimize_timeout` | Integer | クエリオプティマイザのタイムアウト時間。単位: ミリ秒。デフォルト: `3000`。 |
-
-<PropertyWarehouse />
 
 例えば、以下のステートメントは、クエリプロファイルを有効にし、クエリタイムアウトを増加させるセッションプロパティを持つ `test_task` という名前のタスクを送信します：
 

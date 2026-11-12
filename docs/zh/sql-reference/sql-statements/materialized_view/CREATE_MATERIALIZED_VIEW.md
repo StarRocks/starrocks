@@ -4,7 +4,6 @@ displayed_sidebar: docs
 
 # CREATE MATERIALIZED VIEW
 
-import MVWarehouse from '../../../_assets/commonMarkdown/mv_warehouse.mdx'
 
 ## 功能
 
@@ -407,7 +406,14 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
   有关通用分区表达式 TTL 和 `force_mv` 语义的详细指导，参考 [示例六](#示例)。
 
+<<<<<<< HEAD
 <MVWarehouse />
+=======
+- `refresh_mode`：控制物化视图的刷新方式。StarRocks v4.1 中引入。仅支持 Iceberg Append-only 表。有效值：
+
+  - `PCT`：（默认）对于分区物化视图，当基表数据发生变化时，仅刷新受影响的分区，保证该分区的数据一致性。对于非分区物化视图，基表任何数据变化都会触发全量刷新。
+  - `INCREMENTAL`：仅允许进行增量刷新。如果根据定义物化视图不支持增量刷新，或遇到无法增量处理的数据，则创建或刷新的操作会失败。
+>>>>>>> d83b7a6 ([Doc] Merge the warehouse and privilege partials into their pages (#82999))
 
 **query_statement**（必填）
 
