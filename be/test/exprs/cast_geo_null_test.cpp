@@ -88,6 +88,34 @@ protected:
         return nullable(StructColumn::create(std::move(fields), std::vector<std::string>{"g"}), {0, 1, 0});
     }
 
+    ColumnPtr identity_values() const {
+        // POINT (1 2) in little and big endian, then a little-endian empty GEOMETRYCOLLECTION.
+        static constexpr uint8_t little_point[] = {1,    1,    0, 0, 0, 0, 0, 0, 0, 0,   0,
+                                                   0xf0, 0x3f, 0, 0, 0, 0, 0, 0, 0, 0x40};
+        static constexpr uint8_t big_point[] = {0, 0, 0, 0, 1, 0x3f, 0xf0, 0, 0, 0, 0, 0, 0, 0x40, 0, 0, 0, 0, 0, 0, 0};
+        static constexpr uint8_t empty[] = {1, 7, 0, 0, 0, 0, 0, 0, 0};
+        auto geo = GeoColumn::create(GeoColumnDescriptor{*geo_type().geo_type});
+        geo->append_wkb(Slice(little_point, sizeof(little_point)));
+        geo->append_wkb(Slice(big_point, sizeof(big_point)));
+        geo->append_wkb(Slice(empty, sizeof(empty)));
+        geo->append_default();
+        return nullable(std::move(geo), {0, 0, 0, 1});
+    }
+
+    static void check_identity(const ColumnPtr& expected, const ColumnPtr& actual) {
+        ASSERT_EQ(expected->size(), actual->size());
+        EXPECT_EQ(expected->is_constant(), actual->is_constant());
+        auto* from = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(expected));
+        auto* to = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(actual));
+        ASSERT_NE(nullptr, to);
+        EXPECT_EQ(from->descriptor(), to->descriptor());
+        ASSERT_EQ(from->size(), to->size());
+        for (size_t i = 0; i < from->size(); ++i) {
+            EXPECT_EQ(expected->is_null(i), actual->is_null(i));
+            EXPECT_EQ(from->get_wkb(i), to->get_wkb(i));
+        }
+    }
+
     void check_geo(const ColumnPtr& column) const {
         ASSERT_TRUE(column->is_nullable());
         auto* data = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(column.get()));
@@ -226,6 +254,90 @@ TEST_P(GeoNullCastTest, ArrayWithNullStructElement) {
     EXPECT_TRUE(array->elements_column()->is_null(1));
     auto* data = down_cast<const StructColumn*>(ColumnHelper::get_data_column(array->elements_column().get()));
     check_geo(data->fields()[0]);
+}
+
+TEST_P(GeoNullCastTest, IdentityScalar) {
+    auto type = geo_type();
+    auto varying = identity_values();
+    for (size_t row : {0, 1, 2, 3}) {
+        auto value = varying->clone_empty();
+        value->append(*varying, row, 1);
+        auto input = ConstColumn::create(std::move(value), 4);
+        auto result = cast(input, type, type, true);
+        ASSERT_TRUE(result.ok()) << result.status();
+        check_identity(input, result.value());
+    }
+    auto result = cast(varying, type, type);
+    ASSERT_TRUE(result.ok()) << result.status();
+    check_identity(varying, result.value());
+}
+
+TEST_P(GeoNullCastTest, IdentityArrayAndMapWithWiderKey) {
+    auto values = identity_values();
+    auto array = array_type(geo_type());
+    auto constant = ConstColumn::create(ArrayColumn::create(values, offsets({0, 4})), 3);
+    auto result = cast(constant, array, array, true);
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_TRUE(result.value()->is_constant());
+    EXPECT_EQ(3, result.value()->size());
+    auto* array_data = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(result.value()));
+    check_identity(values, array_data->elements_column());
+
+    auto from = TypeDescriptor::create_map_type(TYPE_INT_DESC, geo_type());
+    auto to = TypeDescriptor::create_map_type(TYPE_BIGINT_DESC, geo_type());
+    auto keys = ColumnTestHelper::build_nullable_column<int32_t>({1, 2, 3, 4});
+    auto maps = MapColumn::create(std::move(keys), values, offsets({0, 2, 2, 4}));
+    result = cast(ArrayColumn::create(NullableColumn::wrap_if_necessary(std::move(maps)), offsets({0, 2, 3})),
+                  array_type(from), array_type(to));
+    ASSERT_TRUE(result.ok()) << result.status();
+    array_data = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(result.value()));
+    check_offsets(array_data->offsets(), {0, 2, 3});
+    auto* map = down_cast<const MapColumn*>(ColumnHelper::get_data_column(array_data->elements_column()));
+    check_offsets(map->offsets(), {0, 2, 2, 4});
+    for (size_t i = 0; i < 4; ++i) {
+        EXPECT_EQ(i + 1, map->keys_column()->get(i).get_int64());
+    }
+    check_identity(values, map->values_column());
+}
+
+TEST_P(GeoNullCastTest, IdentityStruct) {
+    auto values = identity_values();
+    auto type = struct_type(geo_type());
+    MutableColumns fields;
+    fields.emplace_back(Column::mutate(ColumnPtr(values)));
+    auto input = nullable(StructColumn::create(std::move(fields), std::vector<std::string>{"g"}), {0, 1, 0, 0});
+    auto result = cast(input, type, type);
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_TRUE(result.value()->is_null(1));
+    auto* data = down_cast<const StructColumn*>(ColumnHelper::get_data_column(result.value()));
+    check_identity(values, data->fields()[0]);
+
+    auto row = input->clone_empty();
+    row->append(*input, 0, 1);
+    auto* expected = down_cast<const StructColumn*>(ColumnHelper::get_data_column(row.get()));
+    auto expected_field = expected->fields()[0];
+    result = cast(ConstColumn::create(std::move(row), 4), type, type);
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_TRUE(result.value()->is_constant());
+    EXPECT_EQ(4, result.value()->size());
+    data = down_cast<const StructColumn*>(ColumnHelper::get_data_column(result.value()));
+    check_identity(expected_field, data->fields()[0]);
+}
+
+TEST_P(GeoNullCastTest, IdentityRequiresMatchingDescriptor) {
+    const auto from = geo_type();
+    auto other = from;
+    other.geo_type->srid.reset();
+    for (const auto& types : {std::pair{from, other}, std::pair{array_type(from), array_type(other)},
+                              std::pair{struct_type(from), struct_type(other)},
+                              std::pair{TypeDescriptor::create_map_type(TYPE_INT_DESC, from),
+                                        TypeDescriptor::create_map_type(TYPE_BIGINT_DESC, other)}}) {
+        ObjectPool pool;
+        auto expr = VectorizedCastExprFactory::create_cast_expr(&pool, types.first, types.second, false);
+        ASSERT_FALSE(expr.ok());
+        EXPECT_TRUE(expr.status().is_not_supported());
+        EXPECT_NE(std::string::npos, expr.status().to_string().find("requires identical descriptors"));
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(NativeGeo, GeoNullCastTest, ::testing::Values(TYPE_GEOGRAPHY, TYPE_GEOMETRY));
