@@ -51,7 +51,7 @@ TENANN_MD5SUM="18c61b80e3e4039bd3c6ca95231cb645"
 #TENANN_MD5SUM="b8683b3df546944b60bc8fe3db8db3af"
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.0.10/starcache-centos7_arm64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.0.11/starcache-centos7_arm64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="6a74ac6f3763644ece64a3ab7c22520a"
+STARCACHE_MD5SUM="fca69b8021538ea17d4a16fb10cc92b6"

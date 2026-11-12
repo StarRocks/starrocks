@@ -55,6 +55,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
 import com.starrocks.sql.parser.NodePosition;
@@ -884,6 +885,19 @@ public class PaimonMetadataTest {
         // partition with function predicate, limit 1
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateCoalescePredicate)
+                .setLimit(1).build();
+        result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
+        assertEquals(1, result.size());
+        assertEquals(1, result.get(0).getFiles().size());
+        assertEquals(6, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
+                .getPaimonSplitsInfo().getPaimonSplits().size());
+
+        // partition LIKE that cannot be pushed down ('_' is a wildcard), limit 1: no limit pruning, otherwise
+        // Paimon could return a split the BE filters out entirely while the matching ones are never scanned
+        ScalarOperator createDateLikePredicate = new LikePredicateOperator(LikePredicateOperator.LikeType.LIKE,
+                createDateColumn, ConstantOperator.createVarchar(dateFormatter.format(now).substring(0, 2) + "__%"));
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateLikePredicate)
                 .setLimit(1).build();
         result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());

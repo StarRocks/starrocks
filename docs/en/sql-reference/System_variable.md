@@ -5,7 +5,6 @@ keywords: ['session variable']
 
 # System variables
 
-import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
 
 StarRocks provides many system variables that can be set and modified to suit your requirements. This section describes the variables supported by StarRocks. You can view the settings of these variables by running the [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) command on your MySQL client. You can also use the [SET](sql-statements/cluster-management/config_vars/SET.md) command to dynamically set or modify variables. You can make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
 
@@ -1473,4 +1472,3 @@ The StarRocks version. Cannot be changed.
 * **Default**: true
 * **Introduced in**: v3.4
 
-<VariableWarehouse />

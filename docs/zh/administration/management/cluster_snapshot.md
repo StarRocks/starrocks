@@ -7,9 +7,6 @@ keywords: ['备份', '恢复', '存算分离', '快照']
 <head><meta name="docsearch:pagerank" content="100"/></head>
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
-import ClusterSnapshotTerm from '../../_assets/commonMarkdown/cluster_snapshot_term.mdx'
-import ManualCreateDropClusterSnapshot from '../../_assets/commonMarkdown/manual_cluster_snapshot.mdx'
-import ClusterSnapshotWarning from '../../_assets/commonMarkdown/cluster_snapshot_warning.mdx'
 
 # 集群快照
 
@@ -38,8 +35,6 @@ import ClusterSnapshotWarning from '../../_assets/commonMarkdown/cluster_snapsho
 - **生成集群快照**
 
   系统自动维护紧随最新集群状态的快照。在创建最新快照后，历史快照将被删除，始终只保留一个快照。
-
-  <ClusterSnapshotTerm />
 
 - **集群恢复**
 
@@ -77,8 +72,6 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
 ```
 
 一旦禁用自动化集群快照，系统将自动清除历史快照。
-
-<ManualCreateDropClusterSnapshot />
 
 ## 查看集群快照
 
@@ -122,8 +115,6 @@ SELECT * FROM information_schema.cluster_snapshot_jobs;
 | error_message      | 任务的错误信息（如果有）。                       |
 
 ## 恢复集群
-
-<ClusterSnapshotWarning />
 
 按照以下步骤使用集群快照恢复集群。
 
