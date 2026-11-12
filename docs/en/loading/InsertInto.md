@@ -703,7 +703,7 @@ You can set the following configuration items for INSERT transaction:
 
 | FE configuration                   | Description                                                  |
 | ---------------------------------- | ------------------------------------------------------------ |
-| insert_load_default_timeout_second | Default timeout for INSERT transaction. Unit: second. If the current INSERT transaction is not completed within the time set by this parameter, it will be canceled by the system and the status will be CANCELLED. As for current version of StarRocks, you can only specify a uniform timeout for all INSERT transactions using this parameter, and you cannot set a different timeout for a specific INSERT transaction. The default is 3600 seconds (1 hour). If the INSERT transaction cannot be completed within the specified time, you can extend the timeout by adjusting this parameter. |
+| insert_load_default_timeout_second | Deprecated. This parameter does not control the timeout of INSERT transactions. Use the session variable `insert_timeout` instead. |
 
 - **Session variables**
 

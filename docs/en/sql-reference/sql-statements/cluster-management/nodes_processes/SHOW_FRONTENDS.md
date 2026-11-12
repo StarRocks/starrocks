@@ -42,7 +42,7 @@ The following table describes the parameters returned by this statement.
 | ClusterId            | The unique ID of the cluster. All nodes in the same cluster must have the same ClusterId. |
 | Join                 | Whether the node has joined the BDBJE group. <ul><li>true: Joined.</li><li>false: Not joined (note: a node might be removed but still show true temporarily).</li></ul> |
 | Alive                | Whether the node is alive and responding. <ul><li>true: Alive.</li><li>false: Not alive.</li></ul> |
-| ReplayedJournalId    | The maximum metadata journal ID that the node has currently replayed. Used to check if the node is in sync with the Leader. |
+| ReplayedJournalId    | The maximum metadata journal ID that the node has currently replayed. Used to check if the node is in sync with the Leader. For the row of the FE that you are connected to, this field shows the maximum journal ID stored in that FE's local metadata journal instead, which can be larger than the ID it has replayed. |
 | LastHeartbeat        | The timestamp of the last heartbeat received.                     |
 | IsHelper             | Whether the node is a Helper node (specified during cluster startup to help other nodes join). |
 | ErrMsg               | Error message displayed if the heartbeat fails                    |

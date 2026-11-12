@@ -1658,7 +1658,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Type: Long
 - Unit:
 - Is mutable: Yes
-- Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value.
+- Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value. The value is read only once, when the cache is created at FE startup, so a value changed at runtime takes effect only after the FE restarts.
 - Introduced in: v3.2
 
 ### `mv_plan_cache_thread_pool_size`
@@ -1667,7 +1667,7 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The default thread pool size of materialized view plan cache (which is used for materialized view rewrite).
+- Description: Deprecated. From v3.5.14, v4.0.7, and v4.1 onwards, this parameter no longer takes effect. The size of the thread pool that loads the materialized view plan cache (which is used for materialized view rewrite) is fixed at the larger of 2 and three quarters of the number of CPU cores.
 - Introduced in: v3.2
 
 ### `mv_refresh_default_planner_optimize_timeout`
@@ -1687,6 +1687,15 @@ Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit eac
 - Is mutable: Yes
 - Description: Mv refresh fails if there is filtered data in refreshing, true by default, otherwise return success by ignoring the filtered data.
 - Introduced in: -
+
+### `mv_refresh_force_partition_type`
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Forces materialized view refreshes of the specified partition types to refresh regardless of whether the base tables have changed. This is useful for materialized views on external tables, where data changes cannot be accurately detected. The value is a bitmap: `0` disables this behavior, `1` applies it to non-partitioned materialized views, `2` to range-partitioned materialized views, and `4` to list-partitioned materialized views. Add the values to combine types, for example, `7` applies to all three. It does not apply to a materialized view whose `refresh_mode` is `INCREMENTAL`.
+- Introduced in: v3.5.16, v4.0.9, v4.1
 
 ### `mv_refresh_try_lock_timeout_ms`
 

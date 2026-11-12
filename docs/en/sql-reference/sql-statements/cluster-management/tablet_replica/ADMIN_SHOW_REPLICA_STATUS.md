@@ -7,6 +7,8 @@ description: "ADMIN SHOW REPLICA STATUS is used to show the status of replicas f
 
 ADMIN SHOW REPLICA STATUS is used to show the status of replicas for a table or a partition.
 
+This statement does not support cloud-native tables in shared-data clusters or materialized views. For a cloud-native table, it returns an error that starts with `Unsupported operation on lake table`. For a materialized view, it returns the error `Table does not exist or is not OLAP table`.
+
 :::tip
 
 This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../../account-management/GRANT.md) to grant this privilege.

@@ -32,7 +32,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 :::note
 
-`NULL` values are not allowed in partition columns. Therefore, you must make sure that no empty values are loaded into the partition columns of the Iceberg table.
+`NULL` values are allowed in partition columns. Rows whose partition value is `NULL` are written to the partition whose partition value is `NULL`.
 
 :::
 
@@ -44,7 +44,7 @@ Appends the data to the Iceberg table.
 
 #### OVERWRITE
 
-Overwrites the existing data of the Iceberg table.
+Overwrites the existing data of the Iceberg table. Only the partitions that receive new data are overwritten, and the other partitions are kept. This behavior does not depend on the `dynamic_overwrite` variable, which has no effect on Iceberg tables. For an unpartitioned table, all existing data is replaced. If the query returns no rows, no data is overwritten, even for an unpartitioned table.
 
 #### column_name
 
@@ -74,7 +74,7 @@ Query statement whose result will be loaded into the Iceberg table. It can be an
 
 #### PARTITION
 
-The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement.
+The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If the partition spec of the Iceberg table contains a non-identity transform (for example, `day()` or `bucket()`), the PARTITION clause is not supported.
 
 :::note
 You cannot specify the `column_name` property if you have specified the PARTITION clause.
@@ -132,7 +132,7 @@ You cannot specify the `column_name` property if you have specified the PARTITIO
 
 ## DELETE
 
-You can use the DELETE statement to delete data from Iceberg tables based on specified conditions. This feature is supported from v4.1 and later.
+You can use the DELETE statement to delete data from Iceberg tables based on specified conditions. This feature is supported from v4.1 and later. The `WITH` clause, the `USING` clause, and `FOR VERSION AS OF` are supported from v4.2 and later. The WHERE clause is required, and the PARTITION clause is not supported.
 
 ### Syntax
 
@@ -472,7 +472,7 @@ A MERGE INTO statement that writes to the Iceberg table emits the following FE-s
 
 ## TRUNCATE
 
-You can use the TRUNCATE TABLE statement to quickly delete all data from Iceberg tables.
+You can use the TRUNCATE TABLE statement to quickly delete all data from Iceberg tables. Truncating specific partitions (`TRUNCATE TABLE ... PARTITION`) is not supported for Iceberg tables.
 
 ### Syntax
 

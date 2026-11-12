@@ -38,10 +38,10 @@ mysql> SET time_zone = "Asia/Shanghai";
 Query OK, 0 rows affected (0.00 sec)
 ```
 
-Example 2: `exec_mem_limit` をグローバルに `2147483648` に設定します。
+Example 2: `query_mem_limit` をグローバルに `2147483648` に設定します。
 
 ```Plain
-mysql> SET GLOBAL exec_mem_limit = 2147483648;
+mysql> SET GLOBAL query_mem_limit = 2147483648;
 Query OK, 0 rows affected (0.00 sec)
 ```
 
@@ -49,7 +49,7 @@ Example 3: 複数のグローバル変数を設定します。各変数の前に
 
 ```Plain
 mysql> SET 
-       GLOBAL exec_mem_limit = 2147483648,
+       GLOBAL query_mem_limit = 2147483648,
        GLOBAL time_zone = "Asia/Shanghai";
 Query OK, 0 rows affected (0.00 sec)
 ```

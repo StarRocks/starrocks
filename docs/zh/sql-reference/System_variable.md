@@ -14,7 +14,7 @@ StarRocks 中的变量参考 MySQL 中的变量设置，但**部分变量仅用�
 
 > **说明**
 >
-> 任何用户都有权限通过 SHOW VARIABLES 查看变量。任何用户都有权限设置变量在 Session 级别生效。只有拥有 System 级 OPERATE 权限的用户才可以设置变量为全局生效。设置全局生效后，后续所有新的会话都会使用新配置，当前会话仍然使用老的配置。
+> 任何用户都有权限通过 SHOW VARIABLES 查看变量。任何用户都有权限设置变量在 Session 级别生效。只有拥有 System 级 OPERATE 权限的用户才可以设置变量为全局生效。设置全局生效后，当前会话和后续所有新的会话都会使用新配置，其他已有的会话仍然使用老的配置。
 
 ## 查看变量
 
@@ -41,7 +41,7 @@ StarRocks 支持三种类型（层级）的变量：全局变量、Session 变�
 
 ### 设置变量全局生效或在会话中生效
 
-变量一般可以设置为**全局**生效或**仅当前会话**生效。设置为全局生效后，**后续所有新的会话**连接中会使用新设置的值，当前会话还会继续使用之前设置的值；设置为仅当前会话生效时，变量仅对当前会话产生作用。
+变量一般可以设置为**全局**生效或**仅当前会话**生效。设置为全局生效后，当前会话和**后续所有新的会话**连接中会使用新设置的值，其他已有的会话还会继续使用之前设置的值，直到执行 [REFRESH CONNECTIONS](sql-statements/cluster-management/config_vars/REFRESH_CONNECTIONS.md)。下文所列仅支持全局生效的变量除外，其新值会立即对所有会话生效；设置为仅当前会话生效时，变量仅对当前会话产生作用。
 
 通过 `SET <var_name> = xxx;` 语句设置的变量仅在当前会话生效。如：
 
@@ -136,7 +136,7 @@ DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
 FROM my_table PARTITION p1
 WHERE k1 = 3;
 
-INSERT /*+ SET_VAR(insert_timeout = 10000000) */
+INSERT /*+ SET_VAR(insert_timeout = 86400) */
 INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
@@ -152,8 +152,8 @@ StarRocks 同时支持在单个语句中设置多个变量，参考如下示例�
 ```sql
 SELECT /*+ SET_VAR
   (
-  exec_mem_limit = 515396075520,
-  query_timeout=10000000,
+  query_mem_limit = 515396075520,
+  query_timeout=86400,
   batch_size=4096,
   parallel_fragment_exec_instance_num=32
   )
@@ -262,7 +262,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **默认值**：`TABLET_HASH`
 * **类型**：String
 * **合法取值**：`CIRCULAR`、`RANDOM`、`TABLET_HASH`
-* **引入版本**：-
+* **引入版本**：v4.1.1
 
 ### broadcast_mem_exceeded_penalty_factor
 
@@ -1207,7 +1207,7 @@ FROM test;
 ### interactive_timeout
 
 * 描述：用于兼容 MySQL 客户端。无实际作用。
-* 默认值：1024
+* 默认值：3600
 * 单位：秒
 * 类型：Int
 
@@ -1237,7 +1237,7 @@ FROM test;
 
 ### lake_bucket_assign_mode
 
-* 描述：数据湖表查询的分桶分配模式。此变量控制系统执行查询期间启用 Bucket-aware 执行时如何将分桶分配给工作节点。有效值：
+* 描述：External Catalog（数据湖）表查询的分桶分配模式。仅作用于 Colocate 或 Bucket Shuffle Join Fragment 中对 External Catalog 表的扫描，对 StarRocks 内表（包括存算分离集群中的云原生表）无效。此变量控制系统执行查询期间启用 Bucket-aware 执行时如何将分桶分配给工作节点。有效值：
   * `balance`：在工作节点间均匀分配分桶以实现负载均衡，以获取更好的性能。
   * `elastic`：使用一致性哈希将分桶分配给工作节点，可以在弹性环境中提供更好的负载分配。
 * 默认值：balance
@@ -1256,11 +1256,11 @@ FROM test;
 
 ### load_mem_limit
 
-* 描述：用于指定导入操作的内存限制，单位为 Byte。默认值为 0，即表示不使用该变量，而采用 `query_mem_limit` 作为导入操作的内存限制。
+* 描述：用于指定导入操作的内存限制，单位为 Byte。默认值为 0，即表示不限制单个导入任务的内存，导入仅受各 BE 节点上所有导入任务的内存上限（BE 配置项 `load_process_max_memory_limit_percent` 和 `load_process_max_memory_limit_bytes`）限制。
 
-  这个变量仅用于 INSERT 操作。因为 INSERT 操作涉及查询和导入两个部分，如果用户不设置此变量，则查询和导入操作各自的内存限制均为 `query_mem_limit`。否则，INSERT 的查询部分内存限制为 `query_mem_limit`，而导入部分限制为 `load_mem_limit`。
+  INSERT 操作涉及查询和导入两个部分，其中查询部分的内存限制由 `query_mem_limit` 设置，导入部分的内存限制由 `load_mem_limit` 设置。
 
-  其他导入方式，如 Broker Load，STREAM LOAD 的内存限制依然使用 `query_mem_limit`。
+  如果未指定作业属性 `load_mem_limit`，Broker Load 也使用该变量。对于 Broker Load，该值同时限制作业的查询部分和导入部分。Stream Load 则使用 HTTP Header `load_mem_limit`。Routine Load 不使用该变量。
 
 * 默认值：0
 * 单位：Byte
@@ -1547,6 +1547,13 @@ FROM test;
 ### query_cache_type
 
  用于兼容 JDBC 连接池 C3P0。无实际作用。
+
+### query_history_load_interval_seconds (global)
+
+* 描述：当 `enable_query_history` 为 `true` 时，FE 内存中缓存的查询历史写入 `_statistics_.query_history` 表的间隔。系统没有后台定时任务：在距上次写入超过该间隔后有 SELECT 语句执行结束时，会写入缓存的查询历史。在繁忙的集群上，如果序列化后的缓存达到 200 MB，也可能在间隔到期之前写入。
+* 单位：秒
+* 默认值：`900`
+* 引入版本：v4.0
 
 ### query_mem_limit
 

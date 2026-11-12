@@ -280,7 +280,7 @@ AS
 
 物化视图的刷新方式。该参数支持如下值：
 
-- `ASYNC`: 自动刷新模式。每当基表数据发生变化时，物化视图会自动刷新。
+- `ASYNC`: 自动刷新模式。每当基表数据发生变化时，物化视图会自动刷新。该模式仅适用于基表全部为 StarRocks 内表或物化视图的物化视图。基于外表创建未指定刷新间隔的 `ASYNC` 物化视图会失败。
 - `SCHEDULE [START (<start_time>)] EVERY(INTERVAL <interval>)`: 定时刷新模式。物化视图将按照定义的间隔定时刷新。您可以使用 `DAY`（天）、`HOUR`（小时）、`MINUTE`（分钟）和 `SECOND`（秒）作为单位指定间隔，格式为 `EVERY (interval n day/hour/minute/second)`。默认值为 `10 MINUTE`（10 分钟）。您还可以进一步指定刷新起始时间，格式为 `START('yyyy-MM-dd hh:mm:ss')`。如未指定起始时间，默认使用当前时间。示例：`SCHEDULE START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`。为兼容旧版本，`ASYNC [START (...)] EVERY (...)` 仍然被接受，但 `SHOW CREATE MATERIALIZED VIEW` 输出的定时刷新部分始终使用 `SCHEDULE`。
 - `MANUAL`: 手动刷新模式。除非手动触发刷新任务，否则物化视图不会刷新。
 
@@ -294,9 +294,9 @@ AS
 
 - `partition_column`：用于分区的列。形如 `PARTITION BY dt`，表示按照 `dt` 列进行分区。
 - `date_function_expr`：用于分区的日期函数复杂表达式。
-  - `date_trunc` 函数：形如 `PARTITION BY date_trunc("MONTH", dt)`，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`DAY`、`HOUR` 以及 `MINUTE`。
+  - `date_trunc` 函数：形如 `PARTITION BY date_trunc("MONTH", dt)`，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`WEEK`、`DAY`、`HOUR` 以及 `MINUTE`。其中 `WEEK` 自 v3.3.1 起支持。
   - `str2date` 函数：用于将基表的字符串类型分区键转化为物化视图的分区键所需的日期类型。`PARTITION BY str2date(dt, "%Y%m%d")` 表示 `dt` 列是一个 STRING 类型日期，其日期格式为 `"%Y%m%d"`。`str2date` 函数支持多种日期格式。更多信息，参考[str2date](../../sql-functions/date-time-functions/str2date.md)。自 v3.1.4 起支持。
-  - `time_slice` 函数：从 v3.1 开始，您可以进一步使用 time_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如 `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))`，其中 time_slice 的时间粒度必须比 `date_trunc` 的时间粒度更细。你可以使用它们来指定一个比分区键更细时间粒度的 GROUP BY 列，例如，`GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
+  - `time_slice` 函数：从 v3.1 开始，您可以进一步使用 time_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如在 SELECT 列表中使用 `time_slice(dt, INTERVAL 7 DAY) AS mv_dt`，并指定 `PARTITION BY date_trunc("MONTH", mv_dt)`，其中 time_slice 的时间粒度必须比 `date_trunc` 的时间粒度更细。PARTITION BY 子句中的 `date_trunc` 不支持嵌套 `time_slice`，因为其第二个参数必须为列。你可以使用它们来指定一个比分区键更细时间粒度的 GROUP BY 列，例如，`GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
 
 自 v3.5.0 起，异步物化视图支持多列分区表达式。您可以为物化视图指定多个分区列映射基表的全部或者部分分区列。
 
@@ -371,7 +371,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 - `partition_ttl`: 物化视图分区的生存时间 (TTL)。数据在指定的时间范围内的分区将被保留，过期的分区将被自动删除。单位：`YEAR`、`MONTH`、`DAY`、`HOUR` 和 `MINUTE`。例如，您可以将此属性设置为 `2 MONTH`（2个月）。建议您使用此属性，不推荐使用 `partition_ttl_number`。该属性自 v3.1.5 起支持。
 - `partition_ttl_number`：需要保留的最近的物化视图分区数量。对于分区开始时间小于当前时间的分区，当数量超过该值之后，多余的分区将会被删除。StarRocks 将根据 FE 配置项 `dynamic_partition_check_interval_seconds` 中的时间间隔定期检查物化视图分区，并自动删除过期分区。在[动态分区](../../../table_design/data_distribution/dynamic_partitioning.md)场景下，提前创建的未来分区将不会被纳入 TTL 考虑。默认值：`-1`。当值为 `-1` 时，将保留物化视图所有分区。
 - `partition_refresh_number`：单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。当值为 `-1` 时，将不会拆分刷新任务。自 v3.3 起，默认值由 `-1` 变为 `1`，表示 StarRocks 每次只刷新一个分区。
-- `partition_refresh_strategy`：单次刷新中物化视图的刷新策略。当值为`adaptive`，会根据基表分区的数据量来自行判断此次刷新需要刷新的分区数，此策略会极大地提高刷新效率。如不指定该属性，默认是`strict`, 即单次刷新完全由`partition_refresh_number`来控制。取值为 `force` 时每次刷新都会刷新全部分区；对 `refresh_mode` 为 `INCREMENTAL` 的物化视图不生效，这类视图按定义就是依据基表变更增量维护的。
+- `partition_refresh_strategy`：单次刷新中物化视图的刷新策略。当值为`adaptive`，会根据基表分区的数据量来自行判断此次刷新需要刷新的分区数，此策略会极大地提高刷新效率。当值为 `strict` 时，单次刷新完全由`partition_refresh_number`来控制。如不指定该属性，则使用 FE 配置项 `default_mv_partition_refresh_strategy` 的值，自 v4.1 起为 `adaptive`，之前版本为 `strict`。取值为 `force` 时每次刷新都会刷新全部分区；对 `refresh_mode` 为 `INCREMENTAL` 的物化视图不生效，这类视图按定义就是依据基表变更增量维护的。
 - `excluded_trigger_tables`：在此项属性中列出的基表，其数据产生变化时不会触发对应物化视图自动刷新。该参数仅针对导入触发式刷新，通常需要与属性 `auto_refresh_partitions_limit` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
 
 - `excluded_refresh_tables`：在此项属性中列出的基表，其数据产生变化时不会更新至物化视图。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
@@ -410,13 +410,13 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
     有关通用分区表达式 TTL 和 `force_mv` 语义的详细指导，参考 [示例六](#示例)。
 
-- `storage_volume`：如果您使用存算分离集群，则需要指定创建物化视图的 Storage Volume 名称。该属性自 v3.1 版本起支持。如果未指定该属性，则使用默认 Storage Volume。示例：`"storage_volume" = "def_volume"`。
+- `storage_volume`：如果您使用存算分离集群，则需要指定创建物化视图的 Storage Volume 名称。该属性自 v3.1 版本起支持。如果未指定该属性，则使用数据库的 Storage Volume；如果数据库未设置 Storage Volume，则使用默认 Storage Volume。示例：`"storage_volume" = "def_volume"`。
 - `file_bundling`：是否为异步物化视图启用 File Bundling 优化。该属性仅适用于存算分离集群，自 v26.2 版本起支持。如果未指定该属性，则由 FE 配置项 `enable_file_bundling`（默认值：`true`）决定。已有的物化视图在升级后仍不启用 File Bundling，可以通过 [ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md) 修改该属性。File Bundling 的作用以及修改该属性的限制，参见 [CREATE TABLE](../table_bucket_part_index/CREATE_TABLE.md) 中的 `file_bundling` 属性。
 - `force_external_table_query_rewrite`: 是否启用基于 External Catalog 的物化视图的查询改写。该属性自 v3.2 起支持。有效值：
-  - `true`（自 v3.3 变为默认值）：启用基于 External Catalog 的物化视图的查询改写。
+  - `true`（自 v3.2 变为默认值）：启用基于 External Catalog 的物化视图的查询改写。
   - `false`：禁用基于 External Catalog 的物化视图的查询改写。
 
-  由于无法保证基表和基于 External Catalog 的物化视图之间的数据强一致，因此默认情况下禁用此功能。启用此功能时，物化视图将根据 `query_rewrite_consistency` 中指定的规则改写查询。
+  由于无法保证基表和基于 External Catalog 的物化视图之间的数据强一致，因此在 v3.2 之前的版本中默认禁用此功能。启用此功能时，物化视图将根据 `query_rewrite_consistency` 中指定的规则改写查询。
 - `enable_query_rewrite`：是否使用物化视图进行查询改写。当存在大量物化视图时，基于物化视图的查询改写可能会影响优化器的耗时。通过此属性，您可以控制是否允许使用物化视图进行查询改写。该功能自 v3.3.0 起支持。有效值：
   - `default`（默认）：系统将不会针对物化视图执行语义检查，但只有 SPJG 类型的物化视图可以用于查询改写。请注意，如果启用了基于文本的查询改写，非 SPJG 类型的物化视图也可以用于查询改写。
   - `true`：系统将在创建或修改物化视图时执行语义检查。如果物化视图不符合查询改写的条件（即，物化视图的定义不是 SPJG 类型的查询），则会返回失败信息。

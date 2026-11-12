@@ -1240,7 +1240,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：Seconds
 - 変更可能：Yes
-- 説明：データをロードするために使用される INSERT INTO ステートメントのタイムアウト期間。
+- 説明：非推奨。この項目は INSERT ステートメントのタイムアウトを制御しません。代わりにセッション変数 `insert_timeout` を使用してください。
 - 導入時期：-
 
 ### `label_clean_interval_second`
