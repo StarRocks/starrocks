@@ -2024,6 +2024,9 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         if (encryption_info) {
             opts.encryption_info = *encryption_info;
         }
+        // A segment file, bundled or not, is written once under a unique name and never rewritten in place. The
+        // delta column group files read instead keep the default.
+        opts.remote_read_retainable = true;
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
         if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
             _segment->lake_tablet_manager() != nullptr) {
