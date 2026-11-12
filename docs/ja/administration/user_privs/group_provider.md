@@ -6,9 +6,6 @@ sidebar_position: 30
 
 # ユーザーグループの認証
 
-import UnixFileIntro from '../../_assets/user_priv/unix_file_intro.mdx'
-import UnixFileSyntax from '../../_assets/user_priv/unix_file_syntax.mdx'
-import UnixFileParam from '../../_assets/user_priv/unix_file_param.mdx'
 import GroupProviderRangerLink from '../../_assets/user_priv/group_provider_ranger_link.mdx'
 
 StarRocks で Group Provider を有効にして、外部認証システムからユーザーグループを認証し、認可します。
@@ -31,7 +28,10 @@ Group Provider は、ユーザーとグループの間のマッピングです�
 
 ## Group Provider を作成する
 
-<UnixFileIntro />
+StarRocks は 3 種類の Group Provider をサポートしています:
+- **LDAP group provider**: LDAP サービス内のユーザーとグループを検索して一致させます
+- **Unix group provider**: オペレーティングシステム内のユーザーとグループを検索して一致させます
+- **File group provider**: ファイルで定義されたユーザーとグループを検索して一致させます
 
 ### 構文
 
@@ -72,11 +72,45 @@ ldap_cache_arg ::=
     ["ldap_cache_max_stale_time" = ""]
 ```
 
-<UnixFileSyntax />
+- Unix group provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name> 
+PROPERTIES (
+    "type" = "unix"
+)
+```
+
+- File group provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name> 
+PROPERTIES (
+    "type" = "file",
+    "group_file_url" = ""
+)
+```
 
 ### パラメータ
 
-<UnixFileParam />
+#### `type`
+
+作成する Group Provider のタイプ。 有効な値:
+- `ldap`: LDAP group provider を作成します。この値が設定されている場合、`ldap_info`、`ldap_search_group_arg`、`ldap_search_user_arg`、およびオプションで `ldap_cache_arg` を指定する必要があります。
+- `unix`: Unix group provider を作成します。
+- `file`: File group provider を作成します。この値が設定されている場合、`group_file_url` を指定する必要があります。
+
+#### `group_file_url`
+
+ユーザーグループを定義するファイルへの URL または相対パス（`fe/conf` 以下）。
+
+:::note
+
+グループファイルには、グループとそのメンバーのリストが含まれています。各行でグループ名とメンバーをコロンで区切って定義できます。複数のユーザーはカンマで区切られます。例: `group_name:user_1,user_2,user_3`。
+
+`http://` または `https://` の URL を指定した場合、読み取りには FE 設定項目 `group_provider_http_connect_timeout_ms`（デフォルト 5000）と `group_provider_http_read_timeout_ms`（デフォルト 30000）が接続・読み取りのタイムアウトとして適用されます。この時間内にサーバーが応答しない場合、ステートメントは失敗し、その Group Provider は以前の設定を保持します。
+
+:::
 
 #### `ldap_info` パラメーターグループ
 

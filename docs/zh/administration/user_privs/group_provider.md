@@ -6,9 +6,6 @@ sidebar_position: 30
 
 # 认证用户组
 
-import UnixFileIntro from '../../_assets/user_priv/unix_file_intro.mdx'
-import UnixFileSyntax from '../../_assets/user_priv/unix_file_syntax.mdx'
-import UnixFileParam from '../../_assets/user_priv/unix_file_param.mdx'
 import GroupProviderRangerLink from '../../_assets/user_priv/group_provider_ranger_link.mdx'
 
 在 StarRocks 中启用 Group Provider 以认证和授权来自外部认证系统的用户组。
@@ -31,7 +28,10 @@ Group Provider 本质上是用户和组之间的映射。任何需要组信息�
 
 ## 创建 Group Provider
 
-<UnixFileIntro />
+StarRocks 支持三种类型的 Group Provider：
+- **LDAP Group Provider**：在您的 LDAP 服务中搜索和匹配用户与组
+- **Unix Group Provider**：在您的操作系统中搜索和匹配用户与组
+- **File Group Provider**：通过文件定义的用户与组进行搜索和匹配
 
 ### 语法
 
@@ -72,11 +72,45 @@ ldap_cache_arg ::=
     ["ldap_cache_max_stale_time" = ""]
 ```
 
-<UnixFileSyntax />
+- Unix Group Provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name> 
+PROPERTIES (
+    "type" = "unix"
+)
+```
+
+- File Group Provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name> 
+PROPERTIES (
+    "type" = "file",
+    "group_file_url" = ""
+)
+```
 
 ### 参数
 
-<UnixFileParam />
+#### `type`
+
+要创建的 Group Provider 的类型。有效值：
+- `ldap`：创建一个 LDAP Group Provider。当设置此值时，您需要指定 `ldap_info`、`ldap_search_group_arg`、`ldap_search_user_arg`，并可选指定 `ldap_cache_arg`。
+- `unix`：创建一个 Unix Group Provider。
+- `file`：创建一个 File Group Provider。当设置此值时，您需要指定 `group_file_url`。
+
+#### `group_file_url`
+
+定义用户组的文件的 URL 或相对路径（在 `fe/conf` 下）。
+
+:::note
+
+组文件包含组及其成员的列表。您可以在每行中定义一个组，其中组名称和成员用冒号分隔。多个用户用逗号分隔。示例：`group_name:user_1,user_2,user_3`。
+
+如果填写的是 `http://` 或 `https://` 的 URL，读取时会使用 FE 配置项 `group_provider_http_connect_timeout_ms`（默认 5000）和 `group_provider_http_read_timeout_ms`（默认 30000）作为连接和读取超时。服务端在超时时间内没有响应时，语句会失败，该 Group Provider 保持原有配置不变。
+
+:::
 
 #### `ldap_info` 参数组
 
