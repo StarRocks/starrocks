@@ -51,6 +51,20 @@ public class PaimonWriteCapabilitiesTest {
     }
 
     @Test
+    public void testInputChangelogIsRejectedIncludingWriteOnlyMode() {
+        for (String writeOnly : new String[] {"false", "true"}) {
+            assertUnsupported(true, Map.of("bucket", "1", "changelog-producer", "input", "write-only", writeOnly),
+                    "changelog-producer=input");
+        }
+    }
+
+    @Test
+    public void testNoChangelogTablesRemainWritable() {
+        Assertions.assertDoesNotThrow(() -> PaimonWriteCapabilities.validateWrite(
+                table(true, Map.of("bucket", "1", "changelog-producer", "none"))));
+    }
+
+    @Test
     public void testWriteOptionsAreCheckedWithoutRestrictingDdlOptions() {
         assertUnsupported(false, Map.of("bucket", "bad"), "Invalid value");
         assertUnsupported(false, Map.of("file.format", "orc"), "Parquet");

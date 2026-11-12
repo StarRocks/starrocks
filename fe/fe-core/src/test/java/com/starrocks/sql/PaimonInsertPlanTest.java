@@ -83,6 +83,9 @@ public class PaimonInsertPlanTest extends PlanTestBase {
         register("fixed", Schema.newBuilder().column("p", DataTypes.DATE().notNull()).column("id", DataTypes.INT().notNull())
                 .column("value", DataTypes.STRING()).partitionKeys("p").primaryKey("p", "id")
                 .option("bucket", "4").build());
+        register("input_changelog", Schema.newBuilder().column("id", DataTypes.INT().notNull())
+                .column("value", DataTypes.INT()).primaryKey("id").option("bucket", "1")
+                .option("changelog-producer", "input").build());
         register("bad_format", Schema.newBuilder().column("id", DataTypes.INT()).option("bucket", "-1")
                 .option("file.format", "orc").build());
         register("with_default", Schema.newBuilder().column("id", DataTypes.INT().notNull())
@@ -229,6 +232,14 @@ public class PaimonInsertPlanTest extends PlanTestBase {
         assertAnalysisError("insert into " + target("target") + " by name select 1 as id, 2 as id", "Duplicate");
         connectContext.setTxnId(1234);
         assertAnalysisError("insert into " + target("target") + " values ('2026-10-29', 1, 'a')", "explicit transaction");
+    }
+
+    @Test
+    public void testInputChangelogWritesAreRejectedByAnalyzer() {
+        assertAnalysisError("insert into " + target("input_changelog") + " values (1, 2)",
+                "changelog-producer=input");
+        assertAnalysisError("insert into " + target("input_changelog") + " select 1, 2",
+                "changelog-producer=input");
     }
 
     @Test

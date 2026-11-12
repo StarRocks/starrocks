@@ -177,7 +177,62 @@ TEST_F(PaimonWriteColumnConverterTest, CharacterBinaryBoundsEmbeddedNulsAndUtf8)
     auto utf8 = BinaryColumn::create();
     const std::string multibyte = "\xe4\xb8\xad";
     utf8->append(Slice(multibyte));
-    EXPECT_FALSE(convert_one(utf8, TypeDescriptor::create_varchar_type(2), arrow::field("s", arrow::utf8())).ok());
+    EXPECT_TRUE(convert_one(utf8, TypeDescriptor::create_varchar_type(2), arrow::field("s", arrow::utf8())).ok());
+}
+
+TEST_F(PaimonWriteColumnConverterTest, VarcharBoundsCountUnicodeCodePoints) {
+    const auto field =
+            arrow::field("s", arrow::utf8(), true, arrow::key_value_metadata({"starrocks.paimon.length"}, {"2"}));
+    auto text = BinaryColumn::create();
+    const std::vector<std::string> values = {"中文", "中a", "😀文", "e\xcc\x81", ""};
+    for (const auto& value : values) text->append(Slice(value));
+    auto batch = convert_one(text, TypeDescriptor::create_varchar_type(2), field);
+    ASSERT_TRUE(batch.ok()) << batch.status().to_string();
+    const auto& output = static_cast<const arrow::StringArray&>(*(*batch)->column(0));
+    for (size_t i = 0; i < values.size(); ++i) EXPECT_EQ(output.GetString(i), values[i]);
+
+    auto constant = BinaryColumn::create();
+    constant->append(Slice("中文"));
+    auto repeated = convert_one(ConstColumn::create(constant, 3), TypeDescriptor::create_varchar_type(2), field);
+    ASSERT_TRUE(repeated.ok()) << repeated.status().to_string();
+    EXPECT_EQ((*repeated)->num_rows(), 3);
+    EXPECT_EQ(static_cast<const arrow::StringArray&>(*(*repeated)->column(0)).GetString(2), "中文");
+    auto null_batch = convert_one(nullable(constant, {1}), TypeDescriptor::create_varchar_type(2), field);
+    ASSERT_TRUE(null_batch.ok()) << null_batch.status().to_string();
+    EXPECT_EQ((*null_batch)->column(0)->null_count(), 1);
+
+    for (const auto& value : {std::string("中文a"), std::string("abc")}) {
+        auto oversized = BinaryColumn::create();
+        oversized->append(Slice(value));
+        auto result = convert_one(oversized, TypeDescriptor::create_varchar_type(2), field);
+        ASSERT_FALSE(result.ok());
+        EXPECT_NE(result.status().to_string().find("character length exceeded"), std::string::npos);
+    }
+}
+
+TEST_F(PaimonWriteColumnConverterTest, NativeVarcharCharacterBoundOverridesSourceLengthHint) {
+    auto text = BinaryColumn::create();
+    text->append(Slice("中文"));
+    const auto field =
+            arrow::field("s", arrow::utf8(), false, arrow::key_value_metadata({"starrocks.paimon.length"}, {"2"}));
+    auto batch = convert_one(text, TypeDescriptor::create_varchar_type(1), field);
+    ASSERT_TRUE(batch.ok()) << batch.status().to_string();
+    EXPECT_EQ(static_cast<const arrow::StringArray&>(*(*batch)->column(0)).GetString(0), "中文");
+}
+
+TEST_F(PaimonWriteColumnConverterTest, BinaryBoundsRemainByteBased) {
+    const auto field =
+            arrow::field("b", arrow::binary(), false, arrow::key_value_metadata({"starrocks.paimon.length"}, {"2"}));
+    auto binary = BinaryColumn::create();
+    binary->append(Slice(bytes({0xff, 0x00})));
+    auto batch = convert_one(binary, TypeDescriptor::create_varbinary_type(8), field);
+    ASSERT_TRUE(batch.ok()) << batch.status().to_string();
+    EXPECT_EQ(static_cast<const arrow::BinaryArray&>(*(*batch)->column(0)).GetString(0), bytes({0xff, 0x00}));
+    auto multibyte = BinaryColumn::create();
+    multibyte->append(Slice("中文"));
+    auto result = convert_one(multibyte, TypeDescriptor::create_varbinary_type(8), field);
+    ASSERT_FALSE(result.ok());
+    EXPECT_NE(result.status().to_string().find("byte length exceeded"), std::string::npos);
 }
 
 TEST_F(PaimonWriteColumnConverterTest, DateNtzLtzNegativeEpochAndCheckedNanos) {
