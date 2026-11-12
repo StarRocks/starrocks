@@ -37,6 +37,7 @@
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 #include "fs/fs_registry.h"
 #endif
+#include "compute_env/staros/starlet_remote_read_context.h"
 #include "compute_env/staros/staros_status.h"
 #include "compute_env/staros/staros_worker.h"
 #include "compute_env/staros/staros_worker_runtime.h"
@@ -93,33 +94,6 @@ inline CacheOptions::ReadMode to_fslib_read_mode(bool skip_read_cache, bool skip
         return CacheOptions::ReadMode::READ_THROUGH_BYPASS_CACHE;
     }
     return skip_fill_cache ? CacheOptions::ReadMode::READ_THROUGH_NO_FILL : CacheOptions::ReadMode::READ_THROUGH;
-}
-
-// Hands the BE's read attribution to the remote read scheduler of starlet. Without a started scheduler starlet
-// ignores it, and reads are done exactly as before.
-inline staros::starlet::fslib::RemoteReadContext to_fslib_remote_read(const RemoteReadContext& ctx) {
-    namespace fslib = staros::starlet::fslib;
-    fslib::RemoteReadContext out;
-    out.is_set = ctx.is_set;
-    switch (ctx.workload) {
-    case RemoteReadContext::Workload::QUERY:
-        out.workload = fslib::ReadWorkload::QUERY;
-        break;
-    case RemoteReadContext::Workload::COMPACTION:
-        out.workload = fslib::ReadWorkload::COMPACTION;
-        break;
-    case RemoteReadContext::Workload::OTHER_BACKGROUND:
-        out.workload = fslib::ReadWorkload::OTHER_BACKGROUND;
-        break;
-    case RemoteReadContext::Workload::LOAD:
-        out.workload = fslib::ReadWorkload::LOAD;
-        break;
-    }
-    out.group_id = ctx.group_id;
-    out.group_weight = ctx.group_weight;
-    out.group_config_version = ctx.group_config_version;
-    out.flow_id = ctx.flow_id;
-    return out;
 }
 
 static const std::string kFileTagType = "type";
