@@ -6,12 +6,6 @@ keywords: ['backup','restore','shared data','snapshot']
 <head><meta name="docsearch:pagerank" content="100"/></head>
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
-<<<<<<< HEAD
-import ClusterSnapshotTerm from '../../_assets/commonMarkdown/cluster_snapshot_term.mdx'
-import ManualCreateDropClusterSnapshot from '../../_assets/commonMarkdown/manual_cluster_snapshot.mdx'
-import ClusterSnapshotWarning from '../../_assets/commonMarkdown/cluster_snapshot_warning.mdx'
-=======
->>>>>>> 227f1a1 ([Doc] Merge the cluster snapshot partials into their page (#82979))
 
 # Cluster Snapshot
 
@@ -77,11 +71,6 @@ ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
 ```
 
 Once Automated Cluster Snapshot is disabled, the system will automatically purge the historical snapshot.
-<<<<<<< HEAD
-
-<ManualCreateDropClusterSnapshot />
-=======
->>>>>>> 227f1a1 ([Doc] Merge the cluster snapshot partials into their page (#82979))
 
 ## View cluster snapshot
 
@@ -128,13 +117,7 @@ Return:
 
 Follow these steps to restore the cluster with the cluster snapshot.
 
-<<<<<<< HEAD
 1. **(Optional)** If the storage location (storage volume) that stores the cluster snapshot have changed, all files under the original storage path must be copied to the new path. To achieve this, you must modify the configuration file **cluster_snapshot.yaml** under the directory `fe/conf` of the Leader FE nodes. For the template of **cluster_snapshot.yaml**, see [Appendix](#appendix).
-=======
-1. **(Optional)** If you want to perform a cross-cluster recovery within the region, you MUST modify the configuration file **cluster_snapshot.yaml** under the directory `fe/conf` of the Leader FE node. Otherwise, you can skip this step.
-
-   To restore the data in a new cluster, all files under the original storage path must be copied to the new path. You must use the template provided in [Appendix](#appendix).
->>>>>>> 227f1a1 ([Doc] Merge the cluster snapshot partials into their page (#82979))
 
 2. Start the Leader FE node.
 
@@ -174,79 +157,7 @@ If you have modified **cluster_snapshot.yaml** in the step 1, the node and stora
 
 ## Appendix
 
-<<<<<<< HEAD
 Template of **cluster_snapshot.yaml**:
-=======
-Template of **cluster_snapshot.yaml** for cross-cluster recovery:
-
-```Yaml
-# Information of the cluster snapshot to be downloaded for restoration.
-cluster_snapshot:
-    # The URI of the snapshot.
-    # Example 1: s3://defaultbucket/test/f7265e80-631c-44d3-a8ac-cf7cdc7adec811019/meta/image/automated_cluster_snapshot_1704038400000
-    # Example 2: s3://defaultbucket/test/f7265e80-631c-44d3-a8ac-cf7cdc7adec811019/meta
-    cluster_snapshot_path: <cluster_snapshot_uri>
-    # The name of the storage volume to store the snapshot. You must define it in the `storage_volumes` section.
-    # NOTE: It must be identical with that in the original cluster.
-    storage_volume_name: my_s3_volume
-
-# [Optional] Node information of the new cluster where the snapshot is to be restored.
-# If this section is not specified, the new cluster after recovery only has the Leader FE node.
-# CN nodes retain the information of the original cluster.
-# NOTE: DO NOT include the Leader FE node in this section.
-
-frontends:
-    # FE host.
-  - host: xxx.xx.xx.x1
-    # FE edit_log_port.
-    edit_log_port: 9010
-    # The FE node type. Valid values: `follower` (Default) and `observer`.
-    type: follower
-  - host: xxx.xx.xx.x2
-    edit_log_port: 9010
-    type: observer
-
-compute_nodes:
-    # CN host.
-  - host: xxx.xx.xx.x3
-    # CN heartbeat_service_port.
-    heartbeat_service_port: 9050
-  - host: xxx.xx.xx.x4
-    heartbeat_service_port: 9050
-
-# Information of the storage volume in the new cluster. It is used for restoring a cloned snapshot.
-# NOTE: The name of the storage volume must be identical with that in the original cluster.
-storage_volumes:
-  # Example for S3-compatible storage volume.
-  - name: my_s3_volume
-    type: S3
-    location: s3://defaultbucket/test/
-    comment: my s3 volume
-    properties:
-      - key: aws.s3.region
-        value: us-west-2
-      - key: aws.s3.endpoint
-        value: https://s3.us-west-2.amazonaws.com
-      - key: aws.s3.access_key
-        value: xxxxxxxxxx
-      - key: aws.s3.secret_key
-        value: yyyyyyyyyy
-  # Example for HDFS storage volume.
-  - name: my_hdfs_volume
-    type: HDFS
-    location: hdfs://127.0.0.1:9000/sr/test/
-    comment: my hdfs volume
-    properties:
-      - key: hadoop.security.authentication
-        value: simple
-      - key: username
-        value: starrocks
-```
-
-:::note
-For more information on credentials for AWS, see [Authenticate to AWS S3](../../integrations/csp_auth/authenticate_to_aws_resources.md).
-:::
->>>>>>> 227f1a1 ([Doc] Merge the cluster snapshot partials into their page (#82979))
 
 ```Yaml
 # Information of the cluster snapshot to be downloaded for restoration.
