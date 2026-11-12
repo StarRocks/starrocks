@@ -840,6 +840,13 @@ Status validate_split_inputs(const TabletMetadataPB& source, SplitMetadataVisitB
                 previous = index;
                 first = false;
             }
+            // A segment with rows but without sort key bounds (for example, bounds kept in a field this
+            // binary does not know) cannot be placed in a child range.
+            if (segment.num_rows() > 0 &&
+                !(segment.has_sort_key_min() && segment.has_sort_key_max() &&
+                  segment.sort_key_min().values_size() > 0 && segment.sort_key_max().values_size() > 0)) {
+                fallback = Status::NotSupported("tablet split segment has no sort key bounds");
+            }
             RETURN_IF_ERROR(insert_physical_slice(segment, &slices).status());
         }
         for (const auto& del : rowset.del_files()) {
