@@ -1017,6 +1017,25 @@ Status build_segments_from_rowsets_impl(TabletManager* tablet_manager, const Tab
     return Status::OK();
 }
 
+// A segment that may hold rows but has no sort key bounds (for example, bounds kept in a field this binary
+// does not know) cannot be placed in a child range: both split-range computations would read the missing bound
+// as an empty tuple, which colocate boundary synthesis indexes into and the row distribution charges to the
+// wrong child. A segment whose row count is not recorded may hold rows, so only a recorded zero lets a
+// bound-less segment through: it has nothing to place. Each computation runs this before reading any bound,
+// and split_tablet turns the NotSupported into an identical tablet.
+Status check_segment_sort_key_bounds(const TabletMetadataPB& metadata) {
+    for (const auto& rowset : metadata.rowsets()) {
+        for (const auto& segment : rowset.segment_metas()) {
+            if ((!segment.has_num_rows() || segment.num_rows() > 0) &&
+                !(segment.has_sort_key_min() && segment.has_sort_key_max() &&
+                  segment.sort_key_min().values_size() > 0 && segment.sort_key_max().values_size() > 0)) {
+                return Status::NotSupported("tablet split segment has no sort key bounds");
+            }
+        }
+    }
+    return Status::OK();
+}
+
 // Compute split_count tablet ranges covering the tablet's key space.
 //
 // Postcondition on Status::OK: split_ranges->size() == split_count.
@@ -1058,6 +1077,7 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
         }
     }
 
+    RETURN_IF_ERROR(check_segment_sort_key_bounds(*tablet_metadata));
     std::vector<SegmentSplitInfo> segments;
     RETURN_IF_ERROR(build_segments_from_rowsets_impl(tablet_manager, tablet_metadata, *tablet_schema,
                                                      /*split_width=*/split_count,
@@ -1352,6 +1372,9 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
     if (old_tablet_metadata->rowsets_size() == 0) {
         return Status::OK();
     }
+
+    // 4a. Every segment with rows must carry the sort key bounds step 5 reads.
+    RETURN_IF_ERROR(check_segment_sort_key_bounds(*old_tablet_metadata));
 
     // 5. Build SegmentSplitInfo from rowsets via shared helper. Empty-segments
     //    here is corruption (we already short-circuited the empty-rowsets case
