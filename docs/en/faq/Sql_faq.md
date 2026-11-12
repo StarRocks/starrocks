@@ -301,8 +301,8 @@ Use `ADMIN SHOW REPLICA DISTRIBUTION FROM <table>` to view the distribution of t
 There are three common scenarios:
 
 - **Single query memory limit exceeded:**
-  - Error: `Mem usage has exceed the limit of single query, You can change the limit by set session variable exec_mem_limit.`
-  - Solution: Adjust `exec_mem_limit`
+  - Error: `Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.`
+  - Solution: Adjust `query_mem_limit`
 - **Query pool memory limit exceeded:**
   - Error: `Mem usage has exceed the limit of query pool`
   - Solution: Optimize the SQL.

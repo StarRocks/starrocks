@@ -247,7 +247,7 @@ mysql> show proc '/statistic/10002';
 | IndexNum              | データベース内のインデックス数。                           |
 | TabletNum             | データベース内のタブレット数。                           |
 | ReplicaNum            | データベース内のレプリカ数。                          |
-| UnhealthyTabletNum    | データ再配布中に未完了 (不健康) のタブレット数。 |
+| UnhealthyTabletNum    | データベース内の不健康なタブレット数。つまり、ヘルスステータスが `HEALTHY`、`REDUNDANT`、`COLOCATE_REDUNDANT`、`NEED_FURTHER_REPAIR` のいずれでもないタブレットの数です。クラウドネイティブテーブルのタブレットはカウントされません。 |
 | InconsistentTabletNum | データベース内の不一致タブレット数。              |
 | CloningTabletNum      | データベース内でクローン中のタブレット数。     |
 | ErrorStateTabletNum   | プライマリキー型テーブルで、エラー状態のタブレット数。 |

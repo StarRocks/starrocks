@@ -24,7 +24,7 @@ PROPERTIES ("key" = "value", ...)
 
 The following attributes are currently supported:
 
-"table_id': required. Specify a Tablet Id.
+"tablet_id": required. Specify a Tablet Id.
 
 "backend_id": required. Specify a Backend Id.
 

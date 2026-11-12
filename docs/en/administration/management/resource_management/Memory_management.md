@@ -12,6 +12,7 @@ This section briefly introduces memory classification and StarRocks’ methods o
 
 Explanation:
 
+<<<<<<< HEAD
 |   Metric       | Name | Description |
 | -------------- | --- | --- |
 |  `process`     |  Total memory used of BE  | |
@@ -22,6 +23,17 @@ Explanation:
 |  `snapshot`    |   Snapshot memory  | Generally used for clone, little memory usage |
 |  `column_pool` |    Column pool memory   | Request to release column cache for accelerated column |
 |  `page_cache`  |   BE's own PageCache   | The default is off, the user can turn it on by modifying the BE file |
+=======
+|   Metric  | Name | Description |
+| --- | --- | --- |
+|  process   |  Total memory used of BE  | |
+|  `query_pool`   |   Memory used by data querying  | Consists of two parts: memory used by the execution layer and memory used by the storage layer.|
+|  load   |  Memory used by data loading    | Generally MemTable|
+|  metadata   |   Metadata memory | S Schema, Tablet metadata, RowSet metadata, Column metadata, ColumnReader, IndexReader |
+|  compaction   |   Multi-version memory compaction  |  compaction that happens after data import is complete |
+|  clone  |   Clone memory  | Memory used by tablet clone tasks |
+|  page_cache   |   BE's own PageCache   | The default is off, the user can turn it on by modifying the BE file |
+>>>>>>> 1cd80a9 ([Doc] Fix docs that contradict the source on memory limits, resource groups, MVs, shared-data, FE and Iceberg (#82971))
 
 ## Memory-related configuration
 
@@ -30,12 +42,11 @@ Explanation:
 | Name | Default| Description|
 | --- | --- | --- |
 | vector_chunk_size | 4096 | Number of chunk rows |
-| mem_limit | 90% | BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100G"). The default hard limit is 90% of the server's memory size, and the soft limit is 80%. You need to configure this parameter if you want to deploy StarRocks with other memory-intensive services on a same server. |
+| mem_limit | 90% | BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100G"). The default value is 90% of the server's memory size. The BE uses 90% of `mem_limit` as the memory limit of the process memory tracker, which is 81% of the server's memory size by default. You need to configure this parameter if you want to deploy StarRocks with other memory-intensive services on a same server. |
 | disable_storage_page_cache | false | The boolean value to control whether to disable PageCache. When PageCache is enabled, StarRocks caches the recently scanned data. PageCache can significantly improve the query performance when similar queries are repeated frequently. `true` indicates to disable PageCache. Use this item together with `storage_page_cache_limit`, you can accelerate query performance in scenarios with sufficient memory resources and much data scan. The default value of this item has been changed from `true` to `false` since StarRocks v2.4. |
 | write_buffer_size | 104857600 |  The capacity limit of a single MemTable, exceeding which a disk swipe will be performed. |
-| load_process_max_memory_limit_bytes | 107374182400 | The upper limit of memory resources that can be taken up by all load processes on a BE node. Its value is the smaller one between `mem_limit * load_process_max_memory_limit_percent / 100` and `load_process_max_memory_limit_bytes`. If this threshold is exceeded, a flush and backpressure will be triggered.  |
-| load_process_max_memory_limit_percent | 30 | The maximum percentage of memory resources that can be taken up by all load processes on a BE node. Its value is the smaller one between `mem_limit * load_process_max_memory_limit_percent / 100` and `load_process_max_memory_limit_bytes`. If this threshold is exceeded, a flush and backpressure will be triggered. |
-| default_load_mem_limit | 2147483648 | If the memory limit on the receiving side is reached for a single import instance, a disk swipe will be triggered. This needs to be modified with the Session variable `load_mem_limit` to take effect. This parameter is mutable when the Event-based Compaction Framework is enabled.|
+| load_process_max_memory_limit_bytes | 107374182400 | The upper limit of memory resources that can be taken up by all load processes on a BE node. Its value is the smaller one between `BE process memory limit * load_process_max_memory_limit_percent / 100` (the BE process memory limit is 90% of `mem_limit`) and `load_process_max_memory_limit_bytes`. If this threshold is exceeded, a flush and backpressure will be triggered.  |
+| load_process_max_memory_limit_percent | 30 | The maximum percentage of memory resources that can be taken up by all load processes on a BE node. Its value is the smaller one between `BE process memory limit * load_process_max_memory_limit_percent / 100` (the BE process memory limit is 90% of `mem_limit`) and `load_process_max_memory_limit_bytes`. If this threshold is exceeded, a flush and backpressure will be triggered. |
 | max_compaction_concurrency | -1 | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
 | cumulative_compaction_check_interval_seconds | 1 | Interval of compaction check|
 
@@ -44,7 +55,7 @@ Explanation:
 | Name| Default| Description|
 | --- | --- | --- |
 | query_mem_limit| 0| Memory limit of a query on each BE node |
-| load_mem_limit | 0| Memory limit of a single import task. If the value is 0, `exec_mem_limit` will be taken|
+| load_mem_limit | 0| Memory limit of a single import task on each BE node. If the value is 0, no per-task limit is set, and the task is limited only by the memory limit of all load processes on the BE node (see `load_process_max_memory_limit_percent` and `load_process_max_memory_limit_bytes`).|
 
 ## View memory usage
 
@@ -94,7 +105,6 @@ Here `Bytes in use by application` refers to the memory currently in use.
 
 ~~~bash
 curl -XGET http://be_ip:be_http_port/metrics | grep 'mem'
-curl -XGET http://be_ip:be_http_port/metrics | grep 'column_pool'
 ~~~
 
 The value of metrics is updated every 10 seconds. It is possible to monitor some of the memory statistics with older versions.

@@ -84,10 +84,20 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 从 v3.1.4 开始，您可以在创建资源组时为其设置各自的并发查询上限 `concurrency_limit` 和 CPU 核数上限 `max_cpu_cores`。当发起一个查询时，如果任意一项资源占用超过了全局粒度或资源组粒度的资源阈值，那么查询会进行排队，直到所有资源都没有超过阈值，再执行该查询。
 
+<<<<<<< HEAD
 | **属性**          | **默认值** | **描述**                                                     |
 | ----------------- | ---------- | ------------------------------------------------------------ |
 | concurrency_limit | 0          | 该资源组在单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。 |
 | max_cpu_cores     | 0          | 该资源组在单个 BE 节点中使用的 CPU 核数上限。仅在设置为大于 `0` 后生效。取值范围：[0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。 |
+=======
+| **属性**           | **默认值** | **描述**                                                                            |
+|--------------------|------------|--------------------------------------------------------------------------------------|
+| concurrency_limit  | 0          | 该资源组在单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。                     |
+| max_cpu_cores      | 0          | 该资源组在单个 BE 节点中使用的 CPU 核数上限。仅在设置为大于 `0` 后生效。取值范围：[0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。 |
+| mem_used_pct_limit | 0          | 该资源组在单个 BE 节点中的内存使用率上限。仅在设置为大于 `0` 后生效。取值范围：[0, 1] |
+
+资源组粒度的查询队列仅由 Query Queue v1 实现。启用 Query Queue v2（将 `enable_query_queue_v2` 设置为 `true`，自 v4.1 起为默认值）后，资源组的 `concurrency_limit`、`max_cpu_cores` 和 `mem_used_pct_limit` 不再触发查询排队。此时 `max_cpu_cores` 和 `mem_used_pct_limit` 不起作用。仅当 `enable_group_level_query_queue` 为 `true` 且该查询本身受查询队列管控（即其查询类型启用了查询队列）时，`concurrency_limit` 才不会被执行。其他情况下，例如 `enable_group_level_query_queue` 为 `false`（默认）或该查询类型未启用查询队列时，在某个 BE 节点上超过 `concurrency_limit` 的查询会直接失败并报错 `Exceed concurrency limit`，而不会排队。
+>>>>>>> 1cd80a9 ([Doc] Fix docs that contradict the source on memory limits, resource groups, MVs, shared-data, FE and Iceberg (#82971))
 
 您可以通过 SHOW USAGE RESOURCE GROUPS 来查看每个资源组在每个 BE 上的资源使用信息，参见[查看资源组的使用信息](./resource_group.md#查看资源组的使用信息)。
 
@@ -261,8 +271,16 @@ ADMIN SET FRONTEND CONFIG ("query_queue_v2_concurrency_level" = "<value>");
 默认值 `0` 表示不限制。只有在需要为同时运行的查询数设置绝对上限时，才建议配置该参数：
 
 ```SQL
+SET GLOBAL query_queue_concurrency_limit = 8;
+```
+
+在支持多 Warehouse 的版本中，您也可以为指定 Warehouse 设置该上限：
+
+```SQL
 ALTER WAREHOUSE default_warehouse SET ("query_queue_concurrency_limit" = "8");
 ```
+
+StarRocks 开源版仅有 `default_warehouse`，不支持 ALTER WAREHOUSE 等 Warehouse DDL 语句（执行时会报错 `Multi-Warehouse is not implemented`）。请使用全局变量进行设置。
 
 建议优先使用 `query_queue_v2_concurrency_level` 调整资源容量。只有在需要显式限制同时运行的查询数量时，才使用 `query_queue_concurrency_limit`。
 

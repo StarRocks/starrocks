@@ -202,7 +202,7 @@ StarRocks 序列化事务提交，因此高导入率可能达到限制。
 
 ## 为什么在 Kubernetes 存算分离集群中 Compaction 速度慢？
 
-如果导入发生在一个 Warehouse 中，但 Compaction 在另一个 Warehouse 中运行（例如，`default_warehouse`），则 Compaction 必须跨 Warehouse 拉取数据，没有缓存，从而减慢速度。
+如果导入发生在一个 Warehouse 中，但 Compaction 在另一个 Warehouse 中运行（例如，`default_warehouse`），则 Compaction 必须跨 Warehouse 拉取数据，没有缓存，从而减慢速度。该情况仅适用于支持多 Warehouse 的版本。StarRocks 开源版仅有 `default_warehouse`，导入和 Compaction 始终在同一 Warehouse 中运行。
 
 解决方案：
 

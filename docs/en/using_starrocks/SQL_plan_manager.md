@@ -646,7 +646,7 @@ The Auto-Capture feature depends on the save query history feature and requires 
 ```SQL
 set global enable_query_history=true;
 ```
-The query history is stored in the '_statistics_.query_history' table.
+The query history is stored in the '_statistics_.query_history' table. Only successful SELECT statements whose execution plan contains at least two scan nodes are recorded. Statements issued by statistics jobs and statements that reference statistics tables are not recorded. Query history older than `query_history_keep_seconds` is purged only while `enable_query_history` is `true`.
 
 To enable automatic capture:
 ```SQL
@@ -658,7 +658,7 @@ Other configurations：
 -- The historical duration of the storage query history, unit: seconds, defaults to 3 days
 set global query_history_keep_seconds = 259200;
 -- The work interval of Auto-Capture, unit: seconds, defaults to 3 hours
-set global plan_capture_interval=10800;
+set global plan_capture_interval_seconds=10800;
 -- Captures regular checks for SQL tables, only captures SQL when table names(db.table) can match plan_capture_include_pattern, defaults .*, which represents all tables
 set global plan_capture_include_pattern=".*";
 ```

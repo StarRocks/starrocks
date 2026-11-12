@@ -83,10 +83,20 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 v3.1.4 以降、リソースグループを作成する際に、個別の同時実行制限 (`concurrency_limit`) と CPU コア制限 (`max_cpu_cores`) を設定できます。クエリが開始されると、グローバルまたはリソースグループレベルのいずれかでリソース消費がリソースしきい値を超えた場合、すべてのリソース消費がしきい値内に収まるまでクエリはキューに入れられます。
 
+<<<<<<< HEAD
 | **Variable**        | **Default** | **Description**                                              |
 | ------------------- | ----------- | ------------------------------------------------------------ |
 | concurrency_limit   | 0           | 単一の BE ノード上のリソースグループの同時実行制限。`0` より大きく設定された場合にのみ有効になります。 |
 | max_cpu_cores       | 0           | 単一の BE ノード上のこのリソースグループの CPU コア制限。`0` より大きく設定された場合にのみ有効になります。範囲: [0, `avg_be_cpu_cores`]、ここで `avg_be_cpu_cores` はすべての BE ノードの平均 CPU コア数を表します。 |
+=======
+| **Variable**       | **Default** | **Description**                                                                                                                                                                       |
+|--------------------|-------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| concurrency_limit  | 0           | 単一の BE ノード上のリソースグループの同時実行制限。`0` より大きく設定された場合にのみ有効になります。                                                                                    |
+| max_cpu_cores      | 0           | 単一の BE ノード上のこのリソースグループの CPU コア制限。`0` より大きく設定された場合にのみ有効になります。範囲: [0, `avg_be_cpu_cores`]、ここで `avg_be_cpu_cores` はすべての BE ノードの平均 CPU コア数を表します。 |
+| mem_used_pct_limit | 0           | 単一の BE ノード上のこのリソースグループのメモリ使用率制限。`0` より大きく設定された場合にのみ有効になります。範囲: [0, 1]                                                                |
+
+リソースグループレベルのクエリキューは Query Queue v1 でのみ実装されています。Query Queue v2 を有効にする（`enable_query_queue_v2` を `true` に設定する。v4.1 以降のデフォルト）と、リソースグループの `concurrency_limit`、`max_cpu_cores`、`mem_used_pct_limit` によってクエリがキューに入れられることはなくなります。この場合、`max_cpu_cores` と `mem_used_pct_limit` は効果がありません。`concurrency_limit` が適用されないのは、`enable_group_level_query_queue` が `true` で、かつクエリ自体がクエリキューの対象である（そのクエリタイプでクエリキューが有効である）場合のみです。それ以外の場合、例えば `enable_group_level_query_queue` が `false`（デフォルト）の場合やそのクエリタイプでクエリキューが無効な場合、BE ノードで `concurrency_limit` を超えたクエリはキューに入れられず、エラー `Exceed concurrency limit` で失敗します。
+>>>>>>> 1cd80a9 ([Doc] Fix docs that contradict the source on memory limits, resource groups, MVs, shared-data, FE and Iceberg (#82971))
 
 各 BE ノードのリソースグループごとのリソース使用情報を表示するには、[View Resource Group Usage Information](./resource_group.md#view-resource-group-usage-information) を参照してください。
 
@@ -261,8 +271,16 @@ ADMIN SET FRONTEND CONFIG ("query_queue_v2_concurrency_level" = "<value>");
 デフォルト値 `0` は無制限を意味します。実行中のクエリ数に絶対的な上限を設けたい場合にのみ設定してください。
 
 ```SQL
+SET GLOBAL query_queue_concurrency_limit = 8;
+```
+
+複数の Warehouse をサポートするエディションでは、特定の Warehouse に対して上限を設定することもできます。
+
+```SQL
 ALTER WAREHOUSE default_warehouse SET ("query_queue_concurrency_limit" = "8");
 ```
+
+StarRocks オープンソース版には `default_warehouse` のみが存在し、ALTER WAREHOUSE などの Warehouse DDL ステートメントはサポートされていません（`Multi-Warehouse is not implemented` エラーで失敗します）。代わりにグローバル変数を使用してください。
 
 まず `query_queue_v2_concurrency_level` を使用してリソース容量を調整してください。`query_queue_concurrency_limit` は、同時に実行できるクエリ数を明示的に制限する必要がある場合にのみ使用してください。
 
