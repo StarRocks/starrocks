@@ -5,9 +5,6 @@ sidebar_position: 30
 
 # Authenticate User Groups
 
-import UnixFileIntro from '../../_assets/user_priv/unix_file_intro.mdx'
-import UnixFileSyntax from '../../_assets/user_priv/unix_file_syntax.mdx'
-import UnixFileParam from '../../_assets/user_priv/unix_file_param.mdx'
 import GroupProviderRangerLink from '../../_assets/user_priv/group_provider_ranger_link.mdx'
 
 Enable Group Provider in StarRocks to authenticate, and authorize user groups from external authentication systems.
@@ -30,7 +27,10 @@ The following flow chart uses LDAP and Apache Ranger as an example to explain th
 
 ## Create a group provider
 
-<UnixFileIntro />
+StarRocks supports three types of group providers: 
+- **LDAP group provider**: Search and match users with groups in your LDAP service
+- **Unix group provider**: Search and match users with groups in your operating system
+- **File group provider**: Search and match users with groups defined by a file
 
 ### Syntax
 
@@ -70,11 +70,45 @@ ldap_cache_arg ::=
     "ldap_cache_refresh_interval" = ""
 ```
 
-<UnixFileSyntax />
+- Unix group provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name> 
+PROPERTIES (
+    "type" = "unix"
+)
+```
+
+- File group provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name> 
+PROPERTIES (
+    "type" = "file",
+    "group_file_url" = ""
+)
+```
 
 ### Parameters
 
-<UnixFileParam />
+#### `type`
+
+The type of the group provider to create. Valid values:
+- `ldap`: Creates an LDAP group provider. When this value is set, you need to specify `ldap_info`, `ldap_search_group_arg`, `ldap_search_user_arg`, and optionally `ldap_cache_arg`.
+- `unix`: Creates a Unix group provider.
+- `file`: Creates a File group provider. When this value is set, you need to specify `group_file_url`.
+
+#### `group_file_url`
+
+The URL or relative path (under `fe/conf`) to the file that defines the user groups.
+
+:::note
+
+A group file contains a list of groups and their members. You can define a group in each line where the group name and members are separated by a colon. Multiple users are separated by commas. Example: `group_name:user_1,user_2,user_3`.
+
+An `http://` or `https://` URL is fetched with the connect and read timeouts set by the FE configuration items `group_provider_http_connect_timeout_ms` (default 5000) and `group_provider_http_read_timeout_ms` (default 30000). If the server does not answer within them, the statement fails and the group provider keeps its previous configuration.
+
+:::
 
 #### `ldap_info` parameter group
 
