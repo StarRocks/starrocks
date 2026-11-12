@@ -323,7 +323,7 @@ public class FunctionAnalyzer {
             case FunctionSet.ENCODE_FINGERPRINT_SHA256:
             case FunctionSet.ENCODE_FINGERPRINT_SHA256_V2:
                 break;
-            case "to_json":
+            case FunctionSet.TO_JSON:
                 if (call.getFn().getBinaryType() != TFunctionBinaryType.BUILTIN) {
                     return;
                 }
