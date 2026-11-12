@@ -383,12 +383,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
     共通パーティション式TTLと`force_mv`セマンティクスの詳細なガイダンスについては、[例6](#例)を参照してください。
 
-<<<<<<< HEAD
-- `storage_volume`: 共有データクラスタを使用している場合、作成する非同期マテリアライズドビューを保存するために使用されるストレージボリュームの名前。このプロパティはv3.1以降でサポートされています。このプロパティが指定されていない場合、デフォルトのストレージボリュームが使用されます。例: `"storage_volume" = "def_volume"`。
-=======
 - `storage_volume`: 共有データクラスタを使用している場合、作成する非同期マテリアライズドビューを保存するために使用されるストレージボリュームの名前。このプロパティはv3.1以降でサポートされています。このプロパティが指定されていない場合、データベースのストレージボリュームが使用されます。データベースにストレージボリュームが設定されていない場合は、デフォルトのストレージボリュームが使用されます。例: `"storage_volume" = "def_volume"`。
-- `file_bundling`: 非同期マテリアライズドビューのファイルバンドリング最適化を有効にするかどうか。このプロパティは共有データクラスタでのみ使用でき、v26.2以降でサポートされています。このプロパティが指定されていない場合、FE 構成 `enable_file_bundling`（デフォルト: `true`）に従います。既存のマテリアライズドビューは、アップグレード後もファイルバンドリングが無効のままです。このプロパティは [ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md) で変更できます。ファイルバンドリングの効果と変更時の制限については、[CREATE TABLE](../table_bucket_part_index/CREATE_TABLE.md) の `file_bundling` プロパティを参照してください。
->>>>>>> 1cd80a9 ([Doc] Fix docs that contradict the source on memory limits, resource groups, MVs, shared-data, FE and Iceberg (#82971))
 - `force_external_table_query_rewrite`: 外部カタログベースのマテリアライズドビューのクエリの書き換えを有効にするかどうか。このプロパティはv3.2からサポートされています。有効な値:
   - `true`(v3.2以降のデフォルト値): 外部カタログベースのマテリアライズドビューのクエリの書き換えを有効にします。
   - `false`: 外部カタログベースのマテリアライズドビューのクエリの書き換えを無効にします。

@@ -16,20 +16,11 @@ sidebar_position: 40
 | --- | --- | --- |
 |  `process`   |  BE の使用メモリ合計  | |
 |  `query_pool`   |   データクエリによるメモリ使用量  | 実行レイヤーとストレージレイヤーの2つの部分から成ります。|
-<<<<<<< HEAD
-|  `load`   |  データロードによるメモリ使用量    | 一般的に MemTable|
-|  `table_meta`   |   メタデータメモリ | S Schema、Tablet メタデータ、RowSet メタデータ、Column メタデータ、ColumnReader、IndexReader |
-|  `compaction`   |   マルチバージョンメモリコンパクション  |  データインポート完了後に発生するコンパクション |
-|  `snapshot`  |   スナップショットメモリ  | 一般的にクローンに使用され、メモリ使用量は少ない |
-|  `column_pool`   |    カラムプールメモリ   | カラムキャッシュを解放してカラムを加速するためのリクエスト |
-|  `page_cache`   |   BE の独自の PageCache   | デフォルトはオフで、ユーザーは BE ファイルを変更してオンにできます |
-=======
 |  load   |  データロードによるメモリ使用量    | 一般的に MemTable|
 |  metadata   |   メタデータメモリ | S Schema、Tablet メタデータ、RowSet メタデータ、Column メタデータ、ColumnReader、IndexReader |
 |  compaction   |   マルチバージョンメモリコンパクション  |  データインポート完了後に発生するコンパクション |
 |  clone  |   クローンメモリ  | Tablet クローンタスクが使用するメモリ |
 |  page_cache   |   BE の独自の PageCache   | デフォルトはオフで、ユーザーは BE ファイルを変更してオンにできます |
->>>>>>> 1cd80a9 ([Doc] Fix docs that contradict the source on memory limits, resource groups, MVs, shared-data, FE and Iceberg (#82971))
 
 ## メモリ関連の設定
 

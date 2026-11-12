@@ -694,13 +694,8 @@ This topic introduces the following types of BE configurations:
 - Default: 0
 - Type: Int
 - Unit: -
-<<<<<<< HEAD
-- Is mutable: Yes
-- Description: The maximum concurrency (per BE node) of the materialized view refresh tasks in the resource group `default_mv_wg`. The default value `0` indicates no limits.
-=======
 - Is mutable: No
 - Description: The maximum concurrency (per BE node) of the materialized view refresh tasks in the resource group `default_mv_wg`. The default value `0` indicates no limits. Deprecated: from v3.4 onwards, this item no longer takes effect because the FE stores `default_mv_wg` and sends it to the BEs. Use `ALTER RESOURCE GROUP default_mv_wg WITH (...)` instead.
->>>>>>> 1cd80a9 ([Doc] Fix docs that contradict the source on memory limits, resource groups, MVs, shared-data, FE and Iceberg (#82971))
 - Introduced in: v3.1
 
 ### default_mv_resource_group_cpu_limit
@@ -708,13 +703,8 @@ This topic introduces the following types of BE configurations:
 - Default: 1
 - Type: Int
 - Unit: -
-<<<<<<< HEAD
-- Is mutable: Yes
-- Description: The maximum number of CPU cores (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`.
-=======
 - Is mutable: No
 - Description: The maximum number of CPU cores (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. Deprecated: from v3.4 onwards, this item no longer takes effect because the FE stores `default_mv_wg` and sends it to the BEs. Use `ALTER RESOURCE GROUP default_mv_wg WITH (...)` instead.
->>>>>>> 1cd80a9 ([Doc] Fix docs that contradict the source on memory limits, resource groups, MVs, shared-data, FE and Iceberg (#82971))
 - Introduced in: v3.1
 
 ### default_mv_resource_group_memory_limit
@@ -722,13 +712,8 @@ This topic introduces the following types of BE configurations:
 - Default: 0.8
 - Type: Double
 - Unit:
-<<<<<<< HEAD
-- Is mutable: Yes
-- Description: The maximum memory proportion (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. The default value indicates 80% of the memory.
-=======
 - Is mutable: No
 - Description: The maximum memory proportion (per BE node) that can be used by the materialized view refresh tasks in the resource group `default_mv_wg`. The default value indicates 80% of the memory. Deprecated: from v3.4 onwards, this item no longer takes effect because the FE stores `default_mv_wg` and sends it to the BEs. Use `ALTER RESOURCE GROUP default_mv_wg WITH (...)` instead.
->>>>>>> 1cd80a9 ([Doc] Fix docs that contradict the source on memory limits, resource groups, MVs, shared-data, FE and Iceberg (#82971))
 - Introduced in: v3.1
 
 ### default_mv_resource_group_spill_mem_limit_threshold
@@ -736,13 +721,8 @@ This topic introduces the following types of BE configurations:
 - Default: 0.8
 - Type: Double
 - Unit: -
-<<<<<<< HEAD
-- Is mutable: Yes
-- Description: The memory usage threshold before a materialized view refresh task in the resource group `default_mv_wg` triggers intermediate result spilling. The default value indicates 80% of the memory.
-=======
 - Is mutable: No
 - Description: The memory usage threshold before a materialized view refresh task in the resource group `default_mv_wg` triggers intermediate result spilling. The default value indicates 80% of the memory. Deprecated: from v3.4 onwards, this item no longer takes effect because the FE stores `default_mv_wg` and sends it to the BEs. Use `ALTER RESOURCE GROUP default_mv_wg WITH (...)` instead.
->>>>>>> 1cd80a9 ([Doc] Fix docs that contradict the source on memory limits, resource groups, MVs, shared-data, FE and Iceberg (#82971))
 - Introduced in: v3.1
 
 ### enable_resolve_hostname_to_ip_in_load_error_url

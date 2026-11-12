@@ -12,18 +12,6 @@ This section briefly introduces memory classification and StarRocks’ methods o
 
 Explanation:
 
-<<<<<<< HEAD
-|   Metric       | Name | Description |
-| -------------- | --- | --- |
-|  `process`     |  Total memory used of BE  | |
-|  `query_pool`  |   Memory used by data querying  | Consists of two parts: memory used by the execution layer and memory used by the storage layer.|
-|  `load`        |  Memory used by data loading    | Generally MemTable|
-|  `table_meta`  |   Metadata memory | S Schema, Tablet metadata, RowSet metadata, Column metadata, ColumnReader, IndexReader |
-|  `compaction`  |   Multi-version memory compaction  |  compaction that happens after data import is complete |
-|  `snapshot`    |   Snapshot memory  | Generally used for clone, little memory usage |
-|  `column_pool` |    Column pool memory   | Request to release column cache for accelerated column |
-|  `page_cache`  |   BE's own PageCache   | The default is off, the user can turn it on by modifying the BE file |
-=======
 |   Metric  | Name | Description |
 | --- | --- | --- |
 |  process   |  Total memory used of BE  | |
@@ -33,7 +21,6 @@ Explanation:
 |  compaction   |   Multi-version memory compaction  |  compaction that happens after data import is complete |
 |  clone  |   Clone memory  | Memory used by tablet clone tasks |
 |  page_cache   |   BE's own PageCache   | The default is off, the user can turn it on by modifying the BE file |
->>>>>>> 1cd80a9 ([Doc] Fix docs that contradict the source on memory limits, resource groups, MVs, shared-data, FE and Iceberg (#82971))
 
 ## Memory-related configuration
 

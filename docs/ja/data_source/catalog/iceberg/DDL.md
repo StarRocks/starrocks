@@ -159,11 +159,7 @@ PARTITION BY (partition_expr[, partition_expr...])
 - `transform_expr(column_name)`
 - `transform_expr(column_name, parameter)`
 
-<<<<<<< HEAD
-StarRocksは、Apache Iceberg仕様で定義されたパーティション変換式をサポートしています。
-=======
 StarRocks は、次のパーティション変換をサポートしています: identity（列名または `identity()`）、`year()`、`month()`、`day()`、`hour()`、`truncate()`、`bucket()`、および `void()`。その他の変換を使用するとエラーが返されます。
->>>>>>> 1cd80a9 ([Doc] Fix docs that contradict the source on memory limits, resource groups, MVs, shared-data, FE and Iceberg (#82971))
 
 :::note
 パーティション列は、FLOAT、DOUBLE、DECIMAL、およびDATETIMEを除くすべてのデータ型をサポートしています。
