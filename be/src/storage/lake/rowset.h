@@ -37,6 +37,9 @@
 
 namespace starrocks {
 class DisjunctivePredicates;
+namespace io {
+class CacheWarmHandle;
+}
 class RowsetReadOptions;
 class SegmentReadOptions;
 } // namespace starrocks
@@ -125,6 +128,12 @@ struct PreparedTabletReadState {
     std::vector<RowsetPtr> rowsets;
     std::vector<std::vector<SegmentPtr>> rowset_segments;
     std::vector<std::vector<PreparedSegmentReadStatePtr>> rowset_prepared_states;
+    // lake_scan_warm_index: the cache fills started for the index pages of these segments. A segment's index pages
+    // are read when the scan reaches that segment, which for the last segments of a long scan is near its end, and
+    // dropping a handle withdraws its fills that no reader has joined yet. So the handles are held as long as this
+    // state: until the last split that shares it, or the close of a non-split reader. A finished fill holds no data
+    // (the warm files are not retainable), so holding its handle costs only the handle.
+    std::vector<std::shared_ptr<io::CacheWarmHandle>> index_warm_handles;
 
     void disable_runtime_filter_dependent_cache() {
         for (const auto& prepared_states : rowset_prepared_states) {

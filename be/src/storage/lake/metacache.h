@@ -66,7 +66,9 @@ public:
     // a load that looks the same key up again.
     std::shared_ptr<Segment> lookup_segment(const MetacacheKey& key, bool count_miss = true);
 
-    std::shared_ptr<const DelVector> lookup_delvec(const MetacacheKey& key);
+    // |count_stats| false leaves the lookup out of the delete vector cache hit and miss counters, for a probe that
+    // is followed by a real lookup of the same key.
+    std::shared_ptr<const DelVector> lookup_delvec(const MetacacheKey& key, bool count_stats = true);
 
     bool lookup_bundled_metadata_marker(const MetacacheKey& key);
 

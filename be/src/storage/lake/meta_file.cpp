@@ -1554,6 +1554,15 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
     return Status::OK();
 }
 
+bool del_vec_cached(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id) {
+    auto iter = metadata.delvec_meta().delvecs().find(segment_id);
+    if (iter == metadata.delvec_meta().delvecs().end()) {
+        return true;
+    }
+    return tablet_mgr->metacache()->lookup_delvec(MetacacheKey::delvec(metadata.id(), iter->second),
+                                                  false /* count_stats */) != nullptr;
+}
+
 namespace {
 
 constexpr size_t kDelvecIoChunkSize = 1UL << 20;

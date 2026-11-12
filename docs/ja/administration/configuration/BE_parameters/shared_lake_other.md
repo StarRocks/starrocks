@@ -338,6 +338,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタのクエリスキャンで、タブレットのすべての Rowset の Segment を Rowset ごとに順番に開くのではなく、Segment ロードスレッドプール上で Segment ごとに 1 タスクとして一度に開き、各 Rowset のイテレータを並列に構築するかどうか。クエリスキャンにのみ適用されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。ロード、コンパクション、その他の読み取りは引き続き `enable_load_segment_parallel` に従います。フッターが Segment メタデータキャッシュですでに開かれている Segment は、タスクを使わずにそのまま使用されます。クエリプロファイルでは、これらは `TabletPrepareCachedSegments` に、フッターの読み取りはその他の `TabletPrepare*` カウンタに報告されます。
 - 導入バージョン: -
 
+### lake_scan_warm_index
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタのクエリスキャン（分割の有無を問わない）が Tablet の Segment を開いた後、次に読むインデックスページを非同期でウォームアップするかどうか。対象は各 Segment の短キーインデックス、述語列の zone map と bloom filter のルートページ、読み取り列の ordinal index のルートページです。スキャンはウォームアップの完了を待たず、失敗した場合は通常どおり読み取ります。Segment メタデータフィルター（`enable_lake_segment_metadata_filter`）によってスキャン対象から除外された Segment はウォームアップしません。この項目はクエリにのみ適用され、リモート I/O スケジューラー（`remote_io_scheduler_enable`）が有効な場合にのみ効果があります。`lake_scan_parallel_segment_open` とは独立しています。ウォームアップの状況はクエリプロファイルの `TabletPrepareIndexWarmSegments`、`TabletPrepareIndexWarmRanges`、`TabletPrepareIndexWarmBlocks`、`TabletPrepareIndexWarmSkipped`、`TabletPrepareIndexWarmPrunedSegments` に記録されます。
+- 導入バージョン: -
+
 ### lake_segment_metadata_cache_limit_percent
 
 - デフォルト: 10
