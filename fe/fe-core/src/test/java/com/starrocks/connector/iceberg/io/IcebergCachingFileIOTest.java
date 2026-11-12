@@ -20,10 +20,15 @@ import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.Files;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
+import org.apache.iceberg.io.OutputFile;
+import org.apache.iceberg.io.ResolvingFileIO;
 import org.apache.iceberg.util.SerializableSupplier;
 import org.apache.iceberg.util.SerializationUtil;
 import org.junit.jupiter.api.Assertions;
@@ -81,8 +86,6 @@ public class IcebergCachingFileIOTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
     public void testNormalizedAzurePathKeepsLogicalLocation() {
         String path = "abfss://c@acct.blob.core.windows.net/metadata/m0.avro";
         String normalized = "wasbs://c@acct.blob.core.windows.net/metadata/m0.avro";
@@ -118,7 +121,6 @@ public class IcebergCachingFileIOTest {
     }
 
     @Test
->>>>>>> dff22f4 ([BugFix][RB-1548] Normalize Azure blob paths for Iceberg metadata tables read on the BE (#83074))
     public void testNewFileWithException() {
         IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
         cachingFileIO.setConf(new Configuration());
