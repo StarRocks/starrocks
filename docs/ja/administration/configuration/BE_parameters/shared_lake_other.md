@@ -326,7 +326,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタのクエリスキャンで、タブレットのすべての Rowset の Segment を Rowset ごとに順番に開くのではなく、Segment ロードスレッドプール上で Segment ごとに 1 タスクとして一度に開き、各 Rowset のイテレータを並列に構築するかどうか。クエリスキャンにのみ適用され、リモート I/O スケジューラが有効な場合にのみ有効です。スケジューラが無効な場合、この項目は効果がありません。ロード、コンパクション、その他の読み取りは引き続き `enable_load_segment_parallel` に従います。フッターが Segment メタデータキャッシュですでに開かれている Segment は、タスクを使わずにそのまま使用されます。クエリプロファイルでは、これらは `TabletPrepareCachedSegments` に、フッターの読み取りはその他の `TabletPrepare*` カウンタに報告されます。
+- 説明: 共有データクラスタのクエリスキャンで、タブレットのすべての Rowset の Segment を Rowset ごとに順番に開くのではなく、Segment ロードスレッドプール上で Segment ごとに 1 タスクとして一度に開き、各 Rowset のイテレータを並列に構築するかどうか。クエリスキャンにのみ適用されます。`remote_io_scheduler_enable` が `true` の場合にのみ有効です。ロード、コンパクション、その他の読み取りは引き続き `enable_load_segment_parallel` に従います。フッターが Segment メタデータキャッシュですでに開かれている Segment は、タスクを使わずにそのまま使用されます。クエリプロファイルでは、これらは `TabletPrepareCachedSegments` に、フッターの読み取りはその他の `TabletPrepare*` カウンタに報告されます。
 - 導入バージョン: -
 
 ### lake_segment_metadata_cache_limit_percent

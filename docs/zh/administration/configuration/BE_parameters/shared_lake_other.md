@@ -323,7 +323,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中，查询扫描是否一次性打开 Tablet 所有 Rowset 的 Segment（在 Segment 加载线程池中每个 Segment 一个任务），而不是逐个 Rowset 依次打开，并并行构建各 Rowset 的迭代器。仅对查询扫描生效，且仅在启用远程 I/O 调度器时生效；调度器关闭时该参数不起作用。导入、Compaction 及其他读取仍由 `enable_load_segment_parallel` 控制。Footer 已在 Segment 元数据缓存中打开的 Segment 直接复用，不再提交任务。Query Profile 中，这类 Segment 计入 `TabletPrepareCachedSegments`，Footer 读取计入其他 `TabletPrepare*` 指标。
+- 描述：存算分离集群中，查询扫描是否一次性打开 Tablet 所有 Rowset 的 Segment（在 Segment 加载线程池中每个 Segment 一个任务），而不是逐个 Rowset 依次打开，并并行构建各 Rowset 的迭代器。仅对查询扫描生效，且仅当 `remote_io_scheduler_enable` 为 `true` 时生效。导入、Compaction 及其他读取仍由 `enable_load_segment_parallel` 控制。Footer 已在 Segment 元数据缓存中打开的 Segment 直接复用，不再提交任务。Query Profile 中，这类 Segment 计入 `TabletPrepareCachedSegments`，Footer 读取计入其他 `TabletPrepare*` 指标。
 - 引入版本：-
 
 ### lake_segment_metadata_cache_limit_percent
