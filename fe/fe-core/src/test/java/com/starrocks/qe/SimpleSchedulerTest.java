@@ -582,6 +582,63 @@ public class SimpleSchedulerTest {
     }
 
     @Test
+    public void testRecoveryTimeFiltersFailureHistory(@Mocked SystemInfoService systemInfoService) {
+        long originalPenalty = Config.black_host_penalty_min_ms;
+        long originalThreshold = Config.black_host_connect_failures_within_time;
+        Config.black_host_penalty_min_ms = 0;
+        Config.black_host_connect_failures_within_time = 2;
+        HostBlacklist blacklist = new HostBlacklist();
+        ComputeNode node = new ComputeNode(10003L, "host10003", 10003);
+        node.setAlive(true);
+        new Expectations() {
+            {
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = systemInfoService;
+                systemInfoService.getBackendOrComputeNode(10003L);
+                result = node;
+                systemInfoService.getComputeNode(10003L);
+                result = node;
+                systemInfoService.checkNodeAvailable(node);
+                result = true;
+            }
+        };
+        new MockUp<NetUtils>() {
+            @Mock
+            public boolean checkAccessibleForAllPorts(String host, List<Integer> ports) {
+                return true;
+            }
+        };
+        try {
+            blacklist.add(10003L, 100);
+            blacklist.add(10003L, 100);
+            node.setLastRecoveryTime(200);
+            Assertions.assertFalse(blacklist.add(10003L, 199));
+            Assertions.assertTrue(blacklist.contains(10003L));
+            // SHOW must not report a count that contradicts the removal decision.
+            Assertions.assertEquals("0", blacklist.getShowData(true).get(0).get(3));
+            blacklist.refresh();
+            Assertions.assertFalse(blacklist.contains(10003L));
+
+            Assertions.assertTrue(blacklist.add(10003L, 200));
+            Assertions.assertTrue(blacklist.add(10003L, 201));
+            blacklist.refresh();
+            Assertions.assertTrue(blacklist.contains(10003L));
+            Assertions.assertEquals("2", blacklist.getShowData(true).get(0).get(3));
+            blacklist.addByManual(10003L);
+            node.setLastRecoveryTime(300);
+            blacklist.refresh();
+            Assertions.assertTrue(blacklist.contains(10003L));
+            Assertions.assertEquals("MANUAL", blacklist.getShowData(true).get(0).get(1));
+            // Manual entries are never removed and keep counting the raw history (auto events only;
+            // addByManual does not record an event).
+            Assertions.assertEquals("4", blacklist.getShowData(true).get(0).get(3));
+        } finally {
+            Config.black_host_penalty_min_ms = originalPenalty;
+            Config.black_host_connect_failures_within_time = originalThreshold;
+        }
+    }
+
+    @Test
     public void testPenaltyTimeInBlockList(@Mocked SystemInfoService systemInfoService, @Mocked NetUtils netUtils)
             throws InterruptedException {
         Config.black_host_history_sec = 5; // 5s

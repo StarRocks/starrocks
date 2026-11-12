@@ -83,9 +83,11 @@ public class ResultReceiver {
             return null;
         }
         final RowBatch rowBatch = new RowBatch();
+        long requestStartTime = 0;
         try {
             while (!isDone && !isCancel) {
                 PFetchDataRequest request = new PFetchDataRequest(finstId);
+                requestStartTime = System.currentTimeMillis();
 
                 Future<PFetchDataResult> future = BackendServiceClient.getInstance().fetchDataAsync(address, request);
                 PFetchDataResult pResult = null;
@@ -135,7 +137,7 @@ public class ResultReceiver {
         } catch (RpcException e) {
             LOG.warn("fetch result rpc exception, finstId={}", DebugUtil.printId(finstId), e);
             status.setRpcStatus(e.getMessage());
-            SimpleScheduler.addToBlocklist(backendId);
+            SimpleScheduler.addToBlocklist(backendId, requestStartTime);
         } catch (ExecutionException e) {
             LOG.warn("fetch result execution exception, finstId={}", DebugUtil.printId(finstId), e);
             if (e.getMessage().contains("time out")) {
@@ -144,7 +146,7 @@ public class ResultReceiver {
                         String.format("please increase the '%s' session variable and retry", SessionVariable.QUERY_TIMEOUT))));
             } else {
                 status.setRpcStatus(e.getMessage());
-                SimpleScheduler.addToBlocklist(backendId);
+                SimpleScheduler.addToBlocklist(backendId, requestStartTime);
             }
         } catch (TimeoutException e) {
             LOG.warn("fetch result timeout, finstId={}", DebugUtil.printId(finstId), e);

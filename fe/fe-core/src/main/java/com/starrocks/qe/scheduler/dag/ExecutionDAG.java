@@ -718,6 +718,7 @@ public class ExecutionDAG {
 
         for (ComputeNode worker : workers) {
             TNetworkAddress brpcAddress = worker.getBrpcAddress();
+            long requestStartTime = System.currentTimeMillis();
             try {
                 BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
                         jobSpec.getQueryId(), dummyInstanceId, cancelReason,
@@ -725,7 +726,7 @@ public class ExecutionDAG {
             } catch (RpcException e) {
                 LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
                         brpcAddress.getPort(), e);
-                SimpleScheduler.addToBlocklist(worker.getId());
+                SimpleScheduler.addToBlocklist(worker.getId(), requestStartTime);
             }
         }
     }

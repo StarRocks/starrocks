@@ -169,8 +169,13 @@ public class SimpleScheduler {
         return null;
     }
 
+    @VisibleForTesting
     public static void addToBlocklist(Long backendID) {
         HOST_BLACKLIST.add(backendID);
+    }
+
+    public static void addToBlocklist(Long backendID, long requestStartTime) {
+        HOST_BLACKLIST.add(backendID, requestStartTime);
     }
 
     public static boolean isInBlocklist(long backendId) {
