@@ -58,10 +58,10 @@ CONF_mBool(enable_lake_prepared_split_pre_refinement, "true");
 // window. 0 starts each segment's read-ahead only when its turn comes.
 CONF_mInt32(lake_scan_read_ahead_segments, "16");
 
-// While the remote I/O scheduler is enabled, a lake query scan opens the segments of all rowsets of a tablet at
-// once on the load segment thread pool, one task per segment, instead of one rowset after another, and builds the
-// rowsets' iterators in parallel. Has no effect while the scheduler is off. Loads, compaction and the other readers
-// keep following enable_load_segment_parallel.
+// While the remote I/O scheduler is enabled (remote_io_scheduler_enable), a lake query scan opens the segments of all
+// rowsets of a tablet at once on the load segment thread pool, one task per segment, instead of one rowset after
+// another, and builds the rowsets' iterators in parallel. Has no effect while the scheduler is off. Loads, compaction
+// and the other readers keep following enable_load_segment_parallel.
 CONF_mBool(lake_scan_parallel_segment_open, "true");
 
 // Whether to use accurate row count for lake primary key tablets by reading delete vectors from object storage.
