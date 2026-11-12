@@ -168,7 +168,10 @@ Status JsonDocumentStreamParser::advance() noexcept {
         ++_doc_stream_itr;
         if (_doc_stream_itr.error() != simdjson::SUCCESS &&
             (batch_size >= cur_left_len || !_check_and_new_doc_stream_iterator())) {
-            if (_doc_stream_itr.error() == simdjson::EMPTY) {
+            // EMPTY: nothing follows the skipped record. truncated_bytes() > 0: stage 1 cut the input inside the
+            // failed record (eg. at a missing comma), so nothing follows it either. Both end the stream and leave
+            // the failed record as one filtered row, as on 3.9.4.
+            if (_doc_stream_itr.error() == simdjson::EMPTY || _doc_stream.truncated_bytes() > 0) {
                 return Status::EndOfFile("all documents of the stream are iterated");
             }
             auto err_msg = strings::Substitute("Failed to iterate document stream as object. error: $0",
