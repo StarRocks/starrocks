@@ -281,10 +281,12 @@ std::shared_ptr<Segment> Metacache::lookup_segment(const MetacacheKey& key, bool
     return *segment;
 }
 
-std::shared_ptr<const DelVector> Metacache::lookup_delvec(const MetacacheKey& key) {
+std::shared_ptr<const DelVector> Metacache::lookup_delvec(const MetacacheKey& key, bool count_stats) {
     auto handle = _segment_metadata_cache->lookup(CacheKey(key.view()));
     if (handle == nullptr) {
-        g_dv_cache_miss << 1;
+        if (count_stats) {
+            g_dv_cache_miss << 1;
+        }
         return nullptr;
     }
     DeferOp defer([this, handle]() { _segment_metadata_cache->release(handle); });
@@ -292,7 +294,9 @@ std::shared_ptr<const DelVector> Metacache::lookup_delvec(const MetacacheKey& ke
     try {
         auto value = static_cast<CacheValue*>(_segment_metadata_cache->value(handle));
         auto delvec = std::get<std::shared_ptr<const DelVector>>(*value);
-        g_dv_cache_hit << 1;
+        if (count_stats) {
+            g_dv_cache_hit << 1;
+        }
         return delvec;
     } catch (const std::bad_variant_access& e) {
         return nullptr;
