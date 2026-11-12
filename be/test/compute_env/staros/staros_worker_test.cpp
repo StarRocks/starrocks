@@ -18,6 +18,7 @@
 #include <aws/core/Aws.h>
 #include <fslib/configuration.h>
 #include <fslib/fslib_all_initializer.h>
+#include <fslib/remote_read_scheduler.h>
 #include <gflags/gflags.h>
 #include <gmock/gmock.h>
 #include <grpcpp/grpcpp.h>
@@ -45,11 +46,14 @@
 #include "common/config_metrics_fwd.h"
 #include "common/config_staros_worker_fwd.h"
 #include "common/configbase.h"
+#include "common/gflags_utils.h"
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
+#include "common/system/cpu_info.h"
 #include "common/util/table_metrics.h"
 #include "compute_env/staros/staros_worker_metrics.h"
 #include "compute_env/staros/staros_worker_runtime.h"
+#include "fs/remote_read_context.h"
 
 DECLARE_int64(fslib_s3_max_single_part_size);
 DECLARE_int64(fslib_s3_min_upload_part_size);
@@ -57,6 +61,8 @@ DECLARE_int64(fslib_gs_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_min_upload_part_size);
 DECLARE_bool(fslib_s3_multipart_equal_part_size);
+
+DECLARE_bool(fs_enable_buffer_prefetch);
 
 namespace starrocks {
 
@@ -1255,6 +1261,133 @@ TEST_F(StarOSWorkerTest, retained_starlet_outlives_shutdown_release) {
     // Touches Starlet::_mutex, the member a use-after-free would have corrupted. Under ASAN this
     // is what fails if the retained reference stops keeping the runtime alive.
     EXPECT_FALSE(held->is_ready());
+}
+
+// The remote I/O scheduler configs are only checked when the scheduler is going to run.
+TEST(RemoteIOSchedulerConfigTest, ValidateOnlyWhenEnabledWithCache) {
+    SCOPED_UPDATE(int32_t, config::remote_read_query_weight, 0);
+    SCOPED_UPDATE(int32_t, config::remote_read_io_threads, -1);
+    {
+        SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, false);
+        EXPECT_OK(validate_remote_io_scheduler_config());
+    }
+    SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, true);
+    {
+        SCOPED_UPDATE(bool, config::datacache_enable, false);
+        EXPECT_OK(validate_remote_io_scheduler_config());
+    }
+    {
+        SCOPED_UPDATE(bool, config::starlet_use_star_cache, false);
+        EXPECT_OK(validate_remote_io_scheduler_config());
+    }
+    SCOPED_UPDATE(bool, config::datacache_enable, true);
+    SCOPED_UPDATE(bool, config::starlet_use_star_cache, true);
+    EXPECT_TRUE(validate_remote_io_scheduler_config().is_invalid_argument());
+}
+
+TEST(RemoteIOSchedulerConfigTest, ValidateRejectsInvalidValues) {
+    SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, true);
+    SCOPED_UPDATE(bool, config::datacache_enable, true);
+    SCOPED_UPDATE(bool, config::starlet_use_star_cache, true);
+    EXPECT_OK(validate_remote_io_scheduler_config());
+    {
+        SCOPED_UPDATE(int32_t, config::remote_read_io_threads, -1);
+        EXPECT_TRUE(validate_remote_io_scheduler_config().is_invalid_argument());
+    }
+    for (int32_t* weight : {&config::remote_read_query_weight, &config::remote_read_load_weight,
+                            &config::remote_read_compaction_weight, &config::remote_read_background_weight}) {
+        ScopedUpdater<int32_t> zero(*weight, 0);
+        EXPECT_TRUE(validate_remote_io_scheduler_config().is_invalid_argument());
+    }
+    {
+        SCOPED_UPDATE(int32_t, config::remote_read_adaptive_min_inflight, 0);
+        EXPECT_TRUE(validate_remote_io_scheduler_config().is_invalid_argument());
+    }
+    {
+        SCOPED_UPDATE(int64_t, config::remote_read_weight_decay_ios, -1);
+        EXPECT_TRUE(validate_remote_io_scheduler_config().is_invalid_argument());
+    }
+    for (double decay_min : {0.0, -0.5, 1.5}) {
+        SCOPED_UPDATE(double, config::remote_read_weight_decay_min, decay_min);
+        EXPECT_TRUE(validate_remote_io_scheduler_config().is_invalid_argument()) << decay_min;
+    }
+    {
+        // 0 turns the decay off, and a minimum of 1 means no decay either.
+        SCOPED_UPDATE(int64_t, config::remote_read_weight_decay_ios, 0);
+        SCOPED_UPDATE(double, config::remote_read_weight_decay_min, 1.0);
+        EXPECT_OK(validate_remote_io_scheduler_config());
+    }
+}
+
+TEST(RemoteIOSchedulerConfigTest, OptionsFollowConfigs) {
+    SCOPED_UPDATE(int32_t, config::remote_read_io_threads, 0);
+    SCOPED_UPDATE(double, config::pipeline_connector_scan_thread_num_per_cpu, 2.0);
+    SCOPED_UPDATE(int32_t, config::starlet_star_cache_block_size_bytes, 1 << 20);
+    SCOPED_UPDATE(bool, config::remote_read_adaptive_limit, true);
+    SCOPED_UPDATE(int32_t, config::remote_read_adaptive_min_inflight, 8);
+    SCOPED_UPDATE(int64_t, config::remote_read_weight_decay_ios, 512);
+    SCOPED_UPDATE(double, config::remote_read_weight_decay_min, 0.25);
+    SCOPED_UPDATE(int32_t, config::remote_read_query_weight, 7);
+    SCOPED_UPDATE(int32_t, config::remote_read_load_weight, 3);
+    SCOPED_UPDATE(int32_t, config::remote_read_compaction_weight, 4);
+    SCOPED_UPDATE(int32_t, config::remote_read_background_weight, 2);
+
+    namespace fslib = staros::starlet::fslib;
+    auto opts = remote_read_scheduler_options();
+    // The automatic pool follows the lake scan threads, without any cap.
+    EXPECT_EQ(std::max(1, static_cast<int32_t>(2.0 * CpuInfo::num_cores())), opts.io_threads);
+    EXPECT_EQ(1 << 20, opts.block_bytes);
+    EXPECT_TRUE(opts.adaptive_limit);
+    EXPECT_EQ(8, opts.adaptive_min_inflight);
+    EXPECT_EQ(512, opts.weight_decay_ios);
+    EXPECT_DOUBLE_EQ(0.25, opts.weight_decay_min);
+    EXPECT_EQ(7, opts.weight(fslib::ReadWorkload::QUERY));
+    EXPECT_EQ(3, opts.weight(fslib::ReadWorkload::LOAD));
+    EXPECT_EQ(4, opts.weight(fslib::ReadWorkload::COMPACTION));
+    EXPECT_EQ(2, opts.weight(fslib::ReadWorkload::OTHER_BACKGROUND));
+
+    SCOPED_UPDATE(int32_t, config::remote_read_io_threads, 1000);
+    SCOPED_UPDATE(bool, config::remote_read_adaptive_limit, false);
+    opts = remote_read_scheduler_options();
+    EXPECT_EQ(1000, opts.io_threads);
+    EXPECT_FALSE(opts.adaptive_limit);
+}
+
+// Disabled, or without the cache, the scheduler stays off and the old read-ahead keeps its configured value.
+TEST(RemoteIOSchedulerConfigTest, EnableFallsBackWithoutSchedulerOrCache) {
+    SCOPED_UPDATE(bool, config::starlet_fs_read_prefetch_enable, true);
+    SCOPED_UPDATE(bool, config::io_coalesce_lake_read_enable, true);
+    ASSERT_FALSE(staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_enable_buffer_prefetch", "1").empty());
+    DeferOp restore([] {
+        (void)staros::starlet::common::GFlagsUtils::UpdateFlagValue(
+                "fs_enable_buffer_prefetch", std::to_string(config::starlet_fs_read_prefetch_enable));
+    });
+    {
+        SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, false);
+        EXPECT_OK(enable_remote_io_scheduler());
+    }
+    {
+        SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, true);
+        SCOPED_UPDATE(bool, config::starlet_use_star_cache, false);
+        // Not checked without the cache: the node starts on the old paths.
+        SCOPED_UPDATE(int32_t, config::remote_read_query_weight, 0);
+        EXPECT_OK(enable_remote_io_scheduler());
+    }
+    EXPECT_FALSE(remote_io_scheduler_enabled());
+    EXPECT_EQ(nullptr, staros::starlet::fslib::RemoteReadScheduler::instance());
+    EXPECT_TRUE(FLAGS_fs_enable_buffer_prefetch);
+    EXPECT_TRUE(config::io_coalesce_lake_read_enable);
+}
+
+// An invalid config refuses startup instead of falling back.
+TEST(RemoteIOSchedulerConfigTest, EnableRejectsInvalidConfig) {
+    SCOPED_UPDATE(bool, config::remote_io_scheduler_enable, true);
+    SCOPED_UPDATE(bool, config::datacache_enable, true);
+    SCOPED_UPDATE(bool, config::starlet_use_star_cache, true);
+    SCOPED_UPDATE(int32_t, config::remote_read_background_weight, 0);
+    EXPECT_TRUE(enable_remote_io_scheduler().is_invalid_argument());
+    EXPECT_FALSE(remote_io_scheduler_enabled());
+    EXPECT_EQ(nullptr, staros::starlet::fslib::RemoteReadScheduler::instance());
 }
 
 } // namespace starrocks

@@ -576,7 +576,10 @@
         "orc_coalesce_read_enable",
         "orc_natural_read_size",
         "enable_orc_libdeflate_decompression",
-        "orc_writer_version"
+        "orc_writer_version",
+        "remote_prefetch_window_blocks",
+        "remote_prefetch_late_read_ahead_ratio",
+        "starlet_star_cache_block_size_bytes"
       ]
     },
     {
@@ -715,7 +718,21 @@
         "starlet_star_cache_mem_size_percent",
         "starlet_star_cache_skip_fresh_block_checksum_verification",
         "starlet_starmgr_client_compression_type",
-        "starlet_use_star_cache"
+        "starlet_use_star_cache",
+        "datacache_enable",
+        "pipeline_connector_scan_thread_num_per_cpu",
+        "io_coalesce_lake_read_enable",
+        "remote_io_scheduler_enable",
+        "remote_read_io_threads",
+        "remote_read_adaptive_limit",
+        "remote_read_adaptive_min_inflight",
+        "remote_read_weight_decay_ios",
+        "remote_read_weight_decay_min",
+        "remote_read_query_weight",
+        "remote_read_load_weight",
+        "remote_read_compaction_weight",
+        "remote_read_background_weight",
+        "remote_prefetch_window_blocks"
       ]
     },
     {
