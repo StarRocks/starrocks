@@ -645,7 +645,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_boundless_segment_colocate_u
     splitting.add_new_tablet_ids(m->id() + 200000);
     TxnInfoPB txn_info;
     txn_info.set_colocate_column_count(1);
-    ASSIGN_OR_ABORT(auto children, lake::split_tablet(_tablet_manager.get(), m, splitting, 2, txn_info, std::nullopt));
+    ASSIGN_OR_ABORT(auto children, lake::split_tablet(_tablet_manager.get(), m, splitting, 2, txn_info));
     ASSERT_EQ(1, children.size());
     EXPECT_EQ(m->rowsets(0).SerializeAsString(), children.begin()->second->rowsets(0).SerializeAsString());
 }
@@ -685,8 +685,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_boundless_rowset_beside_boun
             *second->mutable_upper_bound() = m->range().upper_bound();
             second->set_upper_bound_included(m->range().upper_bound_included());
         }
-        ASSIGN_OR_ABORT(auto children,
-                        lake::split_tablet(_tablet_manager.get(), m, splitting, 2, TxnInfoPB(), std::nullopt));
+        ASSIGN_OR_ABORT(auto children, lake::split_tablet(_tablet_manager.get(), m, splitting, 2, TxnInfoPB()));
         ASSERT_EQ(1, children.size()) << external;
         const auto& child = children.begin()->second;
         ASSERT_EQ(2, child->rowsets_size()) << external;
