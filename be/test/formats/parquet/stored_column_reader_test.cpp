@@ -642,5 +642,119 @@ TEST_F(StoredColumnReaderTest, BenchmarkKernelsScalarVsSimdEquivalence) {
     }
 }
 
+TEST_F(StoredColumnReaderTest, BenchmarkKernelsUnalignedAndSliceSparseEquivalence) {
+    auto sparse_dict_scatter_slice_scalar = [](size_t count, const uint8_t* nulls, const Slice* src_data,
+                                               Slice* dst_data) {
+        size_t cnt = 0;
+        for (size_t i = 0; i < count; ++i) {
+            if (!nulls[i]) {
+                dst_data[i] = src_data[cnt++];
+            }
+        }
+    };
+
+    // 1. Unaligned tail counts (4099, 4103, 4111) for FLBAPlainDecoder and BatchRunCounter<32>/<16>
+    for (size_t count : {size_t{4099}, size_t{4103}, size_t{4111}}) {
+        for (size_t type_len : {size_t{8}, size_t{12}, size_t{16}}) {
+            std::string backing(count * type_len, '\0');
+            for (size_t i = 0; i < backing.size(); ++i) {
+                backing[i] = static_cast<char>('a' + (i % 26));
+            }
+            FLBAPlainDecoder decoder;
+            decoder.set_type_length(static_cast<int32_t>(type_len));
+            ASSERT_OK(decoder.set_data(Slice(backing.data(), backing.size())));
+
+            std::vector<Slice> simd_slices(count);
+            ASSERT_OK(decoder.next_batch(count, reinterpret_cast<uint8_t*>(simd_slices.data())));
+            for (size_t i = 0; i < count; ++i) {
+                EXPECT_EQ(backing.data() + i * type_len, simd_slices[i].data)
+                        << "count=" << count << " type_len=" << type_len << " i=" << i;
+                EXPECT_EQ(type_len, simd_slices[i].size) << "count=" << count << " type_len=" << type_len << " i=" << i;
+            }
+        }
+
+        for (int selectivity : {0, 50, 100}) {
+            std::vector<uint8_t> filter(count, 0);
+            if (selectivity == 100) {
+                std::fill(filter.begin(), filter.end(), 1);
+            } else if (selectivity == 50) {
+                for (size_t i = 0; i < count; ++i) {
+                    filter[i] = ((i / 32) % 3 == 0) ? 0 : (((i / 32) % 3 == 1) ? 1 : static_cast<uint8_t>(i & 1));
+                }
+            }
+
+            size_t expected_set = 0;
+            for (size_t i = 0; i < count; ++i) {
+                expected_set += (filter[i] != 0) ? 1 : 0;
+            }
+
+            auto eval_counter = [&](auto counter) {
+                size_t total_len = 0;
+                size_t set_cnt = 0;
+                size_t offset = 0;
+                BatchCount bc = counter.next_batch();
+                while (bc.length > 0) {
+                    if (bc.AllSet()) {
+                        set_cnt += bc.length;
+                    } else if (!bc.NoneSet()) {
+                        for (size_t j = 0; j < bc.length; ++j) {
+                            set_cnt += (filter[offset + j] != 0) ? 1 : 0;
+                        }
+                    }
+                    offset += bc.length;
+                    total_len += bc.length;
+                    bc = counter.next_batch();
+                }
+                EXPECT_EQ(count, total_len);
+                return set_cnt;
+            };
+
+            EXPECT_EQ(expected_set, eval_counter(BatchRunCounter<32>(filter.data(), 0, count)));
+            EXPECT_EQ(expected_set, eval_counter(BatchRunCounter<16>(filter.data(), 0, count)));
+        }
+    }
+
+    // 2. Slice dictionary values (16-byte slices) scattered through sparse (< 10% non-null) loop at 1%, 5%, 9%
+    {
+        const size_t kCount = 4096;
+        std::vector<std::string> dict_Pool(512);
+        for (size_t i = 0; i < dict_Pool.size(); ++i) {
+            dict_Pool[i] = "slice_val_" + std::to_string(i);
+        }
+
+        DictDecoder<Slice> decoder;
+        for (int density_pct : {1, 5, 9}) {
+            const size_t num_non_nulls = (kCount * static_cast<size_t>(density_pct)) / 100;
+            std::vector<uint8_t> nulls(kCount, 1);
+            std::vector<Slice> src_slices;
+            src_slices.reserve(num_non_nulls);
+            for (size_t k = 0; k < num_non_nulls; ++k) {
+                size_t pos = (k * (kCount / num_non_nulls)) + (k % 3);
+                if (pos >= kCount) pos = kCount - 1 - k;
+                while (nulls[pos] == 0) {
+                    pos = (pos + 1) % kCount;
+                }
+                nulls[pos] = 0;
+            }
+            for (size_t k = 0; k < num_non_nulls; ++k) {
+                src_slices.emplace_back(dict_Pool[k % dict_Pool.size()]);
+            }
+
+            std::vector<Slice> simd_dst(kCount, Slice("", 0));
+            std::vector<Slice> scalar_dst(kCount, Slice("", 0));
+            decoder.assign_data_with_nulls<Slice>(kCount, num_non_nulls, nulls.data(), src_slices.data(),
+                                                  simd_dst.data());
+            sparse_dict_scatter_slice_scalar(kCount, nulls.data(), src_slices.data(), scalar_dst.data());
+
+            for (size_t i = 0; i < kCount; ++i) {
+                if (!nulls[i]) {
+                    EXPECT_EQ(scalar_dst[i].data, simd_dst[i].data) << "density=" << density_pct << " i=" << i;
+                    EXPECT_EQ(scalar_dst[i].size, simd_dst[i].size) << "density=" << density_pct << " i=" << i;
+                }
+            }
+        }
+    }
+}
+
 } // namespace
 } // namespace starrocks::parquet

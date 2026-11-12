@@ -348,47 +348,53 @@ BENCHMARK(BM_ParquetBloomFilter_AddHash_Scalar)->Arg(256)->Arg(1024)->Arg(8192);
 BENCHMARK(BM_ParquetBloomFilter_AddHash_SIMD)->Arg(256)->Arg(1024)->Arg(8192);
 
 static void BM_ParquetBloomFilter_TestHash_Scalar(benchmark::State& state) {
-    size_t n = static_cast<size_t>(state.range(0));
+    int hit_regime = static_cast<int>(state.range(0));
+    constexpr size_t kNumProbes = 1024;
     constexpr uint32_t kNumBlocks = 1024;
     std::vector<uint8_t> filter_data(kNumBlocks * kBytesPerBlock, 0);
-    std::vector<uint64_t> hashes(n);
-    for (size_t i = 0; i < n; ++i) {
+    std::vector<uint64_t> hashes(kNumProbes);
+    for (size_t i = 0; i < kNumProbes; ++i) {
         hashes[i] = ((i + 1) * 0x9E3779B97F4A7C15ULL) ^ ((i + 1) << 17);
-        parquet_bloom_add_hash_scalar(filter_data.data(), kNumBlocks, hashes[i]);
+        if (hit_regime != 0) {
+            parquet_bloom_add_hash_scalar(filter_data.data(), kNumBlocks, hashes[i]);
+        }
     }
     for (auto _ : state) {
         size_t hits = 0;
-        for (size_t i = 0; i < n; ++i) {
+        for (size_t i = 0; i < kNumProbes; ++i) {
             hits += parquet_bloom_test_hash_scalar(filter_data.data(), kNumBlocks, hashes[i]);
         }
         benchmark::DoNotOptimize(hits);
     }
-    state.SetItemsProcessed(state.iterations() * n);
-    state.SetBytesProcessed(state.iterations() * n * kBytesPerBlock);
+    state.SetItemsProcessed(state.iterations() * kNumProbes);
+    state.SetBytesProcessed(state.iterations() * kNumProbes * kBytesPerBlock);
 }
 
 static void BM_ParquetBloomFilter_TestHash_SIMD(benchmark::State& state) {
-    size_t n = static_cast<size_t>(state.range(0));
+    int hit_regime = static_cast<int>(state.range(0));
+    constexpr size_t kNumProbes = 1024;
     constexpr uint32_t kNumBlocks = 1024;
     std::vector<uint8_t> filter_data(kNumBlocks * kBytesPerBlock, 0);
-    std::vector<uint64_t> hashes(n);
-    for (size_t i = 0; i < n; ++i) {
+    std::vector<uint64_t> hashes(kNumProbes);
+    for (size_t i = 0; i < kNumProbes; ++i) {
         hashes[i] = ((i + 1) * 0x9E3779B97F4A7C15ULL) ^ ((i + 1) << 17);
-        parquet_bloom_add_hash_simd(filter_data.data(), kNumBlocks, hashes[i]);
+        if (hit_regime != 0) {
+            parquet_bloom_add_hash_simd(filter_data.data(), kNumBlocks, hashes[i]);
+        }
     }
     for (auto _ : state) {
         size_t hits = 0;
-        for (size_t i = 0; i < n; ++i) {
+        for (size_t i = 0; i < kNumProbes; ++i) {
             hits += parquet_bloom_test_hash_simd(filter_data.data(), kNumBlocks, hashes[i]);
         }
         benchmark::DoNotOptimize(hits);
     }
-    state.SetItemsProcessed(state.iterations() * n);
-    state.SetBytesProcessed(state.iterations() * n * kBytesPerBlock);
+    state.SetItemsProcessed(state.iterations() * kNumProbes);
+    state.SetBytesProcessed(state.iterations() * kNumProbes * kBytesPerBlock);
 }
 
-BENCHMARK(BM_ParquetBloomFilter_TestHash_Scalar)->Arg(256)->Arg(1024)->Arg(8192);
-BENCHMARK(BM_ParquetBloomFilter_TestHash_SIMD)->Arg(256)->Arg(1024)->Arg(8192);
+BENCHMARK(BM_ParquetBloomFilter_TestHash_Scalar)->Arg(0)->Arg(1);
+BENCHMARK(BM_ParquetBloomFilter_TestHash_SIMD)->Arg(0)->Arg(1);
 
 // =====================================================================
 // stored_column_reader :: count_not_null
@@ -702,6 +708,41 @@ static void BM_DictAssignSparseNulls_SIMD(benchmark::State& state) {
 BENCHMARK(BM_DictAssignSparseNulls_Scalar)->Args({4096, 1})->Args({4096, 5})->Args({4096, 9});
 BENCHMARK(BM_DictAssignSparseNulls_SIMD)->Args({4096, 1})->Args({4096, 5})->Args({4096, 9});
 
+static void BM_DictAssignSparseNullsSlice_Scalar(benchmark::State& state) {
+    size_t count = static_cast<size_t>(state.range(0));
+    int non_null_pct = static_cast<int>(state.range(1));
+    std::vector<uint8_t> nulls;
+    size_t num_non_nulls = prepare_sparse_nulls(nulls, count, non_null_pct);
+    static constexpr char kSamplePayload[] = "0123456789abcdef";
+    std::vector<Slice> src(num_non_nulls, Slice(kSamplePayload, 16));
+    std::vector<Slice> dst(count, Slice("", 0));
+    for (auto _ : state) {
+        dict_assign_sparse_nulls_scalar<Slice>(count, nulls.data(), src.data(), dst.data());
+        benchmark::DoNotOptimize(dst.data());
+    }
+    state.SetItemsProcessed(state.iterations() * count);
+    state.SetBytesProcessed(state.iterations() * count * sizeof(Slice));
+}
+
+static void BM_DictAssignSparseNullsSlice_SIMD(benchmark::State& state) {
+    size_t count = static_cast<size_t>(state.range(0));
+    int non_null_pct = static_cast<int>(state.range(1));
+    std::vector<uint8_t> nulls;
+    size_t num_non_nulls = prepare_sparse_nulls(nulls, count, non_null_pct);
+    static constexpr char kSamplePayload[] = "0123456789abcdef";
+    std::vector<Slice> src(num_non_nulls, Slice(kSamplePayload, 16));
+    std::vector<Slice> dst(count, Slice("", 0));
+    for (auto _ : state) {
+        dict_assign_sparse_nulls_simd<Slice>(count, nulls.data(), src.data(), dst.data());
+        benchmark::DoNotOptimize(dst.data());
+    }
+    state.SetItemsProcessed(state.iterations() * count);
+    state.SetBytesProcessed(state.iterations() * count * sizeof(Slice));
+}
+
+BENCHMARK(BM_DictAssignSparseNullsSlice_Scalar)->Args({4096, 1})->Args({4096, 5})->Args({4096, 9});
+BENCHMARK(BM_DictAssignSparseNullsSlice_SIMD)->Args({4096, 1})->Args({4096, 5})->Args({4096, 9});
+
 // =====================================================================
 // FLBAPlainDecoder :: next_batch(size_t count, uint8_t* dst)
 // =====================================================================
@@ -794,8 +835,18 @@ static void BM_FLBAPlainDecode_SIMD(benchmark::State& state) {
     state.SetBytesProcessed(state.iterations() * count * sizeof(Slice));
 }
 
-BENCHMARK(BM_FLBAPlainDecode_Scalar)->Args({4096, 8})->Args({4096, 12})->Args({4096, 16});
-BENCHMARK(BM_FLBAPlainDecode_SIMD)->Args({4096, 8})->Args({4096, 12})->Args({4096, 16});
+BENCHMARK(BM_FLBAPlainDecode_Scalar)
+        ->Args({4096, 8})
+        ->Args({4096, 12})
+        ->Args({4096, 16})
+        ->Args({4099, 8})
+        ->Args({4099, 16});
+BENCHMARK(BM_FLBAPlainDecode_SIMD)
+        ->Args({4096, 8})
+        ->Args({4096, 12})
+        ->Args({4096, 16})
+        ->Args({4099, 8})
+        ->Args({4099, 16});
 
 } // namespace starrocks
 

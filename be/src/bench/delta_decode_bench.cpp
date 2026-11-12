@@ -32,7 +32,7 @@ static void BM_int32_avx512_prefix_sum(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations() * size);
     state.SetBytesProcessed(state.iterations() * size * sizeof(int32_t));
 }
-BENCHMARK(BM_int32_avx512_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+BENCHMARK(BM_int32_avx512_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024)->Arg(4099)->Arg(8195)->Arg(32771);
 
 #endif
 
@@ -47,7 +47,7 @@ static void BM_int32_avx2_prefix_sum(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations() * size);
     state.SetBytesProcessed(state.iterations() * size * sizeof(int32_t));
 }
-BENCHMARK(BM_int32_avx2_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+BENCHMARK(BM_int32_avx2_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024)->Arg(4099)->Arg(8195)->Arg(32771);
 #endif
 
 #if defined(__AVX512F__) && defined(__AVX512VL__)
@@ -61,7 +61,7 @@ static void BM_int32_avx2x_prefix_sum(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations() * size);
     state.SetBytesProcessed(state.iterations() * size * sizeof(int32_t));
 }
-BENCHMARK(BM_int32_avx2x_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+BENCHMARK(BM_int32_avx2x_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024)->Arg(4099)->Arg(8195)->Arg(32771);
 
 #endif
 
@@ -76,7 +76,7 @@ static void BM_int32_neon_prefix_sum(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations() * size);
     state.SetBytesProcessed(state.iterations() * size * sizeof(int32_t));
 }
-BENCHMARK(BM_int32_neon_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+BENCHMARK(BM_int32_neon_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024)->Arg(4099)->Arg(8195)->Arg(32771);
 
 static void BM_int64_neon_prefix_sum(benchmark::State& state) {
     int64_t size = state.range(0);
@@ -88,7 +88,7 @@ static void BM_int64_neon_prefix_sum(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations() * size);
     state.SetBytesProcessed(state.iterations() * size * sizeof(int64_t));
 }
-BENCHMARK(BM_int64_neon_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+BENCHMARK(BM_int64_neon_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024)->Arg(4099)->Arg(8195)->Arg(32771);
 #endif
 
 static void BM_int32_native_prefix_sum(benchmark::State& state) {
@@ -113,7 +113,7 @@ static void BM_int64_avx512_prefix_sum(benchmark::State& state) {
     state.SetItemsProcessed(state.iterations() * size);
     state.SetBytesProcessed(state.iterations() * size * sizeof(int64_t));
 }
-BENCHMARK(BM_int64_avx512_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+BENCHMARK(BM_int64_avx512_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024)->Arg(4099)->Arg(8195)->Arg(32771);
 
 #endif
 
@@ -128,8 +128,8 @@ static void BM_int64_native_prefix_sum(benchmark::State& state) {
     state.SetBytesProcessed(state.iterations() * size * sizeof(int64_t));
 }
 
-BENCHMARK(BM_int32_native_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
-BENCHMARK(BM_int64_native_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+BENCHMARK(BM_int32_native_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024)->Arg(4099)->Arg(8195)->Arg(32771);
+BENCHMARK(BM_int64_native_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024)->Arg(4099)->Arg(8195)->Arg(32771);
 
 static void BM_contains_negative_value_scalar(benchmark::State& state) {
     int size = static_cast<int>(state.range(0));
@@ -153,8 +153,18 @@ static void BM_contains_negative_value_simd(benchmark::State& state) {
     state.SetBytesProcessed(state.iterations() * size * sizeof(int32_t));
 }
 
-BENCHMARK(BM_contains_negative_value_scalar)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
-BENCHMARK(BM_contains_negative_value_simd)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+BENCHMARK(BM_contains_negative_value_scalar)
+        ->RangeMultiplier(2)
+        ->Range(4 * 1024, 32 * 1024)
+        ->Arg(4099)
+        ->Arg(8195)
+        ->Arg(32771);
+BENCHMARK(BM_contains_negative_value_simd)
+        ->RangeMultiplier(2)
+        ->Range(4 * 1024, 32 * 1024)
+        ->Arg(4099)
+        ->Arg(8195)
+        ->Arg(32771);
 
 } // namespace starrocks
 
