@@ -14,7 +14,10 @@
 
 package com.starrocks.connector.parser.trino;
 
+import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,8 +56,10 @@ public class TrinoTimestampWithTimeZoneTest extends TrinoTestBase {
         connectContext.getSessionVariable().setTimeZone(timeZone);
     }
 
+    // A literal in a zone other than the session time zone is only supported where its instant is read, such as a
+    // comparison
     private void assertLiteral(String literal, String expected) throws Exception {
-        assertPlanContains("select TIMESTAMP '" + literal + "'", "'" + expected + "'");
+        assertPlanContains("select * from tall where th = TIMESTAMP '" + literal + "'", "'" + expected + "'");
     }
 
     // https://trino.io/docs/current/language/types.html#timestamp-with-time-zone
@@ -103,24 +108,26 @@ public class TrinoTimestampWithTimeZoneTest extends TrinoTestBase {
         boolean origin = connectContext.getSessionVariable().isDisableFunctionFoldConstants();
         connectContext.getSessionVariable().setDisableFunctionFoldConstants(true);
         try {
-            assertPlanContains("select TIMESTAMP '2001-08-22 03:04:05 Z'", "convert_tz('2001-08-22 03:04:05', 'UTC'");
-            assertPlanContains("select TIMESTAMP '2001-08-22 03:04:05 UT'", "convert_tz('2001-08-22 03:04:05', 'UTC'");
-            assertPlanContains("select TIMESTAMP '2001-08-22 03:04:05 GMT-08:30'",
+            assertPlanContains("select * from tall where th = TIMESTAMP '2001-08-22 03:04:05 Z'",
+                    "convert_tz('2001-08-22 03:04:05', 'UTC'");
+            assertPlanContains("select * from tall where th = TIMESTAMP '2001-08-22 03:04:05 UT'",
+                    "convert_tz('2001-08-22 03:04:05', 'UTC'");
+            assertPlanContains("select * from tall where th = TIMESTAMP '2001-08-22 03:04:05 GMT-08:30'",
                     "convert_tz('2001-08-22 03:04:05', '-08:30'");
-            assertPlanContains("select TIMESTAMP '2001-08-22 03:04:05 +07:09'",
+            assertPlanContains("select * from tall where th = TIMESTAMP '2001-08-22 03:04:05 +07:09'",
                     "convert_tz('2001-08-22 03:04:05', '+07:09'");
-            assertPlanContains("select TIMESTAMP '2001-08-22 03:04:05 Asia/Kathmandu'",
+            assertPlanContains("select * from tall where th = TIMESTAMP '2001-08-22 03:04:05 Asia/Kathmandu'",
                     "convert_tz('2001-08-22 03:04:05', '+05:45'");
             // ambiguous wall clock in a DST fall-back takes the earlier offset (PDT)
-            assertPlanContains("select TIMESTAMP '2024-11-03 01:30:00 America/Los_Angeles'",
+            assertPlanContains("select * from tall where th = TIMESTAMP '2024-11-03 01:30:00 America/Los_Angeles'",
                     "convert_tz('2024-11-03 01:30:00', '-07:00'");
             // local mean time has an offset with seconds, keep the zone id
-            assertPlanContains("select TIMESTAMP '1500-05-01 12:34:56 Asia/Kathmandu'",
+            assertPlanContains("select * from tall where th = TIMESTAMP '1500-05-01 12:34:56 Asia/Kathmandu'",
                     "convert_tz('1500-05-01 12:34:56', 'Asia/Kathmandu'");
             // local mean time -14:21 is outside the offsets BE parses, keep the zone id
-            assertPlanContains("select TIMESTAMP '1800-01-01 00:00:00 Pacific/Guam'",
+            assertPlanContains("select * from tall where th = TIMESTAMP '1800-01-01 00:00:00 Pacific/Guam'",
                     "convert_tz('1800-01-01 00:00:00', 'Pacific/Guam'");
-            assertPlanContains("select TIMESTAMP '2001-08-22 03:04:05 -12:30'",
+            assertPlanContains("select * from tall where th = TIMESTAMP '2001-08-22 03:04:05 -12:30'",
                     "convert_tz('2001-08-22 03:04:05', '-12:30'");
         } finally {
             connectContext.getSessionVariable().setDisableFunctionFoldConstants(origin);
@@ -173,12 +180,13 @@ public class TrinoTimestampWithTimeZoneTest extends TrinoTestBase {
     public void testAtTimeZone() throws Exception {
         for (String timeZone : SESSION_TIME_ZONES) {
             setTimeZone(timeZone);
-            assertPlanContains("select TIMESTAMP '2012-10-31 01:00 UTC' AT TIME ZONE 'America/Los_Angeles'",
-                    "'2012-10-30 18:00:00'");
-            assertPlanContains("select at_timezone(TIMESTAMP '2020-05-01 12:34:56 +07:09', 'America/Los_Angeles')",
-                    "'2020-04-30 22:25:56'");
-            assertPlanContains("select at_timezone(TIMESTAMP '2020-05-01 12:34:56.123456 +07:09', " +
-                    "'America/Los_Angeles')", "'2020-04-30 22:25:56.123456'");
+            // the converted value is the wall clock in the target zone, so read it as one
+            assertPlanContains("select cast(TIMESTAMP '2012-10-31 01:00 UTC' AT TIME ZONE 'America/Los_Angeles' " +
+                    "AS TIMESTAMP)", "'2012-10-30 18:00:00'");
+            assertPlanContains("select cast(at_timezone(TIMESTAMP '2020-05-01 12:34:56 +07:09', " +
+                    "'America/Los_Angeles') AS TIMESTAMP)", "'2020-04-30 22:25:56'");
+            assertPlanContains("select cast(at_timezone(TIMESTAMP '2020-05-01 12:34:56.123456 +07:09', " +
+                    "'America/Los_Angeles') AS TIMESTAMP)", "'2020-04-30 22:25:56.123456'");
         }
     }
 
@@ -194,12 +202,59 @@ public class TrinoTimestampWithTimeZoneTest extends TrinoTestBase {
             // America/Sao_Paulo skipped midnight on 2018-11-04; Trino's date_trunc moves to the end of the gap
             assertPlanContains("select cast(date_trunc('day', TIMESTAMP '2018-11-04 12:00:00 America/Sao_Paulo') " +
                     "AS TIMESTAMP)", "'2018-11-04 01:00:00'");
+            // COALESCE, IF and CASE return one of their operands with its zone
+            assertPlanContains("select cast(coalesce(TIMESTAMP '2024-01-01 00:00:00 Asia/Tokyo', NULL) AS DATE)",
+                    "'2024-01-01");
+            assertPlanContains("select cast(CASE WHEN rand() > 0.5 THEN TIMESTAMP '2024-01-01 00:00:00 Asia/Tokyo' " +
+                    "END AS DATE)", "'2024-01-01 00:00:00'");
         }
-        // Elsewhere date_trunc would truncate in the session time zone, unless it is the literal's, with a fixed offset
+    }
+
+    // Elsewhere a literal is the session-time-zone wall clock of its instant, which differs from Trino unless the
+    // literal's zone is the session time zone, with a fixed offset
+    @Test
+    public void testOnlyInstantConsumersOutsideSessionTimeZone() throws Exception {
         setTimeZone("UTC");
-        analyzeFail("select date_trunc('day', TIMESTAMP '2024-01-01 05:00:00 Asia/Tokyo')",
-                "date_trunc of a TIMESTAMP literal with a time zone");
+        String unsupported = "TIMESTAMP literal with a time zone other than the session time zone";
+        analyzeFail("select TIMESTAMP '2024-01-01 05:00:00 Asia/Tokyo'", unsupported);
+        analyzeFail("select date_trunc('day', TIMESTAMP '2024-01-01 05:00:00 Asia/Tokyo')", unsupported);
+        analyzeFail("select * from tall where th >= TIMESTAMP '2024-03-09 12:00:00 America/New_York' + " +
+                "INTERVAL '1' DAY", unsupported);
+        analyzeFail("select * from (VALUES TIMESTAMP '2024-01-01 00:00:00 Asia/Tokyo') t(x)", unsupported);
+        analyzeFail("select TIMESTAMP '2024-01-01 00:00:00 Asia/Tokyo' AT TIME ZONE 'America/Los_Angeles'",
+                unsupported);
+        assertPlanContains("select * from tall where th BETWEEN TIMESTAMP '2024-01-01 00:00:00 Asia/Tokyo' AND " +
+                "TIMESTAMP '2024-01-02 00:00:00 Asia/Tokyo'", "'2023-12-31 15:00:00'");
+        assertPlanContains("select * from tall where th IN (TIMESTAMP '2024-01-01 00:00:00 Asia/Tokyo')",
+                "'2023-12-31 15:00:00'");
+        assertPlanContains("select * from tall where th >= coalesce(TIMESTAMP '2024-01-01 00:00:00 Asia/Tokyo', th)",
+                "'2023-12-31 15:00:00'");
+        assertPlanContains("select * from tall where th >= at_timezone(TIMESTAMP '2024-01-01 00:00:00 Asia/Tokyo', " +
+                "'UTC')", "'2023-12-31 15:00:00'");
+        assertPlanContains("select TIMESTAMP '2024-01-01 05:00:00 UTC'", "'2024-01-01 05:00:00'");
+        // The query fails rather than being parsed again as StarRocks SQL
+        boolean enableDialectDowngrade = connectContext.getSessionVariable().isEnableDialectDowngrade();
+        try {
+            connectContext.getSessionVariable().setEnableDialectDowngrade(true);
+            String sql = "select TIMESTAMP '2024-01-01 05:00:00 Asia/Tokyo'";
+            UnsupportedException e = Assertions.assertThrows(UnsupportedException.class,
+                    () -> SqlParser.parse(sql, connectContext.getSessionVariable()));
+            Assertions.assertTrue(e.getMessage().contains(unsupported), e.getMessage());
+        } finally {
+            connectContext.getSessionVariable().setEnableDialectDowngrade(enableDialectDowngrade);
+        }
         assertPlanContains("select date_trunc('day', TIMESTAMP '2024-01-01 05:00:00 UTC')", "'2024-01-01 00:00:00'");
+    }
+
+    // 08:30 and 09:30 UTC on 2024-11-03 are both 01:30 in America/Los_Angeles, so the session wall clock would make
+    // them equal
+    @Test
+    public void testRepeatedSessionWallClock() throws Exception {
+        setTimeZone("America/Los_Angeles");
+        analyzeFail("select TIMESTAMP '2024-11-03 08:30:00 UTC' = TIMESTAMP '2024-11-03 09:30:00 UTC'",
+                "repeats its wall-clock time");
+        assertLiteral("2024-11-03 07:30:00 UTC", "2024-11-03 00:30:00");
+        assertPlanContains("select cast(TIMESTAMP '2024-11-03 09:30:00 UTC' AS TIMESTAMP)", "'2024-11-03 09:30:00'");
     }
 
     @Test
