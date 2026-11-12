@@ -74,11 +74,11 @@ uint32_t read_uint(std::string_view bytes, size_t offset, uint8_t width) {
 }
 
 // VariantRowValue::validate_metadata checks the version/minimum size, but does not validate the
-// dictionary offsets, UTF-8, uniqueness, or trailing bytes. Do those before using any accessor.
+// dictionary offsets, UTF-8, sorted-string guarantees, or trailing bytes. Check those before using any accessor.
 StatusOr<std::vector<std::string_view>> validate_variant_metadata(std::string_view metadata) {
     RETURN_IF_ERROR(VariantRowValue::validate_metadata(metadata));
     const uint8_t header = static_cast<uint8_t>(metadata[0]);
-    if ((header & 0x20) != 0) return Status::InvalidArgument("Reserved VARIANT metadata header bit");
+    // Metadata bit 5 is reserved and must be ignored by readers.
     const uint8_t width = (header >> 6) + 1;
     if (metadata.size() < size_t{1} + width) return Status::InvalidArgument("Truncated VARIANT dictionary size");
     const uint32_t count = read_uint(metadata, 1, width);
@@ -91,7 +91,6 @@ StatusOr<std::vector<std::string_view>> validate_variant_metadata(std::string_vi
     }
     std::vector<std::string_view> keys;
     keys.reserve(count);
-    std::unordered_set<std::string_view> unique;
     for (uint32_t i = 0; i < count; ++i) {
         const uint32_t begin = read_uint(metadata, 1 + size_t{width} * (i + 1), width);
         const uint32_t end = read_uint(metadata, 1 + size_t{width} * (size_t{i} + 2), width);
@@ -99,8 +98,8 @@ StatusOr<std::vector<std::string_view>> validate_variant_metadata(std::string_vi
             return Status::InvalidArgument("Invalid VARIANT dictionary offset");
         }
         const auto key = metadata.substr(data_start + begin, end - begin);
-        if (!validate_utf8(key.data(), key.size()) || !unique.emplace(key).second ||
-            ((header & 0x10) != 0 && !keys.empty() && keys.back() >= key)) {
+        // Only sorted_strings=1 requires the dictionary to be sorted and unique.
+        if (!validate_utf8(key.data(), key.size()) || ((header & 0x10) != 0 && !keys.empty() && keys.back() >= key)) {
             return Status::InvalidArgument("Invalid VARIANT dictionary string or ordering");
         }
         keys.emplace_back(key);
