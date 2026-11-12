@@ -5619,6 +5619,51 @@ TEST_F(FileReaderTest, test_read_variant_shredding_keeps_empty_objects) {
     EXPECT_EQ(R"({"p":{}})", variant_row_json(variant_col, 3));
 }
 
+// A shredded scalar field that has both `value` and `typed_value` set is invalid per the shredding spec. Reading it
+// must fail instead of silently dropping `value`.
+TEST_F(FileReaderTest, test_read_variant_shredding_rejects_value_and_typed_value_conflict) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_conflict.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    // The shredded columns are read in get_next, but accept an error from init too.
+    Status status = file_reader->init(&ctx->format_scan_context);
+    if (status.ok()) {
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+        status = file_reader->get_next(&chunk);
+    }
+    ASSERT_FALSE(status.ok());
+    EXPECT_NE(status.message().find("value and typed_value are both set"), std::string::npos) << status.message();
+    EXPECT_NE(status.message().find("'x'"), std::string::npos) << status.message();
+}
+
+// A scalar top-level `value` next to a present object typed_value group whose fields are all null (an empty partially
+// shredded object) is invalid too: the present group alone counts as shredded fields.
+TEST_F(FileReaderTest, test_read_variant_shredding_rejects_non_object_value_with_empty_object) {
+    const std::string variant_file_path =
+            "./be/test/formats/parquet/test_data/variant_shredding_empty_object_conflict.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    if (status.ok()) {
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+        status = file_reader->get_next(&chunk);
+    }
+    ASSERT_FALSE(status.ok());
+    EXPECT_NE(status.message().find("non-object value with shredded fields at the top level at row 1"),
+              std::string::npos)
+            << status.message();
+}
+
 // A list of shredded variants whose typed_value is an object. The levels of the leaves below the variants have one entry
 // per element, so they cannot tell the presence of an object per row: the column must still read as before.
 TEST_F(FileReaderTest, test_read_variant_shredding_in_array_reads_objects_with_variant_null_rows) {

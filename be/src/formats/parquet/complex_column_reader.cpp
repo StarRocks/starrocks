@@ -1054,6 +1054,170 @@ static void _clear_shredded_field_node_columns(ShreddedFieldNode* node) {
     }
 }
 
+// The shredding spec requires `value` to be null wherever a scalar `typed_value` is set; only objects may have both.
+// Reading such a row would silently let typed_value win and drop `value`, so fail on it. This runs after a node's columns
+// are read, so it only inspects data that the query actually uses.
+static Status _check_shredded_scalar_node_no_conflict(const ShreddedFieldNode& node) {
+    if (node.kind != ShreddedFieldNode::Kind::SCALAR || node.value_column == nullptr ||
+        node.typed_value_column == nullptr) {
+        return Status::OK();
+    }
+    const size_t num_rows = node.typed_value_column->size();
+    for (size_t row = 0; row < num_rows; ++row) {
+        const Column* typed_data = nullptr;
+        size_t typed_row = 0;
+        if (!ParquetUtils::get_non_null_data_column_and_row(node.typed_value_column.get(), row, &typed_data,
+                                                            &typed_row)) {
+            continue;
+        }
+        Slice fallback;
+        if (ColumnHelper::get_binary_slice_at(node.value_column.get(), row, &fallback) && fallback.size > 0) {
+            return Status::Corruption(strings::Substitute(
+                    "invalid shredded VARIANT: value and typed_value are both set for field '$0' at row $1",
+                    node.full_path, row));
+        }
+    }
+    return Status::OK();
+}
+
+// Whether `node`, or anything below it, holds a value in `row`: its own fallback `value`, a typed value, or an object
+// group that is present. An ARRAY node counts by its typed list only: its children are element-indexed.
+static bool _shredded_node_has_content(const ShreddedFieldNode& node, size_t row) {
+    Slice fallback;
+    if (node.value_column != nullptr && ColumnHelper::get_binary_slice_at(node.value_column.get(), row, &fallback) &&
+        fallback.size > 0) {
+        return true;
+    }
+    const Column* typed_data = nullptr;
+    size_t typed_row = 0;
+    if (node.typed_value_column != nullptr &&
+        ParquetUtils::get_non_null_data_column_and_row(node.typed_value_column.get(), row, &typed_data, &typed_row)) {
+        return true;
+    }
+    if (node.presence != nullptr && node.presence->is_present(row)) {
+        return true;
+    }
+    if (node.kind == ShreddedFieldNode::Kind::ARRAY) {
+        return false;
+    }
+    for (const auto& child : node.children) {
+        if (_shredded_node_has_content(child, row)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool _has_non_empty_binary(const Column* column, size_t row) {
+    Slice slice;
+    return column != nullptr && ColumnHelper::get_binary_slice_at(column, row, &slice) && slice.size > 0;
+}
+
+// An array element must not have both `value` and a scalar `typed_value`, like any other scalar.
+static Status _check_shredded_array_elements_no_conflict(const ShreddedFieldNode& node) {
+    if (node.kind != ShreddedFieldNode::Kind::ARRAY || !node.scalar_array_layout ||
+        node.typed_value_column == nullptr || node.array_element_value_column == nullptr) {
+        return Status::OK();
+    }
+    const size_t num_rows = node.typed_value_column->size();
+    for (size_t row = 0; row < num_rows; ++row) {
+        const Column* typed_list = nullptr;
+        const Column* value_list = nullptr;
+        size_t typed_row = 0;
+        size_t value_row = 0;
+        if (!ParquetUtils::get_non_null_data_column_and_row(node.typed_value_column.get(), row, &typed_list,
+                                                            &typed_row) ||
+            !ParquetUtils::get_non_null_data_column_and_row(node.array_element_value_column.get(), row, &value_list,
+                                                            &value_row) ||
+            !typed_list->is_array() || !value_list->is_array()) {
+            continue;
+        }
+        const auto* typed_array = down_cast<const ArrayColumn*>(typed_list);
+        const auto* value_array = down_cast<const ArrayColumn*>(value_list);
+        const auto& typed_offsets = typed_array->offsets().get_data();
+        const auto& value_offsets = value_array->offsets().get_data();
+        const size_t count = std::min<size_t>(typed_offsets[typed_row + 1] - typed_offsets[typed_row],
+                                              value_offsets[value_row + 1] - value_offsets[value_row]);
+        for (size_t i = 0; i < count; ++i) {
+            const Column* typed_data = nullptr;
+            size_t typed_element_row = 0;
+            if (ParquetUtils::get_non_null_data_column_and_row(typed_array->elements_column().get(),
+                                                               typed_offsets[typed_row] + i, &typed_data,
+                                                               &typed_element_row) &&
+                _has_non_empty_binary(value_array->elements_column().get(), value_offsets[value_row] + i)) {
+                return Status::Corruption(strings::Substitute(
+                        "invalid shredded VARIANT: value and typed_value are both set for element $0 of '$1' at row $2",
+                        i, node.full_path, row));
+            }
+        }
+    }
+    return Status::OK();
+}
+
+// The `value` of a row that has shredded object fields must be an object (basic type 2) or absent: the fields could
+// not be merged into anything else. Rows that have neither the object group nor any field are not concerned.
+static bool _variant_value_is_object(const Slice& value) {
+    return value.size > 0 && (static_cast<uint8_t>(value.data[0]) & 0x03) == 2;
+}
+
+static Status _check_shredded_object_value_is_object(const ShreddedFieldNode& node) {
+    if (node.kind == ShreddedFieldNode::Kind::ARRAY || node.children.empty() || node.value_column == nullptr) {
+        return Status::OK();
+    }
+    const size_t num_rows = node.value_column->size();
+    for (size_t row = 0; row < num_rows; ++row) {
+        Slice value;
+        if (!ColumnHelper::get_binary_slice_at(node.value_column.get(), row, &value) || value.size == 0 ||
+            _variant_value_is_object(value)) {
+            continue;
+        }
+        bool has_fields = node.presence != nullptr && node.presence->is_present(row);
+        for (const auto& child : node.children) {
+            has_fields = has_fields || _shredded_node_has_content(child, row);
+        }
+        if (has_fields) {
+            return Status::Corruption(strings::Substitute(
+                    "invalid shredded VARIANT: non-object value with shredded fields for '$0' at row $1",
+                    node.full_path, row));
+        }
+    }
+    return Status::OK();
+}
+
+// The same rules for the top level of the variant, where `value` is a column of the variant group: a scalar or array
+// typed_value excludes `value`, and an object typed_value only goes with an object `value`.
+static Status _check_root_value_conflicts(const BinaryColumn* value_column, ImmutableNullData value_nulls,
+                                          const Column* root_typed_value_column,
+                                          const std::vector<ShreddedFieldNode>& shredded_fields,
+                                          const ObjectPresenceSource* root_presence) {
+    const size_t num_rows = value_column->size();
+    for (size_t row = 0; row < num_rows; ++row) {
+        if (value_nulls[row] || value_column->get_slice(row).size == 0) {
+            continue;
+        }
+        const Column* typed_data = nullptr;
+        size_t typed_row = 0;
+        if (root_typed_value_column != nullptr &&
+            ParquetUtils::get_non_null_data_column_and_row(root_typed_value_column, row, &typed_data, &typed_row)) {
+            return Status::Corruption(strings::Substitute(
+                    "invalid shredded VARIANT: value and typed_value are both set at the top level at row $0", row));
+        }
+        if (_variant_value_is_object(value_column->get_slice(row))) {
+            continue;
+        }
+        // A present root object group counts even when every field is null: the value is then an empty object.
+        bool has_fields = root_presence != nullptr && root_presence->is_present(row);
+        for (const auto& node : shredded_fields) {
+            has_fields = has_fields || _shredded_node_has_content(node, row);
+        }
+        if (has_fields) {
+            return Status::Corruption(strings::Substitute(
+                    "invalid shredded VARIANT: non-object value with shredded fields at the top level at row $0", row));
+        }
+    }
+    return Status::OK();
+}
+
 static Status _read_shredded_field_node(const Range<uint64_t>& range, const Filter* filter, ShreddedFieldNode* node,
                                         const std::vector<VariantPath>* requested_paths) {
     if (node == nullptr) {
@@ -1064,6 +1228,9 @@ static Status _read_shredded_field_node(const Range<uint64_t>& range, const Filt
         return Status::OK();
     }
     const bool read_node_columns = _should_read_shredded_field_node_columns(*node, requested_paths);
+    if (read_node_columns && node->typed_value_reader != nullptr && !node->unsupported_reason.empty()) {
+        return Status::NotSupported(strings::Substitute("$0, path=$1", node->unsupported_reason, node->full_path));
+    }
     // All-null fallback `value` has no usable remain payload for any row in this row group.
     // Keep value_column as nullptr so downstream reconstruction treats it the same as
     // "no fallback payload", while still reading typed_value/children normally.
@@ -1105,12 +1272,14 @@ static Status _read_shredded_field_node(const Range<uint64_t>& range, const Filt
     } else if (node->presence != nullptr) {
         node->presence->present.clear();
     }
+    RETURN_IF_ERROR(_check_shredded_scalar_node_no_conflict(*node));
+    RETURN_IF_ERROR(_check_shredded_array_elements_no_conflict(*node));
     const std::vector<VariantPath>* child_requested_paths =
             _child_requested_paths(*node, read_node_columns, requested_paths);
     for (auto& child : node->children) {
         RETURN_IF_ERROR(_read_shredded_field_node(range, filter, &child, child_requested_paths));
     }
-    return Status::OK();
+    return _check_shredded_object_value_is_object(*node);
 }
 
 static void _collect_shredded_field_io_range(const ShreddedFieldNode& node,
@@ -2196,34 +2365,6 @@ static void build_has_typed_value_bitmap(const std::vector<ShreddedFieldNode>& s
     }
 }
 
-// Whether `node`, or anything below it, holds a value in `row`: its own fallback `value`, a typed value, or an object
-// group that is present. An ARRAY node counts by its typed list only: its children are element-indexed.
-static bool _shredded_node_has_content(const ShreddedFieldNode& node, size_t row) {
-    Slice fallback;
-    if (node.value_column != nullptr && ColumnHelper::get_binary_slice_at(node.value_column.get(), row, &fallback) &&
-        fallback.size > 0) {
-        return true;
-    }
-    const Column* typed_data = nullptr;
-    size_t typed_row = 0;
-    if (node.typed_value_column != nullptr &&
-        ParquetUtils::get_non_null_data_column_and_row(node.typed_value_column.get(), row, &typed_data, &typed_row)) {
-        return true;
-    }
-    if (node.presence != nullptr && node.presence->is_present(row)) {
-        return true;
-    }
-    if (node.kind == ShreddedFieldNode::Kind::ARRAY) {
-        return false;
-    }
-    for (const auto& child : node.children) {
-        if (_shredded_node_has_content(child, row)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 // Whether the binary `value` column holds a non-empty value in `row`.
 static bool _fallback_value_present(const Column* column, size_t row) {
     Slice slice;
@@ -2837,6 +2978,9 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     if (_top_level.root_typed_value_reader != nullptr) {
         DCHECK(!_skip_base_payload);
         DCHECK(_top_level.root_typed_value_type != nullptr);
+        if (!_top_level.root_unsupported_reason.empty()) {
+            return Status::NotSupported(_top_level.root_unsupported_reason);
+        }
         _top_level.root_typed_value_column = ColumnHelper::create_column(*_top_level.root_typed_value_type, true);
         RETURN_IF_ERROR(
                 _top_level.root_typed_value_reader->read_range(range, filter, _top_level.root_typed_value_column));
@@ -2864,6 +3008,8 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     const auto* value_column = down_cast<const BinaryColumn*>(value_nullable->data_column().get());
     const auto& metadata_nulls = metadata_nullable->null_column()->get_data();
     const auto& value_nulls = value_nullable->null_column()->get_data();
+    RETURN_IF_ERROR(_check_root_value_conflicts(value_column, value_nulls, _top_level.root_typed_value_column.get(),
+                                                _shredded_fields, _top_level.root_presence.get()));
     // Verify metadata and value columns are aligned
     DCHECK_EQ(metadata_column->size(), value_column->size());
     DCHECK_EQ(metadata_nulls.size(), value_nulls.size());
