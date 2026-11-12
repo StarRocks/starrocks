@@ -4,8 +4,6 @@ keywords: ['FE', 'Coordinator Node','memory', 'OOM', 'JVM', 'troubleshooting', '
 description: "Prevent 'FE memory full' issues, quickly recover, and find out the cause as much as possible to prevent recurrence."
 ---
 
-import MetaRecv from '../_assets/best_practices/fe_mem_meta_recv.mdx'
-import MetaRecvStep from '../_assets/best_practices/fe_mem_meta_recv_step.mdx'
 
 # FE / Coordinator Node memory full issue troubleshooting
 
@@ -208,7 +206,7 @@ Click **Heap before GC** to find the time point when heap memory rises. Use this
 
 ### 3. An internal bug in the FE program caused a crash
 
-<MetaRecv />
+This situation is not within the scope of this discussion. Refer to the [Restore Metadata](../administration/Meta_recovery.md) documentation.
 
 ### 4. JVM bug causes FE crash
 
@@ -700,7 +698,7 @@ SIMPLE_MAJORITY required 1 replica. But none were active with this master.
 
 **Processing Method**: Increase the FE JVM memory configuration, with a recommended minimum of 16GB in production, and adjust later based on the increment of metadata.
 
-<MetaRecvStep />
+For recovery, refer to steps 8 and 9 in the [Metadata Recovery](../administration/Meta_recovery.md) documentation.
 
 ---
 

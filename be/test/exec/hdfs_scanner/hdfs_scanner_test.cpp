@@ -434,6 +434,62 @@ TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnForDatetimeSupportsNegativeMi
     EXPECT_EQ("1970-01-01 00:00:00", col->debug_item(1));
 }
 
+// Under can_use_any_column only the placeholder is filled with a default value: a column the query reads (the source
+// of an Iceberg partition transform) that has no min/max value in this file stays to be read from the file.
+TEST_F(HdfsScannerTest, TestUpdateMinMaxColumnsKeepsQueriedColumnWithoutStats) {
+    SlotDesc descs[] = {{"v", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                        {"d", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE)},
+                        {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    SlotDescriptor* v = tuple_desc->slots()[0];
+    SlotDescriptor* d = tuple_desc->slots()[1];
+
+    auto make_ctx = [&](HdfsScannerContext* ctx, THdfsScanRange* range) {
+        ctx->scan_range = range;
+        ctx->options.use_min_max_opt = true;
+        ctx->options.can_use_any_column = true;
+        ctx->options.any_column_queried_slots.insert(d->id());
+        for (int i = 0; i < 2; i++) {
+            HdfsScannerContext::ColumnInfo column;
+            column.slot_desc = tuple_desc->slots()[i];
+            column.idx_in_chunk = i;
+            ctx->materialized_columns.emplace_back(column);
+        }
+    };
+
+    // No min/max values: the placeholder v is filled, d is read.
+    {
+        THdfsScanRange range;
+        HdfsScannerContext ctx;
+        make_ctx(&ctx, &range);
+        ctx.update_min_max_columns();
+        ASSERT_EQ(1, ctx.materialized_columns.size());
+        ASSERT_EQ(d->id(), ctx.materialized_columns[0].slot_id());
+        ASSERT_EQ(1, ctx.not_existed_slots.size());
+        ASSERT_EQ(v->id(), ctx.not_existed_slots[0]->id());
+        ASSERT_FALSE(ctx.can_use_min_max_optimization());
+    }
+
+    // d has a min/max value: nothing is read.
+    {
+        THdfsScanRange range;
+        TExprMinMaxValue min_max_value;
+        min_max_value.__set_type(TExprNodeType::INT_LITERAL);
+        min_max_value.__set_has_null(false);
+        min_max_value.__set_all_null(false);
+        min_max_value.__set_min_int_value(1);
+        min_max_value.__set_max_int_value(9);
+        range.min_max_values[d->id()] = min_max_value;
+        range.__isset.min_max_values = true;
+        HdfsScannerContext ctx;
+        make_ctx(&ctx, &range);
+        ctx.update_min_max_columns();
+        ASSERT_TRUE(ctx.materialized_columns.empty());
+        ASSERT_EQ(2, ctx.not_existed_slots.size());
+        ASSERT_TRUE(ctx.can_use_min_max_optimization());
+    }
+}
+
 // ========================= ORC SCANNER ============================
 
 static TTypeDesc create_primitive_type_desc(TPrimitiveType::type type) {
