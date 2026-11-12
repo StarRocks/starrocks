@@ -24,6 +24,7 @@
 
 #include "base/bit/rle_encoding.h"
 #include "base/coding.h"
+#include "base/simd/batch_run_counter.h"
 #include "base/string/faststring.h"
 #include "base/testutil/assert.h"
 #include "column/column_helper.h"
@@ -515,6 +516,129 @@ TEST(ParquetSimdParityTest, FLBAPlainDecoderNextBatchSlicesAndUnalignedDst) {
             }
         }
 #endif
+    }
+}
+
+TEST_F(StoredColumnReaderTest, BenchmarkKernelsScalarVsSimdEquivalence) {
+    // 1. ParquetBlockSplitBloomFilter (add_hash + test_hash on 64 hit hashes and 64 miss hashes)
+    {
+        static constexpr uint32_t kSalt[8] = {0x47b6137bU, 0x44974d91U, 0x8824ad5bU, 0xa2b7289dU,
+                                              0x705495c7U, 0x2df1424bU, 0x9efc4947U, 0x5c6bfb31U};
+        ParquetBlockSplitBloomFilter bf;
+        ASSERT_OK(bf.init(4096, 0.01, Hasher::HashStrategy::XXHASH64, 0));
+        const uint32_t num_bytes = bf.num_bytes();
+        const uint32_t num_blocks = num_bytes / 32;
+        std::vector<uint32_t> scalar_words(num_bytes / sizeof(uint32_t), 0);
+
+        std::vector<uint64_t> hit_hashes(64);
+        std::vector<uint64_t> miss_hashes(64);
+        for (size_t i = 0; i < 64; ++i) {
+            hit_hashes[i] = ((i + 1) * 0x9E3779B97F4A7C15ULL) ^ ((i + 1) << 19);
+            miss_hashes[i] = ((i + 1001) * 0xBF58476D1CE4E5B9ULL) ^ ((i + 1001) << 29);
+
+            bf.add_hash(hit_hashes[i]);
+            uint32_t block_index = static_cast<uint32_t>(((hit_hashes[i] >> 32) * num_blocks) >> 32);
+            uint32_t key = static_cast<uint32_t>(hit_hashes[i]);
+            for (int lane = 0; lane < 8; ++lane) {
+                uint32_t bit = (key * kSalt[lane]) >> 27;
+                scalar_words[block_index * 8 + lane] |= (1u << bit);
+            }
+        }
+        EXPECT_EQ(0, std::memcmp(bf.data(), scalar_words.data(), num_bytes));
+
+        for (uint64_t h : hit_hashes) {
+            EXPECT_TRUE(bf.test_hash(h));
+        }
+        for (uint64_t h : miss_hashes) {
+            uint32_t block_index = static_cast<uint32_t>(((h >> 32) * num_blocks) >> 32);
+            uint32_t key = static_cast<uint32_t>(h);
+            bool scalar_hit = true;
+            for (int lane = 0; lane < 8; ++lane) {
+                uint32_t mask = 1u << ((key * kSalt[lane]) >> 27);
+                if ((scalar_words[block_index * 8 + lane] & mask) == 0) {
+                    scalar_hit = false;
+                    break;
+                }
+            }
+            EXPECT_EQ(scalar_hit, bf.test_hash(h));
+        }
+    }
+
+    // 2. BatchRunCounter<32> and BatchRunCounter<16> across 0%, 50%, and 100% selectivities on 4096 elements
+    {
+        const size_t kCount = 4096;
+        for (int selectivity : {0, 50, 100}) {
+            std::vector<uint8_t> filter(kCount, 0);
+            if (selectivity == 100) {
+                std::fill(filter.begin(), filter.end(), 1);
+            } else if (selectivity == 50) {
+                for (size_t i = 0; i < kCount; ++i) {
+                    // Alternate 64-element runs of 0, 64-element runs of 1, and mixed bytes
+                    if ((i / 64) % 3 == 0) {
+                        filter[i] = 0;
+                    } else if ((i / 64) % 3 == 1) {
+                        filter[i] = 1;
+                    } else {
+                        filter[i] = static_cast<uint8_t>(i & 1);
+                    }
+                }
+            }
+
+            size_t scalar_set = 0;
+            for (size_t i = 0; i < kCount; ++i) {
+                scalar_set += (filter[i] != 0) ? 1 : 0;
+            }
+
+            auto count_with_batch_run_counter = [&](auto counter) {
+                size_t total_len = 0;
+                size_t total_set = 0;
+                size_t offset = 0;
+                BatchCount bc = counter.next_batch();
+                while (bc.length > 0) {
+                    if (bc.AllSet()) {
+                        total_set += bc.length;
+                    } else if (!bc.NoneSet()) {
+                        for (size_t j = 0; j < bc.length; ++j) {
+                            total_set += (filter[offset + j] != 0) ? 1 : 0;
+                        }
+                    }
+                    offset += bc.length;
+                    total_len += bc.length;
+                    bc = counter.next_batch();
+                }
+                EXPECT_EQ(kCount, total_len);
+                return total_set;
+            };
+
+            EXPECT_EQ(scalar_set, count_with_batch_run_counter(BatchRunCounter<32>(filter.data(), 0, kCount)))
+                    << "selectivity=" << selectivity;
+            EXPECT_EQ(scalar_set, count_with_batch_run_counter(BatchRunCounter<16>(filter.data(), 0, kCount)))
+                    << "selectivity=" << selectivity;
+        }
+    }
+
+    // 3. FLBAPlainDecoder::next_batch(size_t count, uint8_t* dst) on 4096 elements for type_len in {8, 12, 16}
+    {
+        const size_t kCount = 4096;
+        for (size_t type_len : {size_t{8}, size_t{12}, size_t{16}}) {
+            std::string backing(kCount * type_len, '\0');
+            for (size_t i = 0; i < backing.size(); ++i) {
+                backing[i] = static_cast<char>('A' + (i % 26));
+            }
+
+            FLBAPlainDecoder decoder;
+            decoder.set_type_length(static_cast<int32_t>(type_len));
+            ASSERT_OK(decoder.set_data(Slice(backing.data(), backing.size())));
+
+            std::vector<Slice> simd_slices(kCount);
+            ASSERT_OK(decoder.next_batch(kCount, reinterpret_cast<uint8_t*>(simd_slices.data())));
+
+            for (size_t i = 0; i < kCount; ++i) {
+                Slice expected(backing.data() + i * type_len, type_len);
+                EXPECT_EQ(expected.data, simd_slices[i].data) << "type_len=" << type_len << " i=" << i;
+                EXPECT_EQ(expected.size, simd_slices[i].size) << "type_len=" << type_len << " i=" << i;
+            }
+        }
     }
 }
 

@@ -204,4 +204,16 @@ TEST_F(DeltaDecodeTest, test_contains_negative_value) {
     }
 }
 
+TEST_F(DeltaDecodeTest, ContainsNegativeValueBenchmarkRegimes) {
+    for (int n : {4096, 4099, 8192, 8195, 16384, 32768}) {
+        std::vector<int32_t> buf(n, 42);
+        EXPECT_FALSE(contains_negative_value_scalar(buf.data(), n));
+        EXPECT_FALSE(contains_negative_value(buf.data(), n));
+
+        buf[n - 1] = -1;
+        EXPECT_TRUE(contains_negative_value_scalar(buf.data(), n));
+        EXPECT_TRUE(contains_negative_value(buf.data(), n));
+    }
+}
+
 } // namespace starrocks

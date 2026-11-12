@@ -14,6 +14,8 @@
 
 #include <benchmark/benchmark.h>
 
+#include <vector>
+
 #include "base/simd/delta_decode.h"
 
 namespace starrocks {
@@ -27,6 +29,8 @@ static void BM_int32_avx512_prefix_sum(benchmark::State& state) {
     for (auto _ : state) {
         delta_decode_chain_int32_avx512(elements.data(), size, 0, last_value);
     }
+    state.SetItemsProcessed(state.iterations() * size);
+    state.SetBytesProcessed(state.iterations() * size * sizeof(int32_t));
 }
 BENCHMARK(BM_int32_avx512_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
 
@@ -40,6 +44,8 @@ static void BM_int32_avx2_prefix_sum(benchmark::State& state) {
     for (auto _ : state) {
         delta_decode_chain_int32_avx2(elements.data(), size, 0, last_value);
     }
+    state.SetItemsProcessed(state.iterations() * size);
+    state.SetBytesProcessed(state.iterations() * size * sizeof(int32_t));
 }
 BENCHMARK(BM_int32_avx2_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
 #endif
@@ -52,6 +58,8 @@ static void BM_int32_avx2x_prefix_sum(benchmark::State& state) {
     for (auto _ : state) {
         delta_decode_chain_int32_avx2x(elements.data(), size, 0, last_value);
     }
+    state.SetItemsProcessed(state.iterations() * size);
+    state.SetBytesProcessed(state.iterations() * size * sizeof(int32_t));
 }
 BENCHMARK(BM_int32_avx2x_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
 
@@ -65,6 +73,8 @@ static void BM_int32_neon_prefix_sum(benchmark::State& state) {
     for (auto _ : state) {
         delta_decode_chain_int32_neon(elements.data(), size, 0, last_value);
     }
+    state.SetItemsProcessed(state.iterations() * size);
+    state.SetBytesProcessed(state.iterations() * size * sizeof(int32_t));
 }
 BENCHMARK(BM_int32_neon_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
 
@@ -75,6 +85,8 @@ static void BM_int64_neon_prefix_sum(benchmark::State& state) {
     for (auto _ : state) {
         delta_decode_chain_int64_neon(elements.data(), size, 0, last_value);
     }
+    state.SetItemsProcessed(state.iterations() * size);
+    state.SetBytesProcessed(state.iterations() * size * sizeof(int64_t));
 }
 BENCHMARK(BM_int64_neon_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
 #endif
@@ -86,6 +98,8 @@ static void BM_int32_native_prefix_sum(benchmark::State& state) {
     for (auto _ : state) {
         delta_decode_chain_scalar_prefetch<int32_t>(elements.data(), size, 0, last_value);
     }
+    state.SetItemsProcessed(state.iterations() * size);
+    state.SetBytesProcessed(state.iterations() * size * sizeof(int32_t));
 }
 
 #ifdef __AVX512F__
@@ -96,6 +110,8 @@ static void BM_int64_avx512_prefix_sum(benchmark::State& state) {
     for (auto _ : state) {
         delta_decode_chain_int64_avx512(elements.data(), size, 0, last_value);
     }
+    state.SetItemsProcessed(state.iterations() * size);
+    state.SetBytesProcessed(state.iterations() * size * sizeof(int64_t));
 }
 BENCHMARK(BM_int64_avx512_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
 
@@ -108,10 +124,37 @@ static void BM_int64_native_prefix_sum(benchmark::State& state) {
     for (auto _ : state) {
         delta_decode_chain_scalar_prefetch<int64_t>(elements.data(), size, 0, last_value);
     }
+    state.SetItemsProcessed(state.iterations() * size);
+    state.SetBytesProcessed(state.iterations() * size * sizeof(int64_t));
 }
 
 BENCHMARK(BM_int32_native_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
 BENCHMARK(BM_int64_native_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+
+static void BM_contains_negative_value_scalar(benchmark::State& state) {
+    int size = static_cast<int>(state.range(0));
+    std::vector<int32_t> data(size, 24);
+    for (auto _ : state) {
+        bool has_neg = contains_negative_value_scalar(data.data(), size);
+        benchmark::DoNotOptimize(has_neg);
+    }
+    state.SetItemsProcessed(state.iterations() * size);
+    state.SetBytesProcessed(state.iterations() * size * sizeof(int32_t));
+}
+
+static void BM_contains_negative_value_simd(benchmark::State& state) {
+    int size = static_cast<int>(state.range(0));
+    std::vector<int32_t> data(size, 24);
+    for (auto _ : state) {
+        bool has_neg = contains_negative_value(data.data(), size);
+        benchmark::DoNotOptimize(has_neg);
+    }
+    state.SetItemsProcessed(state.iterations() * size);
+    state.SetBytesProcessed(state.iterations() * size * sizeof(int32_t));
+}
+
+BENCHMARK(BM_contains_negative_value_scalar)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+BENCHMARK(BM_contains_negative_value_simd)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
 
 } // namespace starrocks
 

@@ -25,6 +25,14 @@
 
 namespace starrocks {
 
+inline bool contains_negative_value_scalar(const int32_t* buf, int n) {
+    int32_t acc = 0;
+    for (int i = 0; i < n; ++i) {
+        acc |= buf[i];
+    }
+    return acc < 0;
+}
+
 static inline bool contains_negative_value(const int32_t* data, size_t size) {
     size_t i = 0;
 #ifdef __AVX2__
