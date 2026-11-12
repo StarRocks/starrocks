@@ -1785,7 +1785,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_history_load_interval_seconds (global)
 
-* **Description**: The interval at which the query history buffered in FE memory is written to the `_statistics_.query_history` table when `enable_query_history` is `true`. There is no background timer: the buffered history is written when a SELECT statement finishes after this interval has elapsed since the last write.
+* **Description**: The interval at which the query history buffered in FE memory is written to the `_statistics_.query_history` table when `enable_query_history` is `true`. There is no background timer: the buffered history is written when a SELECT statement finishes after this interval has elapsed since the last write. On busy clusters, it can also be written before the interval elapses, once the serialized buffer reaches 200 MB.
 * **Default**: 900
 * **Unit**: Second
 * **Introduced in**: v4.0

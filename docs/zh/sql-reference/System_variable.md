@@ -1551,7 +1551,7 @@ FROM test;
 
 ### query_history_load_interval_seconds (global)
 
-* 描述：当 `enable_query_history` 为 `true` 时，FE 内存中缓存的查询历史写入 `_statistics_.query_history` 表的间隔。系统没有后台定时任务：只有在距上次写入超过该间隔后有 SELECT 语句执行结束时，才会写入缓存的查询历史。
+* 描述：当 `enable_query_history` 为 `true` 时，FE 内存中缓存的查询历史写入 `_statistics_.query_history` 表的间隔。系统没有后台定时任务：在距上次写入超过该间隔后有 SELECT 语句执行结束时，会写入缓存的查询历史。在繁忙的集群上，如果序列化后的缓存达到 200 MB，也可能在间隔到期之前写入。
 * 单位：秒
 * 默认值：`900`
 * 引入版本：v4.0

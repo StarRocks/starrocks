@@ -9,7 +9,7 @@ description: "ADMIN SHOW REPLICA STATUS は、テーブルまたはパーティ�
 
 このステートメントは、テーブルまたはパーティションのレプリカのステータスを表示するために使用されます。
 
-このステートメントは、共有データクラスタ内のクラウドネイティブテーブルおよびマテリアライズドビューをサポートしていません。このようなテーブルに対しては、エラー `Table does not exist or is not OLAP table` を返します。
+このステートメントは、共有データクラスタ内のクラウドネイティブテーブルおよびマテリアライズドビューをサポートしていません。クラウドネイティブテーブルに対しては `Unsupported operation on lake table` で始まるエラーを返し、マテリアライズドビューに対してはエラー `Table does not exist or is not OLAP table` を返します。
 
 :::tip
 

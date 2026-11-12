@@ -279,7 +279,7 @@ From v3.5.0 onwards, asynchronous materialized views support multi-column partit
 
 #### Notes for multi-column partition expressions
 
-- Multi-column partitions in materialized views can only be directly mapped to the base table's partition columns. Mapping using functions or expressions on the base table's partition columns is not supported. From v3.5.2 onwards, the materialized view can use any subset of the base table's partition columns. In v3.5.0 and v3.5.1, it can use either a single partition column of the base table or all of them, that is, `(col1, col2, ..., coln)`.
+- Multi-column partitions in materialized views can only be directly mapped to the base table's partition columns. Mapping using functions or expressions on the base table's partition columns is not supported, except for the `date_trunc` expressions that map Iceberg time transforms, as described below. From v3.5.2 onwards, the materialized view can use any subset of the base table's partition columns. In v3.5.0 and v3.5.1, it can use either a single partition column of the base table or all of them, that is, `(col1, col2, ..., coln)`.
 - Because Iceberg partition expressions support the `transform` function, additional handling is required when mapping Iceberg partition expressions to StarRocks materialized view partition expressions. The mapping relationship is as follows:
 
   | Iceberg Transform | Iceberg partition expression   | Materialized view partition expression   |
