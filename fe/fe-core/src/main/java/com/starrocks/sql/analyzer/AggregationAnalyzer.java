@@ -53,6 +53,41 @@ import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.QueryStatement;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.ArrowExpr;
+import com.starrocks.sql.ast.expression.BetweenPredicate;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CloneExpr;
+import com.starrocks.sql.ast.expression.CollectionElementExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DictQueryExpr;
+import com.starrocks.sql.ast.expression.DictionaryGetExpr;
+import com.starrocks.sql.ast.expression.ExistsPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MatchExpr;
+import com.starrocks.sql.ast.expression.Parameter;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.SubfieldExpr;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.VariableExpr;
+>>>>>>> 1674317 ([BugFix] Accept struct fields of aggregates in GROUP BY checks (#79649))
 
 import java.util.List;
 import java.util.Map;
@@ -196,6 +231,14 @@ public class AggregationAnalyzer {
             // collection itself. Only checking the collection lets a bare column slip through, e.g.
             // `SELECT map_agg(k, v)[c] FROM t`, and the planner then fails much later with an
             // unactionable "Invalid plan" from the input-dependency checker.
+            return node.getChildren().stream().allMatch(this::visit);
+        }
+
+        @Override
+        public Boolean visitSubfieldExpr(SubfieldExpr node, Void context) {
+            // A field of a struct-valued expression is constant within a group when the struct is, e.g.
+            // `named_struct('a', sum(x)).a` or `any_value(struct_col).a`. Without this the whole access fell
+            // through to visitExpression and was rejected even though its struct is an aggregate.
             return node.getChildren().stream().allMatch(this::visit);
         }
 
