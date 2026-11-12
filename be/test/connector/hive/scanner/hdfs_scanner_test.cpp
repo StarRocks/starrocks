@@ -698,6 +698,59 @@ TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnSpreadsValuesOverSmallBatches
     ASSERT_EQ("[NULL, 1, 9, 1]", fsc2.create_min_max_value_column(slot, min_max_value, 4)->debug_string());
 }
 
+// Under can_use_any_column only the placeholder is filled with a default value: a column the query reads (the source
+// of an Iceberg partition transform) that has no min/max value in this file stays to be read from the file.
+TEST_F(HdfsScannerTest, TestUpdateMinMaxColumnsKeepsQueriedColumnWithoutStats) {
+    SlotDesc descs[] = {{"v", TYPE_INT_DESC}, {"d", TYPE_DATE_DESC}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    SlotDescriptor* v = tuple_desc->slots()[0];
+    SlotDescriptor* d = tuple_desc->slots()[1];
+
+    auto make_ctx = [&](HdfsScannerContext* ctx) {
+        auto& fsc = ctx->format_scan_context;
+        fsc.options.use_min_max_opt = true;
+        fsc.options.can_use_any_column = true;
+        fsc.options.any_column_queried_slots.insert(d->id());
+        for (int i = 0; i < 2; i++) {
+            FormatColumnInfo column;
+            column.slot_desc = tuple_desc->slots()[i];
+            column.idx_in_chunk = i;
+            fsc.materialized_columns.emplace_back(column);
+        }
+    };
+
+    // No min/max values: the placeholder v is filled, d is read.
+    {
+        HdfsScannerContext ctx;
+        make_ctx(&ctx);
+        auto& fsc = ctx.format_scan_context;
+        fsc.update_min_max_columns();
+        ASSERT_EQ(1, fsc.materialized_columns.size());
+        ASSERT_EQ(d->id(), fsc.materialized_columns[0].slot_id());
+        ASSERT_EQ(1, fsc.not_existed_slots.size());
+        ASSERT_EQ(v->id(), fsc.not_existed_slots[0]->id());
+        ASSERT_FALSE(fsc.can_use_min_max_optimization());
+    }
+
+    // d has a min/max value: nothing is read.
+    {
+        HdfsScannerContext ctx;
+        make_ctx(&ctx);
+        auto& fsc = ctx.format_scan_context;
+        TExprMinMaxValue min_max_value;
+        min_max_value.__set_type(TExprNodeType::INT_LITERAL);
+        min_max_value.__set_has_null(false);
+        min_max_value.__set_all_null(false);
+        min_max_value.__set_min_int_value(1);
+        min_max_value.__set_max_int_value(9);
+        fsc.min_max_values[d->id()] = min_max_value;
+        fsc.update_min_max_columns();
+        ASSERT_TRUE(fsc.materialized_columns.empty());
+        ASSERT_EQ(2, fsc.not_existed_slots.size());
+        ASSERT_TRUE(fsc.can_use_min_max_optimization());
+    }
+}
+
 // ========================= ORC SCANNER ============================
 
 static TTypeDesc create_primitive_type_desc(TPrimitiveType::type type) {
