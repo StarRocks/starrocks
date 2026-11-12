@@ -77,7 +77,7 @@ description: "StarRocks 2.5 版本发布说明：Delta Lake catalog、外部存�
 
 - 在刷新物化视图时，尝试自动激活失效的物化视图。 [#38521](https://github.com/StarRocks/starrocks/pull/38521)
 - 优化 BE 的日志打印，避免日志过多。 [#22820](https://github.com/StarRocks/starrocks/pull/22820) [#36187](https://github.com/StarRocks/starrocks/pull/36187)
-- 可以使用 [Hive UDF](https://docs.starrocks.io/zh/docs/integrations/hive_bitmap_udf/) 导入/导出/处理 StarRocks 中的 Bitmap 数据。 [#40165](https://github.com/StarRocks/starrocks/pull/40165) [#40168](https://github.com/StarRocks/starrocks/pull/40168)
+- 可以使用 [Hive UDF](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/hive_bitmap_udf/) 导入/导出/处理 StarRocks 中的 Bitmap 数据。 [#40165](https://github.com/StarRocks/starrocks/pull/40165) [#40168](https://github.com/StarRocks/starrocks/pull/40168)
 - 对于分区字段为 TIMESTAMP 类型的 Iceberg 表，新增 `yyyy-MM-ddTHH:mm` 和 `yyyy-MM-dd HH:mm` 两种数据格式的支持。 [#39986](https://github.com/StarRocks/starrocks/pull/39986)
 
 ### 问题修复
@@ -104,12 +104,12 @@ description: "StarRocks 2.5 版本发布说明：Delta Lake catalog、外部存�
 
 ### 新增特性
 
-- [CREATE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/#参数) 和 [ALTER](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW/) 异步物化视图可以修改 session 变量。[#37401](https://github.com/StarRocks/starrocks/pull/37401)
+- [CREATE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW/#参数) 和 [ALTER](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/materialized_view/ALTER_MATERIALIZED_VIEW/) 异步物化视图可以修改 session 变量。[#37401](https://github.com/StarRocks/starrocks/pull/37401)
 
 ### 功能优化
 
 - 使用 JDK 时 GC 算法默认采用 G1。[#37498](https://github.com/StarRocks/starrocks/pull/37498)
-- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加时间戳进度信息，展示各个分区当前消费消息的时间戳。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD/) 返回结果中增加时间戳进度信息，展示各个分区当前消费消息的时间戳。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
 
 ### 行为变更
 
@@ -119,7 +119,7 @@ description: "StarRocks 2.5 版本发布说明：Delta Lake catalog、外部存�
 ### 参数变更
 
 - 新增 Session 变量 `transaction_read_only`和`tx_read_only`，设置事务的访问模式并且兼容 MySQL 5.7.20 以上的版本。[#37249](https://github.com/StarRocks/starrocks/pull/37249)
-- 新增 [FE 配置项](https://docs.starrocks.io/zh/docs/administration/FE_configuration/) `routine_load_unstable_threshold_second`。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- 新增 [FE 配置项](https://docs.starrocks.io/zh/docs/administration/configuration/FE_parameters/) `routine_load_unstable_threshold_second`。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
 - 新增 FE 配置项 `http_worker_threads_num`，HTTP Server 用于处理 HTTP 请求的线程数。默认取值为 0。如果配置为负数或 0 ，线程数将设置为 CPU 核数的 2 倍。[#37530](https://github.com/StarRocks/starrocks/pull/37530)
 - 新增 BE 配置项 `pindex_major_compaction_limit_per_disk`，配置每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题，默认取值为 1。[#37695](https://github.com/StarRocks/starrocks/pull/37695)
 
@@ -129,7 +129,7 @@ description: "StarRocks 2.5 版本发布说明：Delta Lake catalog、外部存�
 
 - 使用非数列 (NaN 列) 进行排序可能导致 BE crash。[#30759](https://github.com/StarRocks/starrocks/pull/30759)
 - 更新主键索引失败可能导致 "get_applied_rowsets failed"。[#27488](https://github.com/StarRocks/starrocks/pull/27488)
-- [Hive Catalog](https://docs.starrocks.io/zh/docs/2.5/data_source/catalog/hive_catalog/) 的元数据在 Hive 表新增字段后不会自动刷新。[#37668](https://github.com/StarRocks/starrocks/pull/37668)
+- [Hive Catalog](https://docs.starrocks.io/zh/docs/3.1/data_source/catalog/hive_catalog/) 的元数据在 Hive 表新增字段后不会自动刷新。[#37668](https://github.com/StarRocks/starrocks/pull/37668)
 - `SELECT ... FROM ... INTO OUTFILE` 导出至 CSV 时，如果 FROM 子句中包含多个常量，执行时会报错："Unmatched number of columns"。[#38045](https://github.com/StarRocks/starrocks/pull/38045)
 - 某些情况下 `bitmap_to_string` 会因为转换时数据类型溢出导致查询结果错误。[#37405](https://github.com/StarRocks/starrocks/pull/37405)
 
@@ -144,7 +144,7 @@ description: "StarRocks 2.5 版本发布说明：Delta Lake catalog、外部存�
 
 ### 功能优化
 
-- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加 `OtherMsg`，展示最后一个失败的任务的相关信息。[#35806](https://github.com/StarRocks/starrocks/pull/35806)
+- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD/) 返回结果中增加 `OtherMsg`，展示最后一个失败的任务的相关信息。[#35806](https://github.com/StarRocks/starrocks/pull/35806)
 - 调整 Trash 文件的默认过期时间为 1 天（原来是 3 天）。[#37113](https://github.com/StarRocks/starrocks/pull/37113)
 - 优化主键表全部 Rowset 进行 Compaction 时的持久化索引更新性能，降低 I/O 负载。 [#36819](https://github.com/StarRocks/starrocks/pull/36819)
 - 优化主键表 Compaction Score 的取值逻辑，使其和其他类型的表的取值范围看起来更一致。 [#36534](https://github.com/StarRocks/starrocks/pull/36534)
@@ -385,7 +385,7 @@ description: "StarRocks 2.5 版本发布说明：Delta Lake catalog、外部存�
 ### 功能优化
 
 - 优化了非分区表增加分区时的报错信息。 [#25266](https://github.com/StarRocks/starrocks/pull/25266)
-- 优化表的[自动分桶策略](https://docs.starrocks.io/zh/docs/2.5/table_design/Data_distribution/#%E7%A1%AE%E5%AE%9A%E5%88%86%E6%A1%B6%E6%95%B0%E9%87%8F)。 [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- 优化表的[自动分桶策略](https://docs.starrocks.io/zh/docs/3.1/table_design/data_distribution/#确定分桶数量)。 [#24543](https://github.com/StarRocks/starrocks/pull/24543)
 - 优化建表时 Comment 中的默认值。[#24803](https://github.com/StarRocks/starrocks/pull/24803)
 - 优化异步物化视图的手动刷新策略。支持通过 REFRESH MATERIALIZED VIEW WITH SYNC MODE 同步调用物化视图刷新任务。[#25910](https://github.com/StarRocks/starrocks/pull/25910)
 
@@ -403,9 +403,9 @@ description: "StarRocks 2.5 版本发布说明：Delta Lake catalog、外部存�
 
 ### 新增特性
 
-- 失效物化视图支持通过 `ALTER MATERIALIZED VIEW <mv_name> ACTIVE` 手动激活，可用于激活因基表 (base table) 被删除而失效的物化视图。更多信息，参见 [ALTER MATERIALIZED VIEW](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW/)。[#24001](https://github.com/StarRocks/starrocks/pull/24001)
+- 失效物化视图支持通过 `ALTER MATERIALIZED VIEW <mv_name> ACTIVE` 手动激活，可用于激活因基表 (base table) 被删除而失效的物化视图。更多信息，参见 [ALTER MATERIALIZED VIEW](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/materialized_view/ALTER_MATERIALIZED_VIEW/)。[#24001](https://github.com/StarRocks/starrocks/pull/24001)
 
-- 支持在建表和新增分区时自动设置适当的分桶数量。更多信息，参见[确定分桶数量](https://docs.starrocks.io/zh/docs/2.5/table_design/Data_distribution/#%E7%A1%AE%E5%AE%9A%E5%88%86%E6%A1%B6%E6%95%B0%E9%87%8F)。[#10614](https://github.com/StarRocks/starrocks/pull/10614)
+- 支持在建表和新增分区时自动设置适当的分桶数量。更多信息，参见[确定分桶数量](https://docs.starrocks.io/zh/docs/3.1/table_design/data_distribution/#确定分桶数量)。[#10614](https://github.com/StarRocks/starrocks/pull/10614)
 
 ### 功能优化
 
@@ -465,7 +465,7 @@ description: "StarRocks 2.5 版本发布说明：Delta Lake catalog、外部存�
 - `SHOW PROC '/statistic/'` 返回结果中新增统计列 `ErrorStateTabletNum`，用于统计错误状态 (err_state) 的 Tablet 数量。
 - `SHOW PROC '/statistic/<db_id>/'` 返回结果中新增统计列 `ErrorStateTablets`，用于展示当前数据库下处于错误状态的 Tablet ID。[# 19517](https://github.com/StarRocks/starrocks/pull/19517)
 
-更多信息，参见 [SHOW PROC](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/Administration/SHOW_PROC/)。
+更多信息，参见 [SHOW PROC](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC/)。
 
 ### 功能优化
 
@@ -499,7 +499,7 @@ description: "StarRocks 2.5 版本发布说明：Delta Lake catalog、外部存�
 - 优化类型推断，如果查询 `SELECT sum(CASE WHEN XXX)FROM xxx;` 中包含常量 `0`，例如 `SELECT sum(CASE WHEN k1 = 1 THEN v1 ELSE 0 END) FROM test;`，则预聚合自动开启以加速查询。[#19474](https://github.com/StarRocks/starrocks/pull/19474)
 - 支持使用 `SHOW CREATE VIEW` 查看物化视图的创建语句。[#19999](https://github.com/StarRocks/starrocks/pull/19999)
 - BE 节点之间单次 bRPC 请求支持传输超过 2 GB 的数据包。[#20283](https://github.com/StarRocks/starrocks/pull/20283) [#20230](https://github.com/StarRocks/starrocks/pull/20230)
-- External Catalog 支持通过 [SHOW CREATE CATALOG](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG/) 查看 Catalog 的创建信息。
+- External Catalog 支持通过 [SHOW CREATE CATALOG](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG/) 查看 Catalog 的创建信息。
 
 ### 问题修复
 
@@ -579,7 +579,7 @@ description: "StarRocks 2.5 版本发布说明：Delta Lake catalog、外部存�
 - 外表物化视图支持查询改写。 [#11116](https://github.com/StarRocks/starrocks/issues/11116)[#15791](https://github.com/StarRocks/starrocks/issues/15791)
 - CBO 自动全量采集支持用户设置采集时间段，防止因集中采集而导致的集群性能抖动。 [#14996](https://github.com/StarRocks/starrocks/pull/14996)
 - 增加 Thrift server 队列，避免 INSERT INTO SELECT 时因为 Thrift server 中的请求过于繁忙而失败。 [#14571](https://github.com/StarRocks/starrocks/pull/14571)
-- 建表时如果没有显式指定 `storage_medium` 属性，则系统根据 BE 节点磁盘类型自动推导并设定表的存储类型。参见[CREATE TABLE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE/) 中的参数描述。[#14394](https://github.com/StarRocks/starrocks/pull/14394)
+- 建表时如果没有显式指定 `storage_medium` 属性，则系统根据 BE 节点磁盘类型自动推导并设定表的存储类型。参见[CREATE TABLE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/) 中的参数描述。[#14394](https://github.com/StarRocks/starrocks/pull/14394)
 
 ### 问题修复
 
@@ -601,41 +601,41 @@ description: "StarRocks 2.5 版本发布说明：Delta Lake catalog、外部存�
 ### 新增特性
 
 - [Hudi catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/hudi_catalog/) 和 [Hudi 外部表](https://docs.starrocks.io/zh/docs/data_source/External_table#deprecated-hudi-外部表)支持查询 Merge On Read 表。[#6780](https://github.com/StarRocks/starrocks/pull/6780)
-- [Hive catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/hive_catalog/)、Hudi catalog 和 [Iceberg catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/iceberg_catalog/) 支持查询 STRUCT 和 MAP 类型数据。[#10677](https://github.com/StarRocks/starrocks/issues/10677)
+- [Hive catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/hive_catalog/)、Hudi catalog 和 [Iceberg catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/iceberg/) 支持查询 STRUCT 和 MAP 类型数据。[#10677](https://github.com/StarRocks/starrocks/issues/10677)
 - 提供 [Data Cache](https://docs.starrocks.io/zh/docs/data_source/data_cache/) 特性，在查询外部 HDFS 或对象存储上的热数据时，大幅优化数据查询效率。[#11597](https://github.com/StarRocks/starrocks/pull/11579)
 - 支持 [Delta Lake catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/deltalake_catalog/)，无需导入数据或创建外部表即可查询 Delta Lake 数据。[#11972](https://github.com/StarRocks/starrocks/issues/11972)
 - Hive catalog、Hudi catalog 和 Iceberg catalog 兼容 AWS Glue。[#12249](https://github.com/StarRocks/starrocks/issues/12249)
 - 支持通过[文件外部表](https://docs.starrocks.io/zh/docs/data_source/file_external_table/)查询 HDFS 或对象存储上的 Parquet 和 ORC 文件。[#13064](https://github.com/StarRocks/starrocks/pull/13064)
-- 支持基于 Hive、Hudi 或 Iceberg catalog 创建物化视图，以及基于物化视图创建物化视图。相关文档，请参见[物化视图](https://docs.starrocks.io/zh/docs/using_starrocks/Materialized_view/)。[#11116](https://github.com/StarRocks/starrocks/issues/11116) [#11873](https://github.com/StarRocks/starrocks/pull/11873)
+- 支持基于 Hive、Hudi 或 Iceberg catalog 创建物化视图，以及基于物化视图创建物化视图。相关文档，请参见[物化视图](https://docs.starrocks.io/zh/docs/using_starrocks/async_mv/Materialized_view/)。[#11116](https://github.com/StarRocks/starrocks/issues/11116) [#11873](https://github.com/StarRocks/starrocks/pull/11873)
 - 主键表支持条件更新。相关文档，请参见[通过导入实现数据变更](https://docs.starrocks.io/zh/docs/loading/Load_to_Primary_Key_tables#条件更新)。[#12159](https://github.com/StarRocks/starrocks/pull/12159)
-- 支持 [Query Cache](https://docs.starrocks.io/zh/docs/using_starrocks/query_cache/)，通过保存查询的中间计算结果提升简单高并发查询的 QPS 并降低平均时延。[#9194](https://github.com/StarRocks/starrocks/pull/9194)
-- 支持为 Broker Load 作业指定优先级。相关文档，请参见 [BROKER LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/BROKER_LOAD/)。[#11029](https://github.com/StarRocks/starrocks/pull/11029)
-- 支持为 StarRocks 原生表手动设置数据导入的副本数。相关文档，请参见 [CREATE TABLE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE/)。[#11253](https://github.com/StarRocks/starrocks/pull/11253)
-- 支持查询队列功能。相关文档，请参见[查询队列](https://docs.starrocks.io/zh/docs/administration/query_queues/)。[#12594](https://github.com/StarRocks/starrocks/pull/12594)
-- 支持通过资源组对导入计算进行资源隔离，从而间接控制导入任务对集群资源的消耗。相关文档，请参见[资源隔离](https://docs.starrocks.io/zh/docs/administration/resource_group/)。[#12606](https://github.com/StarRocks/starrocks/pull/12606)
+- 支持 [Query Cache](https://docs.starrocks.io/zh/docs/using_starrocks/caching/query_cache/)，通过保存查询的中间计算结果提升简单高并发查询的 QPS 并降低平均时延。[#9194](https://github.com/StarRocks/starrocks/pull/9194)
+- 支持为 Broker Load 作业指定优先级。相关文档，请参见 [BROKER LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/loading_unloading/BROKER_LOAD/)。[#11029](https://github.com/StarRocks/starrocks/pull/11029)
+- 支持为 StarRocks 原生表手动设置数据导入的副本数。相关文档，请参见 [CREATE TABLE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/)。[#11253](https://github.com/StarRocks/starrocks/pull/11253)
+- 支持查询队列功能。相关文档，请参见[查询队列](https://docs.starrocks.io/zh/docs/administration/management/resource_management/query_queues/)。[#12594](https://github.com/StarRocks/starrocks/pull/12594)
+- 支持通过资源组对导入计算进行资源隔离，从而间接控制导入任务对集群资源的消耗。相关文档，请参见[资源隔离](https://docs.starrocks.io/zh/docs/administration/management/resource_management/resource_group/)。[#12606](https://github.com/StarRocks/starrocks/pull/12606)
 - 支持为 StarRocks 原生表手动设置数据压缩算法：LZ4、Zstd、Snappy 和 Zlib。相关文档，请参见[数据压缩](https://docs.starrocks.io/zh/docs/table_design/data_compression/)。[#10097](https://github.com/StarRocks/starrocks/pull/10097) [#12020](https://github.com/StarRocks/starrocks/pull/12020)
-- 支持[用户自定义变量](https://docs.starrocks.io/zh/docs/reference/user_defined_variables/) (user-defined variables)。[#10011](https://github.com/StarRocks/starrocks/pull/10011)
+- 支持[用户自定义变量](https://docs.starrocks.io/zh/docs/sql-reference/user_defined_variables/) (user-defined variables)。[#10011](https://github.com/StarRocks/starrocks/pull/10011)
 - 支持 [Lambda 表达式](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/Lambda_expression/)及高阶函数，包括：[array_map](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_map/)、[array_sum](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_sum/) 和 [array_sortby](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_sortby/)。[#9461](https://github.com/StarRocks/starrocks/pull/9461) [#9806](https://github.com/StarRocks/starrocks/pull/9806) [#10323](https://github.com/StarRocks/starrocks/pull/10323) [#14034](https://github.com/StarRocks/starrocks/pull/14034)
 - [窗口函数](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/Window_function/)中支持使用 QUALIFY 来筛选查询结果。[#13239](https://github.com/StarRocks/starrocks/pull/13239)
-- 建表时，支持指定 uuid 或 uuid_numeric 函数返回的结果作为列默认值。相关文档，请参见 [CREATE TABLE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE/)。[#11155](https://github.com/StarRocks/starrocks/pull/11155)
+- 建表时，支持指定 uuid 或 uuid_numeric 函数返回的结果作为列默认值。相关文档，请参见 [CREATE TABLE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/)。[#11155](https://github.com/StarRocks/starrocks/pull/11155)
 - 新增以下函数：[map_size](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/map-functions/map_size/)、[map_keys](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/map-functions/map_keys/)、[map_values](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/map-functions/map_values/)、[max_by](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/aggregate-functions/max_by/)、[sub_bitmap](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/sub_bitmap/)、[bitmap_to_base64](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_to_base64/)、[host_name](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/utility-functions/host_name/) 和 [date_slice](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/date-time-functions/date_slice/)。[#11299](https://github.com/StarRocks/starrocks/pull/11299) [#11323](https://github.com/StarRocks/starrocks/pull/11323) [#12243](https://github.com/StarRocks/starrocks/pull/12243) [#11776](https://github.com/StarRocks/starrocks/pull/11776) [#12634](https://github.com/StarRocks/starrocks/pull/12634) [#14225](https://github.com/StarRocks/starrocks/pull/14225)
 
 ### 功能优化
 
-- 优化了 [Hive catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/hive_catalog/)、[Hudi catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/hudi_catalog/) 和 [Iceberg catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/iceberg_catalog/) 的元数据访问速度。[#11349](https://github.com/StarRocks/starrocks/issues/11349)
+- 优化了 [Hive catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/hive_catalog/)、[Hudi catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/hudi_catalog/) 和 [Iceberg catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/iceberg/) 的元数据访问速度。[#11349](https://github.com/StarRocks/starrocks/issues/11349)
 - [Elasticsearch 外部表](https://docs.starrocks.io/zh/docs/data_source/External_table#deprecated-elasticsearch-外部表)支持查询 ARRAY 类型数据。[#9693](https://github.com/StarRocks/starrocks/pull/9693)
 - 物化视图优化
-  - 异步物化视图支持 SPJG 类型的物化视图查询的自动透明改写。相关文档，请参见[物化视图](https://docs.starrocks.io/zh/docs/using_starrocks/Materialized_view#使用异步物化视图改写加速查询)。[#13193](https://github.com/StarRocks/starrocks/issues/13193)
-  - 异步物化视图支持多种异步刷新机制。相关文档，请参见[物化视图](https://docs.starrocks.io/zh/docs/using_starrocks/Materialized_view/)。[#12712](https://github.com/StarRocks/starrocks/pull/12712) [#13171](https://github.com/StarRocks/starrocks/pull/13171) [#13229](https://github.com/StarRocks/starrocks/pull/13229) [#12926](https://github.com/StarRocks/starrocks/pull/12926)
+  - 异步物化视图支持 SPJG 类型的物化视图查询的自动透明改写。相关文档，请参见[物化视图](https://docs.starrocks.io/zh/docs/using_starrocks/async_mv/Materialized_view/#使用异步物化视图改写加速查询)。[#13193](https://github.com/StarRocks/starrocks/issues/13193)
+  - 异步物化视图支持多种异步刷新机制。相关文档，请参见[物化视图](https://docs.starrocks.io/zh/docs/using_starrocks/async_mv/Materialized_view/)。[#12712](https://github.com/StarRocks/starrocks/pull/12712) [#13171](https://github.com/StarRocks/starrocks/pull/13171) [#13229](https://github.com/StarRocks/starrocks/pull/13229) [#12926](https://github.com/StarRocks/starrocks/pull/12926)
   - 优化了物化视图的刷新效率。[#13167](https://github.com/StarRocks/starrocks/issues/13167)
 - 导入优化
-  - 优化多副本导入性能，支持 single leader replication 模式，导入性能提升 1 倍。关于该模式的详细信息，参见 [CREATE TABLE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE/) 的 `replicated_storage` 参数。[#10138](https://github.com/StarRocks/starrocks/pull/10138)
-  - 在单 HDFS 集群或单 Kerberos 用户下无需部署 broker 即可通过 Broker Load 或 Spark Load 进行数据导入。如果您配置了多个 HDFS 集群或者多个 Kerberos 用户，需要继续通过 Broker 进程执行导入。相关文档，请参见[从 HDFS 或外部云存储系统导入数据](https://docs.starrocks.io/zh/docs/loading/BrokerLoad/)和[使用 Apache Spark™ 批量导入](https://docs.starrocks.io/zh/docs/loading/SparkLoad/)。[#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
+  - 优化多副本导入性能，支持 single leader replication 模式，导入性能提升 1 倍。关于该模式的详细信息，参见 [CREATE TABLE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/) 的 `replicated_storage` 参数。[#10138](https://github.com/StarRocks/starrocks/pull/10138)
+  - 在单 HDFS 集群或单 Kerberos 用户下无需部署 broker 即可通过 Broker Load 或 Spark Load 进行数据导入。如果您配置了多个 HDFS 集群或者多个 Kerberos 用户，需要继续通过 Broker 进程执行导入。相关文档，请参见[从 HDFS 或外部云存储系统导入数据](https://docs.starrocks.io/zh/docs/loading/BrokerLoad/)和[使用 Apache Spark™ 批量导入](https://docs.starrocks.io/zh/docs/loading/spark/SparkLoad/)。[#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
   - 优化了 Broker Load 在大量 ORC 小文件场景下的导入性能。[#11380](https://github.com/StarRocks/starrocks/pull/11380)
   - 优化了向主键表导入数据时的内存占用。[#12068](https://github.com/StarRocks/starrocks/pull/12068)
-- 优化了 StarRocks 内置的 `information_schema` 数据库以及其中的 `tables` 表和 `columns` 表；新增 `table_config` 表。相关文档，请参见 [Information Schema](https://docs.starrocks.io/zh/docs/reference/overview-pages/information_schema/)。[#10033](https://github.com/StarRocks/starrocks/pull/10033)
+- 优化了 StarRocks 内置的 `information_schema` 数据库以及其中的 `tables` 表和 `columns` 表；新增 `table_config` 表。相关文档，请参见 [Information Schema](https://docs.starrocks.io/zh/docs/sql-reference/information_schema/)。[#10033](https://github.com/StarRocks/starrocks/pull/10033)
 - 优化备份恢复：
-  - 支持数据库级别的备份恢复。相关文档，请参见[备份与恢复](https://docs.starrocks.io/zh/docs/administration/Backup_and_restore/)。[#11619](https://github.com/StarRocks/starrocks/issues/11619)
+  - 支持数据库级别的备份恢复。相关文档，请参见[备份与恢复](https://docs.starrocks.io/zh/docs/administration/management/Backup_and_restore/)。[#11619](https://github.com/StarRocks/starrocks/issues/11619)
   - 支持主键表的备份恢复。相关文档，请参见备份与恢复。[#11885](https://github.com/StarRocks/starrocks/pull/11885)
 - 函数优化：
   - [time_slice](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/date-time-functions/time_slice/) 增加参数，可以计算时间区间的起始点和终点。[#11216](https://github.com/StarRocks/starrocks/pull/11216)

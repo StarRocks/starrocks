@@ -55,8 +55,8 @@ Fixed the following issues:
 - Incorrect table-level scan statistics in the FEs cause inaccurate metrics related to table queries and loading. [#28022](https://github.com/StarRocks/starrocks/pull/28022)
 - BEs may crash if the Join key is a large BINARY column. [#25084](https://github.com/StarRocks/starrocks/pull/25084)
 - An aggregate operator may trigger thread safety issues in certain scenarios, causing BEs to crash. [#26092](https://github.com/StarRocks/starrocks/pull/26092)
-- The version number for a tablet is inconsistent between the BE and FE after data is restored by using [RESTORE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/RESTORE/). [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
-- Partitions cannot be automatically created after the table is recovered by using [RECOVER](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/RECOVER/). [#26813](https://github.com/StarRocks/starrocks/pull/26813)
+- The version number for a tablet is inconsistent between the BE and FE after data is restored by using [RESTORE](https://docs.starrocks.io/docs/sql-reference/sql-statements/backup_restore/RESTORE/). [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- Partitions cannot be automatically created after the table is recovered by using [RECOVER](https://docs.starrocks.io/docs/sql-reference/sql-statements/backup_restore/RECOVER/). [#26813](https://github.com/StarRocks/starrocks/pull/26813)
 - The loading transaction is stuck in the Pending state and DDL statements are hung if data to be loaded using INSERT INTO does not meet quality requirements and the strict mode is enabled for data loading. [#27140](https://github.com/StarRocks/starrocks/pull/27140)
 - Some INSERT jobs return `[42000][1064] Dict Decode failed, Dict can't take cover all key :0` if low-cardinality optimization is enabled. [#27395](https://github.com/StarRocks/starrocks/pull/27395)
 - In certain cases, the INSERT INTO SELECT operation times out when the Pipeline is not enabled. [#26594](https://github.com/StarRocks/starrocks/pull/26594)
@@ -383,13 +383,13 @@ Release date: July 29, 2022
 
 ### New Features
 
-- The Primary Key table supports complete DELETE WHERE syntax. For more information, see [DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/DELETE#delete-data-by-primary-key).
+- The Primary Key table supports complete DELETE WHERE syntax. For more information, see [DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/DELETE/#delete-data-by-primary-key).
 - The Primary Key table supports persistent primary key indexes. You can choose to persist the primary key index on disk rather than in memory, significantly reducing memory usage. For more information, see [Primary Key table](https://docs.starrocks.io/docs/table_design/table_types/primary_key_table/).
 - Global dictionary can be updated during real-time data ingestion, optimizing query performance and delivering 2X query performance for string data.
-- The CREATE TABLE AS SELECT statement can be executed asynchronously. For more information, see [CREATE TABLE AS SELECT](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT/).
+- The CREATE TABLE AS SELECT statement can be executed asynchronously. For more information, see [CREATE TABLE AS SELECT](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT/).
 - Support the following resource group-related features:
-  - Monitor resource groups: You can view the resource group of the query in the audit log and obtain the metrics of the resource group by calling APIs. For more information, see [Monitor and Alerting](https://docs.starrocks.io/docs/administration/Monitor_and_Alert#monitor-and-alerting).
-  - Limit the consumption of large queries on CPU, memory, and I/O resources: You can route queries to specific resource groups based on the classifiers or by configuring session variables. For more information, see [Resource group](https://docs.starrocks.io/docs/administration/resource_group/).
+  - Monitor resource groups: You can view the resource group of the query in the audit log and obtain the metrics of the resource group by calling APIs. For more information, see [Monitor and Alerting](https://docs.starrocks.io/docs/administration/management/monitoring/alert/).
+  - Limit the consumption of large queries on CPU, memory, and I/O resources: You can route queries to specific resource groups based on the classifiers or by configuring session variables. For more information, see [Resource group](https://docs.starrocks.io/docs/administration/management/resource_management/resource_group/).
 - JDBC external tables can be used to conveniently query data in Oracle, PostgreSQL, MySQL, SQLServer, ClickHouse, and other databases. StarRocks also supports predicate pushdown, improving query performance. For more information, see [External table for a JDBC-compatible database](https://docs.starrocks.io/docs/data_source/External_table#external-table-for-a-JDBC-compatible-database).
 - [Preview] A new Data Source Connector framework is released to support external catalogs. You can use external catalogs to directly access and query Hive data without creating external tables. For more information, see [Use catalogs to manage internal and external data](https://docs.starrocks.io/docs/data_source/catalog/query_external_data/).
 - Added the following functions:
@@ -407,10 +407,10 @@ Release date: July 29, 2022
   - TopN and sort operators
   - Equivalence comparison operators that contain functions can use Zone Map indexes when these operators are pushed down to scan operators.
 - Optimized Apache Hive™ external tables.
-  - When Apache Hive™ tables are stored in Parquet, ORC, or CSV format, schema changes caused by ADD COLUMN or REPLACE COLUMN on Hive can be synchronized to StarRocks when you execute the REFRESH statement on the corresponding Hive external table. For more information, see [Hive external table](https://docs.starrocks.io/docs/2.3/data_source/External_table/#hive-external-table).
-  - `hive.metastore.uris` can be modified for Hive resources. For more information, see [ALTER RESOURCE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/ALTER_RESOURCE/).
-- Optimized the performance of Apache Iceberg external tables. A custom catalog can be used to create an Iceberg resource. For more information, see [Apache Iceberg external table](https://docs.starrocks.io/docs/2.3/data_source/External_table/#deprecated-iceberg-external-table).
-- Optimized the performance of Elasticsearch external tables. Sniffing the addresses of the data nodes in an Elasticsearch cluster can be disabled. For more information, see [Elasticsearch external table](https://docs.starrocks.io/docs/2.3/data_source/External_table/#elasticsearch-external-table).
+  - When Apache Hive™ tables are stored in Parquet, ORC, or CSV format, schema changes caused by ADD COLUMN or REPLACE COLUMN on Hive can be synchronized to StarRocks when you execute the REFRESH statement on the corresponding Hive external table. For more information, see [Hive external table](https://docs.starrocks.io/docs/3.1/data_source/External_table/#deprecated-hive-external-table).
+  - `hive.metastore.uris` can be modified for Hive resources. For more information, see [ALTER RESOURCE](https://docs.starrocks.io/docs/sql-reference/sql-statements/Resource/ALTER_RESOURCE/).
+- Optimized the performance of Apache Iceberg external tables. A custom catalog can be used to create an Iceberg resource. For more information, see [Apache Iceberg external table](https://docs.starrocks.io/docs/3.1/data_source/External_table/#deprecated-iceberg-external-table).
+- Optimized the performance of Elasticsearch external tables. Sniffing the addresses of the data nodes in an Elasticsearch cluster can be disabled. For more information, see [Elasticsearch external table](https://docs.starrocks.io/docs/3.1/data_source/External_table/#deprecated-elasticsearch-external-table).
 - When the sum() function accepts a numeric string, it implicitly converts the numeric string.
 - The year(), month(), and day() functions support the DATE data type.
 

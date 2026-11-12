@@ -9,7 +9,7 @@ description: "StarRocks Connector for Apache Spark のリリースノート・�
 
 **ユーザーガイド:**
 
-- [Spark connector を使用して StarRocks にデータをロードする](https://docs.starrocks.io/docs/loading/Spark-connector-starrocks/)
+- [Spark connector を使用して StarRocks にデータをロードする](https://docs.starrocks.io/docs/loading/spark/Spark-connector-starrocks/)
 - [Spark connector を使用して StarRocks からデータを読み取る](https://docs.starrocks.io/docs/unloading/Spark_connector/)
 
 **ソースコード**: [starrocks-connector-for-apache-spark](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
@@ -19,8 +19,8 @@ description: "StarRocks Connector for Apache Spark のリリースノート・�
 **JAR ファイルの取得方法:**
 
 - [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks) から直接 Spark connector JAR ファイルをダウンロードします。
-- Maven プロジェクトの `pom.xml` ファイルに Spark connector を依存関係として追加し、ダウンロードします。具体的な手順については、[ユーザーガイド](https://docs.starrocks.io/docs/loading/Spark-connector-starrocks/#obtain-spark-connector) を参照してください。
-- ソースコードをコンパイルして Spark connector JAR ファイルを作成します。具体的な手順については、[ユーザーガイド](https://docs.starrocks.io/docs/loading/Spark-connector-starrocks/#obtain-spark-connector) を参照してください。
+- Maven プロジェクトの `pom.xml` ファイルに Spark connector を依存関係として追加し、ダウンロードします。具体的な手順については、[ユーザーガイド](https://docs.starrocks.io/docs/loading/spark/Spark-connector-starrocks/#obtain-spark-connector) を参照してください。
+- ソースコードをコンパイルして Spark connector JAR ファイルを作成します。具体的な手順については、[ユーザーガイド](https://docs.starrocks.io/docs/loading/spark/Spark-connector-starrocks/#obtain-spark-connector) を参照してください。
 
 **バージョン要件:**
 
@@ -96,7 +96,7 @@ description: "StarRocks Connector for Apache Spark のリリースノート・�
 
 > **注意**
 >
-> Spark connector をこのバージョンにアップグレードする際のいくつかの変更に注意してください。詳細については、[Spark connector のアップグレード](https://docs.starrocks.io/docs/loading/Spark-connector-starrocks/#upgrade-from-version-110-to-111) を参照してください。
+> Spark connector をこのバージョンにアップグレードする際のいくつかの変更に注意してください。詳細については、[Spark connector のアップグレード](https://docs.starrocks.io/docs/loading/spark/Spark-connector-starrocks/#upgrade-from-version-110-to-111) を参照してください。
 
 **機能**
 
