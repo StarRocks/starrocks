@@ -278,6 +278,24 @@ public class PartitionCastPredicatePrunerTest {
         Assertions.assertFalse(mayMatch(dtEq, range("c2", noon, noon)));
     }
 
+    @Test
+    public void testIsRangePrunable() {
+        Assertions.assertTrue(PartitionCastPredicatePruner.isRangePrunable(
+                eq(castTo(strPartCol, DateType.DATETIME), datetime("2020-06-14 00:00:00"))));
+        Assertions.assertTrue(PartitionCastPredicatePruner.isRangePrunable(new BinaryPredicateOperator(BinaryType.LT,
+                castTo(strPartCol, DateType.DATETIME), datetime("2020-06-14 00:00:00"))));
+        // shapes rangeMayMatch always keeps: a DATE cast, !=, a non-constant right side, a non-binary conjunct
+        Assertions.assertFalse(PartitionCastPredicatePruner.isRangePrunable(
+                eq(castTo(strPartCol, DateType.DATE), datetime("2020-06-14 00:00:00"))));
+        Assertions.assertFalse(PartitionCastPredicatePruner.isRangePrunable(new BinaryPredicateOperator(BinaryType.NE,
+                castTo(strPartCol, DateType.DATETIME), datetime("2020-06-14 00:00:00"))));
+        Assertions.assertFalse(PartitionCastPredicatePruner.isRangePrunable(
+                eq(castTo(strPartCol, DateType.DATETIME), castTo(strPartCol, DateType.DATETIME))));
+        ScalarOperator eqConj = eq(castTo(strPartCol, DateType.DATETIME), datetime("2020-06-14 00:00:00"));
+        Assertions.assertFalse(PartitionCastPredicatePruner.isRangePrunable(
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, eqConj, eqConj)));
+    }
+
     private Map<String, String> singletonMap(String k, String v) {
         Map<String, String> map = new HashMap<>();
         map.put(k, v);
