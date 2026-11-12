@@ -865,8 +865,8 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
                 // A `.cols` segment is opened again by every scan, so its footer read must follow the
                 // scan's cache options: the data and index pages can be served by the page cache, in
                 // which case nothing else would bring the footer block back into the local data cache.
-                ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first, _opts.tablet_schema,
-                                                                             _opts.lake_io_opts, _opts.stats));
+                ASSIGN_OR_RETURN(auto dcg_segment,
+                                 _segment->new_dcg_segment(*dcg, idx.first, _opts.tablet_schema, _opts.lake_io_opts));
                 _dcg_segments[column_file] = dcg_segment;
             }
             return _dcg_segments[column_file];
