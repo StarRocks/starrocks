@@ -18,6 +18,7 @@
 #include <paimon/bucket/bucket_id_calculator.h>
 
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -61,7 +62,23 @@ void compare_sdk(const std::string& config, const ColumnPtr& keys, const TypeDes
     }
 }
 
-TEST(PaimonBucketFunctionTest, CompositeNullableKeysMatchSdkAcrossBatches) {
+class PaimonBucketFunctionTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        SyncPoint::GetInstance()->SetCallBack("PaimonFunctions::load_calculator", [](void* arg) {
+            *static_cast<CreatePaimonBucketCalculator*>(arg) = starrocks_paimon_bucket_calculator_v1;
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+    }
+
+    void TearDown() override {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearCallBack("PaimonFunctions::load_calculator");
+        SyncPoint::GetInstance()->ClearTrace();
+    }
+};
+
+TEST_F(PaimonBucketFunctionTest, CompositeNullableKeysMatchSdkAcrossBatches) {
     auto ids = Int32Column::create();
     ids->append(1);
     ids->append(-5);
@@ -86,7 +103,7 @@ TEST(PaimonBucketFunctionTest, CompositeNullableKeysMatchSdkAcrossBatches) {
     }
 }
 
-TEST(PaimonBucketFunctionTest, ModHiveAndConstantKeysMatchSdk) {
+TEST_F(PaimonBucketFunctionTest, ModHiveAndConstantKeysMatchSdk) {
     auto id = Int32Column::create();
     id->append(-42);
     ColumnPtr keys = ConstColumn::create(StructColumn::create(Columns{id}, {"id"}), 8);
@@ -102,7 +119,7 @@ TEST(PaimonBucketFunctionTest, ModHiveAndConstantKeysMatchSdk) {
     compare_sdk(configuration(R"([{"name":"id","type":"INT"}])", "hive"), keys, type, schema, std::move(hive).value());
 }
 
-TEST(PaimonBucketFunctionTest, FunctionLifecycleUsesOptionalShimAndReturnsActualBuckets) {
+TEST_F(PaimonBucketFunctionTest, FunctionLifecycleUsesLinkedCalculatorAndReturnsActualBuckets) {
     auto type = TypeDescriptor::create_struct_type({"id"}, {TypeDescriptor(TYPE_INT)});
     std::unique_ptr<FunctionContext> context(
             FunctionContext::create_test_context({TypeDescriptor(TYPE_VARCHAR), type}, TypeDescriptor(TYPE_INT)));
@@ -112,20 +129,21 @@ TEST(PaimonBucketFunctionTest, FunctionLifecycleUsesOptionalShimAndReturnsActual
     context->set_constant_columns({config, nullptr});
     ASSERT_OK(PaimonFunctions::prepare(context.get(), FunctionContext::FRAGMENT_LOCAL));
     auto ids = Int32Column::create();
-    ids->append(1);
-    ids->append(18);
-    ids->append(35);
+    for (int32_t id : {0, 1, 16, 17, 18, 35}) ids->append(id);
+    const std::vector<int32_t> expected = {0, 1, 16, 0, 1, 1};
     ColumnPtr keys = StructColumn::create(Columns{ids}, {"id"});
     for (int batch = 0; batch < 3; ++batch) {
         auto result = PaimonFunctions::bucket(context.get(), {config, keys});
         ASSERT_TRUE(result.ok()) << result.status();
-        ASSERT_EQ(3, result.value()->size());
-        for (size_t row = 0; row < 3; ++row) EXPECT_EQ(1, result.value()->get(row).get_int32());
+        ASSERT_EQ(expected.size(), result.value()->size());
+        for (size_t row = 0; row < expected.size(); ++row) {
+            EXPECT_EQ(expected[row], result.value()->get(row).get_int32());
+        }
     }
     ASSERT_OK(PaimonFunctions::close(context.get(), FunctionContext::FRAGMENT_LOCAL));
 }
 
-TEST(PaimonBucketFunctionTest, StandardFunctionExpressionBuildsAndEvaluatesBucketProjection) {
+TEST_F(PaimonBucketFunctionTest, StandardFunctionExpressionBuildsAndEvaluatesBucketProjection) {
     for (bool with_profile : {false, true}) {
         auto runtime =
                 with_profile ? std::make_unique<RuntimeState>(TQueryGlobals{}) : std::make_unique<RuntimeState>();
@@ -180,18 +198,20 @@ TEST(PaimonBucketFunctionTest, StandardFunctionExpressionBuildsAndEvaluatesBucke
         auto ids = Int32Column::create();
         ids->append(1);
         ids->append(18);
+        ids->append(19);
         auto chunk = std::make_shared<Chunk>();
         chunk->append_column(ids, 0);
         auto result = expression->evaluate(chunk.get());
         ASSERT_TRUE(result.ok()) << result.status();
-        ASSERT_EQ(2, result.value()->size());
+        ASSERT_EQ(3, result.value()->size());
         EXPECT_EQ(1, result.value()->get(0).get_int32());
         EXPECT_EQ(1, result.value()->get(1).get_int32());
+        EXPECT_EQ(2, result.value()->get(2).get_int32());
         ExprExecutor::close(expression, &state);
     }
 }
 
-TEST(PaimonBucketFunctionTest, FunctionPrepareRejectsNonconstantConfiguration) {
+TEST_F(PaimonBucketFunctionTest, FunctionPrepareRejectsNonconstantConfiguration) {
     std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
             {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor::create_struct_type({"id"}, {TypeDescriptor(TYPE_INT)})},
             TypeDescriptor(TYPE_INT)));
@@ -199,7 +219,7 @@ TEST(PaimonBucketFunctionTest, FunctionPrepareRejectsNonconstantConfiguration) {
     EXPECT_FALSE(PaimonFunctions::prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 }
 
-TEST(PaimonBucketFunctionTest, RejectsMalformedConfigurationAndUnsupportedAlgorithm) {
+TEST_F(PaimonBucketFunctionTest, RejectsMalformedConfigurationAndUnsupportedAlgorithm) {
     auto type = TypeDescriptor::create_struct_type({"id"}, {TypeDescriptor(TYPE_INT)});
     for (const auto& config :
          {std::string("{}"), configuration("[]", "unknown"), configuration(R"([{"name":"id","type":"INT"}])", "mod")}) {

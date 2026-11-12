@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <mutex>
 
+#include "base/testutil/sync_point.h"
 #include "base/utility/dynamic_util.h"
 #include "column/column_helper.h"
 #include "runtime/current_thread.h"
@@ -35,6 +36,9 @@ struct BucketThreadState final : FunctionThreadState {
 };
 
 StatusOr<CreatePaimonBucketCalculator> load_calculator() {
+    CreatePaimonBucketCalculator linked_factory = nullptr;
+    TEST_SYNC_POINT_CALLBACK("PaimonFunctions::load_calculator", &linked_factory);
+    if (linked_factory != nullptr) return linked_factory;
     static std::mutex mutex;
     static void* handle = nullptr;
     static CreatePaimonBucketCalculator create = nullptr;
