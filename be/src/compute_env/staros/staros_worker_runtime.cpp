@@ -61,6 +61,11 @@ DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 // switch to turn on/off buffer prefetch when read
 DECLARE_bool(fs_enable_buffer_prefetch);
 
+namespace staros::starlet::fslib {
+// Whether a contended cache disk lets a retained block skip its cache write. No installed starlet header declares it.
+DECLARE_bool(remote_read_skip_contended_cache_writes);
+} // namespace staros::starlet::fslib
+
 namespace starrocks {
 
 namespace {
@@ -104,6 +109,13 @@ void apply_starlet_upload_threshold_configs() {
 
     // Shared with the BE S3 filesystem, hence no `starlet_` prefix on the BE config.
     FLAGS_fslib_s3_multipart_equal_part_size = config::s3_multipart_equal_part_size;
+}
+
+void apply_remote_read_skip_contended_cache_writes() {
+    // starlet reads the flag only on the fill path of its remote I/O scheduler, and only for a fill whose block is
+    // already retained, so applying it while the scheduler is off or retains nothing changes no behavior.
+    staros::starlet::fslib::FLAGS_remote_read_skip_contended_cache_writes =
+            config::remote_read_skip_contended_cache_writes;
 }
 
 namespace fslib = staros::starlet::fslib;
@@ -171,6 +183,7 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
     }
     fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
     apply_starlet_upload_threshold_configs();
+    apply_remote_read_skip_contended_cache_writes();
 
     // Goes through UpdateFlagValue rather than a typed FLAGS_ assignment: starlet registers an update
     // hook on this flag that resolves the string to the enum its heartbeat path actually reads, and

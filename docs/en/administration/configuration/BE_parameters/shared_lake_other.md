@@ -436,6 +436,15 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Description: The upper limit of the primary key index cache in a shared-data cluster, expressed as a percentage of the cache capacity. It is checked after every publish that does not fail because it exceeds the memory limit: when the cache holds more than this percentage, the least recently used primary key indexes that are not in use are evicted until the cache is within this percentage. It is a backstop for when the cache grows faster than the background thread brings it down to `primary_key_index_memory_high_percent`, so set it to a value higher than that item.
 - Introduced in: -
 
+### remote_read_skip_contended_cache_writes
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the remote I/O scheduler in a shared-data cluster may skip writing a fetched block to Data Cache while the cache disk is contended, that is, at least 90% busy with reads taking at least 20% of its service time for two consecutive 250 ms samples. Only blocks fetched for the later part of a large query scan qualify, and only after the block is retained in memory under `remote_read_retain_prefetched_bytes`, from which its readers are served. A later read of a skipped block fetches it from object storage again. Enabling this item can help when the cache disk is slower than the network and scans read back blocks that earlier scans have just cached. It has no effect when `remote_io_scheduler_enable` is `false` or `remote_read_retain_prefetched_bytes` is `0`. A change takes effect on blocks fetched afterwards.
+- Introduced in: -
+
 ### s3_multipart_equal_part_size
 
 - Default: false
