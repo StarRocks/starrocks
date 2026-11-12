@@ -55,11 +55,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
->>>>>>> c6c30ac ([BugFix][RB-1512] Do not push LIKE patterns with '_' or an escape down to Iceberg and Paimon as a prefix (#82994))
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
 import com.starrocks.sql.parser.NodePosition;
@@ -902,7 +898,7 @@ public class PaimonMetadataTest {
                 createDateColumn, ConstantOperator.createVarchar(dateFormatter.format(now).substring(0, 2) + "__%"));
         metadata = new PaimonMetadata("paimon", environment, catalog, properties);
         params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateLikePredicate)
-                .setLimit(1).setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L))).build();
+                .setLimit(1).build();
         result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
         assertEquals(1, result.size());
         assertEquals(1, result.get(0).getFiles().size());
