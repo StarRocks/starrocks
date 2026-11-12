@@ -21,6 +21,7 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
+import com.starrocks.sql.analyzer.SavedSqlGeoValidator;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.QueryRelation;
@@ -166,8 +167,10 @@ public class SPMPlanBuilder {
         try (PlannerMetaLocker locker = new PlannerMetaLocker(session, p)) {
             locker.lock();
             Analyzer.analyze(p, session);
+            SavedSqlGeoValidator.validate(p);
             if (b != null) {
                 Analyzer.analyze(b, session);
+                SavedSqlGeoValidator.validate(b);
             }
             // generatePlan() runs the whole optimizer -- partition pruning, statistics, tablet selection -- and
             // without the lock it would iterate the partition maps a concurrent ADD / DROP PARTITION or INSERT
