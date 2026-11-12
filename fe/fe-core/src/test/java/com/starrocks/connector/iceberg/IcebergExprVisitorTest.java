@@ -441,4 +441,170 @@ public class IcebergExprVisitorTest {
                 new BinaryPredicateOperator(BinaryType.LT, cast, value)), context);
         Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testAndPartialPushdown() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        // Build a convertible predicate: k1 > 10
+        BinaryPredicateOperator convertible = new BinaryPredicateOperator(
+                BinaryType.GT, K1, ConstantOperator.createInt(10));
+
+        // Build an unconvertible predicate: CAST(k6 AS INT) < 5
+        // The remaining non-identity cast cannot be converted to an Iceberg predicate.
+        CastOperator cast = new CastOperator(IntegerType.INT, K6);
+        BinaryPredicateOperator unconvertible = new BinaryPredicateOperator(
+                BinaryType.LT, cast, ConstantOperator.createInt(5));
+
+        // Verify that the unconvertible predicate alone produces alwaysTrue
+        Expression unconvertibleExpr = converter.convert(Lists.newArrayList(unconvertible), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, unconvertibleExpr.op(),
+                "Unconvertible predicate should produce alwaysTrue");
+
+        Expression convertedExpr;
+        Expression expectedExpr;
+
+        // AND(convertible, unconvertible) -> returns the convertible side
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                        convertible, unconvertible)), context);
+        expectedExpr = Expressions.greaterThan("k1", 10);
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "AND(convertible, unconvertible) should push down the convertible side");
+
+        // AND(unconvertible, convertible) -> returns the convertible side
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                        unconvertible, convertible)), context);
+        expectedExpr = Expressions.greaterThan("k1", 10);
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "AND(unconvertible, convertible) should push down the convertible side");
+
+        // OR(convertible, unconvertible) -> returns alwaysTrue (no partial pushdown for OR)
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                        convertible, unconvertible)), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "OR(convertible, unconvertible) should NOT do partial pushdown");
+
+        // NOT(AND(convertible, unconvertible)) -> returns alwaysTrue (no partial pushdown inside NOT)
+        CompoundPredicateOperator andOp = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, convertible, unconvertible);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, andOp)), context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op(),
+                "NOT(AND(convertible, unconvertible)) should NOT do partial pushdown");
+
+        // AND(convertible1, convertible2) -> returns and(left, right) (regression test)
+        BinaryPredicateOperator convertible2 = new BinaryPredicateOperator(
+                BinaryType.LT, K2, ConstantOperator.createInt(20));
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                        convertible, convertible2)), context);
+        expectedExpr = Expressions.and(
+                Expressions.greaterThan("k1", 10),
+                Expressions.lessThan("k2", 20));
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "AND(convertible1, convertible2) should return and(left, right)");
+
+        // Nested AND: AND(AND(convertible, unconvertible), convertible2) -> returns and(convertible, convertible2)
+        CompoundPredicateOperator innerAnd = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, convertible, unconvertible);
+        convertedExpr = converter.convert(Lists.newArrayList(
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                        innerAnd, convertible2)), context);
+        expectedExpr = Expressions.and(
+                Expressions.greaterThan("k1", 10),
+                Expressions.lessThan("k2", 20));
+        Assertions.assertEquals(expectedExpr.toString(), convertedExpr.toString(),
+                "AND(AND(convertible, unconvertible), convertible2) should return and(convertible, convertible2)");
+
+        // Strict mode: AND(convertible, unconvertible) -> returns null (no partial pushdown)
+        convertedExpr = converter.convertStrict(Lists.newArrayList(
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                        convertible, unconvertible)), context);
+        Assertions.assertNull(convertedExpr,
+                "Strict mode: AND(convertible, unconvertible) should return null");
+    }
+
+    @Test
+    public void testConvertLastUpdatedSequenceNumberPredicate() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        Expression convertedExpr = converter.convert(Lists.newArrayList(
+                        new BinaryPredicateOperator(BinaryType.EQ, LAST_UPDATED_SEQUENCE_NUMBER,
+                                ConstantOperator.createBigint(1))),
+                context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+    }
+
+    @Test
+    public void testSkipSyntheticVariantRewriteColumn() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        ColumnRefOperator syntheticVariantColumn = new ColumnRefOperator(19, IntegerType.INT, "v.a.b", true, false);
+        syntheticVariantColumn.setHints(List.of(VariantPathRewriteRule.COLUMN_REF_HINT));
+
+        Expression convertedExpr = converter.convert(Lists.newArrayList(
+                        new BinaryPredicateOperator(BinaryType.EQ, syntheticVariantColumn, ConstantOperator.createInt(10))),
+                context);
+        Assertions.assertEquals(Expression.Operation.TRUE, convertedExpr.op());
+    }
+
+    // _pos is not a column of the table schema: predicates on it are left to the BE instead of failing planning
+    @Test
+    public void testMetadataColumnPredicateNotPushedDown() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+        ColumnRefOperator pos = new ColumnRefOperator(100, IntegerType.BIGINT, "_pos", true, false);
+        List<ScalarOperator> predicates = List.of(
+                new BinaryPredicateOperator(BinaryType.EQ, pos, ConstantOperator.createBigint(0)),
+                new InPredicateOperator(false, pos, ConstantOperator.createBigint(1), ConstantOperator.createBigint(2)),
+                new IsNullPredicateOperator(false, pos));
+        for (ScalarOperator predicate : predicates) {
+            Assertions.assertNull(converter.convertStrict(Lists.newArrayList(predicate), context));
+            Assertions.assertEquals(Expressions.alwaysTrue().toString(),
+                    converter.convert(Lists.newArrayList(predicate), context).toString());
+        }
+    }
+
+    @Test
+    public void testLikePrefixPushdownRejectsWildcardsAndEscapes() {
+        ScalarOperatorToIcebergExpr.IcebergContext context = new ScalarOperatorToIcebergExpr.IcebergContext(SCHEMA.asStruct());
+        ScalarOperatorToIcebergExpr converter = new ScalarOperatorToIcebergExpr();
+
+        // a plain prefix is still pushed down
+        Assertions.assertEquals(Expressions.startsWith("k6", "abc").toString(),
+                convertLike(converter, context, K6, "abc%").toString());
+
+        // 'a_c%' also matches abc1 and axc2, so pushing startsWith("a_c") prunes the data files whose bounds
+        // only hold those two and the rows in them go missing
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K6, "a_c%").op(),
+                "A single-character wildcard has no prefix form");
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K15, "a_c%").op(),
+                "The same holds for a nested column");
+
+        // '\' escapes the character behind it, so the prefix as written is not what the pattern matches
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K6, "a\\_c%").op(),
+                "An escaped underscore is a literal underscore, not the two characters as written");
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K6, "abc\\%").op(),
+                "An escaped trailing percent sign is a literal, not a wildcard");
+
+        // unchanged: a wildcard anywhere but the end was never a prefix match
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K6, "%abc%").op());
+        Assertions.assertEquals(Expression.Operation.TRUE, convertLike(converter, context, K6, "abc").op());
+    }
+
+    private static Expression convertLike(ScalarOperatorToIcebergExpr converter,
+                                          ScalarOperatorToIcebergExpr.IcebergContext context,
+                                          ScalarOperator column, String pattern) {
+        return converter.convert(Lists.newArrayList(new LikePredicateOperator(
+                LikePredicateOperator.LikeType.LIKE, column, ConstantOperator.createVarchar(pattern))), context);
+    }
+>>>>>>> c6c30ac ([BugFix][RB-1512] Do not push LIKE patterns with '_' or an escape down to Iceberg and Paimon as a prefix (#82994))
 }
