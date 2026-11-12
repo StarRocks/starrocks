@@ -20,7 +20,6 @@ import com.google.common.collect.Maps;
 import com.google.gson.JsonObject;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
-import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -44,9 +43,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.TaskRunManager;
-import com.starrocks.scheduler.mv.MVRefreshSchemaChecker;
 import com.starrocks.scheduler.persist.TaskRunStatus;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -55,11 +52,6 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import com.starrocks.sql.parser.SqlParser;
->>>>>>> 3d98365 ([BugFix] Journal the MV inactivation a refresh does, and keep its task scheduled (#81660))
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
@@ -74,7 +66,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -1185,24 +1176,11 @@ public class AlterMaterializedViewTest extends MVTestBase  {
             MaterializedView mv = starRocksAssert.getMv("test", "refresh_gone_mv");
             Table base = starRocksAssert.getTable("test", "refresh_gone_base");
             putStaleVersion(mv, base);
-            // Make the base table look like a dropped table of an external catalog.
-            AtomicBoolean tableGone = new AtomicBoolean(true);
-            new MockUp<MvUtils>() {
-                @Mock
-                public Optional<Table> getTable(Invocation invocation, BaseTableInfo baseTableInfo) {
-                    return tableGone.get() ? Optional.empty() : invocation.proceed(baseTableInfo);
-                }
-            };
-            new MockUp<CatalogMgr>() {
-                @Mock
-                public boolean isInternalCatalog(Invocation invocation, String name) {
-                    return !tableGone.get() && (boolean) invocation.proceed(name);
-                }
-            };
             List<AlterMaterializedViewStatusLog> journaled = captureMvStatusJournal();
 
-            MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
-            tableGone.set(false);
+            // What the refresh does when it finds a base table of an external catalog gone.
+            AlterMVJobExecutor.inactiveMvFromRefresh(mv,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableNotExists("refresh_gone_base"));
 
             Assertions.assertFalse(mv.isActive());
             Assertions.assertFalse(hasVersionMap(mv));
