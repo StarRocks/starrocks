@@ -1054,6 +1054,12 @@ public class FunctionAnalyzer {
         if (fn != null) {
             return fn;
         }
+        // get fn from the presign builtins, which are bound to the storage volume they sign with
+        fn = AnalyzerUtils.getPresignedFunction(session, node, argumentTypes);
+        if (fn != null) {
+            return fn;
+        }
+
         // get fn from builtin functions
         fn = getAnalyzedBuiltInFunction(session, fnName, params, argumentTypes, node.getPos());
         if (fn != null) {

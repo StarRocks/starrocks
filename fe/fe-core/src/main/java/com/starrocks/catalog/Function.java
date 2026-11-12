@@ -255,6 +255,7 @@ public class Function implements Writable {
         isMetaFunction = other.isMetaFunction;
         aggStateDesc = other.aggStateDesc;
         inputType = other.inputType;
+        cloudConfiguration = other.cloudConfiguration;
     }
 
     public void setInputType(String inputType) {

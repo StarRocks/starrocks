@@ -693,6 +693,8 @@ public class FunctionSet {
     // file function
     public static final String TO_FILE = "to_file";
     public static final String TRY_TO_FILE = "try_to_file";
+    public static final String GET_PRESIGNED_URL = "get_presigned_url";
+    public static final String GET_PRESIGNED_FILE = "get_presigned_file";
 
     public static final ImmutableList<ScalarType> NUMERIC_TYPES = ImmutableList.<ScalarType>builder()
             .addAll(IntegerType.INTEGER_TYPES)
@@ -846,6 +848,9 @@ public class FunctionSet {
                     .add(QUERY_ID)
                     .add(SLEEP)
                     .add(HTTP_REQUEST)
+                    // A presigned URL embeds the signing time, so it must never be folded, reused or cached.
+                    .add(GET_PRESIGNED_URL)
+                    .add(GET_PRESIGNED_FILE)
                     .addAll(VectorizedBuiltinFunctions.AI_FUNCTION_NAMES)
                     .build();
 
