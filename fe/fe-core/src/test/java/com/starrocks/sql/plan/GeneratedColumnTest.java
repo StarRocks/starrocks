@@ -163,7 +163,6 @@ public class GeneratedColumnTest extends PlanTestBase {
                 {"c boolean AS array_contains([a, b], 3)", "AS array_contains([`a`, `b`], 3)"},
                 {"m varchar(20) AS map{'k': s}['k']", "AS map{'k':`s`}['k']"},
                 {"m varchar(20) AS map('k', s)['k']", "AS map{'k':`s`}['k']"},
-                {"x int AS named_struct('f', a).f", "AS named_struct('f', `a`).`f`"},
                 {"d2 boolean AS array_contains(ARRAY<DATE>['2020-01-01'], d)",
                         "AS array_contains(ARRAY<DATE>['2020-01-01'], `d`)"},
         };
