@@ -591,6 +591,122 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_capacity_limit_uses_identica
     expect_split_fallback_after_flush(m);
 }
 
+namespace {
+// Ways a segment's sort key bounds can be missing.
+enum class BoundDamage { kBothAbsent, kBothEmpty, kMinAbsent, kMaxAbsent, kMinEmpty, kMaxEmpty };
+constexpr BoundDamage kAllBoundDamages[] = {BoundDamage::kBothAbsent, BoundDamage::kBothEmpty, BoundDamage::kMinAbsent,
+                                            BoundDamage::kMaxAbsent,  BoundDamage::kMinEmpty,  BoundDamage::kMaxEmpty};
+
+void strip_segment_bounds(SegmentMetadataPB* sm, BoundDamage damage) {
+    switch (damage) {
+    case BoundDamage::kBothAbsent:
+        sm->clear_sort_key_min();
+        sm->clear_sort_key_max();
+        break;
+    case BoundDamage::kBothEmpty:
+        sm->mutable_sort_key_min()->clear_values();
+        sm->mutable_sort_key_max()->clear_values();
+        break;
+    case BoundDamage::kMinAbsent:
+        sm->clear_sort_key_min();
+        break;
+    case BoundDamage::kMaxAbsent:
+        sm->clear_sort_key_max();
+        break;
+    case BoundDamage::kMinEmpty:
+        sm->mutable_sort_key_min()->clear_values();
+        break;
+    case BoundDamage::kMaxEmpty:
+        sm->mutable_sort_key_max()->clear_values();
+        break;
+    }
+}
+} // namespace
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_boundless_segment_uses_identical_fallback) {
+    for (BoundDamage damage : kAllBoundDamages) {
+        const int mode = static_cast<int>(damage);
+        auto m = split_source();
+        strip_segment_bounds(m->mutable_rowsets(0)->mutable_segment_metas(1), damage);
+        expect_split_fallback_after_flush(m);
+        ASSIGN_OR_ABORT(auto children, split_source_into_children(m, /*external=*/false));
+        ASSERT_EQ(1, children.size()) << mode;
+        EXPECT_EQ(m->rowsets(0).SerializeAsString(), children.begin()->second->rowsets(0).SerializeAsString()) << mode;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_boundless_segment_colocate_uses_identical_fallback) {
+    auto m = split_source();
+    strip_segment_bounds(m->mutable_rowsets(0)->mutable_segment_metas(1), BoundDamage::kBothAbsent);
+    CHECK_OK(_tablet_manager->put_tablet_metadata(m));
+    SplittingTabletInfoPB splitting;
+    splitting.set_old_tablet_id(m->id());
+    splitting.add_new_tablet_ids(m->id() + 100000);
+    splitting.add_new_tablet_ids(m->id() + 200000);
+    TxnInfoPB txn_info;
+    txn_info.set_colocate_column_count(1);
+    ASSIGN_OR_ABORT(auto children, lake::split_tablet(_tablet_manager.get(), m, splitting, 2, txn_info));
+    ASSERT_EQ(1, children.size());
+    EXPECT_EQ(m->rowsets(0).SerializeAsString(), children.begin()->second->rowsets(0).SerializeAsString());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_boundless_rowset_beside_bounded_uses_identical_fallback) {
+    auto m = split_source();
+    *m->mutable_range()->mutable_lower_bound() = generate_sort_key(0);
+    m->mutable_range()->set_lower_bound_included(true);
+    *m->mutable_range()->mutable_upper_bound() = generate_sort_key(1000);
+    m->mutable_range()->set_upper_bound_included(false);
+    auto* r = m->add_rowsets();
+    r->set_id(10);
+    lake::tablet_reshard_helper::set_rowset_uid(r);
+    r->set_num_rows(30);
+    r->set_data_size(300);
+    auto* sm = r->add_segment_metas();
+    sm->set_filename("boundless.dat");
+    sm->set_segment_idx(0);
+    sm->set_num_rows(30);
+    sm->set_size(300);
+    CHECK_OK(_tablet_manager->put_tablet_metadata(m));
+
+    for (bool external : {true, false}) {
+        SplittingTabletInfoPB splitting;
+        splitting.set_old_tablet_id(m->id());
+        splitting.add_new_tablet_ids(m->id() + 100000);
+        splitting.add_new_tablet_ids(m->id() + 200000);
+        if (external) {
+            auto* first = splitting.add_new_tablet_ranges();
+            *first->mutable_lower_bound() = m->range().lower_bound();
+            first->set_lower_bound_included(m->range().lower_bound_included());
+            *first->mutable_upper_bound() = generate_sort_key(50);
+            first->set_upper_bound_included(false);
+            auto* second = splitting.add_new_tablet_ranges();
+            *second->mutable_lower_bound() = generate_sort_key(50);
+            second->set_lower_bound_included(true);
+            *second->mutable_upper_bound() = m->range().upper_bound();
+            second->set_upper_bound_included(m->range().upper_bound_included());
+        }
+        ASSIGN_OR_ABORT(auto children, lake::split_tablet(_tablet_manager.get(), m, splitting, 2, TxnInfoPB()));
+        ASSERT_EQ(1, children.size()) << external;
+        const auto& child = children.begin()->second;
+        ASSERT_EQ(2, child->rowsets_size()) << external;
+        EXPECT_EQ(m->rowsets(0).SerializeAsString(), child->rowsets(0).SerializeAsString()) << external;
+        EXPECT_EQ(m->rowsets(1).SerializeAsString(), child->rowsets(1).SerializeAsString()) << external;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_zero_row_boundless_segment_still_splits) {
+    auto m = split_source();
+    auto* r = m->mutable_rowsets(0);
+    // Only segment 0 (50 rows, 500 bytes) keeps rows, so the rowset totals shrink to match it.
+    r->set_num_rows(50);
+    r->set_data_size(500);
+    auto* sm = r->mutable_segment_metas(1);
+    sm->set_num_rows(0);
+    strip_segment_bounds(sm, BoundDamage::kBothAbsent);
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m));
+    EXPECT_EQ(2, children.size());
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_splitting_corruption_does_not_use_identical_fallback) {
     for (int malformed = 0; malformed < 7; ++malformed) {
         auto m = split_source();
