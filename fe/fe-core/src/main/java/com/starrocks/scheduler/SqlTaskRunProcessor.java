@@ -14,12 +14,17 @@
 
 package com.starrocks.scheduler;
 
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.Relation;
+=======
+import com.starrocks.sql.ast.OriginStatement;
+>>>>>>> 66f9c08 ([BugFix] Apply security policy rewrites to Flight and HTTP SQL queries (#78049))
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;
@@ -49,14 +54,7 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
 
             StatementBase sqlStmt = SqlParser.parse(context.getDefinition(), ctx.getSessionVariable()).get(0);
             sqlStmt.setOrigStmt(new OriginStatement(context.getDefinition(), 0));
-            //Build View SQL without Policy Rewrite
-            new AstTraverser<Void, Void>() {
-                @Override
-                public Void visitRelation(Relation relation, Void context) {
-                    relation.setNeedRewrittenByPolicy(true);
-                    return null;
-                }
-            }.visit(sqlStmt);
+            SecurityPolicyRewriteRule.markRelationsForRewrite(sqlStmt);
 
             executor = StmtExecutor.newInternalExecutor(ctx, sqlStmt);
             ctx.setExecutor(executor);
