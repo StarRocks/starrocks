@@ -58,11 +58,7 @@ import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.IntervalSeconds;
->>>>>>> bf73116 ([BugFix] Add the fractional seconds of an INTERVAL ... SECOND exactly (#81371))
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.ResolvedField;
@@ -112,16 +108,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.type.DateType;
-import com.starrocks.type.FunctionType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.InvalidType;
-import com.starrocks.type.JsonType;
-import com.starrocks.type.Type;
->>>>>>> bf73116 ([BugFix] Add the fractional seconds of an INTERVAL ... SECOND exactly (#81371))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -570,12 +557,7 @@ public final class SqlToScalarOperatorTranslator {
                 arguments.add(visit(argument, context.clone(node)));
             }
 
-<<<<<<< HEAD
-            return new CallOperator(node.getFn().getFunctionName().getFunction(), node.getType(), arguments,
-                    node.getFn());
-=======
-            Function fn = ExprUtils.getTimestampArithmeticFunction(node);
-            Preconditions.checkNotNull(fn, "TimestampArithmeticExpr must resolve to a function");
+            Function fn = node.getFn();
             String fnName = fn.getFunctionName().getFunction();
             ScalarOperator fractionalSeconds = splitFractionalSeconds(fnName, node.getType(), arguments, node.getPos());
             if (fractionalSeconds != null) {
@@ -615,17 +597,17 @@ public final class SqlToScalarOperatorTranslator {
             int wholeMicroseconds = wholeSecondsAndMicroseconds[1];
 
             String microsecondsFn = add ? FunctionSet.MICROSECONDS_ADD : FunctionSet.MICROSECONDS_SUB;
-            Type[] argTypes = {DateType.DATETIME, IntegerType.INT};
+            Type[] argTypes = {Type.DATETIME, Type.INT};
             ScalarOperator result = arguments.get(0);
             if (wholeSeconds != 0 || wholeMicroseconds == 0) {
                 result = new CallOperator(fnName, returnType,
                         Lists.newArrayList(result, ConstantOperator.createInt(wholeSeconds)),
-                        ExprUtils.getBuiltinFunction(fnName, argTypes, Function.CompareMode.IS_IDENTICAL));
+                        Expr.getBuiltinFunction(fnName, argTypes, Function.CompareMode.IS_IDENTICAL));
             }
             if (wholeMicroseconds != 0) {
                 result = new CallOperator(microsecondsFn, returnType,
                         Lists.newArrayList(result, ConstantOperator.createInt(wholeMicroseconds)),
-                        ExprUtils.getBuiltinFunction(microsecondsFn, argTypes, Function.CompareMode.IS_IDENTICAL));
+                        Expr.getBuiltinFunction(microsecondsFn, argTypes, Function.CompareMode.IS_IDENTICAL));
             }
             return result;
         }
@@ -650,7 +632,6 @@ public final class SqlToScalarOperatorTranslator {
                 return null;
             }
             return null;
->>>>>>> bf73116 ([BugFix] Add the fractional seconds of an INTERVAL ... SECOND exactly (#81371))
         }
 
         private LogicalPlan getSubqueryPlan(QueryStatement queryStatement) {

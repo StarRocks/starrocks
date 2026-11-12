@@ -16,15 +16,11 @@
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
 import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.Type;
-=======
+import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.ExprUtils;
->>>>>>> bf73116 ([BugFix] Add the fractional seconds of an INTERVAL ... SECOND exactly (#81371))
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -34,14 +30,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.PlanTestBase;
-<<<<<<< HEAD
-=======
-import com.starrocks.type.BooleanType;
-import com.starrocks.type.DateType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.Type;
-import com.starrocks.type.VarcharType;
->>>>>>> bf73116 ([BugFix] Add the fractional seconds of an INTERVAL ... SECOND exactly (#81371))
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -198,15 +186,15 @@ public class SimplifiedPredicateRuleTest extends PlanTestBase {
     }
 
     private static CallOperator timeFn(String name, ScalarOperator datetime, int amount) {
-        Function fn = ExprUtils.getBuiltinFunction(name, new Type[] {DateType.DATETIME, IntegerType.INT},
+        Function fn = Expr.getBuiltinFunction(name, new Type[] {Type.DATETIME, Type.INT},
                 Function.CompareMode.IS_IDENTICAL);
-        return new CallOperator(name, DateType.DATETIME,
+        return new CallOperator(name, Type.DATETIME,
                 Lists.newArrayList(datetime, ConstantOperator.createInt(amount)), fn);
     }
 
     @Test
     public void mergeTimeFnsOfTheSameUnit() {
-        ColumnRefOperator ts = new ColumnRefOperator(1, DateType.DATETIME, "ts", true);
+        ColumnRefOperator ts = new ColumnRefOperator(1, Type.DATETIME, "ts", true);
         for (String[] unit : TIME_FN_UNITS) {
             String add = unit[0];
             String sub = unit[1];
@@ -229,7 +217,7 @@ public class SimplifiedPredicateRuleTest extends PlanTestBase {
 
     @Test
     public void doNotMergeTimeFnsOfDifferentUnits() {
-        ColumnRefOperator ts = new ColumnRefOperator(1, DateType.DATETIME, "ts", true);
+        ColumnRefOperator ts = new ColumnRefOperator(1, Type.DATETIME, "ts", true);
         List<String[]> units = Lists.newArrayList(TIME_FN_UNITS);
         units.addAll(Arrays.asList(MONTH_BASED_TIME_FN_UNITS));
         for (String[] outer : units) {

@@ -14,10 +14,10 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.sql.ast.expression.DecimalLiteral;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.FloatLiteral;
-import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FloatLiteral;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.math.BigDecimal;

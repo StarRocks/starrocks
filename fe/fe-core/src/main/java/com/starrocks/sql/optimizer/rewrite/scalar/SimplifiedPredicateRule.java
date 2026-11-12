@@ -433,14 +433,8 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
 
     // reduce `date_sub(date_add(x, 1), 2)` -> `date_sub(x, 1)`
     private ScalarOperator simplifiedTimeFns(CallOperator call) {
-<<<<<<< HEAD
-        String fn = TIME_FNS.keySet().stream().filter(s -> call.getFnName().contains(s))
-                .findFirst().orElse("impossible");
-        if (!call.getChild(1).isConstantRef() || !Type.INT.equals(call.getChild(1).getType())) {
-=======
         List<String> unit = TIME_FNS.get(call.getFnName());
-        if (!call.getChild(1).isConstantRef() || !IntegerType.INT.equals(call.getChild(1).getType())) {
->>>>>>> bf73116 ([BugFix] Add the fractional seconds of an INTERVAL ... SECOND exactly (#81371))
+        if (!call.getChild(1).isConstantRef() || !Type.INT.equals(call.getChild(1).getType())) {
             return call;
         }
         if (!(call.getChild(0) instanceof CallOperator)) {
@@ -476,14 +470,8 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         ConstantOperator interval = ConstantOperator.createInt(Math.abs(result));
 
         if (result != 0) {
-<<<<<<< HEAD
-            String fnName = result < 0 ? Objects.requireNonNull(TIME_FNS.get(fn)).get(1) :
-                    Objects.requireNonNull(TIME_FNS.get(fn)).get(0);
-            Function newFn = Expr.getBuiltinFunction(fnName, call.getFunction().getArgs(),
-=======
             String fnName = result < 0 ? unit.get(1) : unit.get(0);
-            Function newFn = ExprUtils.getBuiltinFunction(fnName, call.getFunction().getArgs(),
->>>>>>> bf73116 ([BugFix] Add the fractional seconds of an INTERVAL ... SECOND exactly (#81371))
+            Function newFn = Expr.getBuiltinFunction(fnName, call.getFunction().getArgs(),
                     Function.CompareMode.IS_SUPERTYPE_OF);
             return new CallOperator(fnName, call.getType(), Lists.newArrayList(child.getChild(0), interval), newFn);
         } else {
