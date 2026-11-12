@@ -173,7 +173,7 @@ jobs:
       # Only main PRs are compared: the release-branch templates keep stale version lists. PRs
       # synced in from CelerData or Mirrorship (bot branches *-contributed-pr-* in this repo)
       # carry the source repo's section.
-      - name: Check backport section against the PR template
+      - name: Check backport section lists the template versions
         if: >-
           github.base_ref == 'main' &&
           !(github.event.pull_request.head.repo.full_name == github.repository &&
@@ -195,7 +195,10 @@ jobs:
           template = subprocess.check_output(
               ["gh", "api", endpoint, "-H", "Accept: application/vnd.github.raw+json"], text=True)
 
-          def section(text):
+          def section_rows(text):
+              """The checkbox rows of the one Bugfix cherry-pick branch check section: the
+              versions listed as the label steps read them ("[x] 4.0" / "[ ] 4.0"), and the
+              other rows as (text, ticked). Other lines in the section are not read."""
               lines = (text or "").splitlines()
               starts = [i for i, line in enumerate(lines)
                         if re.match(r"^##\s*Bugfix cherry-pick branch check", line)]
@@ -204,23 +207,42 @@ jobs:
               start = starts[0]
               end = next((i for i in range(start + 1, len(lines))
                           if re.match(r"^#{1,2}\s", lines[i])), len(lines))
-              result = []
-              for line in lines[start:end]:
-                  line = line.rstrip()
-                  if not line or re.fullmatch(r"<!-- backport-boxes: ticked [\d., ]* -->", line):
+              versions, others = set(), []
+              for line in lines[start + 1:end]:
+                  box = re.match(r"^\s*- \[([ xX])\]\s+(.*?)\s*$", line)
+                  if not box:
                       continue
-                  result.append(re.sub(r"^(\s*- )\[[ xX]\]( )", r"\1[ ]\2", line))
-              return result
+                  version = re.fullmatch(r"\s*- \[[ xX]\] (\d+\.\d+(?:\.\d+)?)", line.rstrip())
+                  if version:
+                      versions.add(version.group(1))
+                  elif not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", box.group(2)):
+                      others.append((box.group(2), box.group(1) != " "))
+              return versions, others
 
+          # Every version row of the base branch template must be listed (ticked or not), and the
+          # acknowledgement -- the first other checkbox row, its wording not compared -- ticked.
+          # Extra rows are ignored.
+          expected = []
           try:
-              expected = section(template)
-              if expected[0] != "## Bugfix cherry-pick branch check:" or len(expected) < 3:
+              template_versions, template_others = section_rows(template)
+              expected = sorted(template_versions, key=lambda v: [int(n) for n in v.split(".")], reverse=True)
+              if not expected or not template_others:
                   raise ValueError("The base branch PR template has an invalid backport section.")
-              if section(pr.get("body")) != expected:
-                  raise ValueError("Backport section text or version list differs from the base branch PR template.")
+              versions, others = section_rows(pr.get("body"))
+              missing = [version for version in expected if version not in versions]
+              problems = []
+              if not others:
+                  problems.append("the acknowledgement checkbox row is missing")
+              elif not others[0][1]:
+                  problems.append("the acknowledgement checkbox row is not ticked")
+              if missing:
+                  problems.append("version rows missing: " + ", ".join(missing))
+              if problems:
+                  raise ValueError("Backport section: {}.".format("; ".join(problems)))
           except ValueError as error:
-              print("::error::{} Copy the full Bugfix cherry-pick branch check section from "
-                    "the PR base branch's .github/PULL_REQUEST_TEMPLATE.md; checkbox selections may differ.".format(error))
+              print("::error::{} The section must list every version of the PR base branch's "
+                    ".github/PULL_REQUEST_TEMPLATE.md ({}) as \"- [ ] <version>\"; tick the ones "
+                    "to backport.".format(error, ", ".join(expected) or "see the template"))
               raise SystemExit(1)
           PYTHON
 
