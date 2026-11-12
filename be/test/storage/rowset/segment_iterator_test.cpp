@@ -1201,7 +1201,7 @@ TEST_F(SegmentIteratorTest, DcgSegmentOpenFollowsCallerIOOptionsAndStats) {
     seg_opts.lake_io_opts.fill_data_cache = true;
     auto scan_schema = ChunkHelper::convert_schema(tablet_schema);
     auto chunk_iter = new_segment_iterator(segment, scan_schema, seg_opts);
-    auto chunk = ChunkFactory::new_chunk(scan_schema, config::vector_chunk_size);
+    auto chunk = ChunkHelper::new_chunk(scan_schema, config::vector_chunk_size);
     ASSERT_OK(chunk_iter->get_next(chunk.get()));
     ASSERT_EQ(100, chunk->num_rows());
     // The column came from the `.cols` file, not from the base segment.
