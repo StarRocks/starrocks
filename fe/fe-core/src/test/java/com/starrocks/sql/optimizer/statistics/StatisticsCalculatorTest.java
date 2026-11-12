@@ -37,6 +37,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.Utils;
@@ -44,11 +45,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.AggType;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.optimizer.operator.Projection;
-import com.starrocks.sql.optimizer.operator.UKFKConstraints;
->>>>>>> dcd391a ([BugFix][RB-817] Skip statistics lookup for struct fields of expressions to avoid Unknown column errors (#82995))
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
@@ -73,13 +70,9 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
-<<<<<<< HEAD
-=======
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
-import com.starrocks.type.VarcharType;
->>>>>>> dcd391a ([BugFix][RB-817] Skip statistics lookup for struct fields of expressions to avoid Unknown column errors (#82995))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
