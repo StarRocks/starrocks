@@ -191,24 +191,18 @@ public class TabletStatMgr extends FrontendDaemon {
                                 // all: a follower FE, or a shared-nothing table whose tablets take a lock
                                 // per size read.
                                 boolean underProvisioned = adaptiveBound > 0 && tablets.size() < adaptiveBound;
-                                // The index's own target: narrowed while it has less parallelism
-                                // than the warehouse can drive, the steady-state target once it does.
-                                long indexTarget = underProvisioned
-                                        ? TabletReshardUtils.adaptiveTargetSize(index.getDataSize(true),
-                                                reshardTargetSize, adaptiveBound, splitFloor)
-                                        : 0;
-                                // While that target is narrowed the planner also fills the slots it leaves
-                                // unspent, down to the floor, so a tablet worth two floors is one it can split.
-                                // A narrowed target implies a positive floor, since both come from one reading.
-                                long splitUnit = indexTarget < reshardTargetSize ? splitFloor : indexTarget;
+                                // While the adaptive rule is on, the planner can split any tablet worth two
+                                // children of the floor, so that is what signals.
+                                boolean adaptiveOn = underProvisioned
+                                        && TabletReshardUtils.adaptiveRuleOn(index.getDataSize(true), reshardTargetSize,
+                                                adaptiveBound, splitFloor);
                                 long prevFreshTabletSize = -1L;
                                 // NOTE: can take a rather long time to iterate lots of tablets
                                 for (Tablet tablet : tablets) {
                                     indexRowCount += tablet.getRowCount(version);
                                     long dataSize = tablet.getDataSize(true);
                                     maxTabletSize = Math.max(maxTabletSize, dataSize);
-                                    if (underProvisioned
-                                            && TabletReshardUtils.adaptiveSplitCount(dataSize, splitUnit) > 1) {
+                                    if (adaptiveOn && TabletReshardUtils.canSplitInto(dataSize, 2, splitFloor)) {
                                         maxAdaptiveSplitTabletSize =
                                                 Math.max(maxAdaptiveSplitTabletSize, dataSize);
                                     }

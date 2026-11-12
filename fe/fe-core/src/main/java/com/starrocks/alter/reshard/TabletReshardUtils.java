@@ -103,42 +103,32 @@ public class TabletReshardUtils {
     }
 
     /**
-     * Target tablet size for one index: the steady-state target, or the size that would give the index
-     * one tablet per slot the bound allows, whichever is smaller, floored so a nearly empty index is not
-     * carved into slivers.
-     *
-     * <p>This target is a function of the index's SIZE, not of how many tablets it has: splitting an
-     * index does not move it. It rises as the index grows and meets the steady-state target once the
-     * index holds {@code bound} targets' worth of data, after which the expression collapses to the
-     * steady-state target and the two rules agree. What ends the adaptive phase earlier, and usually
-     * does, is the index reaching the bound -- the headroom test in
+     * Whether the adaptive rule is on for one index: the bound is resolved, {@code floor} (read once with
+     * {@link #adaptiveSplitFloor}) is positive, and the index holds less than {@code bound} steady-state
+     * targets' worth of data. Past that point the index is the size rule's alone. What usually ends the
+     * adaptive phase first is the index reaching the bound -- the headroom in
      * {@code SplitTabletJobFactory#planIndexSplits}, which owns that count.
      *
-     * <p>{@code tablet_reshard_min_split_size >= tablet_reshard_target_size} switches the adaptive
-     * behaviour off: {@link #adaptiveSplitFloor} answers 0 and this returns the steady-state target
-     * unchanged, rather than letting a minimum above the target raise the effective target above it and
-     * change the steady-state rule too.
+     * <p>The floor is passed in because a caller that also cuts children down to it must take one reading for
+     * both: the minimum is mutable, and two readings could disagree about whether the rule is on. A minimum at
+     * or above the steady-state target reads as a zero floor, which is how it switches the rule off.
      *
      * <p>{@code bound} sits at or below the auto-merge parallelism floor -- it is that floor clamped
      * to the node count, so a single-node warehouse gets 1 where the floor is 2. Merge acts strictly
      * above the floor, so an index this rule widens to the bound is never one merge would immediately
-     * narrow again. A non-positive bound (an unresolved warehouse) leaves the steady-state target
-     * untouched.
+     * narrow again. A non-positive bound (an unresolved warehouse) keeps the rule off.
      */
-    public static long adaptiveTargetSize(long indexDataSize, long steadyTargetSize, int bound) {
-        return adaptiveTargetSize(indexDataSize, steadyTargetSize, bound, adaptiveSplitFloor(steadyTargetSize));
+    public static boolean adaptiveRuleOn(long indexDataSize, long steadyTargetSize, int bound, long floor) {
+        return bound > 0 && floor > 0 && indexDataSize / bound < steadyTargetSize;
     }
 
     /**
-     * As above, against a floor the caller has already read with {@link #adaptiveSplitFloor}. A caller that
-     * also cuts children down to that floor must take one reading and pass it to both: the minimum is mutable,
-     * and two readings could leave the target and the floor disagreeing about whether the rule is on.
+     * Whether a tablet of {@code dataSize} can be cut into {@code children} pieces of at least {@code floor}
+     * each. The planner asks it before every child it hands out and the stat scan asks it for a tablet's
+     * first cut, so both apply one definition of a legal cut.
      */
-    public static long adaptiveTargetSize(long indexDataSize, long steadyTargetSize, int bound, long floor) {
-        if (bound <= 0 || floor <= 0) {
-            return steadyTargetSize;
-        }
-        return Math.max(floor, Math.min(steadyTargetSize, indexDataSize / bound));
+    public static boolean canSplitInto(long dataSize, int children, long floor) {
+        return dataSize / children >= floor;
     }
 
     /**
@@ -150,28 +140,6 @@ public class TabletReshardUtils {
     public static long adaptiveSplitFloor(long steadyTargetSize) {
         long configuredFloor = Config.tablet_reshard_min_split_size;
         return configuredFloor > 0 && configuredFloor < steadyTargetSize ? configuredFloor : 0;
-    }
-
-    /**
-     * Child count for the adaptive target: {@code floor(dataSize / target)} once a tablet is worth at
-     * least two of them, and 1 otherwise.
-     *
-     * <p>Requiring two whole targets rather than the size rule's one and a half is what keeps every
-     * child worth at least a target: a tablet of 1.6 targets would otherwise round to two children of
-     * 0.8 each, more tablets than its share and each still under size. The slots this leaves unspent are
-     * filled afterwards, down to {@link #adaptiveSplitFloor}: see {@code SplitTabletJobFactory#planIndexSplits}.
-     *
-     * <p>Flooring bounds the children this asks for, but NOT the width of the index. The tablets it
-     * declines still occupy slots and are absent from that sum, so a skewed index would be widened
-     * past its bound -- {@code 8G, 1G, 1G} against a bound of four lands on five. Capping each split
-     * by the slots the index has left is therefore load bearing, and belongs to the caller that knows
-     * them: see {@code SplitTabletJobFactory#planIndexSplits}.
-     */
-    public static int adaptiveSplitCount(long dataSize, long target) {
-        if (target <= 0 || dataSize / 2 < target) {
-            return 1;
-        }
-        return (int) Math.min((long) Config.tablet_reshard_max_split_count, dataSize / target);
     }
 
     /*
