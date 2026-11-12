@@ -555,15 +555,9 @@ displayed_sidebar: docs
 #### 存算分离架构
 
 - 新增支持主键表，暂不支持持久化索引。
-<<<<<<< HEAD
-- 支持自增列属性 [AUTO_INCREMENT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/auto_increment/)，提供表内全局唯一 ID，简化数据管理。
-- 支持[导入时自动创建分区和使用分区表达式定义分区规则](https://docs.starrocks.io/zh/docs/table_design/expression_partitioning/)，提高了分区创建的易用性和灵活性。
-- 支持[存储卷（Storage Volume）抽象](https://docs.starrocks.io/zh/docs/deployment/shared_data/s3/)，方便在存算分离架构中配置存储位置及鉴权等相关信息。后续创建库表时可以直接引用，提升易用性。
-=======
 - 支持自增列属性 [AUTO_INCREMENT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/table_bucket_part_index/auto_increment/)，提供表内全局唯一 ID，简化数据管理。
 - 支持[导入时自动创建分区和使用分区表达式定义分区规则](https://docs.starrocks.io/zh/docs/table_design/data_distribution/expression_partitioning/)，提高了分区创建的易用性和灵活性。
 - 支持[存储卷（Storage Volume）抽象](https://docs.starrocks.io/zh/docs/deployment/deploy_shared_data_manually/)，方便在存算分离架构中配置存储位置及鉴权等相关信息。后续创建库表时可以直接引用，提升易用性。
->>>>>>> 7a6b4ab ([Doc] Fix links (#83133))
 
 #### 数据湖分析
 
