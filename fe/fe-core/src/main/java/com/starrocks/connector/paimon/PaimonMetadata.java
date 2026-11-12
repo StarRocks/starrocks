@@ -750,8 +750,12 @@ public class PaimonMetadata implements ConnectorMetadata {
             int[] projected =
                     params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
+            // withLimit stops at the first splits that pass the pushed filter, so it is only safe when every
+            // partition conjunct was converted: one left to the BE (e.g. LIKE 'a_c%') would let Paimon pick
+            // splits the BE then filters out entirely, while splits that match are never scanned.
             boolean pruneManifestsByLimit = params.getLimit() != -1 && params.getLimit() < Integer.MAX_VALUE
-                    && onlyHasPartitionPredicate(table, params.getPredicate());
+                    && onlyHasPartitionPredicate(table, params.getPredicate())
+                    && predicates.size() == Utils.extractConjuncts(params.getPredicate()).size();
             readBuilder = readBuilder.withFilter(predicates).withProjection(projected);
 
             if (pruneManifestsByLimit) {
