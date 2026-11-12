@@ -47,10 +47,54 @@ select sequence(0, 10000);
 -- result:
 [REGEX].*result of sequence function must not have more than 10000 entries.*
 -- !result
+select sequence(DATE '2024-01-31', DATE '2024-04-30', INTERVAL '1' MONTH);
+-- result:
+["2024-01-31","2024-02-29","2024-03-31","2024-04-30"]
+-- !result
+select sequence(DATE '2024-04-30', DATE '2024-01-31', INTERVAL -'1' MONTH);
+-- result:
+["2024-04-30","2024-03-30","2024-02-29","2024-01-30"]
+-- !result
+select sequence(DATE '2024-02-29', DATE '2028-02-29', INTERVAL '1' YEAR);
+-- result:
+["2024-02-29","2025-02-28","2026-02-28","2027-02-28","2028-02-29"]
+-- !result
+select sequence(DATE '2024-01-03', DATE '2024-01-01');
+-- result:
+["2024-01-03","2024-01-02","2024-01-01"]
+-- !result
+select sequence(DATE '2024-01-03', DATE '2024-01-01', INTERVAL -'1' DAY);
+-- result:
+["2024-01-03","2024-01-02","2024-01-01"]
+-- !result
+select sequence(DATE '2024-01-01', DATE '2024-01-03', INTERVAL '24' HOUR);
+-- result:
+["2024-01-01","2024-01-02","2024-01-03"]
+-- !result
+select sequence(DATE '2024-01-01', DATE '2024-01-03', INTERVAL '12' HOUR);
+-- result:
+[REGEX].*sequence step must be a day interval if start and end values are dates.*
+-- !result
+select sequence(DATE '2024-01-01', DATE '2024-01-03', INTERVAL '-1' DAY);
+-- result:
+[REGEX].*sequence stop value should be greater than or equal to start value.*
+-- !result
+select sequence(TIMESTAMP '2024-01-01 00:00:00', TIMESTAMP '2024-01-01 01:00:00', INTERVAL '25' MINUTE);
+-- result:
+["2024-01-01 00:00:00","2024-01-01 00:25:00","2024-01-01 00:50:00"]
+-- !result
+select sequence(d, DATE '2024-01-03', INTERVAL '0' DAY) from (select cast(null as date) as d) t;
+-- result:
+None
+-- !result
 set sql_dialect='StarRocks';
 -- result:
 -- !result
 select array_generate(5, 1);
 -- result:
 [5,4,3,2,1]
+-- !result
+select array_generate(DATE '2024-01-31', DATE '2024-04-30', INTERVAL 1 MONTH);
+-- result:
+["2024-01-31","2024-02-29","2024-03-29","2024-04-29"]
 -- !result

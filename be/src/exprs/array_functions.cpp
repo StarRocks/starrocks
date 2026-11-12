@@ -18,6 +18,7 @@
 #include <memory>
 #include <numeric>
 #include <optional>
+#include <unordered_map>
 
 #include "base/container/raw_container.h"
 #include "base/phmap/phmap.h"
@@ -36,6 +37,7 @@
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "types/time_types.h"
 
 namespace starrocks {
 
@@ -1850,10 +1852,9 @@ namespace {
 
 constexpr int64_t TRINO_SEQUENCE_MAX_ENTRIES = 10000;
 
-// The number of elements of Trino's sequence from start to stop by step, with Trino's errors for a zero step, a
-// step pointing away from stop, and a result over 10,000 elements. The distance and the step have the same sign
-// once the direction is checked, and 128-bit arithmetic keeps the distance between extreme BIGINTs exact.
-StatusOr<int64_t> trino_sequence_length(int64_t start, int64_t stop, int64_t step) {
+// Trino's checks that a step is nonzero and points from start towards stop.
+template <typename T>
+Status trino_sequence_check_step(const T& start, const T& stop, int128_t step) {
     if (step == 0) {
         return Status::InvalidArgument("step must not be zero");
     }
@@ -1862,32 +1863,159 @@ StatusOr<int64_t> trino_sequence_length(int64_t start, int64_t stop, int64_t ste
                 "sequence stop value should be greater than or equal to start value if step is greater than zero "
                 "otherwise stop should be less than or equal to start");
     }
-    int128_t length = (static_cast<int128_t>(stop) - start) / step + 1;
+    return Status::OK();
+}
+
+// Trino's limit on the number of elements, checked before any element is built.
+Status trino_sequence_check_length(int128_t length) {
     if (length > TRINO_SEQUENCE_MAX_ENTRIES) {
         return Status::InvalidArgument(fmt::format(
                 "result of sequence function must not have more than {} entries", TRINO_SEQUENCE_MAX_ENTRIES));
     }
+    return Status::OK();
+}
+
+// The number of elements of Trino's sequence from start to stop by a fixed step. The distance and the step have the
+// same sign once the direction is checked, and 128-bit arithmetic keeps the distance between extreme values exact.
+StatusOr<int64_t> trino_sequence_length(int128_t start, int128_t stop, int128_t step) {
+    RETURN_IF_ERROR(trino_sequence_check_step(start, stop, step));
+    int128_t length = (stop - start) / step + 1;
+    RETURN_IF_ERROR(trino_sequence_check_length(length));
     return static_cast<int64_t>(length);
 }
 
-} // namespace
+// A DATE or DATETIME split into its calendar fields and the microseconds into its day.
+struct CalendarPoint {
+    int year;
+    int month;
+    int day;
+    int64_t time_us;
+};
 
-StatusOr<ColumnPtr> ArrayFunctions::trino_sequence_bigint(FunctionContext* ctx, const Columns& columns) {
-    RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    RETURN_IF(columns.size() != 2 && columns.size() != 3, Status::InvalidArgument("expect 2 or 3 arguments"));
+CalendarPoint to_calendar_point(const DateValue& value) {
+    CalendarPoint point{};
+    value.to_date(&point.year, &point.month, &point.day);
+    return point;
+}
 
+CalendarPoint to_calendar_point(const TimestampValue& value) {
+    CalendarPoint point{};
+    int hour, minute, second, usec;
+    value.to_timestamp(&point.year, &point.month, &point.day, &hour, &minute, &second, &usec);
+    point.time_us = ((hour * 60L + minute) * 60L + second) * USECS_PER_SEC + usec;
+    return point;
+}
+
+// The whole months from `from` to `to`, negative when `to` is earlier, as Trino's sequence counts them (Joda's month
+// difference). A `to` on the last day of its month completes a month from any later day of month, so 2024-04-30 is
+// three months after 2024-01-31, and a descending month-end sequence can end one step past stop, as in Trino.
+template <typename ValueType>
+int64_t trino_months_between(const ValueType& from, const ValueType& to) {
+    if (to < from) {
+        return -trino_months_between(to, from);
+    }
+    CalendarPoint later = to_calendar_point(to);
+    CalendarPoint earlier = to_calendar_point(from);
+    int64_t months = (static_cast<int64_t>(later.year) - earlier.year) * 12 + later.month - earlier.month;
+    int earlier_day = earlier.day;
+    if (later.day == DAYS_IN_MONTH[date::is_leap(later.year)][later.month] && earlier_day > later.day) {
+        earlier_day = later.day;
+    }
+    if ((later.day - 1) * USECS_PER_DAY + later.time_us < (earlier_day - 1) * USECS_PER_DAY + earlier.time_us) {
+        months--;
+    }
+    return months;
+}
+
+enum class TrinoSequenceUnit { YEAR, MONTH, DAY, HOUR, MINUTE, SECOND };
+
+StatusOr<TrinoSequenceUnit> parse_trino_sequence_unit(const std::string& unit) {
+    static const std::unordered_map<std::string, TrinoSequenceUnit> units = {
+            {"year", TrinoSequenceUnit::YEAR}, {"month", TrinoSequenceUnit::MONTH},
+            {"day", TrinoSequenceUnit::DAY},   {"hour", TrinoSequenceUnit::HOUR},
+            {"minute", TrinoSequenceUnit::MINUTE}, {"second", TrinoSequenceUnit::SECOND}};
+    auto it = units.find(unit);
+    if (it == units.end()) {
+        return Status::InvalidArgument(fmt::format("Unsupported sequence step unit: {}", unit));
+    }
+    return it->second;
+}
+
+int64_t trino_sequence_unit_microseconds(TrinoSequenceUnit unit) {
+    switch (unit) {
+    case TrinoSequenceUnit::DAY:
+        return USECS_PER_DAY;
+    case TrinoSequenceUnit::HOUR:
+        return USECS_PER_HOUR;
+    case TrinoSequenceUnit::MINUTE:
+        return USECS_PER_MINUTE;
+    default:
+        return USECS_PER_SEC;
+    }
+}
+
+// Appends the elements of one row of a temporal Trino sequence, stepping by n units.
+template <LogicalType LT>
+Status append_trino_temporal_sequence(const RunTimeCppType<LT>& start, const RunTimeCppType<LT>& stop, int64_t n,
+                                      TrinoSequenceUnit unit, RunTimeColumnType<LT>* elements) {
+    using ValueType = RunTimeCppType<LT>;
+    if (unit == TrinoSequenceUnit::YEAR || unit == TrinoSequenceUnit::MONTH) {
+        // Calendar steps: element i is start + i * step months, computed from start so a month-end start doesn't
+        // drift to an earlier day of month.
+        const int128_t months = unit == TrinoSequenceUnit::YEAR ? static_cast<int128_t>(n) * 12 : n;
+        RETURN_IF_ERROR(trino_sequence_check_step(start, stop, months));
+        const int128_t length = trino_months_between(start, stop) / months + 1;
+        RETURN_IF_ERROR(trino_sequence_check_length(length));
+        for (int128_t i = 0; i < length; ++i) {
+            // Every offset is within a step of the months between start and stop, so it fits an int.
+            ValueType value = start.template add<TimeUnit::MONTH>(static_cast<int>(i * months));
+            if (!value.is_valid_non_strict()) {
+                return Status::InvalidArgument("sequence element is out of the supported date range");
+            }
+            elements->append(value);
+        }
+        return Status::OK();
+    }
+
+    const int128_t step_us = static_cast<int128_t>(n) * trino_sequence_unit_microseconds(unit);
+    if constexpr (LT == TYPE_DATE) {
+        if (step_us % USECS_PER_DAY != 0) {
+            return Status::InvalidArgument("sequence step must be a day interval if start and end values are dates");
+        }
+        const int128_t step_days = step_us / USECS_PER_DAY;
+        ASSIGN_OR_RETURN(int64_t length, trino_sequence_length(start.julian(), stop.julian(), step_days));
+        for (int64_t i = 0; i < length; ++i) {
+            elements->append(start.template add<TimeUnit::DAY>(static_cast<int>(i * step_days)));
+        }
+    } else {
+        const int64_t start_us = start.to_unix_microsecond();
+        ASSIGN_OR_RETURN(int64_t length, trino_sequence_length(start_us, stop.to_unix_microsecond(), step_us));
+        for (int64_t i = 0; i < length; ++i) {
+            // Each element lies between start and stop, so it fits in int64 microseconds.
+            int64_t us = static_cast<int64_t>(start_us + i * step_us);
+            int64_t seconds = us / USECS_PER_SEC;
+            int64_t micros = us % USECS_PER_SEC;
+            if (micros < 0) {
+                micros += USECS_PER_SEC;
+                seconds--;
+            }
+            TimestampValue value;
+            value.from_unix_second(seconds, micros);
+            elements->append(value);
+        }
+    }
+    return Status::OK();
+}
+
+// Builds the ARRAY result of a Trino sequence. As in Trino, a row with a NULL argument is NULL before any step
+// check; append_row appends the elements of every other row or returns Trino's error.
+template <LogicalType ElementType, typename AppendRow>
+StatusOr<ColumnPtr> build_trino_sequence(const Columns& columns, AppendRow&& append_row) {
     const size_t num_rows = columns[0]->size();
     const bool all_const = ColumnHelper::is_all_const(columns);
     const size_t num_rows_to_process = all_const ? 1 : num_rows;
 
-    ColumnViewer<TYPE_BIGINT> start_viewer(columns[0]);
-    ColumnViewer<TYPE_BIGINT> stop_viewer(columns[1]);
-    std::optional<ColumnViewer<TYPE_BIGINT>> step_viewer;
-    if (columns.size() == 3) {
-        step_viewer.emplace(columns[2]);
-    }
-
-    auto elements = Int64Column::create();
+    auto elements = RunTimeColumnType<ElementType>::create();
     auto offsets = UInt32Column::create();
     offsets->reserve(num_rows_to_process + 1);
     offsets->append(0);
@@ -1896,24 +2024,17 @@ StatusOr<ColumnPtr> ArrayFunctions::trino_sequence_bigint(FunctionContext* ctx, 
     bool has_null = false;
 
     for (size_t row = 0; row < num_rows_to_process; ++row) {
-        // As in Trino, a NULL argument gives NULL before any of the step checks.
-        if (start_viewer.is_null(row) || stop_viewer.is_null(row) || (step_viewer && step_viewer->is_null(row))) {
+        bool is_null = false;
+        for (const auto& column : columns) {
+            is_null |= column->is_null(row);
+        }
+        if (is_null) {
             has_null = true;
             nulls->append(DATUM_NULL);
-            offsets->append(elements->size());
-            continue;
+        } else {
+            RETURN_IF_ERROR(append_row(row, elements.get()));
+            nulls->append(DATUM_NOT_NULL);
         }
-        const int64_t start = start_viewer.value(row);
-        const int64_t stop = stop_viewer.value(row);
-        // Without a step, the evaluated bounds choose the direction.
-        const int64_t step = step_viewer ? step_viewer->value(row) : (start <= stop ? 1 : -1);
-        ASSIGN_OR_RETURN(int64_t length, trino_sequence_length(start, stop, step));
-
-        // Each element lies between start and stop; only start + i * step needs the wider type.
-        for (int64_t i = 0; i < length; ++i) {
-            elements->append(static_cast<int64_t>(start + static_cast<int128_t>(i) * step));
-        }
-        nulls->append(DATUM_NOT_NULL);
         offsets->append(elements->size());
     }
 
@@ -1930,6 +2051,68 @@ StatusOr<ColumnPtr> ArrayFunctions::trino_sequence_bigint(FunctionContext* ctx, 
         return NullableColumn::create(std::move(result), std::move(nulls));
     }
     return std::move(result);
+}
+
+// trino_sequence(start, stop) steps by one day towards stop, and trino_sequence(start, stop, n, unit) by n units,
+// where the FE passes the unit of the Trino interval literal as a constant.
+template <LogicalType LT>
+StatusOr<ColumnPtr> trino_sequence_temporal(const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    RETURN_IF(columns.size() != 2 && columns.size() != 4, Status::InvalidArgument("expect 2 or 4 arguments"));
+
+    TrinoSequenceUnit unit = TrinoSequenceUnit::DAY;
+    if (columns.size() == 4) {
+        RETURN_IF(!columns[3]->is_constant(), Status::InvalidArgument("sequence step unit must be a constant"));
+        ASSIGN_OR_RETURN(unit, parse_trino_sequence_unit(
+                                       ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[3]).to_string()));
+    }
+    ColumnViewer<LT> start_viewer(columns[0]);
+    ColumnViewer<LT> stop_viewer(columns[1]);
+    std::optional<ColumnViewer<TYPE_BIGINT>> step_viewer;
+    if (columns.size() == 4) {
+        step_viewer.emplace(columns[2]);
+    }
+    return build_trino_sequence<LT>(columns, [&](size_t row, RunTimeColumnType<LT>* elements) {
+        const auto start = start_viewer.value(row);
+        const auto stop = stop_viewer.value(row);
+        // Without a step, the evaluated bounds choose the direction.
+        const int64_t n = step_viewer ? step_viewer->value(row) : (start <= stop ? 1 : -1);
+        return append_trino_temporal_sequence<LT>(start, stop, n, unit, elements);
+    });
+}
+
+} // namespace
+
+StatusOr<ColumnPtr> ArrayFunctions::trino_sequence_bigint(FunctionContext* ctx, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    RETURN_IF(columns.size() != 2 && columns.size() != 3, Status::InvalidArgument("expect 2 or 3 arguments"));
+
+    ColumnViewer<TYPE_BIGINT> start_viewer(columns[0]);
+    ColumnViewer<TYPE_BIGINT> stop_viewer(columns[1]);
+    std::optional<ColumnViewer<TYPE_BIGINT>> step_viewer;
+    if (columns.size() == 3) {
+        step_viewer.emplace(columns[2]);
+    }
+    return build_trino_sequence<TYPE_BIGINT>(columns, [&](size_t row, Int64Column* elements) -> Status {
+        const int64_t start = start_viewer.value(row);
+        const int64_t stop = stop_viewer.value(row);
+        // Without a step, the evaluated bounds choose the direction.
+        const int64_t step = step_viewer ? step_viewer->value(row) : (start <= stop ? 1 : -1);
+        ASSIGN_OR_RETURN(int64_t length, trino_sequence_length(start, stop, step));
+        // Each element lies between start and stop; only start + i * step needs the wider type.
+        for (int64_t i = 0; i < length; ++i) {
+            elements->append(static_cast<int64_t>(start + static_cast<int128_t>(i) * step));
+        }
+        return Status::OK();
+    });
+}
+
+StatusOr<ColumnPtr> ArrayFunctions::trino_sequence_date(FunctionContext* ctx, const Columns& columns) {
+    return trino_sequence_temporal<TYPE_DATE>(columns);
+}
+
+StatusOr<ColumnPtr> ArrayFunctions::trino_sequence_datetime(FunctionContext* ctx, const Columns& columns) {
+    return trino_sequence_temporal<TYPE_DATETIME>(columns);
 }
 
 // array_top_n(array_column, count) -> top_n_array

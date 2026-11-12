@@ -1750,6 +1750,12 @@ vectorized_functions = [
      "ArrayFunctions::trino_sequence_bigint"],
     [150361, 'trino_sequence', False, False, 'ARRAY_BIGINT', ['BIGINT', 'BIGINT', 'BIGINT'],
      "ArrayFunctions::trino_sequence_bigint"],
+    [150362, 'trino_sequence', False, False, 'ARRAY_DATE', ['DATE', 'DATE'],
+     "ArrayFunctions::trino_sequence_date"],
+    [150363, 'trino_sequence', False, False, 'ARRAY_DATE', ['DATE', 'DATE', 'BIGINT', 'VARCHAR'],
+     "ArrayFunctions::trino_sequence_date"],
+    [150364, 'trino_sequence', False, False, 'ARRAY_DATETIME', ['DATETIME', 'DATETIME', 'BIGINT', 'VARCHAR'],
+     "ArrayFunctions::trino_sequence_datetime"],
 
     # high-order functions related to lambda functions.
     [160100, 'array_map', True, False, 'ANY_ARRAY', ['FUNCTION', 'ANY_ARRAY', "..."], 'ArrayFunctions::array_map'],

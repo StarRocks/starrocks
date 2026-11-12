@@ -139,11 +139,10 @@ public class Trino2SRFunctionCallTransformer {
         // contains_sequence -> array_contains_seq
         registerFunctionTransformer("contains_sequence", 2, "array_contains_seq",
                 List.of(Expr.class, Expr.class));
-        // sequence -> trino_sequence, which implements Trino's defaults, NULL handling and step checks
+        // sequence -> trino_sequence, which implements Trino's defaults, NULL handling and step checks. The
+        // three-argument form, whose step may be an interval, is in ComplexFunctionCallTransformer.
         registerFunctionTransformer("sequence", 2, "trino_sequence",
                 List.of(Expr.class, Expr.class));
-        registerFunctionTransformer("sequence", 3, "trino_sequence",
-                List.of(Expr.class, Expr.class, Expr.class));
     }
 
     private static void registerDateFunctionTransformer() {

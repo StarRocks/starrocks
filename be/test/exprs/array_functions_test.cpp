@@ -4103,6 +4103,122 @@ TEST_F(ArrayFunctionsTest, trino_sequence_bigint_errors) {
     ASSERT_FALSE(run(5000, -5000, -1).ok());
 }
 
+template <typename ValueType>
+static std::vector<std::string> trino_sequence_strings(const ColumnPtr& column, size_t row) {
+    std::vector<std::string> values;
+    for (const auto& datum : column->get(row).get_array()) {
+        values.push_back(datum.get<ValueType>().to_string());
+    }
+    return values;
+}
+
+using Strings = std::vector<std::string>;
+
+TEST_F(ArrayFunctionsTest, trino_sequence_date_months) {
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), false);
+    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), false);
+    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+    auto append = [&](DateValue start, DateValue stop, int64_t step) {
+        start_column->append_datum(start);
+        stop_column->append_datum(stop);
+        step_column->append_datum(Datum(step));
+    };
+    // Each element is computed from start, so a month-end start doesn't drift.
+    append(DateValue::create(2024, 1, 31), DateValue::create(2024, 4, 30), 1);
+    append(DateValue::create(2024, 1, 31), DateValue::create(2024, 2, 28), 1);
+    // As in Trino, a descending month-end sequence can end one step past stop.
+    append(DateValue::create(2024, 4, 30), DateValue::create(2024, 1, 31), -1);
+    append(DateValue::create(2024, 1, 1), DateValue::create(2024, 6, 1), 2);
+    auto unit = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("month"), 4);
+    auto result = ArrayFunctions::trino_sequence_date(nullptr, {start_column, stop_column, step_column, unit}).value();
+    ASSERT_EQ((Strings{"2024-01-31", "2024-02-29", "2024-03-31", "2024-04-30"}),
+              trino_sequence_strings<DateValue>(result, 0));
+    ASSERT_EQ((Strings{"2024-01-31"}), trino_sequence_strings<DateValue>(result, 1));
+    ASSERT_EQ((Strings{"2024-04-30", "2024-03-30", "2024-02-29", "2024-01-30"}),
+              trino_sequence_strings<DateValue>(result, 2));
+    ASSERT_EQ((Strings{"2024-01-01", "2024-03-01", "2024-05-01"}), trino_sequence_strings<DateValue>(result, 3));
+
+    // Leap days, both ways.
+    result = ArrayFunctions::trino_sequence_date(
+                     nullptr, {ColumnHelper::create_const_column<TYPE_DATE>(DateValue::create(2024, 2, 29), 1),
+                               ColumnHelper::create_const_column<TYPE_DATE>(DateValue::create(2020, 2, 28), 1),
+                               ColumnHelper::create_const_column<TYPE_BIGINT>(-1, 1),
+                               ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("year"), 1)})
+                     .value();
+    ASSERT_EQ((Strings{"2024-02-29", "2023-02-28", "2022-02-28", "2021-02-28", "2020-02-29"}),
+              trino_sequence_strings<DateValue>(result, 0));
+}
+
+TEST_F(ArrayFunctionsTest, trino_sequence_date_days) {
+    auto run = [](DateValue start, DateValue stop, int64_t n, const char* unit) {
+        return ArrayFunctions::trino_sequence_date(
+                nullptr, {ColumnHelper::create_const_column<TYPE_DATE>(start, 1),
+                          ColumnHelper::create_const_column<TYPE_DATE>(stop, 1),
+                          ColumnHelper::create_const_column<TYPE_BIGINT>(n, 1),
+                          ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(unit), 1)});
+    };
+    const auto jan1 = DateValue::create(2024, 1, 1);
+    const auto jan3 = DateValue::create(2024, 1, 3);
+    // A DATE step must be whole days: 24 hours works, 12 hours fails.
+    ASSERT_EQ((Strings{"2024-01-01", "2024-01-02", "2024-01-03"}),
+              trino_sequence_strings<DateValue>(run(jan1, jan3, 24, "hour").value(), 0));
+    ASSERT_EQ(run(jan1, jan3, 12, "hour").status().message(),
+              "sequence step must be a day interval if start and end values are dates");
+    ASSERT_EQ(run(jan1, jan3, 0, "hour").status().message(), "step must not be zero");
+    ASSERT_EQ(run(jan1, jan3, 0, "month").status().message(), "step must not be zero");
+    ASSERT_FALSE(run(jan1, jan3, -1, "day").ok());
+    ASSERT_FALSE(run(jan1, DateValue::create(2051, 5, 20), 1, "day").ok());
+
+    // Without a step, count by days towards stop.
+    auto result = ArrayFunctions::trino_sequence_date(nullptr, {ColumnHelper::create_const_column<TYPE_DATE>(jan3, 1),
+                                                                ColumnHelper::create_const_column<TYPE_DATE>(jan1, 1)})
+                          .value();
+    ASSERT_EQ((Strings{"2024-01-03", "2024-01-02", "2024-01-01"}), trino_sequence_strings<DateValue>(result, 0));
+
+    // A NULL bound gives NULL, even with a zero step.
+    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+    start_column->append_datum(Datum());
+    result = ArrayFunctions::trino_sequence_date(nullptr, {start_column,
+                                                           ColumnHelper::create_const_column<TYPE_DATE>(jan3, 1),
+                                                           ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1),
+                                                           ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("day"), 1)})
+                     .value();
+    ASSERT_TRUE(result->is_null(0));
+}
+
+TEST_F(ArrayFunctionsTest, trino_sequence_datetime) {
+    auto run = [](TimestampValue start, TimestampValue stop, int64_t n, const char* unit) {
+        return ArrayFunctions::trino_sequence_datetime(
+                nullptr, {ColumnHelper::create_const_column<TYPE_DATETIME>(start, 1),
+                          ColumnHelper::create_const_column<TYPE_DATETIME>(stop, 1),
+                          ColumnHelper::create_const_column<TYPE_BIGINT>(n, 1),
+                          ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(unit), 1)});
+    };
+    // A month step keeps the time of day, and the time of day decides whether the last month is complete.
+    ASSERT_EQ((Strings{"2024-01-31 10:00:00", "2024-02-29 10:00:00"}),
+              trino_sequence_strings<TimestampValue>(run(TimestampValue::create(2024, 1, 31, 10, 0, 0),
+                                                         TimestampValue::create(2024, 3, 31, 9, 0, 0), 1, "month")
+                                                             .value(),
+                                                     0));
+    ASSERT_EQ((Strings{"2024-01-01 00:00:00", "2024-01-01 00:25:00", "2024-01-01 00:50:00"}),
+              trino_sequence_strings<TimestampValue>(run(TimestampValue::create(2024, 1, 1, 0, 0, 0),
+                                                         TimestampValue::create(2024, 1, 1, 1, 0, 0), 25, "minute")
+                                                             .value(),
+                                                     0));
+    // Before 1970 too.
+    ASSERT_EQ((Strings{"1969-12-31 23:59:59", "1970-01-01 00:00:00"}),
+              trino_sequence_strings<TimestampValue>(run(TimestampValue::create(1969, 12, 31, 23, 59, 59),
+                                                         TimestampValue::create(1970, 1, 1, 0, 0, 0), 1, "second")
+                                                             .value(),
+                                                     0));
+    // 10,000 one-second steps are allowed, 10,001 are not.
+    const auto start = TimestampValue::create(2024, 1, 1, 0, 0, 0);
+    ASSERT_EQ(run(start, TimestampValue::create(2024, 1, 1, 2, 46, 39), 1, "second").value()->get(0).get_array().size(),
+              10000);
+    ASSERT_EQ(run(start, TimestampValue::create(2024, 1, 1, 2, 46, 40), 1, "second").status().message(),
+              "result of sequence function must not have more than 10000 entries");
+}
+
 TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     // test only null
     {
