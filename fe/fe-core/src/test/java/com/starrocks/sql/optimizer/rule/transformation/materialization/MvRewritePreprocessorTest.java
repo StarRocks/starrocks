@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -77,6 +78,7 @@ import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.starrocks.planner.MaterializedViewTestBase.getRefBaseTablePartitionColumn;
@@ -772,6 +774,91 @@ public class MvRewritePreprocessorTest extends MVTestBase {
             CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(mv);
             String status = mv.getQueryRewriteStatus();
             Assertions.assertEquals("UNKNOWN", status);
+        });
+    }
+
+    /**
+     * An mv whose plan is already cached as invalid (non-SPJG) must be rejected without resolving its base
+     * tables: for external catalogs (e.g. Unity Catalog views) each base table lookup is a remote call, and
+     * resolving them for every related mv on every query can exhaust the planner timeout.
+     */
+    @Test
+    public void testCachedInvalidPlanSkipsBaseTableResolution() {
+        String sql = "create materialized view invalid_plan_mv distributed by random " +
+                "as select count(distinct cnt) from (select count(v1) as cnt from t1 group by k1) t";
+        starRocksAssert.withMaterializedView(sql, (obj) -> {
+            String mvName = (String) obj;
+            MaterializedView mv = getMv(DB_NAME, mvName);
+            long timeoutMs = connectContext.getSessionVariable().getOptimizerExecuteTimeout();
+
+            // make sure the (invalid) mv plan is fully loaded into the plan cache
+            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance()
+                    .getOrLoadPlanContext(mv, timeoutMs);
+            Assertions.assertNotNull(planContexts);
+            Assertions.assertFalse(planContexts.isEmpty());
+            Assertions.assertTrue(planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan));
+
+            // non-empty query tables, so the extra-tables check would run (and resolve t1) without the fast path
+            Pair<MvRewritePreprocessor, OptExpression> result = buildMvProcessor("select * from t1");
+            Set<Table> queryTables = MvUtils.getAllTables(result.second).stream().collect(Collectors.toSet());
+            Assertions.assertFalse(queryTables.isEmpty());
+
+            // JMockit reverts MockUps created inside a test method automatically when the test ends
+            AtomicInteger getTableCheckedCalls = new AtomicInteger();
+            new MockUp<MvUtils>() {
+                @Mock
+                public Table getTableChecked(Invocation invocation, BaseTableInfo baseTableInfo) {
+                    getTableCheckedCalls.incrementAndGet();
+                    return invocation.proceed(baseTableInfo);
+                }
+            };
+            MVPlanValidationResult validation = MvRewritePreprocessor.isMVValidToRewriteQuery(connectContext, mv,
+                    queryTables, false, false, timeoutMs);
+            Assertions.assertTrue(validation.getStatus().isInvalid());
+            Assertions.assertTrue(validation.getReason().startsWith("no valid plan:"), validation.getReason());
+            Assertions.assertEquals(0, getTableCheckedCalls.get(),
+                    "base tables must not be resolved for an mv whose cached plan is invalid");
+        });
+    }
+
+    @Test
+    public void testGetPlanContextIfLoaded() {
+        String sql = "create materialized view plan_if_loaded_mv distributed by random " +
+                "as select k1, count(v1) as cnt from t1 group by k1";
+        starRocksAssert.withMaterializedView(sql, (obj) -> {
+            String mvName = (String) obj;
+            MaterializedView mv = getMv(DB_NAME, mvName);
+            long timeoutMs = connectContext.getSessionVariable().getOptimizerExecuteTimeout();
+            CachingMvPlanContextBuilder builder = CachingMvPlanContextBuilder.getInstance();
+
+            // wait for any load triggered by mv creation to finish, then evict so the cache is empty
+            builder.getOrLoadPlanContext(mv, timeoutMs);
+            builder.evictMaterializedViewCache(mv);
+            Assertions.assertFalse(builder.contains(mv));
+
+            // not cached: returns empty and, unlike getPlanContextIfPresent, never triggers an async load
+            // the mock delegates to the real method, so leaving it active for the rest of the test is harmless
+            AtomicInteger asyncLoadTriggers = new AtomicInteger();
+            new MockUp<CachingMvPlanContextBuilder>() {
+                @Mock
+                public void triggerLoadMVPlanCacheAsync(Invocation invocation, MaterializedView materializedView) {
+                    asyncLoadTriggers.incrementAndGet();
+                    invocation.proceed(materializedView);
+                }
+            };
+            List<MvPlanContext> notLoaded = builder.getPlanContextIfLoaded(mv);
+            Assertions.assertNotNull(notLoaded);
+            Assertions.assertTrue(notLoaded.isEmpty());
+            Assertions.assertEquals(0, asyncLoadTriggers.get());
+            Assertions.assertFalse(builder.contains(mv));
+
+            // loaded: returns the cached plan contexts
+            List<MvPlanContext> loaded = builder.getOrLoadPlanContext(mv, timeoutMs);
+            Assertions.assertNotNull(loaded);
+            Assertions.assertFalse(loaded.isEmpty());
+            List<MvPlanContext> peeked = builder.getPlanContextIfLoaded(mv);
+            Assertions.assertEquals(loaded.size(), peeked.size());
+            Assertions.assertTrue(peeked.stream().allMatch(MvPlanContext::isValidMvPlan));
         });
     }
 
