@@ -191,6 +191,8 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             switch (index_meta->type()) {
             case ORDINAL_INDEX:
                 _ordinal_index_meta.reset(index_meta->release_ordinal_index());
+                _index_root_pages.ordinal = PagePointer(_ordinal_index_meta->root_page().root_page());
+                _index_root_pages.ordinal_root_is_data = _ordinal_index_meta->root_page().is_root_data_page();
                 MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->ordinal_index_mem_tracker(),
                                          _ordinal_index_meta->SpaceUsedLong());
                 _meta_mem_usage.fetch_add(_ordinal_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
@@ -198,6 +200,10 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
                 break;
             case ZONE_MAP_INDEX:
                 _zonemap_index_meta.reset(index_meta->release_zone_map_index());
+                _index_root_pages.zone_map =
+                        PagePointer(_zonemap_index_meta->page_zone_maps().ordinal_index_meta().root_page());
+                _index_root_pages.zone_map_root_is_data =
+                        _zonemap_index_meta->page_zone_maps().ordinal_index_meta().is_root_data_page();
                 _segment_zone_map.reset(_zonemap_index_meta->release_segment_zone_map());
                 // Currently if the column type is varchar(length) and the values is all null,
                 // a string of length will be written to the Segment file,
@@ -228,6 +234,10 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
                 break;
             case BLOOM_FILTER_INDEX:
                 _bloom_filter_index_meta.reset(index_meta->release_bloom_filter_index());
+                _index_root_pages.bloom_filter =
+                        PagePointer(_bloom_filter_index_meta->bloom_filter().ordinal_index_meta().root_page());
+                _index_root_pages.bloom_filter_root_is_data =
+                        _bloom_filter_index_meta->bloom_filter().ordinal_index_meta().is_root_data_page();
                 MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                          _bloom_filter_index_meta->SpaceUsedLong());
                 _meta_mem_usage.fetch_add(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
@@ -772,6 +782,14 @@ Status ColumnReader::original_bloom_filter(const std::vector<const ColumnPredica
 Status ColumnReader::ngram_bloom_filter(const std::vector<const ::starrocks::ColumnPredicate*>& p,
                                         SparseRange<>* ranges, const IndexReadOptions& opts) {
     return bloom_filter<false>(p, ranges, opts);
+}
+
+bool ColumnReader::has_loaded_ordinal_index() const {
+    return _ordinal_index != nullptr && _ordinal_index->loaded();
+}
+
+bool ColumnReader::has_loaded_zone_map_index() const {
+    return _zonemap_index != nullptr && _zonemap_index->loaded();
 }
 
 Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {

@@ -267,6 +267,19 @@ struct OlapReaderStatistics {
     // lake_scan_parallel_segment_open: segments whose footer was already open in the metadata cache, so the
     // tablet preparation took them as they are without a load task.
     int64_t lake_prepared_tablet_cached_segments = 0;
+    // lake_scan_warm_index, for split and non-split query scans: segments with at least one warmed range, the
+    // block-aligned ranges handed to warm_cache_async(), the cache blocks those calls newly queued or joined, and the
+    // index roots skipped because the segment already holds them in memory.
+    int64_t lake_prepared_tablet_warm_index_segments = 0;
+    int64_t lake_prepared_tablet_warm_index_ranges = 0;
+    int64_t lake_prepared_tablet_warm_index_blocks = 0;
+    int64_t lake_prepared_tablet_warm_index_skipped = 0;
+    // Segments the segment metadata filter excludes from the scan, so they were not warmed, nor, when the non-split
+    // path opened the segments in parallel, opened.
+    int64_t lake_prepared_tablet_warm_index_pruned_segments = 0;
+    // Rowsets of a non-split query scan whose iterators were built inline instead of on the rowset thread pool,
+    // because every segment of the tablet was already open in the metadata cache.
+    int64_t lake_prepared_tablet_inline_rowsets = 0;
     // ------ for lake tablet ------
 
     // ------ for json type, to count flat column ------
@@ -423,6 +436,12 @@ struct OlapReaderStatistics {
         lake_prepared_tablet_io_count_remote += other.lake_prepared_tablet_io_count_remote;
         lake_prepared_tablet_bytes_read_remote += other.lake_prepared_tablet_bytes_read_remote;
         lake_prepared_tablet_cached_segments += other.lake_prepared_tablet_cached_segments;
+        lake_prepared_tablet_warm_index_segments += other.lake_prepared_tablet_warm_index_segments;
+        lake_prepared_tablet_warm_index_ranges += other.lake_prepared_tablet_warm_index_ranges;
+        lake_prepared_tablet_warm_index_blocks += other.lake_prepared_tablet_warm_index_blocks;
+        lake_prepared_tablet_warm_index_skipped += other.lake_prepared_tablet_warm_index_skipped;
+        lake_prepared_tablet_warm_index_pruned_segments += other.lake_prepared_tablet_warm_index_pruned_segments;
+        lake_prepared_tablet_inline_rowsets += other.lake_prepared_tablet_inline_rowsets;
         lake_prepared_seed_segment_init_ns += other.lake_prepared_seed_segment_init_ns;
         lake_prepared_seed_vector_index_load_ns += other.lake_prepared_seed_vector_index_load_ns;
         lake_prepared_seed_get_row_ranges_by_vector_index_ns +=

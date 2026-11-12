@@ -259,6 +259,9 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
                    bool fill_cache, const LakeIOOptions& lake_io_opts, DelVector* delvec);
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
                    const LakeIOOptions& lake_io_opts, DelVector* delvec);
+// Whether get_del_vec() of |segment_id| would be answered without any read: the segment has no delete vector in
+// |metadata|, or its delete vector is in the metadata cache. The probe is not counted as a cache hit or miss.
+bool del_vec_cached(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id);
 bool is_primary_key(TabletMetadata* metadata);
 bool is_primary_key(const TabletMetadata& metadata);
 
