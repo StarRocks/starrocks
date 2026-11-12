@@ -248,8 +248,8 @@ public class TabletReshardJobMgr extends LeaderDaemon implements GsonPostProcess
     // raw configs guarantees an ALTER of the table's tablet_reshard_target_size property or any admin config
     // change re-arms the size-split latch even when calcSplitCount is capped at max_split_count;
     // the computed count also captures a size-band crossing. The adaptive term is folded raw, because
-    // the target it would be counted against is per-index and cannot be rebuilt from one flat number
-    // here -- so a growing tablet moves this fingerprint by every byte, and suppression only settles a
+    // the children it would be cut into depend on each index's free slots and cannot be rebuilt from one
+    // flat number here -- so a growing tablet moves this fingerprint by every byte, and suppression only settles a
     // table whose data has stopped moving. That is the case it exists for. The bound is folded in because the plan
     // depends on it and the signal alone does not carry it: an eight-way attempt that latched after
     // producing an identical tablet would, on a warehouse scaled down to two nodes, become a two-way
