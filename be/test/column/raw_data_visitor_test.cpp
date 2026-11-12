@@ -158,22 +158,6 @@ TEST(RawBytesVisitorTest, VisitBinaryColumn) {
     EXPECT_EQ(memcmp(bytes + 5, "world", 5), 0);
 }
 
-// LargeBinaryColumn is BinaryColumnBase<uint64_t>; same flat-bytes semantics.
-TEST(RawBytesVisitorTest, VisitLargeBinaryColumn) {
-    RawBytesVisitor visitor;
-    auto col = LargeBinaryColumn::create();
-    col->append(Slice("hello"));
-    col->append(Slice("world"));
-
-    ASSERT_OK(col->accept(&visitor));
-    // Pointer must be exactly the column's underlying flat-bytes buffer.
-    ASSERT_EQ(visitor.result(), col->raw_bytes());
-
-    const auto* bytes = visitor.result();
-    EXPECT_EQ(memcmp(bytes, "hello", 5), 0);
-    EXPECT_EQ(memcmp(bytes + 5, "world", 5), 0);
-}
-
 TEST(RawBytesVisitorTest, VisitNullableColumn) {
     RawBytesVisitor visitor;
     auto col = ColumnTestHelper::build_nullable_column<int32_t>({42, 7});

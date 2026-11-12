@@ -25,6 +25,29 @@ import java.util.Arrays;
 
 public class AuditEventTest {
     @Test
+    public void testAIStatisticsBuilderSnapshotAndExecutionCopy() {
+        AuditEvent.AuditEventBuilder builder = new AuditEvent.AuditEventBuilder()
+                .addAITaskCount(1L).addAIRequestCount(2L).addAIRetryCount(3L)
+                .addAITimeoutCount(4L).addAIErrorCount(5L).addAIHttpTimeNs(6L)
+                .addAIPromptTokens(7L, 10L).addAICompletionTokens(8L, 11L).addAITotalTokens(9L, 12L);
+        AuditEvent snapshot = builder.buildSnapshot();
+        AuditEvent.AuditEventBuilder forwarded = new AuditEvent.AuditEventBuilder();
+        forwarded.copyExecStatsFrom(snapshot);
+        builder.addAITaskCount(99L).addAIPromptTokens(99L, 99L);
+        long[] expected = new long[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+        for (AuditEvent event : new AuditEvent[] {snapshot, forwarded.buildSnapshot()}) {
+            Assertions.assertArrayEquals(expected, new long[] {event.aiTaskCount, event.aiRequestCount,
+                    event.aiRetryCount, event.aiTimeoutCount, event.aiErrorCount, event.aiHttpTimeNs,
+                    event.aiPromptTokens, event.aiCompletionTokens, event.aiTotalTokens,
+                    event.aiPromptUsageCount, event.aiCompletionUsageCount, event.aiTotalUsageCount});
+        }
+        builder.reset();
+        Assertions.assertEquals(-1L, builder.build().aiTaskCount);
+        Assertions.assertEquals(-1L, builder.build().aiPromptTokens);
+        Assertions.assertEquals(-1L, builder.build().aiPromptUsageCount);
+    }
+
+    @Test
     public void testAuditEvent() {
         AuditEvent.AuditEventBuilder builder = new AuditEvent.AuditEventBuilder()
                 .setEventType(AuditEvent.EventType.CONNECTION)

@@ -18,19 +18,27 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.reshard.presplit.LoadKind;
 import com.starrocks.alter.reshard.presplit.PreSplitProfile;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.lake.LakeMetaVersionNotFoundException;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DescriptorTable;
@@ -38,6 +46,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
+import com.starrocks.planner.RangeColocateUnalignedException;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.proto.PQueryStatistics;
@@ -48,10 +57,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QualifiedName;
@@ -73,26 +85,33 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.PlainInsertOnEmptyPartitionsConflictException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
+import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 public class StmtExecutorTest {
     private static class DummyPlanNode extends PlanNode {
@@ -107,6 +126,9 @@ public class StmtExecutorTest {
         }
     }
 
+    // Counts StatementPlanner.plan() calls from a faked static method, which cannot capture a local.
+    private static final AtomicInteger PLAN_COUNT = new AtomicInteger();
+
     private static ExecPlan buildMinimalExecPlan(long cardinality) {
         ExecPlan execPlan = new ExecPlan();
         PlanNode root = new DummyPlanNode(new PlanNodeId(0), cardinality);
@@ -116,6 +138,10 @@ public class StmtExecutorTest {
         return execPlan;
     }
 
+    // StatementPlanner.plan and ProfilingExecPlan.buildFrom are static, so a fake of either cannot
+    // capture a local; the plans they see have to land on static fields.
+    private static final List<ExecPlan> PLANNED_PLANS = Lists.newArrayList();
+    private static final List<ExecPlan> PROFILED_PLANS = Lists.newArrayList();
     @Test
     public void testIsForwardToLeader(@Mocked ConnectContext ctx) {
         MysqlSerializer serializer = MysqlSerializer.newInstance();
@@ -501,6 +527,57 @@ public class StmtExecutorTest {
     }
 
     @Test
+    public void testAnalyzeProfileRechecksAccessWhenProfileAppearsAfterAnalysis() throws Exception {
+        // The analyzer allows an id whose profile is absent, and a running query publishes its profile every
+        // runtime_profile_report_interval -- so one can appear between the analyzer's lookup and the executor's.
+        // The executor therefore checks the element it actually serves. This mock is that race: absent on the
+        // first lookup (analysis), present on the second (execution).
+        RuntimeProfile profile = new RuntimeProfile("Query");
+        RuntimeProfile summary = new RuntimeProfile("Summary");
+        summary.addInfoString(ProfileManager.QUERY_ID, "raced-query-id");
+        summary.addInfoString(ProfileManager.QUERY_TYPE, "Query");
+        summary.addInfoString(ProfileManager.USER, "someone_else");
+        summary.addInfoString(ProfileManager.SQL_STATEMENT, "select 1");
+        profile.addChild(summary);
+        ProfileManager.ProfileElement published = ProfileManager.getInstance().createElement(summary, profile);
+
+        new MockUp<ProfileManager>() {
+            private int lookups = 0;
+
+            @Mock
+            public ProfileManager.ProfileElement getProfileElement(String queryId) {
+                return lookups++ == 0 ? null : published;
+            }
+        };
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)
+                    throws AccessDeniedException {
+                throw new AccessDeniedException("Access denied; OPERATE on SYSTEM required");
+            }
+        };
+
+        Config.authorization_enable_query_profile_access_check = true;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            StatementBase stmt = SqlParser.parseSingleStatement(
+                    "ANALYZE PROFILE FROM 'raced-query-id'", SqlModeHelper.MODE_DEFAULT);
+
+            new StmtExecutor(ctx, stmt).execute();
+
+            Assertions.assertTrue(ctx.getState().isError());
+            Assertions.assertTrue(ctx.getState().getErrorMessage().contains("Access denied"),
+                    ctx.getState().getErrorMessage());
+        } finally {
+            Config.authorization_enable_query_profile_access_check = false;
+        }
+    }
+
+    @Test
     public void testExecuteAnalyzeProfileStmtBranchSetsErrorWhenProfileMissing() throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ConnectContext.threadLocalInfo.set(ctx);
@@ -537,6 +614,394 @@ public class StmtExecutorTest {
 
             executor.execute();
             Assertions.assertNotNull(ctx.getState());
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
+    }
+
+    /**
+     * A lake metadata-version miss reported before any row reaches the client must degrade into a
+     * retry, and that retry has to go through the whole planning flow again: redelivering the old
+     * fragments would reuse scan ranges that still name the version BE could not read.
+     */
+    @Test
+    public void testLakeMetaVersionNotFoundReplansAndRetriesWithNewQueryId(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 2;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            // Keep the statement off the FE-side constant fast path so it goes through a coordinator.
+            ctx.getSessionVariable().setEnableConstantExecuteInFE(false);
+            StatementBase stmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            // This harness has no leader elected, so keep execute() on the local path.
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public boolean isForwardToLeader() {
+                    return false;
+                }
+            };
+
+            // No warehouse is registered in this harness; the counter is not what is under test.
+            new MockUp<WarehouseMetricMgr>() {
+                @Mock
+                public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+                }
+            };
+
+            PLAN_COUNT.set(0);
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                    PLAN_COUNT.incrementAndGet();
+                    return buildMinimalExecPlan(1);
+                }
+            };
+
+            new MockUp<DefaultCoordinator.Factory>() {
+                @Mock
+                public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                               List<ScanNode> scanNodes, TDescriptorTable descTable,
+                                                               ExecPlan plan) {
+                    return coordinator;
+                }
+            };
+
+            AtomicInteger attempts = new AtomicInteger();
+            List<TUniqueId> executionIds = Lists.newArrayList();
+            new MockUp<DefaultCoordinator>() {
+                @Mock
+                public void execWithQueryDeployExecutor(ConnectContext context) {
+                    executionIds.add(context.getExecutionId());
+                }
+
+                @Mock
+                public RowBatch getNext() {
+                    if (attempts.incrementAndGet() == 1) {
+                        throw new LakeMetaVersionNotFoundException(
+                                "lake tablet metadata version not found, tablet_id=10001, partition_id=10002, "
+                                        + "version=144847: Not found");
+                    }
+                    return new RowBatch();
+                }
+            };
+
+            executor.execute();
+
+            Assertions.assertEquals(2, attempts.get(), "the failed attempt should have been retried");
+            // One plan for the first attempt plus a full re-plan for the retry.
+            Assertions.assertEquals(2, PLAN_COUNT.get(), "the retry must rebuild the exec plan");
+            Assertions.assertEquals(2, executionIds.size());
+            Assertions.assertNotEquals(executionIds.get(0), executionIds.get(1),
+                    "the retry must run under a new query id");
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
+    }
+
+    /**
+     * A range-colocate bucket assignment that went stale between planning and scheduling (a tablet split or merge
+     * published in between) fails the attempt before anything is deployed. The statement must be planned again --
+     * the new plan sees the current tablets, or a shuffle if the group is being realigned -- and retried.
+     */
+    @Test
+    public void testStaleRangeColocateAssignmentReplansAndRetries(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 2;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            ctx.getSessionVariable().setEnableConstantExecuteInFE(false);
+            StatementBase stmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public boolean isForwardToLeader() {
+                    return false;
+                }
+            };
+            new MockUp<WarehouseMetricMgr>() {
+                @Mock
+                public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+                }
+            };
+            PLAN_COUNT.set(0);
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                    PLAN_COUNT.incrementAndGet();
+                    return buildMinimalExecPlan(1);
+                }
+            };
+            new MockUp<DefaultCoordinator.Factory>() {
+                @Mock
+                public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                               List<ScanNode> scanNodes, TDescriptorTable descTable,
+                                                               ExecPlan plan) {
+                    return coordinator;
+                }
+            };
+
+            AtomicInteger attempts = new AtomicInteger();
+            List<TUniqueId> executionIds = Lists.newArrayList();
+            new MockUp<DefaultCoordinator>() {
+                @Mock
+                public void execWithQueryDeployExecutor(ConnectContext context) {
+                    executionIds.add(context.getExecutionId());
+                    if (attempts.incrementAndGet() == 1) {
+                        throw new RangeColocateUnalignedException("range colocate group 1 has a stale bucket "
+                                + "assignment in physical partition 2");
+                    }
+                }
+
+                @Mock
+                public RowBatch getNext() {
+                    return new RowBatch();
+                }
+            };
+
+            executor.execute();
+
+            Assertions.assertEquals(2, attempts.get(), "the failed attempt should have been retried");
+            Assertions.assertEquals(2, PLAN_COUNT.get(), "the retry must rebuild the exec plan");
+            Assertions.assertNotEquals(executionIds.get(0), executionIds.get(1),
+                    "the retry must run under a new query id");
+            Assertions.assertFalse(ctx.getState().isError(), ctx.getState().getErrorMessage());
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
+    }
+
+    /**
+     * A range-colocate group that is stable but still unaligned re-plans into the same failure on every
+     * attempt. Bounded by {@code max_query_retry_time}, the statement must still fail -- with the original
+     * error, not a retry-exhaustion error -- rather than retry forever.
+     */
+    @Test
+    public void testPersistentlyStaleRangeColocateAssignmentFailsWithTheOriginalError(
+            @Mocked DefaultCoordinator coordinator) throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 2;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            ctx.getSessionVariable().setEnableConstantExecuteInFE(false);
+            StatementBase stmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public boolean isForwardToLeader() {
+                    return false;
+                }
+            };
+            new MockUp<WarehouseMetricMgr>() {
+                @Mock
+                public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+                }
+            };
+            PLAN_COUNT.set(0);
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                    PLAN_COUNT.incrementAndGet();
+                    return buildMinimalExecPlan(1);
+                }
+            };
+            new MockUp<DefaultCoordinator.Factory>() {
+                @Mock
+                public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                               List<ScanNode> scanNodes, TDescriptorTable descTable,
+                                                               ExecPlan plan) {
+                    return coordinator;
+                }
+            };
+
+            AtomicInteger attempts = new AtomicInteger();
+            List<TUniqueId> executionIds = Lists.newArrayList();
+            new MockUp<DefaultCoordinator>() {
+                @Mock
+                public void execWithQueryDeployExecutor(ConnectContext context) {
+                    executionIds.add(context.getExecutionId());
+                    attempts.incrementAndGet();
+                    throw new RangeColocateUnalignedException("range colocate group 1 has a stale bucket "
+                            + "assignment in physical partition 2");
+                }
+
+                @Mock
+                public RowBatch getNext() {
+                    return new RowBatch();
+                }
+            };
+
+            executor.execute();
+
+            Assertions.assertEquals(2, attempts.get(), "the statement is attempted max_query_retry_time times");
+            Assertions.assertEquals(2, PLAN_COUNT.get(),
+                    "every retry is re-planned, and there is no retry after the last attempt");
+            Assertions.assertTrue(ctx.getState().isError());
+            Assertions.assertTrue(ctx.getState().getErrorMessage().contains("stale bucket assignment"),
+                    ctx.getState().getErrorMessage());
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
+    }
+
+    /**
+     * The reverse ordering of the guard in DefaultCoordinator: the retryable failure is recorded
+     * first and the KILL lands afterwards, so queryStatus still holds the retryable code. The retry
+     * must be refused anyway -- a cancellation that reached this statement is terminal, otherwise a
+     * KILL would silently start a second, full execution of the query the user just stopped.
+     */
+    @Test
+    public void testCancelledStatementIsNotRetriedAfterARetryableFailure(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 2;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            ctx.getSessionVariable().setEnableConstantExecuteInFE(false);
+            StatementBase stmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public boolean isForwardToLeader() {
+                    return false;
+                }
+            };
+            new MockUp<WarehouseMetricMgr>() {
+                @Mock
+                public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+                }
+            };
+            PLAN_COUNT.set(0);
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                    PLAN_COUNT.incrementAndGet();
+                    return buildMinimalExecPlan(1);
+                }
+            };
+            new MockUp<DefaultCoordinator.Factory>() {
+                @Mock
+                public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                               List<ScanNode> scanNodes, TDescriptorTable descTable,
+                                                               ExecPlan plan) {
+                    return coordinator;
+                }
+            };
+
+            AtomicInteger attempts = new AtomicInteger();
+            new MockUp<DefaultCoordinator>() {
+                @Mock
+                public RowBatch getNext() {
+                    attempts.incrementAndGet();
+                    // The KILL lands while this fragment is failing, i.e. after the retryable status.
+                    executor.cancel("killed by user");
+                    throw new LakeMetaVersionNotFoundException(
+                            "lake tablet metadata version not found, tablet_id=10001, partition_id=10002, "
+                                    + "version=144847: Not found");
+                }
+            };
+
+            executor.execute();
+
+            Assertions.assertEquals(1, attempts.get(), "a cancelled statement must not be retried");
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
+    }
+
+    /**
+     * The narrow window after the retry gate accepts: the finally block still does real work
+     * (profile cleanup, compute-resource re-acquisition) before the next attempt deploys, and a KILL
+     * landing there used to be missed entirely -- the loop reset the query id and handed a fresh
+     * coordinator to a query the user had already stopped. The start of each retry must re-observe it.
+     */
+    @Test
+    public void testCancellationDuringTheRetryWindowStopsTheRedeploy(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 2;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            ctx.getSessionVariable().setEnableConstantExecuteInFE(false);
+            StatementBase stmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public boolean isForwardToLeader() {
+                    return false;
+                }
+            };
+            new MockUp<WarehouseMetricMgr>() {
+                @Mock
+                public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+                }
+            };
+            PLAN_COUNT.set(0);
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                    PLAN_COUNT.incrementAndGet();
+                    return buildMinimalExecPlan(1);
+                }
+            };
+            new MockUp<DefaultCoordinator.Factory>() {
+                @Mock
+                public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                               List<ScanNode> scanNodes, TDescriptorTable descTable,
+                                                               ExecPlan plan) {
+                    return coordinator;
+                }
+            };
+            // Runs in the retry window: after the gate accepted, before the next attempt deploys.
+            new MockUp<ConnectContext>() {
+                @Mock
+                public void ensureCurrentComputeResourceAvailable() {
+                    executor.cancel("killed by user");
+                }
+            };
+
+            AtomicInteger attempts = new AtomicInteger();
+            new MockUp<DefaultCoordinator>() {
+                @Mock
+                public RowBatch getNext() {
+                    attempts.incrementAndGet();
+                    throw new LakeMetaVersionNotFoundException(
+                            "lake tablet metadata version not found, tablet_id=10001, partition_id=10002, "
+                                    + "version=144847: Not found");
+                }
+            };
+
+            executor.execute();
+
+            Assertions.assertEquals(1, attempts.get(),
+                    "a KILL landing in the retry window must stop the redeploy");
         } finally {
             Config.max_query_retry_time = oldRetryTime;
         }
@@ -917,6 +1382,7 @@ public class StmtExecutorTest {
         String embedded = onSummary.getInfoString(ProfileKeyDictionary.EXPLAIN_PLAN);
         Assertions.assertNotNull(embedded,
                 "ExplainPlan must be embedded when enable_explain_in_profile is true");
+        Assertions.assertFalse(onCtx.isExplainForProfile(), "Embedding must reset explainForProfile after rendering");
         Assertions.assertTrue(embedded.contains("PLAN FRAGMENT"),
                 "Embedded explain plan should contain rendered fragment headers");
         Assertions.assertTrue(embedded.contains("OlapScanNode"),
@@ -1495,6 +1961,56 @@ public class StmtExecutorTest {
     }
 
     @Test
+    public void testAuditStatisticsRefreshesCoordinatorSnapshots(@Mocked Coordinator coordinator) {
+        StmtExecutor executor = new StmtExecutor(new ConnectContext(), new ShowFrontendsStmt());
+        Assertions.assertEquals(0L, executor.getQueryStatisticsForAuditLog().scanRows);
+        PQueryStatistics first = new PQueryStatistics();
+        first.scanRows = 1L;
+        PQueryStatistics second = new PQueryStatistics();
+        second.scanRows = 2L;
+        new Expectations() {
+            {
+                coordinator.getAuditStatistics();
+                returns(first, second);
+                minTimes = 0;
+            }
+        };
+        Deencapsulation.setField(executor, "coord", coordinator);
+        Assertions.assertEquals(1L, executor.getQueryStatisticsForAuditLog().scanRows);
+        Assertions.assertEquals(2L, executor.getQueryStatisticsForAuditLog().scanRows);
+        Assertions.assertEquals(1L, first.scanRows);
+    }
+
+    @Test
+    public void testAuditStatisticsPrefersAuthoritativeResults(@Mocked Coordinator coordinator) {
+        PQueryStatistics partial = new PQueryStatistics();
+        partial.scanRows = 1L;
+        new Expectations() {
+            {
+                coordinator.getAuditStatistics();
+                result = partial;
+                minTimes = 0;
+            }
+        };
+        StatementBase stmt = SqlParser.parseSingleStatement("select 1", SqlModeHelper.MODE_DEFAULT);
+        stmt.setOrigStmt(new OriginStatement("select 1", 0));
+        StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
+        Deencapsulation.setField(executor, "coord", coordinator);
+        Assertions.assertEquals(1L, executor.getQueryStatisticsForAuditLog().scanRows);
+
+        PQueryStatistics forwarded = new PQueryStatistics();
+        forwarded.scanRows = 10L;
+        executor.setQueryStatistics(forwarded);
+        Assertions.assertSame(forwarded, executor.getQueryStatisticsForAuditLog());
+        PQueryStatistics batchStatistics = new PQueryStatistics();
+        batchStatistics.scanRows = 20L;
+        RowBatch batch = new RowBatch();
+        batch.setQueryStatistics(batchStatistics);
+        executor.processQueryStatisticsFromResult(batch, null, false);
+        Assertions.assertSame(batchStatistics, executor.getQueryStatisticsForAuditLog());
+    }
+
+    @Test
     public void testFailedQueryDetailUsesCoordinatorStatistics() {
         boolean oldCollect = Config.enable_collect_query_detail_info;
         Config.enable_collect_query_detail_info = true;
@@ -2004,5 +2520,434 @@ public class StmtExecutorTest {
         Assertions.assertEquals("existing", state.getInfoMessage());
         StmtExecutor.attachDeleteOkInfo(state, "");
         Assertions.assertEquals("existing", state.getInfoMessage());
+    }
+
+    /**
+     * A retry that went through ExecuteExceptionHandler runs the plan that was rebuilt for it, so the
+     * profile and the EXPLAIN ANALYZE rendering that close the statement have to describe that plan.
+     * Reporting the plan the first attempt ran pairs the new coordinator's runtime counters with an
+     * operator tree the query never executed, which shows up as missing or misattributed fragments.
+     */
+    @Test
+    public void testProfileAndExplainAnalyzeAfterRetryUseTheReplannedPlan(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 2;
+        PLANNED_PLANS.clear();
+        PROFILED_PLANS.clear();
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            // Keep the statement off the FE-side constant fast path so it goes through a coordinator.
+            ctx.getSessionVariable().setEnableConstantExecuteInFE(false);
+            String sql = "EXPLAIN ANALYZE SELECT 1";
+            StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+            stmt.setOrigStmt(new OriginStatement(sql, 0));
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            // This harness has no leader elected, so keep execute() on the local path.
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public boolean isForwardToLeader() {
+                    return false;
+                }
+            };
+
+            // No warehouse is registered in this harness; the counter is not what is under test.
+            new MockUp<WarehouseMetricMgr>() {
+                @Mock
+                public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+                }
+            };
+
+            // A fresh plan per planning round, so the assertions can tell them apart by identity.
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                    ExecPlan plan = buildMinimalExecPlan(1);
+                    PLANNED_PLANS.add(plan);
+                    return plan;
+                }
+            };
+
+            // Both the profile (ExecPlan#getProfilingPlan) and the EXPLAIN ANALYZE rendering reach the
+            // plan through this one conversion, so it records every plan the wrap-up reports on.
+            new MockUp<ProfilingExecPlan>() {
+                @Mock
+                public static ProfilingExecPlan buildFrom(ExecPlan execPlan) {
+                    PROFILED_PLANS.add(execPlan);
+                    return null;
+                }
+            };
+
+            // The faked conversion above hands it a null plan, which the real analyzer cannot render.
+            new MockUp<ExplainAnalyzer>() {
+                @Mock
+                public static String analyze(ProfilingExecPlan plan, RuntimeProfile profile,
+                                             List<Integer> planNodeIds, boolean colorExplainOutput) {
+                    return "";
+                }
+            };
+
+            new MockUp<DefaultCoordinator.Factory>() {
+                @Mock
+                public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                               List<ScanNode> scanNodes, TDescriptorTable descTable,
+                                                               ExecPlan plan) {
+                    return coordinator;
+                }
+            };
+
+            AtomicInteger attempts = new AtomicInteger();
+            new MockUp<DefaultCoordinator>() {
+                @Mock
+                public void execWithQueryDeployExecutor(ConnectContext context) {
+                }
+
+                // Non-null so the wrap-up actually walks into profile processing.
+                @Mock
+                public RuntimeProfile getQueryProfile() {
+                    return new RuntimeProfile("Execution");
+                }
+
+                @Mock
+                public RowBatch getNext() throws Exception {
+                    if (attempts.incrementAndGet() == 1) {
+                        throw new StarRocksException(InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR,
+                                "Backend node not found. Check if any backend node is down.");
+                    }
+                    return new RowBatch();
+                }
+            };
+
+            executor.execute();
+
+            Assertions.assertEquals(2, attempts.get(), "the failed attempt should have been retried");
+            Assertions.assertEquals(2, PLANNED_PLANS.size(), "the retry must rebuild the exec plan");
+            ExecPlan retriedPlan = PLANNED_PLANS.get(1);
+            // One conversion for the profile, one for the EXPLAIN ANALYZE rendering.
+            Assertions.assertEquals(2, PROFILED_PLANS.size(), "both wrap-up paths must have run");
+            for (ExecPlan profiled : PROFILED_PLANS) {
+                Assertions.assertSame(retriedPlan, profiled,
+                        "profile and EXPLAIN ANALYZE must describe the plan the retry actually ran");
+            }
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
+    }
+
+    // ---- a plain insert on never-written partitions that lost the race at commit is retried once ----
+
+    private static final AtomicInteger DML_ATTEMPTS = new AtomicInteger();
+    private static final AtomicBoolean PLAN_PLAIN_INSERT = new AtomicBoolean();
+    // The transaction id each planning attempt found on the statement.
+    private static final List<Long> PLAN_TXN_IDS = Lists.newArrayList();
+    // Whether each planning attempt found the statement without a resolved target table.
+    private static final List<Boolean> PLAN_TARGET_WAS_NULL = Lists.newArrayList();
+    // clearExternalResources() calls on the coordinator, sampled when each DML attempt starts.
+    private static final AtomicInteger COORD_CLEARS = new AtomicInteger();
+    private static final List<Integer> COORD_CLEARS_AT_ATTEMPT_START = Lists.newArrayList();
+    // Transactions StatementPlanner.abortTransaction was asked to abort, by id.
+    private static final List<Long> ABORTED_TXN_IDS = Lists.newArrayList();
+    // The executor under test, for a test that cancels it from inside a stub.
+    private static final AtomicReference<StmtExecutor> EXECUTOR = new AtomicReference<>();
+    // The table planning attempt n resolves the target to.
+    private static final AtomicReference<Function<Integer, Table>> PLAN_TARGET_OF = new AtomicReference<>();
+
+    private static ConnectContext newInsertCtx() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        return ctx;
+    }
+
+    // Runs an INSERT through execute() with the plan and handleDMLStmt stubbed (the profile wrapper
+    // around it is real): the plan is flagged (or not) as a plain insert on empty partitions, and
+    // attempt n fails with failureOfAttempt(n) the way handleDMLStmt reports a failure, or succeeds
+    // when that is null. Each plan "begins" a transaction by stamping a txn id on the statement, and
+    // resolves the target to the same table every time.
+    private static void executeInsertWithStubbedDml(ConnectContext ctx, boolean plainInsertOnEmptyPartitions,
+                                                    Function<Integer, Throwable> failureOfAttempt,
+                                                    List<TUniqueId> executionIds,
+                                                    DefaultCoordinator coordinator) throws Exception {
+        Table table = new Table(Table.TableType.OLAP);
+        executeInsertWithStubbedDml(ctx, plainInsertOnEmptyPartitions, failureOfAttempt, executionIds, coordinator,
+                plan -> table);
+    }
+
+    // As above, with planning attempt n resolving the target to targetOfPlan(n).
+    private static void executeInsertWithStubbedDml(ConnectContext ctx, boolean plainInsertOnEmptyPartitions,
+                                                    Function<Integer, Throwable> failureOfAttempt,
+                                                    List<TUniqueId> executionIds,
+                                                    DefaultCoordinator coordinator,
+                                                    Function<Integer, Table> targetOfPlan) throws Exception {
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "INSERT INTO t0 SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        EXECUTOR.set(executor);
+        PLAN_TARGET_OF.set(targetOfPlan);
+        COORD_CLEARS.set(0);
+        COORD_CLEARS_AT_ATTEMPT_START.clear();
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void clearExternalResources() {
+                COORD_CLEARS.incrementAndGet();
+            }
+        };
+
+        // This harness has no leader elected, so keep execute() on the local path.
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public boolean isForwardToLeader() {
+                return false;
+            }
+
+            @Mock
+            public void handleDMLStmt(Invocation invocation, ExecPlan execPlan, DmlStmt dmlStmt) throws Exception {
+                int attempt = DML_ATTEMPTS.incrementAndGet();
+                executionIds.add(ctx.getExecutionId());
+                COORD_CLEARS_AT_ATTEMPT_START.add(COORD_CLEARS.get());
+                // What the real handleDMLStmt does first: this attempt's coordinator becomes the executor's.
+                Field coordField = StmtExecutor.class.getDeclaredField("coord");
+                coordField.setAccessible(true);
+                coordField.set(invocation.getInvokedInstance(), coordinator);
+                // And what it does next: a statement cancelled by now does not run.
+                StmtExecutor self = invocation.getInvokedInstance();
+                Throwable failure = self.isCancelled() ? new StarRocksException("Statement has been cancelled")
+                        : failureOfAttempt.apply(attempt);
+                if (failure != null) {
+                    // What handleDMLStmt leaves behind on a failure: the error state, and the cause
+                    // wrapped once more.
+                    ctx.getState().setError(failure.getMessage());
+                    throw new StarRocksException(failure.getMessage(), failure);
+                }
+                ctx.getState().setOk();
+            }
+        };
+        // No warehouse is registered in this harness; the counter is not what is under test.
+        new MockUp<WarehouseMetricMgr>() {
+            @Mock
+            public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+                // nothing to count in this harness
+            }
+        };
+        PLAN_COUNT.set(0);
+        DML_ATTEMPTS.set(0);
+        PLAN_TXN_IDS.clear();
+        PLAN_TARGET_WAS_NULL.clear();
+        ABORTED_TXN_IDS.clear();
+        PLAN_PLAIN_INSERT.set(plainInsertOnEmptyPartitions);
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public static ExecPlan plan(StatementBase plannedStmt, ConnectContext ignoredCtx) {
+                // StatementPlanner.beginTransaction only opens a transaction for a statement that
+                // carries none; record what this attempt found and stamp this attempt's.
+                PLAN_TXN_IDS.add(((DmlStmt) plannedStmt).getTxnId());
+                ((DmlStmt) plannedStmt).setTxnId(1000 + PLAN_COUNT.incrementAndGet());
+                // InsertAnalyzer resolves the target only when the statement carries none; record that and
+                // leave a resolved target behind, as analysis does.
+                InsertStmt planned = (InsertStmt) plannedStmt;
+                PLAN_TARGET_WAS_NULL.add(planned.getTargetTable() == null);
+                planned.setTargetTable(PLAN_TARGET_OF.get().apply(PLAN_COUNT.get()));
+                ExecPlan plan = buildMinimalExecPlan(1);
+                plan.setPlainInsertOnEmptyPartitions(PLAN_PLAIN_INSERT.get());
+                return plan;
+            }
+
+            @Mock
+            public static void abortTransaction(DmlStmt dmlStmt, ConnectContext ignoredCtx, String errMsg) {
+                ABORTED_TXN_IDS.add(dmlStmt.getTxnId());
+            }
+        };
+
+        executor.execute();
+    }
+
+    // The conflict as it reaches StmtExecutor: thrown by DatabaseTransactionMgr under the commit lock and
+    // wrapped by GlobalTransactionMgr.retryCommitOnRateLimitExceeded.
+    private static Throwable plainInsertCommitConflict() {
+        String msg = "partition 10001 of table t0 received other writes while this INSERT was planned as a "
+                + "plain insert on an empty partition, retry the statement";
+        return new StarRocksException("fail to execute commit task: " + msg,
+                new PlainInsertOnEmptyPartitionsConflictException(msg));
+    }
+
+    @Test
+    public void testPlainInsertOnEmptyPartitionsConflictIsRetriedOnce(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        ConnectContext ctx = newInsertCtx();
+        ctx.getSessionVariable().setEnableProfile(true);
+        List<TUniqueId> executionIds = Lists.newArrayList();
+        List<String> removedProfiles = Lists.newArrayList();
+        new MockUp<ProfileManager>() {
+            @Mock
+            public void removeProfile(String queryId) {
+                removedProfiles.add(queryId);
+            }
+        };
+
+        executeInsertWithStubbedDml(ctx, true, attempt -> attempt == 1 ? plainInsertCommitConflict() : null,
+                executionIds, coordinator);
+
+        Assertions.assertEquals(2, DML_ATTEMPTS.get(), "the lost race must be retried once");
+        Assertions.assertEquals(2, PLAN_COUNT.get(),
+                "the retry must re-plan: that is where it sees the advanced partition version");
+        Assertions.assertNotEquals(executionIds.get(0), executionIds.get(1),
+                "the retry runs under a new execution id, so it gets a new transaction label");
+        // The first attempt's transaction was aborted; the statement must not carry its id into the
+        // re-plan, or StatementPlanner.beginTransaction would keep it instead of opening a new one.
+        Assertions.assertEquals(2, PLAN_TXN_IDS.size());
+        Assertions.assertTrue(PLAN_TXN_IDS.stream().allMatch(txnId -> txnId == DmlStmt.INVALID_TXN_ID),
+                "planning attempts saw txn ids " + PLAN_TXN_IDS);
+        // The target the first attempt resolved is dropped too, so the re-plan resolves the name again,
+        // the same way beginTransaction does for the new transaction: a table replaced in between is then
+        // either consistently written or consistently rejected.
+        Assertions.assertEquals(List.of(true, true), PLAN_TARGET_WAS_NULL,
+                "the re-plan must not reuse the first attempt's target table");
+        // The first attempt's coordinator may hold connector scan resources (INSERT ... SELECT from an
+        // external table); they are released before the retry replaces it, not only at the very end.
+        Assertions.assertEquals(List.of(0, 1), COORD_CLEARS_AT_ATTEMPT_START,
+                "the first coordinator must be cleared before the second attempt starts");
+        // The failed attempt's profile is dropped, not queued: the async profile task would read the
+        // executor's coord and profile, which the retry replaces.
+        Assertions.assertEquals(List.of(DebugUtil.printId(executionIds.get(0))), removedProfiles);
+        Assertions.assertFalse(ctx.getState().isError(), ctx.getState().getErrorMessage());
+    }
+
+    @Test
+    public void testDMLCancelledWhileItsCoordinatorIsCreatedDoesNotRun(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        // A KILL that lands while the statement is being planned, or while its coordinator is being created
+        // (for the conflict retry: after the first coordinator finished), can only cancel the coordinator the
+        // executor holds at that moment, which is not the one about to run. handleDMLStmt must re-read the
+        // flag once the new coordinator is installed, or a killed statement would still write and commit.
+        MetricRepo.init();
+        ConnectContext ctx = newInsertCtx();
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "INSERT INTO t0 SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        Table targetTable = new Table(Table.TableType.BLACKHOLE);
+        new MockUp<InsertStmt>() {
+            @Mock
+            public Table getTargetTable() {
+                return targetTable;
+            }
+        };
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                            List<ScanNode> scanNodes,
+                                                            TDescriptorTable descTable, ExecPlan plan) {
+                executor.cancel("killed while the coordinator was being created");
+                return coordinator;
+            }
+        };
+        AtomicInteger executions = new AtomicInteger();
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void exec() {
+                executions.incrementAndGet();
+            }
+        };
+
+        Exception ex = Assertions.assertThrows(Exception.class,
+                () -> executor.handleDMLStmt(buildMinimalExecPlan(1), stmt));
+
+        Assertions.assertTrue(ex.getMessage() != null && ex.getMessage().contains("cancelled"), ex.getMessage());
+        Assertions.assertEquals(0, executions.get(), "a cancelled statement must not run its coordinator");
+        Assertions.assertTrue(ctx.getState().isError());
+    }
+
+    @Test
+    public void testPlainInsertRetryFailsWhenTheTargetTableWasReplaced(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        // Between the attempts the name was swapped, or dropped and re-created, so the re-plan resolves another
+        // table. The statement keeps one-way state from its first analysis (usePartialUpdate is set only for a
+        // primary key target and never cleared), so running it against the replacement is not safe: the retry
+        // gives up and releases the transaction its re-plan opened.
+        ConnectContext ctx = newInsertCtx();
+        Table firstTable = new Table(1, "t0", Table.TableType.OLAP, Lists.newArrayList());
+        Table replacement = new Table(2, "t0", Table.TableType.OLAP, Lists.newArrayList());
+
+        executeInsertWithStubbedDml(ctx, true, attempt -> plainInsertCommitConflict(), Lists.newArrayList(),
+                coordinator, plan -> plan == 1 ? firstTable : replacement);
+
+        Assertions.assertEquals(1, DML_ATTEMPTS.get(), "the retry must not run against another table");
+        Assertions.assertEquals(2, PLAN_COUNT.get());
+        Assertions.assertEquals(List.of(1002L), ABORTED_TXN_IDS, "the re-plan's transaction must be released");
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertTrue(ctx.getState().getErrorMessage().contains("was replaced"),
+                ctx.getState().getErrorMessage());
+    }
+
+    @Test
+    public void testCancellationAfterTheRetryIsDecidedStillReachesTheRetry(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        // The retry is decided once, where the failed attempt's profile is dropped. A KILL landing right after
+        // must not make a second check decline the retry: that profile is gone, so the statement would end
+        // with none. The retry runs instead and is stopped by handleDMLStmt's own cancellation check, which
+        // leaves that attempt's profile behind.
+        ConnectContext ctx = newInsertCtx();
+        ctx.getSessionVariable().setEnableProfile(true);
+        List<TUniqueId> executionIds = Lists.newArrayList();
+        List<String> removedProfiles = Lists.newArrayList();
+        new MockUp<ProfileManager>() {
+            @Mock
+            public void removeProfile(String queryId) {
+                removedProfiles.add(queryId);
+                EXECUTOR.get().cancel("killed after the retry was decided");
+            }
+        };
+
+        executeInsertWithStubbedDml(ctx, true, attempt -> attempt == 1 ? plainInsertCommitConflict() : null,
+                executionIds, coordinator);
+
+        Assertions.assertEquals(2, DML_ATTEMPTS.get(), "the decided retry must start and be stopped by its own check");
+        Assertions.assertEquals(List.of(DebugUtil.printId(executionIds.get(0))), removedProfiles,
+                "only the attempt that is retried loses its profile");
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertTrue(ctx.getState().getErrorMessage().contains("cancelled"), ctx.getState().getErrorMessage());
+    }
+
+    @Test
+    public void testPlainInsertOnEmptyPartitionsConflictIsRetriedOnlyOnce(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        ConnectContext ctx = newInsertCtx();
+        List<TUniqueId> executionIds = Lists.newArrayList();
+
+        executeInsertWithStubbedDml(ctx, true, attempt -> plainInsertCommitConflict(), executionIds, coordinator);
+
+        Assertions.assertEquals(2, DML_ATTEMPTS.get());
+        Assertions.assertEquals(2, PLAN_COUNT.get());
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertTrue(ctx.getState().getErrorMessage().contains("received other writes"),
+                ctx.getState().getErrorMessage());
+    }
+
+    @Test
+    public void testPlainInsertOnEmptyPartitionsConflictNotRetriedForOtherPlansOrFailures(
+            @Mocked DefaultCoordinator coordinator) throws Exception {
+        // The same conflict on a plan that was not a plain insert on empty partitions: not ours to retry.
+        ConnectContext ctx = newInsertCtx();
+        executeInsertWithStubbedDml(ctx, false, attempt -> plainInsertCommitConflict(), Lists.newArrayList(),
+                coordinator);
+        Assertions.assertEquals(1, DML_ATTEMPTS.get());
+        Assertions.assertEquals(1, PLAN_COUNT.get());
+        Assertions.assertTrue(ctx.getState().isError());
+
+        // A flagged plan failing at commit for any other reason: no retry either.
+        ctx = newInsertCtx();
+        executeInsertWithStubbedDml(ctx, true, attempt -> new StarRocksException(
+                "fail to execute commit task: disable_load_job is set to true, all load jobs are prevented",
+                new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented")),
+                Lists.newArrayList(), coordinator);
+        Assertions.assertEquals(1, DML_ATTEMPTS.get());
+        Assertions.assertEquals(1, PLAN_COUNT.get());
+        Assertions.assertTrue(ctx.getState().isError());
     }
 }

@@ -392,15 +392,15 @@ TEST_F(PartitionChunkWriterTest, spill_writer_for_complex_types) {
     Status status;
 
     parquet::Utils::SlotDesc c1{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY)};
-    c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    c1.type.children.push_back(TYPE_INT_DESC);
 
     parquet::Utils::SlotDesc c2{"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_MAP)};
-    c2.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
-    c2.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    c2.type.children.push_back(TYPE_VARCHAR_DESC);
+    c2.type.children.push_back(TYPE_INT_DESC);
 
     parquet::Utils::SlotDesc c3{"c3", TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT)};
-    c3.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
-    c3.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    c3.type.children.push_back(TYPE_VARCHAR_DESC);
+    c3.type.children.push_back(TYPE_INT_DESC);
     c3.type.field_names.emplace_back("c3_name");
     c3.type.field_names.emplace_back("c3_age");
 

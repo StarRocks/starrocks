@@ -16,6 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -24,6 +25,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
 import java.util.stream.Stream;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class DistinctAggTest extends PlanTestBase {
 
@@ -56,12 +59,49 @@ public class DistinctAggTest extends PlanTestBase {
     }
 
     @Test
+    void testCountDistinctPrimaryKeyWithOtherAggregation() throws Exception {
+        String sql = "select v1, count(1), count(distinct pk) from tprimary group by v1 order by v1 desc";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: count(1), count(1: pk)");
+    }
+
+    @Test
+    void testCountDistinctPrimaryKeyWithoutOtherAggregation() throws Exception {
+        String plan = getFragmentPlan("select v1, count(distinct pk) from tprimary group by v1");
+        assertContains(plan, "count(1: pk)");
+    }
+
+    @Test
     void testDistinctConstant() throws Exception {
         String sql = "select b1, count(distinct [skew] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) " +
                 "t1 group by b1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "2:AGGREGATE (update finalize)\n" +
                 "  |  output: any_value(CAST(split('a,b,c', ',') IS NOT NULL AS BIGINT))");
+    }
+
+    @Test
+    void testGroupByCountDistinctRewriteKeepsDecimalType() throws Exception {
+        // The distinct column is the distribution key, so GroupByCountDistinctRewriteRule turns
+        // multi_distinct_sum into sum. The sum must keep the analyzed decimal type instead of the
+        // builtin's wildcard DECIMAL128(-1, -1).
+        starRocksAssert.withTable("CREATE TABLE t_distinct_decimal (\n" +
+                "  k int NULL,\n" +
+                "  d decimal(38, 10) NULL\n" +
+                ") DUPLICATE KEY(k)\n" +
+                "DISTRIBUTED BY HASH(d) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        try {
+            String sql = "select k, multi_distinct_sum(d) from t_distinct_decimal group by k";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "output: sum(2: d)");
+            String thrift = getThriftPlan(sql);
+            assertContains(thrift, "fn:TFunction(name:TFunctionName(function_name:sum)");
+            assertContains(thrift, "scalar_type:TScalarType(type:DECIMAL128, precision:38, scale:10)");
+            assertNotContains(thrift, "precision:-1");
+        } finally {
+            starRocksAssert.dropTable("t_distinct_decimal");
+        }
     }
 
     @Test
@@ -111,6 +151,57 @@ public class DistinctAggTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "output: array_agg(DISTINCT 'xxxx'), array_agg(DISTINCT 'xxx')");
         assertNotContains(plan, "array_agg_distinct");
+    }
+
+    @Test
+    void testArrayAggDistinctOnTypeWithoutArrayAggDistinctOverload() throws Exception {
+        // array_agg_distinct has no VARIANT or VARBINARY overload. The non-strict lookup used to return the DECIMALV2
+        // overload without casting the argument, and the BE then read the column as DECIMALV2 and crashed.
+        String[] sqls = {
+                "select array_agg(distinct cast(t1a as variant)) from test_all_type",
+                "select array_agg(distinct cast(t1a as variant)) from test_all_type group by t1b",
+                "select count(distinct t1b), array_agg(distinct cast(t1a as variant)) from test_all_type",
+                "select array_agg(distinct cast(t1a as variant)), array_agg(distinct t1b) from test_all_type group by t1c",
+                "select array_agg(distinct to_binary(t1a)) from test_all_type",
+                "select count(distinct t1b), array_agg(distinct to_binary(t1a)) from test_all_type",
+        };
+        try {
+            // 0: auto, 1: one phase (PlanFragmentBuilder), 2: two phase (SplitTwoPhaseAggRule)
+            for (int stage : new int[] {0, 1, 2}) {
+                connectContext.getSessionVariable().setNewPlanerAggStage(stage);
+                for (String sql : sqls) {
+                    try {
+                        String plan = getVerboseExplain(sql);
+                        assertNotContains(plan, "args: DECIMALV2");
+                    } catch (StarRocksPlannerException e) {
+                        assertContains(e.getMessage(), "array_agg(distinct) does not support type");
+                    }
+                }
+            }
+
+            for (int stage : new int[] {1, 2}) {
+                connectContext.getSessionVariable().setNewPlanerAggStage(stage);
+                StarRocksPlannerException e = assertThrows(StarRocksPlannerException.class,
+                        () -> getVerboseExplain("select array_agg(distinct cast(t1a as variant)) from test_all_type"));
+                assertContains(e.getMessage(), "array_agg(distinct) does not support type VARIANT");
+                e = assertThrows(StarRocksPlannerException.class,
+                        () -> getVerboseExplain("select array_agg(distinct to_binary(t1a)) from test_all_type"));
+                assertContains(e.getMessage(), "array_agg(distinct) does not support type VARBINARY");
+            }
+
+            // a constant complex argument has no column to split by, so it gets the same error in every stage
+            // instead of "no executable plan"; a complex type column still plans through the multi-stage split
+            for (int stage : new int[] {0, 1, 2, 3, 4}) {
+                connectContext.getSessionVariable().setNewPlanerAggStage(stage);
+                StarRocksPlannerException e = assertThrows(StarRocksPlannerException.class,
+                        () -> getVerboseExplain("select array_agg(distinct map(2, 3)) from t0"));
+                assertContains(e.getMessage(), "array_agg(distinct) does not support type MAP");
+            }
+            connectContext.getSessionVariable().setNewPlanerAggStage(0);
+            getVerboseExplain("select array_agg(distinct v3) from tarray");
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        }
     }
 
     @Test

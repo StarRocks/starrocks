@@ -19,6 +19,9 @@ import com.starrocks.proto.AbortCompactionResponse;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
 import com.starrocks.proto.AggregateCompactRequest;
+import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.BuildVectorIndexRequest;
+import com.starrocks.proto.BuildVectorIndexResponse;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
@@ -29,6 +32,8 @@ import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.DropTabletCacheRequest;
+import com.starrocks.proto.DropTabletCacheResponse;
 import com.starrocks.proto.GetTabletMetadatasRequest;
 import com.starrocks.proto.GetTabletMetadatasResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
@@ -48,6 +53,8 @@ import com.starrocks.proto.UnlockTabletMetadataRequest;
 import com.starrocks.proto.UnlockTabletMetadataResponse;
 import com.starrocks.proto.UploadSnapshotsRequest;
 import com.starrocks.proto.UploadSnapshotsResponse;
+import com.starrocks.proto.VacuumFullRequest;
+import com.starrocks.proto.VacuumFullResponse;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
 import mockit.Expectations;
@@ -323,4 +330,57 @@ public class LakeServiceWithMetricsTest {
                 lakeServiceWithMetrics.repairTabletMetadata(new RepairTabletMetadataRequest());
         assertNotNull(result);
     }
+    @Test
+    public void testDropTabletCache() throws Exception {
+        new Expectations() {
+            {
+                lakeService.dropTabletCache((DropTabletCacheRequest) any);
+                result = CompletableFuture.completedFuture(new DropTabletCacheResponse());
+            }
+        };
+
+        Future<DropTabletCacheResponse> result = lakeServiceWithMetrics.dropTabletCache(new DropTabletCacheRequest());
+        assertNotNull(result);
+    }
+
+    @Test
+    public void testAggregatePublishVersion() throws Exception {
+        new Expectations() {
+            {
+                lakeService.aggregatePublishVersion((AggregatePublishVersionRequest) any);
+                result = CompletableFuture.completedFuture(new PublishVersionResponse());
+            }
+        };
+
+        Future<PublishVersionResponse> result =
+                lakeServiceWithMetrics.aggregatePublishVersion(new AggregatePublishVersionRequest());
+        assertNotNull(result);
+    }
+
+    @Test
+    public void testVacuumFull() throws Exception {
+        new Expectations() {
+            {
+                lakeService.vacuumFull((VacuumFullRequest) any);
+                result = CompletableFuture.completedFuture(new VacuumFullResponse());
+            }
+        };
+
+        Future<VacuumFullResponse> result = lakeServiceWithMetrics.vacuumFull(new VacuumFullRequest());
+        assertNotNull(result);
+    }
+
+    @Test
+    public void testBuildVectorIndex() throws Exception {
+        new Expectations() {
+            {
+                lakeService.buildVectorIndex((BuildVectorIndexRequest) any);
+                result = CompletableFuture.completedFuture(new BuildVectorIndexResponse());
+            }
+        };
+
+        Future<BuildVectorIndexResponse> result = lakeServiceWithMetrics.buildVectorIndex(new BuildVectorIndexRequest());
+        assertNotNull(result);
+    }
+
 }

@@ -329,7 +329,7 @@ public class ColocateTableIndex implements Writable {
                     if (!(tbl instanceof ExternalOlapTable)) {
                         // Colocate table should keep the same bucket number across the partitions
                         if (hashDistInfo.getBucketNum() == 0) {
-                            int bucketNum = CatalogUtils.calBucketNumAccordingToBackends(tbl.isLightWeightTabletCreation());
+                            int bucketNum = CatalogUtils.calBucketNumAccordingToBackends(tbl);
                             hashDistInfo.setBucketNum(bucketNum);
                         }
                     }
@@ -537,6 +537,23 @@ public class ColocateTableIndex implements Writable {
                 return false;
             }
             return metaGroups.contains(groupId);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
+     * Returns the table's {@link GroupId} iff the table participates in a colocate group backed by
+     * a StarOS meta group, or {@code null} otherwise. Wraps the
+     * {@code isMetaGroupColocateTable + getGroup} pair under a single read lock so a concurrent
+     * de-colocation between the two lookups cannot fail the second one.
+     */
+    @javax.annotation.Nullable
+    public GroupId getMetaGroupColocateGroupId(long tableId) {
+        readLock();
+        try {
+            GroupId groupId = table2Group.get(tableId);
+            return (groupId != null && metaGroups.contains(groupId)) ? groupId : null;
         } finally {
             readUnlock();
         }

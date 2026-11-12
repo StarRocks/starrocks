@@ -119,12 +119,17 @@ Status apply_decay_ms(const std::string& option, bool dirty, ssize_t decay_ms) {
         return mallctl_failed(default_name, err);
     }
 
-    // `arenas.narenas` reports the arena count cached by the ctl layer, which is
-    // only refreshed when the epoch advances.
-    uint64_t epoch = 1;
-    size_t epoch_size = sizeof(epoch);
-    (void)je_mallctl("epoch", &epoch, &epoch_size, &epoch, epoch_size);
-
+    // Deliberately no "epoch" refresh first. Writing to `epoch` runs ctl_refresh(), which
+    // re-snapshots what the stats.* nodes report, and nothing here reads one.
+    //
+    // `arenas.narenas` in particular is not one of them. It does change over a process's life --
+    // ctl_init() sets it and ctl_arena_init() increments it when an arena is created -- but both
+    // write it directly, while ctl_refresh() only iterates the count it already holds. So a
+    // refresh cannot make this read see an arena it would otherwise miss.
+    //
+    // `opt.narenas` is fixed at startup, and `arena.<i>.dirty_decay_ms` resolves its arena
+    // through arena_get() -- which is also where its EFAULT for an arena that does not exist yet
+    // comes from. A refresh would only walk every arena merging statistics under ctl_mtx.
     unsigned narenas = 0;
     size_t narenas_size = sizeof(narenas);
     if (int err = je_mallctl("arenas.narenas", &narenas, &narenas_size, nullptr, 0); err != 0) {

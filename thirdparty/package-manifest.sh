@@ -75,6 +75,7 @@ starrocks_set_default_packages() {
         librdkafka
         pulsar
         s2
+        h3
         bitshuffle
         croaringbitmap
         cctz
@@ -117,6 +118,8 @@ starrocks_set_default_packages() {
         benchgen
         paimon_cpp
         libdeflate
+        libnl
+        nsjail
     )
 
     if [[ "${machine_type}" != "aarch64" ]]; then

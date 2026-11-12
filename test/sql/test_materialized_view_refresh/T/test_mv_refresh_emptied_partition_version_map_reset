@@ -1,0 +1,54 @@
+-- name: test_mv_refresh_emptied_partition_version_map_reset
+-- A base partition emptied by TRUNCATE sits at its initial version under a new id. Once the mv's version map is reset,
+-- it reads as a new, empty partition; the mv partition still holding its old rows must be refreshed all the same, and
+-- must not answer a rewritten query before that.
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE base_p (dt date NOT NULL, k int NOT NULL, v int) DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (START ('2024-01-01') END ('2024-01-04') EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ("replication_num" = "1");
+INSERT INTO base_p SELECT date_add('2024-01-01', x % 3), x % 7, x FROM TABLE(generate_series(1, 300)) AS g(x);
+CREATE MATERIALIZED VIEW mv_p
+PARTITION BY dt
+DISTRIBUTED BY HASH(dt) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("replication_num" = "1")
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM base_p GROUP BY dt, k;
+REFRESH MATERIALIZED VIEW mv_p WITH SYNC MODE;
+
+CREATE TABLE base_u (k int NOT NULL, v int) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ("replication_num" = "1");
+INSERT INTO base_u SELECT x % 7, x FROM TABLE(generate_series(1, 300)) AS g(x);
+CREATE MATERIALIZED VIEW mv_u
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("replication_num" = "1")
+AS SELECT k, SUM(v) AS s, COUNT(*) AS c FROM base_u GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_u WITH SYNC MODE;
+
+TRUNCATE TABLE base_p PARTITION (p20240103);
+TRUNCATE TABLE base_u;
+-- reading v, both mvs are inactivated and their version maps reset
+ALTER TABLE base_p MODIFY COLUMN v BIGINT;
+function: wait_alter_table_finish()
+ALTER TABLE base_u MODIFY COLUMN v BIGINT;
+function: wait_alter_table_finish()
+ALTER MATERIALIZED VIEW mv_p ACTIVE;
+ALTER MATERIALIZED VIEW mv_u ACTIVE;
+REFRESH MATERIALIZED VIEW mv_p WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_u WITH SYNC MODE;
+
+set enable_materialized_view_rewrite = false;
+SELECT count(*) FROM mv_p WHERE dt = '2024-01-03';
+SELECT count(*) FROM mv_u;
+SELECT count(*) FROM mv_p;
+
+-- a query on the base tables must not be answered from rows the truncate removed
+set enable_materialized_view_rewrite = true;
+SELECT dt, k, SUM(v), COUNT(*) FROM base_p WHERE dt = '2024-01-03' GROUP BY dt, k ORDER BY k;
+SELECT k, SUM(v), COUNT(*) FROM base_u GROUP BY k ORDER BY k;
+set enable_materialized_view_rewrite = false;
+
+drop database db_${uuid0} force;

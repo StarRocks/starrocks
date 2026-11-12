@@ -13,4 +13,6 @@ The URL or relative path (under `fe/conf`) to the file that defines the user gro
 
 A group file contains a list of groups and their members. You can define a group in each line where the group name and members are separated by a colon. Multiple users are separated by commas. Example: `group_name:user_1,user_2,user_3`.
 
+An `http://` or `https://` URL is fetched with the connect and read timeouts set by the FE configuration items `group_provider_http_connect_timeout_ms` (default 5000) and `group_provider_http_read_timeout_ms` (default 30000). If the server does not answer within them, the statement fails and the group provider keeps its previous configuration.
+
 :::

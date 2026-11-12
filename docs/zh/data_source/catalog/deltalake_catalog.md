@@ -13,7 +13,6 @@ import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
 ## 使用说明
 
 - StarRocks 支持的 Delta Lake 文件格式是 Parquet。Parquet 文件支持以下压缩格式：SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION。
-- StarRocks 不支持 Delta Lake 的数据类型为 MAP 和 STRUCT。
 
 ## 集成准备
 
@@ -450,10 +449,10 @@ Delta Lake catalog 的描述。此参数是可选的。
 | enable_deltalake_table_cache                       | -        | true         | 是否在 Delta Lake 的元数据缓存中启用表缓存。 |
 | enable_deltalake_json_meta_cache                   | -        | true         | 是否为 Delta Log JSON 文件启用缓存。 |
 | deltalake_json_meta_cache_ttl_sec                  | 秒       | 48 * 60 * 60 | Delta Log JSON 文件缓存的生存时间 (TTL)。 |
-| deltalake_json_meta_cache_memory_usage_ratio       | -        | 0.1          | Delta Log JSON 文件缓存占用的 JVM 堆内存的最大比例。 |
+| deltalake_json_meta_cache_memory_usage_ratio       | -        | 0.1          | Delta Log JSON 文件缓存占用的 JVM 堆内存的最大比例。FE 配置项 `deltalake_json_meta_cache_global_memory_ratio` 大于 `0` 时该属性不生效。 |
 | enable_deltalake_checkpoint_meta_cache             | -        | true         | 是否为 Delta Log Checkpoint 文件启用缓存。 |
 | deltalake_checkpoint_meta_cache_ttl_sec            | 秒       | 48 * 60 * 60 | Delta Log Checkpoint 文件缓存的生存时间 (TTL)。  |
-| deltalake_checkpoint_meta_cache_memory_usage_ratio | -        | 0.1          | Delta Log Checkpoint 文件缓存占用的 JVM 堆内存的最大比例。 |
+| deltalake_checkpoint_meta_cache_memory_usage_ratio | -        | 0.1          | Delta Log Checkpoint 文件缓存占用的 JVM 堆内存的最大比例。FE 配置项 `deltalake_checkpoint_meta_cache_global_memory_ratio` 大于 `0` 时该属性不生效。 |
 
 ### 示例
 

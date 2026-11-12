@@ -40,14 +40,18 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.http.JsonArrayChunkedInput;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
+import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
 import java.util.List;
 
 public class QueryDetailAction extends RestBaseAction {
+    private static final Gson GSON = new Gson();
 
     public QueryDetailAction(ActionController controller) {
         super(controller);
@@ -55,6 +59,13 @@ public class QueryDetailAction extends RestBaseAction {
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
         controller.registerHandler(HttpMethod.GET, "/api/query_detail", new QueryDetailAction(controller));
+    }
+
+    @Override
+    public boolean supportAsyncHandler() {
+        // The response is streamed from the handler thread, which must not be a netty event loop, whatever
+        // enable_http_async_handler says; ExecuteSqlAction streams its results the same way.
+        return true;
     }
 
     @Override
@@ -68,10 +79,13 @@ public class QueryDetailAction extends RestBaseAction {
             return;
         }
         long eventTime = Long.parseLong(eventTimeStr.trim());
-        List<QueryDetail> queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(eventTime);
-        Gson gson = new Gson();
-        String jsonString = gson.toJson(queryDetails);
-        response.getContent().append(jsonString);
-        sendResult(request, response);
+        // The records carry profile text, which follows the query-profile access rule.
+        List<QueryDetail> queryDetails = Authorizer.redactUnreadableProfiles(ConnectContext.get(),
+                QueryDetailQueue.getQueryDetailsAfterTime(eventTime));
+        // The window keeps every statement of the last query_detail_cache_time_nanosecond with its full text and
+        // profile, so its size is set by the workload: it is streamed record by record rather than built into one
+        // string, which held several copies of the window in heap at once.
+        writeChunkedResponse(request, response, HttpResponseStatus.OK,
+                new JsonArrayChunkedInput<>(GSON, QueryDetail.class, queryDetails));
     }
 }

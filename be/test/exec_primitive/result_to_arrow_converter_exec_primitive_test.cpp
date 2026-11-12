@@ -26,6 +26,7 @@
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -34,7 +35,7 @@ TEST(ResultToArrowConverterExecPrimitiveTest, BuildsSchemaAndConvertsChunkThroug
     constexpr TupleId kTupleId = 2;
     constexpr SlotId kSlotId = 5;
 
-    ColumnRef ref(TypeDescriptor(TYPE_INT), kSlotId);
+    ColumnRef ref(TYPE_INT_DESC, kSlotId);
     ref.set_tuple_id(kTupleId);
     ExprContext expr_context(&ref);
     RuntimeState runtime_state{TQueryGlobals()};
@@ -49,9 +50,7 @@ TEST(ResultToArrowConverterExecPrimitiveTest, BuildsSchemaAndConvertsChunkThroug
     EXPECT_EQ("answer", schema->field(0)->name());
     EXPECT_EQ(arrow::Type::INT32, schema->field(0)->type()->id());
 
-    auto column = Int32Column::create();
-    column->append(42);
-    column->append(43);
+    auto column = ColumnTestHelper::build_column<int32_t>({42, 43});
     Chunk chunk;
     chunk.append_column(std::move(column), kSlotId);
 
@@ -67,15 +66,12 @@ TEST(ResultToArrowConverterExecPrimitiveTest, BuildsSchemaAndConvertsChunkThroug
 TEST(ResultToArrowConverterExecPrimitiveTest, ConvertsChunkBySlotIds) {
     constexpr SlotId kSlotId = 7;
 
-    auto column = Int32Column::create();
-    column->append(11);
-    column->append(12);
+    auto column = ColumnTestHelper::build_column<int32_t>({11, 12});
     Chunk chunk;
     chunk.append_column(std::move(column), kSlotId);
 
     auto schema = arrow::schema({arrow::field("v", arrow::int32(), false)});
-    TypeDescriptor type(TYPE_INT);
-    std::vector<const TypeDescriptor*> slot_types{&type};
+    std::vector<const TypeDescriptor*> slot_types{&TYPE_INT_DESC};
     std::vector<SlotId> slot_ids{kSlotId};
 
     std::shared_ptr<arrow::RecordBatch> batch;

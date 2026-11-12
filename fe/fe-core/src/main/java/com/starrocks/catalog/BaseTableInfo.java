@@ -30,6 +30,10 @@ public class BaseTableInfo {
     @SerializedName(value = "catalogName")
     private final String catalogName;
 
+    // dbId/tableId are only set by the internal-catalog constructor. For an external base table they stay at
+    // -1, which is never a valid internal id (ids start at GlobalStateMgr.NEXT_ID_INIT_VALUE, with the range
+    // below it reserved by SystemId). They must therefore never be used as a lock identity -- see
+    // MVRefreshProcessor.collectDatabases, which skips external base tables for exactly this reason.
     @SerializedName(value = "dbId")
     private long dbId = -1;
 
@@ -82,6 +86,11 @@ public class BaseTableInfo {
         }
     }
 
+    /**
+     * Whether dbId/tableId are usable, in particular as a lock identity. catalogName here is the one carried by
+     * the table object, so a resource-mapping base table lands in the external constructor and leaves tableId
+     * at -1, and its Database resolves through the connector -- neither id may be locked.
+     */
     public boolean isInternalCatalog() {
         return CatalogMgr.isInternalCatalog(catalogName);
     }

@@ -27,14 +27,16 @@ description: "Query detail API 返回 FE 内存中缓存的最近查询执行详
 
 ## 响应
 
-- v1 返回 `QueryDetail` 数组。
+- v1 返回 `QueryDetail` 数组。该数组以分块传输编码（chunked transfer encoding）流式返回，响应不带 `Content-Length` 头；对于 HTTP/1.0 请求，响应体在连接关闭时结束。
 - v2 返回 `{ "code": "0", "message": "OK", "result": [ ... ] }`，其中 `result` 为 `QueryDetail` 列表。
 
 ## 认证与权限
 
 该 API 需要使用 **HTTP Basic 认证**。
 
-接口不会进行额外的权限校验，只要登录成功即可访问。任何已认证用户都可以查看所有缓存的查询详情；如果指定了 `user` 参数，则只返回对应用户的记录。
+默认情况下，接口不会进行额外的权限校验，只要登录成功即可访问。任何已认证用户都可以查看所有缓存的查询详情；如果指定了 `user` 参数，则只返回对应用户的记录。
+
+如果将 FE 配置项 `authorization_enable_query_profile_access_check` 设置为 `true`，则只有当前用户自己执行的查询才会返回 `profile` 字段，以及由该 Profile 渲染而来的 `explain` 字段；拥有 SYSTEM 级 OPERATE 权限的用户可以获取所有查询的这些字段。其他记录仍会列出，但不包含上述字段。
 
 ## QueryDetail 字段说明
 

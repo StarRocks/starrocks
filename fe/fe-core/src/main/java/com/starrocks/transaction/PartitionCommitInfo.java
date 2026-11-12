@@ -54,9 +54,12 @@ public class PartitionCommitInfo implements Writable {
     private long version;
 
     // For LakeTable, the value of versionTime indicates different circumstances:
-    //  = 0 : no publish version task has been executed since process starts
-    //  < 0 : last publish version task failed and Math.abs(versionTime) is the last execution time
+    //  = 0 : this partition has not published yet
     //  > 0 : last publish version task succeeded and versionTime is the last execution time
+    //
+    // A failed attempt is recorded in lastPublishFailureTime instead of by negating this field:
+    // versionTime is also the timestamp handed to Partition#updateVisibleVersion, so it must never
+    // carry a negative value into the image.
     //
     // For OlapTable, versionTime always greater than 0.
     @SerializedName(value = "versionTime")
@@ -80,6 +83,18 @@ public class PartitionCommitInfo implements Writable {
     @SerializedName(value = "DictCollectedVersion")
     private List<Long> dictCollectedVersions = Lists.newArrayList();
 
+    // Empty identities use collected versions; conflicts go in invalidDictCacheColumns.
+    @SerializedName("dictContentIdentities")
+    private List<Long> dictContentIdentities = Lists.newArrayList();
+
+    public List<Long> getDictContentIdentities() {
+        return dictContentIdentities;
+    }
+
+    public void setDictContentIdentities(List<Long> identities) {
+        this.dictContentIdentities = identities == null ? Lists.newArrayList() : Lists.newArrayList(identities);
+    }
+
     // compaction score quantiles of lake table
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
@@ -101,7 +116,27 @@ public class PartitionCommitInfo implements Writable {
     // Leaving it unsynchronized keeps such a mistake loud instead of silently truncating stats.
     private final Map<Long, TabletStatPB> tabletStats = new HashMap<>();
 
+    // Persisted: replaying a double write's commit has to move the next version of the temp partition to the version
+    // after it, as the leader did (OlapTableTxnLogApplier.applyCommitLog), not just one past its own; a follower that
+    // took the other branch would carry a next version below the visible one into the partition the optimize swaps in,
+    // and stall every load to it once it leads.
+    @SerializedName(value = "isDoubleWrite")
     private boolean isDoubleWrite = false;
+
+    // Paces the "fail to publish partition" error log for this partition. Deliberately not
+    // serialized: it only throttles logging inside one FE process. Races between publish
+    // threads can at worst let one extra line through, which is not worth a lock here.
+    private long lastPublishErrorLogTime = 0;
+
+    // When the last publish attempt for this partition failed, used to space out retries.
+    // Deliberately not serialized: it is in-process retry state, and a leader that has just taken
+    // over should attempt a publish immediately rather than inherit a stale back-off.
+    private long lastPublishFailureTime = 0;
+
+    // Whether a publish request for this partition's tablets has been sent, see
+    // PublishVersionRequest.is_retry_publish. Deliberately not serialized, like lastPublishFailureTime: a leader
+    // that has just taken over sends its first request as a first attempt.
+    private volatile boolean publishSent = false;
 
     public PartitionCommitInfo() {
 
@@ -142,6 +177,7 @@ public class PartitionCommitInfo implements Writable {
         this.dictCollectedVersions = partitionCommitInfo.dictCollectedVersions == null
                 ? Lists.newArrayList()
                 : Lists.newArrayList(partitionCommitInfo.dictCollectedVersions);
+        setDictContentIdentities(partitionCommitInfo.dictContentIdentities);
         this.compactionScore = partitionCommitInfo.compactionScore == null
                 ? null
                 : new Quantiles(partitionCommitInfo.compactionScore);
@@ -151,6 +187,41 @@ public class PartitionCommitInfo implements Writable {
 
     public void setVersionTime(long time) {
         this.versionTime = time;
+    }
+
+    // Records a failed publish attempt. versionTime is left alone so it keeps meaning
+    // "the time this partition became visible", which is what the txn log appliers read.
+    public void markPublishFailed(long now) {
+        this.lastPublishFailureTime = now;
+    }
+
+    public void markPublishSucceeded(long now) {
+        this.lastPublishFailureTime = 0;
+        this.versionTime = now;
+    }
+
+    // Marks the publish request as sent and returns whether an earlier request was already sent. Call it right
+    // before sending, after every check that can still skip the send.
+    public boolean getAndMarkPublishSent() {
+        boolean sent = publishSent;
+        publishSent = true;
+        return sent;
+    }
+
+    // 0 when the last attempt did not fail.
+    public long getLastPublishFailureTime() {
+        return lastPublishFailureTime;
+    }
+
+    // Returns true at most once per intervalMs. A partition that keeps failing to publish is
+    // retried continuously, so logging every failure turns one stuck partition into a steady
+    // stream of identical messages.
+    public boolean shouldLogPublishError(long now, long intervalMs) {
+        if (now - lastPublishErrorLogTime < intervalMs) {
+            return false;
+        }
+        lastPublishErrorLogTime = now;
+        return true;
     }
 
     public long getPhysicalPartitionId() {
@@ -203,6 +274,21 @@ public class PartitionCommitInfo implements Writable {
 
     public List<Long> getDictCollectedVersions() {
         return dictCollectedVersions;
+    }
+
+    /**
+     * Takes over the dictionary metadata of another commit info of the same load, one the commit drops or one whose
+     * partition may be dropped before the load becomes visible. The listener puts the metadata of a table on one of its
+     * partitions only (OlapTableTxnStateListener.preWriteCommitLog), and without it the global dicts of the table are
+     * neither invalidated nor advanced when the load becomes visible.
+     */
+    public void takeDictMetadataFrom(PartitionCommitInfo other) {
+        invalidDictCacheColumns.addAll(other.invalidDictCacheColumns);
+        if (validDictCacheColumns.isEmpty() && !other.validDictCacheColumns.isEmpty()) {
+            validDictCacheColumns.addAll(other.validDictCacheColumns);
+            dictCollectedVersions.addAll(other.dictCollectedVersions);
+            dictContentIdentities.addAll(other.dictContentIdentities);
+        }
     }
 
     public void setCompactionScore(Quantiles compactionScore) {

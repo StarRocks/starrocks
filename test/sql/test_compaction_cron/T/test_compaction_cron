@@ -1,5 +1,10 @@
--- name: test_primary_key @sequential
-create table t(k int, v int) primary key(k)  properties('base_compaction_forbidden_time_ranges'='* * * * *');
+-- name: test_primary_key_cloud @sequential @cloud
+create table t(k int, v int) primary key(k) properties('base_compaction_forbidden_time_ranges'='* * * * *');
+alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');
+alter table t set ('base_compaction_forbidden_time_ranges'='');
+
+-- name: test_primary_key_native @sequential @native
+create table t(k int, v int) primary key(k) properties('base_compaction_forbidden_time_ranges'='* * * * *');
 create table t(k int, v int) primary key(k);
 alter table t set ('base_compaction_forbidden_time_ranges'='* 7-20 * * *');
 

@@ -840,6 +840,10 @@ description: "StarRocks 4.0 リリースノート: DECIMAL256、File Bundling、
 
 リリース日：2025 年 12 月 25 日
 
+### 動作変更
+
+- 従来、FE 設定項目 `max_scalar_operator_flat_children`（デフォルト値 `10000`）は `CASE WHEN` 式の構築時にのみノード数をチェックしていました。現在は、オプティマイザが書き換えるすべてのスカラー式がチェック対象となり、ノード数はキャッシュ値を再利用せず書き換えのたびに再計算されます。そのため、アップグレード後は、従来は実行できていたクエリが分析フェーズで `Expression too complex. Current nodes: N, Limit: M.` というエラーで拒否される場合があります。ビュー、CTE、サブクエリのインライン展開によって式ツリーが膨張するケースで発生しやすくなります。式を簡略化するか、動的に変更可能な `max_scalar_operator_flat_children` の値を大きくしてください。[#66324](https://github.com/StarRocks/starrocks/pull/66324)
+
 ### 改善点
 
 - STRUCT データ型に対する `ORDER BY` 句をサポートしました。[#66035](https://github.com/StarRocks/starrocks/pull/66035)

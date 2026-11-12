@@ -15,7 +15,6 @@ import DatabricksDataParams from '../../_assets/catalog/_databricks_data_params.
 ## Usage notes
 
 - The file format of Delta Lake that StarRocks supports is Parquet. Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
-- The data types of Delta Lake that StarRocks does not support are MAP and STRUCT.
 
 ## Integration preparations
 
@@ -454,10 +453,10 @@ In most cases, if your Delta Lake data is updated at a granularity of 1 hour or 
 | enable_deltalake_table_cache                       | -        | true         | Whether to enable Table Cache in the metadata cache for Delta Lake. |
 | enable_deltalake_json_meta_cache                   | -        | true         | Whether to enable cache for Delta Log JSON files. |
 | deltalake_json_meta_cache_ttl_sec                  | Second   | 48 * 60 * 60 | Time-To-Live (TTL) for the Delta Log JSON file cache. |
-| deltalake_json_meta_cache_memory_usage_ratio       | -        | 0.1          | The maximum ratio of JVM Heap size occupied by the Delta Log JSON file cache. |
+| deltalake_json_meta_cache_memory_usage_ratio       | -        | 0.1          | The maximum ratio of JVM Heap size occupied by the Delta Log JSON file cache. Ignored when the FE configuration item `deltalake_json_meta_cache_global_memory_ratio` is greater than `0`. |
 | enable_deltalake_checkpoint_meta_cache             | -        | true         | Whether to enable cache for Delta Log Checkpoint files. |
 | deltalake_checkpoint_meta_cache_ttl_sec            | Second   | 48 * 60 * 60 | Time-To-Live (TTL) for the Delta Log Checkpoint file cache.  |
-| deltalake_checkpoint_meta_cache_memory_usage_ratio | -        | 0.1          | The maximum ratio of JVM Heap size occupied by the Delta Log Checkpoint file cache. |
+| deltalake_checkpoint_meta_cache_memory_usage_ratio | -        | 0.1          | The maximum ratio of JVM Heap size occupied by the Delta Log Checkpoint file cache. Ignored when the FE configuration item `deltalake_checkpoint_meta_cache_global_memory_ratio` is greater than `0`. |
 
 ### Examples
 

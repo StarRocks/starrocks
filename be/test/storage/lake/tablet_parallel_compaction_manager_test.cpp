@@ -23,6 +23,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "common/config_compaction_fwd.h"
@@ -54,7 +55,14 @@ public:
     void Run() override {
         std::lock_guard<std::mutex> lock(_mutex);
         _finished = true;
+        _run_count++;
         _cv.notify_all();
+    }
+
+    // The RPC must be answered exactly once, which a bool cannot tell apart from twice.
+    int run_count() {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return _run_count;
     }
 
     bool wait_finish(int64_t timeout_ms = 5000) {
@@ -71,6 +79,44 @@ private:
     std::mutex _mutex;
     std::condition_variable _cv;
     bool _finished = false;
+    int _run_count = 0;
+};
+
+// A single-thread pool whose only thread is held by a blocking task, so tasks submitted to it (e.g. the
+// subtasks of create_parallel_tasks) stay queued until release(). This lets a test inspect the state or drive
+// on_subtask_complete() by hand without racing with the real execute_subtask. The destructor releases the pool
+// too, so a failed ASSERT cannot leave the blocked thread waiting forever.
+class BlockedThreadPool {
+public:
+    BlockedThreadPool() {
+        CHECK_OK(ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&_pool));
+        std::promise<void> started;
+        CHECK_OK(_pool->submit_func([&]() {
+            started.set_value();
+            _release_future.wait();
+        }));
+        started.get_future().wait();
+    }
+
+    ~BlockedThreadPool() { release(); }
+
+    ThreadPool* get() const { return _pool.get(); }
+
+    // Lets the queued tasks run and waits for all of them to finish.
+    void release() {
+        if (_released) {
+            return;
+        }
+        _released = true;
+        _release_promise.set_value();
+        _pool->wait();
+    }
+
+private:
+    std::promise<void> _release_promise;
+    std::shared_future<void> _release_future = _release_promise.get_future().share();
+    std::unique_ptr<ThreadPool> _pool;
+    bool _released = false;
 };
 
 class TabletParallelCompactionStateTest : public ::testing::Test {
@@ -130,9 +176,20 @@ TEST_F(TabletParallelCompactionStateTest, test_is_complete) {
     _state->running_subtasks.erase(0);
     EXPECT_FALSE(_state->is_complete());
 
-    // Complete all
+    // Complete all -- still NOT complete, because submission has not been sealed. While
+    // submit_subtasks_from_groups() registers groups one at a time, an empty running_subtasks only means
+    // "the next group has not been registered yet"; treating that as completion is what allowed two
+    // subtasks to each drive the completion transition for one tablet.
     _state->running_subtasks.erase(1);
+    EXPECT_FALSE(_state->is_complete());
+
+    // Sealing submission is what makes the predicate meaningful.
+    _state->submission_done = true;
     EXPECT_TRUE(_state->is_complete());
+
+    // And the transition can be claimed exactly once, however many callers race for it.
+    EXPECT_TRUE(_state->claim_completion());
+    EXPECT_FALSE(_state->claim_completion());
 }
 
 // Pins the compaction-policy configs that these tests' expected subtask counts are derived from, and
@@ -308,8 +365,7 @@ protected:
     static TuplePB make_varchar_tuple(int64_t key) {
         TuplePB tuple;
         auto* v = tuple.add_values();
-        TypeDescriptor type_desc = TypeDescriptor::create_varchar_type(32);
-        v->mutable_type()->CopyFrom(type_desc.to_protobuf());
+        v->mutable_type()->CopyFrom(TYPE_VARCHAR_DESC.to_protobuf());
         v->set_variant_type(VariantTypePB::NORMAL_VALUE);
         v->set_value(encode_varchar_key(key));
         return tuple;
@@ -686,22 +742,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_two_group
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    // Use a thread pool with 1 thread
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    // Submit a blocking task to occupy the thread
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    // Wait for the blocking task to start
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -716,9 +757,53 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_two_group
     ASSERT_EQ(5, state->running_subtasks[1].input_rowset_ids.size());
 
     // Unblock the thread
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 
+    _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
+TEST_F(TabletParallelCompactionManagerTest, test_forced_non_pk_base_selects_oldest_rowset) {
+    constexpr int64_t tablet_id = 10064;
+    constexpr int64_t txn_id = 20064;
+    constexpr int64_t version = 11;
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    TabletParallelConfig config;
+    config.set_max_parallel_per_tablet(2);
+    config.set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+    CompactRequest request;
+    request.set_skip_write_txnlog(true);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    BlockedThreadPool pool;
+
+    auto result = _manager->create_parallel_tasks(
+            tablet_id, txn_id, version, config, callback, true /* force_base_compaction */, pool.get(),
+            []() { return true; }, [](bool) {});
+    EXPECT_TRUE(result.ok()) << result.status();
+    if (result.ok()) {
+        EXPECT_EQ(2, result.value());
+        auto state = _manager->get_tablet_state(tablet_id, txn_id);
+        EXPECT_NE(nullptr, state);
+        if (state != nullptr) {
+            EXPECT_TRUE(state->is_base_compaction);
+            EXPECT_EQ(2, state->running_subtasks.size());
+            auto oldest_group = state->running_subtasks.find(0);
+            EXPECT_NE(state->running_subtasks.end(), oldest_group);
+            if (oldest_group != state->running_subtasks.end()) {
+                EXPECT_FALSE(oldest_group->second.input_rowset_ids.empty());
+                if (!oldest_group->second.input_rowset_ids.empty()) {
+                    EXPECT_EQ(0, oldest_group->second.input_rowset_ids.front());
+                }
+            }
+        }
+    }
+
+    pool.release();
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -741,22 +826,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_multiple_
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    // Use a thread pool with 1 thread
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    // Submit a blocking task to occupy the thread
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    // Wait for the blocking task to start
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -784,8 +854,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_multiple_
     ASSERT_EQ(2, state->running_subtasks[2].input_rowset_ids.size());
 
     // Unblock the thread
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
@@ -1201,19 +1270,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_default_m
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -1223,8 +1280,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_default_m
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(0, st.value()); // Returns 0 indicating fallback to normal compaction
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -1247,19 +1303,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_invalid_m
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -1268,8 +1312,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_invalid_m
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.status().is_invalid_argument());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -1318,19 +1361,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_already_e
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     // First creation should succeed and create parallel tasks
     auto st1 = _manager->create_parallel_tasks(
@@ -1344,8 +1375,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_already_e
     ASSERT_FALSE(st2.ok());
     ASSERT_TRUE(st2.status().is_already_exist());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -1402,19 +1432,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_on_subtask_complete_subtask_not
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -1425,8 +1443,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_on_subtask_complete_subtask_not
     ctx->subtask_id = 999; // Non-existent subtask
     _manager->on_subtask_complete(tablet_id, txn_id, 999, std::move(ctx));
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -1449,19 +1466,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks) {
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -1482,8 +1487,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks) {
         EXPECT_GE(info.subtask_id, 0);
     }
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -1506,15 +1510,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_overlapped) {
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2, st.value());
 
@@ -1589,8 +1588,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_overlapped) {
     EXPECT_TRUE(subtask1.has_output_rowset());
     EXPECT_EQ(200, subtask1.output_rowset().num_rows());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // Test for partial success: one subtask succeeds, one fails
@@ -1612,15 +1610,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_one_succeeded_o
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2, st.value());
 
@@ -1678,8 +1671,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_one_succeeded_o
     EXPECT_EQ(1, subtask0.output_rowset().segment_metas_size());
     EXPECT_EQ("segment_0.dat", subtask0.output_rowset().segment_metas(0).filename());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // Test for data exceeding max_parallel capacity (lines 141-156)
@@ -1702,19 +1694,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_exceeds_c
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -1727,8 +1707,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_exceeds_c
     // Each subtask should have limited rowsets
     ASSERT_EQ(2, state->running_subtasks.size());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -1751,15 +1730,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_stats_merging) {
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2, st.value());
 
@@ -1789,8 +1763,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_stats_merging) {
 
     ASSERT_TRUE(closure.is_finished());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // Test for no rowsets to compact (line 75)
@@ -1930,19 +1903,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_subtask_creation) {
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     int acquire_count = 0;
     auto st = _manager->create_parallel_tasks(
@@ -1958,8 +1919,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_subtask_creation) {
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.status().is_resource_busy());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -1982,15 +1942,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks_with_completed) {
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2, st.value());
 
@@ -2043,8 +1998,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_list_tasks_with_completed) {
 
     ASSERT_TRUE(closure.is_finished());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // Test for copying table_id and partition_id from subtask contexts (lines 413-428)
@@ -2066,15 +2020,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_table_partition_id_copy) {
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2, st.value());
 
@@ -2103,8 +2052,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_table_partition_id_copy) {
 
     ASSERT_TRUE(closure.is_finished());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // Test for TxnLog merge without output (lines 520-527, 560-565)
@@ -2126,15 +2074,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_no_output) {
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2, st.value());
 
@@ -2173,8 +2116,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_no_output) {
     EXPECT_EQ(1, subtask1.subtask_id());
     EXPECT_EQ(1, subtask1.input_rowsets_size());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // Test for TxnLog merge without compact_version (lines 567-574)
@@ -2196,15 +2138,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_no_compact_versi
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2, st.value());
 
@@ -2230,8 +2167,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_no_compact_versi
 
     ASSERT_TRUE(closure.is_finished());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // Test for subtask with null TxnLog (lines 501-507)
@@ -2253,15 +2189,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_null_txn_log) {
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2, st.value());
 
@@ -2283,8 +2214,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_null_txn_log) {
 
     ASSERT_TRUE(closure.is_finished());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // Test for subtask with TxnLog but no op_compaction (lines 501-507, 522-523)
@@ -2306,15 +2236,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_no_op_compaction
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2, st.value());
 
@@ -2336,8 +2261,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_no_op_compaction
 
     ASSERT_TRUE(closure.is_finished());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // Test for two subtasks output with non-overlapped results
@@ -2361,15 +2285,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_two_subtasks) {
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2, st.value()); // Two subtasks
 
@@ -2430,8 +2349,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_merged_txn_log_two_subtasks) {
     EXPECT_EQ(2000, subtask1.output_rowset().data_size());
     EXPECT_EQ("merged_segment_1.dat", subtask1.output_rowset().segment_metas(0).filename());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // Test for metrics after subtask completion
@@ -2453,23 +2371,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_metrics_after_completion) {
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    // Submit a blocking task first to occupy the single thread in the pool.
-    // This prevents execute_subtask from running until we unblock it,
-    // avoiding race condition with manual on_subtask_complete calls.
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    // Wait for blocking task to start
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     int64_t initial_running = _manager->running_subtasks();
     int64_t initial_completed = _manager->completed_subtasks();
@@ -2509,8 +2411,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_metrics_after_completion) {
 
     // Unblock the pool. The queued execute_subtask tasks will run but find state cleaned up,
     // which will decrement running_subtasks (expected behavior for orphaned tasks).
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 
     // After pool completes, running_subtasks will be decremented by the orphaned execute_subtask calls.
     // This is expected: 2 execute_subtask calls each decrement counter when they find state missing.
@@ -2536,19 +2437,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_rowsets_marking) {
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -2570,8 +2459,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_rowsets_marking) {
         }
     }
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -2596,15 +2484,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_on_subtask_complete_with_callba
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2, st.value()); // Expect 2 subtasks
 
@@ -2632,8 +2515,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_on_subtask_complete_with_callba
 
     ASSERT_TRUE(closure.wait_finish(5000));
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // Test for all subtasks failed (should fail overall)
@@ -2655,15 +2537,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_all_subtasks_failed) {
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2, st.value());
 
@@ -2693,8 +2570,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_all_subtasks_failed) {
     // When all subtasks fail, the overall status should indicate failure
     EXPECT_NE(0, response.status().status_code());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // Test for partial success with multiple subtasks (2 succeed, 1 fails) - PK table
@@ -2718,15 +2594,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_multiple_subtas
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok()) << st.status();
     ASSERT_EQ(3, st.value());
 
@@ -2803,8 +2674,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_multiple_subtas
     EXPECT_EQ(2000, subtask2.output_rowset().data_size());
     EXPECT_EQ("segment_2.dat", subtask2.output_rowset().segment_metas(0).filename());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // Test for partial success with non-consecutive successful subtasks
@@ -2827,15 +2697,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_pk_table_all_successful_sub
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok()) << st.status();
     ASSERT_EQ(4, st.value());
 
@@ -2939,8 +2804,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_non_pk_table_all_successful_sub
     EXPECT_EQ(200, subtask2.output_rowset().num_rows());
     EXPECT_EQ(2000, subtask2.output_rowset().data_size());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // Test where first subtask fails but second succeeds
@@ -2963,15 +2827,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_first_subtask_fails_second_succ
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(2, st.value());
 
@@ -3025,8 +2884,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_first_subtask_fails_second_succ
     EXPECT_EQ(1, subtask1.output_rowset().segment_metas_size());
     EXPECT_EQ("segment_1.dat", subtask1.output_rowset().segment_metas(0).filename());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // Test partial success pattern: [fail, success, success, fail]
@@ -3049,15 +2907,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_middle_subtasks
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("blocked_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
-            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; },
-            [&](bool) { block_future.wait(); });
+            tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok()) << st.status();
     ASSERT_EQ(4, st.value());
 
@@ -3157,8 +3010,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_middle_subtasks
     EXPECT_EQ(200, subtask2.output_rowset().num_rows());
     EXPECT_EQ(2000, subtask2.output_rowset().data_size());
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 }
 
 // ================================================================================
@@ -3395,19 +3247,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_split_c
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, 123, 2, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -3422,8 +3262,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_split_c
         VLOG(1) << "Created " << state->running_subtasks.size() << " subtasks";
     }
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 
     _manager->cleanup_tablet(tablet_id, 123);
 }
@@ -3456,19 +3295,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_mixed_large_and_smal
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, 124, 5, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -3490,8 +3317,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_mixed_large_and_smal
         }
     }
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 
     _manager->cleanup_tablet(tablet_id, 124);
 }
@@ -3714,20 +3540,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_split_c
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    // Use a single-threaded pool and block it to prevent task execution during state verification
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, 125, 2, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -3769,8 +3582,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_split_c
         }
     }
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 
     _manager->cleanup_tablet(tablet_id, 125);
 }
@@ -3795,20 +3607,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_uses_al
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    // Use a single-threaded pool and block it to prevent task execution during state verification
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, 126, 2, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -3835,8 +3634,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_uses_al
         }
     }
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 
     _manager->cleanup_tablet(tablet_id, 126);
 }
@@ -3861,16 +3659,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_split_large_rowset_m
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, 2, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -3881,8 +3670,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_split_large_rowset_m
     EXPECT_EQ(2, state->running_subtasks.size())
             << "7 segments with max_parallel=3: last group has 1 segment, merged into previous -> 2 groups";
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -3907,20 +3695,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_skipped
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    // Use a single-threaded pool and block it to prevent task execution during state verification
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, 127, 2, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -3934,8 +3709,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_skipped
     auto state = _manager->get_tablet_state(tablet_id, 127);
     EXPECT_EQ(nullptr, state) << "State should not exist when large rowset is skipped";
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 
     _manager->cleanup_tablet(tablet_id, 127);
 }
@@ -4080,19 +3854,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_submit_subtasks_token_acquisiti
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     int acquire_count = 0;
     // Fail on first acquire_token() call
@@ -4112,8 +3874,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_submit_subtasks_token_acquisiti
     // No token was successfully acquired, so no release should be called
     EXPECT_EQ(0, release_count) << "No token was acquired, so no release should happen";
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
 
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
@@ -4137,16 +3898,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_submit_subtasks_token_partial_a
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     int acquire_count = 0;
     auto acquire_token = [&acquire_count]() {
@@ -4163,8 +3915,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_submit_subtasks_token_partial_a
     EXPECT_EQ(2, acquire_count);
     EXPECT_EQ(1, release_count) << "One token was acquired then released";
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -4207,16 +3958,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_create_subtask_group
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, 126, 3, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -4226,8 +3968,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_create_subtask_group
     ASSERT_NE(nullptr, state);
     EXPECT_EQ(2, state->running_subtasks.size())
             << "First large rowset uses 2 slots; second is skipped (no remaining slots)";
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
     _manager->cleanup_tablet(tablet_id, 126);
 }
 
@@ -4542,6 +4283,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     state->tablet_id = tablet_id;
     state->txn_id = txn_id;
     state->version = version;
+    state->is_base_compaction = true;
     state->total_subtasks_created = 2;
     state->large_rowset_split_groups[0] = {0, 1};
     state->expected_large_rowset_split_counts[0] = 2;
@@ -4599,6 +4341,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     ASSERT_TRUE(closure.is_finished());
     ASSERT_EQ(1, response.txn_logs_size());
     const auto& op_parallel = response.txn_logs(0).op_parallel_compaction();
+    EXPECT_GT(op_parallel.base_compaction_time(), 0);
     ASSERT_EQ(1, op_parallel.subtask_compactions_size());
     const auto& merged = op_parallel.subtask_compactions(0);
     EXPECT_TRUE(merged.has_output_rowset());
@@ -4628,6 +4371,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     state->tablet_id = tablet_id;
     state->txn_id = txn_id;
     state->version = version;
+    state->is_base_compaction = true;
     state->total_subtasks_created = 2;
     state->large_rowset_split_groups[0] = {0, 1};
     state->expected_large_rowset_split_counts[0] = 2;
@@ -4663,6 +4407,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_get_merged_txn_log_large_rowset
     ASSERT_EQ(1, response.txn_logs_size());
     const auto& op_parallel = response.txn_logs(0).op_parallel_compaction();
     EXPECT_EQ(0, op_parallel.subtask_compactions_size());
+    EXPECT_EQ(0, op_parallel.base_compaction_time());
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -4765,19 +4510,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, 500, 2, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -4791,8 +4524,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
     // Verify large_rowset_split_groups is populated
     EXPECT_FALSE(state->large_rowset_split_groups.empty()) << "DUP_KEYS table should have large_rowset_split_groups";
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
     _manager->cleanup_tablet(tablet_id, 500);
 }
 
@@ -4822,19 +4554,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_mixed_large
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-
-    pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    });
-
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, 501, 4, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -4855,8 +4575,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_mixed_large
     EXPECT_TRUE(has_large) << "Should have LARGE_ROWSET_PART subtasks for the large rowset";
     // Small rowsets may or may not form a NORMAL subtask depending on grouping
 
-    block_promise.set_value();
-    pool->wait();
+    pool.release();
     _manager->cleanup_tablet(tablet_id, 501);
 }
 
@@ -4980,8 +4699,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
 static TuplePB make_int_tuple(int32_t value) {
     TuplePB tuple;
     auto* v = tuple.add_values();
-    TypeDescriptor type_desc(TYPE_INT);
-    v->mutable_type()->CopyFrom(type_desc.to_protobuf());
+    v->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v->set_variant_type(VariantTypePB::NORMAL_VALUE);
     v->set_value(std::to_string(value));
     return tuple;
@@ -6160,6 +5878,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_group_subtas
     state->tablet_id = tablet_id;
     state->txn_id = txn_id;
     state->version = version;
+    state->is_base_compaction = true;
     state->max_parallel = 4;
     state->is_range_split = false;
 
@@ -6241,6 +5960,9 @@ TEST_F(TabletParallelCompactionManagerTest, test_large_rowset_split_group_subtas
 
     const auto& op_parallel = result.value().op_parallel_compaction();
     EXPECT_FALSE(op_parallel.is_range_split());
+    // The oldest-rowset group failed, but the successful selected subtask still did
+    // Base work and starts the interval for either key type.
+    EXPECT_GT(op_parallel.base_compaction_time(), 0);
 
     // Only the normal subtask (2) should be in success_subtask_ids
     // Large rowset group should be entirely skipped due to failure
@@ -8062,18 +7784,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
     TestClosure closure;
     auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
 
-    std::unique_ptr<ThreadPool> pool;
-    ThreadPoolBuilder("rng_split_test").set_max_threads(1).build(&pool);
-
-    std::promise<void> block_promise;
-    std::future<void> block_future = block_promise.get_future();
-    std::promise<void> start_promise;
-    CancelableDefer unblock_pool([&]() { block_promise.set_value(); });
-    ASSERT_OK(pool->submit_func([&]() {
-        start_promise.set_value();
-        block_future.wait();
-    }));
-    start_promise.get_future().wait();
+    BlockedThreadPool pool;
 
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, pconfig, callback, false, pool.get(), []() { return true; }, [](bool) {});
@@ -8090,9 +7801,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
         }
     }
 
-    block_promise.set_value();
-    unblock_pool.cancel();
-    pool->wait();
+    pool.release();
     ASSERT_TRUE(closure.wait_finish());
 
     {
@@ -8120,6 +7829,113 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
         _manager->execute_subtask_range_split(99999, 99999, 0, std::move(empty_rowsets), lower, upper, true, true, true,
                                               true, 1, false, [](bool) {});
     }
+}
+
+// stop() settles tablets whose subtasks the shutting-down thread pool dropped without ever running them:
+// ThreadPool::shutdown() removes queued tasks and FunctionRunnable::cancel() is a no-op, so they never
+// report back. Nothing else can complete such a tablet -- its scheduler context was destroyed when it was
+// handed off to the subtasks -- so without this pass the compact RPC would hang until it timed out.
+TEST_F(TabletParallelCompactionManagerTest, test_abort_pending_states_completes_dropped_subtasks) {
+    int64_t tablet_id = 10007;
+    int64_t txn_id = 20007;
+    int64_t version = 11;
+
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    CompactRequest request;
+    request.set_skip_write_txnlog(true);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = version;
+    state->max_parallel = 2;
+    state->callback = callback;
+    {
+        SubtaskInfo info0;
+        info0.subtask_id = 0;
+        info0.input_rowset_ids = {0, 1, 2, 3, 4};
+        info0.input_bytes = 5 * 1024 * 1024;
+        info0.start_time = ::time(nullptr);
+        state->running_subtasks[0] = std::move(info0);
+
+        SubtaskInfo info1;
+        info1.subtask_id = 1;
+        info1.input_rowset_ids = {5, 6, 7, 8, 9};
+        info1.input_bytes = 5 * 1024 * 1024;
+        info1.start_time = ::time(nullptr);
+        state->running_subtasks[1] = std::move(info1);
+        state->total_subtasks_created = 2;
+    }
+    for (int i = 0; i < 10; i++) {
+        state->compacting_rowsets[i] = 1;
+    }
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+
+    // Subtask 0 reports back; subtask 1 is the one the pool dropped, so it stays in running_subtasks and
+    // the tablet cannot reach completion on its own.
+    auto ctx0 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx0->subtask_id = 0;
+    ctx0->txn_log = std::make_unique<TxnLogPB>();
+    ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(0);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
+    _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
+    ASSERT_FALSE(closure.is_finished());
+
+    _manager->abort_pending_states();
+
+    // The RPC is completed instead of being left hanging...
+    EXPECT_TRUE(closure.is_finished());
+    // ...and it is completed as an abort, like a serial compaction interrupted by stop(). Reporting the
+    // tablet as failed is what keeps FE from committing this compaction.
+    ASSERT_EQ(1, response.failed_tablets_size());
+    EXPECT_EQ(tablet_id, response.failed_tablets(0));
+    // Nothing is published for the work that did run: subtask 0's log must not be merged and handed back
+    // as if the whole tablet had been compacted, because subtask 1's rowsets were never touched.
+    EXPECT_EQ(0, response.txn_logs_size());
+
+    // Completion is claimed once, so a second settling pass must not complete the same tablet again:
+    // finish_task() has already released the request and response that a second call would touch.
+    _manager->abort_pending_states();
+    EXPECT_EQ(1, response.failed_tablets_size());
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
+// abort() walks the scheduler's own context list first, but a handed-off tablet is no longer on it: that
+// context was destroyed when the subtasks took over. The manager is then the only place still holding the
+// txn's callback, which is what lets an abort reach subtasks that are already running.
+TEST_F(TabletParallelCompactionManagerTest, test_collect_callbacks_for_txn) {
+    int64_t tablet_id = 10008;
+    int64_t txn_id = 20008;
+
+    CompactRequest request;
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = 11;
+    state->max_parallel = 2;
+    state->callback = callback;
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+
+    auto callbacks = _manager->collect_callbacks_for_txn(txn_id);
+    ASSERT_EQ(1, callbacks.size());
+    EXPECT_EQ(callback.get(), callbacks[0].get());
+
+    // Another txn's abort must not pick up this tablet's callback.
+    EXPECT_TRUE(_manager->collect_callbacks_for_txn(txn_id + 1).empty());
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
 // A failing PK index major compaction must fail the parallel compaction, exactly as it does on the
@@ -8187,6 +8003,631 @@ TEST_F(TabletParallelCompactionManagerTest, test_index_major_compaction_failure_
     auto ok = _manager->get_merged_txn_log(tablet_id, txn_id + 1);
     EXPECT_TRUE(ok.ok()) << ok.status();
     _manager->cleanup_tablet(tablet_id, txn_id + 1);
+}
+
+// A token reserved for a subtask that never ran must go back through the neutral return_token, not
+// through release_token(false): the limiter restores concurrency it reduced under memory pressure by
+// counting successful completions (Limiter::no_memory_limit_exceeded), and a reservation that did no work
+// is not one. Otherwise a single planning failure over several groups would undo that protection at
+// once. The three ways a reserved token ends up unused are covered: the all-or-nothing acquisition
+// failing part-way, the thread pool rejecting a subtask, and an exception unwinding the submission loop.
+TEST_F(TabletParallelCompactionManagerTest, test_unused_tokens_are_returned_not_released) {
+    int64_t tablet_id = 10009;
+    int64_t version = 11;
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    TabletParallelConfig config;
+    config.set_max_parallel_per_tablet(3);
+    config.set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+    std::unique_ptr<ThreadPool> pool;
+    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
+
+    int acquired = 0;
+    int released = 0;
+    int returned = 0;
+    auto reset_counts = [&]() { acquired = released = returned = 0; };
+    ReleaseTokenFunc release_token = [&](bool) { released++; };
+    ReturnTokenFunc return_token = [&]() { returned++; };
+
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->EnableProcessing();
+    DeferOp disable_sync_point([&]() {
+        sync_point->ClearCallBack("ThreadPool::do_submit:1");
+        sync_point->ClearCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register");
+        sync_point->DisableProcessing();
+    });
+
+    // 1. The all-or-nothing acquisition fails part-way: the one token acquired so far is returned.
+    {
+        int64_t txn_id = 20009;
+        CompactRequest request;
+        request.set_skip_write_txnlog(true);
+        request.add_tablet_ids(tablet_id);
+        CompactResponse response;
+        TestClosure closure;
+        auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+        auto st = _manager->create_parallel_tasks(
+                tablet_id, txn_id, version, config, callback, false, pool.get(), [&]() { return ++acquired <= 1; },
+                release_token, false, 0, 0, return_token);
+        ASSERT_FALSE(st.ok());
+        ASSERT_TRUE(st.status().is_resource_busy()) << st.status();
+        EXPECT_EQ(1, returned);
+        EXPECT_EQ(0, released);
+        _manager->cleanup_tablet(tablet_id, txn_id);
+        reset_counts();
+    }
+
+    // 2. The thread pool rejects the first subtask: its token and those of every later group are returned.
+    {
+        int64_t txn_id = 20010;
+        CompactRequest request;
+        request.set_skip_write_txnlog(true);
+        request.add_tablet_ids(tablet_id);
+        CompactResponse response;
+        TestClosure closure;
+        auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+        sync_point->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *static_cast<int64_t*>(arg) = 0; });
+        auto st = _manager->create_parallel_tasks(
+                tablet_id, txn_id, version, config, callback, false, pool.get(),
+                [&]() {
+                    acquired++;
+                    return true;
+                },
+                release_token, false, 0, 0, return_token);
+        sync_point->ClearCallBack("ThreadPool::do_submit:1");
+        ASSERT_FALSE(st.ok());
+        // Every token the planner reserved -- one per group, so more than one -- came back untouched.
+        EXPECT_GE(acquired, 2);
+        EXPECT_EQ(acquired, returned);
+        EXPECT_EQ(0, released);
+        _manager->cleanup_tablet(tablet_id, txn_id);
+        reset_counts();
+    }
+
+    // 3. An exception unwinds the submission loop before any subtask was handed to the pool: the guard
+    //    that keeps the tokens from leaking must return them, not report them as completions.
+    {
+        int64_t txn_id = 20011;
+        CompactRequest request;
+        request.set_skip_write_txnlog(true);
+        request.add_tablet_ids(tablet_id);
+        CompactResponse response;
+        TestClosure closure;
+        auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+        sync_point->SetCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register",
+                                [](void*) { throw std::bad_alloc(); });
+        auto st = _manager->create_parallel_tasks(
+                tablet_id, txn_id, version, config, callback, false, pool.get(),
+                [&]() {
+                    acquired++;
+                    return true;
+                },
+                release_token, false, 0, 0, return_token);
+        sync_point->ClearCallBack("TabletParallelCompactionManager::submit_subtasks_from_groups:after_register");
+        ASSERT_FALSE(st.ok());
+        EXPECT_GE(acquired, 2);
+        EXPECT_EQ(acquired, returned);
+        EXPECT_EQ(0, released);
+        _manager->cleanup_tablet(tablet_id, txn_id);
+        reset_counts();
+    }
+
+    pool->wait();
+}
+
+// Whoever claims a tablet's completion must complete it even when the finalization throws: nothing else
+// will. Here the sealer claims it -- every subtask finished before submission was sealed -- and the
+// merged-context build throws right after completion was claimed. Before the guard, the exception
+// escaped into create_parallel_tasks()'s catch, which sealed again (a no-op, the claim was taken) and
+// reported a successful hand-off, so the scheduler destroyed its context and the RPC hung forever.
+TEST_F(TabletParallelCompactionManagerTest, test_finalization_exception_completes_tablet_as_failed) {
+    int64_t tablet_id = 10011;
+    int64_t txn_id = 20013;
+    int64_t version = 11;
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    CompactRequest request;
+    request.set_skip_write_txnlog(true);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = version;
+    state->max_parallel = 1;
+    state->callback = callback;
+    state->total_subtasks_created = 1;
+    auto ctx0 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx0->subtask_id = 0;
+    ctx0->txn_log = std::make_unique<TxnLogPB>();
+    ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(0);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
+    state->completed_subtasks.push_back(std::move(ctx0));
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("TabletParallelCompactionManager::finalize_tablet_completion:after_context",
+                            [](void*) { throw std::bad_alloc(); });
+    sync_point->EnableProcessing();
+    DeferOp disable_sync_point([&]() {
+        sync_point->ClearCallBack("TabletParallelCompactionManager::finalize_tablet_completion:after_context");
+        sync_point->DisableProcessing();
+    });
+
+    // Sealing claims the completion and runs the finalization, which throws.
+    _manager->seal_submission(tablet_id, txn_id, state);
+
+    // The RPC still completes, and as a failure: nothing of a half-built result may be published.
+    EXPECT_TRUE(closure.is_finished());
+    ASSERT_EQ(1, response.failed_tablets_size());
+    EXPECT_EQ(tablet_id, response.failed_tablets(0));
+    EXPECT_EQ(0, response.txn_logs_size());
+
+    // Completion was claimed exactly once, so sealing again -- what create_parallel_tasks()'s catch does --
+    // must not complete the tablet a second time.
+    _manager->seal_submission(tablet_id, txn_id, state);
+    EXPECT_EQ(1, response.failed_tablets_size());
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
+// The last subtask to finish before submission is sealed cannot run the completion itself, and the sealer
+// that will run it has already given its own limiter token back before planning. If that subtask released
+// its token too, the finalization -- LCRM rewriting, the PK SST compaction wait -- would run outside the
+// limiter while other compactions use the full concurrency. So the subtask parks its token with the state,
+// the sealer finalizes on it and hands it back afterwards with the outcome the subtask reported; at most one
+// token is parked, and cleanup returns a parked token whose sealer never came.
+TEST_F(TabletParallelCompactionManagerTest, test_last_unsealed_subtask_parks_token_for_the_sealer) {
+    int64_t tablet_id = 10012;
+    int64_t txn_id = 20014;
+    int64_t version = 11;
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    CompactRequest request;
+    request.set_skip_write_txnlog(true);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    int released = 0;
+    int released_mem_limit_exceeded = 0;
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = version;
+    state->max_parallel = 2;
+    state->callback = callback;
+    state->release_token = [&](bool mem_limit_exceeded) {
+        released++;
+        if (mem_limit_exceeded) {
+            released_mem_limit_exceeded++;
+        }
+    };
+    auto register_running = [&](int32_t subtask_id, std::vector<uint32_t> rowset_ids) {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        SubtaskInfo info;
+        info.subtask_id = subtask_id;
+        info.input_rowset_ids = rowset_ids;
+        info.input_bytes = 5 * 1024 * 1024;
+        info.start_time = ::time(nullptr);
+        for (auto id : rowset_ids) {
+            state->compacting_rowsets[id] = 1;
+        }
+        state->running_subtasks[subtask_id] = std::move(info);
+        state->total_subtasks_created++;
+    };
+    auto finished_context = [&](int32_t subtask_id, uint32_t input_rowset) {
+        auto ctx = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+        ctx->subtask_id = subtask_id;
+        ctx->txn_log = std::make_unique<TxnLogPB>();
+        ctx->txn_log->mutable_op_compaction()->add_input_rowsets(input_rowset);
+        ctx->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+        ctx->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
+        return ctx;
+    };
+    register_running(0, {0, 1, 2, 3, 4});
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+    {
+        // register_tablet_state_for_test() seals the state; this test is about the window before the seal.
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->submission_done = false;
+    }
+
+    // Subtask 0 finishes while submission is still open: it parks its token instead of releasing it, and
+    // the tablet is not completed.
+    EXPECT_TRUE(_manager->on_subtask_complete(tablet_id, txn_id, 0, finished_context(0, 0),
+                                              /*mem_limit_exceeded=*/true));
+    EXPECT_EQ(0, released);
+    EXPECT_FALSE(closure.is_finished());
+
+    // Subtask 1 is registered after that and also finishes before the seal: one token is already parked, so
+    // this one is left to its caller to release as usual.
+    register_running(1, {5, 6, 7, 8, 9});
+    EXPECT_FALSE(_manager->on_subtask_complete(tablet_id, txn_id, 1, finished_context(1, 5),
+                                               /*mem_limit_exceeded=*/false));
+    EXPECT_EQ(0, released);
+    EXPECT_FALSE(closure.is_finished());
+
+    // Sealing claims the completion, runs it on the parked token, and only then hands that token back --
+    // with the outcome its subtask reported.
+    _manager->seal_submission(tablet_id, txn_id, state);
+    EXPECT_TRUE(closure.is_finished());
+    EXPECT_EQ(0, response.failed_tablets_size());
+    EXPECT_EQ(1, released);
+    EXPECT_EQ(1, released_mem_limit_exceeded);
+
+    // Nothing is left parked for cleanup to return.
+    _manager->cleanup_tablet(tablet_id, txn_id);
+    EXPECT_EQ(1, released);
+
+    // A parked token whose sealer never comes goes back when the state is cleaned up.
+    int64_t txn_id2 = txn_id + 1;
+    released = 0;
+    released_mem_limit_exceeded = 0;
+    auto state2 = std::make_shared<TabletParallelCompactionState>();
+    state2->tablet_id = tablet_id;
+    state2->txn_id = txn_id2;
+    state2->version = version;
+    state2->max_parallel = 1;
+    state2->callback = callback;
+    state2->release_token = state->release_token;
+    {
+        std::lock_guard<std::mutex> lock(state2->mutex);
+        SubtaskInfo info;
+        info.subtask_id = 0;
+        info.input_rowset_ids = {0};
+        info.start_time = ::time(nullptr);
+        state2->compacting_rowsets[0] = 1;
+        state2->running_subtasks[0] = std::move(info);
+        state2->total_subtasks_created = 1;
+    }
+    _manager->register_tablet_state_for_test(tablet_id, txn_id2, state2);
+    {
+        std::lock_guard<std::mutex> lock(state2->mutex);
+        state2->submission_done = false;
+    }
+    auto ctx = std::make_unique<CompactionTaskContext>(txn_id2, tablet_id, version, false, true, nullptr);
+    ctx->subtask_id = 0;
+    EXPECT_TRUE(_manager->on_subtask_complete(tablet_id, txn_id2, 0, std::move(ctx), /*mem_limit_exceeded=*/false));
+    EXPECT_EQ(0, released);
+    _manager->cleanup_tablet(tablet_id, txn_id2);
+    EXPECT_EQ(1, released);
+    EXPECT_EQ(0, released_mem_limit_exceeded);
+}
+
+// The interleaving the parked token was never returned in: subtask 0 finishes before the next group is
+// registered and parks its token; submission is then sealed while subtask 1 is still running, so the
+// sealer does not claim the completion. Subtask 1 later finalizes on its own token, and nothing took the
+// parked one -- it stayed held until the whole RPC's cleanup. With a sibling tablet queued in the same
+// RPC and needing a token, that cleanup could never come. Sealing must return a parked token it is not
+// going to use, right away.
+TEST_F(TabletParallelCompactionManagerTest, test_parked_token_is_returned_at_seal_when_a_subtask_still_runs) {
+    int64_t tablet_id = 10013;
+    int64_t txn_id = 20015;
+    int64_t version = 11;
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    // Two tablets in the RPC: this one and a sibling that never completes here, so the RPC's cleanup --
+    // the only other place a parked token was returned -- cannot run.
+    CompactRequest request;
+    request.set_skip_write_txnlog(true);
+    request.add_tablet_ids(tablet_id);
+    request.add_tablet_ids(tablet_id + 1);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    int released = 0;
+    int released_mem_limit_exceeded = 0;
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = version;
+    state->max_parallel = 2;
+    state->callback = callback;
+    state->release_token = [&](bool mem_limit_exceeded) {
+        released++;
+        if (mem_limit_exceeded) {
+            released_mem_limit_exceeded++;
+        }
+    };
+    auto register_running = [&](int32_t subtask_id, std::vector<uint32_t> rowset_ids) {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        SubtaskInfo info;
+        info.subtask_id = subtask_id;
+        info.input_rowset_ids = rowset_ids;
+        info.input_bytes = 5 * 1024 * 1024;
+        info.start_time = ::time(nullptr);
+        for (auto id : rowset_ids) {
+            state->compacting_rowsets[id] = 1;
+        }
+        state->running_subtasks[subtask_id] = std::move(info);
+        state->total_subtasks_created++;
+    };
+    auto finished_context = [&](int32_t subtask_id, uint32_t input_rowset) {
+        auto ctx = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+        ctx->subtask_id = subtask_id;
+        ctx->txn_log = std::make_unique<TxnLogPB>();
+        ctx->txn_log->mutable_op_compaction()->add_input_rowsets(input_rowset);
+        ctx->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+        ctx->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
+        return ctx;
+    };
+    register_running(0, {0, 1, 2, 3, 4});
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->submission_done = false;
+    }
+
+    // Subtask 0 finishes before the next group exists and parks its token.
+    EXPECT_TRUE(_manager->on_subtask_complete(tablet_id, txn_id, 0, finished_context(0, 0),
+                                              /*mem_limit_exceeded=*/true));
+    EXPECT_EQ(0, released);
+
+    // Subtask 1 is registered and still running when submission is sealed: the sealer cannot claim the
+    // completion, so the parked token has nothing to cover and comes back now, with the outcome its
+    // subtask reported -- before this tablet, let alone the RPC, completes.
+    register_running(1, {5, 6, 7, 8, 9});
+    _manager->seal_submission(tablet_id, txn_id, state);
+    EXPECT_EQ(1, released);
+    EXPECT_EQ(1, released_mem_limit_exceeded);
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        EXPECT_FALSE(state->token_parked);
+    }
+    EXPECT_FALSE(closure.is_finished());
+
+    // Subtask 1 finishes after the seal and runs the completion on its own token, which its caller
+    // releases as usual; the manager returns nothing more.
+    EXPECT_FALSE(_manager->on_subtask_complete(tablet_id, txn_id, 1, finished_context(1, 5),
+                                               /*mem_limit_exceeded=*/false));
+    EXPECT_EQ(1, released);
+    EXPECT_EQ(1, response.compact_stats_size());
+    EXPECT_EQ(0, response.failed_tablets_size());
+    // The tablet is complete but the RPC is not: its sibling is still pending.
+    EXPECT_FALSE(closure.is_finished());
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
+    EXPECT_EQ(1, released);
+}
+
+// finish_task() can fail before it accepts the merged context (its allocations come first). The sealer
+// holds the completion claim, so the tablet must still be completed -- as failed, on a second and safe
+// attempt, since the callback was left untouched -- and the parked token the sealer finalized on must
+// come back exactly once regardless.
+TEST_F(TabletParallelCompactionManagerTest, test_acceptance_failure_completes_tablet_once_and_returns_parked_token) {
+    int64_t tablet_id = 10014;
+    int64_t txn_id = 20016;
+    int64_t version = 11;
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    CompactRequest request;
+    request.set_skip_write_txnlog(true);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    int released = 0;
+    int released_mem_limit_exceeded = 0;
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = version;
+    state->max_parallel = 1;
+    state->callback = callback;
+    state->release_token = [&](bool mem_limit_exceeded) {
+        released++;
+        if (mem_limit_exceeded) {
+            released_mem_limit_exceeded++;
+        }
+    };
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        SubtaskInfo info;
+        info.subtask_id = 0;
+        info.input_rowset_ids = {0};
+        info.start_time = ::time(nullptr);
+        state->compacting_rowsets[0] = 1;
+        state->running_subtasks[0] = std::move(info);
+        state->total_subtasks_created = 1;
+    }
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->submission_done = false;
+    }
+    auto ctx0 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx0->subtask_id = 0;
+    ctx0->txn_log = std::make_unique<TxnLogPB>();
+    ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(0);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
+    EXPECT_TRUE(_manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0), /*mem_limit_exceeded=*/true));
+    EXPECT_EQ(0, released);
+
+    // The first acceptance fails the way an allocation failure would; the retry goes through.
+    std::atomic<bool> failed_once{false};
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("lake::CompactionTaskCallback::finish_task:before_accept", [&](void*) {
+        if (!failed_once.exchange(true)) {
+            throw std::bad_alloc();
+        }
+    });
+    sync_point->EnableProcessing();
+    DeferOp disable_sync_point([&]() {
+        sync_point->ClearCallBack("lake::CompactionTaskCallback::finish_task:before_accept");
+        sync_point->DisableProcessing();
+    });
+
+    _manager->seal_submission(tablet_id, txn_id, state);
+
+    EXPECT_TRUE(failed_once.load());
+    EXPECT_TRUE(closure.is_finished());
+    ASSERT_EQ(1, response.failed_tablets_size());
+    EXPECT_EQ(tablet_id, response.failed_tablets(0));
+    EXPECT_EQ(0, response.txn_logs_size());
+    // Only the accepted attempt left a trace in the response.
+    EXPECT_EQ(1, response.compact_stats_size());
+    // The parked token came back exactly once, after the completion, with its subtask's outcome.
+    EXPECT_EQ(1, released);
+    EXPECT_EQ(1, released_mem_limit_exceeded);
+
+    // The claim was consumed once; sealing again completes nothing and returns nothing.
+    _manager->seal_submission(tablet_id, txn_id, state);
+    EXPECT_EQ(1, response.failed_tablets_size());
+    EXPECT_EQ(1, released);
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
+    EXPECT_EQ(1, released);
+}
+
+// Accepting the last tablet also answers the RPC, and building the response's final status
+// allocates. That allocation used to happen after the context had been accepted, where a failure
+// could not be recovered from: the retry saw a null context, built a fresh one for the same tablet
+// and accepted it too, so the accepted count passed tablet_ids_size() and the completion -- which
+// only runs on equality -- never ran at all, leaving the RPC unanswered. The status is now built
+// before the acceptance, where a failure is still retryable, and the acceptance itself installs it
+// without allocating. Exactly one result per tablet, and exactly one completion.
+TEST_F(TabletParallelCompactionManagerTest, test_final_status_failure_accepts_the_tablet_once) {
+    int64_t tablet_id = 10015;
+    int64_t txn_id = 20017;
+    int64_t version = 11;
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    CompactRequest request;
+    request.set_skip_write_txnlog(true);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    int released = 0;
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = version;
+    state->max_parallel = 1;
+    state->callback = callback;
+    state->release_token = [&](bool /*mem_limit_exceeded*/) { released++; };
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        SubtaskInfo info;
+        info.subtask_id = 0;
+        info.input_rowset_ids = {0};
+        info.start_time = ::time(nullptr);
+        state->compacting_rowsets[0] = 1;
+        state->running_subtasks[0] = std::move(info);
+        state->total_subtasks_created = 1;
+    }
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->submission_done = false;
+    }
+    auto ctx0 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx0->subtask_id = 0;
+    ctx0->txn_log = std::make_unique<TxnLogPB>();
+    ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(0);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
+    EXPECT_TRUE(_manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0)));
+
+    // Building the final status fails the way an allocation failure would, once.
+    std::atomic<bool> failed_once{false};
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("lake::CompactionTaskCallback::finish_task:before_final_status", [&](void*) {
+        if (!failed_once.exchange(true)) {
+            throw std::bad_alloc();
+        }
+    });
+    sync_point->EnableProcessing();
+    DeferOp disable_sync_point([&]() {
+        sync_point->ClearCallBack("lake::CompactionTaskCallback::finish_task:before_final_status");
+        sync_point->DisableProcessing();
+    });
+
+    _manager->seal_submission(tablet_id, txn_id, state);
+
+    EXPECT_TRUE(failed_once.load());
+    // The retry completed the tablet as failed, and it is the only accepted result.
+    EXPECT_EQ(1, closure.run_count());
+    EXPECT_EQ(1, response.compact_stats_size());
+    ASSERT_EQ(1, response.failed_tablets_size());
+    EXPECT_EQ(tablet_id, response.failed_tablets(0));
+    EXPECT_EQ(0, response.txn_logs_size());
+    // The parked token came back once, after the completion.
+    EXPECT_EQ(1, released);
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
+// The other side of that boundary: once the context has been accepted and the RPC answered, the
+// work that follows (releasing the scheduler's states, dropping the contexts) must not throw out of
+// finish_task(). The caller would read that as "the result was not accepted" and complete the
+// tablet again, which is exactly what breaks the completion count.
+TEST_F(TabletParallelCompactionManagerTest, test_failure_after_the_rpc_is_answered_does_not_re_accept) {
+    int64_t tablet_id = 10016;
+    int64_t txn_id = 20018;
+    int64_t version = 11;
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    CompactRequest request;
+    request.set_skip_write_txnlog(true);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = version;
+    state->max_parallel = 1;
+    state->callback = callback;
+    state->total_subtasks_created = 1;
+    auto ctx0 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx0->subtask_id = 0;
+    ctx0->txn_log = std::make_unique<TxnLogPB>();
+    ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(0);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(50);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_data_size(500);
+    state->completed_subtasks.push_back(std::move(ctx0));
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+
+    std::atomic<bool> failed_once{false};
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->SetCallBack("lake::CompactionTaskCallback::finish_task:after_complete", [&](void*) {
+        if (!failed_once.exchange(true)) {
+            throw std::bad_alloc();
+        }
+    });
+    sync_point->EnableProcessing();
+    DeferOp disable_sync_point([&]() {
+        sync_point->ClearCallBack("lake::CompactionTaskCallback::finish_task:after_complete");
+        sync_point->DisableProcessing();
+    });
+
+    // Must not throw, and must not complete the tablet a second time.
+    ASSERT_NO_THROW(_manager->seal_submission(tablet_id, txn_id, state));
+
+    EXPECT_TRUE(failed_once.load());
+    EXPECT_EQ(1, closure.run_count());
+    // One accepted result for the one tablet, whatever the merge itself concluded: the failure was
+    // in the work that follows the answer, so it must not add a second one.
+    EXPECT_EQ(1, response.compact_stats_size());
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
 } // namespace starrocks::lake

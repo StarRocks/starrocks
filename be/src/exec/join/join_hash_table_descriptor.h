@@ -146,7 +146,6 @@ struct JoinHashTableItems {
     bool with_other_conjunct = false;
     bool left_to_nullable = false;
     bool right_to_nullable = false;
-    bool has_large_column = false;
     float keys_per_bucket = 0;
     size_t used_buckets = 0;
     bool cache_miss_serious = false;

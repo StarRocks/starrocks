@@ -8,8 +8,6 @@ toc_max_heading_level: 4
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
 import MultiServiceAccess from '../../../_assets/commonMarkdown/multi-service-access.mdx'
-import GrantCreateWarehouse from '../../../_assets/commonMarkdown/grant_create_warehouse.mdx'
-import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 
 ## 説明
 
@@ -36,7 +34,24 @@ GRANT 操作を実行する前に、関連するユーザーまたはロール�
 
 #### システム
 
-<GrantCreateWarehouse />
+```SQL
+GRANT
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME | SECURITY } 
+    ON SYSTEM
+    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+```
+
+#### AI 関数と Provider
+
+```sql
+GRANT USAGE ON ALL AI FUNCTIONS TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+GRANT USAGE ON AI FUNCTION <function_name> TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+GRANT USAGE ON AI PROVIDER <provider_name> TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+GRANT USAGE ON ALL AI PROVIDERS TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+```
+
+AI FUNCTION には、データベース修飾や引数シグネチャのない公開組み込み関数ファミリー名を指定します。`USAGE ON ALL AI FUNCTIONS` は現在および将来のファミリーを対象とし、`WITH GRANT OPTION` を付けると個別またはすべてのファミリーの使用権限を再付与できます。Provider 使用権限は含みません。Provider 名は完全一致します。詳細は [AI の権限項目](../../../administration/user_privs/authorization/privilege_item.md#ai-function-privileges)を参照してください。
+
 
 #### リソースグループ
 
@@ -126,7 +141,7 @@ GRANT
 
 ```SQL
 GRANT  
-    { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
+    { ALTER | DROP | SELECT | EXPORT | ALL [PRIVILEGES]}
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
            { { DATABASE <database_name> } | ALL DATABASES }
@@ -136,6 +151,7 @@ GRANT
 * このコマンドを実行する前に SET CATALOG を実行する必要があります。
 * `<db_name>.<view_name>` を使用してビューを表すこともできます。
 * External Catalog 内のテーブルに対しては、Hive テーブルビューにのみ SELECT 権限を付与できます (v3.1以降)。
+* EXPORT 権限については、付与および取り消しのみ対応しています。EXPORT TABLE によるビューのエクスポートはサポートされていません。
 
   ```SQL
   GRANT <priv> ON VIEW <db_name>.<view_name> TO { ROLE <role_name> | USER <user_name> }
@@ -145,7 +161,7 @@ GRANT
 
 ```SQL
 GRANT
-    { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
+    { SELECT | ALTER | REFRESH | DROP | EXPORT | ALL [PRIVILEGES]}
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
            { { DATABASE <database_name> } | ALL DATABASES }
@@ -154,10 +170,17 @@ GRANT
 
 * このコマンドを実行する前に SET CATALOG を実行する必要があります。
 * `<db_name>.<mv_name>` を使用して mv を表すこともできます。
+* EXPORT 権限については、付与および取り消しのみ対応しています。EXPORT TABLE によるマテリアライズドビューのエクスポートはサポートされていません。
 
   ```SQL
   GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO { ROLE <role_name> | USER <user_name> }
   ```
+
+:::caution
+
+`ALL PRIVILEGES` はビューおよびマテリアライズドビューで `EXPORT` を含むようになりました。アップグレード前に `ALL ... WITH GRANT OPTION` を付与され、かつシステムレベルの `GRANT` 権限を持たないユーザーは、管理者が追加で `EXPORT ... WITH GRANT OPTION` を付与しない限り、当該オブジェクトに対して `GRANT` / `REVOKE ALL PRIVILEGES` を実行できなくなります。
+
+:::
 
 #### 関数
 
@@ -193,8 +216,6 @@ GRANT
     ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUMES} 
     TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
-
-<GrantWarehouse />
 
 ### ロールをロールまたはユーザーに付与
 

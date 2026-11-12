@@ -39,6 +39,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
+import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.partitiontraits.DefaultTraits;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DmlType;
@@ -295,6 +297,34 @@ public class StatisticUtils {
         return updatedPartitions;
     }
 
+    /**
+     * The partitions updated since {@code checkTime} together with every partition of the table, both taken from
+     * one fetch of the partition info map - the same fetch {@link #getUpdatedPartitionNames} makes and then throws
+     * the full list of. Either field is null when the table's traits cannot list partitions with their info.
+     */
+    public record UpdatedPartitionNames(Set<String> updated, List<String> all) {
+    }
+
+    public static UpdatedPartitionNames getUpdatedAndAllPartitionNames(Table table, LocalDateTime checkTime) {
+        ConnectorPartitionTraits traits;
+        try {
+            traits = ConnectorPartitionTraits.build(table);
+        } catch (Exception e) {
+            return new UpdatedPartitionNames(null, null);
+        }
+        if (!(traits instanceof DefaultTraits)) {
+            return new UpdatedPartitionNames(getUpdatedPartitionNames(table, checkTime), null);
+        }
+        try {
+            Map<String, PartitionInfo> partitionInfos = traits.getPartitionNameWithPartitionInfo();
+            return new UpdatedPartitionNames(DefaultTraits.getUpdatedPartitionNames(partitionInfos, checkTime, 60),
+                    new ArrayList<>(partitionInfos.keySet()));
+        } catch (Exception e) {
+            // same as getUpdatedPartitionNames: traits that cannot list partition info answer "unknown"
+            return new UpdatedPartitionNames(null, null);
+        }
+    }
+
     // Don't use PartitionVisibleTime for data update checks as it's ineffective for ShareData architecture
     @Deprecated
     public static LocalDateTime getPartitionLastUpdateTime(Partition partition) {
@@ -490,7 +520,8 @@ public class StatisticUtils {
 
     public static Optional<Double> convertStatisticsToDouble(Type type, String statistic) {
         if (!type.canStatistic()) {
-            throw new StarRocksPlannerException("Error statistic type : " + type.toSql(), ErrorType.INTERNAL_ERROR);
+            // No statistics for this type (e.g. VARBINARY): the caller estimates without a value, as for VARCHAR.
+            return Optional.empty();
         }
         try {
             switch (type.getPrimitiveType()) {

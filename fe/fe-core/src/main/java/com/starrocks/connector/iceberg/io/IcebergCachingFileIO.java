@@ -54,7 +54,10 @@ import com.github.benmanes.caffeine.cache.Weigher;
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
+import com.starrocks.common.util.concurrent.lock.LockInvariantViolationException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import com.starrocks.fs.azure.AzBlobURI;
 import org.apache.hadoop.conf.Configuration;
@@ -66,7 +69,6 @@ import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.hadoop.HadoopInputFile;
 import org.apache.iceberg.hadoop.HadoopOutputFile;
-import org.apache.iceberg.hadoop.SerializableConfiguration;
 import org.apache.iceberg.hadoop.Util;
 import org.apache.iceberg.io.ByteBufferInputStream;
 import org.apache.iceberg.io.FileIO;
@@ -153,7 +155,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         wrappedIO.initialize(properties);
 
         if (conf != null) {
-            wrappedIO.setConf(conf.get());
+            setWrappedConf(conf.get());
         }
 
         if (ENABLE_DISK_CACHE) {
@@ -184,9 +186,40 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
     @Override
     public void setConf(Configuration conf) {
-        this.conf = new SerializableConfiguration(conf)::get;
+        this.conf = new SharedConfiguration(conf);
         if (wrappedIO != null) {
-            wrappedIO.setConf(conf);
+            setWrappedConf(conf);
+        }
+    }
+
+    // ResolvingFileIO.setConf copies the configuration into a SerializableConfiguration, which rebuilds a
+    // second Configuration on first use. A table whose REST load response carries its own config or
+    // credentials gets its own FileIO, so those copies (~80-180 KB with a default Hadoop configuration) were
+    // retained per cached table. Hand the wrapped IO a reference instead. serializeConfWith replaces its
+    // supplier in one assignment (its getConf() is null-safe, and the argument is ignored), so a concurrent
+    // newInputFile never sees a half-set configuration.
+    private void setWrappedConf(Configuration conf) {
+        wrappedIO.serializeConfWith(ignored -> new SharedConfiguration(conf));
+    }
+
+    // Shares the Configuration in memory and copies it only when serialized (a table shipped in a split).
+    // The copy is a SerializableTable.SerializableConfSupplier, not a lambda or a class of fe-core: a
+    // concurrent newInputFile can put this supplier back on the wrapped IO after SerializableTable installed
+    // its own, and the BE deserializing the split has neither fe-core nor this class.
+    private static final class SharedConfiguration implements SerializableSupplier<Configuration> {
+        private final transient Configuration conf;
+
+        private SharedConfiguration(Configuration conf) {
+            this.conf = conf;
+        }
+
+        @Override
+        public Configuration get() {
+            return conf;
+        }
+
+        private Object writeReplace() {
+            return new SerializableTable.SerializableConfSupplier(conf);
         }
     }
 
@@ -201,7 +234,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     public InputFile newInputFile(String path) {
         try {
             String normalizedPath = normalizeAzurePath(path);
-            wrappedIO.setConf(buildConfFromProperties(properties, normalizedPath));
+            setWrappedConf(buildConfFromProperties(properties, normalizedPath));
             return new CachingInputFile(fileContentCache, wrappedIO.newInputFile(normalizedPath));
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new input file for path: %s, properties: %s", path, properties);
@@ -214,7 +247,15 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     public OutputFile newOutputFile(String path) {
         try {
             String normalizedPath = normalizeAzurePath(path);
-            wrappedIO.setConf(buildConfFromProperties(properties, normalizedPath));
+            setWrappedConf(buildConfFromProperties(properties, normalizedPath));
+            // Wrapped rather than returned as is: newOutputFile itself contacts nothing -- the wait is in
+            // create()/createOrOverwrite() on the object handed back, which is where the guard has to be.
+            // Returned as the wrapped IO made it, deliberately. The write has no door and cannot have one
+            // here: the wait is in create() on this object, but iceberg dispatches on what the object *is*
+            // -- Parquet.WriteBuilder and ParquetIO look for HadoopOutputFile and for NativelyEncryptedFile
+            // -- so wrapping it to add a guard would quietly move the writer onto its generic path and take
+            // the Hadoop configuration, the block size and native encryption with it. An observability
+            // change does not get to cost that; the gap is recorded in BlockingCallValidator's javadoc.
             return wrappedIO.newOutputFile(normalizedPath);
         } catch (StarRocksException e) {
             String errorMessage = String.format("Failed to new output file for path: %s, properties: %s", path, properties);
@@ -225,6 +266,9 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
     @Override
     public void deleteFile(String path) {
+        // No cache in front of a delete: it always goes out. Reached by table purge and by the cleanup of
+        // a failed commit, both of which can run inside a DDL's database lock.
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         String normalizedPath = normalizeAzurePath(path);
         wrappedIO.deleteFile(normalizedPath);
         // remove from cache.
@@ -707,7 +751,14 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         @Override
         public long getLength() {
             long len = contentCache.getLength(location());
-            return len == -1 ? wrappedInputFile.getLength() : len;
+            if (len != -1) {
+                return len;
+            }
+            // Not in the cache, so the size is a stat against storage. This is the door iceberg's own
+            // planning goes through -- manifest lists, manifests, metadata.json -- and it is reached
+            // through the FileIO the catalogs install, not through MetadataMgr.
+            BlockingCallValidator.validateNotUnderLock("remote-storage");
+            return wrappedInputFile.getLength();
         }
 
         @Override
@@ -723,6 +774,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 }
 
                 // fallback to non-caching input stream.
+                BlockingCallValidator.validateNotUnderLock("remote-storage");
                 return wrappedInputFile.newStream();
             } catch (FileNotFoundException e) {
                 throw new NotFoundException(e, "Failed to open input stream for file: %s", wrappedInputFile.location());
@@ -739,7 +791,11 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
 
         @Override
         public boolean exists() {
-            return contentCache.exists(location()) || wrappedInputFile.exists();
+            if (contentCache.exists(location())) {
+                return true;
+            }
+            BlockingCallValidator.validateNotUnderLock("remote-storage");
+            return wrappedInputFile.exists();
         }
 
         private CacheEntry newCacheEntry() {
@@ -752,10 +808,14 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                     stream = contentCache.getDiskSeekableStream(location());
                     if (stream == null) {
                         LOG.debug(location() + " load from remote");
+                        BlockingCallValidator.validateNotUnderLock("remote-storage");
                         stream = wrappedInputFile.newStream();
                     }
                 } else {
                     LOG.debug(location() + " load from remote");
+                    // The content cache's loader, so a hit never reaches here; the disk-cache branch above
+                    // is local until its stream comes back null.
+                    BlockingCallValidator.validateNotUnderLock("remote-storage");
                     stream = wrappedInputFile.newStream();
                 }
                 List<ByteBuffer> buffers = Lists.newArrayList();
@@ -793,8 +853,13 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 Preconditions.checkNotNull(entry, "CacheEntry should not be null when there is no RuntimeException occurs");
                 return ByteBufferInputStream.wrap(entry.buffers);
             } catch (UncheckedIOException ex) {
+                LockInvariantViolationException.rethrowIfRefusal(ex);
                 throw ex.getCause();
             } catch (RuntimeException ex) {
+                // newCacheEntry is the loader, so a refusal raised in it surfaces here. Rethrown as itself:
+                // wrapped into an IOException it would read as a storage failure, and the lock violation
+                // -- the thing that actually happened -- would be gone.
+                LockInvariantViolationException.rethrowIfRefusal(ex);
                 throw new IOException("Caught an error while reading through cache", ex);
             }
         }

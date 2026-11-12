@@ -85,6 +85,7 @@ select * from t;
 
 -- name: test_mv @sequential
 create table t(k date, v int, v1 int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
+DISTRIBUTED BY RANDOM
 PROPERTIES (
 "replication_num" = "1",
 "bucket_size" = "1"

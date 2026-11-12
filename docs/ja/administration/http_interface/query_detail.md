@@ -27,14 +27,16 @@ Query detail レコードは、FE 構成の `enable_collect_query_detail_info` �
 
 ## レスポンス
 
-- v1 は QueryDetail 配列を返します。
+- v1 は QueryDetail 配列を返します。配列はチャンク転送エンコーディング（chunked transfer encoding）でストリーミングされるため、レスポンスに `Content-Length` ヘッダーは含まれません。HTTP/1.0 リクエストの場合、ボディは接続のクローズで終わります。
 - v2 は `{ "code": "0", "message": "OK", "result": [ ... ] }` を返し、`result` が QueryDetail 配列です。
 
 ## 認証と権限
 
 本 API は **HTTP Basic 認証** を必要とします。
 
-ログインに成功すれば追加の権限制御は行われません。認証済みユーザーは、`user` フィルタを指定しない限り、すべてのキャッシュ済みクエリ詳細を参照できます。
+デフォルトでは、ログインに成功すれば追加の権限制御は行われません。認証済みユーザーは、`user` フィルタを指定しない限り、すべてのキャッシュ済みクエリ詳細を参照できます。
+
+FE 設定項目 `authorization_enable_query_profile_access_check` を `true` に設定した場合、`profile` フィールド、およびその profile から生成された `explain` フィールドは、現在のユーザーが実行したクエリに対してのみ返されます。SYSTEM レベルの OPERATE 権限を持つユーザーはすべてのクエリでこれらを取得できます。それ以外のレコードも一覧には含まれますが、これらのフィールドは省略されます。
 
 ## QueryDetail フィールド
 

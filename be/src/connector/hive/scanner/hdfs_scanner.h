@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -62,6 +63,12 @@ public:
 
 protected:
     Status open_random_access_file();
+
+    // Whether do_close() and do_open() restart reading from the file start, to read it again bypassing the datacache.
+    virtual bool support_reopen_without_datacache() const { return false; }
+    // Whether the file may be skipped before do_open() when its min/max values from the scan range fail the
+    // predicates, which include the join runtime filters that have arrived.
+    virtual bool support_file_stats_pruning() const { return false; }
     static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 
     void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
@@ -71,6 +78,17 @@ protected:
 private:
     bool _opened = false;
     std::atomic<bool> _closed = false;
+    // The file was skipped by _pruned_by_file_stats(): do_open() never ran.
+    bool _skipped_by_file_stats = false;
+    bool _pruned_by_file_stats() const;
+    // A failure which may come from the datacache has been handled.
+    bool _datacache_error_handled = false;
+    bool _may_be_caused_by_datacache(const Status& status);
+    // Reopen the file bypassing the datacache and call `redo`; drop the datacache if it succeeds.
+    Status _handle_datacache_error(RuntimeState* runtime_state, const Status& status,
+                                   const std::function<Status()>& redo);
+    void _drop_datacache(CacheInputStream* cache_input_stream, const Status& status, bool verified);
+    Status _reopen_without_datacache(RuntimeState* runtime_state);
     Status _build_scanner_context();
     void update_hdfs_counter(HdfsScannerProfile* profile);
 
@@ -83,6 +101,8 @@ protected:
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
     std::shared_ptr<CacheInputStream> _cache_input_stream = nullptr;
+    // The datacache stream of the first read, kept for its counters.
+    std::shared_ptr<CacheInputStream> _bypassed_cache_input_stream = nullptr;
     std::shared_ptr<SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     int64_t _total_running_time = 0;
 };

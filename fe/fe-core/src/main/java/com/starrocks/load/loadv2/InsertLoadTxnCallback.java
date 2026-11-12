@@ -34,4 +34,10 @@ public interface InsertLoadTxnCallback {
      * After transaction is committed, do some follow-up work.
      */
     void afterCommitted(TransactionState txnState) throws StarRocksException;
+
+    /**
+     * Replay counterpart of {@link #afterCommitted}: a node reading the committed transaction back off
+     * the journal has no callback state of its own, so the work must be driven by the record alone.
+     */
+    void replayOnCommitted(TransactionState txnState);
 }

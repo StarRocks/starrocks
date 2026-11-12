@@ -37,6 +37,11 @@ struct BucketAwarePartitionCtx {
     std::vector<uint32_t>& round_ids;
 };
 
-void calc_hash_values_and_bucket_ids(const std::vector<const Column*>& partitions_columns, BucketAwarePartitionCtx ctx);
+// Iceberg bucket hash of one column, written into hashes[0, num_rows). NULL rows are left untouched.
+// MURMUR3_X86_32_UUID parses each 36-char uuid string to its 16 bytes before hashing, as Iceberg does.
+void bucket_hash_column(const Column& column, TBucketFunction::type func, uint32_t* hashes, size_t num_rows);
+
+void compute_hash_values_and_bucket_ids(const std::vector<const Column*>& partitions_columns,
+                                        BucketAwarePartitionCtx ctx);
 
 } // namespace starrocks

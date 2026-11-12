@@ -28,7 +28,13 @@ import java.util.Objects;
  * column-name map the sampler uses to project any index's sort key (base or rollup) and
  * the partition columns by their source-table column names. The optional WHERE predicate
  * SQL is threaded through verbatim from the INSERT-SELECT statement so the sample covers
- * only the rows the load will actually write.
+ * only the rows the load will actually write. A key column the SELECT feeds with a literal has no
+ * source column; it is carried as the literal's SQL, which the sampler projects instead.
+ * A key column the SELECT computes from source columns -- a safe computed projection, or a generated
+ * column evaluated from the columns its definition reads -- is carried as the expression's SQL, which
+ * the sampler evaluates over the source rows. The load time zone keeps external timestamp decoding
+ * aligned with the INSERT. {@code sessionSemantics} are the INSERT session's variables that decide
+ * how the predicate and those expressions evaluate; the sampler sets them on its own session.
  */
 public record InsertFromTableScanContext(
         Table sourceTable,
@@ -37,16 +43,31 @@ public record InsertFromTableScanContext(
         String wherePredicateSql,                   // nullable
         ComputeResource computeResource,
         long sourceTotalBytes,
-        long sourceTotalRows) implements ScanContext {
+        long sourceTotalRows,
+        Map<String, String> targetToConstantSql,    // lower-cased target name -> SQL
+        Map<String, String> targetToExpressionSql,  // lower-cased target name -> SQL
+        String loadTimeZone,
+        SampleSessionSemantics sessionSemantics) implements ScanContext {
 
     public InsertFromTableScanContext {
         Objects.requireNonNull(sourceTable, "sourceTable");
         Objects.requireNonNull(sourceFromSql, "sourceFromSql");
         Objects.requireNonNull(targetToSourceColumnNames, "targetToSourceColumnNames");
         Objects.requireNonNull(computeResource, "computeResource");
+        Objects.requireNonNull(targetToConstantSql, "targetToConstantSql");
+        Objects.requireNonNull(targetToExpressionSql, "targetToExpressionSql");
+        Objects.requireNonNull(sessionSemantics, "sessionSemantics");
         if (sourceTotalBytes < 0 || sourceTotalRows < 0) {
             throw new IllegalArgumentException("source estimates must be non-negative");
         }
+    }
+
+    /** Every key column is backed by a source column. */
+    public InsertFromTableScanContext(
+            Table sourceTable, String sourceFromSql, Map<String, String> targetToSourceColumnNames,
+            String wherePredicateSql, ComputeResource computeResource, long sourceTotalBytes, long sourceTotalRows) {
+        this(sourceTable, sourceFromSql, targetToSourceColumnNames, wherePredicateSql, computeResource,
+                sourceTotalBytes, sourceTotalRows, Map.of(), Map.of(), null, SampleSessionSemantics.NONE);
     }
 
     /** Backward-compatible constructor for the original internal-OLAP source path and its tests. */

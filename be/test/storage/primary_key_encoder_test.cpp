@@ -29,6 +29,7 @@
 #include "common/config_local_io_fwd.h"
 #include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
+#include "testutil/column_test_helper.h"
 #include "types/date_value.h"
 #include "types/datum.h"
 
@@ -323,12 +324,7 @@ TEST(PrimaryKeyEncoderTest, testDeleteFileBinaryColumnSizeCheck) {
 
     auto sticky_large = BinaryColumn::create();
     sticky_large->append_strings(strings.data(), strings.size());
-    AdaptiveOffsets::Large large_offsets;
-    large_offsets.resize(sticky_large->get_offset().size());
-    for (size_t i = 0; i < sticky_large->get_offset().size(); ++i) {
-        large_offsets[i] = sticky_large->get_offset()[i];
-    }
-    sticky_large->get_offset().set_large_buffer(std::move(large_offsets));
+    ColumnTestHelper::force_large_offsets(sticky_large.get());
     ASSERT_TRUE(sticky_large->get_offset().is_large());
     ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*sticky_large).ok());
 
@@ -336,10 +332,6 @@ TEST(PrimaryKeyEncoderTest, testDeleteFileBinaryColumnSizeCheck) {
     nullable_data->append_strings(strings.data(), strings.size());
     auto nullable = NullableColumn::create(std::move(nullable_data), NullColumn::create(strings.size(), 0));
     ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*nullable).ok());
-
-    auto large_binary = LargeBinaryColumn::create();
-    large_binary->append_strings(strings.data(), strings.size());
-    ASSERT_FALSE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*large_binary).ok());
 
     auto overlimit_binary = make_unrepresentable_binary_column();
     ASSERT_FALSE(overlimit_binary->is_payload_size_representable().ok());

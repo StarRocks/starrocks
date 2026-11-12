@@ -55,7 +55,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.ArrayDeque;
+import java.util.Queue;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private static final Logger LOG = LogManager.getLogger(HttpServerHandler.class);
@@ -66,7 +70,15 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     protected HttpRequest request = null;
     private final ActionController controller;
     private final Executor executor;
-    private BaseAction action = null;
+    // A client that pipelines more requests than this behind a slow one loses the connection rather than piling
+    // them up in memory.
+    private static final int MAX_WAITING_REQUESTS = 8;
+    // The requests a client pipelined while an earlier one of this connection was still being handled on the
+    // executor, in the order they came. A request is handled only once the one before it is done, so the client
+    // gets its responses in order and none lands inside a response still being written. Event loop only.
+    private final Queue<HttpRequest> waiting = new ArrayDeque<>();
+    // Whether a request of this connection is being handled on the executor. Event loop only.
+    private boolean busy = false;
 
     public HttpServerHandler(ActionController controller, Executor executor) {
         super();
@@ -81,6 +93,22 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        if ((busy || !waiting.isEmpty()) && msg instanceof HttpRequest) {
+            if (waiting.size() >= MAX_WAITING_REQUESTS) {
+                LOG.warn("closing the connection from {}: more than {} pipelined requests are waiting",
+                        ctx.channel().remoteAddress(), MAX_WAITING_REQUESTS);
+                ReferenceCountUtil.release(msg);
+                ctx.close();
+                return;
+            }
+            // Released once it has been handled, or when the connection closes.
+            waiting.add((HttpRequest) msg);
+            return;
+        }
+        handle(ctx, msg);
+    }
+
+    private void handle(ChannelHandlerContext ctx, Object msg) {
         try {
             if (!(msg instanceof HttpRequest)) {
                 return;
@@ -88,18 +116,30 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
             this.request = (HttpRequest) msg;
             if (LOG.isDebugEnabled()) {
-                LOG.debug("request: url:[{}]", request.uri());
+                LOG.debug("request: url:[{}]", WebUtils.sanitizeHttpReqUriForLog(request.uri()));
             }
             try {
                 validateRequest(ctx, request);
             } catch (Exception e) {
-                LOG.warn("accept bad request: {}, error: {}", request.uri(), e.getMessage(), e);
+                LOG.warn("accept bad request: {}, error: {}", WebUtils.sanitizeHttpReqUriForLog(request.uri()),
+                        e.getMessage(), e);
                 writeResponse(ctx, HttpResponseStatus.BAD_REQUEST, "Bad Request. <br/> " + e.getMessage());
                 return;
             }
 
             BaseRequest req = new BaseRequest(ctx, request);
-            action = getAction(req);
+            BaseAction action;
+            try {
+                action = getAction(req);
+            } catch (IllegalArgumentException e) {
+                // A uri that cannot be parsed or decoded, e.g. with a malformed escape like %ZZ. The message of
+                // the exception quotes the whole uri, whose query may hold a credential, so neither the message
+                // nor the exception is logged or sent back.
+                LOG.warn("accept bad request uri: {}, error: {}", WebUtils.sanitizeHttpReqUriForLog(request.uri()),
+                        uriErrorReason(e));
+                writeResponse(ctx, HttpResponseStatus.BAD_REQUEST, "Bad Request. <br/> Invalid request uri.");
+                return;
+            }
             if (action.isSqlAction()) {
                 req.setConnectContext(ctx.channel().attr(HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY).get());
             } else {
@@ -111,9 +151,9 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                     LOG.debug("action: {} ", action.getClass().getName());
                 }
                 if (action.supportAsyncHandler()) {
-                    handleActionAsync(req);
+                    handleActionAsync(req, action);
                 } else {
-                    handleActionSync(req);
+                    handleActionSync(req, action);
                 }
             }
         } finally {
@@ -121,7 +161,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         }
     }
 
-    private void handleActionSync(BaseRequest request) {
+    private void handleActionSync(BaseRequest request, BaseAction action) {
         RequestHandlingWatch watch = new RequestHandlingWatch(request, false);
         try {
             action.handleRequest(request);
@@ -132,33 +172,87 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         }
     }
 
-    private void handleActionAsync(BaseRequest request) {
+    private void handleActionAsync(BaseRequest request, BaseAction action) {
         RequestHandlingWatch watch = new RequestHandlingWatch(request, true);
+        busy = true;
         try {
             executor.execute(() -> {
                 try {
+                    // The SQL actions on a channel share one ConnectContext for as long as the channel lives; they
+                    // never run on it at once, since a connection's requests are handled one at a time.
                     action.handleRequest(request);
-                } catch (Exception e) {
-                    handleException(request, e);
+                } catch (Throwable t) {
+                    // An Error, such as an OutOfMemoryError while building a response, would otherwise end this
+                    // thread without an answer and leave the client waiting on an open connection.
+                    handleException(request, t);
                 } finally {
-                    // HttpServerHandler will flush automatically in channelReadComplete. For synchronous handling,
-                    // the response is written in channelRead which is before channelReadComplete, so no need to
-                    // trigger flush manually. But for asynchronous handling, the response can be written after
-                    // channelReadComplete, so we need to trigger the flush manually.
-                    request.getContext().flush();
-                    watch.finish();
+                    try {
+                        // HttpServerHandler will flush automatically in channelReadComplete. For synchronous
+                        // handling, the response is written in channelRead which is before channelReadComplete, so no
+                        // need to trigger flush manually. But for asynchronous handling, the response can be written
+                        // after channelReadComplete, so we need to trigger the flush manually.
+                        request.getContext().flush();
+                        watch.finish();
+                    } finally {
+                        handleNextRequest(request.getContext());
+                    }
                 }
             });
         } catch (Exception exception) {
+            busy = false;
             handleException(request, exception);
             watch.finish();
         }
     }
 
-    private void handleException(BaseRequest request, Exception exception) {
+    // Once a request is done on the executor, goes back to the event loop, where the writes the request queued
+    // go out first, and handles the requests that waited for it there.
+    private void handleNextRequest(ChannelHandlerContext ctx) {
+        try {
+            ctx.executor().execute(() -> {
+                busy = false;
+                boolean handled = false;
+                HttpRequest next;
+                while (!busy && ctx.channel().isActive() && (next = waiting.poll()) != null) {
+                    handled = true;
+                    try {
+                        handle(ctx, next);
+                    } catch (Throwable t) {
+                        // What netty does for a failure in channelRead; closing releases the rest.
+                        exceptionCaught(ctx, t);
+                        return;
+                    }
+                }
+                if (!ctx.channel().isActive()) {
+                    // Nothing is left to answer on a connection that is gone.
+                    releaseWaiting();
+                } else if (handled) {
+                    // No read is going on whose end would flush what a waiting request wrote.
+                    ctx.flush();
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            // The event loop is shutting down with the connection, which releases the waiting requests.
+        }
+    }
+
+    private void releaseWaiting() {
+        HttpRequest waitingRequest;
+        while ((waitingRequest = waiting.poll()) != null) {
+            ReferenceCountUtil.release(waitingRequest);
+        }
+    }
+
+    private void handleException(BaseRequest request, Throwable exception) {
         writeResponse(request.getContext(), HttpResponseStatus.INTERNAL_SERVER_ERROR,
                 String.format("failed to handle request, error: %s:%s ", exception.getClass(), exception.getMessage()));
-        LOG.debug("Failed to handle request: {}", request.getRequest().uri(), exception);
+        if (exception instanceof Error) {
+            LOG.warn("Failed to handle request: {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()),
+                    exception);
+        } else if (LOG.isDebugEnabled()) {
+            LOG.debug("Failed to handle request: {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()),
+                    exception);
+        }
     }
 
     @Override
@@ -172,6 +266,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(-1L);
+        releaseWaiting();
         HttpConnectContext context = ctx.channel().attr(HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY).get();
         if (context != null) {
             // Do NOT gate on isRegistered(): that flag is set AFTER
@@ -211,6 +306,14 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         LOG.warn(String.format("[remote=%s] Exception caught: %s",
                 ctx.channel().remoteAddress(), cause.getMessage()), cause);
         ctx.close();
+    }
+
+    // Why the uri could not be parsed, without quoting it.
+    private static String uriErrorReason(IllegalArgumentException e) {
+        if (e.getCause() instanceof URISyntaxException) {
+            return ((URISyntaxException) e.getCause()).getReason();
+        }
+        return e.getClass().getSimpleName();
     }
 
     private BaseAction getAction(BaseRequest request) {
@@ -254,14 +357,8 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
             HttpServerHandlerMetrics.getInstance().handlingRequestsNum.increase(-1L);
             HttpServerHandlerMetrics.getInstance().requestHandleLatencyMs.update(latency);
             if (latency >= Config.http_slow_request_threshold_ms) {
-                String uri;
-                try {
-                    uri = WebUtils.sanitizeHttpReqUri(request.getRequest().uri());
-                } catch (Exception e) {
-                    uri = "failed to sanitize uri, error=" + e.getMessage();
-                }
                 LOG.warn("receive slow http request. uri: {}, startTime: {}, latency: {} ms",
-                        uri, startTime, latency);
+                        WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()), startTime, latency);
             }
             if (asyncHandling) {
                 ReferenceCountUtil.release(request.getRequest());

@@ -37,7 +37,7 @@ CREATE USER <username> IDENTIFIED WITH authentication_jwt [AS
 | Property            | Corresponding FE Configuration | Description                                                                                                            |
 | ------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
 | `jwks_url`          | `jwt_jwks_url`                 | The URL to the JSON Web Key Set (JWKS) service or the path to the public key local file under the `fe/conf` directory. |
-| `principal_field`   | `jwt_principal_field`          | The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks. |
+| `principal_field`   | `jwt_principal_field`          | The field in the JWT that identifies the subject. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks. To extract a value from a nested claim, specify an [RFC 6901 JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) (a path starting with `/`). Use `~1` to escape `/` and `~0` to escape `~` in key names. |
 | `required_issuer`   | `jwt_required_issuer`          | (Optional) The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer. |
 | `required_audience` | `jwt_required_audience`        | (Optional) The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience. |
 
@@ -74,3 +74,9 @@ Example:
 ```Bash
 mysql -h 127.0.0.1 -P 9030 --authentication-openid-connect-client-id-token-file=/path/to/token/file -u tom
 ```
+
+## Connect over HTTP or Arrow Flight with JWT
+
+Users of a JWT security integration can also send the token as `Authorization: Bearer <token>` to the HTTP API (SQL API, Stream Load, Web UI) and to Arrow Flight SQL, with no user name. See [Connect over HTTP and Arrow Flight](./security_integration.md#connect-over-http-and-arrow-flight).
+
+> A user created with `IDENTIFIED WITH authentication_jwt` can present its token only over the MySQL protocol, where the handshake carries the user name. To use a JWT on the HTTP API or Arrow Flight SQL, create a JWT [security integration](./security_integration.md) instead, and see [Where each authentication method works](./authentication.mdx#where-each-authentication-method-works).

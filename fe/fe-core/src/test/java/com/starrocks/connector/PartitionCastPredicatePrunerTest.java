@@ -15,7 +15,6 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
-import com.starrocks.connector.PartitionCastPredicatePruner.PartitionResidual;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -23,6 +22,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ExternalScanPredicates;
+import com.starrocks.sql.optimizer.rewrite.ExternalScanPredicates.PartitionResidual;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
@@ -67,24 +68,24 @@ public class PartitionCastPredicatePrunerTest {
     @Test
     public void testContainsStringToTemporalCast() {
         // CAST(<string col> AS DATETIME/DATE) -> true
-        Assertions.assertTrue(PartitionCastPredicatePruner.containsStringToTemporalCast(
+        Assertions.assertTrue(ExternalScanPredicates.containsStringToTemporalCast(
                 eq(castTo(strPartCol, DateType.DATETIME), datetime("2020-06-14 00:00:00"))));
-        Assertions.assertTrue(PartitionCastPredicatePruner.containsStringToTemporalCast(
+        Assertions.assertTrue(ExternalScanPredicates.containsStringToTemporalCast(
                 eq(castTo(strPartCol, DateType.DATE), ConstantOperator.createVarchar("2020-06-14"))));
 
         // CAST on a DATE column (not a string) -> false; DATE->DATETIME is native-safe.
-        Assertions.assertFalse(PartitionCastPredicatePruner.containsStringToTemporalCast(
+        Assertions.assertFalse(ExternalScanPredicates.containsStringToTemporalCast(
                 eq(castTo(dateCol, DateType.DATETIME), datetime("2020-06-14 00:00:00"))));
 
         // bare string column, no cast -> false
-        Assertions.assertFalse(PartitionCastPredicatePruner.containsStringToTemporalCast(
+        Assertions.assertFalse(ExternalScanPredicates.containsStringToTemporalCast(
                 eq(strPartCol, ConstantOperator.createVarchar("2020-06-14"))));
 
         // nested inside OR -> found by recursion
         ScalarOperator or = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
                 eq(castTo(strPartCol, DateType.DATETIME), datetime("2020-06-14 00:00:00")),
                 eq(intCol, ConstantOperator.createInt(5)));
-        Assertions.assertTrue(PartitionCastPredicatePruner.containsStringToTemporalCast(or));
+        Assertions.assertTrue(ExternalScanPredicates.containsStringToTemporalCast(or));
     }
 
     @Test
@@ -100,7 +101,7 @@ public class PartitionCastPredicatePrunerTest {
                 eq(castTo(strPartCol, DateType.DATETIME), datetime("2020-06-14 00:00:00")),
                 eq(intCol, ConstantOperator.createInt(5)));
 
-        PartitionResidual result = PartitionCastPredicatePruner.split(
+        PartitionResidual result = ExternalScanPredicates.splitStringPartitionCast(
                 Lists.newArrayList(residualConjunct, pushableConjunct, mixedOr), partCols);
 
         Assertions.assertEquals(1, result.residual.size());
@@ -119,7 +120,7 @@ public class PartitionCastPredicatePrunerTest {
         ColumnRefOperator strDataCol = new ColumnRefOperator(4, VarcharType.VARCHAR, "s", true);
         ScalarOperator conjunct = eq(castTo(strDataCol, DateType.DATETIME), datetime("2020-06-14 00:00:00"));
 
-        PartitionResidual result = PartitionCastPredicatePruner.split(
+        PartitionResidual result = ExternalScanPredicates.splitStringPartitionCast(
                 Lists.newArrayList(conjunct), partitionColumns("c2"));
 
         Assertions.assertTrue(result.pushable.isEmpty());
@@ -131,7 +132,7 @@ public class PartitionCastPredicatePrunerTest {
         // The column ref is "c2"; the partition set is passed upper-cased. split() must still classify it as
         // residual (membership is case-insensitive; callers need not pre-normalize).
         ScalarOperator conjunct = eq(castTo(strPartCol, DateType.DATETIME), datetime("2020-06-14 00:00:00"));
-        PartitionResidual result = PartitionCastPredicatePruner.split(
+        PartitionResidual result = ExternalScanPredicates.splitStringPartitionCast(
                 Lists.newArrayList(conjunct), partitionColumns("C2"));
         Assertions.assertEquals(1, result.residual.size());
         Assertions.assertTrue(result.pushable.isEmpty());
@@ -144,7 +145,7 @@ public class PartitionCastPredicatePrunerTest {
                 eq(castTo(strPartCol, DateType.DATETIME), datetime("2020-06-14 00:00:00")),
                 eq(castTo(strPartCol, DateType.DATETIME), datetime("2020-06-15 00:00:00")));
 
-        PartitionResidual result = PartitionCastPredicatePruner.split(Lists.newArrayList(or), partCols);
+        PartitionResidual result = ExternalScanPredicates.splitStringPartitionCast(Lists.newArrayList(or), partCols);
         Assertions.assertEquals(1, result.residual.size());
         Assertions.assertTrue(result.pushable.isEmpty());
     }

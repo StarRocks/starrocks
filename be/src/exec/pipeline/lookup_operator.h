@@ -53,10 +53,6 @@ public:
         return Status::InternalError("LookUpOperator does not support push_chunk");
     }
 
-    auto defer_notify() {
-        return DeferOp([this]() { observer()->source_trigger(); });
-    }
-
 private:
     friend class LookUpProcessor;
     inline static const std::string IO_TASK_EXEC_TIMER_NAME = "IOTaskExecTime";

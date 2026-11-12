@@ -38,8 +38,11 @@ import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonPostProcessable;
 
-public class DropDbInfo implements Writable {
+import java.io.IOException;
+
+public class DropDbInfo implements Writable, GsonPostProcessable {
     @SerializedName(value = "dbName")
     private String dbName;
     @SerializedName(value = "forceDrop")
@@ -50,8 +53,7 @@ public class DropDbInfo implements Writable {
     }
 
     public DropDbInfo(String dbName, boolean forceDrop) {
-        // compatible with old version
-        this.dbName = ClusterNamespace.getFullName(dbName);
+        this.dbName = dbName;
         if (this.dbName == null) {
             this.dbName = "";
         }
@@ -59,7 +61,13 @@ public class DropDbInfo implements Writable {
     }
 
     public String getDbName() {
-        return ClusterNamespace.getNameFromFullName(dbName);
+        return dbName;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        // Edit logs written by older versions carry the default_cluster prefix.
+        dbName = ClusterNamespace.getNameFromFullName(dbName);
     }
 
     public boolean isForceDrop() {

@@ -58,6 +58,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/schema_change.h"
+#include "storage/lake/scoped_local_disk_cache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -129,6 +130,15 @@ protected:
         return seg_name;
     }
 
+    std::string generate_sst_file(int64_t txn_id) {
+        auto sst_name = lake::gen_sst_filename(txn_id);
+        auto sst_path = _tablet_mgr->sst_location(_tablet_id, sst_name);
+        ASSIGN_OR_ABORT(auto f, fs::new_writable_file(sst_path));
+        CHECK_OK(f->append(sst_path));
+        CHECK_OK(f->close());
+        return sst_name;
+    }
+
     std::string generate_segment_file_for_tablet(int64_t tablet_id, int64_t txn_id) {
         auto seg_name = lake::gen_segment_filename(txn_id);
         auto seg_path = _tablet_mgr->segment_location(tablet_id, seg_name);
@@ -176,6 +186,42 @@ protected:
         range->set_upper_bound_included(false);
 
         ASSERT_OK(_tablet_mgr->put_tablet_metadata(metadata));
+    }
+
+    // Publishes one op_write onto a range tablet created by create_tablet_metadata_with_range.
+    // |shared| controls whether the written segment carries the shared flag. Mirrors the
+    // range-tablet branch of test_publish_returns_tablet_stats.
+    void publish_range_tablet_segment(int64_t range_tablet_id, bool shared, PublishVersionResponse* response) {
+        auto seg_name = lake::gen_segment_filename(next_id());
+        auto seg_path = _tablet_mgr->segment_location(range_tablet_id, seg_name);
+        {
+            ASSIGN_OR_ABORT(auto f, fs::new_writable_file(seg_path));
+            CHECK_OK(f->append("dummy"));
+            CHECK_OK(f->close());
+        }
+
+        auto txn_id = next_id();
+        TxnLog log;
+        log.set_tablet_id(range_tablet_id);
+        log.set_partition_id(_partition_id);
+        log.set_txn_id(txn_id);
+        auto* rowset = log.mutable_op_write()->mutable_rowset();
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(seg_name);
+        segment_meta->set_size(512);
+        segment_meta->set_num_rows(10);
+        segment_meta->set_shared(shared);
+        rowset->set_data_size(512);
+        rowset->set_num_rows(10);
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(range_tablet_id);
+        request.add_txn_ids(txn_id);
+
+        _lake_service.publish_version(nullptr, &request, response, nullptr);
     }
 
     void create_pk_tablet_with_delvec_range(int64_t tablet_id, int64_t version, int lower_key, int upper_key) {
@@ -439,6 +485,75 @@ TEST_F(LakeServiceTest, test_publish_version_rejects_normal_split_count_one) {
     expect_invalid_split_count(false, 1);
 }
 
+TEST_F(LakeServiceTest, test_publish_reshard_unchanged_tablet) {
+    ASSIGN_OR_ABORT(auto original, _tablet_mgr->get_tablet_metadata(_tablet_id, 1));
+    auto base = std::make_shared<TabletMetadataPB>(*original);
+    auto* rowset = base->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(17);
+    rowset->set_data_size(29);
+    rowset->add_segment_metas()->set_filename("unchanged.dat");
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(base));
+
+    // A CN can hold only the indexes left unchanged by a split or merge on another CN.
+    // No txnlog exists for these tablets; they must retain their data at the new version.
+    for (bool aggregate : {false, true}) {
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.set_enable_aggregate_publish(aggregate);
+        request.add_tablet_ids(_tablet_id);
+        auto* txn = request.add_txn_infos();
+        txn->set_txn_id(next_id());
+        txn->set_txn_type(TXN_TABLET_RESHARD);
+        txn->set_gtid(12345);
+
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            brpc::Controller cntl;
+            PublishVersionResponse response;
+            _lake_service.publish_version(&cntl, &request, &response, nullptr);
+            ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+            ASSERT_EQ(0, response.status().status_code());
+            ASSERT_EQ(0, response.failed_tablets_size());
+            EXPECT_EQ(0, response.tablet_ranges_size());
+            EXPECT_EQ(aggregate ? 1 : 0, response.tablet_metas_size());
+            TabletMetadataPB metadata;
+            if (aggregate) {
+                metadata.CopyFrom(response.tablet_metas().at(_tablet_id));
+            } else {
+                ASSIGN_OR_ABORT(auto persisted, _tablet_mgr->get_tablet_metadata(_tablet_id, 2));
+                metadata.CopyFrom(*persisted);
+            }
+            EXPECT_EQ(_tablet_id, metadata.id());
+            EXPECT_EQ(2, metadata.version());
+            EXPECT_EQ(12345, metadata.gtid());
+            EXPECT_EQ(base->schema().SerializeAsString(), metadata.schema().SerializeAsString());
+            ASSERT_EQ(1, metadata.rowsets_size());
+            EXPECT_EQ(1, metadata.rowsets(0).id());
+            EXPECT_EQ(17, metadata.rowsets(0).num_rows());
+            EXPECT_EQ(29, metadata.rowsets(0).data_size());
+            ASSERT_EQ(1, metadata.rowsets(0).segment_metas_size());
+            EXPECT_EQ("unchanged.dat", metadata.rowsets(0).segment_metas(0).filename());
+        }
+    }
+    ASSIGN_OR_ABORT(auto unchanged, _tablet_mgr->get_tablet_metadata(_tablet_id, 1));
+    EXPECT_EQ(base->SerializeAsString(), unchanged->SerializeAsString());
+}
+
+TEST_F(LakeServiceTest, test_publish_reshard_rejects_empty_tablets) {
+    brpc::Controller cntl;
+    PublishVersionRequest request;
+    PublishVersionResponse response;
+    request.set_base_version(1);
+    request.set_new_version(2);
+    auto* txn = request.add_txn_infos();
+    txn->set_txn_id(next_id());
+    txn->set_txn_type(TXN_TABLET_RESHARD);
+    _lake_service.publish_version(&cntl, &request, &response, nullptr);
+    EXPECT_TRUE(cntl.Failed());
+    EXPECT_FALSE(_tablet_mgr->get_tablet_metadata(_tablet_id, 2).ok());
+}
+
 TEST_F(LakeServiceTest, test_publish_version_missing_tablet_ids) {
     brpc::Controller cntl;
     PublishVersionRequest request;
@@ -506,6 +621,34 @@ TEST_F(LakeServiceTest, test_publish_version_thread_pool_full) {
     ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
     ASSERT_EQ(1, response.failed_tablets_size());
     ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+}
+
+// A task that starts after the request deadline fails its tablet with TimedOut instead of publishing.
+TEST_F(LakeServiceTest, test_publish_version_task_starts_after_deadline) {
+    // Fires inside the task, before the deadline check.
+    SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::publish_version:before_publish",
+                                          [](void*) { std::this_thread::sleep_for(std::chrono::milliseconds(200)); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::publish_version:before_publish");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    brpc::Controller cntl;
+    PublishVersionRequest request;
+    PublishVersionResponse response;
+    request.set_base_version(1);
+    request.set_new_version(2);
+    request.add_tablet_ids(_tablet_id);
+    request.add_txn_ids(1000);
+    request.set_timeout_ms(100);
+    _lake_service.publish_version(&cntl, &request, &response, nullptr);
+    ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+    ASSERT_EQ(1, response.failed_tablets_size());
+    ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+    ASSERT_EQ(TStatusCode::TIMEOUT, response.status().status_code()) << response.status().error_msgs(0);
+    ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "reached deadline=*/timeout=100"))
+            << response.status().error_msgs(0);
 }
 
 TEST_F(LakeServiceTest, test_publish_version_for_write) {
@@ -715,6 +858,54 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
 // whose shadow_rewrite_alter_version carries the watershed W. This exercises the TXN_SHADOW_REWRITE
 // branch in publish_version that anchors the historical rewrite as an op_schema_change@W during the
 // flip publish, including the W == 1 skip-load (empty partition) path.
+#ifdef WITH_STARCACHE
+// A bundled publish request keeps a tablet's result as its partial_meta only when the result may never reach the
+// bundle: here, a retry. A later retry that finds neither the metacache entry nor the txn log answers from it.
+TEST_F(LakeServiceTest, test_publish_version_keeps_partial_meta_for_retry) {
+    const bool old_enable = config::lake_enable_publish_partial_meta;
+    config::lake_enable_publish_partial_meta = true;
+    DeferOp restore([&]() { config::lake_enable_publish_partial_meta = old_enable; });
+    lake::ScopedLocalDiskCache local_disk_cache(std::string(kRootLocation) + "_partial_meta_cache");
+
+    auto txn_log = generate_write_txn_log(2, 101, 4096);
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+    PublishVersionRequest request;
+    request.set_base_version(1);
+    request.set_new_version(2);
+    request.add_tablet_ids(_tablet_id);
+    request.add_txn_ids(txn_log.txn_id());
+    request.set_enable_aggregate_publish(true);
+
+    // A first attempt that finishes in time keeps nothing.
+    {
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size()) << response.status().DebugString();
+        EXPECT_TRUE(_tablet_mgr->get_partial_tablet_metadata(_tablet_id, 2, 0).status().is_not_found());
+    }
+    request.set_is_retry_publish(true);
+    // A retry after the metacache lost the version applies again and keeps the result.
+    {
+        _tablet_mgr->prune_metacache();
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size()) << response.status().DebugString();
+        ASSIGN_OR_ABORT(auto partial, _tablet_mgr->get_partial_tablet_metadata(_tablet_id, 2, 0));
+        EXPECT_EQ(2, partial->version());
+    }
+    // The next retry answers from it, without the txn log.
+    {
+        ASSERT_OK(fs::delete_file(_tablet_mgr->txn_log_location(_tablet_id, txn_log.txn_id())));
+        _tablet_mgr->prune_metacache();
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size()) << response.status().DebugString();
+        ASSERT_EQ(1, response.tablet_metas().count(_tablet_id));
+        EXPECT_EQ(2, response.tablet_metas().at(_tablet_id).version());
+    }
+}
+#endif
+
 TEST_F(LakeServiceTest, test_publish_version_shadow_rewrite) {
     // Each shadow tablet is freshly created at version 1; W (alter_version) is the base partition's
     // watershed, independent of the shadow tablet's base_version and always < new_version.
@@ -2150,6 +2341,8 @@ TEST_F(LakeServiceTest, test_abort) {
         log.mutable_op_write()->mutable_rowset()->set_data_size(4096);
         log.mutable_op_write()->mutable_rowset()->set_num_rows(101);
         log.mutable_op_write()->mutable_rowset()->set_overlapped(true);
+        log.mutable_op_write()->add_ssts()->set_name(generate_sst_file(txn_id));
+        log.mutable_op_write()->add_ssts(); // a segment without a pre-built sstable
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
 
         logs.emplace_back(log);
@@ -2169,6 +2362,8 @@ TEST_F(LakeServiceTest, test_abort) {
                 generate_segment_file(txn_id));
         log.mutable_op_compaction()->set_new_segment_offset(0);
         log.mutable_op_compaction()->set_new_segment_count(2);
+        log.mutable_op_compaction()->add_ssts()->set_name(generate_sst_file(txn_id));
+        log.mutable_op_compaction()->add_ssts()->set_name(generate_sst_file(txn_id));
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
 
         logs.emplace_back(log);
@@ -2219,6 +2414,14 @@ TEST_F(LakeServiceTest, test_abort) {
         }
         for (auto&& s : log.op_compaction().output_rowset().segment_metas()) {
             EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s.filename())));
+        }
+        for (auto&& f : log.op_write().ssts()) {
+            if (!f.name().empty()) {
+                EXPECT_FALSE(fs::path_exist(_tablet_mgr->sst_location(_tablet_id, f.name())));
+            }
+        }
+        for (auto&& f : log.op_compaction().ssts()) {
+            EXPECT_FALSE(fs::path_exist(_tablet_mgr->sst_location(_tablet_id, f.name())));
         }
         for (auto&& r : log.op_schema_change().rowsets()) {
             for (auto&& s : r.segment_metas()) {
@@ -3186,13 +3389,12 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids) {
     }
 }
 
-// Partial per-load_id .log sets must NOT silently produce a .vlog from
-// incomplete data -- load_txn_log skips NotFound files, so a corruption /
-// lost-file scenario would otherwise let FE advance visibleVersion with
-// dropped statement data. publish_log_version must require every expected
-// per-load_id file (or fall back to an existing .vlog for idempotent retry).
+// load_ids lists every statement of a multi-statement transaction, but a statement writes txn logs only for the
+// tablets it loads. In BEGIN; INSERT INTO t1 ...; INSERT INTO t2 ...; COMMIT while t1 is being altered, the shadow
+// tablets of t1 have no log of the second statement, and FE still sends both load ids. publish_log_version must
+// build the .vlog from the logs it finds, must not rebuild an existing .vlog from the logs a previous attempt left
+// behind, and must fail a tablet that has no log at all.
 TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids_partial) {
-    auto txn_id = next_id();
     PUniqueId load_id_1;
     load_id_1.set_hi(0x5555555555555551LL);
     load_id_1.set_lo(0x6666666666666661LL);
@@ -3200,28 +3402,19 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids_partial) {
     load_id_2.set_hi(0x5555555555555552LL);
     load_id_2.set_lo(0x6666666666666662LL);
 
-    // Write only ONE of the two per-statement .log files -- simulate the
-    // case where one statement's flush is lost / the file vanished.
-    {
+    auto put_statement_log = [&](int64_t txn_id, const PUniqueId& load_id, int64_t num_rows, const std::string& file) {
         TxnLog log;
         log.set_tablet_id(_tablet_id);
         log.set_txn_id(txn_id);
-        log.mutable_load_id()->CopyFrom(load_id_1);
-        log.mutable_op_write()->mutable_rowset()->set_num_rows(7);
-        log.mutable_op_write()->mutable_rowset()->set_data_size(70);
-        log.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("partial_seg.dat");
+        log.mutable_load_id()->CopyFrom(load_id);
+        log.mutable_op_write()->mutable_rowset()->set_num_rows(num_rows);
+        log.mutable_op_write()->mutable_rowset()->set_data_size(num_rows * 10);
+        log.mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename(file);
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
-    }
-
-    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
-    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_2)));
-
-    const int64_t version = 30;
-
-    // Without an existing .vlog, the partial set must fail loudly. The
-    // failing tablet ends up in failed_tablets and crucially NO .vlog gets
-    // written (otherwise a later retry would silently treat this as success).
-    {
+    };
+    // Publishes the log version of a transaction whose statements are load_id_1 and load_id_2, and returns the
+    // number of failed tablets.
+    auto publish = [&](int64_t txn_id, int64_t version) {
         PublishLogVersionRequest request;
         PublishLogVersionResponse response;
         request.add_tablet_ids(_tablet_id);
@@ -3236,50 +3429,63 @@ TEST_F(LakeServiceTest, test_publish_log_version_with_load_ids_partial) {
 
         brpc::Controller cntl;
         _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
-        ASSERT_FALSE(cntl.Failed());
-        ASSERT_EQ(1, response.failed_tablets_size());
-        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        EXPECT_FALSE(cntl.Failed()) << cntl.ErrorText();
         StorageEngine::instance()->wait_storage_cleanup_tasks();
-        EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version)));
-        // The single source .log must remain so the operator can recover.
-        EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
+        return response.failed_tablets_size();
+    };
+    auto read_vlog = [&](int64_t version) {
+        _tablet_mgr->prune_metacache();
+        return _tablet_mgr->get_txn_vlog(_tablet_id, version);
+    };
+
+    // Only the first statement loaded this tablet: the .vlog holds its log, and the source log is deleted.
+    {
+        auto txn_id = next_id();
+        const int64_t version = 30;
+        put_statement_log(txn_id, load_id_1, 7, "stmt1.dat");
+        ASSERT_EQ(0, publish(txn_id, version));
+        EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
+        ASSIGN_OR_ABORT(auto vlog, read_vlog(version));
+        EXPECT_EQ(txn_id, vlog->txn_id());
+        EXPECT_FALSE(vlog->has_load_id());
+        EXPECT_EQ(7, vlog->op_write().rowset().num_rows());
+        ASSERT_EQ(1, vlog->op_write().rowset().segment_metas_size());
+        EXPECT_EQ("stmt1.dat", vlog->op_write().rowset().segment_metas(0).filename());
+
+        // FE retries when it lost the response; the .vlog stays.
+        ASSERT_EQ(0, publish(txn_id, version));
+        ASSIGN_OR_ABORT(auto vlog_after_retry, read_vlog(version));
+        EXPECT_EQ(7, vlog_after_retry->op_write().rowset().num_rows());
     }
 
-    // If the target .vlog already exists (a previous successful publish), a
-    // partial source set must be treated as an idempotent retry: succeed and
-    // sweep up the orphan .log so it doesn't linger until vacuum.
+    // Both statements loaded this tablet and a previous attempt wrote the .vlog, but deleted only the log of the
+    // second statement before FE retried: the retry keeps the .vlog instead of rebuilding it from the first
+    // statement alone, and deletes the leftover log.
     {
-        // Hand-craft a .vlog at the target path to simulate a prior success.
+        auto txn_id = next_id();
+        const int64_t version = 31;
+        put_statement_log(txn_id, load_id_1, 7, "stmt1.dat");
         auto vlog = std::make_shared<TxnLog>();
         vlog->set_tablet_id(_tablet_id);
         vlog->set_txn_id(txn_id);
-        vlog->mutable_op_write()->mutable_rowset()->set_num_rows(99);
-        vlog->mutable_op_write()->mutable_rowset()->set_data_size(990);
-        vlog->mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("already_published.dat");
+        vlog->mutable_op_write()->mutable_rowset()->set_num_rows(18);
+        vlog->mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("stmt1.dat");
+        vlog->mutable_op_write()->mutable_rowset()->add_segment_metas()->set_filename("stmt2.dat");
         ASSERT_OK(_tablet_mgr->put_txn_vlog(vlog, version));
-        EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version)));
 
-        PublishLogVersionRequest request;
-        PublishLogVersionResponse response;
-        request.add_tablet_ids(_tablet_id);
-        request.set_version(version);
-        auto* txn_info = request.mutable_txn_info();
-        txn_info->set_txn_id(txn_id);
-        txn_info->set_combined_txn_log(false);
-        txn_info->set_txn_type(TXN_NORMAL);
-        txn_info->set_commit_time(::time(nullptr));
-        txn_info->add_load_ids()->CopyFrom(load_id_1);
-        txn_info->add_load_ids()->CopyFrom(load_id_2);
-
-        brpc::Controller cntl;
-        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
-        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
-        ASSERT_EQ(0, response.failed_tablets_size());
-
-        StorageEngine::instance()->wait_storage_cleanup_tasks();
-        // The pre-existing .vlog stays intact and the stale .log is cleaned.
-        EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version)));
+        ASSERT_EQ(0, publish(txn_id, version));
         EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, txn_id, load_id_1)));
+        ASSIGN_OR_ABORT(auto vlog_after_retry, read_vlog(version));
+        EXPECT_EQ(18, vlog_after_retry->op_write().rowset().num_rows());
+        EXPECT_EQ(2, vlog_after_retry->op_write().rowset().segment_metas_size());
+    }
+
+    // No statement left a log for this tablet and there is no .vlog: the tablet fails and no .vlog is written.
+    {
+        auto txn_id = next_id();
+        const int64_t version = 32;
+        ASSERT_EQ(1, publish(txn_id, version));
+        EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, version)));
     }
 }
 
@@ -4094,8 +4300,10 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
     // the precious LRU metacache with stat-collection workloads.
     auto cache_key_v1 = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
     auto cache_key_v3 = _tablet_mgr->tablet_metadata_location(_tablet_id, 3);
-    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key_v1) == nullptr);
-    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key_v3) == nullptr);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(
+                        starrocks::lake::MetacacheKey::tablet_metadata(cache_key_v1)) == nullptr);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(
+                        starrocks::lake::MetacacheKey::tablet_metadata(cache_key_v3)) == nullptr);
 
     // test timeout
     response.clear_tablet_stats();
@@ -4111,6 +4319,65 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
 
     _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
     ASSERT_EQ(0, response.tablet_stats_size());
+}
+
+TEST_F(LakeServiceTest, test_get_tablet_stats_reports_shared_files) {
+    // Publish a version whose single rowset carries one shared segment.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata([&] {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(_tablet_id);
+        metadata->set_version(3);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename("shared_seg.dat");
+        segment->set_shared(true);
+        return metadata;
+    }()));
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(_tablet_id);
+    info->set_version(3);
+
+    _tablet_mgr->metacache()->prune();
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+
+    ASSERT_EQ(1, response.tablet_stats_size());
+    ASSERT_TRUE(response.tablet_stats(0).has_has_shared_files());
+    EXPECT_TRUE(response.tablet_stats(0).has_shared_files());
+}
+
+TEST_F(LakeServiceTest, test_get_tablet_stats_reports_no_shared_files) {
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata([&] {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(_tablet_id);
+        metadata->set_version(4);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename("private_seg.dat");
+        segment->set_shared(false);
+        return metadata;
+    }()));
+
+    TabletStatRequest request;
+    TabletStatResponse response;
+    auto* info = request.add_tablet_infos();
+    info->set_tablet_id(_tablet_id);
+    info->set_version(4);
+
+    _tablet_mgr->metacache()->prune();
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+
+    ASSERT_EQ(1, response.tablet_stats_size());
+    ASSERT_TRUE(response.tablet_stats(0).has_has_shared_files());
+    EXPECT_FALSE(response.tablet_stats(0).has_shared_files());
 }
 
 TEST_F(LakeServiceTest, test_get_tablet_stats_null_thread_pool) {
@@ -4318,7 +4585,8 @@ TEST_F(LakeServiceTest, test_get_tablet_stats_does_not_pollute_metacache) {
 
     // Metadata must NOT be in the metacache after a stat request
     auto cache_key = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
-    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key) == nullptr)
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(
+                        starrocks::lake::MetacacheKey::tablet_metadata(cache_key)) == nullptr)
             << "get_tablet_stats should not fill the metacache (fill_cache=false)";
 }
 
@@ -4642,7 +4910,7 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
 
         MockClosure closure;
         load_mgr->open(nullptr, request, &response, &closure);
-        ASSERT_TRUE(Awaitility().timeout(60000).until([&] { return closure.has_run(); }));
+        ASSERT_TRUE(Awaitility().timeout(60 * 1000 * 1000).until([&] { return closure.has_run(); }));
         ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
     }
 
@@ -4891,7 +5159,8 @@ TEST_F(LakeServiceTest, test_publish_version_with_combined_log) {
         auto combined_log = CombinedTxnLogPB();
         combined_log.add_txn_logs()->CopyFrom(*txn_log);
 
-        _tablet_mgr->metacache()->cache_txn_log(_tablet_mgr->txn_log_location(_tablet_id, txn_id), txn_log);
+        _tablet_mgr->metacache()->cache_txn_log(
+                starrocks::lake::MetacacheKey::txn_log(_tablet_mgr->txn_log_location(_tablet_id, txn_id)), txn_log);
 
         ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined_log));
 
@@ -4902,13 +5171,16 @@ TEST_F(LakeServiceTest, test_publish_version_with_combined_log) {
         auto path = _tablet_mgr->combined_txn_log_location(_tablet_id, txn_id);
         ASSERT_OK(FileSystem::Default()->path_exists(path));
 
-        _tablet_mgr->metacache()->erase(_tablet_mgr->txn_log_location(_tablet_id, txn_id));
+        _tablet_mgr->metacache()->erase(
+                starrocks::lake::MetacacheKey::TEST_from_string(_tablet_mgr->txn_log_location(_tablet_id, txn_id)));
         // publish again without txn log cache
         do_test(txn_id, TStatusCode::OK);
 
         // publish again without txn log cache and combined txn log cache
-        _tablet_mgr->metacache()->erase(_tablet_mgr->txn_log_location(_tablet_id, txn_id));
-        _tablet_mgr->metacache()->erase(_tablet_mgr->combined_txn_log_location(_tablet_id, txn_id));
+        _tablet_mgr->metacache()->erase(
+                starrocks::lake::MetacacheKey::TEST_from_string(_tablet_mgr->txn_log_location(_tablet_id, txn_id)));
+        _tablet_mgr->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(
+                _tablet_mgr->combined_txn_log_location(_tablet_id, txn_id)));
         do_test(txn_id, TStatusCode::OK);
     }
 }
@@ -5266,6 +5538,29 @@ TEST_F(LakeServiceTest, test_task_cleared_in_thread_pool_queue) {
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id, response.failed_tablets(0));
         ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*has been cancelled*"));
+    }
+
+    // The resharding task's text must not name a split when it publishes a merge.
+    {
+        auto other_tablet_id = next_id();
+        PublishVersionRequest request;
+        PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        auto* txn_info = request.add_txn_infos();
+        txn_info->set_txn_id(next_id());
+        txn_info->set_txn_type(TXN_TABLET_RESHARD);
+        auto* merging = request.add_resharding_tablet_infos()->mutable_merging_tablet_info();
+        merging->add_old_tablet_ids(_tablet_id);
+        merging->add_old_tablet_ids(other_tablet_id);
+        merging->set_new_tablet_id(next_id());
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(2, response.failed_tablets_size());
+        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        ASSERT_EQ(other_tablet_id, response.failed_tablets(1));
+        ASSERT_TRUE(
+                MatchPattern(response.status().error_msgs(0), "*publish resharding tablet task has been cancelled*"))
+                << response.status().error_msgs(0);
     }
 
     {
@@ -6691,6 +6986,81 @@ TEST_F(LakeServiceTest, test_publish_returns_tablet_stats) {
     }
 }
 
+TEST_F(LakeServiceTest, test_publish_version_reports_shared_files) {
+    int64_t range_tablet_id = next_id();
+    create_tablet_metadata_with_range(range_tablet_id, /*version=*/1, /*lower=*/0, /*upper=*/100);
+
+    PublishVersionResponse response;
+    publish_range_tablet_segment(range_tablet_id, /*shared=*/true, &response);
+
+    ASSERT_EQ(0, response.failed_tablets_size()) << response.status().error_msgs(0);
+    auto it = response.tablet_stats().find(range_tablet_id);
+    ASSERT_NE(it, response.tablet_stats().end());
+    ASSERT_TRUE(it->second.has_has_shared_files());
+    EXPECT_TRUE(it->second.has_shared_files());
+}
+
+TEST_F(LakeServiceTest, test_publish_version_reports_no_shared_files) {
+    int64_t range_tablet_id = next_id();
+    create_tablet_metadata_with_range(range_tablet_id, /*version=*/1, /*lower=*/0, /*upper=*/100);
+
+    PublishVersionResponse response;
+    publish_range_tablet_segment(range_tablet_id, /*shared=*/false, &response);
+
+    ASSERT_EQ(0, response.failed_tablets_size()) << response.status().error_msgs(0);
+    auto it = response.tablet_stats().find(range_tablet_id);
+    ASSERT_NE(it, response.tablet_stats().end());
+    ASSERT_TRUE(it->second.has_has_shared_files());
+    EXPECT_FALSE(it->second.has_shared_files());
+}
+
+// Compaction is what clears the shared flags, so its publish must carry the new answer back in the
+// same round trip -- otherwise a tablet stays un-mergeable until the next periodic stats collection.
+TEST_F(LakeServiceTest, test_publish_version_compaction_clears_shared_files) {
+    int64_t range_tablet_id = next_id();
+    create_tablet_metadata_with_range(range_tablet_id, /*version=*/1, /*lower=*/0, /*upper=*/100);
+
+    PublishVersionResponse first;
+    publish_range_tablet_segment(range_tablet_id, /*shared=*/true, &first);
+    ASSERT_TRUE(first.tablet_stats().at(range_tablet_id).has_shared_files());
+
+    // Publish a compaction whose output rowset replaces the shared input with a private segment.
+    auto compact_txn_id = next_id();
+    {
+        TxnLog log;
+        log.set_tablet_id(range_tablet_id);
+        log.set_partition_id(_partition_id);
+        log.set_txn_id(compact_txn_id);
+        auto* op = log.mutable_op_compaction();
+        op->add_input_rowsets(2); // the rowset written by publish_range_tablet_segment
+        auto* out = op->mutable_output_rowset();
+        out->set_overlapped(false);
+        out->set_num_rows(10);
+        out->set_data_size(512);
+        auto* out_seg = out->add_segment_metas();
+        out_seg->set_filename(generate_segment_file(compact_txn_id));
+        out_seg->set_shared(false);
+        op->set_new_segment_offset(0);
+        op->set_new_segment_count(1);
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+    }
+
+    PublishVersionRequest compact_request;
+    compact_request.set_base_version(2);
+    compact_request.set_new_version(3);
+    compact_request.add_tablet_ids(range_tablet_id);
+    compact_request.add_txn_ids(compact_txn_id);
+
+    PublishVersionResponse second;
+    _lake_service.publish_version(nullptr, &compact_request, &second, nullptr);
+    ASSERT_EQ(0, second.failed_tablets_size()) << second.status().error_msgs(0);
+
+    auto it = second.tablet_stats().find(range_tablet_id);
+    ASSERT_NE(it, second.tablet_stats().end());
+    ASSERT_TRUE(it->second.has_has_shared_files());
+    EXPECT_FALSE(it->second.has_shared_files());
+}
+
 // FE's prefer_shared_initial_metadata hint, end to end through the RPC handler and the production
 // base-version read in lake::publish_version(). Every tablet of a `file_bundling` partition resolves
 // version 1 from the single partition-shared object: the per-tablet version-1 key, which such a
@@ -6710,7 +7080,7 @@ TEST_F(LakeServiceTest, test_publish_version_prefer_shared_initial_metadata) {
     const auto shared_location = _tablet_mgr->tablet_initial_metadata_location(tablet_a);
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(shared, shared_location));
     // put_tablet_metadata() caches what it wrote; a cold CN has nothing.
-    _tablet_mgr->metacache()->erase(shared_location);
+    _tablet_mgr->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(shared_location));
 
     for (auto tablet_id : {tablet_a, tablet_b}) {
         TxnLog log;

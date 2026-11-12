@@ -3,7 +3,6 @@ displayed_sidebar: docs
 description: "为 ETL 语句创建异步任务，支持长时间运行和定期执行。"
 ---
 
-import PropertyWarehouse from '../../../../_assets/commonMarkdown/property_warehouse_tip_default.mdx'
 
 # SUBMIT TASK
 
@@ -44,8 +43,6 @@ AS <etl_statement>
 | `session.insert_timeout` | Integer | INSERT 操作的超时时间。单位：秒。默认值：`14400`。自 v3.4.0 起支持。 |
 | `session.enable_profile` | Boolean | 是否为任务开启查询 Profile。默认值：`false`。 |
 | `session.new_planner_optimize_timeout` | Integer | 查询优化器的超时时间。单位：毫秒。默认值：`3000`。 |
-
-<PropertyWarehouse />
 
 例如，以下语句提交了一个名为 `test_task` 的任务，并启用了查询分析和增加了查询超时时间：
 
@@ -108,6 +105,7 @@ SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 | task_check_interval_second   | 3600       | 删除过期 Task 的间隔时间，单位秒。                           |
 | task_runs_ttl_second         | 86400      | TaskRun 的有效期，单位秒。超过有效期的 TaskRun 会被自动删除。此外，成功和失败状态的 TaskRun 也会被自动删除。对于周期任务，其每次周期执行称为 `TaskRun`。 |
 | task_runs_concurrency        | 4          | 最多可同时运行的 TaskRun 的数量。                            |
+| task_runs_dispatch_interval_ms | 1000   | Leader FE 检查 running TaskRun 并调度 pending TaskRun 的间隔，单位毫秒。可在线修改，无需重启 FE。新间隔在当前调度周期结束后生效。 |
 | task_runs_queue_length       | 500        | 最多可同时等待运行的 TaskRun 的数量。如同时等待运行的 TaskRun 的数量超过该参数的默认值，您将无法继续执行 Task。 |
 | task_runs_max_history_number | 10000      | 保留的最多历史 TaskRun 任务数量。 |
 | task_min_schedule_interval_s | 10         | Task 最小执行间隔。单位：秒。 |

@@ -31,6 +31,7 @@
 #include "platform/key_cache.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
+#include "storage/pk_vector_chunk_size.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"
@@ -125,7 +126,7 @@ Status RowsetUpdateState::_load_upserts(uint32_t idx, Column* pk_column) {
 
     // only hold pkey, so can use larger chunk size
     ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, 4096));
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, get_pk_vector_chunk_size()));
     auto chunk = chunk_shared_ptr.get();
     auto& dest = _upserts[idx];
     auto col = pk_column->clone();
@@ -166,7 +167,8 @@ Status RowsetUpdateState::_do_load() {
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
-    auto res = _rowset->get_segment_iterators2(pkey_schema, schema, MetaLoadMode::NONE, 0, &_segment_iters_stats);
+    auto res = _rowset->get_segment_iterators2(pkey_schema, schema, MetaLoadMode::NONE, 0, &_segment_iters_stats,
+                                               get_pk_vector_chunk_size());
     if (!res.ok()) {
         return res.status();
     }
@@ -224,8 +226,8 @@ Status RowsetUpdateState::load_upserts(uint32_t upsert_id) {
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column,
-                                                     PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1, true));
+    RETURN_IF_ERROR(
+            PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
     return _load_upserts(upsert_id, pk_column.get());
 }
 
@@ -343,7 +345,8 @@ Status RowsetUpdateState::_prepare_partial_update_value_columns(uint32_t idx,
         _partial_update_value_columns_schema =
                 ChunkHelper::convert_schema(tablet_schema, _partial_update_value_column_ids);
         auto res = _rowset->get_segment_iterators2(_partial_update_value_columns_schema, tablet_schema,
-                                                   MetaLoadMode::NONE, 0, &_partial_update_value_column_read_stats);
+                                                   MetaLoadMode::NONE, 0, &_partial_update_value_column_read_stats,
+                                                   get_pk_vector_chunk_size());
         if (!res.ok()) {
             return res.status();
         }
@@ -355,7 +358,8 @@ Status RowsetUpdateState::_prepare_partial_update_value_columns(uint32_t idx,
         return Status::OK();
     }
     ChunkUniquePtr chunk;
-    TRY_CATCH_BAD_ALLOC(chunk = ChunkFactory::new_chunk(_partial_update_value_columns_schema, 4096));
+    TRY_CATCH_BAD_ALLOC(
+            chunk = ChunkFactory::new_chunk(_partial_update_value_columns_schema, get_pk_vector_chunk_size()));
     auto num_rows = _rowset->segments()[idx]->num_rows();
     _partial_update_states[idx].partial_update_value_columns =
             ChunkFactory::new_chunk(_partial_update_value_columns_schema, num_rows);

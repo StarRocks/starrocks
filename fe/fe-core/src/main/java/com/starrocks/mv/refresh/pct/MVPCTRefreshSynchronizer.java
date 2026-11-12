@@ -38,6 +38,7 @@ import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
 import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.MVInactiveException;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
@@ -124,6 +125,11 @@ public final class MVPCTRefreshSynchronizer {
         final Stopwatch stopwatch = Stopwatch.createStarted();
         processor.setSnapshotBaseTables(processor.collectBaseTableSnapshotInfos());
 
+        // Freeze first, align second: the partition topology published below drives the refresh scope
+        // and its partition predicate, so it has to be derived from a state no older than the frozen
+        // snapshot the scan will read.
+        processor.freezeSnapshotBeforePartitionAlign();
+
         if (!processor.getMvContext().isExplain() && processor.getMvRefreshParams().isNonTentativeForce()) {
             PCellSortedSet toRefreshPartitions = processor.getMvPctRefreshPartitioner().getMVPartitionsToRefreshByParams();
             if (toRefreshPartitions != null && !toRefreshPartitions.isEmpty()) {
@@ -190,7 +196,7 @@ public final class MVPCTRefreshSynchronizer {
                 MaterializedView mv = processor.getMv();
                 MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
                 if (!mv.isActive()) {
-                    throw new DmlException(String.format(
+                    throw new MVInactiveException(String.format(
                             "Materialized view: %s/%d is not active due to %s.",
                             mv.getName(), mv.getId(), mv.getInactiveReason()));
                 }

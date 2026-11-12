@@ -14,6 +14,8 @@
 
 #include "storage/lake/persistent_index_memtable.h"
 
+#include <chrono>
+#include <mutex>
 #include <utility>
 
 #include "base/debug/trace.h"
@@ -23,10 +25,11 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_util.h"
+#include "gutil/strings/substitute.h"
 #include "platform/key_cache.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
 
 namespace starrocks::lake {
 
@@ -49,7 +52,7 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
         auto key = std::string_view(keys[i].data, keys[i].size);
         const auto value = values[i];
         if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, value)); inserted) {
-            not_founds->insert(i);
+            not_founds->insert(not_founds->end(), i);
             _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
         } else {
             auto& old_index_value_ver = it->second;
@@ -104,7 +107,7 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
         auto key = std::string_view(keys[i].data, keys[i].size);
         if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, IndexValue(NullIndexValue))); inserted) {
             old_values[i] = NullIndexValue;
-            not_founds->insert(i);
+            not_founds->insert(not_founds->end(), i);
             _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
         } else {
             auto& old_index_value_ver = it->second;
@@ -166,7 +169,7 @@ Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* val
         auto it = _map.find(key);
         if (it == _map.end()) {
             values[i] = NullIndexValue;
-            not_founds->insert(i);
+            not_founds->insert(not_founds->end(), i);
         } else {
             // Assuming we want the latest (first) value due to emplace_front in updates/inserts
             auto& index_value_ver = it->second;
@@ -188,7 +191,7 @@ Status PersistentIndexMemtable::get(const Slice* keys, IndexValue* values, const
             auto& index_value_ver = it->second;
             auto& index_value = index_value_ver.second;
             values[key_index] = index_value.get_value();
-            found_key_indexes->insert(key_index);
+            found_key_indexes->insert(found_key_indexes->end(), key_index);
         }
     }
     return Status::OK();
@@ -213,7 +216,7 @@ Status PersistentIndexMemtable::flush() {
             return Status::AlreadyExist("PersistentIndexMemtable already flushed");
         }
     }
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    auto* block_cache = _tablet_mgr->primary_key_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
@@ -278,11 +281,16 @@ void PersistentIndexMemtable::run() {
         _flush_status = st;
     }
     TEST_SYNC_POINT_CALLBACK("PersistentIndexMemtable::run:after_flush", &_flush_status);
+    {
+        std::lock_guard<std::mutex> lg(_flush_mutex);
+        _flush_cv.notify_all();
+    }
 }
 
 void PersistentIndexMemtable::cancel() {
     std::lock_guard<std::mutex> lg(_flush_mutex);
     _flush_status = Status::Cancelled("PersistentIndexMemtable flush cancelled");
+    _flush_cv.notify_all();
 }
 
 std::unique_ptr<PersistentIndexSstable> PersistentIndexMemtable::release_sstable() {
@@ -293,6 +301,24 @@ std::unique_ptr<PersistentIndexSstable> PersistentIndexMemtable::release_sstable
 Status PersistentIndexMemtable::flush_status() const {
     std::lock_guard<std::mutex> lg(_flush_mutex);
     return _flush_status;
+}
+
+Status PersistentIndexMemtable::wait_for_flush(int64_t timeout_us) {
+    std::unique_lock<std::mutex> lk(_flush_mutex);
+    auto finished = [this]() { return _sstable != nullptr || !_flush_status.ok(); };
+    if (!finished()) {
+        if (timeout_us <= 0) {
+            return Status::TimedOut(strings::Substitute("wait memtable flush timeout for tablet $0", _tablet_id));
+        }
+        _flush_cv.wait_for(lk, std::chrono::microseconds(timeout_us), finished);
+    }
+    if (!_flush_status.ok()) {
+        return _flush_status;
+    }
+    if (_sstable == nullptr) {
+        return Status::TimedOut(strings::Substitute("wait memtable flush timeout for tablet $0", _tablet_id));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::lake

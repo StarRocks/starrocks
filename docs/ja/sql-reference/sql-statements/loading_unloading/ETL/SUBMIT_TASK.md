@@ -3,7 +3,6 @@ displayed_sidebar: docs
 description: "ETL ステートメントを非同期タスクとして送信し、バックグラウンドで実行またはスケジュール実行します。"
 ---
 
-import PropertyWarehouse from '../../../../_assets/commonMarkdown/property_warehouse_tip_default.mdx'
 
 # SUBMIT TASK
 
@@ -45,8 +44,6 @@ AS <etl_statement>
 | `session.insert_timeout` | Integer | INSERT 操作のタイムアウト時間。単位: 秒。デフォルト: `14400`。v3.4.0 以降でサポートされています。 |
 | `session.enable_profile` | Boolean | タスクのクエリプロファイルを有効にするかどうか。デフォルト: `false`。 |
 | `session.new_planner_optimize_timeout` | Integer | クエリオプティマイザのタイムアウト時間。単位: ミリ秒。デフォルト: `3000`。 |
-
-<PropertyWarehouse />
 
 例えば、以下のステートメントは、クエリプロファイルを有効にし、クエリタイムアウトを増加させるセッションプロパティを持つ `test_task` という名前のタスクを送信します：
 
@@ -109,6 +106,7 @@ SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 | task_check_interval_second   | 3600              | 無効な Task を削除する時間間隔です。単位: 秒。    |
 | task_runs_ttl_second         | 86400             | TaskRun が有効である期間です。単位: 秒。有効期間を超えた TaskRun は自動的に削除されます。さらに、`FAILED` および `SUCCESS` 状態の TaskRun も自動的に削除されます。`TaskRun` は定期タスクの個々の実行を示します。  |
 | task_runs_concurrency        | 4                 | 並行して実行できる TaskRun の最大数です。  |
+| task_runs_dispatch_interval_ms | 1000          | Leader FE が実行中の TaskRun を確認し、pending の TaskRun をディスパッチする間隔です。単位: ミリ秒。FE を再起動せずに変更できます。新しい間隔は現在のディスパッチ周期が終わった後に有効になります。 |
 | task_runs_queue_length       | 500               | 実行待ちの TaskRun の最大数です。デフォルト値を超えると、受信タスクは一時停止されます。 |
 | task_runs_max_history_number | 10000             | 保持する TaskRun レコードの最大数です。 |
 | task_min_schedule_interval_s | 10                | Task 実行の最小間隔です。単位: 秒。 |

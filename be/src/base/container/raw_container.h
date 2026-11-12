@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <new>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -102,7 +103,11 @@ public:
 
     pointer allocate(size_type n) {
         size_t size = (n * sizeof(value_type) < N) ? N : (n * sizeof(value_type));
-        return (pointer)BitUtil::safe_aligned_alloc(N, size);
+        auto* ptr = (pointer)BitUtil::safe_aligned_alloc(N, size);
+        // A null return is adopted as valid storage by the container; only std::bad_alloc
+        // reaches TRY_CATCH_ALLOC_SCOPE, which callers rely on for memory-limit errors.
+        if (UNLIKELY(ptr == nullptr)) throw std::bad_alloc();
+        return ptr;
     }
 
     void deallocate(pointer p, size_type) { free(p); }

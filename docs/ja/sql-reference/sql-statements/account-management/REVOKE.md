@@ -31,6 +31,17 @@ REVOKE
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
+#### AI 関数と Provider
+
+```sql
+REVOKE USAGE ON ALL AI FUNCTIONS FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON AI FUNCTION <function_name> FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON AI PROVIDER <provider_name> FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON ALL AI PROVIDERS FROM {ROLE <role_name> | USER <user_identity>};
+```
+
+権限の取り消しは、プリペアド EXECUTE を含む後続の実行と再計画に適用されます。実行中のクエリはキャンセルしません。この機能はネイティブ認可に対応します。AI チェックを実装していない外部アクセスコントローラーは対象操作を拒否します。
+
 #### リソースグループ
 
 ```SQL
@@ -116,7 +127,7 @@ REVOKE
 
 ```SQL
 REVOKE  
-    { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
+    { ALTER | DROP | SELECT | EXPORT | ALL [PRIVILEGES]}
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
            { { DATABASE <database_name> [, <database_name>,...]}  | ALL DATABASES }
@@ -125,6 +136,7 @@ REVOKE
 
 * このコマンドを実行する前に、SET CATALOG を実行する必要があります。
 * db.view を使用してビューを表すこともできます。
+* EXPORT 権限については、付与および取り消しのみ対応しています。EXPORT TABLE によるビューのエクスポートはサポートされていません。
 
   ```SQL
   REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
@@ -134,7 +146,7 @@ REVOKE
 
 ```SQL
 REVOKE
-    { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
+    { SELECT | ALTER | REFRESH | DROP | EXPORT | ALL [PRIVILEGES]}
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
            { { DATABASE <database_name> [, <database_name>,...] } | ALL [DATABASES] }
@@ -143,6 +155,7 @@ REVOKE
 
 * このコマンドを実行する前に、SET CATALOG を実行する必要があります。
 * db.mv を使用して mv を表すこともできます。
+* EXPORT 権限については、付与および取り消しのみ対応しています。EXPORT TABLE によるマテリアライズドビューのエクスポートはサポートされていません。
 
   ```SQL
   REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_identity>}

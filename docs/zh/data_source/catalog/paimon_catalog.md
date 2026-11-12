@@ -24,7 +24,7 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 
 ## 使用注意事项
 
-Paimon catalog 仅支持查询数据，不支持通过 Paimon catalog 在 Paimon 集群中执行 DROP、DELETE 或 INSERT 操作。
+Paimon catalog 支持查询数据，以及创建和删除 Paimon 数据库与表。不支持通过 INSERT、UPDATE、DELETE 写入数据，也不支持 CREATE TABLE LIKE 和 CREATE TABLE AS SELECT。
 
 ## Paimon to StarRocks data types
 
@@ -698,6 +698,134 @@ SHOW CREATE CATALOG paimon_catalog_fs;
 
 ```SQL
 DROP Catalog paimon_catalog_fs;
+```
+
+## 创建和删除 Paimon 数据库与表
+
+以下操作直接创建或删除 Paimon 原生对象。示例使用已有的 `paimon_catalog_fs` catalog，其 warehouse 和存储凭证已配置。
+
+### CREATE DATABASE
+
+#### 语法
+
+```SQL
+CREATE DATABASE [IF NOT EXISTS] <catalog_name>.<database_name>;
+```
+
+#### 参数
+
+- `catalog_name`：已有的 Paimon catalog 名称。
+- `database_name`：要创建的数据库名称。
+- `IF NOT EXISTS`：数据库已存在时不报错。
+
+不支持数据库 `PROPERTIES`，数据库使用 catalog 的存储配置。
+
+#### 示例
+
+```SQL
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+```
+
+### CREATE TABLE
+
+#### 语法
+
+```SQL
+CREATE TABLE [IF NOT EXISTS] <catalog_name>.<database_name>.<table_name> (
+    <column_name> <column_type> [NULL | NOT NULL] [DEFAULT NULL] [COMMENT '<column_comment>']
+    [, ...]
+)
+[ENGINE = paimon]
+[PRIMARY KEY (<column_name> [, ...])]
+[COMMENT '<table_comment>']
+[PARTITION BY (<column_name> [, ...])]
+[PROPERTIES ("<key>" = "<value>" [, ...])];
+```
+
+#### 参数
+
+- **表名与引擎**：指定已有 Paimon catalog 中的数据库和新表名称。目标为 Paimon catalog 时，可以省略 `ENGINE = paimon`。`IF NOT EXISTS` 会忽略表已存在的错误，但仍会校验表定义和属性。
+- **列定义**：支持 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、FLOAT、DOUBLE、DATE、DATETIME、CHAR、VARCHAR、VARBINARY、精度不超过 38 的 DECIMAL，以及 ARRAY、MAP、STRUCT 和 VARIANT。DATETIME 映射为 Paimon TIMESTAMP(6)。VARIANT 仍受现有读取限制约束。仅支持 `DEFAULT NULL`，主键列不能设置默认值。可以通过 `COMMENT` 设置列注释和表注释。
+- **主键**：使用 `PRIMARY KEY (column, ...)` 或 `primary-key` 表属性定义。主键列不必位于表的开头，未显式指定可空性时会在 Paimon schema 中设为非空，不能显式声明为 `NULL`。同时指定两种形式时，解析后的列名及顺序必须一致。
+- **分区**：使用 `PARTITION BY (column, ...)` 指定普通分区列，不支持分区表达式和显式分区定义。
+- **表属性**：通过 `PROPERTIES` 指定 Paimon 表选项，例如 `bucket` 和 `file.format`。表使用 catalog 配置的 warehouse 和存储凭证，不允许通过表属性覆盖 catalog、存储位置、凭证或 schema。未知选项会被拒绝。部分写入相关的配置错误可能在写入时才报错。暂不支持 `fields.<column>.aggregate-function` 等动态列属性。
+
+#### 示例
+
+创建空的 append-only 分区表：
+
+```SQL
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.append_demo (
+    id BIGINT NOT NULL,
+    payload VARCHAR(100) COMMENT 'Payload',
+    dt DATE
+)
+ENGINE = paimon
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "-1",
+    "file.format" = "parquet"
+);
+```
+
+创建主键分区表：
+
+```SQL
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.pk_demo (
+    payload VARCHAR(100),
+    id BIGINT,
+    dt DATE
+)
+PRIMARY KEY (id, dt)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "2",
+    "bucket-key" = "id",
+    "file.format" = "parquet"
+);
+```
+
+也可以省略 `PRIMARY KEY (id, dt)` 子句，并在 `PROPERTIES` 中添加 `"primary-key" = "id,dt"`。
+
+#### 限制
+
+- 不支持 `DISTRIBUTED BY`、`ORDER BY`、`ROLLUP`、生成列、聚合列和 `AUTO_INCREMENT`。
+- 不支持非 NULL 的列默认值。
+- 不支持 `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`，也不支持通过 `INSERT`、`UPDATE`、`DELETE` 写入数据。
+
+### DROP TABLE
+
+#### 语法
+
+```SQL
+DROP TABLE [IF EXISTS] <catalog_name>.<database_name>.<table_name>;
+```
+
+`IF EXISTS` 表示表不存在时不报错。此操作删除 Paimon 原生表，不只是移除 StarRocks 中的表引用。
+
+#### 示例
+
+```SQL
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.append_demo;
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.pk_demo;
+```
+
+### DROP DATABASE
+
+#### 语法
+
+```SQL
+DROP DATABASE [IF EXISTS] <catalog_name>.<database_name> [FORCE];
+```
+
+`IF EXISTS` 表示数据库不存在时不报错。数据库必须为空才能删除；`FORCE` 不会启用级联删除。
+
+#### 示例
+
+删除数据库中的表后，再删除数据库：
+
+```SQL
+DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
 ```
 
 ## 查看 Paimon 表的 schema

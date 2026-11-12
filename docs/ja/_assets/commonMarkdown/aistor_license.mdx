@@ -1,0 +1,5 @@
+MinIO AIStor の実行にはライセンスが必要です。既存のライセンスを使用するか、新しい MinIO AIStor Free Tier ライセンスをリクエストできます。
+
+新しい MinIO AIStor Free Tier ライセンスをリクエストするには、[MinIO AIStor の価格](https://min.io/pricing)ページにアクセスし、Free ティアの **Get Started** を選択して無料ライセンスを取得します。Free Tier ライセンスでは、1 つ以上のドライブを持つ単一のコンピューティングリソース上で MinIO AIStor を実行できます。
+
+ライセンスファイルを `minio.license` という名前で、`docker-compose.yml` ファイルと同じディレクトリに保存します。Docker Compose ファイルは `minio.license` を MinIO AIStor コンテナにマウントします。有効なライセンスがない場合、MinIO AIStor は起動しますが、すべての S3 操作を拒否します。

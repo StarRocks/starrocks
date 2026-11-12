@@ -1,0 +1,53 @@
+-- name: test_iceberg_v3_glm_row_id_order
+-- Global late materialization fetches rows by _row_id. A file whose _row_id does not ascend with the
+-- row position (here: a sorted rewrite that keeps each row's original _row_id) must still return each
+-- row's own values.
+
+create external catalog iceberg_glm_rid_${uuid0}
+PROPERTIES ( "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false");
+
+create database iceberg_glm_rid_${uuid0}.db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_v3_glm_row_id_order/${uuid0}/db_${uuid0}"
+);
+set catalog iceberg_glm_rid_${uuid0};
+use db_${uuid0};
+
+-- The constant partition column p plus the forced sink shuffle send every row of the rewrite to one
+-- writer, so the rewrite yields one file however many nodes the cluster has. Without them each node
+-- rewrites the files it scans on its own and the _row_id order can stay ascending. The rewrite also
+-- runs with one sink driver, so the single file does not rely on how a node spreads rows over drivers.
+create table t1 (id INT, v STRING, p INT) PARTITION BY (p) ORDER BY (id DESC) PROPERTIES ("format-version" = "3");
+-- Each insert writes one file sorted by id DESC: _row_id ascends with the position, descends with id.
+insert into t1 values (1, 'v1', 0), (2, 'v2', 0), (3, 'v3', 0);
+insert into t1 values (4, 'v4', 0), (5, 'v5', 0), (6, 'v6', 0);
+select id, _row_id from t1 order by id;
+
+-- The rewrite merges both files sorted by id DESC and keeps _row_id, so file order is 3,4,5,0,1,2.
+set connector_sink_shuffle_mode = 'force';
+set pipeline_sink_dop = 1;
+[UC]alter table t1 execute rewrite_data_files("rewrite_all" = "true");
+set pipeline_sink_dop = 0;
+set connector_sink_shuffle_mode = 'auto';
+select count(distinct _file) from t1;
+select _pos, id, _row_id from t1 order by _pos;
+
+set enable_global_late_materialization = true;
+function: assert_explain_contains('select id, v from t1 order by id limit 10', 'FETCH')
+select id, v from t1 order by id limit 10;
+select id, v from t1 order by id desc limit 3;
+select id, v from t1 where id != 3 order by v limit 10;
+set enable_global_late_materialization = false;
+select id, v from t1 order by id limit 10;
+
+drop table t1 force;
+set catalog default_catalog;
+drop database iceberg_glm_rid_${uuid0}.db_${uuid0};
+drop catalog iceberg_glm_rid_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_glm_row_id_order/${uuid0} >/dev/null || echo "exit 0" >/dev/null

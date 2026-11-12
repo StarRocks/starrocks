@@ -752,4 +752,19 @@ public class SetTest extends PlanTestBase {
         ExecPlan plan = getExecPlan(sql);
         assertContains("varchar", plan.getOutputColumns().get(0).getType().toSql());
     }
+
+    @Test
+    public void testUnionValuesMerge() throws Exception {
+        String sql = "SELECT x, _c0 FROM (\n"
+                + "  (SELECT k AS _c0, x AS x FROM (VALUES (10.0, 1)) AS t_0(x, k))\n"
+                + "  UNION ALL\n"
+                + "  (SELECT k AS _c0, x AS x FROM (VALUES (7, 70.0)) AS t_1(k, x))\n"
+                + ") t_2;";
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:UNION\n"
+                + "     constant exprs: \n"
+                + "         1 | 10.0\n"
+                + "         7 | 70.0");
+    }
 }

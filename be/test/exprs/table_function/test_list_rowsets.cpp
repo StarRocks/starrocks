@@ -19,13 +19,20 @@
 #include "platform/platform_env.h"
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
+#include "storage/lake/metacache.h"
 #include "storage/storage_env.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
 class ListRowsetsTableFunctionTest : public ::testing::Test {
 public:
     void SetUp() override {
+        // destroy() clears the spill dir manager, and init() does not put it back -- it is
+        // injected from outside (init_test_env.h / starrocks_be.cpp). Without saving it here,
+        // every later suite in this binary that writes through a delta writer fails with
+        // "LoadSpillBlockManager requires local spill dir manager".
+        _previous_spill_dir_mgr = StorageEnv::GetInstance()->spill_dir_mgr();
         StorageEnv::GetInstance()->stop();
         StorageEnv::GetInstance()->destroy();
         _state = new ListRowsets::MyState();
@@ -38,21 +45,25 @@ public:
         StorageEnvOptions storage_env_options;
         storage_env_options.store_path_registry = PlatformEnv::GetInstance()->store_path_registry();
         storage_env_options.update_mem_tracker = RuntimeEnv::GetInstance()->update_mem_tracker();
-        storage_env_options.lake_metadata_cache_limit = config::lake_metadata_cache_limit;
+        const int64_t process_mem_limit = RuntimeEnv::GetInstance()->process_mem_limit();
+        storage_env_options.lake_tablet_metadata_cache_limit =
+                lake::metacache_capacity(process_mem_limit, config::lake_tablet_metadata_cache_limit_percent);
+        storage_env_options.lake_segment_metadata_cache_limit =
+                lake::metacache_capacity(process_mem_limit, config::lake_segment_metadata_cache_limit_percent);
         storage_env_options.lake_location_provider_mode = LakeLocationProviderMode::kFixed;
         ASSERT_OK(StorageEnv::GetInstance()->init(storage_env_options));
+        StorageEnv::GetInstance()->set_spill_dir_mgr(_previous_spill_dir_mgr);
     }
 
 protected:
     ListRowsets::MyState* _state;
     RuntimeState* _runtimeState;
+    spill::DirManager* _previous_spill_dir_mgr = nullptr;
 };
 
 TEST_F(ListRowsetsTableFunctionTest, basic_test) {
-    auto tablet_id_column = Int64Column::create();
-    tablet_id_column->append(12345);
-    auto tablet_version_column = Int64Column::create();
-    tablet_version_column->append(1);
+    auto tablet_id_column = ColumnTestHelper::build_column<int64_t>({12345});
+    auto tablet_version_column = ColumnTestHelper::build_column<int64_t>({1});
 
     Columns input_columns;
     input_columns.push_back(tablet_id_column);

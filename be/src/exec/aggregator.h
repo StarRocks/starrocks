@@ -531,6 +531,21 @@ protected:
     bool _is_pending_reset_state = false;
     Filter _streaming_selection;
 
+    // Agg functions whose state keeps only the first value it sees (AggregateFunction::is_first_value_only, e.g.
+    // any_value). While there is one, build_hash_map marks the rows that created a group in `_new_group_selection`
+    // (Filter convention: 0 = created a group) and compute_batch_agg_states feeds those functions only these rows
+    // (plus the non-NULL rows of groups created by a NULL row, see _first_value_only_selection), so the rows of the
+    // other groups never touch their states.
+    std::vector<uint8_t> _is_first_value_only_funcs;
+    size_t _num_first_value_only_funcs = 0;
+    Filter _new_group_selection;
+    Filter _first_value_only_selection_buffer;
+    // Bloom filter over the states of groups whose first-value-only functions may still lack a value.
+    std::vector<uint64_t> _pending_first_value_groups;
+    bool _has_pending_first_value_groups = false;
+    // Whether `_new_group_selection` describes the rows of the last build_hash_map.
+    bool _new_group_selection_ready = false;
+
     bool _has_udaf = false;
 
     AggStatistics* _agg_stat;
@@ -554,6 +569,11 @@ public:
     void build_hash_map_with_selection(size_t chunk_size);
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
     void build_hash_map_with_topn_runtime_filter(size_t chunk_size);
+
+private:
+    const Filter& _first_value_only_selection(size_t i, bool use_intermediate, size_t chunk_size);
+
+public:
     Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk,
                                      bool force_use_intermediate_as_output = false);
 
@@ -614,6 +634,9 @@ protected:
     // Choose different agg hash map/set by different group by column's count, type, nullable
     template <typename HashVariantType>
     void _init_agg_hash_variant(HashVariantType& hash_variant);
+
+    // Publishes the selected key representation to the query profile.
+    void _report_hash_variant(const char* name);
     // get spec hash table/set type
     template <typename HashVariantType>
     typename HashVariantType::Type _get_hash_table_type();

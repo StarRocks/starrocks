@@ -14,8 +14,13 @@
 
 #include "meta_helper.h"
 
+#include <algorithm>
+#include <functional>
 #include <optional>
+#include <tuple>
+#include <utility>
 
+#include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/schema.h"
 #include "formats/utils.h"
@@ -72,6 +77,19 @@ std::optional<ExtendedVariantVirtualBinding> find_extended_variant_virtual_bindi
 
 } // namespace
 
+// A map whose group key is read with a table key of another shape: keep the column, so that the reader factory
+// reports the unsupported key instead of the column being dropped (read as NULL), e.g. for a key-only projection
+// whose value is pruned.
+static bool reads_incompatible_map_key(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) {
+    if (parquet_field->type != ColumnType::MAP || parquet_field->children.empty() ||
+        type_descriptor->children.empty()) {
+        return false;
+    }
+    const ParquetField& key = parquet_field->children[0];
+    const TypeDescriptor& key_type = type_descriptor->children[0];
+    return key.is_complex_type() && !key_type.is_unknown_type() && !key.has_same_complex_type(key_type);
+}
+
 void ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
                                              const std::vector<ColumnAccessPathPtr>* column_access_paths,
                                              std::vector<GroupReaderParam::Column>& read_cols,
@@ -81,6 +99,10 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>
                 find_extended_variant_virtual_binding(column_access_paths, materialized_column.name());
 
         int32_t field_idx = find_field_idx_for_materialized_column(_file_metadata, materialized_column);
+        const TIcebergSchemaField* mapped_lake_field = nullptr;
+        if (field_idx < 0) {
+            std::tie(field_idx, mapped_lake_field) = _find_field_idx_by_mapped_names(materialized_column);
+        }
         if (field_idx < 0) continue;
 
         const ParquetField* parquet_field = _file_metadata->schema().get_stored_column_by_field_idx(field_idx);
@@ -91,8 +113,11 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>
         }
 
         auto parquet_type = parquet_field->physical_type;
-        GroupReaderParam::Column column = _build_column(field_idx, parquet_type, materialized_column.slot_desc,
-                                                        materialized_column.decode_needed);
+        // a scalar reader only uses the Iceberg field to check GEOGRAPHY metadata; a complex one would match its
+        // subfields by id, which the file does not have
+        GroupReaderParam::Column column =
+                _build_column(field_idx, parquet_type, materialized_column.slot_desc, materialized_column.decode_needed,
+                              parquet_field->is_complex_type() ? nullptr : mapped_lake_field);
         if (extended_variant_binding.has_value()) {
             column.is_extended_variant_virtual = true;
             column.source_variant_column_name = std::string(extended_variant_binding->access_path->path());
@@ -101,6 +126,67 @@ void ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>
         read_cols.emplace_back(column);
         existed_column_names.emplace(Utils::format_name(materialized_column.name(), _case_sensitive));
     }
+}
+
+// A file without field ids (a migrated Hive file, or one added by add_files) stores a column renamed afterwards
+// under an older name. The table's name mapping keeps those names, as Iceberg readers resolve such files through it.
+std::pair<int32_t, const TIcebergSchemaField*> ParquetMetaHelper::_find_field_idx_by_mapped_names(
+        const FormatColumnInfo& materialized_column) const {
+    if (_lake_schema == nullptr || materialized_column.col_unique_id() != -1) {
+        return {-1, nullptr};
+    }
+    auto col_name = materialized_column.formatted_name(_case_sensitive);
+    for (const auto& field : _lake_schema->fields) {
+        if (!field.__isset.mapped_names || Utils::format_name(field.name, _case_sensitive) != col_name) {
+            continue;
+        }
+        for (const auto& mapped_name : field.mapped_names) {
+            // a name that is now another column's belongs to that column
+            auto formatted_mapped_name = Utils::format_name(mapped_name, _case_sensitive);
+            if (std::any_of(_lake_schema->fields.begin(), _lake_schema->fields.end(), [&](const auto& other) {
+                    return Utils::format_name(other.name, _case_sensitive) == formatted_mapped_name;
+                })) {
+                continue;
+            }
+            // the mapping tells fields apart by the exact name: `a` and `A` may be older names of two columns.
+            // ParquetField::name is lowercased for a case-insensitive scan, so compare the name the file stores.
+            const auto& stored_names = _stored_top_level_names();
+            for (size_t i = 0; i < stored_names.size(); i++) {
+                if (stored_names[i] == mapped_name) {
+                    return {static_cast<int32_t>(i), &field};
+                }
+            }
+        }
+        return {-1, nullptr};
+    }
+    return {-1, nullptr};
+}
+
+// The top-level column names as the file stores them, in the order of the schema's fields.
+const std::vector<std::string>& ParquetMetaHelper::_stored_top_level_names() const {
+    if (_stored_names.has_value()) {
+        return *_stored_names;
+    }
+    _stored_names.emplace();
+    const auto& elements = _file_metadata->t_metadata().schema;
+    // skips the subtree of the element at `pos`, returns the position after it
+    std::function<size_t(size_t)> skip = [&](size_t pos) {
+        size_t next = pos + 1;
+        int32_t children = elements[pos].__isset.num_children ? elements[pos].num_children : 0;
+        for (int32_t i = 0; i < children && next < elements.size(); i++) {
+            next = skip(next);
+        }
+        return next;
+    };
+    if (!elements.empty()) {
+        size_t pos = 1;
+        int32_t children = elements[0].__isset.num_children ? elements[0].num_children : 0;
+        for (int32_t i = 0; i < children && pos < elements.size(); i++) {
+            _stored_names->push_back(elements[pos].name);
+            pos = skip(pos);
+        }
+    }
+    return *_stored_names;
 }
 
 bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const {
@@ -120,6 +206,9 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
 
     bool has_valid_child = false;
 
+    if (reads_incompatible_map_key(parquet_field, type_descriptor)) {
+        return true;
+    }
     if (parquet_field->type == ColumnType::ARRAY || parquet_field->type == ColumnType::MAP) {
         for (size_t idx = 0; idx < parquet_field->children.size(); idx++) {
             if (_is_valid_type(&parquet_field->children[idx], &type_descriptor->children[idx])) {
@@ -127,54 +216,19 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
                 break;
             }
         }
-    } else if (parquet_field->type == ColumnType::STRUCT) {
-        if (type_descriptor->type == LogicalType::TYPE_VARIANT) {
-            // variant type currently can be mapped to struct type in parquet
-            has_valid_child = true;
-        } else if (!type_descriptor->field_ids.empty()) {
-            std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type;
-            for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
-                field_id_2_type.emplace(type_descriptor->field_ids[idx], &type_descriptor->children[idx]);
-            }
-
-            // start to check struct type
-            for (const auto& child_parquet_field : parquet_field->children) {
-                auto it = field_id_2_type.find(child_parquet_field.field_id);
-                if (it == field_id_2_type.end()) {
-                    continue;
-                }
-
-                if (_is_valid_type(&child_parquet_field, it->second)) {
-                    has_valid_child = true;
-                    break;
-                }
-            }
-        } else {
-            std::unordered_map<std::string, const TypeDescriptor*> field_name_2_type;
-            if (!type_descriptor->field_physical_names.empty()) {
-                for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
-                    field_name_2_type.emplace(
-                            Utils::format_name(type_descriptor->field_physical_names[idx], _case_sensitive),
-                            &type_descriptor->children[idx]);
-                }
-            } else {
-                for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
-                    field_name_2_type.emplace(Utils::format_name(type_descriptor->field_names[idx], _case_sensitive),
-                                              &type_descriptor->children[idx]);
-                }
-            }
-
-            // start to check struct type
-            for (const auto& child_parquet_field : parquet_field->children) {
-                auto it = field_name_2_type.find(Utils::format_name(child_parquet_field.name, _case_sensitive));
-                if (it == field_name_2_type.end()) {
-                    continue;
-                }
-
-                if (_is_valid_type(&child_parquet_field, it->second)) {
-                    has_valid_child = true;
-                    break;
-                }
+    } else if (type_descriptor->type == LogicalType::TYPE_VARIANT) {
+        // A VARIANT group, or a struct group the reader factory rejects with an error.
+        has_valid_child = true;
+    } else if (parquet_field->has_struct_layout()) {
+        // Same matching as the reader (ColumnReaderFactory::create), so a valid column always gets a reader.
+        StructSubfieldMapping mapping = ColumnReaderFactory::resolve_struct_subfields(*parquet_field, *type_descriptor,
+                                                                                      _case_sensitive, nullptr, false);
+        for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
+            const ParquetField* child_parquet_field = mapping.parquet_children[idx];
+            if (child_parquet_field != nullptr &&
+                _is_valid_type(child_parquet_field, &type_descriptor->children[idx])) {
+                has_valid_child = true;
+                break;
             }
         }
     }
@@ -210,6 +264,9 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
             type_descriptor->children.size() < required_children) {
             return false;
         }
+        if (reads_incompatible_map_key(parquet_field, type_descriptor)) {
+            return true;
+        }
         for (size_t idx = 0; idx < required_children; idx++) {
             if (_is_valid_type(&parquet_field->children[idx], &field_schema->children[idx],
                                &type_descriptor->children[idx])) {
@@ -217,39 +274,25 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
                 break;
             }
         }
-    } else if (parquet_field->type == ColumnType::STRUCT) {
-        if (type_descriptor->type == LogicalType::TYPE_VARIANT) {
-            return true;
-        }
-
+    } else if (type_descriptor->type == LogicalType::TYPE_VARIANT) {
+        // A VARIANT group, or a struct group the reader factory rejects with an error.
+        return true;
+    } else if (parquet_field->has_struct_layout()) {
+        // Same matching as the reader (ColumnReaderFactory::create), so a valid column always gets a reader.
         // LakeMetaHelper is only used when the parquet file has field ids (see _build_meta_helper).
-        std::unordered_map<int32_t, const TIcebergSchemaField*> field_id_2_lake_schema;
-        std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type;
-        for (const auto& field : field_schema->children) {
-            field_id_2_lake_schema.emplace(field.field_id, &field);
-            for (size_t i = 0; i < type_descriptor->field_names.size(); i++) {
-                if (type_descriptor->field_names[i] == field.name) {
-                    field_id_2_type.emplace(field.field_id, &type_descriptor->children[i]);
-                    break;
-                }
-            }
-        }
-
-        for (const auto& child_parquet_field : parquet_field->children) {
-            auto it = field_id_2_lake_schema.find(child_parquet_field.field_id);
-            if (it == field_id_2_lake_schema.end()) {
-                continue;
-            }
-
-            auto it_td = field_id_2_type.find(child_parquet_field.field_id);
-            if (it_td == field_id_2_type.end()) {
-                continue;
-            }
-
-            if (_is_valid_type(&child_parquet_field, it->second, it_td->second)) {
+        StructSubfieldMapping mapping = ColumnReaderFactory::resolve_struct_subfields(
+                *parquet_field, *type_descriptor, _case_sensitive, field_schema, /*parquet_has_field_id=*/true);
+        for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
+            const ParquetField* child_parquet_field = mapping.parquet_children[idx];
+            if (child_parquet_field != nullptr &&
+                _is_valid_type(child_parquet_field, mapping.lake_children[idx], &type_descriptor->children[idx])) {
                 has_valid_child = true;
                 break;
             }
+        }
+        // No used subfield is in the file: the reader reads a stored one for the struct's levels.
+        if (!has_valid_child && ColumnReaderFactory::find_struct_level_source(*parquet_field) != nullptr) {
+            has_valid_child = true;
         }
     }
 

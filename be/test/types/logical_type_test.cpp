@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <set>
+#include <utility>
+
 #include "types/olap_type_infra.h"
 
 namespace starrocks {
@@ -48,6 +51,62 @@ TEST(LogicalTypeTest, TypePredicates) {
     EXPECT_TRUE(is_binary_type(TYPE_BINARY));
     EXPECT_TRUE(is_binary_type(TYPE_VARBINARY));
     EXPECT_FALSE(is_binary_type(TYPE_VARCHAR));
+}
+
+namespace {
+
+// Materializes the full membership of a compile-time type guard, so a test can assert the exact set
+// instead of spot-checking a few members and missing the ones that were accidentally let in.
+template <template <LogicalType> class Guard, size_t... Is>
+std::set<LogicalType> guard_members(std::index_sequence<Is...>) {
+    std::set<LogicalType> members;
+    auto add = [&members](LogicalType type, bool in_guard) {
+        if (in_guard) {
+            members.insert(type);
+        }
+    };
+    (add(static_cast<LogicalType>(Is), Guard<static_cast<LogicalType>(Is)>::value), ...);
+    return members;
+}
+
+template <template <LogicalType> class Guard>
+std::set<LogicalType> guard_members() {
+    return guard_members<Guard>(std::make_index_sequence<TYPE_MAX_VALUE>{});
+}
+
+} // namespace
+
+// Axis 1 of the taxonomy in logical_type.h: how values are laid out in a Column.
+TEST(LogicalTypeTest, PhysicalShapeGuards) {
+    EXPECT_EQ((std::set<LogicalType>{TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE, TYPE_JSON, TYPE_VARIANT}),
+              guard_members<lt_is_object_family_struct>());
+    EXPECT_EQ((std::set<LogicalType>{TYPE_ARRAY, TYPE_MAP, TYPE_STRUCT}), guard_members<lt_is_collection_struct>());
+
+    // VARIANT joins the nested types here because a shredded VariantColumn keeps its rows outside
+    // ObjectColumn::_pool, which is what ColumnViewer<TYPE_VARIANT> would read. JSON must stay out:
+    // JsonColumn always stores rows in _pool, so the viewer/builder path remains valid and faster.
+    EXPECT_EQ((std::set<LogicalType>{TYPE_ARRAY, TYPE_MAP, TYPE_STRUCT, TYPE_VARIANT}),
+              guard_members<lt_is_row_wise_append_struct>());
+    EXPECT_FALSE(lt_is_row_wise_append<TYPE_JSON>);
+}
+
+// Axis 2 of the taxonomy: what the type means to the user. The two guards partition the object
+// family -- logical_type.h static_asserts that, this pins down which side each type lands on.
+TEST(LogicalTypeTest, SemanticGuards) {
+    EXPECT_EQ((std::set<LogicalType>{TYPE_JSON, TYPE_VARIANT}), guard_members<lt_is_semi_structured_struct>());
+    EXPECT_EQ((std::set<LogicalType>{TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE}),
+              guard_members<lt_is_opaque_sketch_struct>());
+}
+
+// Semi-structured values have a per-replica physical encoding (flat JSON / variant shredding), so
+// ordering their on-disk bytes is meaningless and a checksum mismatch would not mean divergence.
+TEST(LogicalTypeTest, SemiStructuredTypesAreNotZoneMapKeysNorChecksummable) {
+    for (auto type : {TYPE_JSON, TYPE_VARIANT}) {
+        EXPECT_FALSE(is_zone_map_key_type(type)) << type;
+        EXPECT_FALSE(is_support_checksum_type(type)) << type;
+    }
+    EXPECT_TRUE(is_zone_map_key_type(TYPE_INT));
+    EXPECT_TRUE(is_support_checksum_type(TYPE_INT));
 }
 
 namespace {

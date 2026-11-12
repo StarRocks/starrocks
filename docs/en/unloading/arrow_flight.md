@@ -193,6 +193,18 @@ On the client side, create an Arrow Flight SQL client using the following inform
 - Port that Arrow Flight used for listening on the StarRocks FE
 - Username and password of the StarRocks user that has the necessary privileges
 
+A token issued by your identity provider works in place of the username and password, if a JWT or OAuth 2.0 [security integration](../administration/user_privs/authentication/security_integration.md) is configured. Pass it as the authorization header instead of `USERNAME` and `PASSWORD`:
+
+```Python
+from adbc_driver_flightsql import DatabaseOptions
+
+conn = flight_sql.connect(uri=f"grpc://{FE_HOST}:{FE_PORT}", db_kwargs={
+    DatabaseOptions.AUTHORIZATION_HEADER.value: "Bearer " + token,
+})
+```
+
+The server answers the first call with a session token of its own, which the client uses for the rest of the connection, exactly as it does after a username and password. The session cannot outlive the JWT: once the token's `exp` passes, the connection is refused and the client has to connect again with a new token. See [Where each authentication method works](../administration/user_privs/authentication/authentication.mdx#where-each-authentication-method-works).
+
 Example:
 
 ```Python

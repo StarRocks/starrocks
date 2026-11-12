@@ -27,6 +27,10 @@ public:
     Status init(const TFunction& fn, TableFunctionState** state) const override;
     Status prepare(TableFunctionState* state) const override;
     Status open(RuntimeState* runtime_state, TableFunctionState* state) const override;
+    // Deliberately keeps the default (false): TRY_CATCH_BAD_ALLOC reacts to the BE mem tracker, but a
+    // UDTF's results are allocated on the JVM heap, which the tracker does not see. Bounding this needs
+    // its own design (the per-row jobject results are held as JNI local refs until emit_udtf_rows).
+
     std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
                                                   TableFunctionState* state) const override;
     Status close(RuntimeState* _runtime_state, TableFunctionState* state) const override;

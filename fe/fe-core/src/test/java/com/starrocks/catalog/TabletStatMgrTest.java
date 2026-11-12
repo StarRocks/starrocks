@@ -16,6 +16,9 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.alter.reshard.ReshardingPhysicalPartition;
+import com.starrocks.alter.reshard.SplitTabletJob;
+import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.common.Config;
@@ -35,6 +38,8 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -55,10 +60,16 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.Mockito;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -80,6 +91,8 @@ public class TabletStatMgrTest {
     private static final AtomicInteger STUBBED_NODE_COUNT = new AtomicInteger();
     // The bound the scan handed to the drain on the last runScan.
     private static int capturedBound;
+    // The merge signal the scan handed to the drain on the last runScan.
+    private static long capturedMinAdjacentTabletPairSize;
 
     private static final AtomicInteger NODE_COUNT_RESOLUTIONS = new AtomicInteger();
 
@@ -92,6 +105,8 @@ public class TabletStatMgrTest {
     private static final String SCAN_DB_NAME = "tablet_stat_scan_test";
 
     private Database registeredDb;
+    // tablet_reshard_target_size property the scan fixture's range table carries; 0 leaves it unset.
+    private long scanTableTargetSize;
 
     @BeforeEach
     public void before() {
@@ -198,6 +213,49 @@ public class TabletStatMgrTest {
 
         // Partition
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setReplicationNum(PARTITION_ID, (short) 3);
+        Partition partition = new Partition(PARTITION_ID, PH_PARTITION_ID, "p1", index, distributionInfo);
+        partition.getDefaultPhysicalPartition().setVisibleVersion(2L, visibleVersionTime);
+
+        // Lake table
+        LakeTable table = new LakeTable(TABLE_ID, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        Deencapsulation.setField(table, "baseIndexMetaId", INDEX_ID);
+        table.addPartition(partition);
+        table.setIndexMeta(INDEX_ID, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
+
+        return table;
+    }
+
+    // Same shape as createLakeTableForTest, but range-distributed so OlapTable.isRangeDistribution()
+    // is true -- the condition the new collection-scope and skip-condition rules key off of.
+    private LakeTable createRangeLakeTableForTest() {
+        long tablet1Id = 20L;
+        long tablet2Id = 21L;
+
+        // Schema
+        List<Column> columns = Lists.newArrayList();
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
+        columns.add(k1);
+        columns.add(new Column("k2", IntegerType.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
+
+        long visibleVersionTime = System.currentTimeMillis();
+
+        // Tablet
+        LakeTablet tablet1 = new LakeTablet(tablet1Id);
+        LakeTablet tablet2 = new LakeTablet(tablet2Id);
+        tablet1.setDataSizeUpdateTime(0);
+        tablet2.setDataSizeUpdateTime(0);
+
+        // Index
+        MaterializedIndex index = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, TABLE_ID, PARTITION_ID, INDEX_ID, TStorageMedium.HDD, true);
+        index.addTablet(tablet1, tabletMeta);
+        index.addTablet(tablet2, tabletMeta);
+
+        // Partition
+        DistributionInfo distributionInfo = new RangeDistributionInfo();
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(PARTITION_ID, (short) 3);
         Partition partition = new Partition(PARTITION_ID, PH_PARTITION_ID, "p1", index, distributionInfo);
@@ -644,6 +702,9 @@ public class TabletStatMgrTest {
         LakeTable table = createLakeTableForTest();
         // Reshard, and with it the early-split signal, only looks at range-distribution tables.
         table.setDefaultDistributionInfo(new RangeDistributionInfo());
+        if (scanTableTargetSize > 0) {
+            table.setTabletReshardTargetSize(scanTableTargetSize);
+        }
 
         MaterializedIndex index =
                 table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex();
@@ -673,6 +734,7 @@ public class TabletStatMgrTest {
     private long runScan(boolean leader, int stubbedNodeCount, long... tabletSizes) {
         long[] captured = {-1L};
         capturedBound = -1;
+        capturedMinAdjacentTabletPairSize = -1L;
         STUBBED_NODE_COUNT.set(stubbedNodeCount);
         NODE_COUNT_RESOLUTIONS.set(0);
 
@@ -697,6 +759,7 @@ public class TabletStatMgrTest {
                     long minAdjacentTabletPairSize, long maxAdaptiveSplitTabletSize, int adaptiveBound) {
                 captured[0] = maxAdaptiveSplitTabletSize;
                 capturedBound = adaptiveBound;
+                capturedMinAdjacentTabletPairSize = minAdjacentTabletPairSize;
             }
         };
 
@@ -775,9 +838,649 @@ public class TabletStatMgrTest {
         assertEquals(0L, runScan(true, 1, 8L << 30));
     }
 
+    /**
+     * Runs one scan over a single 3 GiB tablet on 4 nodes (bound 4) with the cluster target pinned at
+     * 10 GiB and tablet_reshard_min_split_size at 2 GiB. Against the cluster target the adaptive target
+     * is floored at 2 GiB, and 3 GiB is not worth two of those; a 1 GiB table target lowers the target
+     * to 1 GiB, and the same tablet splits.
+     */
+    private long runScanAgainstPinnedTargets() {
+        return runScanWithMinimum(2L << 30, 4, 3L << 30);
+    }
+
+    /**
+     * Runs one scan with the cluster target pinned at 10 GiB and tablet_reshard_min_split_size at the given
+     * value, so the fill floor these cases reason about does not drift with the configuration defaults.
+     */
+    private long runScanWithMinimum(long minSplitSize, int stubbedNodeCount, long... tabletSizes) {
+        long savedTargetSize = Config.tablet_reshard_target_size;
+        long savedMinSplitSize = Config.tablet_reshard_min_split_size;
+        Config.tablet_reshard_target_size = 10L << 30;
+        Config.tablet_reshard_min_split_size = minSplitSize;
+        try {
+            return runScan(true, stubbedNodeCount, tabletSizes);
+        } finally {
+            Config.tablet_reshard_target_size = savedTargetSize;
+            Config.tablet_reshard_min_split_size = savedMinSplitSize;
+        }
+    }
+
+    @Test
+    public void theClusterTargetEmitsNoEarlySignalForTheTargetSizeFixture() {
+        assertEquals(0L, runScanAgainstPinnedTargets(),
+                "without a table target the adaptive target follows the configuration");
+    }
+
+    @Test
+    public void theAdaptiveTargetFollowsTheTableTargetSize() {
+        scanTableTargetSize = 1L << 30;
+        assertEquals(3L << 30, runScanAgainstPinnedTargets(),
+                "a range table's own target must be the steady target the adaptive target narrows");
+    }
+
+    @Test
+    public void aStalledIndexEmitsTheEarlySignal() {
+        // Two 4 GiB tablets on three nodes: neither is worth two of the 8/3 GiB adaptive target, but the
+        // planner now fills the third slot with a split down to the 2 GiB floor. Without this signal only the
+        // 15 GiB size rule would ever reach that planner.
+        assertEquals(4L << 30, runScanWithMinimum(2L << 30, 3, 4L << 30, 4L << 30));
+    }
+
+    @Test
+    public void tenNodesStalledAtEightTabletsEmitTheEarlySignal() {
+        long[] sizes = new long[8];
+        Arrays.fill(sizes, 4L << 30);
+        assertEquals(4L << 30, runScanWithMinimum(2L << 30, 10, sizes));
+    }
+
+    @Test
+    public void noEarlySignalForTabletsUnderTwoFloors() {
+        // A third child of either 3 GiB tablet would be 1.5 GiB, under the floor: the planner has nothing to do.
+        assertEquals(0L, runScanWithMinimum(2L << 30, 3, 3L << 30, 3L << 30));
+    }
+
+    @Test
+    public void aMinimumAtTheTargetSilencesTheFillSignal() {
+        assertEquals(0L, runScanWithMinimum(10L << 30, 3, 4L << 30, 4L << 30));
+    }
+
+    @Test
+    public void aFilledIndexEmitsNeitherSignal() {
+        // What the fill leaves on three nodes: three tablets, whose adjacent pairs are all far under the merge
+        // threshold. The index is at its bound, so no early signal, and at the merge floor, so no merge signal
+        // either -- the fill never hands auto-merge an index to narrow again.
+        assertEquals(0L, runScanWithMinimum(2L << 30, 3, 2L << 30, 2L << 30, 4L << 30));
+        assertEquals(Long.MAX_VALUE, capturedMinAdjacentTabletPairSize, "a filled index must not signal a merge");
+
+        // Control: one tablet more puts the index above the floor, and the same scan does signal the merge,
+        // so the assertion above is about the width and not about a capture that never fires.
+        runScanWithMinimum(2L << 30, 3, 2L << 30, 2L << 30, 2L << 30, 2L << 30);
+        assertEquals(4L << 30, capturedMinAdjacentTabletPairSize);
+    }
+
     @Test
     public void emitsNoEarlySignalWhenTheNodeCountIsUnavailable() {
         assertEquals(0L, runScan(true, 0, 8L << 30),
                 "an unresolved node count keeps the merge floor at 0 and emits no early signal");
+    }
+
+    /**
+     * Installs the BrpcProxy/Utils mocking that lets a single lakeService.getTabletStats(...) call reach
+     * a caller-supplied response (or exception), then drives one updateLakeTableTabletStat round. Shared
+     * plumbing for the has-shared-files tests below; each caller still builds its own TabletStat values
+     * and makes its own assertions -- this only owns the RPC/Future boilerplate around them.
+     */
+    private void collectLakeTabletStatsOnce(LakeService lakeService, Database db, LakeTable table,
+            Callable<TabletStatResponse> responseSupplier) {
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(TNetworkAddress addr) {
+                return lakeService;
+            }
+
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return lakeService;
+            }
+        };
+        new MockUp<Utils>() {
+            @Mock
+            public Long chooseNodeId(LakeTablet tablet, long workerGroupId) {
+                return 1000L;
+            }
+
+            @Mock
+            public ComputeNode chooseNode(LakeTablet tablet, long workerGroupId) {
+                return new ComputeNode();
+            }
+        };
+
+        new Expectations() {
+            {
+                lakeService.getTabletStats((TabletStatRequest) any);
+                minTimes = 1;
+                maxTimes = 1;
+                result = new Delegate() {
+                    Future<TabletStatResponse> getTabletStats(TabletStatRequest request) {
+                        return new Future<TabletStatResponse>() {
+                            @Override
+                            public boolean cancel(boolean mayInterruptIfRunning) {
+                                return false;
+                            }
+
+                            @Override
+                            public boolean isCancelled() {
+                                return false;
+                            }
+
+                            @Override
+                            public boolean isDone() {
+                                return true;
+                            }
+
+                            @Override
+                            public TabletStatResponse get() throws ExecutionException {
+                                try {
+                                    return responseSupplier.call();
+                                } catch (Exception e) {
+                                    throw new ExecutionException(e);
+                                }
+                            }
+
+                            @Override
+                            public TabletStatResponse get(long timeout, @NotNull TimeUnit unit) {
+                                return null;
+                            }
+                        };
+                    }
+                };
+            }
+        };
+
+        TabletStatMgr tabletStatMgr = new TabletStatMgr();
+        Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
+    }
+
+    @Test
+    public void testAppliesSharedFileFlagFromPeriodicCollection(@Mocked LakeService lakeService) {
+        LakeTable table = createLakeTableForTest();
+
+        long tablet1Id =
+                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex().getTablets()
+                        .get(0).getId();
+        long tablet2Id =
+                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex().getTablets()
+                        .get(1).getId();
+
+        // db
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+
+        collectLakeTabletStatsOnce(lakeService, db, table, () -> {
+            List<TabletStat> stats = Lists.newArrayList();
+            TabletStat stat1 = new TabletStat();
+            stat1.tabletId = tablet1Id;
+            stat1.numRows = 10L;
+            stat1.dataSize = 100L;
+            stat1.hasSharedFiles = Boolean.FALSE;
+            stats.add(stat1);
+            TabletStat stat2 = new TabletStat();
+            stat2.tabletId = tablet2Id;
+            stat2.numRows = 10L;
+            stat2.dataSize = 100L;
+            stat2.hasSharedFiles = Boolean.FALSE;
+            stats.add(stat2);
+
+            TabletStatResponse response = new TabletStatResponse();
+            response.tabletStats = stats;
+            return response;
+        });
+
+        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablets().get(0);
+        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablets().get(1);
+
+        Assertions.assertFalse(tablet1.hasSharedFiles());
+        Assertions.assertFalse(tablet2.hasSharedFiles());
+    }
+
+    @Test
+    public void testMissingSharedFileFlagKeepsTabletBlocked(@Mocked LakeService lakeService) {
+        // An old BE does not populate the field. That silence cannot sustain a proof, so the tablet
+        // stays unproven -- and keeps being re-collected -- until a BE that reports the field runs.
+        // (It is still ineligible for merge, because unproven is treated as "holds shared files".)
+        LakeTable table = createLakeTableForTest();
+
+        long tablet1Id =
+                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex().getTablets()
+                        .get(0).getId();
+        long tablet2Id =
+                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex().getTablets()
+                        .get(1).getId();
+
+        // db
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+
+        collectLakeTabletStatsOnce(lakeService, db, table, () -> {
+            List<TabletStat> stats = Lists.newArrayList();
+            TabletStat stat1 = new TabletStat();
+            stat1.tabletId = tablet1Id;
+            stat1.numRows = 10L;
+            stat1.dataSize = 100L;
+            stat1.hasSharedFiles = null;
+            stats.add(stat1);
+            TabletStat stat2 = new TabletStat();
+            stat2.tabletId = tablet2Id;
+            stat2.numRows = 10L;
+            stat2.dataSize = 100L;
+            stat2.hasSharedFiles = null;
+            stats.add(stat2);
+
+            TabletStatResponse response = new TabletStatResponse();
+            response.tabletStats = stats;
+            return response;
+        });
+
+        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablets().get(0);
+        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablets().get(1);
+
+        Assertions.assertTrue(tablet1.hasSharedFiles());
+        Assertions.assertTrue(tablet2.hasSharedFiles());
+    }
+
+    @Test
+    public void testFailedCollectionDoesNotClearAReportedResult(@Mocked LakeService lakeService) {
+        // A failed or skipped RPC is not a new observation.
+        LakeTable table = createLakeTableForTest();
+
+        // db
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+
+        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablets().get(0);
+        tablet1.setHasSharedFiles(false);
+
+        collectLakeTabletStatsOnce(lakeService, db, table, () -> {
+            throw new RuntimeException("injected");
+        });
+
+        Assertions.assertFalse(tablet1.hasSharedFiles());
+    }
+
+    @Test
+    public void testLaterObservationRestoresTheFlag() {
+        // The publish path and the periodic path can complete out of order; the most recent
+        // observation is the one that counts.
+        LakeTablet lakeTablet = new LakeTablet(100L);
+        lakeTablet.setHasSharedFiles(false);
+        lakeTablet.setHasSharedFiles(true);
+
+        Assertions.assertTrue(lakeTablet.hasSharedFiles());
+    }
+
+    @Test
+    public void testSkipsSharedFileObservationWhileTableIsResharding(@Mocked LakeService lakeService) {
+        // The window this table-state flag handles: a shared-file observation taken while a split's
+        // cross-publish can still be marking children's files shared must be skipped. Size and
+        // row-count collection carry no such risk and must keep refreshing regardless.
+        LakeTable table = createLakeTableForTest();
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        companionJobManager(table, PH_PARTITION_ID);
+
+        long tablet1Id =
+                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex().getTablets()
+                        .get(0).getId();
+        long tablet2Id =
+                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex().getTablets()
+                        .get(1).getId();
+
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+
+        long t1 = System.currentTimeMillis();
+        collectLakeTabletStatsOnce(lakeService, db, table, () -> {
+            List<TabletStat> stats = Lists.newArrayList();
+            TabletStat stat1 = new TabletStat();
+            stat1.tabletId = tablet1Id;
+            stat1.numRows = 10L;
+            stat1.dataSize = 100L;
+            stat1.hasSharedFiles = Boolean.FALSE;
+            stats.add(stat1);
+            TabletStat stat2 = new TabletStat();
+            stat2.tabletId = tablet2Id;
+            stat2.numRows = 10L;
+            stat2.dataSize = 100L;
+            stat2.hasSharedFiles = Boolean.FALSE;
+            stats.add(stat2);
+
+            TabletStatResponse response = new TabletStatResponse();
+            response.tabletStats = stats;
+            return response;
+        });
+        long t2 = System.currentTimeMillis();
+
+        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablets().get(0);
+        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablets().get(1);
+
+        // Size and row count still refresh.
+        Assertions.assertEquals(100L, tablet1.getDataSize(true));
+        Assertions.assertEquals(10L, tablet1.getRowCount(-1));
+        Assertions.assertTrue(tablet1.getDataSizeUpdateTime() >= t1 && tablet1.getDataSizeUpdateTime() <= t2);
+        Assertions.assertEquals(100L, tablet2.getDataSize(true));
+        Assertions.assertEquals(10L, tablet2.getRowCount(-1));
+        Assertions.assertTrue(tablet2.getDataSizeUpdateTime() >= t1 && tablet2.getDataSizeUpdateTime() <= t2);
+
+        // But the shared-file observation is skipped: the response said "clean," yet the tablets stay
+        // unproven, exactly as if the RPC had never reported the field.
+        Assertions.assertTrue(tablet1.hasSharedFiles());
+        Assertions.assertTrue(tablet2.hasSharedFiles());
+    }
+
+    @Test
+    public void testNonRangeTableInSchemaChangeStillCollectsStats(@Mocked LakeService lakeService) {
+        // Regression guard: SCHEMA_CHANGE (like ROLLUP, WAITING_STABLE, RESTORE, UPDATING_META) is not
+        // the reshard cross-publish window, and a non-range table never needs a shared-file observation
+        // in the first place (needsSharedFileState = table.isRangeDistribution() further down this
+        // file). Its size/row-count stats must not freeze for the whole duration of a long schema
+        // change.
+        LakeTable table = createLakeTableForTest();
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+
+        long tablet1Id =
+                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex().getTablets()
+                        .get(0).getId();
+        long tablet2Id =
+                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex().getTablets()
+                        .get(1).getId();
+
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+
+        collectLakeTabletStatsOnce(lakeService, db, table, () -> {
+            List<TabletStat> stats = Lists.newArrayList();
+            TabletStat stat1 = new TabletStat();
+            stat1.tabletId = tablet1Id;
+            stat1.numRows = 10L;
+            stat1.dataSize = 100L;
+            stats.add(stat1);
+            TabletStat stat2 = new TabletStat();
+            stat2.tabletId = tablet2Id;
+            stat2.numRows = 10L;
+            stat2.dataSize = 100L;
+            stats.add(stat2);
+
+            TabletStatResponse response = new TabletStatResponse();
+            response.tabletStats = stats;
+            return response;
+        });
+
+        LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablets().get(0);
+        LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablets().get(1);
+
+        Assertions.assertEquals(100L, tablet1.getDataSize(true));
+        Assertions.assertEquals(10L, tablet1.getRowCount(-1));
+        Assertions.assertEquals(100L, tablet2.getDataSize(true));
+        Assertions.assertEquals(10L, tablet2.getRowCount(-1));
+    }
+
+    @Test
+    public void testNonRangeTableKeepsTheOriginalSkipCondition() {
+        // A hash-distributed table can never be a merge candidate; requiring a shared-file
+        // observation would cost one redundant collection round per tablet after every restart.
+        TabletStatMgr tabletStatMgr = new TabletStatMgr();
+        LakeTable table = createLakeTableForTest();
+        PhysicalPartition partition =
+                table.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        Assertions.assertFalse(table.isRangeDistribution());
+        // EVERY tablet must be fresh: the assertion is about the whole collection job, and
+        // createLakeTableForTest builds a partition with two tablets.
+        for (Tablet t : partition.getLatestBaseIndex().getTablets()) {
+            ((LakeTablet) t).setDataSizeUpdateTime(Long.MAX_VALUE);
+            Assertions.assertTrue(((LakeTablet) t).hasSharedFiles());
+        }
+
+        Database registeredDb = new Database(DB_ID, "db");
+        registeredDb.registerTableUnlocked(table);
+
+        Object job = Deencapsulation.invoke(
+                tabletStatMgr, "createCollectTabletStatJob", registeredDb, table, partition);
+
+        Assertions.assertNull(job);
+    }
+
+    @Test
+    public void testCollectsWhenSharedFileStateIsUnknownEvenIfSizeIsFresh() {
+        // Reproduces the starvation: dataSizeUpdateTime is persisted and is also refreshed by the
+        // publish path, so after an image load resets the shared-file flag an idle tablet would
+        // otherwise never be collected again.
+        // Fixture must be a RANGE-distributed table for this condition to apply.
+        TabletStatMgr tabletStatMgr = new TabletStatMgr();
+        LakeTable rangeTable = createRangeLakeTableForTest();
+        PhysicalPartition rangePartition =
+                rangeTable.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        // All sizes fresh, at least one tablet left unproven -- otherwise the job is non-empty for an
+        // unrelated reason and the test proves nothing.
+        for (Tablet t : rangePartition.getLatestBaseIndex().getTablets()) {
+            ((LakeTablet) t).setDataSizeUpdateTime(Long.MAX_VALUE);
+        }
+        Assertions.assertTrue(((LakeTablet) rangePartition.getLatestBaseIndex()
+                .getTablets().get(0)).hasSharedFiles());
+
+        Database registeredDb = new Database(DB_ID, "db");
+        registeredDb.registerTableUnlocked(rangeTable);
+
+        Object job = Deencapsulation.invoke(
+                tabletStatMgr, "createCollectTabletStatJob", registeredDb, rangeTable, rangePartition);
+
+        Assertions.assertNotNull(job);
+    }
+
+    @Test
+    public void testSkipsWhenBothSizeAndSharedFileStateAreFresh() {
+        TabletStatMgr tabletStatMgr = new TabletStatMgr();
+        LakeTable rangeTable = createRangeLakeTableForTest();
+        PhysicalPartition rangePartition =
+                rangeTable.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        for (Tablet t : rangePartition.getLatestBaseIndex().getTablets()) {
+            ((LakeTablet) t).setDataSizeUpdateTime(Long.MAX_VALUE);
+            ((LakeTablet) t).setHasSharedFiles(false);
+        }
+
+        Database registeredDb = new Database(DB_ID, "db");
+        registeredDb.registerTableUnlocked(rangeTable);
+
+        Object job = Deencapsulation.invoke(
+                tabletStatMgr, "createCollectTabletStatJob", registeredDb, rangeTable, rangePartition);
+
+        Assertions.assertNull(job);
+    }
+
+    @Test
+    public void testKeepsCollectingWhileSharedFilesAreStillPresent() {
+        // A tablet observed to hold shared files must keep being collected, because only a later
+        // collection will notice the compaction that clears them: an observation is not by itself a
+        // reason to stop collecting a tablet that is not proven free.
+        TabletStatMgr tabletStatMgr = new TabletStatMgr();
+        LakeTable rangeTable = createRangeLakeTableForTest();
+        PhysicalPartition rangePartition =
+                rangeTable.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        for (Tablet t : rangePartition.getLatestBaseIndex().getTablets()) {
+            LakeTablet lakeTablet = (LakeTablet) t;
+            lakeTablet.setDataSizeUpdateTime(Long.MAX_VALUE);
+            lakeTablet.setHasSharedFiles(true);
+            // Not proven free -- the whole point of the case.
+            Assertions.assertTrue(lakeTablet.hasSharedFiles());
+        }
+
+        Database registeredDb = new Database(DB_ID, "db");
+        registeredDb.registerTableUnlocked(rangeTable);
+
+        Object job = Deencapsulation.invoke(
+                tabletStatMgr, "createCollectTabletStatJob", registeredDb, rangeTable, rangePartition);
+
+        Assertions.assertNotNull(job);
+    }
+
+    @Test
+    public void testRangeDistributionCollectsEveryVisibleIndex() {
+        // A rollup / MV tablet that is never collected would be permanently ineligible for merge
+        // under the conservative default.
+        TabletStatMgr tabletStatMgr = new TabletStatMgr();
+        LakeTable rangeTable = createRangeLakeTableForTest();
+        PhysicalPartition rangePartition =
+                rangeTable.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        int baseTabletCount = rangePartition.getLatestBaseIndex().getTablets().size();
+
+        // Add a rollup index to the same physical partition, with its own tablets, and confirm its
+        // tablets are collected alongside the base index's.
+        long rollupIndexId = INDEX_ID + 100;
+        MaterializedIndex rollupIndex = new MaterializedIndex(rollupIndexId, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta rollupTabletMeta =
+                new TabletMeta(DB_ID, TABLE_ID, PARTITION_ID, rollupIndexId, TStorageMedium.HDD, true);
+        rollupIndex.addTablet(new LakeTablet(30L), rollupTabletMeta);
+        rollupIndex.addTablet(new LakeTablet(31L), rollupTabletMeta);
+        rangePartition.createRollupIndex(rollupIndex);
+        int rollupTabletCount = rollupIndex.getTablets().size();
+
+        Database registeredDb = new Database(DB_ID, "db");
+        registeredDb.registerTableUnlocked(rangeTable);
+
+        Object snapshot = Deencapsulation.invoke(
+                tabletStatMgr, "createPartitionSnapshot", registeredDb, rangeTable, rangePartition);
+        List<?> tablets = Deencapsulation.getField(snapshot, "tablets");
+
+        Assertions.assertEquals(baseTabletCount + rollupTabletCount, tablets.size());
+    }
+
+    @Test
+    public void testFreePartitionAcceptsSharedFileProofWithRetainedJobs(@Mocked LakeService lakeService) {
+        LakeTable table = createRangeLakeTableForTest();
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        TabletReshardJobMgr manager = companionJobManager(table, PH_PARTITION_ID - 1);
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+        List<Tablet> tablets = table.getPhysicalPartition(PH_PARTITION_ID).getLatestBaseIndex().getTablets();
+        collectLakeTabletStatsOnce(lakeService, db, table, () -> cleanTabletResponse(tablets));
+        for (Tablet tablet : tablets) {
+            Assertions.assertFalse(((LakeTablet) tablet).hasSharedFiles());
+            Assertions.assertEquals(10L, ((LakeTablet) tablet).getRowCount(-1));
+        }
+        Mockito.verify(manager, Mockito.times(1)).isPhysicalPartitionReshardingLocked(table, PH_PARTITION_ID);
+    }
+
+    @Test
+    public void testDelayedSharedFileProofStaysWithOriginalTabletGeneration(@Mocked LakeService lakeService) {
+        LakeTable table = createRangeLakeTableForTest();
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        companionJobManager(table, PH_PARTITION_ID - 1);
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+        MaterializedIndex index = table.getPhysicalPartition(PH_PARTITION_ID).getLatestBaseIndex();
+        List<Tablet> original = new ArrayList<>(index.getTablets());
+        LakeTablet replacement = new LakeTablet(original.get(0).getId());
+        collectLakeTabletStatsOnce(lakeService, db, table, () -> {
+            index.removeTablet(replacement.getId());
+            index.addTablet(replacement, new TabletMeta(DB_ID, TABLE_ID, PH_PARTITION_ID, INDEX_ID,
+                    TStorageMedium.HDD, true));
+            return cleanTabletResponse(original);
+        });
+        Assertions.assertFalse(((LakeTablet) original.get(0)).hasSharedFiles());
+        Assertions.assertTrue(replacement.hasSharedFiles());
+        Assertions.assertEquals(0L, replacement.getDataSize(true));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OlapTable.OlapTableState.class, names = {"NORMAL", "TABLET_RESHARD"},
+            mode = EnumSource.Mode.EXCLUDE)
+    public void testOtherAlterStatesKeepSharedFileProofConservative(OlapTable.OlapTableState state,
+            @Mocked LakeService lakeService) {
+        LakeTable table = createRangeLakeTableForTest();
+        table.setState(state);
+        companionJobManager(table, PH_PARTITION_ID - 1);
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+        List<Tablet> tablets = table.getPhysicalPartition(PH_PARTITION_ID).getLatestBaseIndex().getTablets();
+        collectLakeTabletStatsOnce(lakeService, db, table, () -> cleanTabletResponse(tablets));
+        for (Tablet tablet : tablets) {
+            Assertions.assertTrue(((LakeTablet) tablet).hasSharedFiles());
+            Assertions.assertEquals(10L, ((LakeTablet) tablet).getRowCount(-1));
+        }
+    }
+
+    private TabletStatResponse cleanTabletResponse(List<Tablet> tablets) {
+        TabletStatResponse response = new TabletStatResponse();
+        response.tabletStats = new ArrayList<>();
+        for (Tablet tablet : tablets) {
+            TabletStat stat = new TabletStat();
+            stat.tabletId = tablet.getId();
+            stat.numRows = 10L;
+            stat.dataSize = 100L;
+            stat.hasSharedFiles = false;
+            response.tabletStats.add(stat);
+        }
+        return response;
+    }
+
+    private TabletReshardJobMgr companionJobManager(OlapTable table, long busyPartitionId) {
+        TabletReshardJobMgr manager = Mockito.spy(new TabletReshardJobMgr());
+        Map<Long, TabletReshardJob> jobs = manager.getTabletReshardJobs();
+        jobs.put(1L, new SplitTabletJob(1L, 1L, table.getId(),
+                Map.of(busyPartitionId, new ReshardingPhysicalPartition(busyPartitionId, Map.of()))));
+        for (long id = 2; id <= 20; id++) {
+            SplitTabletJob historical = new SplitTabletJob(id, 1L, table.getId(),
+                    Map.of(busyPartitionId + 1, new ReshardingPhysicalPartition(busyPartitionId + 1, Map.of())));
+            Deencapsulation.setField(historical, "jobState", TabletReshardJob.JobState.FINISHED);
+            jobs.put(id, historical);
+        }
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public TabletReshardJobMgr getTabletReshardJobMgr() {
+                return manager;
+            }
+        };
+        return manager;
+    }
+
+    @Test
+    public void testTotalRowsCountsBaseIndexOnly() {
+        // BasicStatsMeta.totalRows is compared against base index row counts by the optimizer, so the rows of a
+        // rollups which should not be counted again.
+        LakeTable table = createLakeTableForTest();
+        PhysicalPartition physicalPartition = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition();
+        for (Tablet tablet : physicalPartition.getLatestBaseIndex().getTablets()) {
+            ((LakeTablet) tablet).setRowCount(100);
+        }
+
+        MaterializedIndex rollupIndex = new MaterializedIndex(INDEX_ID + 100, MaterializedIndex.IndexState.NORMAL);
+        LakeTablet rollupTablet = new LakeTablet(30L);
+        rollupTablet.setRowCount(7);
+        rollupIndex.addTablet(rollupTablet, null, false);
+        physicalPartition.createRollupIndex(rollupIndex);
+
+        registeredDb = new Database(SCAN_DB_ID, SCAN_DB_NAME);
+        registeredDb.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(registeredDb);
+
+        BasicStatsMeta meta = new BasicStatsMeta(SCAN_DB_ID, TABLE_ID, Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddBasicStatsMeta(meta);
+        try {
+            new TabletStatMgr().runAfterCatalogReady();
+
+            assertEquals(200, physicalPartition.getLatestBaseIndex().getRowCount());
+            assertEquals(7, rollupIndex.getRowCount());
+            assertEquals(200, meta.getTotalRows());
+        } finally {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().remove(TABLE_ID);
+        }
     }
 }
