@@ -245,7 +245,7 @@ mysql> show proc '/statistic/10002';
 | IndexNum              | Number of indexes in the database.                           |
 | TabletNum             | Number of tablets in the database.                           |
 | ReplicaNum            | Number of replicas in the database.                          |
-| UnhealthyTabletNum    | Number of unfinished (unhealthy) tablets in the database during data redistribution. |
+| UnhealthyTabletNum    | Number of unhealthy tablets in the database, that is, tablets whose health status is not `HEALTHY`, `REDUNDANT`, `COLOCATE_REDUNDANT`, or `NEED_FURTHER_REPAIR`. Tablets of cloud-native tables are not counted. |
 | InconsistentTabletNum | Number of inconsistent tablets in the database.              |
 | CloningTabletNum      | Number of tablets that are being cloned in the database.     |
 | ErrorStateTabletNum   | In a Primary Key type table, the number of tablets in Error state. |

@@ -1240,7 +1240,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 秒
 - 是否可变: Yes
-- 描述: 用于加载数据的 INSERT INTO 语句的超时时长。
+- 描述: 已弃用。该参数不控制 INSERT 语句的超时时间。请使用会话变量 `insert_timeout`。
 - 引入版本: -
 
 ### `label_clean_interval_second`

@@ -43,7 +43,7 @@ keywords: ['fuzai', 'ziyuan', 'ziyuanzu']
 | exclusive_cpu_percent      | 该资源组的 CPU 硬隔离百分比。自 v4.1 起支持。                         | [0, 100] (大于 0 时生效)                      | 0      |
 | mem_limit                  | 该资源组在当前 BE 节点可使用于查询的内存的比例。                 | (0, 1] (必填项)                              | -      |
 | mem_pool                   | 将资源组进行分组以共享内存限制。                 | 字符串                                     | default_mem_pool |
-| spill_mem_limit_threshold  | 该资源组触发落盘的内存占用阈值。                               | (0, 1]                                      | 1.0    |
+| spill_mem_limit_threshold  | 该资源组触发落盘的内存占用阈值。                               | (0, 1)                                      | 1.0    |
 | concurrency_limit          | 该资源组中并发查询数的上限。                                  | 整数 (大于 0 才生效)                           | 0      |
 | mem_used_pct_limit         | 该资源组的内存使用率上限。需要启用 `enable_group_level_query_queue`。仅当 `enable_query_queue_v2` 为 `false` 时可用。 | [0, 1] (大于 0 才生效)                        | 0      |
 | big_query_cpu_second_limit | 该资源组的大查询任务在每个 BE 上可以使用 CPU 的时间上限。         | 整数 (大于 0 才生效)                          | 0      |
@@ -59,9 +59,9 @@ keywords: ['fuzai', 'ziyuan', 'ziyuanzu']
 您可以通过以下任一参数设置该权重：
 
 - `cpu_weight`：直接设置 CPU 调度权重。取值范围为 (0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。只有大于 0 时才生效。
-- `cpu_weight_percent`：自 v4.1 起支持，用百分比设置 CPU 调度权重。取值范围为 [0, 100]。只有大于 0 时才生效。如果 `min_be_cpu_cores * cpu_weight_percent / 100 < 1`，系统会返回错误，其中 `min_be_cpu_cores` 表示所有 BE 的 CPU 核数的最小值。
+- `cpu_weight_percent`：自 v4.1 起支持，用百分比设置 CPU 调度权重。取值范围为 [0, 100]。只有大于 0 时才生效。
 
-实际使用时，每个 BE 会根据本机 CPU 核数 `be_cpu_cores` 将 `cpu_weight_percent` 换算为真实的 `cpu_weight`：`cpu_weight = be_cpu_cores * cpu_weight_percent / 100`。
+实际使用时，每个 BE 会根据本机 CPU 核数 `be_cpu_cores` 将 `cpu_weight_percent` 换算为真实的 `cpu_weight`：`cpu_weight = max(1, be_cpu_cores * cpu_weight_percent / 100)`，其中除法向下取整。
 
 `cpu_weight`、`cpu_weight_percent`、`exclusive_cpu_cores` 和 `exclusive_cpu_percent` 中有且只能有一个为正数。
 
@@ -184,7 +184,7 @@ WITH (
 
 如果普通查询受资源组管理，但是没有匹配到分类器，系统将默认为其分配 `default_wg`。该资源组的默认资源配置如下：
 
-- `cpu_weight`：BE 的 CPU 核数。
+- `cpu_weight_percent`：100，即每个 BE 的 CPU 核数。（如果 `default_wg` 创建于 v4.1 之前，升级后仍保留 `cpu_weight`，其值为创建时所有 BE 的平均 CPU 核数。）
 - `mem_limit`：100%。
 - `concurrency_limit`：0。
 - `big_query_cpu_second_limit`：0。
@@ -197,7 +197,7 @@ WITH (
 
 如果创建异步物化视图时没有通过 `resource_group` 属性指定资源组，该物化视图刷新时，系统将默认为其分配 `default_mv_wg`。该资源组的默认资源配置如下：
 
-- `cpu_weight`：1。
+- `cpu_weight_percent`：1，在 CPU 核数少于 200 的 BE 上即 CPU 权重为 1。（如果 `default_mv_wg` 创建于 v4.1 之前，升级后仍保留 `cpu_weight`：1。）
 - `mem_limit`：80%。
 - `concurrency_limit`: 0。
 - `spill_mem_limit_threshold`: 80%。

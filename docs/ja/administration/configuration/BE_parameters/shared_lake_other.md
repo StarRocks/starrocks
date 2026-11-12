@@ -574,11 +574,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### datacache_disk_size
 
-- デフォルト: 0
+- デフォルト: 100%
 - タイプ: String
 - 単位: -
 - 変更可能: はい
-- 説明: 単一ディスクにキャッシュできるデータの最大量。パーセンテージ (例: `80%`) または物理的な制限 (例: `2T`、`500G`) として設定できます。たとえば、2 つのディスクを使用し、`datacache_disk_size` パラメータの値を `21474836480` (20 GB) に設定した場合、これらの 2 つのディスクに最大 40 GB のデータをキャッシュできます。デフォルト値は `0` で、これはメモリのみがデータをキャッシュするために使用されることを示します。
+- 説明: 単一ディスクにキャッシュできるデータの最大量。パーセンテージ (例: `80%`) または物理的な制限 (例: `2T`、`500G`) として設定できます。たとえば、2 つのディスクを使用し、`datacache_disk_size` パラメータの値を `21474836480` (20 GB) に設定した場合、これらの 2 つのディスクに最大 40 GB のデータをキャッシュできます。パーセンテージは、各 `storage_root_path` が存在するディスクの容量に対する割合です。デフォルト値は `100%` です。`enable_datacache_disk_auto_adjust` が `true` (デフォルト) の場合、システムはディスク使用率に基づいて実際のディスクキャッシュ容量を自動調整し、この項目はその容量の上限のみを設定します。`0` はディスクキャッシュを無効にします。
 - 導入バージョン: -
 
 ### datacache_enable
@@ -876,8 +876,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクの最大同時実行数 (BE ノードごと)。デフォルト値 `0` は制限がないことを示します。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクの最大同時実行数 (BE ノードごと)。デフォルト値 `0` は制限がないことを示します。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### default_mv_resource_group_cpu_limit
@@ -885,8 +885,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 1
 - タイプ: Int
 - 単位: -
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大 CPU コア数 (BE ノードごと)。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大 CPU コア数 (BE ノードごと)。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### default_mv_resource_group_memory_limit
@@ -894,8 +894,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 0.8
 - タイプ: Double
 - 単位: 
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大メモリ比率 (BE ノードごと)。デフォルト値はメモリの 80% を示します。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで使用できる最大メモリ比率 (BE ノードごと)。デフォルト値はメモリの 80% を示します。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### default_mv_resource_group_spill_mem_limit_threshold
@@ -903,8 +903,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - デフォルト: 0.8
 - タイプ: Double
 - 単位: -
-- 変更可能: はい
-- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで中間結果のスピリングをトリガーする前のメモリ使用量のしきい値。デフォルト値はメモリの 80% を示します。
+- 変更可能: いいえ
+- 説明: リソースグループ `default_mv_wg` のマテリアライズドビューリフレッシュタスクで中間結果のスピリングをトリガーする前のメモリ使用量のしきい値。デフォルト値はメモリの 80% を示します。非推奨: v3.4 以降、FE が `default_mv_wg` を永続化して BE に送信するため、この項目は効果がありません。代わりに `ALTER RESOURCE GROUP default_mv_wg WITH (...)` を使用してください。
 - 導入バージョン: v3.1
 
 ### enable_resolve_hostname_to_ip_in_load_error_url
