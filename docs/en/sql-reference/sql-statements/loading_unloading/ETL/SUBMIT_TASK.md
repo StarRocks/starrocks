@@ -3,7 +3,6 @@ displayed_sidebar: docs
 description: "SUBMIT TASK submits an ETL statement as an asynchronous task."
 ---
 
-import PropertyWarehouse from '../../../../_assets/commonMarkdown/property_warehouse_tip_default.mdx'
 
 # SUBMIT TASK
 
@@ -43,8 +42,6 @@ You can add the `session.` prefix before session variables to change the task ru
 | `session.insert_timeout` | Integer | The timeout duration of an INSERT operation. Unit: Seconds. Default: `14400`. Supported from v3.4.0 onwards. |
 | `session.enable_profile` | Boolean | Whether to enable query profiling for the task. Default: `false`. |
 | `session.new_planner_optimize_timeout` | Integer | The timeout duration of the query optimizer. Unit: Milliseconds. Default: `3000`. |
-
-<PropertyWarehouse />
 
 For example, the following statement submits a task named `test_task` with session properties which enables query profile and increase query timeout:
 
