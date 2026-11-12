@@ -20,10 +20,15 @@ import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.Files;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
+import org.apache.iceberg.io.OutputFile;
+import org.apache.iceberg.io.ResolvingFileIO;
 import org.apache.iceberg.util.SerializableSupplier;
 import org.apache.iceberg.util.SerializationUtil;
 import org.junit.jupiter.api.Assertions;
@@ -78,6 +83,57 @@ public class IcebergCachingFileIOTest {
         long cacheIOInputFileSize = cachingFileIOInputFile.getLength();
         Assertions.assertEquals(cacheIOInputFileSize, 39);
         cachingFileIO.deleteFile(path);
+    }
+
+    @Test
+    public void testNormalizeAzurePath() {
+        Assertions.assertNull(IcebergCachingFileIO.normalizeAzurePath(null));
+        Assertions.assertEquals("wasbs://c@acct.blob.core.windows.net/a/b.avro",
+                IcebergCachingFileIO.normalizeAzurePath("abfss://c@acct.blob.core.windows.net/a/b.avro"));
+        Assertions.assertEquals("wasb://c@acct.blob.core.windows.net/a",
+                IcebergCachingFileIO.normalizeAzurePath("abfs://c@acct.blob.core.windows.net/a"));
+        Assertions.assertEquals("wasbs://c@acct.blob.core.windows.net",
+                IcebergCachingFileIO.normalizeAzurePath("abfss://c@acct.blob.core.windows.net"));
+        // dfs endpoints and other schemes are left alone
+        String dfs = "abfss://c@acct.dfs.core.windows.net/a";
+        Assertions.assertEquals(dfs, IcebergCachingFileIO.normalizeAzurePath(dfs));
+        String s3 = "s3://bucket/a";
+        Assertions.assertEquals(s3, IcebergCachingFileIO.normalizeAzurePath(s3));
+    }
+
+    @Test
+    public void testNormalizedAzurePathKeepsLogicalLocation() {
+        String path = "abfss://c@acct.blob.core.windows.net/metadata/m0.avro";
+        String normalized = "wasbs://c@acct.blob.core.windows.net/metadata/m0.avro";
+        List<String> accessed = new ArrayList<>();
+        new MockUp<ResolvingFileIO>() {
+            @Mock
+            public InputFile newInputFile(String location) {
+                accessed.add(location);
+                return Files.localInput("/tmp/non_existent_file");
+            }
+
+            @Mock
+            public OutputFile newOutputFile(String location) {
+                accessed.add(location);
+                return null;
+            }
+
+            @Mock
+            public void deleteFile(String location) {
+                accessed.add(location);
+            }
+        };
+
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        cachingFileIO.initialize(new HashMap<>());
+
+        // the parsed-manifest caches are keyed by ManifestFile.path(), so location() must stay the caller's path
+        Assertions.assertEquals(path, cachingFileIO.newInputFile(path).location());
+        cachingFileIO.newOutputFile(path);
+        cachingFileIO.deleteFile(path);
+        Assertions.assertEquals(List.of(normalized, normalized, normalized), accessed);
     }
 
     @Test
