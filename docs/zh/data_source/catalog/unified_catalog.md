@@ -67,6 +67,21 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 - 在每个 FE 和每个 BE 或 CN 上运行 `kinit -kt keytab_path principal` 命令，从密钥分发中心 (KDC) 获取票证授予票证 (TGT)。要运行此命令，您必须具有访问 HDFS 集群和 Hive metastore 的权限。请注意，使用此命令访问 KDC 是时间敏感的。因此，您需要使用 cron 定期运行此命令。
 - 将 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` 添加到每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件或每个 CN 的 **$CN_HOME/conf/cn.conf** 文件中。在此示例中，`/etc/krb5.conf` 是 krb5.conf 文件的保存路径。您可以根据需要修改路径。
 
+#### Catalog 级别 Kerberos 凭证
+
+除了在每个节点上为同一个 principal 执行 `kinit` 外，您还可以在 Catalog 属性中为该 Catalog 指定独立的 principal 和 keytab。StarRocks 将以该 principal 访问该 Catalog 的 Hive metastore 和 HDFS，因此同一集群中的不同 Catalog 可以使用不同的 principal。
+
+```SQL
+"hadoop.security.authentication" = "kerberos",
+"hadoop.kerberos.principal" = "user_a@EXAMPLE.COM",
+"hadoop.kerberos.keytab" = "/path/to/user_a.keytab"
+```
+
+- keytab 文件必须存在于每个 FE 以及每个 BE 或 CN 的相同路径下。
+- FE 和 BE（或 CN）进程的 Hadoop 配置仍需将 `hadoop.security.authentication` 设置为 `kerberos`，并且 **krb5.conf** 文件必须包含所有 principal 所属的 realm。
+- 该 Catalog 的读写操作（包括 INSERT 写入的文件）均以该 Catalog 的 principal 执行。
+- 如需让所有 Catalog 重新使用进程的 Kerberos 身份，请将 FE 参数 `enable_catalog_kerberos_credentials` 设置为 `false` 并重启 FE。
+
 ## 创建统一 catalog
 
 ### 语法

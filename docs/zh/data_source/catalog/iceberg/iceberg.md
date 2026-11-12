@@ -109,6 +109,21 @@ Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使�
 
 </Tabs>
 
+##### Catalog 级别 Kerberos 凭证
+
+除了在每个节点上为同一个 principal 执行 `kinit` 外，您还可以在 Catalog 属性中为该 Catalog 指定独立的 principal 和 keytab。StarRocks 将以该 principal 访问该 Catalog 的 Hive metastore 和 HDFS，因此同一集群中的不同 Catalog 可以使用不同的 principal。
+
+```SQL
+"hadoop.security.authentication" = "kerberos",
+"hadoop.kerberos.principal" = "user_a@EXAMPLE.COM",
+"hadoop.kerberos.keytab" = "/path/to/user_a.keytab"
+```
+
+- keytab 文件必须存在于每个 FE 以及每个 BE 或 CN 的相同路径下。
+- FE 和 BE（或 CN）进程的 Hadoop 配置仍需将 `hadoop.security.authentication` 设置为 `kerberos`，并且 **krb5.conf** 文件必须包含所有 principal 所属的 realm。
+- 该 Catalog 的读写操作（包括 INSERT 写入的文件）均以该 Catalog 的 principal 执行。
+- 如需让所有 Catalog 重新使用进程的 Kerberos 身份，请将 FE 参数 `enable_catalog_kerberos_credentials` 设置为 `false` 并重启 FE。
+
 ---
 
 ## 创建 Iceberg catalog

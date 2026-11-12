@@ -26,6 +26,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.common.util.concurrent.lock.LockInvariantViolationException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
@@ -53,6 +54,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -99,8 +101,31 @@ public class IcebergHiveCatalog implements IcebergCatalog {
         // it will request all Table Objects from Hive Metastore, when there are lots of tables under the
         // database, timeout may happen.
         copiedProperties.putIfAbsent(HiveCatalog.LIST_ALL_TABLES, "true");
+        applyKerberosClientPoolKey(conf, copiedProperties);
 
         delegate = (HiveCatalog) CatalogUtil.loadCatalog(HiveCatalog.class.getName(), name, copiedProperties, conf);
+    }
+
+    /**
+     * Iceberg shares one metastore client pool per metastore URI across catalogs. When the catalog logs in with
+     * its own Kerberos principal, key the pool by that principal too, so catalogs with different principals do
+     * not reuse each other's authenticated connections. The "ugi" key is not used because the pool is looked up
+     * outside the catalog's doAs, where the current user is still the process user. User-set keys are kept and
+     * the principal key is appended to them, since none of them would separate the principals on their own.
+     */
+    @VisibleForTesting
+    static void applyKerberosClientPoolKey(Configuration conf, Map<String, String> catalogProperties) {
+        if (conf.get(HadoopExt.CATALOG_KERBEROS_PRINCIPAL) == null) {
+            return;
+        }
+        String principalKey = "conf:" + HadoopExt.CATALOG_KERBEROS_PRINCIPAL;
+        String userKeys = catalogProperties.get(CatalogProperties.CLIENT_POOL_CACHE_KEYS);
+        if (Strings.isNullOrEmpty(userKeys)) {
+            catalogProperties.put(CatalogProperties.CLIENT_POOL_CACHE_KEYS, principalKey);
+        } else if (Arrays.stream(userKeys.split(",")).map(String::trim).noneMatch(principalKey::equals)) {
+            // Iceberg rejects a key listed twice, so append it only when missing.
+            catalogProperties.put(CatalogProperties.CLIENT_POOL_CACHE_KEYS, userKeys + "," + principalKey);
+        }
     }
 
     @VisibleForTesting

@@ -766,6 +766,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 数据湖
 
+### `enable_catalog_kerberos_credentials`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: 将 `hadoop.security.authentication` 设置为 `kerberos` 并同时设置了 `hadoop.kerberos.principal` 和 `hadoop.kerberos.keytab` 的 External Catalog 是否以该 principal 访问其 Hive metastore 和 HDFS。设置为 `false` 时，所有 Catalog 均使用 FE 和 BE（或 CN）进程的 Kerberos 身份。
+- 引入版本: -
+
 ### `files_enable_insert_push_down_column_type`
 
 - 默认值: true

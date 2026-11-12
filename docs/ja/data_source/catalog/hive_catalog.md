@@ -94,6 +94,21 @@ HDFS クラスターまたは Hive メタストアに Kerberos 認証が有効�
 - 各 FE および各 BE または CN で `kinit -kt keytab_path principal` コマンドを実行して、Key Distribution Center (KDC) から Ticket Granting Ticket (TGT) を取得します。このコマンドを実行するには、HDFS クラスターおよび Hive メタストアにアクセスする権限が必要です。このコマンドを使用して KDC にアクセスすることは時間に敏感です。したがって、このコマンドを定期的に実行するために cron を使用する必要があります。
 - 各 FE の **$FE_HOME/conf/fe.conf** ファイル、および各 BE または CN の **$BE_HOME/conf/be.conf** ファイルに `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` を追加します。この例では、`/etc/krb5.conf` は **krb5.conf** ファイルの保存パスです。必要に応じてパスを変更できます。
 
+#### Catalog レベルの Kerberos 認証情報
+
+すべてのノードで 1 つのプリンシパルに対して `kinit` を実行する代わりに、Catalog のプロパティでその Catalog 専用のプリンシパルと keytab を指定できます。StarRocks はそのプリンシパルとして Catalog の Hive メタストアと HDFS にアクセスするため、同じクラスタ内の Catalog ごとに異なるプリンシパルを使用できます。
+
+```SQL
+"hadoop.security.authentication" = "kerberos",
+"hadoop.kerberos.principal" = "user_a@EXAMPLE.COM",
+"hadoop.kerberos.keytab" = "/path/to/user_a.keytab"
+```
+
+- keytab ファイルは、すべての FE とすべての BE または CN の同じパスに存在する必要があります。
+- FE および BE（または CN）プロセスの Hadoop 設定では引き続き `hadoop.security.authentication` を `kerberos` に設定する必要があり、**krb5.conf** ファイルはすべてのプリンシパルの realm を含む必要があります。
+- Catalog の読み取りと書き込み（INSERT で書き込まれるファイルを含む）は、その Catalog のプリンシパルとして実行されます。
+- すべての Catalog でプロセスの Kerberos ID を再び使用するには、FE パラメータ `enable_catalog_kerberos_credentials` を `false` に設定して FE を再起動してください。
+
 ## Hive catalog の作成
 
 ### 構文
