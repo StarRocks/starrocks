@@ -3,10 +3,6 @@ displayed_sidebar: docs
 sidebar_position: 10
 ---
 
-<<<<<<< HEAD
-=======
-
->>>>>>> d83b7a6 ([Doc] Merge the warehouse and privilege partials into their pages (#82999))
 # リソースグループ
 
 このトピックでは、StarRocks のリソースグループ機能について説明します。
@@ -272,20 +268,12 @@ TO (
     role='string', 
     query_type in ('select'), 
     source_ip='cidr'
-<<<<<<< HEAD
 ) -- クラシファイアを作成します。複数のクラシファイアを作成する場合、クラシファイアをカンマ（`,`）で区切ります。
-=======
-) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (`,`).
->>>>>>> d83b7a6 ([Doc] Merge the warehouse and privilege partials into their pages (#82999))
 WITH (
     "{ cpu_weight | exclusive_cpu_cores }" = "INT",
     "mem_limit" = "m%",
     "concurrency_limit" = "INT",
-<<<<<<< HEAD
     "type" = "str" -- リソースグループのタイプ。値を normal に設定します。
-=======
-    "type" = "str" --The type of the resource group. Set the value to normal.
->>>>>>> d83b7a6 ([Doc] Merge the warehouse and privilege partials into their pages (#82999))
 );
 ```
 

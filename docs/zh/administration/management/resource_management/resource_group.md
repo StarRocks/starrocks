@@ -3,10 +3,6 @@ displayed_sidebar: docs
 keywords: ['fuzai', 'ziyuan', 'ziyuanzu'] 
 ---
 
-<<<<<<< HEAD
-=======
-
->>>>>>> d83b7a6 ([Doc] Merge the warehouse and privilege partials into their pages (#82999))
 # 资源隔离
 
 本文介绍如何使用资源隔离功能。
@@ -264,30 +260,17 @@ SET GLOBAL enable_pipeline_engine = true;
 创建资源组，关联分类器，并分配资源。
 
 ```SQL
-<<<<<<< HEAD
 CREATE RESOURCE GROUP group_name 
-=======
-CREATE RESOURCE GROUP <group_name> 
->>>>>>> d83b7a6 ([Doc] Merge the warehouse and privilege partials into their pages (#82999))
 TO (
     user='string', 
     role='string', 
     query_type in ('select'), 
     source_ip='cidr'
-<<<<<<< HEAD
 ) -- 创建分类器，多个分类器间用英文逗号（,）分隔。
 WITH (
     "{ cpu_weight | exclusive_cpu_cores }" = "INT",
     "mem_limit" = "m%",
     "concurrency_limit" = "INT"
-=======
-) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (`,`).
-WITH (
-    "{ cpu_weight | exclusive_cpu_cores }" = "INT",
-    "mem_limit" = "m%",
-    "concurrency_limit" = "INT",
-    "type" = "str" --The type of the resource group. Set the value to normal.
->>>>>>> d83b7a6 ([Doc] Merge the warehouse and privilege partials into their pages (#82999))
 );
 ```
 

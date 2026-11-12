@@ -411,15 +411,6 @@ Properties of the asynchronous materialized view. You can modify the properties 
 
   See [Example 6](#examples) for detailed instructions on the `force_mv` semantic and `partition_retention_condition`.
 
-<<<<<<< HEAD
-<MVWarehouse />
-=======
-- `refresh_mode`: Controls how a materialized view is refreshed. Introduced in StarRocks v4.1, and only supported for Iceberg append-only tables. Valid values:
-
-  - `PCT`: (Default) For partitioned materialized views, only the affected partition is refreshed when there is a data change, ensuring result consistency for that partition. For non-partitioned materialized views, any data change in the base table triggers a full refresh of the materialized view.
-  - `INCREMENTAL`: Ensures that only incremental refreshes are performed. If the materialized view does not support incremental refresh based on its definition or encounters non-incremental data, creation or refresh will fail.
->>>>>>> d83b7a6 ([Doc] Merge the warehouse and privilege partials into their pages (#82999))
-
 **query_statement** (required)
 
 The query statement to create the asynchronous materialized view. From v3.1.6 onwards, StarRocks supports creating asynchronous materialized views with Common Table Expression (CTE).
