@@ -79,6 +79,8 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
     private final Map<String, SnapshotRef> refs;
 
     private transient volatile LocationProvider lazyLocationProvider;
+    // Not serialized, so the split keeps the format older BEs can read: built on first use instead.
+    private transient volatile FileIO lazyNormalizingIO = null;
 
     private transient volatile Table lazyTable = null;
     private transient volatile Schema lazySchema = null;
@@ -129,14 +131,10 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
                     }
 
                     TableOperations ops =
-<<<<<<< HEAD
-                            new StaticTableOperations(metadataFileLocation, io);
-=======
                             new StaticTableOperations(metadataFileLocation, io());
                     // StaticTableOperations.current() loads the metadata without synchronization, and the table
                     // can be shared by concurrent scan tasks: load it before publishing the table.
                     ops.current();
->>>>>>> 0489f28 ([Enhancement][RB-225] Share the deserialized Iceberg table across metadata scan tasks (#83094))
                     this.lazyTable = newTable(ops, name);
                 }
             }
@@ -234,9 +232,19 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
         return lazyTable().sortOrders();
     }
 
+    // The FE strips IcebergCachingFileIO, which normalizes Azure paths, before serializing the table, so the
+    // metadata scanners on the BE get the bare IO. Wrap it here so every read through this table -- the
+    // metadata json, manifest lists and manifests -- has its abfss://...blob.core.windows.net paths rewritten.
     @Override
     public FileIO io() {
-        return io;
+        if (lazyNormalizingIO == null) {
+            synchronized (this) {
+                if (lazyNormalizingIO == null) {
+                    this.lazyNormalizingIO = new AzurePathNormalizingFileIO(io);
+                }
+            }
+        }
+        return lazyNormalizingIO;
     }
 
     @Override

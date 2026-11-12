@@ -14,21 +14,29 @@
 
 package com.starrocks.connector.share.iceberg;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.inmemory.InMemoryCatalog;
 import org.apache.iceberg.inmemory.InMemoryFileIO;
+import org.apache.iceberg.io.FileIO;
+import org.apache.iceberg.io.InputFile;
+import org.apache.iceberg.io.OutputFile;
+import org.apache.iceberg.io.SeekableInputStream;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.SerializableSupplier;
+import org.apache.iceberg.util.SerializationUtil;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-<<<<<<< HEAD
-=======
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -36,9 +44,10 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
->>>>>>> 0489f28 ([Enhancement][RB-225] Share the deserialized Iceberg table across metadata scan tasks (#83094))
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -94,8 +103,6 @@ public class SerializableTableTest {
         assertNotNull(serializable.locationProvider());
     }
 
-<<<<<<< HEAD
-=======
     @Test
     public void testIoNormalizesAzurePathAfterRoundTrip() {
         Table table = createTable(new HashMap<>());
@@ -184,12 +191,72 @@ public class SerializableTableTest {
         }
     }
 
->>>>>>> 0489f28 ([Enhancement][RB-225] Share the deserialized Iceberg table across metadata scan tasks (#83094))
     private Table createTable(Map<String, String> properties) {
         InMemoryCatalog catalog = new InMemoryCatalog();
         catalog.initialize("test", new HashMap<>());
         catalog.createNamespace(Namespace.of("db"));
         TableIdentifier id = TableIdentifier.of("db", "tbl");
         return catalog.createTable(id, SCHEMA, PartitionSpec.unpartitioned(), properties);
+    }
+
+    static class LocationOnlyFileIO implements FileIO, HadoopConfigurable {
+        private SerializableSupplier<Configuration> confSupplier;
+        private final List<String> accessed = new ArrayList<>();
+
+        LocationOnlyFileIO(Configuration conf) {
+            this.confSupplier = () -> conf;
+        }
+
+        @Override
+        public InputFile newInputFile(String path) {
+            accessed.add(path);
+            return new InputFile() {
+                @Override
+                public long getLength() {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public SeekableInputStream newStream() {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
+                public String location() {
+                    return path;
+                }
+
+                @Override
+                public boolean exists() {
+                    return false;
+                }
+            };
+        }
+
+        @Override
+        public OutputFile newOutputFile(String path) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void deleteFile(String path) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void serializeConfWith(
+                Function<Configuration, SerializableSupplier<Configuration>> confSerializer) {
+            this.confSupplier = confSerializer.apply(confSupplier.get());
+        }
+
+        @Override
+        public void setConf(Configuration conf) {
+            this.confSupplier = () -> conf;
+        }
+
+        @Override
+        public Configuration getConf() {
+            return confSupplier.get();
+        }
     }
 }
