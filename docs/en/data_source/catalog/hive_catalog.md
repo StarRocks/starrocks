@@ -510,7 +510,7 @@ In most cases, if your Hive data is updated at a granularity of 1 hour or less, 
 | metastore_cache_refresh_interval_sec   | No       | The time interval at which StarRocks asynchronously updates the metadata of Hive tables or partitions cached in itself. Unit: seconds. Default value: `60`, which is one minute. Since v3.3.0, the default value of this property is changed from `7200` to `60`. |
 | remote_file_cache_refresh_interval_sec | No       | The time interval at which StarRocks asynchronously updates the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `60`. |
 | metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Hive tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
-| remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
+| remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours, from v3.5.7 and v4.0.0 onwards. In earlier versions, the default value is `129600`, which is 36 hours. |
 | enable_cache_list_names                | No       | Specifies whether StarRocks caches Hive partition names. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
 | remote_file_cache_memory_ratio         | No       | The maximum memory usage ratio for the remote file cache. Default value: `0.1`, which is 10%. Supported from v3.5.6 onwards. |
 
@@ -1318,7 +1318,7 @@ For example, there is a Hive table named `table2`, which has four partitions: `p
 - The time interval (specified by the `metastore_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of `p1` is 60 seconds.
 - The time interval (specified by the `remote_file_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of the underlying data files of `p1` is 60 seconds.
 - The time interval (specified by the `metastore_cache_ttl_sec` parameter) to automatically discard the cached metadata of `p1` is 24 hours.
-- The time interval (specified by the `remote_file_cache_ttl_sec` parameter) to automatically discard the cached metadata of the underlying data files of `p1` is 36 hours.
+- The time interval (specified by the `remote_file_cache_ttl_sec` parameter) to automatically discard the cached metadata of the underlying data files of `p1` is 24 hours.
 
 The following figure shows the time intervals on a timeline for easier understanding.
 
@@ -1330,4 +1330,4 @@ Then StarRocks updates or discards the metadata in compliance with the following
 - If another query hits `p1` again and the current time from the last update is more than 60 seconds, StarRocks updates the cached metadata of `p1` and the cached metadata of the underlying data files of `p1`.
 - If the table has been accessed within 24 hours, the related cache will be refreshed every 10 minutes in the background.
 - If `p1` has not been accessed within 24 hours from the last update, StarRocks discards the cached metadata of `p1`. The metadata will be cached at the next query.
-- If `p1` has not been accessed within 36 hours from the last update, StarRocks discards the cached metadata of the underlying data files of `p1`. The metadata will be cached at the next query.
+- If `p1` has not been accessed within 24 hours from the last update, StarRocks discards the cached metadata of the underlying data files of `p1`. The metadata will be cached at the next query.

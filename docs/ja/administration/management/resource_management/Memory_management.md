@@ -21,7 +21,7 @@ products: [oss, enterprise, anywhere]
 |  metadata   |   メタデータメモリ | S Schema、Tablet メタデータ、RowSet メタデータ、Column メタデータ、ColumnReader、IndexReader |
 |  compaction   |   マルチバージョンメモリコンパクション  |  データインポート完了後に発生するコンパクション |
 |  clone  |   クローンメモリ  | Tablet クローンタスクが使用するメモリ |
-|  page_cache   |   BE の独自の PageCache   | デフォルトはオフで、ユーザーは BE ファイルを変更してオンにできます |
+|  page_cache   |   BE の独自の PageCache   | v2.4 以降、デフォルトで有効です。BE 設定ファイルで `disable_storage_page_cache` を `true` に設定すると無効にできます |
 
 ## メモリ関連の設定
 

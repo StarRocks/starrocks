@@ -164,7 +164,7 @@ StarRocks 存算分离集群由 FE 和 CN 组成。CN 取代了存算一体集�
 
       > **说明**
       >
-      > 本地缓存数据将存储在 **`<storage_root_path>/starlet_cache`** 路径下。
+      > 自 v3.4.0 起，本地缓存数据将存储在 **`<storage_root_path>/datacache`** 路径下。CN 启动时，会自动将 `<storage_root_path>/starlet_cache` 中已有的缓存数据移动至该路径下。在更早的版本中，本地缓存数据将存储在 **`<storage_root_path>/starlet_cache`** 路径下。
 
    b. 如果任何在 [环境配置清单](./preparation/environment_configurations.md) 中提到的 BE 端口被占用，您必须在 BE 配置文件中为其分配其他可用端口。
 

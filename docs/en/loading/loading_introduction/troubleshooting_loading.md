@@ -28,11 +28,11 @@ There are two ways to observe load jobs:
 Load tasks can also be monitored in two ways:
 
 - Using  SQL statements **[SHOW LOAD](../../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md)** and **[SHOW ROUTINE LOAD TASK](../../sql-reference/sql-statements/loading_unloading/routine_load/SHOW_ROUTINE_LOAD_TASK.md)**.
-- Using system views **[information_schema.loads](../../sql-reference/information_schema/loads.md)** and **statistics.loads_history**.
+- Using system views **[information_schema.loads](../../sql-reference/information_schema/loads.md)** and **`_statistics_.loads_history`**.
 
 ### SQL statements
 
-The **SHOW** statements display both ongoing and recently completed load tasks for the current database, providing a quick overview of task status. The information retrieved is a subset of the **statistics.loads_history** system view.
+The **SHOW** statements display both ongoing and recently completed load tasks for the current database, providing a quick overview of task status. The information retrieved is a subset of the **`_statistics_.loads_history`** system view.
 
 SHOW LOAD statements return information of Broker Load, Insert Into, and Spark Load tasks, and SHOW ROUTINE LOAD TASK statements return Routine Load task information.
 
@@ -40,7 +40,7 @@ SHOW LOAD statements return information of Broker Load, Insert Into, and Spark L
 
 #### information_schema.loads
 
-The **information_schema.loads** system view stores information about recent load tasks, including active and recently completed ones. StarRocks periodically synchronizes the data to the **statistics.loads_history** system table for persistent storage.
+The **information_schema.loads** system view stores information about recent load tasks, including active and recently completed ones. StarRocks periodically synchronizes the data to the **`_statistics_.loads_history`** system table for persistent storage.
 
 **information_schema.loads** provides the following fields:
 
@@ -55,7 +55,7 @@ The **information_schema.loads** system view stores information about recent loa
 | WAREHOUSE            | The warehouse to which the load job belongs.                 |
 | STATE                | The state of the load job. Valid values:<ul><li>`PENDING`/`BEGIN`: The load job is created.</li><li>`QUEUEING`/`BEFORE_LOAD`: The load job is in the queue waiting to be scheduled.</li><li>`LOADING`: The load job is running.</li><li>`PREPARING`: The transaction is being pre-committed.</li><li>`PREPARED`: The transaction has been pre-committed.</li><li>`COMMITED`: The transaction has been committed.</li><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul> |
 | PROGRESS             | The progress of the ETL stage and LOADING stage of the load job. |
-| TYPE                 | The type of the load job. For Broker Load, the return value is `BROKER`. For INSERT, the return value is `INSERT`. For Stream Load, the return value is `STREAM`. For Routine Load Load, the return value is `ROUTINE`. |
+| TYPE                 | The type of the load job. For Broker Load, the return value is `BROKER`. For INSERT, the return value is `INSERT`. For Spark Load, the return value is `SPARK`. For Stream Load, the return value is `STREAM_LOAD`. For Routine Load, the return value is `ROUTINE_LOAD`. |
 | PRIORITY             | The priority of the load job. Valid values: `HIGHEST`, `HIGH`, `NORMAL`, `LOW`, and `LOWEST`. |
 | SCAN_ROWS            | The number of data rows that are scanned.                    |
 | SCAN_BYTES           | The number of bytes that are scanned.                        |
@@ -133,9 +133,9 @@ The **information_schema.loads** system view stores information about recent loa
 | task_num               | Number of subtasks actually executed in parallel.          |
 | timeout                | Timeout for load tasks.                                    |
 
-#### statistics.loads_history
+#### `_statistics_.loads_history`
 
-The **statistics.loads_history** system view stores load records for the last three months by default. DBAs can adjust the retention period by modifying the `partition_ttl` of the view. **statistics.loads_history** has the consistent schema with **information_schema.loads**.
+The **`_statistics_.loads_history`** system view stores load records for the last 30 days by default. DBAs can adjust the retention period by modifying the FE configuration item [`loads_history_retained_days`](../../administration/configuration/FE_parameters/user_query_loading.md#loads_history_retained_days). Do not modify the `partition_live_number` property of the table directly, because StarRocks resets it to the value of `loads_history_retained_days`. **`_statistics_.loads_history`** has the consistent schema with **information_schema.loads**.
 
 ## Identify loading performance issues with Load Profiles
 
@@ -153,14 +153,14 @@ Enable Load Profiles for Broker Load and INSERT INTO at session level:
 SET enable_profile = true;
 ```
 
-By default, profiles are automatically enabled for long-running jobs (longer than 300 seconds). You can customize this threshold by:
+By default, profiles are automatically enabled for long-running jobs (longer than 30 seconds). You can customize this threshold by:
 
 ```sql
 SET big_query_profile_threshold = 60s;
 ```
 
 :::note
-When `big_query_profile_threshold` is set to its default value `0`, the default behavior is to disable Query Profiling for queries. However, for load tasks, profiles are automatically recorded for tasks with execution times exceeding 300 seconds.
+The default value of `big_query_profile_threshold` is `30s` from v3.3.12, v3.4.2, and v3.5.0 onwards. In earlier versions, the default value is `0`, which disables automatic profiling of long-running jobs.
 :::
 
 StarRocks also supports **Runtime Profiles**, which periodically (every 30 seconds) report execution metrics of long-running load jobs. You can customize the report interval by:

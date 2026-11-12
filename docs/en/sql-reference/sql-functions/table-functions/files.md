@@ -384,9 +384,10 @@ The following table describes the parameters you need to configure in `StorageCr
 
 | Parameter                   | Required | Description                                                  |
 | --------------------------- | -------- | ------------------------------------------------------------ |
+| `aws.s3.use_aws_sdk_default_behavior` | No | Whether to use the default authentication credential of AWS SDK. Valid values: `true` and `false` (Default). |
 | `aws.s3.use_instance_profile` | Yes      | Specifies whether to enable the credential methods instance profile and assumed role. Valid values: `true` and `false`. Default value: `false`. |
 | `aws.s3.iam_role_arn`         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. |
-| `aws.s3.region`               | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
+| `aws.s3.region`               | No       | The region in which your AWS S3 bucket resides. Example: `us-west-1`. If you do not specify this parameter, `us-east-1` is used. |
 | `aws.s3.access_key`           | No       | The access key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
 | `aws.s3.secret_key`           | No       | The secret key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
 

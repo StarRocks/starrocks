@@ -230,7 +230,7 @@ You can create a new user account and then set the data permission by granting p
 
 ## Why does the profile fail to display after I set `enable_profile` to `true`?
 
-The report is only submitted to the leader FE for access.
+The profile is reported to and stored only on the FE that ran the query (usually the FE that the client is connected to). You can view the profile only on that FE.
 
 ## How to check field annotations in the tables of StarRocks?
 

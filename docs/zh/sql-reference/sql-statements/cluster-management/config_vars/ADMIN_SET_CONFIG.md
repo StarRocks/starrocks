@@ -12,7 +12,7 @@ products: [oss, enterprise, cloud, anywhere]
 
 可设置的配置项，可以通过 [ADMIN SHOW FRONTEND CONFIG](ADMIN_SHOW_CONFIG.md) 命令查看。
 
-设置后的配置项，在 FE 重启之后会恢复成 **fe.conf** 文件中的配置或者默认值。如果需要让配置长期生效，建议设置完之后同时修改 **fe.conf** 文件，防止重启后修改失效。
+设置后的配置项，在 FE 重启之后会恢复成 **fe.conf** 文件中的配置或者默认值。如果需要让配置长期生效，建议设置完之后同时修改 **fe.conf** 文件，防止重启后修改失效。自 v3.5.0 起，您可以在语句中添加 `WITH PERSISTENT`，将新的配置值同时写入各个 FE 的 **fe.conf** 文件，使其在 FE 重启后仍然生效。如果 **fe.conf** 不可写或 FE 运行在容器中，带 `WITH PERSISTENT` 的语句会执行失败。
 
 :::tip
 
@@ -23,7 +23,7 @@ products: [oss, enterprise, cloud, anywhere]
 ## 语法
 
 ```sql
-ADMIN SET FRONTEND CONFIG ("key" = "value")
+ADMIN SET FRONTEND CONFIG ("key" = "value") [WITH PERSISTENT]
 ```
 
 ## 示例

@@ -23,7 +23,7 @@ products: [oss, enterprise, cloud, anywhere]
 | WAREHOUSE            | ロードジョブが属するウェアハウス。                 |
 | STATE                | ロードジョブの状態。 有効な値:<ul><li>`PENDING`/`BEGIN`: ロードジョブが作成された。</li><li>`QUEUEING`/`BEFORE_LOAD`: ロードジョブがスケジュール待ちのキューにある。</li><li>`LOADING`: ロードジョブが実行中。</li><li>`PREPARING`: トランザクションが事前コミットされている。</li><li>`PREPARED`: トランザクションが事前コミットされた。</li><li>`COMMITED`: トランザクションがコミットされた。</li><li>`FINISHED`: ロードジョブが成功した。</li><li>`CANCELLED`: ロードジョブが失敗した。</li></ul> |
 | PROGRESS             | ロードジョブの ETL ステージと LOADING ステージの進捗。 |
-| TYPE                 | ロードジョブのタイプ。 Broker Load の場合、返される値は `BROKER`。INSERT の場合、返される値は `INSERT`。Stream Load の場合、返される値は `STREAM`。Routine Load の場合、返される値は `ROUTINE`。 |
+| TYPE                 | ロードジョブのタイプ。 Broker Load の場合、返される値は `BROKER`。INSERT の場合、返される値は `INSERT`。Spark Load の場合、返される値は `SPARK`。Stream Load の場合、返される値は `STREAM_LOAD`。Routine Load の場合、返される値は `ROUTINE_LOAD`。 |
 | PRIORITY             | ロードジョブの優先度。 有効な値: `HIGHEST`, `HIGH`, `NORMAL`, `LOW`, `LOWEST`。 |
 | SCAN_ROWS            | スキャンされたデータ行の数。                    |
 | SCAN_BYTES           | スキャンされたバイト数。                        |

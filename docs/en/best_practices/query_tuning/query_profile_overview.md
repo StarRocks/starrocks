@@ -57,7 +57,7 @@ SET runtime_profile_report_interval = 30;
 | enable_profile                    | Session Var  | true/false        | false   | Enable Query Profile                                                                        |
 | pipeline_profile_level            | Session Var  | 1/2               | 1       | 1: merge metrics; 2: retain original structure (disables visualization tools)               |
 | runtime_profile_report_interval   | Session Var  | Positive integer  | 10      | Runtime Query Profile report interval (seconds)                                              |
-| big_query_profile_threshold       | Session Var  | String            | 0s      | Enable Query Profile for queries exceeding this duration (e.g., '30s', '500ms', '60m')       |
+| big_query_profile_threshold       | Session Var  | String            | 30s     | Enable Query Profile for queries exceeding this duration (e.g., '30s', '500ms', '60m'). The default value is `30s` from v3.3.12, v3.4.2, and v3.5.0 onwards, and `0s` (disabled) in earlier versions. |
 | enable_statistics_collect_profile | FE Dynamic   | true/false        | false   | Enable Query Profile for statistics collection-related queries                               |
 
 ## How to Obtain Query Profile

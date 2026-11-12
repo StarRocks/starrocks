@@ -6,9 +6,9 @@ products: [oss, enterprise, cloud, anywhere]
 
 # ADMIN SET CONFIG
 
-ADMIN SET CONFIG is used to set configuration items for the cluster (Currently, only FE dynamic configuration items can be set using this command). You can view these configuration items using the [ADMIN SHOW FRONTEND CONFIG](ADMIN_SET_CONFIG.md) command.
+ADMIN SET CONFIG is used to set configuration items for the cluster (Currently, only FE dynamic configuration items can be set using this command). You can view these configuration items using the [ADMIN SHOW FRONTEND CONFIG](ADMIN_SHOW_CONFIG.md) command.
 
-The configurations will be restored to the default values in the `fe.conf` file after the FE restarts. Therefore, we recommend that you also modify the configuration items in `fe.conf` to prevent the loss of modifications.
+The configurations will be restored to the default values in the `fe.conf` file after the FE restarts. Therefore, we recommend that you also modify the configuration items in `fe.conf` to prevent the loss of modifications. From v3.5.0 onwards, you can add `WITH PERSISTENT` to the statement so that the new value is also written into the `fe.conf` file of each FE and is retained after the FE restarts. The statement with `WITH PERSISTENT` fails if `fe.conf` is not writable or the FE runs in a container.
 
 :::tip
 
@@ -19,7 +19,7 @@ This operation requires the SYSTEM-level OPERATE privilege. You can follow the i
 ## Syntax
 
 ```sql
-ADMIN SET FRONTEND CONFIG ("key" = "value")
+ADMIN SET FRONTEND CONFIG ("key" = "value") [WITH PERSISTENT]
 ```
 
 ## Examples

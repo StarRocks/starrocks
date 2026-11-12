@@ -97,7 +97,7 @@ v3.3.0 以降から v3.2 にクラスターをダウングレードするには�
 
    a. [ALTER SYSTEM CREATE IMAGE](../../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md) を実行してメタデータスナップショットを作成します。
 
-   b. Leader FE のログファイル **fe.log** を確認して、イメージファイルが同期されたかどうかを確認できます。"push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" のようなログ記録があれば、イメージファイルが正常に同期されたことを示しています。
+   b. Leader FE のログファイル **fe.log** を確認して、イメージファイルが同期されたかどうかを確認できます。"push image.* from subdir [] to other nodes. totally xx nodes, push succeeded xx nodes" のようなログ記録があれば、イメージファイルが正常に同期されたことを示しています。
 
 2. FE ノードの作業ディレクトリに移動し、ノードを停止します。
 

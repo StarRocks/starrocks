@@ -272,7 +272,7 @@ StarRocks は BE ノード間で tablet を自動的にバランスします。
 
 #### BE の負荷
 
-StarRocks は `ClusterLoadStatistics` (CLS) を使用してクラスター内の各 BE ノードの負荷統計を表示します。Tablet Scheduler は `ClusterLoadStatistics` に基づいてレプリカのバランシングをトリガーします。StarRocks は各 BE ノードの **ディスク使用率** と **レプリカ数** を評価し、それに応じて `loadScore` を計算します。BE ノードの `loadScore` が高いほど、そのノードの負荷が高いことを示します。Tablet Scheduler は `ClusterLoadStatistics` を毎分更新します。
+StarRocks は `ClusterLoadStatistics` (CLS) を使用してクラスター内の各 BE ノードの負荷統計を表示します。StarRocks は各 BE ノードの **ディスク使用率** と **レプリカ数** を評価し、それに応じて `loadScore` を計算します。BE ノードの `loadScore` が高いほど、そのノードの負荷が高いことを示します。Tablet Scheduler は `ClusterLoadStatistics` を毎分更新します。
 
 `capacityCoefficient` と `replicaNumCoefficient` は、ディスク使用率とレプリカ数の重み付け係数です。`capacityCoefficient` と `replicaNumCoefficient` の合計は 1 です。`capacityCoefficient` は実際のディスク使用量に応じて動的に調整されます。BE ノードの全体的なディスク使用率が 50% 未満の場合、`capacityCoefficient` の値は 0.5 です。ディスク使用率が 75% を超える場合、その値は 1 です。この制限は FE 設定項目 `capacity_used_percent_high_water` を介して設定できます。使用率が 50% から 75% の間の場合、`capacityCoefficient` は次の式に基づいてスムーズに増加します：
 
@@ -283,6 +283,8 @@ capacityCoefficient= 2 * Disk utilization - 0.5
 `capacityCoefficient` は、ディスク使用量が非常に高い場合に、この BE ノードの `loadScore` を高くし、システムがこの BE ノードの負荷を最優先で減らすようにします。
 
 #### バランシングポリシー
+
+StarRocks は、まず BE ノード間でレプリカをバランスし、次に各 BE ノード内のディスク間でレプリカをバランスします。レプリカのバランシングは `loadScore` に依存しません。すべての BE ノードのディスク使用率が FE 設定項目 `tablet_sched_balance_load_disk_safe_threshold` の値（デフォルト: 50%）より低い場合、または最高と最低のディスク使用率の差が `tablet_sched_balance_load_score_threshold` の値（デフォルト: 10%）より小さい場合、StarRocks は BE ノード間で各パーティションの tablet 数をバランスします。それ以外の場合、StarRocks はディスク使用率の高い BE ノードからディスク使用率の低い BE ノードにレプリカを移動します。
 
 Tablet Scheduler が tablet をスケジュールするたびに、Load Balancer を通じてバランスされる候補の tablet として一定数の健全な tablet を選択します。次回 tablet をスケジュールする際、Tablet Scheduler はこれらの健全な tablet をバランスします。
 

@@ -21,7 +21,7 @@ products: [oss, enterprise, cloud, anywhere]
 - Follower FE を追加します。
 
   ```SQL
-  ALTER SYSTEM ADD FOLLOWER "<fe_host>:<edit_log_port>"[, ...]
+  ALTER SYSTEM ADD FOLLOWER "<fe_host>:<edit_log_port>"
   ```
 
   新しい Follower FE のステータスは `SHOW PROC '/frontends'\G` を実行して確認できます。
@@ -29,13 +29,13 @@ products: [oss, enterprise, cloud, anywhere]
 - Follower FE を削除します。
 
   ```SQL
-  ALTER SYSTEM DROP FOLLOWER "<fe_host>:<edit_log_port>"[, ...]
+  ALTER SYSTEM DROP FOLLOWER "<fe_host>:<edit_log_port>"
   ```
 
 - Observer FE を追加します。
 
   ```SQL
-  ALTER SYSTEM ADD OBSERVER "<fe_host>:<edit_log_port>"[, ...]
+  ALTER SYSTEM ADD OBSERVER "<fe_host>:<edit_log_port>"
   ```
 
   新しい Observer FE のステータスは `SHOW PROC '/frontends'\G` を実行して確認できます。
@@ -43,7 +43,7 @@ products: [oss, enterprise, cloud, anywhere]
 - Observer FE を削除します。
 
   ```SQL
-  ALTER SYSTEM DROP OBSERVER "<fe_host>:<edit_log_port>"[, ...]
+  ALTER SYSTEM DROP OBSERVER "<fe_host>:<edit_log_port>"
   ```
 
 - Leader ロールを別の Follower FE にグレースフルに引き継ぎます（プロセスを再起動せず、その場で降格）。
@@ -164,7 +164,7 @@ products: [oss, enterprise, cloud, anywhere]
 ALTER SYSTEM CREATE IMAGE
 ```
 
-イメージの作成は Leader FE 上での非同期操作です。操作の開始時刻と終了時刻は FE ログファイル **fe.log** で確認できます。`triggering a new checkpoint manually...` のようなログはイメージ作成が開始されたことを示し、`finished save image...` のようなログはイメージが作成されたことを示します。
+イメージの作成は Leader FE でトリガーされる非同期操作です。操作の開始時刻と終了時刻は FE ログファイル **fe.log** で確認できます。Leader FE の **fe.log** にある `triggering a new checkpoint manually...` のようなログはイメージ作成が開始されたことを示し、`finished save image...` のようなログはイメージが作成されたことを示します。v3.4.0 以降、Leader FE はイメージを作成するチェックポイントワーカーとして FE を 1 つ選択し、Leader FE よりもヒープ使用率の低い FE を優先します（`checkpoint_only_on_leader` が `true` に設定されている場合を除く）。そのため、`finished save image...` のログはその FE の **fe.log** に出力されます。それより前のバージョンでは、イメージは Leader FE で作成されます。
 
 ## 使用上の注意
 
@@ -182,10 +182,10 @@ ALTER SYSTEM CREATE IMAGE
 ALTER SYSTEM ADD FOLLOWER "x.x.x.x:9010";
 ```
 
-例 2: 2 つの Observer FE ノードを同時に削除します。
+例 2: Observer FE ノードを削除します。
 
 ```SQL
-ALTER SYSTEM DROP OBSERVER "x.x.x.x:9010","x.x.x.x:9010";
+ALTER SYSTEM DROP OBSERVER "x.x.x.x:9010";
 ```
 
 例 3: BE ノードを追加します。

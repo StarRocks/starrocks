@@ -8,9 +8,9 @@ products: [oss, enterprise, cloud, anywhere]
 
 ## 説明
 
-このステートメントは、クラスタの設定項目を設定するために使用されます（現在、このコマンドで設定できるのは FE の動的設定項目のみです）。これらの設定項目は、[ADMIN SHOW FRONTEND CONFIG](ADMIN_SET_CONFIG.md) コマンドを使用して表示できます。
+このステートメントは、クラスタの設定項目を設定するために使用されます（現在、このコマンドで設定できるのは FE の動的設定項目のみです）。これらの設定項目は、[ADMIN SHOW FRONTEND CONFIG](ADMIN_SHOW_CONFIG.md) コマンドを使用して表示できます。
 
-設定は FE が再起動すると `fe.conf` ファイルのデフォルト値に戻ります。そのため、変更が失われないように `fe.conf` の設定項目も変更することをお勧めします。
+設定は FE が再起動すると `fe.conf` ファイルのデフォルト値に戻ります。そのため、変更が失われないように `fe.conf` の設定項目も変更することをお勧めします。v3.5.0 以降では、ステートメントに `WITH PERSISTENT` を追加すると、新しい値が各 FE の `fe.conf` ファイルにも書き込まれ、FE の再起動後も保持されます。`fe.conf` が書き込み不可である場合、または FE がコンテナ内で実行されている場合、`WITH PERSISTENT` を指定したステートメントは失敗します。
 
 :::tip
 
@@ -21,7 +21,7 @@ products: [oss, enterprise, cloud, anywhere]
 ## 構文
 
 ```sql
-ADMIN SET FRONTEND CONFIG ("key" = "value")
+ADMIN SET FRONTEND CONFIG ("key" = "value") [WITH PERSISTENT]
 ```
 
 ## 例

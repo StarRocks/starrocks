@@ -61,6 +61,7 @@ INSERT statements support configuring PROPERTIES from v3.4.0 onwards.
 | timeout          | INSERT 作业的超时时间。单位：秒。您也可以通过变量 `insert_timeout` 在当前 Session 中或全局设置 INSERT 的超时时间。 |
 | strict_mode      | 是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../../../loading/strict_mode.md)。您也可以通过变量 `enable_insert_strict` 在当前 Session 中或全局启用 INSERT 的严格模式。 |
 | max_filter_ratio | INSERT from FILES() 导入作业的最大容忍率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。当不合格行数比例超过该限制时，导入作业失败。默认值：`0`。范围：[0, 1]。您也可以通过变量 `insert_max_filter_ratio` 在当前 Session 中或全局设置 INSERT 的最大错误容忍度。 |
+| merge_condition  | 用于判断更新是否生效的条件列名。只有当导入的数据中该列的值大于等于当前值时，更新才会生效。该属性仅适用于主键表，自 v3.5.8、v4.0.1 和 v4.1.0 起支持。不能指定主键列作为条件列。更多信息，参见[条件更新](../../../loading/Load_to_Primary_Key_tables.md#条件更新)。 |
 
 :::note
 

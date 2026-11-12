@@ -44,7 +44,7 @@ Release Candidates are only built for the initial minor and major versions. For 
 The naming convention for software packages is: `StarRocks-x.y.z[-rcxx]{-os}{-arch}.tar.gz`. (That is, the main form is `Product-version-os-arch`)
 1. x.y.z: follows the three-digit version numbering rule. `-rcxx` is an optional prerelease version number, such as `-rc01`, `-rc02`.
 2. OS includes: `ubuntu`, `centos`. Mandatory.
-3. ARCH includes: `amd64`. Mandatory. (There is no community edition for `arm64` yet.)
+3. ARCH includes: `amd64`. Mandatory. (Software packages are provided only for `amd64`. To deploy StarRocks on `arm64`, prepare the deployment files from the StarRocks Docker image. See [Prepare deployment files](../deployment/preparation/prepare_deployment_files.md#for-arm-based-cpu).)
 
 #### Example software package names
 1. `StarRocks-3.4.0-rc01-ubuntu-amd64.tar.gz`: The prerelease version of 3.4.0, built for Ubuntu Linux.

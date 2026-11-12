@@ -228,7 +228,7 @@ StarRocks 支持单节点部署，所以 BE 最小配置个数是 1 个。BE 需
 
 ## 为什么将 `enable_profile` 指定为 `true` 后 profile 无法显示？
 
-因为报告信息只汇报给主 FE，只有主 FE 可以查看报告信息。同时，如果通过 StarRocks Manager 查看 profile， 必须确保 FE 配置项 `enable_collect_query_detail_info` 为 `true`。
+因为 profile 只会汇报并保存到执行该查询的 FE（通常为客户端所连接的 FE）上，只有在该 FE 上才能查看 profile。同时，如果通过 StarRocks Manager 查看 profile， 必须确保 FE 配置项 `enable_collect_query_detail_info` 为 `true`。
 
 ## 如何查看 StarRocks 表里的字段注释？
 

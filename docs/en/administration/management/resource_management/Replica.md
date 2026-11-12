@@ -272,7 +272,7 @@ To move a tablet from a high-load node to a low-load node, StarRocks first creat
 
 #### BE load
 
-StarRocks shows the load statistics of each BE node in the cluster using `ClusterLoadStatistics` (CLS). Tablet Scheduler triggers the replica balancing based on `ClusterLoadStatistics`. StarRocks evaluates the **disk utilization** and the **replica count** of each BE node and calculates a `loadScore` accordingly. The higher the `loadScore` of a BE node, the higher the load the node has. Tablet Scheduler updates `ClusterLoadStatistics` every one minute.
+StarRocks shows the load statistics of each BE node in the cluster using `ClusterLoadStatistics` (CLS). StarRocks evaluates the **disk utilization** and the **replica count** of each BE node and calculates a `loadScore` accordingly. The higher the `loadScore` of a BE node, the higher the load the node has. Tablet Scheduler updates `ClusterLoadStatistics` every one minute.
 
 `capacityCoefficient` and `replicaNumCoefficient`are the weighting factors for the disk utilization and the replica count respectively. The sum of `capacityCoefficient` and `replicaNumCoefficient` is one. `capacityCoefficient` is dynamically adjusted according to the actual disk usage. When the overall disk utilization of a BE node is below 50%, the `capacityCoefficient` value is 0.5. When the disk utilization is above 75%, the value is 1. You can configure this limit via the FE configuration item `capacity_used_percent_high_water`. If the utilization is between 50% and 75%, `capacityCoefficient` increases smoothly based on this formula:
 
@@ -283,6 +283,8 @@ capacityCoefficient= 2 * Disk utilization - 0.5
 `capacityCoefficient` ensures that when the disk usage is exceedingly high, the `loadScore` of this BE node gets higher, forcing the system to reduce the load on this BE node at the earliest opportunity.
 
 #### Balancing policy
+
+StarRocks first balances replicas across BE nodes, and then balances replicas across the disks within each BE node. The replica balancing does not depend on `loadScore`. If the disk utilization of all BE nodes is lower than the value of the FE configuration item `tablet_sched_balance_load_disk_safe_threshold` (Default: 50%), or the difference between the highest and lowest disk utilization is less than the value of `tablet_sched_balance_load_score_threshold` (Default: 10%), StarRocks balances the number of tablets of each partition across BE nodes. Otherwise, StarRocks moves replicas from the BE nodes with high disk utilization to the BE nodes with low disk utilization.
 
 Each time Tablet Scheduler schedules tablets, it selects a certain number of healthy tablets as the candidate tablets to be balanced through Load Balancer. Next time when scheduling tablets, Tablet Scheduler balances these healthy tablets.
 

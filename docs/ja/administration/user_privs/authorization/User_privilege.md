@@ -63,7 +63,7 @@ SHOW ROLES;
 
 ### ロールの作成
 
-[CREATE ROLE](../../../sql-reference/sql-statements/account-management/CREATE_ROLE.md) を使用してロールを作成できます。デフォルトでは、ユーザーは最大 64 のロールを持つことができます。この設定は、FE ダイナミックパラメータ `privilege_max_total_roles_per_user` を使用して調整できます。ロールは最大 16 の継承レベルを持つことができます。この設定は、FE ダイナミックパラメータ `privilege_max_role_depth` を使用して調整できます。
+[CREATE ROLE](../../../sql-reference/sql-statements/account-management/CREATE_ROLE.md) を使用してロールを作成できます。デフォルトでは、ユーザーは最大 64 のロールを持つことができます（付与されたロールを通じて継承されるロールを含む）。この制限は、ロールをユーザーに付与する際にチェックされます。この設定は、FE ダイナミックパラメータ `privilege_max_total_roles_per_user` を使用して調整できます。ロールは最大 16 の継承レベルを持つことができます。この設定は、FE ダイナミックパラメータ `privilege_max_role_depth` を使用して調整できます。
 
 次の例は、ロール `example_role` を作成します。
 

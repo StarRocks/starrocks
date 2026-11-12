@@ -161,7 +161,7 @@ The following procedures are performed on the CN instances. You can deploy CN no
 
       > **NOTE**
       >
-      > The data is cached under the directory **`<storage_root_path>/starlet_cache`**.
+      > From v3.4.0 onwards, the data is cached under the directory **`<storage_root_path>/datacache`**. When the CN starts, the existing cache data in `<storage_root_path>/starlet_cache` is automatically moved to this directory. In earlier versions, the data is cached under the directory **`<storage_root_path>/starlet_cache`**.
 
    b. If any of the CN ports mentioned in the [Environment Configuration Checklist](./preparation/environment_configurations.md) are occupied, you must assign valid alternatives in the CN configuration file.
 
@@ -330,7 +330,7 @@ A high-availability FE cluster requires at least THREE Follower FE nodes in the 
    > **NOTE**
    >
    > - You can use the preceding command to add a single Follower FE nodes each time.
-   > - If you want to add Observer FE nodes, execute `ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"=`. For detailed instructions, see [ALTER SYSTEM - FE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md).
+   > - If you want to add Observer FE nodes, execute `ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"`. For detailed instructions, see [ALTER SYSTEM - FE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md).
 
 3. Launch a terminal on the new FE instance, create a dedicated directory for metadata storage, navigate to the directory that stores the StarRocks FE deployment files, and modify the FE configuration file **fe/conf/fe.conf**. For more instructions, see [Step 1: Start the Leader FE node](#step-1-start-the-leader-fe-node). Basically, you can repeat the procedures in Step 1 **except for the command used to start the FE node**.
   

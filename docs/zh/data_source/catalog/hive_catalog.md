@@ -516,7 +516,7 @@ StarRocks 默认采用[自动异步更新策略](#附录理解元数据自动异
 | metastore_cache_refresh_interval_sec   | 否       | StarRocks 异步更新缓存的 Hive 表或分区的元数据的时间间隔。单位：秒。默认值：`60`，即一分钟。自 v3.3.0 起，该属性默认值由 `7200` 变更为 `60`。 |
 | remote_file_cache_refresh_interval_sec | 否       | StarRocks 异步更新缓存的 Hive 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`60`。 |
 | metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
-| remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
+| remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：自 v3.5.7 和 v4.0.0 起为 `86400`，即 24 小时；更早版本为 `129600`，即 36 小时。 |
 | enable_cache_list_names                | 否       | 指定 StarRocks 是否缓存 Hive Partition Names。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
 | remote_file_cache_memory_ratio         | 否       | 远程文件缓存的最大内存使用率。默认值：`0.1`，即 10%。自 v3.5.6 起支持。 |
 
@@ -1327,7 +1327,7 @@ REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]
 - 异步更新 `p1` 的缓存元数据的时间间隔（通过 `metastore_cache_refresh_interval_sec` 参数指定）为  60 秒。
 - 异步更新 `p1` 下数据文件的缓存元数据的时间间隔（通过 `remote_file_cache_refresh_interval_sec` 参数指定）为 60 秒。
 - 自动淘汰 `p1` 的缓存元数据的时间间隔（通过 `metastore_cache_ttl_sec` 参数指定）为 24 小时。
-- 自动淘汰 `p1` 下数据文件的缓存元数据的时间间隔（通过 `remote_file_cache_ttl_sec` 参数指定）为 36 小时。
+- 自动淘汰 `p1` 下数据文件的缓存元数据的时间间隔（通过 `remote_file_cache_ttl_sec` 参数指定）为 24 小时。
 
 如下图所示。
 
@@ -1339,4 +1339,4 @@ StarRocks 采用如下策略更新和淘汰缓存的元数据：
 - 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔超过 60 秒，则 StarRocks 会更新 `p1` 的缓存元数据以及 `p1` 下数据文件的缓存元数据。
 - 如果表在 24 小时内被访问过，相关缓存将每 10 分钟在后台刷新一次。
 - 如果继上次更新结束后，`p1` 在 24 小时内未被访问，则 StarRocks 会淘汰 `p1` 的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 的元数据。
-- 如果继上次更新结束后，`p1` 在 36 小时内未被访问，则 StarRocks 会淘汰 `p1` 下数据文件的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 下数据文件的元数据。
+- 如果继上次更新结束后，`p1` 在 24 小时内未被访问，则 StarRocks 会淘汰 `p1` 下数据文件的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 下数据文件的元数据。

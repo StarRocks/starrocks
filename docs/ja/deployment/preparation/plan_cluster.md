@@ -81,7 +81,7 @@ StarRocks では、テーブル内のデータは最初に複数のパーティ�
 
 - 既存の BE ノードに追加ストレージボリュームを追加
 
-  既存の BE ノードに追加ストレージボリュームを追加することもできます。詳細な手順については、[Scale your StarRocks cluster - Scale BE up](../../administration/management/Scale_up_down.md) を参照してください。
+  既存の BE ノードに追加ストレージボリュームを追加することもできます。そのためには、新しいストレージボリュームのパスを BE 設定項目 [`storage_root_path`](../../administration/configuration/BE_parameters/stats_storage.md#storage_root_path) に追加します。
 
   追加ストレージボリュームが追加されると、StarRocks はすべてのテーブル内のデータを自動的に再バランスします。
 

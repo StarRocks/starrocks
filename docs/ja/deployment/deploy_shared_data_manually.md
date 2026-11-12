@@ -161,7 +161,7 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
 
       > **注意**
       >
-      > データはディレクトリ **`<storage_root_path>/starlet_cache`** にキャッシュされます。
+      > v3.4.0 以降、データはディレクトリ **`<storage_root_path>/datacache`** にキャッシュされます。CN の起動時に、`<storage_root_path>/starlet_cache` 内の既存のキャッシュデータは自動的にこのディレクトリに移動されます。それ以前のバージョンでは、データはディレクトリ **`<storage_root_path>/starlet_cache`** にキャッシュされます。
 
    b. [環境設定チェックリスト](./preparation/environment_configurations.md)で言及されている CN ポートが占有されている場合は、CN 設定ファイルで有効な代替ポートを割り当てる必要があります。
 
@@ -328,7 +328,7 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
    > **注意**
    >
    > - 上記のコマンドを使用して、1 回に 1 つの Follower FE ノードを追加できます。
-   > - Observer FE ノードを追加したい場合は、`ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"=` を実行します。詳細な手順については、[ALTER SYSTEM - FE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md)を参照してください。
+   > - Observer FE ノードを追加したい場合は、`ALTER SYSTEM ADD OBSERVER "<fe_address>:<edit_log_port>"` を実行します。詳細な手順については、[ALTER SYSTEM - FE](../sql-reference/sql-statements/cluster-management/nodes_processes/ALTER_SYSTEM.md)を参照してください。
 
 3. 新しい FE インスタンスでターミナルを起動し、メタデータストレージ用の専用ディレクトリを作成し、StarRocks FE デプロイメントファイルを保存しているディレクトリに移動し、FE 設定ファイル **fe/conf/fe.conf** を修正します。詳細な手順については、[ステップ 1: Leader FE ノードを起動する](#ステップ-1-leader-fe-ノードを起動する)を参照してください。基本的には、FE ノードを起動するためのコマンドを除いて、ステップ 1 の手順を繰り返すことができます。
 
