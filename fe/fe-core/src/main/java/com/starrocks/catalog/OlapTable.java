@@ -87,7 +87,6 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.ColocatePersistInfo;
-import com.starrocks.persist.ColocateRangePersistInfo;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.qe.ConnectContext;
@@ -3144,22 +3143,14 @@ public class OlapTable extends Table {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         if (colocateTableIndex.isColocateTable(getId())) {
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(getId());
-            // For range colocate groups, journal the range mgr state ahead of OP_COLOCATE_ADD_TABLE_V2
-            // so the record lands after OP_CREATE_TABLE is durably written. A crash between this
-            // record and the add-table record leaves only an orphan range entry on a fresh grpId,
-            // which is harmless because the next create on the same colocate_with name allocates a
-            // new grpId via getNextId().
             if (colocateTableIndex.isRangeColocateGroup(groupId)) {
-                List<ColocateRange> ranges = colocateTableIndex.getColocateRanges(groupId.grpId);
-                if (!ranges.isEmpty()) {
-                    GlobalStateMgr.getCurrentState().getEditLog().logColocateRangeUpdate(
-                            ColocateRangePersistInfo.create(groupId.grpId, ranges));
-                }
+                colocateTableIndex.logAddTableToRangeGroup(groupId, getId());
+            } else {
+                List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+                ColocatePersistInfo colocatePersistInfo = ColocatePersistInfo.createForAddTable(groupId, getId(),
+                        backendsPerBucketSeq);
+                GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(colocatePersistInfo);
             }
-            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
-            ColocatePersistInfo colocatePersistInfo = ColocatePersistInfo.createForAddTable(groupId, getId(),
-                    backendsPerBucketSeq);
-            GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(colocatePersistInfo);
         }
 
         DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), this);
