@@ -894,9 +894,9 @@ public class TaskManagerEditLogTest {
     @Test
     public void testAlterTaskFromEventTriggeredToPeriodical() throws Exception {
         // This test verifies the fix for the MV scheduler bug when changing from 
-        // REFRESH ASYNC (EVENT_TRIGGERED) to REFRESH ASYNC EVERY(interval) (PERIODICAL)
+        // REFRESH ON_CHANGE (EVENT_TRIGGERED) to REFRESH SCHEDULE EVERY(interval) (PERIODICAL)
         
-        // 1. Prepare test data - create an event triggered task first (simulating REFRESH ASYNC)
+        // 1. Prepare test data - create an event triggered task first (simulating REFRESH ON_CHANGE)
         String taskName = "alter_event_triggered_to_periodical";
         Task currentTask = new Task(taskName);
         currentTask.setType(Constants.TaskType.EVENT_TRIGGERED);

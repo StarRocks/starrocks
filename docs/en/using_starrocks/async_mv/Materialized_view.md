@@ -44,9 +44,10 @@ The following table compares the asynchronous materialized views (ASYNC MV) and 
 
   When you create an asynchronous materialized view, its data reflects only the state of the base tables at that time. When the data in the base tables change, you need to refresh the materialized view to keep the changes synchronized.
 
-  Currently, StarRocks supports two generic refreshing strategies:
+  Currently, StarRocks supports three refreshing strategies:
 
-  - ASYNC: Asynchronous refresh mode. Materialized views can be refreshed automatically when the data in the base table changes, or at regular intervals based on specified intervals.
+  - ON_CHANGE: Base-table-change-triggered refresh mode. Each time the base table data changes, the materialized view is automatically refreshed.
+  - SCHEDULE: Regular refresh mode. The materialized view is refreshed regularly at the interval defined.
   - MANUAL: Manual refresh mode. The materialized view will not be automatically refreshed. The refresh tasks can only be triggered manually by users.
 
 - **Query rewrite**
@@ -162,7 +163,7 @@ Based on the table `goods`, `order_list`, and the query statement mentioned abov
 ```SQL
 CREATE MATERIALIZED VIEW order_mv
 DISTRIBUTED BY HASH(`order_id`)
-REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
+REFRESH SCHEDULE START('2022-09-01 10:00:00') EVERY (interval 1 day)
 AS SELECT
     order_list.order_id,
     sum(goods.price) as total
@@ -182,7 +183,7 @@ GROUP BY order_id;
 
 - **About refresh mechanisms of asynchronous materialized views**
 
-  Currently, StarRocks supports two ON DEMAND refresh strategies: MANUAL refresh and ASYNC refresh.
+  Currently, StarRocks supports three ON DEMAND refresh strategies: ON_CHANGE refresh, SCHEDULE refresh, and MANUAL refresh.
 
   In StarRocks v2.5, asynchronous materialized views further support a variety of asynchronous refreshing mechanisms to control the cost of refresh and increase the success rate:
 
@@ -270,7 +271,7 @@ You can alter the property of an asynchronous materialized view using [ALTER MAT
 - Alter the refreshing interval of an asynchronous materialized view to 2 days.
 
   ```SQL
-  ALTER MATERIALIZED VIEW order_mv REFRESH ASYNC EVERY(INTERVAL 2 DAY);
+  ALTER MATERIALIZED VIEW order_mv REFRESH SCHEDULE EVERY(INTERVAL 2 DAY);
   ```
 
 ### Show asynchronous materialized views

@@ -45,8 +45,8 @@ With these features, you can design comprehensive and adaptable data models to m
 
 When creating an asynchronous materialized view, you can specify the refresh strategy using the REFRESH clause. Currently, StarRocks supports the following refresh strategies of asynchronous materialized views:
 
-- **Automatic Refresh** (`REFRESH ASYNC`): Refresh tasks are triggered each time data in the base tables changes. Data dependencies are automatically managed by the materialized view.
-- **Scheduled Refresh** (`REFRESH ASYNC EVERY (INTERVAL <refresh_interval>)`): Refresh tasks are triggered at regular intervals, for example, every minute, day, or month. If there are no data changes in the base tables, the refresh task will not be triggered.
+- **Automatic Refresh** (`REFRESH ON_CHANGE`): Refresh tasks are triggered each time data in the base tables changes. Data dependencies are automatically managed by the materialized view.
+- **Scheduled Refresh** (`REFRESH SCHEDULE EVERY (INTERVAL <refresh_interval>)`): Refresh tasks are triggered at regular intervals, for example, every minute, day, or month. If there are no data changes in the base tables, the refresh task will not be triggered.
 - **Manual Refresh** (`REFRESH MANUAL`): Refresh tasks are triggered only by executing REFRESH MATERIALIZED VIEW manually. This refresh strategy can be used when you maintain an external scheduling framework to trigger refresh tasks.
 
 Syntax:
@@ -54,8 +54,8 @@ Syntax:
 ```SQL
 CREATE MATERIALIZED VIEW <name>
 REFRESH 
-    [ ASYNC | 
-      ASYNC [START <time>] EVERY(<interval>) | 
+    [ ON_CHANGE | 
+      SCHEDULE [START <time>] EVERY(<interval>) | 
       MANUAL
     ]
 AS <query>
@@ -73,7 +73,7 @@ Syntax:
 
 ```SQL
 CREATE MATERIALIZED VIEW <name>
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY 
     [
         <base_table_column> | 

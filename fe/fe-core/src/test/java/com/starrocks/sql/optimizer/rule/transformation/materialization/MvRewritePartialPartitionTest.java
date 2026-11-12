@@ -255,7 +255,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW ttl_mv_2\n" +
                 " PARTITION BY k1\n" +
                 " DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                " REFRESH ASYNC\n" +
+                " REFRESH ON_CHANGE\n" +
                 " PROPERTIES(\n" +
                 " 'partition_ttl_number'='4' \n" +
                 " )\n" +
@@ -329,7 +329,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
         createAndRefreshMv("CREATE MATERIALIZED VIEW " + mvName +
                 " PARTITION BY k1\n" +
                 " DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                " REFRESH ASYNC\n" +
+                " REFRESH ON_CHANGE\n" +
                 " PROPERTIES(\n" +
                 " 'partition_refresh_number'='1',\n" +
                 " 'partition_ttl_number'='2' \n" +
@@ -719,7 +719,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
             starRocksAssert.withRefreshedMaterializedView("create materialized view test_loose_mv" +
                     " partition by id_date" +
                     " distributed by random" +
-                    " REFRESH ASYNC\n" +
+                    " REFRESH ON_CHANGE\n" +
                     " PROPERTIES (\n" +
                     "\"replication_num\" = \"1\",\n" +
                     "\"query_rewrite_consistency\" = \"loose\"," +

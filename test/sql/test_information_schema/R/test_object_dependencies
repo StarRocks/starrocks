@@ -8,7 +8,7 @@ use db_${uuid0};
 create table t1 (c1 int, c2 string);
 -- result:
 -- !result
-create materialized view mv1 refresh async as select * from t1;
+create materialized view mv1 refresh on_change as select * from t1;
 -- result:
 -- !result
 select 
@@ -26,7 +26,7 @@ order by object_name, ref_object_name;
 create view v1 as select * from t1;
 -- result:
 -- !result
-create materialized view mv2 refresh async as select * from t1;
+create materialized view mv2 refresh on_change as select * from t1;
 -- result:
 -- !result
 select 
@@ -41,7 +41,7 @@ order by object_name, ref_object_name;
 -- result:
 [REGEX](?s)mv1\tdefault_catalog\t(CLOUD_NATIVE_)?MATERIALIZED_VIEW\tt1\tdefault_catalog\t(OLAP|CLOUD_NATIVE)\nmv2\tdefault_catalog\t(CLOUD_NATIVE_)?MATERIALIZED_VIEW\tt1\tdefault_catalog\t(OLAP|CLOUD_NATIVE)
 -- !result
-create materialized view mv3 refresh async as select * from mv2;
+create materialized view mv3 refresh on_change as select * from mv2;
 -- result:
 -- !result
 select 

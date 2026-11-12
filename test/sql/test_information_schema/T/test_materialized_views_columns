@@ -13,12 +13,12 @@ as select event_day, sum(pv) as sum_pv from ss group by event_day;
 
 -- Bare async refresh: load triggered, REFRESH_TRIGGER/REFRESH_POLICY = ON_BASE_TABLE_CHANGE
 create materialized view mv_onchange distributed by hash(event_day)
-refresh deferred async
+refresh deferred on_change
 as select event_day, sum(pv) as sum_pv from ss group by event_day;
 
 -- Scheduled async refresh: REFRESH_TRIGGER = SCHEDULED, REFRESH_POLICY = START(...) EVERY(...)
 create materialized view mv_sched distributed by hash(event_day)
-refresh deferred async start('2024-01-01 00:00:00') every(interval 1 hour)
+refresh deferred schedule start('2024-01-01 00:00:00') every(interval 1 hour)
 as select event_day, sum(pv) as sum_pv from ss group by event_day;
 
 -- REFRESH_TYPE=ASYNC, REFRESH_MODE=PCT, RESOURCE_GROUP=default_mv_wg for all;

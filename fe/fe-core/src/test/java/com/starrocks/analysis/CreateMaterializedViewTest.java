@@ -2682,7 +2682,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
     public void testUseCte() throws Exception {
         String sql = "create materialized view mv1\n" +
                 "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS with tbl as\n" +
                 "(select * from tbl1)\n" +
                 "SELECT k1,k2\n" +
@@ -2691,7 +2691,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
 
         sql = "create materialized view mv1\n" +
                 "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                "REFRESH ASYNC AS " +
+                "REFRESH ON_CHANGE AS " +
                 "WITH cte1 AS (select k1, k2 from tbl1),\n" +
                 "     cte2 AS (select count(*) cnt from tbl1)\n" +
                 "SELECT cte1.k1, cte2.cnt\n" +
@@ -2864,7 +2864,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
     public void testHiveMVAsyncRefreshWithException() {
         Throwable exception = assertThrows(DdlException.class, () ->
                 starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW supplier_hive_mv " +
-                        "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH ASYNC AS select     s_suppkey,     s_nationkey," +
+                        "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH ON_CHANGE " +
+                        "AS select     s_suppkey,     s_nationkey," +
                         "sum(s_acctbal) as total_s_acctbal,      count(s_phone) as s_phone_count from hive0.tpch.supplier as " +
                         "supp " +
                         "group by s_suppkey, s_nationkey order by s_suppkey;"));
@@ -4652,7 +4653,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "DISTRIBUTED BY HASH(ID)");
         starRocksAssert.withRefreshedMaterializedView("CREATE MATERIALIZED VIEW sr_dw_test_table\n" +
                 "DISTRIBUTED BY HASH(id)\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "AS\n" +
                 "SELECT id,name,str_to_map(CONCAT_WS(':',id,name),';',':') as mapvalue FROM sr_ods_test_table");
     }
@@ -4667,7 +4668,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "CREATE MATERIALIZED VIEW `mv_invalid` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, `c_1_4`, " +
                         "`c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "PROPERTIES (\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"replication_num\" = \"1\",\n" +
@@ -4687,7 +4688,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "(`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, `c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, " +
                         "`c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "PROPERTIES (\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"replication_num\" = \"1\",\n" +
@@ -4706,7 +4707,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                         "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "PROPERTIES (\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"replication_num\" = \"1\",\n" +
@@ -4725,7 +4726,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                         "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "PROPERTIES (\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"replication_num\" = \"1\",\n" +
@@ -4753,7 +4754,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "(`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, `c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, " +
                 "`c_1_10`, `c_1_11`, `c_1_12`)\n" +
                 "DISTRIBUTED BY RANDOM\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "PROPERTIES (\n" +
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"transparent_mv_rewrite_mode\" = \"false\",\n" +
@@ -4771,7 +4772,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                         "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "PROPERTIES (\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"transparent_mv_rewrite_mode\" = \"true\",\n" +
@@ -4790,7 +4791,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                 "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                 "DISTRIBUTED BY RANDOM\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "PROPERTIES (\n" +
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"transparent_mv_rewrite_mode\" = \"FALSE\",\n" +
@@ -4805,7 +4806,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                         "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "PROPERTIES (\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"transparent_mv_rewrite_mode\" = \"TRANSPARENT_OR_ERROR\",\n" +
@@ -4820,7 +4821,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assertions.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
                         "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
                         "DISTRIBUTED BY RANDOM\n" +
-                        "REFRESH ASYNC\n" +
+                        "REFRESH ON_CHANGE\n" +
                         "PROPERTIES (\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"transparent_mv_rewrite_mode\" = \"TRANSPARENT_OR_DEFAULT\",\n" +
@@ -5225,7 +5226,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "DISTRIBUTED BY RANDOM\n");
         starRocksAssert.withMaterializedView("create materialized view mv1\n" +
                 "partition by (province, dt, age) \n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "properties (\n" +
                 "'replication_num' = '1',\n" +
                 // check auto_refresh_partitions_limit parameter
@@ -5518,7 +5519,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         starRocksAssert.withMaterializedView("\n" +
                 "CREATE MATERIALIZED VIEW mv1\n" +
                 "PARTITION BY (date_trunc('day', k1), date_trunc('month', k2))\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "PROPERTIES(\n" +
                 "    \"auto_refresh_partitions_limit\"=\"30\"\n" +
                 ")\n" +
@@ -5541,7 +5542,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         starRocksAssert.withMaterializedView("\n" +
                 "CREATE MATERIALIZED VIEW mv1\n" +
                 "PARTITION BY (date_trunc('day', k1), date_trunc('month', k2))\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH ON_CHANGE\n" +
                 "PROPERTIES(\n" +
                 "    \"auto_refresh_partitions_limit\"=\"30\",\n" +
                 "   'partition_retention_condition' = 'date_trunc(\\'day\\', k1) > current_date() - interval 2 month'" +
@@ -5565,7 +5566,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test.test_mv_A\n" +
                     "PARTITION BY day\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "AS\n" +
                     "select\n" +
                     "    date_trunc('day', hour) as day,\n" +
@@ -5590,7 +5591,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test.test_mv_A\n" +
                     "PARTITION BY (day, partner_id)\n" +
-                    "REFRESH ASYNC\n" +
+                    "REFRESH ON_CHANGE\n" +
                     "AS\n" +
                     "select\n" +
                     "    date_trunc('day', hour) as day,\n" +
