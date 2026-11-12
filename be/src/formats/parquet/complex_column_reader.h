@@ -386,6 +386,9 @@ private:
         ColumnReaderPtr root_typed_value_reader;
         std::unique_ptr<TypeDescriptor> root_typed_value_type;
         ColumnPtr root_typed_value_column;
+        // The root typed_value when it is an array: read and rebuilt like an array field, whose elements are
+        // {value, typed_value} groups. Set by the factory instead of root_typed_value_reader.
+        std::unique_ptr<ShreddedFieldNode> root_array_node;
     };
 
 public:
@@ -424,12 +427,14 @@ public:
                          std::move(root_typed_value_type)),
               _shredded_fields(std::move(shredded_fields)),
               _requested_shredded_paths(std::move(parsed_shredded_paths)) {
-        // Both readers must be non-null for VariantColumnReader to function correctly
+        // The value reader is null when the file has no top-level `value` column: the row is then rebuilt from
+        // typed_value alone.
         DCHECK(_top_level.metadata_reader != nullptr) << "VariantColumnReader: metadata reader cannot be null";
-        DCHECK(_top_level.value_reader != nullptr) << "VariantColumnReader: value reader cannot be null";
     }
 
     ~VariantColumnReader() override = default;
+
+    void set_root_array_node(std::unique_ptr<ShreddedFieldNode> node) { _top_level.root_array_node = std::move(node); }
 
     Status prepare() override;
 

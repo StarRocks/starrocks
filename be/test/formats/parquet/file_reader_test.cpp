@@ -5462,4 +5462,71 @@ TEST_F(FileReaderTest, test_read_variant_shredding_full_column_ignores_extended_
     ASSERT_EQ(R"({"extra":1,"kind":"identity","note":"n1"})", variant_row_json(variant_col, 2));
 }
 
+// A whole-variant read of the shredded shapes in test_data/gen_variant_shredding_top_level_shapes.py: a top-level array
+// typed_value (of scalars, of arrays and of objects), and variants or array elements that have no `value` column. The
+// shredding specification makes `value` optional, and other engines may either read or reject such files; this reader
+// reads them. "NULL" in the expected rows is a SQL NULL.
+TEST_F(FileReaderTest, test_read_variant_shredding_top_level_shapes) {
+    struct ShapeCase {
+        std::string file;
+        std::vector<std::string> expected_rows;
+    };
+    const std::vector<ShapeCase> cases = {
+            {"variant_shredding_top_level_array.parquet",
+             {R"(["red","green"])", R"(["red",null,"blue"])", "[null]", "[1]", "NULL", "[]"}},
+            {"variant_shredding_nested_array.parquet", {R"([["a","b"],[],["c"]])"}},
+            {"variant_shredding_array_of_objects.parquet", {R"([{"a":1,"b":"x"},{"a":2,"b":"y"}])"}},
+            {"variant_shredding_no_value_column.parquet", {"34", "35"}},
+            {"variant_shredding_array_no_element_value.parquet", {R"(["red","green"])"}},
+    };
+    for (const auto& shape : cases) {
+        SCOPED_TRACE(shape.file);
+        const std::string variant_file_path = "./be/test/formats/parquet/test_data/" + shape.file;
+        auto file_reader = _create_file_reader(variant_file_path);
+        TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+        Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+        auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+        Status status = file_reader->init(&ctx->format_scan_context);
+        ASSERT_TRUE(status.ok()) << status.message();
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+        status = file_reader->get_next(&chunk);
+        ASSERT_TRUE(status.ok()) << status.message();
+        ASSERT_EQ(shape.expected_rows.size(), chunk->num_rows());
+
+        const ColumnPtr& column = chunk->get_column_by_index(0);
+        const auto* nullable = down_cast<const NullableColumn*>(column.get());
+        const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+        for (size_t row = 0; row < shape.expected_rows.size(); ++row) {
+            if (shape.expected_rows[row] == "NULL") {
+                EXPECT_TRUE(nullable->is_null(row)) << "row " << row;
+                continue;
+            }
+            ASSERT_FALSE(nullable->is_null(row)) << "row " << row;
+            EXPECT_EQ(shape.expected_rows[row], variant_row_json(variant_col, row)) << "row " << row;
+        }
+    }
+}
+
+// A list of shredded variants whose typed_value is an object. The levels of the leaves below the variants have one entry
+// per element, so they cannot tell the presence of an object per row: the column must still read as before.
+TEST_F(FileReaderTest, test_read_variant_shredding_in_array_reads_objects_with_top_level_shapes) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_in_array.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+    TypeDescriptor array_of_variant = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
+    Utils::SlotDesc slot_descs[] = {{"arr", array_of_variant}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << status.message();
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(array_of_variant, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(2, chunk->num_rows());
+    EXPECT_EQ(R"([{"x":1},{"x":2}])", chunk->get_column_by_index(0)->debug_item(0));
+    EXPECT_EQ(R"([{"x":3}])", chunk->get_column_by_index(0)->debug_item(1));
+}
+
 } // namespace starrocks::parquet
