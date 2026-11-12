@@ -1785,6 +1785,23 @@ public class UtFrameUtils {
             }
         }
 
+        /**
+         * Removes every record queued for the follower and returns them deserialized, in journal order.
+         */
+        public static synchronized List<JournalEntity> drainFollowerJournal() throws InterruptedException, IOException {
+            assert (followerJournalQueue != null);
+            List<JournalEntity> entities = new ArrayList<>();
+            while (!followerJournalQueue.isEmpty()) {
+                DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
+                try (DataInputStream dis = new DataInputStream(
+                        new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()))) {
+                    short opCode = dis.readShort();
+                    entities.add(new JournalEntity(opCode, EditLogDeserializer.deserialize(opCode, dis)));
+                }
+            }
+            return entities;
+        }
+
         public static synchronized void replayJournalToEnd() throws InterruptedException, IOException {
             int count = followerJournalQueue.size();
             while (!followerJournalQueue.isEmpty()) {
