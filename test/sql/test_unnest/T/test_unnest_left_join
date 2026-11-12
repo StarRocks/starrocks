@@ -42,3 +42,11 @@ select id, scores, gen from student_score left join generate_series(1, 3) as t(g
 
 -- multi-unnest
 select * from student_score left join unnest(scores, []) on true order by 1, 3;
+
+-- a NULL array argument gives no rows, or a NULL-padded row in a left join
+select id, x from student_score, unnest(cast(null as array<int>)) as t(x) order by 1, 2;
+select id, x from student_score left join unnest(cast(null as array<int>)) as t(x) on true order by 1, 2;
+
+-- a NULL array alongside another array keeps the other array's elements
+select id, x, y from student_score, unnest(scores, cast(null as array<int>)) as t(x, y) order by 1, 2;
+select id, x, y from student_score left join unnest(scores, cast(null as array<int>)) as t(x, y) on true order by 1, 2;

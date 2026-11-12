@@ -1197,16 +1197,16 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             outputColumns.add(columnRefFactory.create(colName, tableFunction.getTableFnReturnTypes().get(i), true));
         }
 
-        FunctionCallExpr expr = new FunctionCallExpr(tableFunction.getFunctionName().getFunction(), node.getChildExpressions());
-        expr.setFn(tableFunction);
-        ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr, context, columnRefFactory);
-
-        if (operator.isConstantRef() && ((ConstantOperator) operator).isNull()) {
-            throw new StarRocksPlannerException("table function not support null parameter", ErrorType.USER_ERROR);
-        }
-
+        // Translate the arguments one by one instead of as a scalar call: scalar NULL propagation would fold the
+        // whole call to NULL when any argument is NULL, but a table function is a relation, not a value. UNNEST of
+        // a NULL array produces no rows, or a NULL-padded row in a left join, and leaves the other arrays intact.
         List<Pair<ColumnRefOperator, ScalarOperator>> projectMap = new ArrayList<>();
-        for (ScalarOperator scalarOperator : operator.getChildren()) {
+        for (int i = 0; i < node.getChildExpressions().size(); ++i) {
+            Expr argument = TypeManager.addCastExpr(node.getChildExpressions().get(i), tableFunction.getArgs()[i]);
+            ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(argument, context, columnRefFactory);
+            if (scalarOperator.isConstantNull() && !FunctionSet.UNNEST.equalsIgnoreCase(tableFunction.functionName())) {
+                throw new StarRocksPlannerException("table function not support null parameter", ErrorType.USER_ERROR);
+            }
             if (scalarOperator instanceof ColumnRefOperator) {
                 projectMap.add(Pair.create((ColumnRefOperator) scalarOperator, scalarOperator));
             } else {
