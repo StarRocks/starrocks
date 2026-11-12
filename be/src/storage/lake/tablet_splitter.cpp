@@ -744,53 +744,11 @@ std::unordered_map<uint32_t, RowsetAnchor> build_rowset_anchor(const TabletMetad
                 a.num_rows += sm.num_rows();
             }
         }
-<<<<<<< HEAD
         if (rowset.has_data_size()) {
             a.data_size = rowset.data_size();
         } else {
             for (const auto& sm : rowset.segment_metas()) {
                 a.data_size += sm.size();
-=======
-        uint32_t previous = 0;
-        bool first = true;
-        for (const auto& segment : rowset.segment_metas()) {
-            // Charged nothing for samples: metadata sort-key samples are no longer written, so the
-            // count is always zero. The declaration itself is already charged above.
-            if (!segment.has_num_rows()) {
-                fallback = Status::NotSupported("tablet split segment row count is absent");
-            }
-            if (!segment.has_segment_idx()) {
-                fallback = Status::NotSupported("tablet split segment index is absent");
-            } else {
-                const uint32_t index = segment.segment_idx();
-                if (!first && index <= previous) {
-                    return Status::Corruption("tablet split segment indices are not strictly increasing");
-                }
-                if (uint64_t{rowset.id()} + index > UINT32_MAX) {
-                    return Status::Corruption("tablet split segment RSSID overflows uint32");
-                }
-                previous = index;
-                first = false;
-            }
-            // A segment with rows but without sort key bounds (for example, bounds kept in a field this
-            // binary does not know) cannot be placed in a child range.
-            if (segment.num_rows() > 0 &&
-                !(segment.has_sort_key_min() && segment.has_sort_key_max() &&
-                  segment.sort_key_min().values_size() > 0 && segment.sort_key_max().values_size() > 0)) {
-                fallback = Status::NotSupported("tablet split segment has no sort key bounds");
-            }
-            RETURN_IF_ERROR(insert_physical_slice(segment, &slices).status());
-        }
-        for (const auto& del : rowset.del_files()) {
-            RETURN_IF_ERROR(budget->consume(1, "source delete declaration"));
-            const uint64_t offset = del.has_op_offset() ? del.op_offset() : previous;
-            if (uint64_t{del.origin_rowset_id()} + offset > UINT32_MAX) {
-                return Status::Corruption("tablet split delete replay span overflows uint32");
-            }
-            if (del.origin_rowset_id() == rowset.id() &&
-                (rowset.segment_metas_size() == 0 ? offset != 0 : offset > previous)) {
-                fallback = Status::NotSupported("tablet split self-origin delete offset exceeds rowset replay span");
->>>>>>> 8e8520e ([BugFix][RB-1485] Fall back to an identical tablet when a split source segment has no sort key bounds (#83016))
             }
         }
         if (rowset.has_num_dels()) {
@@ -1059,6 +1017,25 @@ Status build_segments_from_rowsets_impl(TabletManager* tablet_manager, const Tab
     return Status::OK();
 }
 
+// A segment that may hold rows but has no sort key bounds (for example, bounds kept in a field this binary
+// does not know) cannot be placed in a child range: both split-range computations would read the missing bound
+// as an empty tuple, which colocate boundary synthesis indexes into and the row distribution charges to the
+// wrong child. A segment whose row count is not recorded may hold rows, so only a recorded zero lets a
+// bound-less segment through: it has nothing to place. Each computation runs this before reading any bound,
+// and split_tablet turns the NotSupported into an identical tablet.
+Status check_segment_sort_key_bounds(const TabletMetadataPB& metadata) {
+    for (const auto& rowset : metadata.rowsets()) {
+        for (const auto& segment : rowset.segment_metas()) {
+            if ((!segment.has_num_rows() || segment.num_rows() > 0) &&
+                !(segment.has_sort_key_min() && segment.has_sort_key_max() &&
+                  segment.sort_key_min().values_size() > 0 && segment.sort_key_max().values_size() > 0)) {
+                return Status::NotSupported("tablet split segment has no sort key bounds");
+            }
+        }
+    }
+    return Status::OK();
+}
+
 // Compute split_count tablet ranges covering the tablet's key space.
 //
 // Postcondition on Status::OK: split_ranges->size() == split_count.
@@ -1100,6 +1077,7 @@ Status get_tablet_split_ranges_impl(TabletManager* tablet_manager, const TabletM
         }
     }
 
+    RETURN_IF_ERROR(check_segment_sort_key_bounds(*tablet_metadata));
     std::vector<SegmentSplitInfo> segments;
     RETURN_IF_ERROR(build_segments_from_rowsets_impl(tablet_manager, tablet_metadata, *tablet_schema,
                                                      /*split_width=*/split_count,
@@ -1394,6 +1372,9 @@ Status compute_split_ranges_from_external_boundaries_impl(TabletManager* tablet_
     if (old_tablet_metadata->rowsets_size() == 0) {
         return Status::OK();
     }
+
+    // 4a. Every segment with rows must carry the sort key bounds step 5 reads.
+    RETURN_IF_ERROR(check_segment_sort_key_bounds(*old_tablet_metadata));
 
     // 5. Build SegmentSplitInfo from rowsets via shared helper. Empty-segments
     //    here is corruption (we already short-circuited the empty-rowsets case
