@@ -69,6 +69,7 @@ public class LogicalLanceScanOperator extends LogicalScanOperator {
         @Override
         public LogicalLanceScanOperator.Builder withOperator(LogicalLanceScanOperator scanOperator) {
             super.withOperator(scanOperator);
+            builder.setScanOptimizeOption(scanOperator.getScanOptimizeOption().copy());
             builder.predicates = scanOperator.predicates.clone();
             return this;
         }
