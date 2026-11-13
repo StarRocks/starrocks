@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Recovers a database, table, or partition that was dropped by using the DROP command."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # RECOVER

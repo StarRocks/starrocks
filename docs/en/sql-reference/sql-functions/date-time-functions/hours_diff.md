@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the hour difference between two date expressions (expr1 − expr2), accurate to the hour."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hours_diff

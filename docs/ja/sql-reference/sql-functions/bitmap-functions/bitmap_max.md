@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ビットマップの最大値を取得します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_max

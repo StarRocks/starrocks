@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回输入字符串的 32 位 XXH32 hash 值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # xx_hash32

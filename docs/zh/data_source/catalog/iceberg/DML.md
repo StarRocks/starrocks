@@ -4,6 +4,7 @@ displayed_sidebar: docs
 description: "StarRocks Iceberg catalog 支持 DML 操作，包括向 Iceberg 表插入数据。"
 toc_max_heading_level: 5
 keywords: ['iceberg', 'dml', 'insert', 'sink data', 'overwrite']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Iceberg DML 操作

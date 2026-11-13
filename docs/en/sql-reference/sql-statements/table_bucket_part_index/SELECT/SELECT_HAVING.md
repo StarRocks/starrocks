@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_label: "HAVING"
 description: "The HAVING clause does not filter row data in a table, but filters the results of aggregate functions."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # HAVING

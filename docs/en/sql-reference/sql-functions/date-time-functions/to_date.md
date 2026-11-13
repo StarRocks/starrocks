@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a DATETIME value into a date."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # to_date

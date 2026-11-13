@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "1つ以上のキーと値のペアをJSONオブジェクトに変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # json_object

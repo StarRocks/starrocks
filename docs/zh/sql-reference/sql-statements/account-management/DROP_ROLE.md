@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP ROLE drops a role."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP ROLE

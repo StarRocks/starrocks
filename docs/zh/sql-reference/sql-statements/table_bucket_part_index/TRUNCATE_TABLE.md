@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "TRUNCATE TABLE clears data from specified table or partition while retaining structure."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # TRUNCATE TABLE

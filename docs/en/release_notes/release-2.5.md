@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 2.5 release notes: Delta Lake catalog, Data Cache for external storage, Query Cache, query queues, resource groups for data loading, STRUCT/MAP..."
+products: [oss]
 ---
 
 # StarRocks version 2.5

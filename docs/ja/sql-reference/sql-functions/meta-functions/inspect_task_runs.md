@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "FEタスクマネージャーの現在のステータスをJSON形式で返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # inspect_task_runs

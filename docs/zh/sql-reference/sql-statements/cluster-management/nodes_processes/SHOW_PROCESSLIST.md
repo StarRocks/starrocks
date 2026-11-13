@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW PROCESSLIST 列出服务器内线程当前正在执行的操作。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW PROCESSLIST

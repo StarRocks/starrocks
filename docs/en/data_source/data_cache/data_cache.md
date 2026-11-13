@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "Understand the core principles of Data Cache and how to accelerate data queries with Data Cache."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Data Cache

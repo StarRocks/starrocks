@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "json_path式で特定できる要素の値をJSONオブジェクトからクエリし、JSON値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # json_query

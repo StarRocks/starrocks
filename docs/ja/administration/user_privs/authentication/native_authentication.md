@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "SQL コマンドでネイティブ（パスワードベース）認証によるユーザー作成・管理を行います。"
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ネイティブ認証

@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: Partition data in StarRocks
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 表达式分区（推荐）

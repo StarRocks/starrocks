@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された年数を日付に追加します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # years_add

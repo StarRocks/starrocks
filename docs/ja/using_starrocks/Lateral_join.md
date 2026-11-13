@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "Lateral Join と unnest() を StarRocks で組み合わせて配列カラムを行に変換します (列から行への変換)。"
 sidebar_position: 50
 keywords: ['explode']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Lateral Join を使用した列から行への変換

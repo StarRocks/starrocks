@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "BE/CN ノードを BE ブラックリストから削除します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DELETE BACKEND/COMPUTE NOT BLACKLIST

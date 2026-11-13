@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算一组 Bitmap 值的并集并返回并集的基数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_union_count

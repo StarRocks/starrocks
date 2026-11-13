@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Configure and use Query Cache in StarRocks to store intermediate aggregation results in memory, improving QPS and reducing latency for repeated queries."
 sidebar_position: 10
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query Cache

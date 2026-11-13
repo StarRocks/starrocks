@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "VARIANT 値が VARIANT null（JSON null など）かどうかを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # is_variant_null

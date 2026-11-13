@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Use asynchronous materialized views in StarRocks to accelerate queries against data lake tables (Iceberg, Hive, Hudi, Delta Lake) through transparent rewrite."
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # マテリアライズドビューによるデータレイククエリアクセラレーション

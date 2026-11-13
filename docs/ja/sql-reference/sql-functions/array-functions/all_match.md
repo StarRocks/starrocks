@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ALL_MATCH関数は配列のすべての要素が指定された述語に一致するかどうかを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # all_match

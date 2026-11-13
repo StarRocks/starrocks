@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "fe_metrics 提供每个 FE 节点指标的信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # fe_metrics

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SELECT queries data from one or more tables, views, or materialized views."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SELECT

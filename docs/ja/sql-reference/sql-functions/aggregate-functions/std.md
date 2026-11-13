@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "STD関数は式の標準偏差を返し、v2.5.10以降はウィンドウ関数としても使用できます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # std

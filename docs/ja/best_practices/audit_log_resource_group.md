@@ -1,6 +1,7 @@
 ---
 sidebar_position: 120
 description: "監査ログテーブル分析によるデータ駆動型リソースグループ設定で効率的なマルチテナント環境を実現します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 監査ログベースのリソースグループ設定

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "引数の立方根を計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # cbrt

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE FUNCTION creates a user-defined function (UDF)."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE FUNCTION

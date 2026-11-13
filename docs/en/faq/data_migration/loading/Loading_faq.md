@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "You were running load jobs too frequently, and the data was not compacted in a timely manner."
+products: [oss, enterprise]
 ---
 
 # Data loading common questions

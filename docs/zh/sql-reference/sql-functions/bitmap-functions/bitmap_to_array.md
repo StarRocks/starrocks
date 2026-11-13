@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将 BITMAP 中的所有值组合成 BIGINT 类型的数组。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_to_array

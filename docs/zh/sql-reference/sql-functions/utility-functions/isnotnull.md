@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "判断输入值是否为非 NULL；不是 NULL 返回 1，否则返回 0。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # isnotnull

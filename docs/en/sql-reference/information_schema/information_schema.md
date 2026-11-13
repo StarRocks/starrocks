@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "The StarRocks Information Schema is a database within each StarRocks instance."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Information Schema

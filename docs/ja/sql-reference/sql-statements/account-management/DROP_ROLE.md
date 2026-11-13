@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP ROLE removes a role from StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP ROLE

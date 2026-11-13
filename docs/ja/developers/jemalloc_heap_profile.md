@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks BE ノードの Jemalloc ヒーププロファイル有効化・可視化によるメモリ診断方法。"
+products: [oss]
 ---
 
 # Jemalloc ヒーププロファイリング

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "現在の時刻を取得し、TIME 型の値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date

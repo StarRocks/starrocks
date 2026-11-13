@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the input value unchanged but acts as an optimization barrier for the FE (Frontend) optimizer."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # materialize

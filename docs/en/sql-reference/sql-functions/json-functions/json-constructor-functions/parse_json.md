@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a string to a JSON value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # parse_json

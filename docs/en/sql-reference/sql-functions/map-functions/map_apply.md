@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Applies a Lambda expression to the keys and values of the original Map and generates a new Map."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # map_apply

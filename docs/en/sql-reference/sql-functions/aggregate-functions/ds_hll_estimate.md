@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Estimates the approximate distinct count from a serialized DataSketches HyperLogLog (HLL) sketch."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_hll_estimate

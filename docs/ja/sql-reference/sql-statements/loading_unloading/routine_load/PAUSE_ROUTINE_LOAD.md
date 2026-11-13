@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "実行中の Routine Load ジョブを一時停止します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # PAUSE ROUTINE LOAD

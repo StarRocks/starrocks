@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "StarRocks のレガシーレンジパーティション化は時系列データに適し、動的パーティショニング戦略で TTL を管理できます。"
 sidebar_position: 30
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # レンジパーティション化 (レガシー)

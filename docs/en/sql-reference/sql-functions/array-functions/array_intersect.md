@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns an array of the elements in the intersection of one or more arrays."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_intersect

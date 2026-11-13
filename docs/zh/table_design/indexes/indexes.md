@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "Overview of index types in StarRocks: built-in indexes (Prefix, Ordinal, ZoneMap) and user-created indexes (Bitmap, Bloom filter)."
 keywords: ['suoyin']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 索引

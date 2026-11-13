@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "applicable_roles テーブルは現在のユーザーに適用可能なロール情報を提供。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # applicable_roles

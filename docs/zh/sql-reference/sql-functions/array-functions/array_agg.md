@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将列中的值（包括NULL）聚合成数组，支持使用ORDER BY对元素排序。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_agg

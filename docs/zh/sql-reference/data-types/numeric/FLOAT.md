@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "FLOAT 是 4 字节浮点数类型。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FLOAT

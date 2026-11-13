@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "使用显式 CRS 从 WKT 构造原生 GEOMETRY，或使用旧版单参数格式。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_GeomFromText, ST_GeometryFromText

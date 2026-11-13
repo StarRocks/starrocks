@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "be_bvars provides statistical information regarding bRPC."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # be_bvars

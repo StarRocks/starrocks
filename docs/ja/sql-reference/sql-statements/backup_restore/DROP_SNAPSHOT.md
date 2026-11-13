@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "データスナップショットとそのデータファイルをリポジトリから削除します。"
+products: [oss, enterprise, anywhere]
 ---
 
 # DROP SNAPSHOT

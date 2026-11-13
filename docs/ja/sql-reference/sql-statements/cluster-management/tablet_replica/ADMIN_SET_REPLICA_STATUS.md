@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ADMIN SET REPLICA STATUS は、指定されたレプリカのステータスを設定するために使用されます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN SET REPLICA STATUS

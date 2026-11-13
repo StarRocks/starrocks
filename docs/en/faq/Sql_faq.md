@@ -2,6 +2,7 @@
 sidebar_position: 50
 displayed_sidebar: docs
 description: "FAQ for common StarRocks SQL questions."
+products: [oss, enterprise]
 ---
 
 # SQL query

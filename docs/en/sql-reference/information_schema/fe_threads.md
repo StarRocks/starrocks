@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "fe_threads provides information about the threads running on each FE node."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # fe_threads

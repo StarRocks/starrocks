@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "2つの配列の交差が空かどうかを確認します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # arrays_overlap

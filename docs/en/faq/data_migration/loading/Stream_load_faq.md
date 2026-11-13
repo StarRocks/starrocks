@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Stream Load does not support identifying column names held in the first few rows of a CSV-formatted file."
+products: [oss, enterprise]
 ---
 
 # Stream Load

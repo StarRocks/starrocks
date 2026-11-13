@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Serializes a native GEOMETRY or GEOGRAPHY value as WKB."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_AsBinary, ST_AsWKB

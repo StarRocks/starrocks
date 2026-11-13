@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "近似计算不同值数量的聚合函数，比 COUNT(DISTINCT) 更快，处理高基数列时内存占用更少。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_theta_count_distinct

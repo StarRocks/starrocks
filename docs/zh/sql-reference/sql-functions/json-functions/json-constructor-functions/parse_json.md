@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将字符串转换为JSON值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # parse_json

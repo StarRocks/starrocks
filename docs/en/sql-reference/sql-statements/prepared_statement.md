@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "From v3.2 onwards, StarRocks provides prepared statements for executing SQL statements multiple times with the same structure but different variables."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Prepared statements

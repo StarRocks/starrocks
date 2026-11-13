@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "辞書オブジェクト内のキーにマップされた値をクエリします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # dictionary_get

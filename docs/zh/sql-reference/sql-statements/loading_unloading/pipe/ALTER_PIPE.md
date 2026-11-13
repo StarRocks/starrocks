@@ -2,6 +2,7 @@
 keywords: ['xiugai'] 
 displayed_sidebar: docs
 description: "修改 Pipe 的执行参数和属性配置。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER PIPE

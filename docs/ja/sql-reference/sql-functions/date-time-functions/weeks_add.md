@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "日付に指定された週数を追加した値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # weeks_add

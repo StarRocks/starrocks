@@ -4,6 +4,7 @@ description: "如何在 StarRocks 存算分离集群中配置和使用 Data Cach
 sidebar_position: 20
 toc_max_heading_level: 2
 keywords: ['huan cun']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 

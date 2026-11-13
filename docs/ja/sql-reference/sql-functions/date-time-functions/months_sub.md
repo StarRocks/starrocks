@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された月を日付から減算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # months_sub

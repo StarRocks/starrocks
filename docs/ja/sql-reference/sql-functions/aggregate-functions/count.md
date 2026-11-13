@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された式に基づいて、行の総数を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # count

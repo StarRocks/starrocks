@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 description: "Deletes a data snapshot and its data files from a repository."
 ---
 

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 系统限制和命名规则，包括数据库、表、分区、列等对象的命名要求。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 系统限制

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ARRAY_GENERATE関数は指定された範囲内の異なる値の配列を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_generate

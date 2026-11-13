@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the number of elements in a MAP value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # map_size

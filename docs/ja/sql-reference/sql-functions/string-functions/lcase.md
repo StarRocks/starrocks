@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列を小文字に変換します。lcase関数と同じです。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # lcase

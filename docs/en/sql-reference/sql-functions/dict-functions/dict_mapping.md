@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the value mapped to the specified key in a dictionary table."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # dict_mapping

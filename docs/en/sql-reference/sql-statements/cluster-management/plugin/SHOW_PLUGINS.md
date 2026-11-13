@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW PLUGINS is used to view the installed plugins."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW PLUGINS

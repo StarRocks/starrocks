@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Constructs a native GEOGRAPHY value from WKB."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_GeogFromWKB

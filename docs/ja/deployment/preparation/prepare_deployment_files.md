@@ -2,6 +2,7 @@
 sidebar_position: 40
 displayed_sidebar: docs
 description: "x86 または ARM ベースの CPU 向け StarRocks デプロイメントファイルの準備方法。"
+products: [oss]
 ---
 
 # デプロイメントファイルの準備

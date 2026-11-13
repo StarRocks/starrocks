@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将某个 AI provider 设为其类型的默认值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SET DEFAULT AI PROVIDER

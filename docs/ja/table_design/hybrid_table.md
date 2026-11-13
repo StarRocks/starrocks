@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "StarRocks v3.2.3 以降のハイブリッド行列ストレージは高コンカレンシーポイントクエリと部分列更新に対応します。"
 sidebar_position: 60
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Beta from '../_assets/commonMarkdown/_beta.mdx'

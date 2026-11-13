@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "選択されたフィールドの平均値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # avg

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Calculates the square root of a value."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # sqrt, dsqrt

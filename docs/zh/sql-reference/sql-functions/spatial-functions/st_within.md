@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "判断点是否严格位于多边形内部。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Within

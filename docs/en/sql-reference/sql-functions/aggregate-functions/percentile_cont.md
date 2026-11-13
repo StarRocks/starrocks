@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Computes the percentile value of expr with linear interpolation."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_cont

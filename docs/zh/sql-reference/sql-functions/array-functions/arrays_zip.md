@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据元素位置将给定的数组合并为 Struct 数组，其中第 n 个 Struct 包含所有输入数组的第 n 个值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # arrays_zip

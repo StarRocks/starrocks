@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 10
 description: "共有データクラスター上でClaudeとStarRocks MCPサーバーを使用して複雑なデータを分析します。"
+products: [oss]
 ---
 
 import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'

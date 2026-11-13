@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "检查一个 JSON 文档是否包含特定的值或子文档。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # json_contains

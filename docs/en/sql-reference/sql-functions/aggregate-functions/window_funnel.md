@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Searches for an event chain in a sliding window and calculates the maximum number of consecutive events in the event chain."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # window_funnel

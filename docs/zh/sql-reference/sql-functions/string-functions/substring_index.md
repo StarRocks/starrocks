@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从字符串中截取指定次数分隔符之前或之后的部分。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # substring_index

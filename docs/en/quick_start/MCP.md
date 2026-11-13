@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 10
 description: "Analyze complex data with Claude and the StarRocks MCP server on a shared-data cluster."
+products: [oss]
 ---
 
 import AIStorLicense from '../_assets/commonMarkdown/aistor_license.mdx'

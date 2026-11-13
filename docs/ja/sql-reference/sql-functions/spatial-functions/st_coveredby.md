@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "境界を含めて点がポリゴンに覆われるかどうかを判定します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_CoveredBy

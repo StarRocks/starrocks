@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回 GEOGRAPHY 或 GEOMETRY 值的 OGC 几何类型。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_GEOMETRYTYPE

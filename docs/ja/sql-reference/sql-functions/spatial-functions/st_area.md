@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ネイティブ GEOGRAPHY または GEOMETRY 値の 2 次元面積を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Area
