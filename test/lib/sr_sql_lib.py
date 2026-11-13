@@ -3970,14 +3970,28 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             res1 == res2, "assert two plans are different, plan1: {}, plan2: {}".format(res1["result"], res2["result"])
         )
 
+    @staticmethod
+    def _query_result_haystacks(result):
+        """
+        Texts to search a query result in. str() of the result tuple escapes quotes (a cell holding both ' and "
+        is printed as '...\\'...'), so an expectation with a single quote never matches it. The cells joined as
+        they are is searched as well; str() is kept so that existing expectations written against it still match.
+        """
+        haystacks = [str(result)]
+        if isinstance(result, (list, tuple)):
+            rows = [row if isinstance(row, (list, tuple)) else (row,) for row in result]
+            haystacks.append("\n".join("\t".join(str(cell) for cell in row) for row in rows))
+        return haystacks
+
     def assert_query_contains(self, query, *expects):
         """
         assert explain result contains expect string
         """
         res = self.execute_sql(query, True)
+        haystacks = self._query_result_haystacks(res["result"])
         for expect in expects:
             tools.assert_true(
-                str(res["result"]).find(expect) > 0,
+                any(expect in haystack for haystack in haystacks),
                 "assert expect {} is not found in plan {}".format(expect, res["result"]),
             )
 
@@ -3986,9 +4000,10 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         assert query result does not contain expect string
         """
         res = self.execute_sql(query, True)
+        haystacks = self._query_result_haystacks(res["result"])
         for expect in expects:
             tools.assert_true(
-                str(res["result"]).find(expect) < 0,
+                all(expect not in haystack for haystack in haystacks),
                 "assert expect {} is unexpectedly found in result {}".format(expect, res["result"]),
             )
 
