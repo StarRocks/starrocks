@@ -4,6 +4,10 @@ toc_max_heading_level: 2
 sidebar_position: 20
 ---
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 73448c3 ([Doc] Merge the remaining single-use partials into their pages (#83169))
 # Data Cache
 
 v3.1.7 および v3.2.3 以降、StarRocks は共有データクラスタにおけるクエリを高速化するために Data Cache を導入し、以前のバージョンでの File Cache を置き換えました。Data Cache は必要に応じてリモートストレージからデータをブロック単位（MB 単位）でロードしますが、File Cache は必要なデータ行数に関係なく、毎回バックグラウンドでデータファイル全体をロードします。
@@ -125,6 +129,7 @@ CN ノード上でキャッシュされたデータをクリアする手順は�
 - `datacache.partition_duration` プロパティが特定の時間範囲に設定されている場合、その時間範囲を超えたデータはキャッシュされません。
 - 共有データクラスタを v3.3 から v3.2.8 以前にダウングレードした後、Data Cache のキャッシュされたデータを再利用する場合、ディレクトリ `starlet_cache` 内の Blockfile のファイル名形式を `blockfile_{n}.{version}` から `blockfile_{n}` に手動で変更し、バージョン情報のサフィックスを削除する必要があります。v3.2.9 以降のバージョンは v3.3 のファイル名形式と互換性があるため、この操作を手動で行う必要はありません。次のシェルスクリプトを実行して名前を変更できます：
 
+<<<<<<< HEAD
 ```Bash
 #!/bin/bash
 
@@ -139,6 +144,8 @@ for blockfile in ${starlet_cache_path}/blockfile_*; do
 done
 ```
 
+=======
+>>>>>>> 73448c3 ([Doc] Merge the remaining single-use partials into their pages (#83169))
 ## 既知の問題
 
 ### 高メモリ使用量

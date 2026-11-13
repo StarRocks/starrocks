@@ -3,7 +3,11 @@ displayed_sidebar: docs
 toc_max_heading_level: 4
 ---
 
+<<<<<<< HEAD
 import TableURL from '../../../_assets/commonMarkdown/stream_load_table_url.mdx';
+=======
+import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';
+>>>>>>> 73448c3 ([Doc] Merge the remaining single-use partials into their pages (#83169))
 import TableURLTip from '../../../_assets/commonMarkdown/stream_load_table_url_tip.mdx';
 
 # STREAM LOAD
@@ -55,7 +59,22 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 
 指定表的 URL。语法：
 
-<TableURL />
+```Plain
+http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
+```
+
+下表描述了 URL 中的参数。
+
+| 参数 | 是否必填 | 描述 |
+| ------------- | -------- | ------------------------------------------------------------ |
+| fe_host | 是 | 集群中 FE 节点的 IP 地址。<br />**注意**<br />如果您将导入作业提交到特定的 BE 或 CN 节点，则必须输入该 BE 或 CN 节点的 IP 地址。 |
+| fe_http_port | 是 | 集群中 FE 节点的 HTTP 端口号。默认端口号为 `8030`。<br />**注意**<br />如果您将导入作业提交到特定的 BE 或 CN 节点，则必须输入该 BE 或 CN 节点的 HTTP 端口号。默认端口号为 `8030`。 |
+| database_name | 是 | 表所属的数据库名称。 |
+| table_name | 是 | 表的名称。 |
+
+:::note
+您可以使用 [SHOW FRONTENDS](../cluster-management/nodes_processes/SHOW_FRONTENDS.md) 来查看 FE 节点的 IP 地址和 HTTP 端口。
+:::
 
 ### data_desc
 

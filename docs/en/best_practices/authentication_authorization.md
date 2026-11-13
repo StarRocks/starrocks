@@ -4,7 +4,6 @@ sidebar_position: 100
 
 # Authentication and Authorization
 
-import AuthSeeAlso from '../_assets/best_practices/auth_see_also.mdx'
 
 This topic aims to provide a coherent guide for best practices on developing your own authentication and authorization workflow.
 
@@ -327,4 +326,15 @@ If you prefer to use **StarRocks' built-in authorization system** while still re
 
 ![Authentication and Authorization - Solution-3](../_assets/best_practices/auth_solution_3.png)
 
-<AuthSeeAlso />
+## See also
+
+- **Authentication**
+  - [Native Authentication](../administration/user_privs/authentication/native_authentication.md)
+  - [Security Integration](../administration/user_privs/authentication/security_integration.md)
+  - [LDAP Authentication](../administration/user_privs/authentication/ldap_authentication.md)
+  - [OAuth 2.0 Authentication](../administration/user_privs/authentication/oauth2_authentication.md)
+  - [JSON Web Token Authentication](../administration/user_privs/authentication/jwt_authentication.md)
+- [**Group Provider**](../administration/user_privs/group_provider.md)
+- **Authorization**
+  - [Native Authorization](../administration/user_privs/authorization/User_privilege.md)
+  - [Apache Ranger Plugin](../administration/user_privs/authorization/ranger_plugin.md)

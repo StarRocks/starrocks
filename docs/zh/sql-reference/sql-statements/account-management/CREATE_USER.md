@@ -5,7 +5,6 @@ displayed_sidebar: docs
 # 创建用户
 
 import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.mdx'
-import AuthOption from '../../../_assets/commonMarkdown/AuthOption.mdx'
 
 `CREATE USER` 用于创建 StarRocks 用户。在 StarRocks 中，`user_identity` 唯一标识一个用户。从 v3.3.3 版本起，StarRocks 支持在创建用户时设置用户属性。
 
@@ -26,7 +25,34 @@ CREATE USER [IF NOT EXISTS] <user_identity>
 
   有关用户名的命名规范，请参阅 [系统限制](../../System_limit.md)。
 
-<AuthOption />
+- `auth_option` 指定认证方法。目前支持五种认证方法：StarRocks 原生密码、`mysql_native_password`、`authentication_ldap_simple`、JSON Web Token (JWT) 认证和 OAuth 2.0 认证。StarRocks 原生密码在逻辑上与 `mysql_native_password` 相同，但在语法上略有不同。一个用户身份只能使用一种认证方法。
+
+  ```SQL
+  auth_option: {
+      IDENTIFIED BY 'auth_string'
+      IDENTIFIED WITH mysql_native_password BY 'auth_string'
+      IDENTIFIED WITH mysql_native_password AS 'auth_string'
+      IDENTIFIED WITH authentication_ldap_simple AS 'auth_string'
+      IDENTIFIED WITH authentication_jwt [AS 'auth_properties']
+      IDENTIFIED WITH authentication_oauth2 [AS 'auth_properties']
+  }
+  ```
+
+  | **认证方法**    | **用户创建密码** | **登录密码** |
+| ---------------------------- | ------------------------------ | ---------------------- |
+| 原生密码                     | 明文或密文                     | 明文                   |
+| `mysql_native_password BY`   | 明文                           | 明文                   |
+| `mysql_native_password WITH` | 密文                           | 明文                   |
+| `authentication_ldap_simple` | 明文                           | 明文                   |
+
+  :::note
+StarRocks 在存储用户密码之前会对其进行加密。
+:::
+
+  有关 JSON Web Token (JWT) 认证和 OAuth 2.0 认证的 `auth_properties` 详细信息，请参阅相应文档：
+
+  - [JSON Web Token 认证](../../../administration/user_privs/authentication/jwt_authentication.md)
+  - [OAuth 2.0 认证](../../../administration/user_privs/authentication/oauth2_authentication.md)
 
 - `DEFAULT ROLE <role_name>[, <role_name>, ...]`：如果指定此参数，则在用户登录时，角色会自动分配给用户并默认激活。如果未指定，则此用户不具有任何权限。请确保所有指定的角色都已存在。
 

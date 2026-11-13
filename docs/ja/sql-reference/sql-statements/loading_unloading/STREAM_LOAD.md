@@ -4,7 +4,6 @@ toc_max_heading_level: 4
 ---
 
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';
-import TableURL from '../../../_assets/commonMarkdown/stream_load_table_url.mdx';
 import TableURLTip from '../../../_assets/commonMarkdown/stream_load_table_url_tip.mdx';
 
 # STREAM LOAD
@@ -59,7 +58,22 @@ HTTPリクエストメソッドを指定します。これは必須パラメー�
 
 テーブルのURLを指定します。構文：
 
-<TableURL />
+```Plain
+http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
+```
+
+以下の表は、URL内のパラメーターについて説明しています。
+
+| パラメーター     | 必須 | 説明                                                  |
+| ------------- | -------- | ------------------------------------------------------------ |
+| fe_host       | はい      | クラスター内のFEノードのIPアドレス。<br />**注**<br />ロードジョブを特定のBEまたはCNノードに送信する場合、そのBEまたはCNノードのIPアドレスを入力する必要があります。 |
+| fe_http_port  | はい      | クラスター内のFEノードのHTTPポート番号。デフォルトのポート番号は`8030`。<br />**注**<br />ロードジョブを特定のBEまたはCNノードに送信する場合、そのBEまたはCNノードのHTTPポート番号を入力する必要があります。デフォルトのポート番号は`8030`。 |
+| database_name | はい      | テーブルが属するデータベースの名前。         |
+| table_name    | はい      | テーブルの名前。                                       |
+
+:::note
+[SHOW FRONTENDS](../cluster-management/nodes_processes/SHOW_FRONTENDS.md) を使用して、FE ノードの IP アドレスと HTTP ポートを確認できます。
+:::
 
 ### data_desc
 

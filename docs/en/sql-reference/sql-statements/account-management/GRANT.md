@@ -6,7 +6,6 @@ toc_max_heading_level: 4
 # GRANT
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
-import MultiServiceAccess from '../../../_assets/commonMarkdown/multi-service-access.mdx'
 
 Grants roles or privileges on specific objects to a user, a role, or an external group.
 
@@ -270,5 +269,11 @@ GRANT db_admin, user_admin, cluster_admin TO EXTERNAL GROUP admin_group;
 
 <UserPrivilegeCase />
 
+<<<<<<< HEAD
 <MultiServiceAccess />
 
+=======
+---
+---
+For the best practices of multi-service access control, see [Multi-service access control](../../../administration/user_privs/authorization/User_privilege.md#multi-service-access-control).
+>>>>>>> 73448c3 ([Doc] Merge the remaining single-use partials into their pages (#83169))
