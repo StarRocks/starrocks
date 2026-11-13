@@ -902,6 +902,10 @@ bool TabletUpdates::_is_retryable(Status& status) {
     case TStatusCode::MEM_LIMIT_EXCEEDED:
     case TStatusCode::MEM_ALLOC_FAILED:
     case TStatusCode::TIMEOUT:
+    // A column-mode partial update fails with this when a column grows past what it can address
+    // (ChunkHelper::reject_if_over_capacity). Retrying does not make it fit, but the error state
+    // would fail every query on the tablet, while a stuck apply only blocks loads.
+    case TStatusCode::CAPACITY_LIMIT_EXCEED:
         return true;
     case TStatusCode::CORRUPTION:
     case TStatusCode::NOT_IMPLEMENTED_ERROR:
@@ -972,6 +976,7 @@ bool TabletUpdates::need_apply() const {
 DEFINE_FAIL_POINT(tablet_apply_normal_rowset_commit_internal_error);
 DEFINE_FAIL_POINT(tablet_apply_normal_rowset_commit_memory_exceed);
 DEFINE_FAIL_POINT(tablet_apply_column_partial_update_commit_internal_error);
+DEFINE_FAIL_POINT(tablet_apply_column_partial_update_finalize_capacity_exceed);
 DEFINE_FAIL_POINT(tablet_apply_load_rowset_update_state_failed);
 DEFINE_FAIL_POINT(tablet_apply_load_index_failed);
 DEFINE_FAIL_POINT(tablet_apply_rowset_not_found);
@@ -1207,6 +1212,9 @@ Status TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo&
     span->AddEvent("gen_delta_column_group");
     // 3. finalize and generate delta column group
     st = state.finalize(&_tablet, rowset.get(), rowset_id, index_meta, manager->mem_tracker(), new_del_vecs, index);
+    FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_column_partial_update_finalize_capacity_exceed, {
+        st = Status::CapacityLimitExceed("inject tablet_apply_column_partial_update_finalize_capacity_exceed");
+    });
     if (!st.ok()) {
         failure_handler("finalize failed", st);
         return apply_st;
