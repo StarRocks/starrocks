@@ -315,6 +315,7 @@ Typical scenarios that can make Exchange Operator the bottleneck of a query:
 | ShuffleBufferFlushRows | Number of rows sent by these early flushes. |
 | ShuffleBufferReleasedChunks | Number of partial chunks released after an early flush because the memory they still held exceeded half of `exchange_sink_buffer_flush_threshold_bytes`. |
 | PeakSerializedChunkBytes | Size of the largest serialized chunk before compression. |
+| PeakRequestBytes | Size of the largest request sent over the network, after compression if it applies. `BytesSent / RequestSent` gives the average request size. Passthrough data is not counted. |
 | SinkBufferPeakMemoryUsage | Peak memory of the requests waiting to be sent or in flight in the sink buffer. |
 | SinkBufferMemoryLimit | Memory limit of the sink buffer. By default, it is `sink_buffer_mem_limit_per_driver` multiplied by the number of destinations. When it is reached, the sink stops accepting data until requests complete. |
 | SinkBufferPeakInFlightRpcNum | Peak number of RPCs in flight at the same time. |
