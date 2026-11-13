@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
 description: "Checks whether the geometric figure shape1 can fully contain shape2."
-=======
-description: "Tests whether a polygon strictly contains a point."
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ST_Contains

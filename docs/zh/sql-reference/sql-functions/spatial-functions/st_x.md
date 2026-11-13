@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
 description: "如果 point 是有效的点类型，返回对应的 X 坐标值。"
-=======
-description: "返回 GEOGRAPHY 或 GEOMETRY 点的 X 坐标。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ST_X

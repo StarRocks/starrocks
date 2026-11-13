@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
 description: "ジオメトリ図形shape1がshape2を完全に含むかどうかを確認します。"
-=======
-description: "ポリゴンが点を内部に含むかどうかを判定します。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ST_Contains

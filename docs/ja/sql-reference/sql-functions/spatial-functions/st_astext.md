@@ -1,11 +1,7 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
 description: "ジオメトリ図形をWKT(Well Known Text)形式に変換します。"
-=======
-description: "GEOMETRY または GEOGRAPHY 値を WKT（Well-Known Text）形式に変換します。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ST_AsText,ST_AsWKT

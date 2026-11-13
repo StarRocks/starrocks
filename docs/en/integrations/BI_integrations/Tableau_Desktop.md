@@ -65,7 +65,7 @@ Before proceeding, make sure the following requirements are met:
       sudo cp /<path_to_driver_file_name>.jar /opt/tableau/tableau_driver/jdbc
       ```
   
-   2. Grant permission to the the "Tableau" user.
+   2. Grant permission to the "Tableau" user.
 
       ```Bash
       # Replace <driver_file_name> with the name of the driver file.

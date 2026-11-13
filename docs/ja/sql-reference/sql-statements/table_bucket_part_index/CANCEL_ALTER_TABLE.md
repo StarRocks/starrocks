@@ -1,10 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
-description: "CANCEL ALTER TABLE は実行中の ALTER TABLE 操作（列の変更、テーブルスキーマの最適化、ロールアップインデックスの作成・削除）をキャンセルします。"
 products: [oss, enterprise, cloud, anywhere]
->>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # CANCEL ALTER TABLE
