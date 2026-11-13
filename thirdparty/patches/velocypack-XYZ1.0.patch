@@ -9,3 +9,11 @@ diff -rupN velocypack-XYZ1.0.orig/include/velocypack/Slice.h velocypack-XYZ1.0/i
  
  #if __cplusplus >= 201703L
  #include <string_view>
+--- velocypack-XYZ1.0.orig/src/Dumper.cpp
++++ velocypack-XYZ1.0/src/Dumper.cpp
+@@ -223,3 +223,4 @@
+ void Dumper::appendDouble(double v) {
+-  char temp[24];
++  // Fixed notation can exceed 24 bytes once the minus sign is included.
++  char temp[32];
+   int len = fpconv_dtoa(v, &temp[0]);
