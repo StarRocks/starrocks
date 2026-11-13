@@ -16,7 +16,6 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.http.ActionController;
@@ -46,8 +45,7 @@ public class SyncCloudTableMetaAction extends RestBaseAction {
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response)
             throws DdlException, AccessDeniedException {
-        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        checkUserOwnsAdminRole(currentUser);
+        checkAdminRole(ConnectContext.get());
 
         if (redirectToLeader(request, response)) {
             return;

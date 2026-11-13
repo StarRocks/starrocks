@@ -37,7 +37,6 @@ package com.starrocks.http.action;
 import com.google.common.base.Strings;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -182,7 +181,6 @@ public class WebBaseAction extends BaseAction {
             ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             ctx.setRemoteIP(request.getHostString());
             checkCredential(ctx, parseAuthCredentials(request));
-            UserIdentity currentUser = ctx.getCurrentUserIdentity();
 
             if (needAdmin()) {
                 try {
@@ -192,7 +190,7 @@ public class WebBaseAction extends BaseAction {
 
                     Authorizer.checkSystemAction(context, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
-                    checkUserOwnsAdminRole(currentUser);
+                    checkAdminRole(ctx);
                 }
             }
             request.setAuthorized(true);
@@ -229,7 +227,11 @@ public class WebBaseAction extends BaseAction {
                     context.setCurrentRoleIds(sessionValue.currentUser);
                     Authorizer.checkSystemAction(context, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
+<<<<<<< HEAD
                     checkUserOwnsAdminRole(sessionValue.currentUser);
+=======
+                    checkAdminRole(sessionValue.connectContext);
+>>>>>>> aa7b3ba2a99... [BugFix][RB-1566] Count group roles and security-integration users in SHOW GRANTS FOR ROLE, SHOW AUTHENTICATION and the HTTP admin check (#69542)
                 }
                 authorized = true;
             } catch (AccessDeniedException e) {

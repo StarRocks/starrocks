@@ -319,11 +319,6 @@ public class MetricsActionTest {
                 return UserIdentity.ROOT;
             }
         };
-        new MockUp<MetricsAction>() {
-            @Mock
-            protected void checkUserOwnsAdminRole(UserIdentity currentUser) {
-            }
-        };
 
         DefaultHttpHeaders good = new DefaultHttpHeaders();
         good.add("Authorization", "Bearer good.jwt.token");

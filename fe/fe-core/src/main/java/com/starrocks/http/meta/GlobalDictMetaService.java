@@ -20,7 +20,6 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -71,8 +70,7 @@ public class GlobalDictMetaService {
             if (redirectToLeader(request, response)) {
                 return;
             }
-            UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-            checkUserOwnsAdminRole(currentUser);
+            checkAdminRole(ConnectContext.get());
             executeInLeaderWithAdmin(request, response);
         }
 

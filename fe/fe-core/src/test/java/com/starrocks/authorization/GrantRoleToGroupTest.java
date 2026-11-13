@@ -18,11 +18,18 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.MockedLocalMetaStore;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.epack.authorization.AuthorizationMgrEPack;
+import com.starrocks.epack.authorization.AuthorizationProviderEPack;
+>>>>>>> aa7b3ba2a99... [BugFix][RB-1566] Count group roles and security-integration users in SHOW GRANTS FOR ROLE, SHOW AUTHENTICATION and the HTTP admin check (#69542)
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.UpdateGroupToRoleLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.SetRoleExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.SqlModeHelper;
@@ -35,6 +42,7 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.NodePosition;
@@ -585,5 +593,73 @@ public class GrantRoleToGroupTest {
         ShowGrantsStmt showGrantsStmt = (ShowGrantsStmt) stmt;
         Assertions.assertEquals("g1", showGrantsStmt.getGroupOrRole());
         Assertions.assertEquals(GrantType.GROUP, showGrantsStmt.getGrantType());
+    }
+
+    /**
+     * A role a user holds through one of its groups lets it run SHOW GRANTS FOR ROLE on that role
+     * and on the roles above it, the same as a role granted to the user. Before, only roles granted
+     * to the user were checked, so a native user was refused for its group roles.
+     */
+    @Test
+    public void testShowGrantsForRoleHeldThroughGroup() throws Exception {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        AuthorizationMgr authorizationMgr = new AuthorizationMgrEPack(new AuthorizationProviderEPack());
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(authorizationMgr);
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
+
+        for (String sql : List.of("create role r_parent", "create role r_grp", "create role r_other",
+                "grant r_parent to role r_grp", "create user u_grp_role")) {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
+        }
+        GrantRoleStmt grantRoleStmt = new GrantRoleStmt(List.of("r_grp"), "g1", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(grantRoleStmt, ctx);
+        authorizationMgr.grantRole(grantRoleStmt);
+
+        ctx.setCurrentUserIdentity(new UserIdentity("u_grp_role", "%"));
+        ctx.setCurrentRoleIds(Set.of());
+        ctx.setGroups(Set.of("g1"));
+        Authorizer.check(new ShowGrantsStmt("r_grp", GrantType.ROLE, NodePosition.ZERO), ctx);
+        Authorizer.check(new ShowGrantsStmt("r_parent", GrantType.ROLE, NodePosition.ZERO), ctx);
+        Assertions.assertThrows(ErrorReportException.class,
+                () -> Authorizer.check(new ShowGrantsStmt("r_other", GrantType.ROLE, NodePosition.ZERO), ctx));
+
+        // Out of the group, the role is no longer held.
+        ctx.setGroups(Set.of());
+        Assertions.assertThrows(ErrorReportException.class,
+                () -> Authorizer.check(new ShowGrantsStmt("r_grp", GrantType.ROLE, NodePosition.ZERO), ctx));
+    }
+
+    /**
+     * SET ROLE on a role the user holds through a group fails as before, but says why: the role is
+     * always active, instead of claiming it is not granted.
+     */
+    @Test
+    public void testSetRoleOnGroupRoleExplainsWhy() throws Exception {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        AuthorizationMgr authorizationMgr = new AuthorizationMgrEPack(new AuthorizationProviderEPack());
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(authorizationMgr);
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
+
+        for (String sql : List.of("create role r_set_grp", "create role r_set_none", "create user u_set_role")) {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
+        }
+        GrantRoleStmt grantRoleStmt =
+                new GrantRoleStmt(List.of("r_set_grp"), "g_set", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(grantRoleStmt, ctx);
+        authorizationMgr.grantRole(grantRoleStmt);
+
+        ctx.setCurrentUserIdentity(new UserIdentity("u_set_role", "%"));
+        ctx.setGroups(Set.of("g_set"));
+        StarRocksException e = Assertions.assertThrows(StarRocksException.class, () -> SetRoleExecutor.execute(
+                (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser("set role r_set_grp", ctx), ctx));
+        Assertions.assertTrue(e.getMessage().contains("is granted to group g_set"), e.getMessage());
+        Assertions.assertTrue(e.getMessage().contains("always active"), e.getMessage());
+
+        // A role the user does not hold at all keeps the old message.
+        e = Assertions.assertThrows(StarRocksException.class, () -> SetRoleExecutor.execute(
+                (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser("set role r_set_none", ctx), ctx));
+        Assertions.assertTrue(e.getMessage().contains("is not granted to"), e.getMessage());
     }
 }

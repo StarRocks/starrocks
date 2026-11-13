@@ -3237,24 +3237,34 @@ public class ShowExecutor {
             if (statement.isAll()) {
                 authenticationInfoMap.putAll(authenticationManager.getUserToAuthenticationInfo());
             } else {
+                // Without FOR the statement describes the session's own user. Its identity,
+                // unlike one built from a name, also says whether the user is ephemeral.
                 UserRef user = statement.getUser();
-                UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
-                UserAuthenticationInfo userAuthenticationInfo;
-                if (statement.getUser() == null) {
-                    userAuthenticationInfo = authenticationManager
-                            .getUserAuthenticationInfoByUserIdentity(context.getCurrentUserIdentity());
-                } else {
-                    userAuthenticationInfo = authenticationManager.getUserAuthenticationInfoByUserIdentity(userIdentity);
-                }
-                authenticationInfoMap.put(userIdentity, userAuthenticationInfo);
+                UserIdentity userIdentity = user == null ? context.getCurrentUserIdentity()
+                        : new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+                authenticationInfoMap.put(userIdentity,
+                        authenticationManager.getUserAuthenticationInfoByUserIdentity(userIdentity));
             }
             for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : authenticationInfoMap.entrySet()) {
+                UserIdentity userIdentity = entry.getKey();
                 UserAuthenticationInfo userAuthenticationInfo = entry.getValue();
-                userAuthInfos.add(Lists.newArrayList(
-                        entry.getKey().toString(),
-                        userAuthenticationInfo.getPassword().length == 0 ? "No" : "Yes",
-                        userAuthenticationInfo.getAuthPlugin(),
-                        userAuthenticationInfo.getAuthString()));
+                if (userIdentity.isEphemeral()) {
+                    // An ephemeral user is not stored: the security integration that
+                    // authenticated it checked its credential, and no password is kept for it.
+                    String securityIntegration = context.getSecurityIntegration();
+                    userAuthInfos.add(Arrays.asList(userIdentity.toString(), "No",
+                            securityIntegration == null ? FeConstants.NULL_STRING : securityIntegration,
+                            FeConstants.NULL_STRING));
+                } else if (userAuthenticationInfo == null) {
+                    // the session's own user was dropped after it logged in
+                    throw new SemanticException("cannot find user " + userIdentity);
+                } else {
+                    userAuthInfos.add(Lists.newArrayList(
+                            userIdentity.toString(),
+                            userAuthenticationInfo.getPassword().length == 0 ? "No" : "Yes",
+                            userAuthenticationInfo.getAuthPlugin(),
+                            userAuthenticationInfo.getAuthString()));
+                }
             }
 
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), userAuthInfos);
