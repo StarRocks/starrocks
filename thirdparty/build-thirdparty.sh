@@ -664,7 +664,7 @@ build_simdjson() {
         -DCMAKE_CXX_FLAGS="$(append_flags "${CXXFLAGS}" "-O3 -fPIC")" \
         -DCMAKE_C_FLAGS="$(append_flags "${CFLAGS}" "-O3 -fPIC")" \
         -DCMAKE_POSITION_INDEPENDENT_CODE=True \
-        -DSIMDJSON_AVX512_ALLOWED=OFF \
+        -DSIMDJSON_AVX512_ALLOWED=ON \
         -DSIMDJSON_SKIPUTF8VALIDATION=ON ..
     $CMAKE_CMD --build .
     mkdir -p $TP_INSTALL_DIR/lib

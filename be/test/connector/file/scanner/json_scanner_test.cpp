@@ -2508,4 +2508,194 @@ TEST_F(JsonScannerTruncatedDocTest, rejected_record) {
     EXPECT_EQ((std::vector<std::string>{R"({"k1":"b")", kTruncatedDocument}), raw_records);
 }
 
+TEST_F(JsonScannerTruncatedDocTest, mid_document_syntax_error_positions) {
+    static_assert(simdjson::SIMDJSON_VERSION_MAJOR == 5,
+                  "Re-validate mid_document_syntax_error_positions on simdjson major version upgrade");
+    EXPECT_EQ(5, int(simdjson::SIMDJSON_VERSION_MAJOR));
+
+    // 1. First-only malformed document (with and without trailing newline)
+    for (const std::string& doc : {kMissingValueDocument, kMissingValueDocument + "\n"}) {
+        auto result = scan(TBrokerRangeDesc(), kK13Names, {doc});
+        EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+        EXPECT_EQ(0, result.rows);
+        EXPECT_EQ(1, result.filtered);
+    }
+
+    // 2. Middle position (valid, invalid, valid across stream buffers, with and without trailing newline)
+    for (const std::string& suffix : {std::string(""), std::string("\n")}) {
+        auto result = scan(
+                {R"({"k1":"a","k2":1})" + suffix, R"({"k1":"b","k2":})" + suffix, R"({"k1":"c","k2":3})" + suffix});
+        EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+        EXPECT_EQ(2, result.rows);
+        EXPECT_EQ(1, result.filtered);
+    }
+
+    // 3. Last position in same NDJSON buffer (valid, invalid, with and without trailing newline)
+    for (const std::string& suffix : {std::string(""), std::string("\n")}) {
+        auto result = scan({"{\"k1\":\"a\",\"k2\":1}\n{\"k1\":\"b\",\"k2\":}" + suffix});
+        EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+        EXPECT_EQ(1, result.rows);
+        EXPECT_EQ(1, result.filtered);
+    }
+
+    // 4. Consecutive mid-document syntax errors flanked by valid rows across separate stream buffers
+    const std::string valid1 = R"({"k1":"a","k2":"1"})";
+    const std::string valid2 = R"({"k1":"b","k2":"2"})";
+    auto multi_buf_result =
+            scan(TBrokerRangeDesc(), kK13Names, {valid1, kMissingValueDocument, kMissingValueDocument, valid2});
+    EXPECT_TRUE(multi_buf_result.status.is_end_of_file()) << multi_buf_result.status;
+    EXPECT_EQ(2, multi_buf_result.rows);
+    EXPECT_EQ(2, multi_buf_result.filtered);
+
+    // 5. Consecutive mid-document syntax errors flanked by valid rows in a single NDJSON buffer:
+    // advance() rebuilds the stream at _last_begin_offset and skips each failed record so subsequent
+    // valid records in the same buffer are recovered rather than silently dropped.
+    auto single_buf_result =
+            scan(TBrokerRangeDesc(), kK13Names,
+                 {valid1 + "\n" + kMissingValueDocument + "\n" + kMissingValueDocument + "\n" + valid2});
+    EXPECT_TRUE(single_buf_result.status.is_end_of_file()) << single_buf_result.status;
+    EXPECT_EQ(2, single_buf_result.rows);
+    EXPECT_EQ(2, single_buf_result.filtered);
+
+    // 6. Single-buffer resync across malformed record shapes (missing-value, missing-comma, trailing-comma)
+    // and positions (first record bad, middle record bad).
+    const std::string v = R"({"k1":"a","k2":1})";
+    for (const std::string& bad :
+         {std::string(R"({"k1":"x","k2":})"), std::string(R"({"k1":"x" "k2":9})"), std::string(R"({"k1":"x",})")}) {
+        auto mid_res = scan({v + "\n" + bad + "\n" + v + "\n" + v});
+        EXPECT_TRUE(mid_res.status.is_end_of_file()) << bad << ": " << mid_res.status;
+        EXPECT_EQ(3, mid_res.rows) << bad;
+        EXPECT_EQ(1, mid_res.filtered) << bad;
+
+        auto first_res = scan({bad + "\n" + v + "\n" + v});
+        EXPECT_TRUE(first_res.status.is_end_of_file()) << bad << ": " << first_res.status;
+        EXPECT_EQ(2, first_res.rows) << bad;
+        EXPECT_EQ(1, first_res.filtered) << bad;
+    }
+
+    // 7. Trailing or single-record missing-comma / missing-colon record where stage 1 cuts inside the failed
+    // record (truncated_bytes() > 0): advance() ends the stream with EndOfFile so preceding valid rows are
+    // preserved and the failed record is counted once as a single filtered row.
+    auto trailing_missing_comma = scan({v + "\n" + v + "\n" + R"({"k1":"x" "k2":9})"});
+    EXPECT_TRUE(trailing_missing_comma.status.is_end_of_file()) << trailing_missing_comma.status;
+    EXPECT_EQ(2, trailing_missing_comma.rows);
+    EXPECT_EQ(1, trailing_missing_comma.filtered);
+
+    for (const std::string& single_cut : {std::string(R"({"k1":"x" "k2":9})"), std::string(R"({"k1":"x","k2" "9"})")}) {
+        auto single_cut_res = scan({single_cut});
+        EXPECT_TRUE(single_cut_res.status.is_end_of_file()) << single_cut << ": " << single_cut_res.status;
+        EXPECT_EQ(0, single_cut_res.rows) << single_cut;
+        EXPECT_EQ(1, single_cut_res.filtered) << single_cut;
+    }
+
+    // 8. Mid-buffer unclosed container followed by complete record(s), with or without a stage-1-cut trailing
+    // record: skipping the failed record in advance() hits INCOMPLETE_ARRAY_OR_OBJECT across the remaining
+    // complete record(s) before the cut and surfaces a non-EOF parse error rather than silently dropping them.
+    for (const std::string& tail : {std::string(""), std::string("\n") + v + "\n" + R"({"k1":"tr)",
+                                    std::string("\n") + v + "\n" + R"({"k1":"x" "k2":9})"}) {
+        auto mid_unclosed_array = scan({v + "\n" + R"({"k1":"x","k2":[1,2})" + "\n" + v + tail});
+        EXPECT_TRUE(mid_unclosed_array.status.is_data_quality_error()) << tail << ": " << mid_unclosed_array.status;
+        EXPECT_EQ(2, mid_unclosed_array.filtered) << tail;
+    }
+
+    // 9. Multi-batch stream with a mid-document error in the middle of the buffer recovers all remaining rows.
+    config::json_parse_many_batch_size = 64;
+    std::string multi_batch_body;
+    for (int i = 0; i < 40; i++) {
+        if (i == 15) {
+            multi_batch_body += R"({"k1":"bad","k2":})"
+                                "\n";
+        }
+        multi_batch_body += "{\"k1\":\"" + std::to_string(i) + "\",\"k2\":" + std::to_string(i) + "}\n";
+    }
+    auto multi_batch_res = scan({multi_batch_body});
+    EXPECT_TRUE(multi_batch_res.status.is_end_of_file()) << multi_batch_res.status;
+    EXPECT_EQ(40, multi_batch_res.rows);
+    EXPECT_EQ(1, multi_batch_res.filtered);
+
+    // 10. Repeated malformed rows in a single batch reuse the indexed stage-1 batch without rescanning the
+    // remainder on every rejected row, and rewinding to the document root before skipping prevents a missing
+    // field value ("k2":}) from leaving depth > 1 and swallowing a following row with an extra closing brace.
+    config::json_parse_many_batch_size = 1000000;
+    auto mv_followed_by_extra_brace = scan({R"({"k1":"x","k2":})"
+                                            "\n"
+                                            R"({"k1":"x","k2":1}})"
+                                            "\n" +
+                                            v});
+    EXPECT_TRUE(mv_followed_by_extra_brace.status.is_data_quality_error()) << mv_followed_by_extra_brace.status;
+    EXPECT_EQ(0, mv_followed_by_extra_brace.rows);
+    EXPECT_EQ(2, mv_followed_by_extra_brace.filtered);
+
+    std::string many_bad_body;
+    constexpr int kManyBadRows = 20000;
+    many_bad_body.reserve(kManyBadRows * 18 + 32);
+    for (int i = 0; i < kManyBadRows; i++) {
+        many_bad_body += R"({"k1":"x","k2":})"
+                         "\n";
+    }
+    many_bad_body += v + "\n";
+    auto many_bad_res = scan({many_bad_body});
+    EXPECT_TRUE(many_bad_res.status.is_end_of_file()) << many_bad_res.status;
+    EXPECT_EQ(1, many_bad_res.rows);
+    EXPECT_EQ(kManyBadRows, many_bad_res.filtered);
+}
+
+TEST_F(JsonScannerTruncatedDocTest, unbalanced_record_swallows_records_up_to_stray_closer) {
+    // `b` lacks its closing '}'; the stray '}' after `x` balances the root brace depth, so `skip_child(0)` treats
+    // `b`..`x}}` as one brace-balanced malformed root object and resumes at `d`.
+    const std::string input =
+            "{\"k1\":\"b\",\"k2\":1\n"
+            "{\"k1\":\"c\",\"k2\":3}\n"
+            "{\"k1\":\"x\",\"k2\":9}}\n"
+            "{\"k1\":\"d\",\"k2\":4}";
+    auto result = scan({input});
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(1, result.rows);
+    EXPECT_EQ(1, result.filtered);
+}
+
+TEST_F(JsonScannerTest, test_simdjson_v511_big_integer_and_unicode_escapes) {
+    std::string filename = "./be/test/exec/test_data/json_scanner/v511_big_integer_unicode.json";
+    std::string json_data =
+            "{\"f_largeint\": 18446744073709551616, \"f_bigint\": 18446744073709551616, \"f_str\": "
+            "\"\\u6C49\\u5B57\\u4E2D\\u6587\\uD83D\\uDE00\"}\n"
+            "{\"f_largeint\": 99999999999999999999, \"f_bigint\": 99999999999999999999, \"f_str\": "
+            "\"\\u6C49\\u5B57\\u4E2D\\u6587\\uD83D\\uDE00\"}\n";
+    write_json_to_file(filename, json_data);
+    DeferOp defer([&] { std::remove(filename.c_str()); });
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_LARGEINT);
+    types.emplace_back(TYPE_BIGINT);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path(filename);
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"f_largeint", "f_bigint", "f_str"});
+    ASSERT_OK(scanner->open());
+    DeferOp close_scanner([&]() { scanner->close(); });
+
+    ASSIGN_OR_ASSERT_FAIL(ChunkPtr chunk, scanner->get_next());
+    ASSERT_EQ(3, chunk->num_columns());
+    ASSERT_EQ(2, chunk->num_rows());
+
+    EXPECT_EQ("[18446744073709551616, NULL, '汉字中文\xF0\x9F\x98\x80']", chunk->debug_row(0));
+    EXPECT_EQ("[99999999999999999999, NULL, '汉字中文\xF0\x9F\x98\x80']", chunk->debug_row(1));
+
+    const ScannerCounter* counter = scanner->TEST_scanner_counter();
+    ASSERT_NE(nullptr, counter);
+    EXPECT_GT(counter->total_ns, 0);
+    EXPECT_GT(counter->file_read_count, 0);
+    EXPECT_EQ(0, counter->num_rows_filtered);
+}
+
 } // namespace starrocks

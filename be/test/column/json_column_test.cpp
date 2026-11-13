@@ -493,6 +493,44 @@ PARALLEL_TEST(JsonConvertTest, convert_from_simdjson_big_integer) {
     ondemand::object double_overflow_obj = double_overflow_doc.get_object();
     auto double_overflow_json = JsonValue::from_simdjson(&double_overflow_obj);
     ASSERT_FALSE(double_overflow_json.ok());
+
+    // UINT64_MAX (18446744073709551615) is unsigned_integer
+    auto u64_max_str = R"({"a": 18446744073709551615})"_padded;
+    ondemand::document u64_max_doc = parser.iterate(u64_max_str);
+    ondemand::object u64_max_obj = u64_max_doc.get_object();
+    auto u64_max_json = JsonValue::from_simdjson(&u64_max_obj);
+    ASSERT_TRUE(u64_max_json.ok()) << u64_max_json.status();
+    ASSERT_EQ(R"({"a": 18446744073709551615})", u64_max_json.value().to_string_uncheck());
+
+    // 20-digit positive integers in [2^64, 10^20) are classified as big_integer in simdjson 5.0+
+    for (const auto& [int_raw, expected_double_raw] : std::vector<std::pair<std::string_view, std::string_view>>{
+                 {R"({"a": 18446744073709551616})", R"({"a": 18446744073709551616.0})"},
+                 {R"({"a": 99999999999999999999})", R"({"a": 99999999999999999999.0})"}}) {
+        padded_string int_str(int_raw);
+        ondemand::document int_doc = parser.iterate(int_str);
+        ondemand::object int_obj = int_doc.get_object();
+        auto int_json = JsonValue::from_simdjson(&int_obj);
+        ASSERT_TRUE(int_json.ok()) << int_json.status();
+
+        padded_string expected_double_str(expected_double_raw);
+        ondemand::document expected_doc = parser.iterate(expected_double_str);
+        ondemand::object expected_obj = expected_doc.get_object();
+        auto expected_json = JsonValue::from_simdjson(&expected_obj);
+        ASSERT_TRUE(expected_json.ok()) << expected_json.status();
+
+        ASSERT_EQ(expected_json.value().to_string_uncheck(), int_json.value().to_string_uncheck());
+    }
+
+    // Big integer with trailing non-structural garbage must fail with DataQualityError
+    for (std::string_view bad_raw : {std::string_view(R"({"a": 123456789123456789123x})"),
+                                     std::string_view(R"({"bad_big": 99999999999999999999abc})")}) {
+        padded_string trailing_garbage_str(bad_raw);
+        ondemand::document trailing_garbage_doc = parser.iterate(trailing_garbage_str);
+        ondemand::object trailing_garbage_obj = trailing_garbage_doc.get_object();
+        auto bad_res = JsonValue::from_simdjson(&trailing_garbage_obj);
+        ASSERT_FALSE(bad_res.ok());
+        ASSERT_TRUE(bad_res.status().is_data_quality_error()) << bad_res.status();
+    }
 }
 
 // Flat-JSON schemas are decided per segment, so a single scan can hand the same JsonColumn

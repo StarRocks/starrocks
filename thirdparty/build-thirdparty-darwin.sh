@@ -1660,7 +1660,6 @@ build_simdjson() {
         -DCMAKE_CXX_FLAGS="$(append_flags "${CXXFLAGS}" "-O3 -fPIC")" \
         -DCMAKE_C_FLAGS="$(append_flags "${CFLAGS}" "-O3 -fPIC")" \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-        -DSIMDJSON_AVX512_ALLOWED=OFF \
         -DSIMDJSON_SKIPUTF8VALIDATION=ON \
         -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5

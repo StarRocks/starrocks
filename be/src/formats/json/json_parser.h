@@ -85,6 +85,8 @@ private:
     // iterator context for document stream.
     simdjson::ondemand::document_stream _doc_stream;
     simdjson::ondemand::document_stream::iterator _doc_stream_itr;
+    // Snapshot of _doc_stream's json_iterator at the root of the current object before field consumption.
+    simdjson::ondemand::json_iterator _doc_iter_snapshot;
 
     // Iterator (value, object, array, etc) in simdjson could be only parsed once.
     // If we want to access iterator twice, a call of rewind/reset is needed.
