@@ -108,6 +108,7 @@ set(EXEC_FILES
         ./formats/avro/cpp/date_column_reader_test.cpp
         ./formats/avro/cpp/numeric_column_reader_test.cpp
         ./formats/avro/cpp/utils_test.cpp
+        ./formats/orc/orc_compression_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_file_writer_test.cpp
         ./formats/parquet/arrow_parquet_writer_test.cpp
@@ -233,6 +234,11 @@ if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./http/datacache_action_test.cpp)
     list(APPEND EXEC_FILES ./http/action/update_config_action_test.cpp)
 endif ()
+
+# The compression regression uses internal ORC headers, including generated Adaptor.hh.
+get_target_property(ORC_TEST_BINARY_DIR orc BINARY_DIR)
+set_source_files_properties(./formats/orc/orc_compression_test.cpp PROPERTIES
+        INCLUDE_DIRECTORIES "${SRC_DIR}/formats/orc/apache-orc/c++/src;${ORC_TEST_BINARY_DIR}")
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
