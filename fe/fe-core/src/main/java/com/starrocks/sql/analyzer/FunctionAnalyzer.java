@@ -321,6 +321,7 @@ public class FunctionAnalyzer {
             case FunctionSet.ENCODE_SORT_KEY:
             case FunctionSet.ENCODE_FINGERPRINT_SHA256:
             case FunctionSet.ENCODE_FINGERPRINT_SHA256_V2:
+            case FunctionSet.TO_JSON:
                 break;
             default:
                 return;
