@@ -65,6 +65,7 @@ import com.starrocks.sql.analyzer.AlterMVClauseAnalyzerVisitor;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
+import com.starrocks.sql.analyzer.SavedSqlGeoValidator;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -964,6 +965,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         // analyze this ast
         ConnectContext connectContext = context == null ? ConnectContext.buildInner() : context;
         Analyzer.analyze(queryStatement, connectContext);
+        SavedSqlGeoValidator.validate(queryStatement);
 
         List<SlotRef> slots = Lists.newArrayList();
         addColumnExpr.collect(SlotRef.class, slots);
@@ -1228,6 +1230,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
         ConnectContext connectContext = context == null ? ConnectContext.buildInner() : context;
         Analyzer.analyze(queryStatement, connectContext);
+        SavedSqlGeoValidator.validate(queryStatement);
 
         // fast schema evolution
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
@@ -1877,6 +1880,19 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             } finally {
                 mv.markVersionMapReset();
             }
+        }
+    }
+
+    /**
+     * Inactivates an MV from inside the refresh that found it can no longer be refreshed, and stops scheduling it as
+     * every other inactivation does. Both happen under the MV's write lock, which ALTER ... ACTIVE takes too: an
+     * activation in between would be paused by the suspension, and leave an active MV that is never refreshed.
+     */
+    public static void inactiveMvAndSuspendTask(MaterializedView mv, String inactiveReason) {
+        try (AutoCloseableLock ignored = new AutoCloseableLock(mv.getDbId(), mv.getId(), LockType.WRITE)) {
+            inactiveMvAndLog(mv, inactiveReason);
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            taskManager.suspendTaskWithoutKilling(taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId())));
         }
     }
 

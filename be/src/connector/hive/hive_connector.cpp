@@ -456,6 +456,30 @@ Status HiveDataSource::_init_extended_values() {
     RETURN_IF_ERROR(ExprExecutor::prepare(_scanner_ctx.extended_col_expr_ctxs, _runtime_state));
     RETURN_IF_ERROR(ExprExecutor::open(_scanner_ctx.extended_col_expr_ctxs, _runtime_state));
 
+    // Extended columns (e.g. Iceberg `_file`, `$spec_id`) are constant per scan range and are
+    // appended to the chunk after the file reader runs, so the readers never evaluate the
+    // single-slot conjuncts on them. Evaluate those conjuncts here, the same way identity
+    // partition conjuncts are, and skip the whole scan range when they reject the values.
+    auto extended_chunk = std::make_shared<Chunk>();
+    std::vector<ExprContext*> ctxs;
+    const auto& by_slot = _scanner_ctx.format_scan_context.conjuncts.by_slot;
+    for (size_t i = 0; i < _scanner_ctx.extended_col_slots.size(); i++) {
+        SlotId slot_id = _scanner_ctx.extended_col_slots[i]->id();
+        auto it = by_slot.find(slot_id);
+        if (it == by_slot.end()) continue;
+        int extended_col_idx = _scanner_ctx.index_in_extended_columns[i];
+        ASSIGN_OR_RETURN(auto value_col, _scanner_ctx.extended_col_expr_ctxs[extended_col_idx]->evaluate(nullptr));
+        DCHECK(value_col->is_constant());
+        extended_chunk->append_column(std::move(value_col), slot_id);
+        ctxs.insert(ctxs.end(), it->second.begin(), it->second.end());
+    }
+    if (!ctxs.empty()) {
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(ctxs, extended_chunk.get()));
+        if (!extended_chunk->has_rows()) {
+            _partition_filter.filter_by_eval = true;
+        }
+    }
+
     return Status::OK();
 }
 
@@ -528,6 +552,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     }
     if (hdfs_scan_node.__isset.can_use_min_max_opt) {
         _scanner_ctx.format_scan_context.options.use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
+        _scanner_ctx.format_scan_context.options.min_max_values_of_all_slots = hdfs_scan_node.can_use_min_max_opt;
     }
     // can_use_any_column is set by PruneHDFSScanColumnRule when every queried column is
     // a partition column and a placeholder materialized column was injected to satisfy
@@ -536,6 +561,21 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     // min/max optimization is active.
     if (hdfs_scan_node.__isset.can_use_any_column) {
         _scanner_ctx.format_scan_context.options.can_use_any_column = hdfs_scan_node.can_use_any_column;
+    }
+    // The placeholder is never a partition column of the FE, so a materialized slot that is the source of an Iceberg
+    // partition transform is a column the query reads (a file stores it as data).
+    if (_scanner_ctx.format_scan_context.options.can_use_any_column) {
+        if (auto* iceberg_table = dynamic_cast<const IcebergTableDescriptor*>(_scanner_ctx.hive_table)) {
+            std::unordered_set<std::string> source_names;
+            for (const auto& name : iceberg_table->partition_source_column_names()) {
+                source_names.insert(_scanner_ctx.formatted_name(name));
+            }
+            for (auto* slot : _scanner_ctx.materialize_slots) {
+                if (source_names.contains(_scanner_ctx.formatted_name(slot->col_name()))) {
+                    _scanner_ctx.format_scan_context.options.any_column_queried_slots.insert(slot->id());
+                }
+            }
+        }
     }
     if (hdfs_scan_node.__isset.can_use_count_opt) {
         _scanner_ctx.format_scan_context.options.use_count_opt = hdfs_scan_node.can_use_count_opt;
@@ -674,6 +714,8 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _scanner_ctx.profile.scan_ranges_size = ADD_COUNTER(_runtime_profile, "ScanRangesSize", TUnit::BYTES);
     _scan_ranges_pruned_by_partition_value_counter =
             ADD_COUNTER(_runtime_profile, "ScanRangesPrunedByPartitionValue", TUnit::UNIT);
+    _scanner_ctx.profile.scan_ranges_pruned_by_file_stats_counter =
+            ADD_COUNTER(_runtime_profile, "ScanRangesPrunedByFileStats", TUnit::UNIT);
 
     _scanner_ctx.profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
     _scanner_ctx.profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");

@@ -16,22 +16,39 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 #if defined(__x86_64__) && defined(__AVX2__)
 #include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
 #endif
 
 namespace starrocks {
 
+inline bool contains_negative_value_scalar(const int32_t* buf, int n) {
+    int32_t acc = 0;
+    for (int i = 0; i < n; ++i) {
+        acc |= buf[i];
+    }
+    return acc < 0;
+}
+
 static inline bool contains_negative_value(const int32_t* data, size_t size) {
     size_t i = 0;
 #ifdef __AVX2__
-    __m256i v_zero = _mm256_setzero_si256();
     for (; i + 8 <= size; i += 8) {
-        __m256i v = _mm256_loadu_si256((__m256i*)(data + i));
-        __m256i cmp = _mm256_cmpgt_epi32(v_zero, v);
-        if (_mm256_movemask_epi8(cmp)) return true;
+        __m256i v = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + i));
+        if (_mm256_movemask_ps(_mm256_castsi256_ps(v))) return true;
     }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    int32x4_t v_or0 = vdupq_n_s32(0);
+    int32x4_t v_or1 = vdupq_n_s32(0);
+    for (; i + 8 <= size; i += 8) {
+        v_or0 = vorrq_s32(v_or0, vld1q_s32(data + i));
+        v_or1 = vorrq_s32(v_or1, vld1q_s32(data + i + 4));
+    }
+    if (vminvq_s32(vorrq_s32(v_or0, v_or1)) < 0) return true;
 #endif
     for (; i < size; ++i) {
         if (data[i] < 0) return true;
@@ -40,20 +57,26 @@ static inline bool contains_negative_value(const int32_t* data, size_t size) {
 }
 
 template <typename T>
-static inline void delta_decode_chain_scalar_prefetch(T* buf, int n, T min_delta, T& last_value) noexcept {
-    T acc = last_value;
+inline void delta_decode_chain_scalar_prefetch(T* buf, int n, T min_delta, T& last_value) noexcept {
+    using U = std::make_unsigned_t<T>;
+    U acc = static_cast<U>(last_value);
+    const U u_min_delta = static_cast<U>(min_delta);
     int i = 0;
     for (i = 0; (i + 8) < n; ++i) {
         __builtin_prefetch(buf + i + 8);
-        acc += buf[i] + min_delta;
-        buf[i] = acc;
+        acc += static_cast<U>(buf[i]) + u_min_delta;
+        buf[i] = static_cast<T>(acc);
     }
     for (; i < n; ++i) {
-        acc += buf[i] + min_delta;
-        buf[i] = acc;
+        acc += static_cast<U>(buf[i]) + u_min_delta;
+        buf[i] = static_cast<T>(acc);
     }
-    last_value = acc;
+    last_value = static_cast<T>(acc);
 }
+
+// Portable scalar reference implementations, defined in delta_decode.cpp.
+void delta_decode_chain_int32_scalar(int32_t* buf, int n, int32_t min_delta, int32_t& last_value);
+void delta_decode_chain_int64_scalar(int64_t* buf, int n, int64_t min_delta, int64_t& last_value);
 
 // ISA-specific implementations, defined in delta_decode.cpp. Each kernel carries a per-function
 // `target` attribute so its AVX2 / AVX-512 intrinsics are available even when the global build
@@ -68,6 +91,10 @@ void delta_decode_chain_int32_avx2(int32_t* buf, int n, int32_t min_delta, int32
 void delta_decode_chain_int32_avx2x(int32_t* buf, int n, int32_t min_delta, int32_t& last_value);
 void delta_decode_chain_int32_avx512(int32_t* buf, int n, int32_t min_delta, int32_t& last_value);
 void delta_decode_chain_int64_avx512(int64_t* buf, int n, int64_t min_delta, int64_t& last_value);
+#if defined(__ARM_NEON) && defined(__aarch64__)
+void delta_decode_chain_int32_neon(int32_t* buf, int n, int32_t min_delta, int32_t& last_value);
+void delta_decode_chain_int64_neon(int64_t* buf, int n, int64_t min_delta, int64_t& last_value);
+#endif
 
 // Public entry points. Defined in delta_decode.cpp; they pick the best implementation for the
 // running CPU at runtime via __builtin_cpu_supports (explicit dispatch, not FMV/IFUNC).

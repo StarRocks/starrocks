@@ -40,6 +40,7 @@
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/delta_column_group.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/rowset/column_iterator.h"
@@ -121,6 +122,10 @@ public:
     }
     TabletSchemaBuilder& set_length(size_t length) {
         _column_pbs.back().set_length(length);
+        return *this;
+    }
+    TabletSchemaBuilder& set_bitmap_index() {
+        _column_pbs.back().set_has_bitmap_index(true);
         return *this;
     }
 
@@ -1285,6 +1290,89 @@ TEST_F(SegmentIteratorTest, testCharToVarcharZoneMapFilter) {
     }
 }
 
+// (c1 = 1 AND (c2 IN (1, 2))) OR (c1 = 2 AND c2 = 3), with bitmap indexes on c1 and c2. The inner OR fails the
+// bitmap selectivity gate (2 of 10 c2 values) while both AND chains pass it, so the outer OR is used and the second
+// chain is fully erased. The residual must still keep that chain, or row 3001 (c1 = 2, c2 = 3) is lost.
+TEST_F(SegmentIteratorTest, BitmapIndexKeepsPartiallyErasedOr) {
+    using namespace starrocks::test;
+
+    std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaBuilder()
+                                                          .create(0, false, TYPE_INT, true)
+                                                          .create(1, false, TYPE_INT, false)
+                                                          .set_bitmap_index()
+                                                          .create(2, false, TYPE_INT, false)
+                                                          .set_bitmap_index()
+                                                          .build();
+
+    auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), 4096);
+    auto append_row = [&](int32_t id, int32_t c1, int32_t c2) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(id));
+        chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(c1));
+        chunk->get_column_by_index(2)->as_mutable_ptr()->append_datum(Datum(c2));
+    };
+    for (int32_t i = 0; i < 3000; i++) {
+        append_row(i, 1000 + i, i % 10);
+    }
+    append_row(3000, 1, 1);
+    append_row(3001, 2, 3);
+    append_row(3002, 1, 3);
+    append_row(3003, 2, 1);
+
+    auto segment =
+            write_and_open_segment(_fs, kSegmentDir + "/bitmap_index_partially_erased_or", tablet_schema, *chunk, 1024);
+
+    auto vec_schema = VecSchemaBuilder().add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT).add(2, "c2", TYPE_INT).build();
+
+    const auto type_int = get_type_info(TYPE_INT);
+    std::unique_ptr<ColumnPredicate> c1_eq_1(new_column_eq_predicate(type_int, 1, "1"));
+    std::unique_ptr<ColumnPredicate> c2_in_1_2(new_column_in_predicate(type_int, 2, {"1", "2"}));
+    std::unique_ptr<ColumnPredicate> c1_eq_2(new_column_eq_predicate(type_int, 1, "2"));
+    std::unique_ptr<ColumnPredicate> c2_eq_3(new_column_eq_predicate(type_int, 2, "3"));
+
+    PredicateOrNode inner_or;
+    inner_or.add_child(PredicateColumnNode{c2_in_1_2.get()});
+    PredicateAndNode chain1;
+    chain1.add_child(PredicateColumnNode{c1_eq_1.get()});
+    chain1.add_child(std::move(inner_or));
+    PredicateAndNode chain2;
+    chain2.add_child(PredicateColumnNode{c1_eq_2.get()});
+    chain2.add_child(PredicateColumnNode{c2_eq_3.get()});
+    PredicateOrNode outer_or;
+    outer_or.add_child(std::move(chain1));
+    outer_or.add_child(std::move(chain2));
+    PredicateAndNode pred_root;
+    pred_root.add_child(std::move(outer_or));
+
+    SegmentReadOptions seg_opts;
+    OlapReaderStatistics stats;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
+
+    std::vector<int32_t> ids;
+    auto res_chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), config::vector_chunk_size);
+    while (true) {
+        res_chunk->reset();
+        auto st = chunk_iter->get_next(res_chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        auto id_col = ColumnHelper::cast_to_raw<TYPE_INT>(res_chunk->get_column_by_index(0));
+        for (size_t i = 0; i < res_chunk->num_rows(); i++) {
+            ids.push_back(id_col->get_data()[i]);
+        }
+    }
+
+    ASSERT_EQ(3001, stats.rows_bitmap_index_filtered);
+    ASSERT_EQ((std::vector<int32_t>{3000, 3001}), ids);
+}
+
 // Tests for dict_lookup_batch optimization: large IN predicate on dict-encoded VARCHAR column.
 // The hash-based batch lookup (kDictLookupHashThreshold=100) is exercised when either
 // dict_size >= 100 or the IN list has >= 100 values.
@@ -2101,6 +2189,129 @@ TEST_F(SegmentIteratorTest, FooterAndIndexReadsReportStreamStatsOnce) {
     EXPECT_TRUE(bad_index->load_index(io_opts, &failed_index_stats).is_corruption());
     EXPECT_EQ(1, failed_index_stats.io_count_request);
     expect_stream_stats(failed_index_stats);
+}
+
+// A `.cols` segment is opened by every scan and never cached, so its footer read has to follow the
+// caller's cache options and report to the caller's statistics. Opening it with default options made
+// the read skip the local data cache fill and left it out of the scan's IO statistics.
+TEST_F(SegmentIteratorTest, DcgSegmentOpenFollowsCallerIOOptionsAndStats) {
+    using namespace starrocks::test;
+
+    class ReadStatsStream : public io::SeekableInputStreamWrapper {
+    public:
+        explicit ReadStatsStream(std::unique_ptr<RandomAccessFile> file)
+                : io::SeekableInputStreamWrapper(std::move(file)) {}
+
+        io::IoStatsSnapshot get_io_stats_snapshot() const override {
+            return {.bytes_read_remote = 256, .io_count_remote = 3, .io_ns_read_remote = 2000};
+        }
+    };
+    class RecordingFileSystem : public MemoryFileSystem {
+    public:
+        StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                           const std::string& path) override {
+            skip_fill_by_path[path].push_back(opts.skip_fill_local_cache);
+            ASSIGN_OR_RETURN(auto file, MemoryFileSystem::new_random_access_file(opts, path));
+            return std::make_unique<RandomAccessFile>(std::make_shared<ReadStatsStream>(std::move(file)), path);
+        }
+
+        // One entry per open of the path, in order.
+        std::unordered_map<std::string, std::vector<bool>> skip_fill_by_path;
+    };
+    // Serves one delta column group that moves column uid 2 into `update.cols`.
+    class OneDcgLoader : public DeltaColumnGroupLoader {
+    public:
+        Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs) override {
+            return _load(pdcgs);
+        }
+        Status load(int64_t tablet_id, RowsetId rowsetid, uint32_t segment_id, int64_t version,
+                    DeltaColumnGroupList* pdcgs) override {
+            return _load(pdcgs);
+        }
+
+    private:
+        static Status _load(DeltaColumnGroupList* pdcgs) {
+            auto dcg = std::make_shared<DeltaColumnGroup>();
+            dcg->init(1, {{2}}, {"update.cols"});
+            pdcgs->push_back(std::move(dcg));
+            return Status::OK();
+        }
+    };
+
+    auto fs = std::make_shared<RecordingFileSystem>();
+    ASSERT_OK(fs->create_dir("/dcg"));
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).build();
+    // The second column holds i * |factor|, so a scan shows which file it read the column from.
+    auto write_segment = [&](const std::string& path, int32_t factor) {
+        ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(path));
+        SegmentWriter writer(std::move(wfile), 0, tablet_schema, SegmentWriterOptions{});
+        TabletDataBuilder data(writer, tablet_schema, config::vector_chunk_size, 100);
+        ASSERT_OK(data.append(0, [](int32_t i) { return i; }));
+        ASSERT_OK(data.append(1, [factor](int32_t i) { return i * factor; }));
+        ASSERT_OK(data.finalize_footer());
+    };
+    const std::string segment_path = "/dcg/seg.dat";
+    const std::string cols_path = "/dcg/update.cols";
+    ASSERT_NO_FATAL_FAILURE(write_segment(segment_path, 2));
+    ASSERT_NO_FATAL_FAILURE(write_segment(cols_path, 3));
+
+    auto segment = std::make_shared<Segment>(fs, FileInfo{segment_path}, 0, tablet_schema, nullptr);
+    ASSERT_OK(segment->open(nullptr, nullptr, LakeIOOptions{}));
+    DeltaColumnGroup dcg;
+    dcg.init(1, {{2}}, {"update.cols"});
+
+    // The caller asks for the cache to be filled: the footer read must not skip the fill, and it is
+    // added to the caller's statistics.
+    LakeIOOptions fill_opts;
+    fill_opts.fill_data_cache = true;
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto filled, segment->new_dcg_segment(dcg, 0, tablet_schema, fill_opts, &stats));
+    EXPECT_EQ(100, filled->num_rows());
+    ASSERT_EQ(1, fs->skip_fill_by_path[cols_path].size());
+    EXPECT_FALSE(fs->skip_fill_by_path[cols_path].back());
+    EXPECT_EQ(1, stats.segments_opened);
+    EXPECT_EQ(3, stats.io_count_remote);
+    EXPECT_EQ(3, stats.io_count);
+    EXPECT_EQ(256, stats.compressed_bytes_read_remote);
+    EXPECT_EQ(2000, stats.io_ns_remote);
+    EXPECT_GT(stats.io_ns, 0);
+
+    // A caller that does not want the cache filled keeps that behavior.
+    LakeIOOptions no_fill_opts;
+    no_fill_opts.fill_data_cache = false;
+    ASSIGN_OR_ABORT(auto not_filled, segment->new_dcg_segment(dcg, 0, tablet_schema, no_fill_opts));
+    EXPECT_EQ(100, not_filled->num_rows());
+    EXPECT_TRUE(fs->skip_fill_by_path[cols_path].back());
+
+    // The scan path: SegmentIterator has to hand its own cache options and statistics to the `.cols`
+    // open. It opens the file twice, once for the footer and once to read the column, and neither
+    // open may skip the cache fill.
+    fs->skip_fill_by_path.clear();
+    OlapReaderStatistics scan_stats;
+    SegmentReadOptions seg_opts;
+    seg_opts.fs = fs;
+    seg_opts.stats = &scan_stats;
+    seg_opts.tablet_schema = tablet_schema;
+    seg_opts.dcg_loader = std::make_shared<OneDcgLoader>();
+    seg_opts.lake_io_opts.fill_data_cache = true;
+    auto scan_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk_iter = new_segment_iterator(segment, scan_schema, seg_opts);
+    auto chunk = ChunkFactory::new_chunk(scan_schema, config::vector_chunk_size);
+    ASSERT_OK(chunk_iter->get_next(chunk.get()));
+    ASSERT_EQ(100, chunk->num_rows());
+    // The column came from the `.cols` file, not from the base segment.
+    EXPECT_EQ(3 * 7, chunk->get_column_by_index(1)->get(7).get_int32());
+    chunk_iter->close();
+
+    const auto& cols_opens = fs->skip_fill_by_path[cols_path];
+    ASSERT_EQ(2, cols_opens.size());
+    EXPECT_FALSE(cols_opens[0]);
+    EXPECT_FALSE(cols_opens[1]);
+    // The base segment was opened above without statistics, so the one segment counted here is the
+    // `.cols` segment the scan opened.
+    EXPECT_EQ(1, scan_stats.segments_opened);
 }
 
 // load_index and segment_seek_ranges_to_rowid_ranges report their reads to the statistics they are given:

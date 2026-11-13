@@ -625,7 +625,7 @@ PROPERTIES (
 
 #### `datacache.partition_duration`
 
-热数据的有效期。当启用本地磁盘缓存时，所有数据都会导入至本地磁盘缓存中。当缓存满时，StarRocks 会从缓存中删除最近较少使用（Less recently used）的数据。当有查询需要扫描已删除的数据时，StarRocks 会从当前时间开始，检查该数据是否在有效期内。如果数据在有效期内，StarRocks 会再次将数据导入至缓存中。如果数据不在有效期内，StarRocks 不会将其导入至缓存中。该属性为字符串，您可以使用以下单位指定：`YEAR`、`MONTH`、`DAY` 和 `HOUR`，例如，`7 DAY` 和 `12 HOUR`。如果不指定，StarRocks 将所有数据都作为热数据进行缓存。
+热分区的时间范围，从当前时间向前计算。对于按 DATE 或 DATETIME 列分区的表，查询扫描某个分区时，仅当该分区的范围与此时间范围有交集（对于 List 分区，即分区值落在此时间范围内）时，StarRocks 才会将扫描的数据填充到缓存中。查询其他分区时仍可读取已缓存的数据，但不会填充缓存，也不会使用内存中的 Page Cache。该属性在查询时根据分区边界进行判断，而非根据数据导入时间，并且不会淘汰已缓存的数据。对于既不是按单个 DATE 或 DATETIME 列进行 Range 分区、也不是按 DATE 或 DATETIME 列进行 List 分区的表，该属性不生效。该属性为字符串，格式为 `<数值> <单位>`，单位可以是 `YEAR`、`MONTH`、`WEEK`、`DAY`、`HOUR`、`MINUTE` 或 `SECOND`（不区分大小写，单复数均可），例如，`7 DAY` 和 `12 HOUR`。可以组合多个数值和单位，例如 `1 DAY 12 HOUR`，但 `YEAR`、`MONTH`、`WEEK` 不能与 `HOUR`、`MINUTE`、`SECOND` 组合使用。如果不指定，查询所有分区时均会填充缓存。
 
 > **说明**
 >

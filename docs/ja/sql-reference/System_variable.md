@@ -5,8 +5,6 @@ description: "StarRocks が提供する多くのシステム変数の設定と�
 
 # システム変数
 
-import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
-import EditionSpecificVariable from '../_assets/commonMarkdown/Edition_Specific_Variable.mdx'
 
 StarRocks は、多くのシステム変数を提供しており、要件に応じて設定や変更が可能です。このセクションでは、StarRocks がサポートする変数について説明します。これらの変数の設定を確認するには、MySQL クライアントで [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) コマンドを実行します。また、[SET](sql-statements/cluster-management/config_vars/SET.md) コマンドを使用して、変数を動的に設定または変更することもできます。これらの変数は、システム全体でグローバルに、現在のセッションのみで、または単一のクエリ文でのみ有効にすることができます。
 
@@ -14,14 +12,7 @@ StarRocks の変数は、MySQL の変数セットを参照していますが、*
 
 > **注意**
 >
-> どのユーザーでも SHOW VARIABLES を実行し、セッションレベルで変数を有効にする権限があります。ただし、SYSTEM レベルの OPERATE 権限を持つユーザーのみが、変数をグローバルに有効にすることができます。グローバルに有効な変数は、すべての将来のセッション（現在のセッションを除く）で有効になります。
->
-> 現在のセッションの設定変更を行い、さらにその設定変更をすべての将来のセッションに適用したい場合は、`GLOBAL` 修飾子を使用せずに一度、使用してもう一度変更を行うことができます。例：
->
-> ```SQL
-> SET query_mem_limit = 137438953472; -- 現在のセッションに適用。
-> SET GLOBAL query_mem_limit = 137438953472; -- すべての将来のセッションに適用。
-> ```
+> どのユーザーでも SHOW VARIABLES を実行し、セッションレベルで変数を有効にする権限があります。ただし、SYSTEM レベルの OPERATE 権限を持つユーザーのみが、変数をグローバルに有効にすることができます。グローバルに有効な変数は、現在のセッションとすべての将来のセッションで有効になりますが、他の既存のセッションには影響しません。
 
 ## 変数の階層と種類
 
@@ -47,7 +38,7 @@ SHOW VARIABLES LIKE '%time_zone%';
 
 ### 変数をグローバルまたは単一のセッションで設定
 
-変数を **グローバルに** または **現在のセッションのみで** 有効に設定できます。グローバルに設定すると、新しい値はすべての将来のセッションで使用されますが、現在のセッションは元の値を使用します。「現在のセッションのみ」に設定すると、変数は現在のセッションでのみ有効になります。
+変数を **グローバルに** または **現在のセッションのみで** 有効に設定できます。グローバルに設定すると、新しい値は現在のセッションとすべての将来のセッションで使用されますが、他の既存のセッションは [REFRESH CONNECTIONS](sql-statements/cluster-management/config_vars/REFRESH_CONNECTIONS.md) を実行するまで元の値を使用します。ただし、以下に示すグローバルにのみ有効な変数は例外で、新しい値はすべてのセッションに即座に反映されます。「現在のセッションのみ」に設定すると、変数は現在のセッションでのみ有効になります。
 
 `SET <var_name> = xxx;` で設定された変数は、現在のセッションでのみ有効です。例：
 
@@ -140,7 +131,7 @@ DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
 FROM my_table PARTITION p1
 WHERE k1 = 3;
 
-INSERT /*+ SET_VAR(insert_timeout = 10000000) */
+INSERT /*+ SET_VAR(insert_timeout = 86400) */
 INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
@@ -156,8 +147,8 @@ INTO insert_wiki_edit
 ```sql
 SELECT /*+ SET_VAR
   (
-  exec_mem_limit = 515396075520,
-  query_timeout=10000000,
+  query_mem_limit = 515396075520,
+  query_timeout=86400,
   batch_size=4096,
   parallel_fragment_exec_instance_num=32
   )
@@ -263,7 +254,7 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: `TABLET_HASH`
 * **データ型**: String
 * **有効な値**: `CIRCULAR`, `RANDOM`, `TABLET_HASH`
-* **導入バージョン**: -
+* **導入バージョン**: v4.1.1
 
 ### broadcast_mem_exceeded_penalty_factor
 
@@ -552,8 +543,8 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 ### enable_adaptive_sink_dop
 
-* **説明**: データロードの適応並行性を有効にするかどうかを指定します。この機能を有効にすると、システムは INSERT INTO および Broker Load ジョブのロード並行性を自動的に設定し、`pipeline_dop` のメカニズムと同等になります。新しくデプロイされた v2.5 StarRocks クラスタでは、デフォルトで `true` に設定されています。v2.4 からアップグレードされた v2.5 クラスタでは、デフォルトで `false` に設定されています。
-* **デフォルト**: false
+* **説明**: データロードの適応並行性を有効にするかどうかを指定します。この機能を有効にすると、システムは INSERT INTO および Broker Load ジョブのロード並行性を自動的に設定し、`pipeline_dop` のメカニズムと同等になります。デフォルト値は `true` です。永続化されたメタデータにこの変数の値がすでに保存されているクラスタでは、その値が維持されます。たとえば、v2.4 以前からアップグレードされたクラスタでは `false` が維持されます。`SET enable_adaptive_sink_dop = DEFAULT` または `SET GLOBAL enable_adaptive_sink_dop = DEFAULT` を実行すると、クラスタの現在の値が `false` であっても、この変数は `true` に設定されます。
+* **デフォルト**: true
 * **導入バージョン**: v2.5
 
 ### enable_bucket_aware_execution_on_lake
@@ -607,6 +598,12 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **説明**: キャッシュ共有を有効にするかどうか。これを `true` に設定すると、この機能が有効になります。キャッシュ共有は、ネットワークを介して他のノードからキャッシュデータにアクセスすることをサポートするために使用されます。これは、クラスタのスケーリング中にキャッシュが無効になることによって発生するパフォーマンスのジッタを軽減するのに役立ちます。この変数は FE パラメータ `enable_trace_historical_node` が `true` に設定されている場合にのみ有効になります。
 * **デフォルト**: true
 * **導入バージョン**: v3.5.1
+
+### enable_delta_lake_function_predicate_pruning
+
+* **説明**: Delta Lake テーブルの列に関数を適用した述語を、データファイルのスキップに使用するかどうか。StarRocks はこのような述語を列自体の条件に変換します。たとえば `year(dt) = 2024` は `dt >= '2024-01-01' AND dt < '2025-01-01'` に変換され、パーティション値とファイルの列統計情報によってファイルを、Parquet の row group の列統計情報によって row group をスキップできます。対象の関数は `enable_iceberg_function_predicate_pruning` と同じです。元の述語は引き続き各行に対して評価されます。`false` に設定すると、このようなクエリを従来どおりにプランします。たとえば結果を比較する場合に使用します。
+* **デフォルト**: true
+* **導入バージョン**: v26.3
 
 ### enable_distinct_agg_over_window
 
@@ -678,6 +675,12 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **説明**: リソースグループレベルの[クエリキュー](../administration/management/resource_management/query_queues.md)を有効にするかどうか。
 * **デフォルト**: false、つまりこの機能は無効です。
 * **導入バージョン**: v3.1.4
+
+### enable_hive_function_predicate_pruning
+
+* **説明**: Hive テーブルの日付または日時の列に関数を適用した述語を、パーティションのプルーニングに使用するかどうか。StarRocks はこのような述語を列自体の条件に変換します。たとえば `year(dt) = 2024` は `dt >= '2024-01-01' AND dt < '2025-01-01'` に変換され、パーティション列ではパーティションをプルーニングし、row group の列統計情報によって row group をスキップできます。対象は `enable_iceberg_function_predicate_pruning` に記載された日付と時刻の関数です。元の述語は引き続き各行に対して評価されます。`false` に設定すると、このようなクエリを従来どおりにプランします。たとえば結果を比較する場合に使用します。
+* **デフォルト**: true
+* **導入バージョン**: v26.3
 
 ### enable_iceberg_eq_delete_runtime_filter_pruning
 
@@ -1192,7 +1195,7 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 ### lake_bucket_assign_mode
 
-* **説明**: データレイク内のテーブルに対するクエリにおけるバケット割り当てモード。この変数は、クエリ実行中に Bucket-aware 実行が有効になった際に、バケットがワーカーノードにどのように割り当てられるかを制御します。有効な値:
+* **説明**: External Catalog（データレイク）内のテーブルに対するクエリにおけるバケット割り当てモード。Colocate または Bucket Shuffle Join のフラグメントにおける External Catalog テーブルのスキャンにのみ適用され、StarRocks の内部テーブル（共有データクラスタのクラウドネイティブテーブルを含む）には影響しません。この変数は、クエリ実行中に Bucket-aware 実行が有効になった際に、バケットがワーカーノードにどのように割り当てられるかを制御します。有効な値:
   * `balance`: ワーカーノードにバケットを均等に割り当て、バランスの取れたワークロードとより良いパフォーマンスを実現します。
   * `elastic`: 一貫性ハッシュを使用してバケットをワーカーノードに割り当て、弾力的な環境においてより良い負荷分散を実現できます。
 * **デフォルト**: balance
@@ -1210,11 +1213,11 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 ### load_mem_limit
 
-インポート操作のメモリ制限を指定します。デフォルト値は 0 で、この変数は使用されず、`query_mem_limit` が代わりに使用されます。
+インポート操作のメモリ制限を指定します。デフォルト値は 0 で、タスクごとの制限は設定されず、インポートは各 BE ノード上のすべてのロードプロセスのメモリ制限（BE 設定項目 `load_process_max_memory_limit_percent` および `load_process_max_memory_limit_bytes`）のみによって制限されます。
 
-この変数は、クエリとインポートの両方を含む `INSERT` 操作にのみ使用されます。ユーザーがこの変数を設定しない場合、クエリとインポートのメモリ制限は `exec_mem_limit` に設定されます。それ以外の場合、クエリのメモリ制限は `exec_mem_limit` に設定され、インポートのメモリ制限は `load_mem_limit` に設定されます。
+クエリとインポートの両方を含む `INSERT` 操作では、クエリ部分のメモリ制限は `query_mem_limit` によって、インポート部分のメモリ制限は `load_mem_limit` によって設定されます。
 
-他のインポート方法（`BROKER LOAD`、`STREAM LOAD` など）は引き続き `exec_mem_limit` をメモリ制限として使用します。
+Broker Load も、ジョブプロパティ `load_mem_limit` が指定されていない場合はこの変数を使用します。Broker Load では、この値はジョブのクエリ部分とインポート部分の両方を制限します。Stream Load は代わりに HTTP ヘッダー `load_mem_limit` を使用します。Routine Load はこの変数を使用しません。
 
 ### log_rejected_record_num (v3.1 以降)
 
@@ -1488,6 +1491,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 JDBC 接続プール C3P0 との互換性のために使用されます。実際の用途はありません。
 
+### query_history_load_interval_seconds (global)
+
+* **説明**: `enable_query_history` が `true` の場合に、FE メモリにバッファされたクエリ履歴を `_statistics_.query_history` テーブルに書き込む間隔。バックグラウンドのタイマーはありません。前回の書き込みからこの間隔が経過した後に SELECT 文が終了したときに、バッファされたクエリ履歴が書き込まれます。負荷の高いクラスタでは、シリアライズされたバッファが 200 MB に達すると、間隔の経過前に書き込まれることもあります。
+* **デフォルト**: 900
+* **単位**: 秒
+* **導入バージョン**: v4.0
+
 ### query_mem_limit
 
 * **説明**: 各 BE ノードでのクエリのメモリ制限を設定するために使用されます。デフォルト値は 0 で、制限がないことを意味します。この項目はパイプラインエンジンが有効になった後にのみ有効です。`Memory Exceed Limit` エラーが発生した場合、この変数を増やすことができます。`0` に設定すると、制限が課されないことを示します。
@@ -1543,11 +1553,19 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 * スコープ: Session
 * デフォルト: `colocate`
 * データ型: String
-* 有効な値: `colocate`, `parallel`
+* 有効な値: `colocate`, `parallel`, `grouped`
 
 空でない並列スキャンは、少なくとも 2 つの論理パーティションと 2 つの実 Tablet を選択する必要があり、選択した計算リソースに少なくとも 2 つの利用可能な CN が必要です。DISTINCT 修飾子を使う集計では、`COUNT DISTINCT` のみをサポートします。Pipeline 実行と `parallel_fragment_exec_instance_num = 1` が必要です。並列モードはネットワークと集計状態の転送コストを増やし、非所有ノードからのリモート読み取りを増やす可能性があります。高速化や全計算ノードの使用は保証されません。パーティションと Tablet のプルーニングは維持されます。
 
 書き込み/更新、JOIN、集合演算、CTE、サブクエリ、ウィンドウ関数、Grouping Sets、特殊/履歴/メタデータ/キャッシュ統計スキャン、サンプリングやスキャンヒント、MV/Rollup によるソース置換、複数の最終スキャン、Query Cache、段階的スケジューリング、事前準備物理分割スキャン、単一ノードプラン、および非 Pipeline 実行はサポートしません。入力が完全にプルーニングされた場合、通常の空入力集計の動作を維持します。未対応のリクエストは他のセッション設定を変更せずにエラーになります。
+
+`grouped` はセッション限定の実験的な明示オプションです。Tablet の範囲境界から一時的なキー範囲グループを構成し、選択した各パーティションで同じキー範囲を読むスキャンタスクを揃えます。SQL の各集計グループの全入力行を、1 つの CN 上の同じ集計論理ドライバーで処理し、集計前の行をキーで CN 間や CN 内に再分散するシャッフルを省きます。完全なグループ化の証明が保持される場合、フィルター、出力エイリアス、HAVING、最終 ORDER BY/LIMIT のセマンティクスは維持されます。適用条件は計画時に確認され、現在の実験的な実装の条件を満たさないリクエストは明示的なエラーになります。
+
+Grouped 実行はソースバージョンと Tablet 範囲を一度だけ取得し、選択した物理パーティション全体の完全なキー範囲グループを構成します。少なくとも 2 つの物理パーティションと 2 つの空でないキー範囲グループが必要です。各グループは 1 つのブロッキング HASH 集計に入力され、最終化したスカラー結果のみを集約します。Pipeline、Group Execution、`parallel_fragment_exec_instance_num = 1` が必要です。並列モードの制限も適用され、強制的な多段階集計および互換性のないグローバル遅延マテリアライズは未対応です。このパスではソート集計とバケット単位の集計を無効にします。完全にプルーニングされた入力は通常の空入力の動作を維持します。PREPARE/EXECUTE は完全な物理プランを再利用せず、現在のモードで集計を再計画します。
+
+`enable_lake_tablet_internal_parallel` が有効な場合、grouped スキャンは通常の非 prepared 物理行 ID 分割をサポートします。完全なキーグループごとに、1 つの CN 上の 1 つの集計論理ドライバーが引き続き処理します。追加の I/O タスクは、キーのシャッフルを行わずに同じドライバーへデータを渡します。`enable_lake_tablet_internal_parallel` を無効にすると、分割しないパスを使用します。デフォルトの 16 I/O スロットは同時に実行する I/O 数を制限し、生成される子タスク数の上限ではありません。
+
+スキャンごとの上限は 1,024 グループ、8,192 ルートクリップタスクです。この上限は生成される I/O 子タスク数を制限しません。Group Execution の容量制限も適用されます。EXPLAIN は grouped 実行と一意のソース数、グループ数、ルートタスク数を表示します。`RangeClipTasks` は正常にオープンされたルートクリップを 1 回だけ数え、子タスクを含みません。`MorselsCount` はルートと子タスクを含みます。`PeakIOTasks` とスキャン時間、行数、リモート読み取りバイト数を併せて I/O 並行性を評価してください。通常の Tablet および Segment カウンターにはタスクによる重複読み取りが含まれる場合があり、全体で一意のソース数ではありません。高速化や DISTINCT 集計の一定メモリ使用量は保証しません。デフォルトは `colocate` のままです。
 
 ### resource_group 
 
@@ -1772,11 +1790,8 @@ StarRocks のバージョン。変更できません。
 
 ### wait_timeout
 
-* **説明**: サーバーが非対話型接続でアクティビティを待機する秒数。この時間が経過してもクライアントが StarRocks と対話しない場合、StarRocks は接続を積極的に閉じます。
+* **説明**: サーバーがアイドル状態の接続でアクティビティを待機する秒数。対話型かどうかに関係なく、すべての接続に適用されます。`interactive_timeout` は使用されません。この時間が経過してもクライアントが StarRocks と対話しない場合、StarRocks は接続を積極的に閉じます。
 * **デフォルト**: 28800（8 時間）。
 * **単位**: 秒
 * **データ型**: Int
 
-<EditionSpecificVariable />
-
-<VariableWarehouse />

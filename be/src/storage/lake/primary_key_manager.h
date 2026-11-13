@@ -18,10 +18,10 @@
 #include <unordered_map>
 
 #include "cache/dynamic_cache.h"
+#include "column/column.h"
 #include "runtime/runtime_fwd.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_persistent_index.h"
-#include "storage/lake/primary_key_compaction_state.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
@@ -92,7 +92,7 @@ private:
     std::unordered_map<uint32_t, uint32_t> _rssid_to_rowid;
 };
 
-// Manages primary-key indexes and the rowset update/compaction state used by shared-data tablets.
+// Manages primary-key indexes and the rowset update state used by shared-data tablets.
 class PrimaryKeyManager {
 public:
     PrimaryKeyManager(std::shared_ptr<LocationProvider> location_provider, MemTracker* mem_tracker);
@@ -177,13 +177,11 @@ public:
     // avoiding repeated metadata loads for each segment.
     size_t get_rowset_num_deletes(const TabletMetadata& metadata, const RowsetMetadataPB& rowset_meta);
 
+    // Resolve the compaction against the writes published since it started, using the rows mapper (.lcrm) the
+    // compaction wrote, then update the primary index, delvecs and tablet metadata.
     Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
                                       const TabletMetadataPtr& metadata, const Tablet& tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version);
-
-    Status light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                            const TabletMetadataPtr& metadata, const Tablet& tablet,
-                                            IndexEntry* index_entry, MetaFileBuilder* builder, int64_t base_version);
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
 
@@ -201,26 +199,21 @@ public:
 
     // Shrink the primary index cache to |percent|% of its capacity if it holds more. Indexes in use are kept.
     void evict_cache(int32_t percent);
-    void preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet, const TabletSchemaCSPtr& tablet_schema);
 
     // check if pk index's cache ref == ref_cnt
     bool TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint32_t ref_cnt);
 
     bool TEST_check_update_state_cache_absent(uint32_t tablet_id, int64_t txn_id);
-    bool TEST_check_compaction_cache_absent(uint32_t tablet_id, int64_t txn_id);
-    void TEST_remove_compaction_cache(uint32_t tablet_id, int64_t txn_id);
 
-    // Re-derive the index cache capacity, the block cache capacity and the update/compaction state tracker
-    // limits from the current primary key mem tracker limit, after it changed.
+    // Re-derive the index cache capacity, the block cache capacity and the update state tracker limit from the
+    // current primary key mem tracker limit, after it changed.
     void refresh_mem_limits();
 
-    // Re-apply lake_pk_preload_memory_limit_percent to the update state and compaction state trackers.
+    // Re-apply lake_pk_preload_memory_limit_percent to the update state tracker.
     void refresh_preload_mem_limit();
 
     // Re-apply lake_pk_index_block_cache_limit_percent to the primary index sstable block cache.
     void refresh_block_cache_mem_limit();
-
-    MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
     MemTracker* update_state_mem_tracker() const { return _update_state_mem_tracker.get(); }
 
@@ -343,9 +336,6 @@ private:
 
     PkIndexShard& _get_pk_index_shard(int64_t tabletId);
 
-    // decide whether use light publish compaction stategy or not
-    bool _use_light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction);
-
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:
     // default 6min
@@ -355,8 +345,6 @@ private:
 
     // rowset cache
     DynamicCache<string, RowsetUpdateState> _update_state_cache;
-    // compaction cache
-    DynamicCache<string, PrimaryKeyCompactionState> _compaction_cache;
     std::atomic<int64_t> _last_clear_expired_cache_millis = 0;
     std::shared_ptr<LocationProvider> _location_provider;
     TabletManager* _tablet_mgr = nullptr;
@@ -366,7 +354,6 @@ private:
     MemTracker* _primary_key_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _index_cache_mem_tracker;
     std::unique_ptr<MemTracker> _update_state_mem_tracker;
-    std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
 
     std::vector<PkIndexShard> _pk_index_shards;
 

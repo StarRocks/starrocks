@@ -21,6 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
+import com.starrocks.scheduler.mv.MVRefreshPinState;
 import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
 import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
 import com.starrocks.sql.plan.ExecPlan;
@@ -72,9 +73,18 @@ public class MvTaskRunContext extends TaskRunContext {
     private boolean partitionLimitExcludedPartitions = false;
     // MaterializedView#getVersionMapResetEpoch as this run saw it before reading anything, -1 when not recorded.
     private long versionMapResetEpoch = -1;
+    private MVRefreshPinState pinState;
 
     public MvTaskRunContext(TaskRunContext context) {
         super(context);
+    }
+
+    public MVRefreshPinState getPinState() {
+        return pinState;
+    }
+
+    public void setPinState(MVRefreshPinState pinState) {
+        this.pinState = pinState;
     }
 
     public long getVersionMapResetEpoch() {

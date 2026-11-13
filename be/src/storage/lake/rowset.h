@@ -196,12 +196,14 @@ public:
     // simply get iterators to iterate all rows without complex options like predicates
     // |schema| read schema
     // |stats| used for iterator read stats
+    // |chunk_size| rows per chunk, 0 keeps the SegmentReadOptions default
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
     // this function does not expect segment schema will be changed, so return error if record predicate exists
     // but does not match its chunk schema
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema, bool file_data_cache,
-                                                                      OlapReaderStatistics* stats);
+                                                                      OlapReaderStatistics* stats,
+                                                                      size_t chunk_size = 0);
 
     // used for primary index load, it will get segment iterator by specifice version and it's delvec,
     // without complex options like predicates

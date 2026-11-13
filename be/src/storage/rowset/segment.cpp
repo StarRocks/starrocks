@@ -43,6 +43,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/hash/crc32c.h"
 #include "base/string/slice.h"
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
@@ -341,6 +342,14 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_segment_file_info.encryption_meta));
         opts.encryption_info = std::move(info);
     }
+
+#ifdef BE_TEST
+    {
+        // Lets a test check which cache options a given file's footer read was opened with.
+        std::pair<const std::string*, const RandomAccessFileOptions*> path_and_opts{&_segment_file_info.path, &opts};
+        TEST_SYNC_POINT_CALLBACK("Segment::_open:footer_file_options", &path_and_opts);
+    }
+#endif
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
     std::optional<MemTracker*> read_file_mem_tracker;
     if (_uses_process_memory) read_file_mem_tracker = CurrentThread::mem_tracker();
@@ -786,7 +795,9 @@ Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& 
 }
 
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
-                                                            const TabletSchemaCSPtr& read_tablet_schema) {
+                                                            const TabletSchemaCSPtr& read_tablet_schema,
+                                                            const LakeIOOptions& lake_io_opts,
+                                                            OlapReaderStatistics* stats) {
     std::shared_ptr<TabletSchema> tablet_schema;
     if (read_tablet_schema != nullptr) {
         tablet_schema = TabletSchema::create_with_uid(read_tablet_schema, dcg.column_ids()[idx]);
@@ -803,7 +814,9 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
     if (idx < dcg.encryption_metas().size()) {
         info.encryption_meta = dcg.encryption_metas()[idx];
     }
-    return Segment::open(_fs, info, 0, tablet_schema, nullptr);
+    auto segment = std::make_shared<Segment>(_fs, std::move(info), 0, std::move(tablet_schema), nullptr);
+    RETURN_IF_ERROR(segment->open(nullptr, nullptr, lake_io_opts, stats));
+    return segment;
 }
 
 Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {

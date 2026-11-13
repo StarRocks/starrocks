@@ -25,6 +25,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
 import com.starrocks.type.AnyGeographyType;
@@ -344,6 +345,8 @@ public class PolymorphicFunctionAnalyzer {
             throw  new SemanticException(errMsg);
         }
 
+        checkMapKeyType(newRetType);
+
         // change null type into boolean type
         resolvedArgTypes = AnalyzerUtils.replaceNullTypes2Booleans(resolvedArgTypes);
         newRetType = replaceNullType2Boolean(newRetType);
@@ -355,6 +358,26 @@ public class PolymorphicFunctionAnalyzer {
             return newAggregateFunction((AggregateFunction) fn, Arrays.asList(resolvedArgTypes), newRetType);
         }
         return null;
+    }
+
+    static void checkMapKeyType(Type type) {
+        checkMapKeyType(type, NodePosition.ZERO);
+    }
+
+    static void checkMapKeyType(Type type, NodePosition pos) {
+        if (type.isMapType()) {
+            MapType map = (MapType) type;
+            if (map.getKeyType().isGeoType() || map.getKeyType().hasNestedGeoType()) {
+                throw new SemanticException("Map key doesn't support type: " + map.getKeyType(), pos);
+            }
+            checkMapKeyType(map.getValueType(), pos);
+        } else if (type.isArrayType()) {
+            checkMapKeyType(((ArrayType) type).getItemType(), pos);
+        } else if (type.isStructType()) {
+            for (StructField field : ((StructType) type).getFields()) {
+                checkMapKeyType(field.getType(), pos);
+            }
+        }
     }
 
     private static Function resolvePolymorphicArrayFunction(Function fn, Type[] inputArgTypes) {

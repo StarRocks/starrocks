@@ -348,6 +348,18 @@ public class ConnectContext {
         return scanVersionOverride;
     }
 
+    // Start task run id of the incremental MV refresh whose staged TVR window this connection's insert commits;
+    // see IVMInsertLoadTxnCallback.
+    private String tvrStagingOwner = null;
+
+    public void setTvrStagingOwner(String tvrStagingOwner) {
+        this.tvrStagingOwner = tvrStagingOwner;
+    }
+
+    public String getTvrStagingOwner() {
+        return tvrStagingOwner;
+    }
+
     public void setOptimizeRewrite(boolean optimizeRewrite) {
         this.optimizeRewrite = optimizeRewrite;
     }

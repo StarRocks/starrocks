@@ -16,6 +16,7 @@ package com.starrocks.connector.iceberg;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.connector.ConnectorMetadataCache;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
@@ -50,11 +51,11 @@ import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 
@@ -301,11 +302,14 @@ public class IcebergCacheMemoryAccuracyTest extends TableTestBase {
         Map<String, Partition> partitions = delegate.getPartitions(icebergTable, -1, null);
 
         CachingIcebergCatalog catalog = newCatalog(Map.of());
-        com.github.benmanes.caffeine.cache.LoadingCache<IcebergTableName, Map<String, Partition>> cache =
-                field(catalog, "partitionCache");
-        cache.put(new IcebergTableName("db", "part", table.currentSnapshot().snapshotId()), partitions);
+        String scope = field(catalog, "cacheScope");
+        ConnectorMetadataCache.Store partitionStore = field(catalog, "partitionStore");
+        partitionStore.put(scope, ConnectorMetadataCache.Kind.PARTITIONS,
+                new IcebergTableName("db", "part", table.currentSnapshot().snapshotId()), partitions);
         long actual = GraphLayout.parseInstance(partitions).totalSize();
-        check(label, "ledger", ledger(cache), actual);
+        check(label, "ledger",
+                partitionStore.weightedSize(scope, EnumSet.of(ConnectorMetadataCache.Kind.PARTITIONS)),
+                actual);
         check(label, "estimateSize()", catalog.estimateSize(), actual);
     }
 
@@ -404,10 +408,14 @@ public class IcebergCacheMemoryAccuracyTest extends TableTestBase {
         GraphLayout tableGraph = GraphLayout.parseInstance(table, ((BaseTable) table).operations().current());
         List<Object> allRoots = new ArrayList<>();
         String cacheName = dataStats || (!positionDeletes && !equalityDeletes) ? "dataFileCache" : "deleteFileCache";
+        String scope = field(catalog, "cacheScope");
         for (String each : new String[] {"dataFileCache", "deleteFileCache"}) {
-            Cache<String, Set<?>> cache = field(catalog, each);
+            ConnectorMetadataCache.Kind kind = each.equals("dataFileCache")
+                    ? ConnectorMetadataCache.Kind.DATA_FILES : ConnectorMetadataCache.Kind.DELETE_FILES;
+            ConnectorMetadataCache.Store store =
+                    field(catalog, each.equals("dataFileCache") ? "dataFileStore" : "deleteFileStore");
             List<Object> roots = new ArrayList<>();
-            for (Map.Entry<String, Set<?>> e : cache.asMap().entrySet()) {
+            for (Map.Entry<Object, Object> e : store.entries(scope, kind).entrySet()) {
                 roots.add(e.getKey());
                 roots.add(e.getValue());
             }
@@ -415,7 +423,7 @@ public class IcebergCacheMemoryAccuracyTest extends TableTestBase {
             if (each.equals(cacheName)) {
                 Assertions.assertFalse(roots.isEmpty(), label + ": " + each + " is empty");
                 long actual = GraphLayout.parseInstance(roots.toArray()).subtract(tableGraph).totalSize();
-                check(label, each + " ledger", ledger(cache), actual);
+                check(label, each + " ledger", store.weightedSize(scope, EnumSet.of(kind)), actual);
             }
         }
         long actual = GraphLayout.parseInstance(allRoots.toArray()).subtract(tableGraph).totalSize();

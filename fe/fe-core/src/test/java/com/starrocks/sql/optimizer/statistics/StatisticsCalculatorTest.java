@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -28,10 +29,12 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -50,6 +53,7 @@ import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
@@ -57,19 +61,29 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -313,6 +327,212 @@ public class StatisticsCalculatorTest {
         }
     }
 
+    /**
+     * Operator level test for both call sites that ask the statistics storage for a subfield path: the projection of a
+     * scan operator, and a LogicalProject on top of a scan. A query reaches the first one, see
+     * {@link #testQueryWithSubfieldOfArrayElement()}, but not the second one, because the project is merged into the
+     * scan projection before statistics are estimated. That branch is therefore covered by a hand built operator tree.
+     */
+    @Test
+    public void testSkipStatisticsForSubfieldOfArrayElement() {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("statistics_test")
+                .getTable("test_all_type");
+        List<Long> partitionIds = table.getPartitions().stream()
+                .mapToLong(Partition::getId).boxed().collect(Collectors.toList());
+
+        Type structType = new StructType(
+                new ArrayList<>(List.of(new StructField("bucket_id", IntegerType.INT))));
+        Type arrayType = new ArrayType(structType);
+        Column arrayColumn = new Column("bucket_array", arrayType, true);
+        ColumnRefOperator arrayRef = columnRefFactory.create("bucket_array", arrayType, true);
+        ColumnRefOperator outputRef = columnRefFactory.create("bucket_id", IntegerType.INT, true);
+        CollectionElementOperator arrayElement = new CollectionElementOperator(
+                structType, arrayRef, ConstantOperator.createInt(1), false);
+        SubfieldOperator subfield = new SubfieldOperator(
+                arrayElement, IntegerType.INT, List.of("bucket_id"));
+
+        LogicalOlapScanOperator scanOperator = new LogicalOlapScanOperator(table,
+                ImmutableMap.of(arrayRef, arrayColumn),
+                ImmutableMap.of(arrayColumn, arrayRef),
+                null, -1, null,
+                table.getBaseIndexMetaId(),
+                partitionIds,
+                null,
+                false,
+                Lists.newArrayList(),
+                Lists.newArrayList(),
+                Lists.newArrayList(),
+                false);
+        scanOperator.setProjection(new Projection(ImmutableMap.of(outputRef, subfield)));
+
+        List<String> requestedColumns = new ArrayList<>();
+        StatisticStorage originalStorage = globalStateMgr.getStatisticStorage();
+        globalStateMgr.setStatisticStorage(new EmptyStatisticStorage() {
+            @Override
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                requestedColumns.addAll(columns);
+                return super.getColumnStatistics(table, columns);
+            }
+        });
+        try {
+            GroupExpression groupExpression = new GroupExpression(scanOperator, Lists.newArrayList());
+            groupExpression.setGroup(new Group(0));
+            ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+
+            new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+
+            // the array column itself has no collectable statistics, so only the subfield path could be requested,
+            // and a path rooted at the array element must not be
+            Assertions.assertFalse(requestedColumns.stream().anyMatch(column -> column.contains(",")),
+                    requestedColumns.toString());
+            Assertions.assertTrue(expressionContext.getStatistics().getColumnStatistic(outputRef).isUnknown());
+
+            requestedColumns.clear();
+            scanOperator.setProjection(null);
+            OptExpression scanExpression = OptExpression.create(scanOperator);
+            scanExpression.setStatistics(Statistics.builder()
+                    .setOutputRowCount(100)
+                    .addColumnStatistic(arrayRef, ColumnStatistic.unknown())
+                    .build());
+            OptExpression projectExpression = OptExpression.create(
+                    new LogicalProjectOperator(ImmutableMap.of(outputRef, subfield)), scanExpression);
+            ExpressionContext projectContext = new ExpressionContext(projectExpression);
+
+            new StatisticsCalculator(projectContext, columnRefFactory, optimizerContext).estimatorStats();
+
+            Assertions.assertTrue(requestedColumns.isEmpty());
+            Assertions.assertTrue(projectContext.getStatistics().getColumnStatistic(outputRef).isUnknown());
+        } finally {
+            globalStateMgr.setStatisticStorage(originalStorage);
+        }
+    }
+
+    @Test
+    public void testStatisticsForDirectSubfield() {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("statistics_test")
+                .getTable("test_all_type");
+        List<Long> partitionIds = table.getPartitions().stream()
+                .mapToLong(Partition::getId).boxed().collect(Collectors.toList());
+
+        Type structType = new StructType(
+                new ArrayList<>(List.of(new StructField("bucket_id", IntegerType.INT))));
+        Column structColumn = new Column("bucket_struct", structType, true);
+        ColumnRefOperator structRef = columnRefFactory.create("bucket_struct", structType, true);
+        ColumnRefOperator outputRef = columnRefFactory.create("bucket_id", IntegerType.INT, true);
+        SubfieldOperator subfield = new SubfieldOperator(
+                structRef, IntegerType.INT, List.of("bucket_id"));
+
+        LogicalOlapScanOperator scanOperator = new LogicalOlapScanOperator(table,
+                ImmutableMap.of(structRef, structColumn),
+                ImmutableMap.of(structColumn, structRef),
+                null, -1, null,
+                table.getBaseIndexMetaId(),
+                partitionIds,
+                null,
+                false,
+                Lists.newArrayList(),
+                Lists.newArrayList(),
+                Lists.newArrayList(),
+                false);
+        scanOperator.setProjection(new Projection(ImmutableMap.of(outputRef, subfield)));
+
+        ColumnStatistic expected = new ColumnStatistic(1, 10, 0, 8, 5);
+        StatisticStorage originalStorage = globalStateMgr.getStatisticStorage();
+        globalStateMgr.setStatisticStorage(new EmptyStatisticStorage() {
+            @Override
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                if (columns.equals(List.of("bucket_struct.bucket_id"))) {
+                    return List.of(expected);
+                }
+                return super.getColumnStatistics(table, columns);
+            }
+        });
+        try {
+            GroupExpression groupExpression = new GroupExpression(scanOperator, Lists.newArrayList());
+            groupExpression.setGroup(new Group(0));
+            ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+
+            new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+
+            ColumnStatistic actual = expressionContext.getStatistics().getColumnStatistic(outputRef);
+            Assertions.assertFalse(actual.isUnknown());
+            Assertions.assertEquals(expected.getMinValue(), actual.getMinValue());
+            Assertions.assertEquals(expected.getMaxValue(), actual.getMaxValue());
+            Assertions.assertEquals(expected.getDistinctValuesCount(), actual.getDistinctValuesCount());
+        } finally {
+            globalStateMgr.setStatisticStorage(originalStorage);
+        }
+    }
+
+    /**
+     * Query level regression test for the same bug. `ass[1].a` reaches the optimizer as a SubfieldOperator whose root
+     * is an expression instead of a table column, so before the fix the scan asked the statistics storage for the path
+     * `3: ass,1.a`, which no table column can ever match.
+     * <p>
+     * The statistics storage below reproduces what production then does with such a path: the loader behind
+     * CachedStatisticStorage resolves every requested path with StatisticUtils#getQueryStatisticsColumnType, which
+     * rejects an unknown root column, and CachedStatisticStorage falls back to unknown statistics for the whole
+     * requested batch. Since one scan requests all of its subfield paths in a single batch, the unsupported path also
+     * throws away the statistics of the valid `st1.s1` path selected by the same query. That is the user visible
+     * impact: a repeated failing statistics lookup plus worse cost estimates for the other columns of the projection.
+     */
+    @Test
+    public void testQueryWithSubfieldOfArrayElement() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `test_subfield_statistics` (\n" +
+                "  `v1` bigint NULL,\n" +
+                "  `st1` struct<s1 int, s2 int> NULL,\n" +
+                "  `ass` array<struct<a int, b int>> NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        ColumnStatistic structSubfieldStatistic = new ColumnStatistic(1, 10, 0, 4, 5);
+        List<String> requestedColumns = new ArrayList<>();
+        List<String> rejectedRequests = new ArrayList<>();
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        StatisticStorage originalStorage = globalStateMgr.getStatisticStorage();
+        // the test table has no data, keep the scan instead of letting PruneEmptyScanRule replace it with values
+        boolean originalPruneEmptyOutputScan = FeConstants.enablePruneEmptyOutputScan;
+        FeConstants.enablePruneEmptyOutputScan = false;
+        globalStateMgr.setStatisticStorage(new EmptyStatisticStorage() {
+            @Override
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                requestedColumns.addAll(columns);
+                try {
+                    columns.forEach(column -> StatisticUtils.getQueryStatisticsColumnType(table, column));
+                } catch (SemanticException e) {
+                    rejectedRequests.add(columns.toString());
+                    return super.getColumnStatistics(table, columns);
+                }
+                return columns.stream()
+                        .map(column -> "st1.s1".equals(column) ? structSubfieldStatistic : ColumnStatistic.unknown())
+                        .collect(Collectors.toList());
+            }
+        });
+        try {
+            String plan = UtFrameUtils.getPlanAndFragment(connectContext,
+                            "select ass[1].a, st1.s1, " +
+                                    "cast(parse_json('{\"k\": 45}') as struct<k varchar>).k " +
+                                    "from test_subfield_statistics")
+                    .second.getExplainString(TExplainLevel.COSTS);
+
+            Assertions.assertTrue(rejectedRequests.isEmpty(),
+                    "unsupported statistics path requested: " + rejectedRequests);
+            Assertions.assertTrue(requestedColumns.contains("st1.s1"),
+                    "statistics of the supported subfield path were not requested: " + requestedColumns);
+            Assertions.assertTrue(plan.contains("-->[1.0, 10.0, 0.0, 4.0, 5.0] ESTIMATE"), plan);
+        } finally {
+            FeConstants.enablePruneEmptyOutputScan = originalPruneEmptyOutputScan;
+            globalStateMgr.setStatisticStorage(originalStorage);
+            starRocksAssert.dropTable("test_subfield_statistics");
+        }
+    }
+
     @Test
     public void testLogicalIcebergTableScan() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -351,17 +571,153 @@ public class StatisticsCalculatorTest {
                                 new ColumnStatistic(0, 100, 0.0, 5.0, 100))
                 );
                 builder.setOutputRowCount(100);
-                return builder.build();
+                // like the real method: internal statistics are full-table ANALYZE statistics
+                return builder.setStatsSource(Statistics.StatsSource.ANALYZE).build();
             }
         };
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, optimizerContext);
         statisticsCalculator.estimatorStats();
+        // ANALYZE statistics cover the whole table, so the partition predicate stays in the selectivity
         Assertions.assertEquals(50, expressionContext.getStatistics().getOutputRowCount(), 0.001);
         Assertions.assertEquals(50, expressionContext.getStatistics().
                 getColumnStatistic(partitionColumn).getMaxValue(), 0.001);
-        Assertions.assertTrue(optimizerContext.isObtainedFromInternalStatistics());
-        optimizerContext.setObtainedFromInternalStatistics(false);
+    }
+
+    @Test
+    public void testRemoveIcebergPartitionPredicateFollowsScanStatsSource() {
+        LogicalIcebergScanOperator scan = icebergScan("partitioned_db", "t1");
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.LT, icebergColumn(scan, "date"),
+                ConstantOperator.createVarchar("2020-01-03"));
+        StatisticsCalculator calculator = new StatisticsCalculator();
+
+        // row count from the pruned files: the partition predicate is already applied
+        Assertions.assertEquals(ConstantOperator.TRUE,
+                calculator.removePartitionPredicate(predicate, scan, ICEBERG_TABLE_METADATA));
+        // full-table ANALYZE statistics and default statistics keep it in the selectivity
+        Statistics analyzed = Statistics.builder().setStatsSource(Statistics.StatsSource.ANALYZE).build();
+        Assertions.assertEquals(predicate, calculator.removePartitionPredicate(predicate, scan, analyzed));
+        Assertions.assertEquals(predicate,
+                calculator.removePartitionPredicate(predicate, scan, Statistics.builder().build()));
+        Assertions.assertEquals(predicate, calculator.removePartitionPredicate(predicate, scan, null));
+    }
+
+    @Test
+    public void testRemovedIcebergPartitionPredicateKeepsColumnStatistics() {
+        LogicalIcebergScanOperator scan = icebergScan("partitioned_db", "t1");
+        ColumnRefOperator date = icebergColumn(scan, "date");
+        ColumnRefOperator id = icebergColumn(scan, "id");
+        ScalarOperator predicate = new InPredicateOperator(false, date, ConstantOperator.createVarchar("2020-01-01"),
+                ConstantOperator.createVarchar("2020-01-02"));
+        scan = new LogicalIcebergScanOperator(scan.getTable(), scan.getColRefToColumnMetaMap(),
+                scan.getColumnMetaToColRefMap(), -1, predicate, TvrTableSnapshot.empty());
+        LogicalIcebergScanOperator finalScan = scan;
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatistics(OptimizerContext session, String catalogName, Table table,
+                                                 Map<ColumnRefOperator, Column> columns,
+                                                 List<PartitionKey> partitionKeys, ScalarOperator predicate,
+                                                 long limit, TvrVersionRange version) {
+                // the row count of the files planned with the scan predicate
+                Statistics.Builder builder = Statistics.builder().setOutputRowCount(100)
+                        .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
+                finalScan.getOutputColumns().forEach(col -> builder.addColumnStatistic(col,
+                        new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0.0, 10.0, 50)));
+                return builder.build();
+            }
+        };
+        GroupExpression groupExpression = new GroupExpression(scan, Lists.newArrayList());
+        groupExpression.setGroup(new Group(0));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+
+        Statistics statistics = expressionContext.getStatistics();
+        // the IN list is not applied to the pruned row count again, but still caps the NDV of its column
+        Assertions.assertEquals(100, statistics.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(2, statistics.getColumnStatistic(date).getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(50, statistics.getColumnStatistic(id).getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testRemoveIcebergPartitionPredicateOnlyForPrunedConjuncts() {
+        StatisticsCalculator calculator = new StatisticsCalculator();
+
+        // a string-to-temporal cast on the identity string partition column is not converted, but the connector
+        // prunes manifests / files with it against the partition values, so the row count already reflects it
+        LogicalIcebergScanOperator identity = icebergScan("partitioned_db", "t1");
+        ScalarOperator castEq = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(DateType.DATETIME, icebergColumn(identity, "date")),
+                ConstantOperator.createDatetime(LocalDateTime.of(2020, 1, 1, 0, 0)));
+        Assertions.assertEquals(ConstantOperator.TRUE,
+                calculator.removePartitionPredicate(castEq, identity, ICEBERG_TABLE_METADATA));
+        // ... but not with statistics that do not come from the planned files
+        Assertions.assertEquals(castEq, calculator.removePartitionPredicate(castEq, identity, null));
+        // shapes the manifest range check cannot prune with (a DATE cast, !=) keep every manifest, so they stay
+        ScalarOperator castDateEq = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(DateType.DATE, icebergColumn(identity, "date")),
+                ConstantOperator.createDate(LocalDateTime.of(2020, 1, 1, 0, 0)));
+        Assertions.assertEquals(castDateEq,
+                calculator.removePartitionPredicate(castDateEq, identity, ICEBERG_TABLE_METADATA));
+        ScalarOperator castNe = new BinaryPredicateOperator(BinaryType.NE,
+                new CastOperator(DateType.DATETIME, icebergColumn(identity, "date")),
+                ConstantOperator.createDatetime(LocalDateTime.of(2020, 1, 1, 0, 0)));
+        Assertions.assertEquals(castNe, calculator.removePartitionPredicate(castNe, identity, ICEBERG_TABLE_METADATA));
+        // a literal the converter cannot bind to the string column does not prune either
+        ScalarOperator intLt = new BinaryPredicateOperator(BinaryType.LT, icebergColumn(identity, "date"),
+                ConstantOperator.createInt(50));
+        Assertions.assertEquals(intLt, calculator.removePartitionPredicate(intLt, identity, ICEBERG_TABLE_METADATA));
+
+        // bucket / truncate / time transforms prune at most whole transformed partitions, a range on a bucket column
+        // not at all
+        List<String[]> transformed = List.of(new String[] {"t0_bucket", "ts"}, new String[] {"t0_day", "ts"},
+                new String[] {"t0_truncate", "data"});
+        for (String[] t : transformed) {
+            LogicalIcebergScanOperator scan = icebergScan("partitioned_transforms_db", t[0]);
+            ColumnRefOperator column = icebergColumn(scan, t[1]);
+            ScalarOperator literal = column.getType().isStringType() ? ConstantOperator.createVarchar("abcde")
+                    : ConstantOperator.createDatetime(LocalDateTime.of(2024, 1, 1, 0, 0));
+            ScalarOperator ge = new BinaryPredicateOperator(BinaryType.GE, column, literal);
+            Assertions.assertEquals(ge, calculator.removePartitionPredicate(ge, scan, ICEBERG_TABLE_METADATA), t[0]);
+        }
+
+        // identity partitioned in the current spec only: files of the older month(ts) spec are not pruned exactly
+        LogicalIcebergScanOperator evolved = icebergScan("partitioned_transforms_db", "t0_date_month_identity_evolution");
+        ScalarOperator tsEq = new BinaryPredicateOperator(BinaryType.EQ, icebergColumn(evolved, "ts"),
+                ConstantOperator.createDatetime(LocalDateTime.of(2024, 1, 1, 0, 0)));
+        Assertions.assertEquals(tsEq, calculator.removePartitionPredicate(tsEq, evolved, ICEBERG_TABLE_METADATA));
+
+        // after a partition transform evolution the file partition values are not read, so the cast residual keeps
+        // every file and the cast stays
+        new MockUp<IcebergTable>() {
+            @Mock
+            public boolean hasPartitionTransformedEvolution() {
+                return true;
+            }
+        };
+        Assertions.assertEquals(castEq, calculator.removePartitionPredicate(castEq, identity, ICEBERG_TABLE_METADATA));
+    }
+
+    private static final Statistics ICEBERG_TABLE_METADATA =
+            Statistics.builder().setStatsSource(Statistics.StatsSource.TABLE_METADATA).build();
+
+    private LogicalIcebergScanOperator icebergScan(String db, String tableName) {
+        Table icebergTable = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", db, tableName);
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        List<Column> columns = icebergTable.getColumns();
+        for (int i = 0; i < columns.size(); i++) {
+            ColumnRefOperator ref = new ColumnRefOperator(i, columns.get(i).getType(), columns.get(i).getName(), true);
+            refToColumn.put(ref, columns.get(i));
+            columnToRef.put(columns.get(i), ref);
+        }
+        return new LogicalIcebergScanOperator(icebergTable, refToColumn, columnToRef, -1, null,
+                TvrTableSnapshot.empty());
+    }
+
+    private static ColumnRefOperator icebergColumn(LogicalIcebergScanOperator scan, String name) {
+        return scan.getColRefToColumnMetaMap().keySet().stream().filter(ref -> ref.getName().equals(name))
+                .findFirst().orElseThrow();
     }
 
     @Test
@@ -415,7 +771,6 @@ public class StatisticsCalculatorTest {
             estimateIcebergScan(icebergTable, refToColumn, columnToRef);
         } finally {
             connectContext.setDumpInfo(previous);
-            optimizerContext.setObtainedFromInternalStatistics(false);
         }
     }
 
@@ -817,6 +1172,64 @@ public class StatisticsCalculatorTest {
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
         statisticsCalculator.estimatorStats();
         Assertions.assertEquals(200000.0, expressionContext.getStatistics().getOutputRowCount(), 0.0001);
+    }
+
+    @Test
+    public void testJoinEstimateAppliesAllResidualPredicates() {
+        ColumnRefOperator l1 = columnRefFactory.create("l1", IntegerType.INT, true);
+        ColumnRefOperator l2 = columnRefFactory.create("l2", IntegerType.INT, true);
+        ColumnRefOperator r1 = columnRefFactory.create("r1", IntegerType.INT, true);
+        ColumnRefOperator r2 = columnRefFactory.create("r2", IntegerType.INT, true);
+        ColumnRefOperator r3 = columnRefFactory.create("r3", IntegerType.INT, true);
+        columnRefFactory.updateColumnToRelationIds(l1.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(l2.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(r1.getId(), 1);
+        columnRefFactory.updateColumnToRelationIds(r2.getId(), 1);
+        columnRefFactory.updateColumnToRelationIds(r3.getId(), 1);
+
+        Statistics.Builder leftBuilder = Statistics.builder();
+        leftBuilder.setOutputRowCount(10000);
+        leftBuilder.addColumnStatistics(ImmutableMap.of(l1, new ColumnStatistic(0, 100, 0, 10, 50)));
+        leftBuilder.addColumnStatistics(ImmutableMap.of(l2, new ColumnStatistic(0, 50, 0, 10, 50)));
+        Group leftGroup = new Group(0);
+        leftGroup.setStatistics(leftBuilder.build());
+        leftGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(l1, l2))));
+
+        Statistics.Builder rightBuilder = Statistics.builder();
+        rightBuilder.setOutputRowCount(20000);
+        rightBuilder.addColumnStatistics(ImmutableMap.of(r1, new ColumnStatistic(0, 100, 0, 10, 100)));
+        rightBuilder.addColumnStatistics(ImmutableMap.of(r2, new ColumnStatistic(0, 50, 0, 10, 50)));
+        rightBuilder.addColumnStatistics(ImmutableMap.of(r3, new ColumnStatistic(0, 50, 0, 10, 50)));
+        Group rightGroup = new Group(1);
+        rightGroup.setStatistics(rightBuilder.build());
+        rightGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(r1, r2, r3))));
+
+        BinaryPredicateOperator eq = new BinaryPredicateOperator(BinaryType.EQ, l1, r1);
+        BinaryPredicateOperator ge = new BinaryPredicateOperator(BinaryType.GE, l2, r2);
+        BinaryPredicateOperator le = new BinaryPredicateOperator(BinaryType.LE, l2, r3);
+
+        // ON l1 = r1
+        double eqRows = estimateJoin(JoinOperator.INNER_JOIN, eq, leftGroup, rightGroup).getOutputRowCount();
+        Assertions.assertTrue(eqRows > 1);
+
+        // ON l1 = r1 AND l2 >= r2: one column-to-column residual, unknown coefficient 0.5
+        Statistics oneResidual =
+                estimateJoin(JoinOperator.INNER_JOIN, Utils.compoundAnd(eq, ge), leftGroup, rightGroup);
+        Assertions.assertEquals(eqRows * 0.5, oneResidual.getOutputRowCount(), 0.0001);
+
+        // ON l1 = r1 AND l2 >= r2 AND l2 <= r3: both residuals must apply, 0.5 * 0.5
+        Statistics twoResiduals =
+                estimateJoin(JoinOperator.INNER_JOIN, Utils.compoundAnd(eq, ge, le), leftGroup, rightGroup);
+        Assertions.assertEquals(eqRows * 0.25, twoResiduals.getOutputRowCount(), 0.0001);
+
+        // ON l1 = r1 AND l2 <= 25 AND l2 >= r2: the constant range residual is not the last conjunct,
+        // its column statistics narrowing must survive the following residual
+        BinaryPredicateOperator constRange =
+                new BinaryPredicateOperator(BinaryType.LE, l2, ConstantOperator.createInt(25));
+        Statistics withConstRange =
+                estimateJoin(JoinOperator.INNER_JOIN, Utils.compoundAnd(eq, constRange, ge), leftGroup, rightGroup);
+        Assertions.assertEquals(25, withConstRange.getColumnStatistic(l2).getMaxValue(), 0.0001);
+        Assertions.assertTrue(withConstRange.getOutputRowCount() < oneResidual.getOutputRowCount());
     }
 
     @Test

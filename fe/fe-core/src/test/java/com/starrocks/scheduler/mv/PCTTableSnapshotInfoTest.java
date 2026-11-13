@@ -14,25 +14,40 @@
 
 package com.starrocks.scheduler.mv;
 
+import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.MVPartitionCellBuilder;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -148,7 +163,62 @@ class PCTTableSnapshotInfoTest {
                 "an unchanged live table must not be reported as changed");
     }
 
-    private static void mockLiveTable(OlapTable live) {
+    @ParameterizedTest
+    @CsvSource({"true, false", "true, true", "false, false", "false, true"})
+    void testExternalPartitionDriftUsesSnapshotPin(boolean pinned, boolean foreignWindow) throws AnalysisException {
+        Table snapshot = mock(Table.class);
+        when(snapshot.getType()).thenReturn(Table.TableType.ICEBERG);
+        Table live = mock(Table.class);
+        when(live.getType()).thenReturn(Table.TableType.ICEBERG);
+        MaterializedView mv = mock(MaterializedView.class);
+        PartitionInfo partitionInfo = mock(PartitionInfo.class);
+        when(partitionInfo.isRangePartition()).thenReturn(true);
+        when(mv.getPartitionInfo()).thenReturn(partitionInfo);
+        when(mv.getRefBaseTablePartitionColumns()).thenReturn(Map.of(snapshot, List.of(mock(Column.class))));
+        when(mv.getRangePartitionFirstExpr()).thenReturn(Optional.of(mock(Expr.class)));
+        MaterializedView.MvRefreshScheme scheme = new MaterializedView.MvRefreshScheme();
+        when(mv.getRefreshScheme()).thenReturn(scheme);
+        BaseTableInfo baseTableInfo = mock(BaseTableInfo.class);
+        MaterializedView.AsyncRefreshContext shared = scheme.getAsyncRefreshContext();
+        Map<BaseTableInfo, TvrVersionRange> foreign = foreignWindow
+                ? Map.of(baseTableInfo, TvrTableSnapshot.of(99L)) : Map.of();
+        shared.replaceTempBaseTableInfoTvrDeltaMap(foreignWindow ? "another-refresh" : null, foreign);
+        shared.getBaseTableInfoTvrVersionRangeMap().put(baseTableInfo, TvrTableSnapshot.of(0L));
+        Map<BaseTableInfo, TvrVersionRange> baseline = Map.copyOf(shared.getBaseTableInfoTvrVersionRangeMap());
+        mockLiveTable(live);
+        Map<Table, PCellSortedSet> cellsByTable = new HashMap<>(Map.of(snapshot, dayCells(1), live, dayCells(2)));
+        new MockUp<MVPartitionCellBuilder>() {
+            @Mock
+            public BaseToMVPartitionMapping getPartitionKeyRange(Table table, Column column, Expr expression) {
+                return BaseToMVPartitionMapping.of(cellsByTable.get(table));
+            }
+        };
+        PCTTableSnapshotInfo info = new PCTTableSnapshotInfo(baseTableInfo, snapshot);
+        if (pinned) {
+            info.setPinnedRange(TvrTableSnapshot.of(42L));
+        }
+
+        Assertions.assertEquals(!pinned, info.hasBaseTableChanged(mv),
+                "only this snapshot's pin may suppress live partition drift, regardless of another job's window");
+        // Control against exceptions being swallowed and reported as drift.
+        cellsByTable.put(live, dayCells(1));
+        Assertions.assertFalse(info.hasBaseTableChanged(mv));
+        Assertions.assertEquals(foreignWindow ? "another-refresh" : null, shared.getTempTvrOwnerStartTaskRunId());
+        Assertions.assertEquals(foreign, shared.getTempBaseTableInfoTvrDeltaMap());
+        Assertions.assertEquals(baseline, shared.getBaseTableInfoTvrVersionRangeMap());
+    }
+
+    private static PCellSortedSet dayCells(int days) throws AnalysisException {
+        List<PCellWithName> cells = new ArrayList<>();
+        for (int i = 0; i < days; i++) {
+            LocalDate day = LocalDate.of(2026, 1, 1).plusDays(i);
+            cells.add(PCellWithName.of("p" + i, new PRangeCell(
+                    Range.closedOpen(PartitionKey.ofDate(day), PartitionKey.ofDate(day.plusDays(1))))));
+        }
+        return PCellSortedSet.of(cells);
+    }
+
+    private static void mockLiveTable(Table live) {
         new MockUp<MvUtils>() {
             @Mock
             public Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {

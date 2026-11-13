@@ -7,7 +7,6 @@ keywords: ['iceberg', 'procedures', 'fast forward', 'cherry pick', 'expire snaps
 
 # Iceberg Procedures
 
-import AutoMetaMaintenance from '../../../_assets/commonMarkdown/auto_meta_maintenance.mdx'
 
 StarRocks Iceberg catalog は、スナップショット管理、ブランチ管理、データメンテナンス、メタデータ管理、およびテーブル管理を含む、Iceberg テーブルを管理するためのさまざまなプロシージャをサポートしています。
 
@@ -37,6 +36,52 @@ EXECUTE rollback_to_snapshot(<snapshot_id>)
 ```SQL
 ALTER TABLE iceberg.sales.order
 EXECUTE rollback_to_snapshot(98765);
+```
+
+### タイムスタンプへのロールバック
+
+指定したタイムスタンプより前にコミットされた最新のスナップショットにテーブルをロールバックします。タイムスタンプは現在のセッションのタイムゾーンで解釈されます。
+
+#### `rollback_to_timestamp` 構文
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE rollback_to_timestamp(<timestamp>)
+```
+
+#### パラメータ
+
+`timestamp`: この時点より前にコミットされた最新のスナップショットにテーブルをロールバックします。形式: 'YYYY-MM-DD HH:MM:SS'。この時点より前にコミットされたスナップショットがない場合はエラーを返します。
+
+#### 例
+
+テーブルを 2025-01-01 00:00:00 より前の状態にロールバックします。
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE rollback_to_timestamp('2025-01-01 00:00:00');
+```
+
+### 現在のスナップショットの設定
+
+テーブルの現在のスナップショットを指定されたスナップショット ID に設定します。`rollback_to_snapshot` と異なり、スナップショットは現在のスナップショットの祖先である必要がないため、ロールバックで外れたスナップショットにテーブルを再び進めることができます。
+
+#### `set_current_snapshot` 構文
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name
+EXECUTE set_current_snapshot(<snapshot_id>)
+```
+
+#### パラメータ
+
+`snapshot_id`: テーブルの現在のスナップショットとして設定するスナップショットの ID。
+
+#### 例
+
+```SQL
+ALTER TABLE iceberg.sales.order
+EXECUTE set_current_snapshot(98765);
 ```
 
 ### スナップショットの Cherry Pick
@@ -270,8 +315,6 @@ EXECUTE rewrite_manifests()
 ALTER TABLE iceberg.sales.order
 EXECUTE rewrite_manifests()
 ```
-
-<AutoMetaMaintenance />
 
 ## テーブル管理
 

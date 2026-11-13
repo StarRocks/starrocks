@@ -13,7 +13,7 @@ description: "ALTER STORAGE VOLUME modifies credential properties, comments, or 
 > **注意**
 >
 > - 仅拥有特定存储卷 ALTER 权限的用户可以执行该操作。
-> - 已有存储卷的 `TYPE` 、`LOCATIONS` 和其他存储路径相关的参数无法更改，仅能更改认证属性。如果您更改了存储路径相关的配置项，则在此之前创建的数据库和表将变为只读，您无法向其中导入数据。
+> - 已有存储卷的 `TYPE`、`LOCATIONS` 以及属性 `aws.s3.enable_partitioned_prefix` 和 `aws.s3.num_partitioned_prefix` 无法更改。StarRocks 不会阻止更改 Endpoint、Region 等其他属性，新值会作用于所有使用该存储卷的已有数据库和表。仅应在访问同一存储时更改这些属性，例如轮换认证信息。如果新值指向其他存储，已有数据库和表的数据将无法访问。
 > - `enabled` 为 `false` 的存储卷无法被引用。
 > - 在 shared_data 模式下，执行 `ALTER STORAGE VOLUME` 时默认会进行存储可访问性校验；该行为受 FE 配置项 `enable_storage_volume_access_check` 控制，可通过关闭该配置禁用校验。如果更新后的凭证或端点无法访问远端存储，语句会失败。
 

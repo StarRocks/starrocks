@@ -42,7 +42,7 @@ SHOW FRONTENDS
 | ClusterId            | 集群的唯一 ID。同一集群中的所有节点必须具有相同的 ClusterId。              |
 | Join                 | 该节点是否已加入 BDBJE 组。 <ul><li>true: 已加入。</li><li>false: 未加入（注意：节点被移除后可能暂时仍显示为 true）。</li></ul> |
 | Alive                | 节点是否存活并响应。 <ul><li>true: 存活。</li><li>false: 不存活。</li></ul> |
-| ReplayedJournalId    | 该节点当前已回放的最大元数据日志 ID。用于检查节点是否与 Leader 同步。       |
+| ReplayedJournalId    | 该节点当前已回放的最大元数据日志 ID。用于检查节点是否与 Leader 同步。对于当前连接的 FE 所在的行，该字段显示的是该 FE 本地元数据日志中的最大日志 ID，可能大于其已回放的日志 ID。       |
 | LastHeartbeat        | 最近一次收到心跳的时间戳。                                            |
 | IsHelper             | 是否为 Helper 节点（在集群启动期间指定，用于帮助其他节点加入）。            |
 | ErrMsg               | 心跳失败时显示的错误信息。                                            |

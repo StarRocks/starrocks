@@ -6,8 +6,6 @@ description: "StarRocks provides many system variables that can be set and modif
 
 # System variables
 
-import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
-import EditionSpecificVariable from '../_assets/commonMarkdown/Edition_Specific_Variable.mdx'
 
 StarRocks provides many system variables that can be set and modified to suit your requirements. This section describes the variables supported by StarRocks. You can view the settings of these variables by running the [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) command on your MySQL client. You can also use the [SET](sql-statements/cluster-management/config_vars/SET.md) command to dynamically set or modify variables. You can make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
 
@@ -15,14 +13,7 @@ The variables in StarRocks refer to the variable sets in MySQL, but **some varia
 
 > **NOTE**
 >
-> Any user has the privilege to run SHOW VARIABLES and make a variable take effect at session level. However, only users with the SYSTEM-level OPERATE privilege can make a variable take effect globally. Globally effective variables take effect on all the future sessions (excluding the current session).
->
-> If you want to make a setting change for the current session and also make that setting change apply to all future sessions, you can make the change twice, once without the `GLOBAL` modifier and once with it. For example:
->
-> ```SQL
-> SET query_mem_limit = 137438953472; -- Apply to the current session.
-> SET GLOBAL query_mem_limit = 137438953472; -- Apply to all future sessions.
-> ```
+> Any user has the privilege to run SHOW VARIABLES and make a variable take effect at session level. However, only users with the SYSTEM-level OPERATE privilege can make a variable take effect globally. Globally effective variables take effect on the current session and all the future sessions, but not on other existing sessions.
 
 ## Variable hierarchy and types
 
@@ -48,7 +39,7 @@ SHOW VARIABLES LIKE '%time_zone%';
 
 ### Set variables globally or for a single session
 
-You can set variables to take effect **globally** or **only on the current session**. When set to global, the new value will be used for all the future sessions, while the current session still uses the original value. When set to "current session only", the variable will only take effect on the current session.
+You can set variables to take effect **globally** or **only on the current session**. When set to global, the new value will be used by the current session and all the future sessions, while other existing sessions still use the original value until you run [REFRESH CONNECTIONS](sql-statements/cluster-management/config_vars/REFRESH_CONNECTIONS.md). Variables that only take effect globally (listed below) are an exception: a new value takes effect on all sessions at once. When set to "current session only", the variable will only take effect on the current session.
 
 A variable set by `SET <var_name> = xxx;` only takes effect for the current session. Example:
 
@@ -141,7 +132,7 @@ DELETE /*+ SET_VAR(query_mem_limit = 8589934592) */
 FROM my_table PARTITION p1
 WHERE k1 = 3;
 
-INSERT /*+ SET_VAR(insert_timeout = 10000000) */
+INSERT /*+ SET_VAR(insert_timeout = 86400) */
 INTO insert_wiki_edit
     SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
@@ -157,8 +148,8 @@ You can also set multiple variables in a single statement. Example:
 ```sql
 SELECT /*+ SET_VAR
   (
-  exec_mem_limit = 515396075520,
-  query_timeout=10000000,
+  query_mem_limit = 515396075520,
+  query_timeout=86400,
   batch_size=4096,
   parallel_fragment_exec_instance_num=32
   )
@@ -272,7 +263,7 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: `TABLET_HASH`
 * **Data type**: String
 * **Valid values**: `CIRCULAR`, `RANDOM`, `TABLET_HASH`
-* **Introduced in**: -
+* **Introduced in**: v4.1.1
 
 ### broadcast_mem_exceeded_penalty_factor
 
@@ -635,8 +626,8 @@ Used for MySQL client compatibility. No practical usage.
 
 ### enable_adaptive_sink_dop
 
-* **Description**: Specifies whether to enable adaptive parallelism for data loading. After this feature is enabled, the system automatically sets load parallelism for INSERT INTO and Broker Load jobs, which is equivalent to the mechanism of `pipeline_dop`. For a newly deployed v2.5 StarRocks cluster, the value is `true` by default. For a v2.5 cluster upgraded from v2.4, the value is `false`.
-* **Default**: false
+* **Description**: Specifies whether to enable adaptive parallelism for data loading. After this feature is enabled, the system automatically sets load parallelism for INSERT INTO and Broker Load jobs, which is equivalent to the mechanism of `pipeline_dop`. The default value is `true`. A cluster whose persisted metadata already holds a value for this variable keeps that value. For example, a cluster upgraded from v2.4 or earlier keeps `false`. `SET enable_adaptive_sink_dop = DEFAULT` and `SET GLOBAL enable_adaptive_sink_dop = DEFAULT` set the variable to `true`, even if the cluster currently holds `false`.
+* **Default**: true
 * **Introduced in**: v2.5
 
 ### enable_bucket_aware_execution_on_lake
@@ -707,6 +698,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Whether to enable Cache Sharing. Setting this to `true` enables the feature. Cache Sharing is used to support accessing cache data from other nodes through the network, which can help to reduce performance jitter caused by cache invalidation during cluster scaling. This variable takes effect only when the FE parameter `enable_trace_historical_node` is set to `true`.
 * **Default**: true
 * **Introduced in**: v3.5.1
+
+### enable_delta_lake_function_predicate_pruning
+
+* **Description**: Whether a predicate on a function of a Delta Lake column can skip data files. StarRocks converts such a predicate into a condition on the column itself, for example `year(dt) = 2024` into `dt >= '2024-01-01' AND dt < '2025-01-01'`, so that files are skipped through partition values and file column statistics, and Parquet row groups are skipped through their column statistics. It applies to the same functions as `enable_iceberg_function_predicate_pruning`. The original predicate is still evaluated on the rows. Set it to `false` to plan such queries as before, for example to compare results.
+* **Default**: true
+* **Introduced in**: v26.3
 
 ### enable_distinct_agg_over_window
 
@@ -797,6 +794,12 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Description**: Whether to enable resource group-level [query queue](../administration/management/resource_management/query_queues.md).
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v3.1.4
+
+### enable_hive_function_predicate_pruning
+
+* **Description**: Whether a predicate on a function of a date or datetime column of a Hive table can prune partitions. StarRocks converts such a predicate into a condition on the column itself, for example `year(dt) = 2024` into `dt >= '2024-01-01' AND dt < '2025-01-01'`, so that partitions are pruned on a partition column and row groups are skipped through their column statistics. It applies to the date and time functions listed for `enable_iceberg_function_predicate_pruning`. The original predicate is still evaluated on the rows. Set it to `false` to plan such queries as before, for example to compare results.
+* **Default**: true
+* **Introduced in**: v26.3
 
 ### enable_iceberg_eq_delete_runtime_filter_pruning
 
@@ -1438,7 +1441,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### lake_bucket_assign_mode
 
-* **Description**: The bucket assignment mode for queries against tables in data lakes. This variable controls how buckets are distributed among worker nodes when bucket-aware execution takes effect during query execution. Valid values:
+* **Description**: The bucket assignment mode for queries against tables in external catalogs (data lakes). It applies only to scans of external catalog tables in colocate or bucket shuffle join fragments, and has no effect on StarRocks internal tables, including cloud-native tables in shared-data clusters. This variable controls how buckets are distributed among worker nodes when bucket-aware execution takes effect during query execution. Valid values:
   * `balance`: Distributes buckets evenly across worker nodes to achieve balanced workload and better performance.
   * `elastic`: Uses consistent hashing to assign buckets to worker nodes, which can provide better load distribution in elastic environments.
 * **Default**: balance
@@ -1464,11 +1467,11 @@ Used for MySQL client compatibility. No practical usage.
 
 ### load_mem_limit
 
-Specifies the memory limit for the import operation. The default value is 0, meaning that this variable is not used and `query_mem_limit` is used instead.
+Specifies the memory limit for the import operation. The default value is 0, meaning that no per-task limit is set and the import is limited only by the memory limit of all load processes on each BE node (BE configuration items `load_process_max_memory_limit_percent` and `load_process_max_memory_limit_bytes`).
 
-This variable is only used for the `INSERT` operation which involves both query and import. If the user does not set this variable, the memory limit for both query and import will be set as `exec_mem_limit`. Otherwise, the memory limit for query will be set as `exec_mem_limit` and the memory limit for import will be as `load_mem_limit`.
+For an `INSERT` operation, which involves both query and import, the memory limit for the query part is set by `query_mem_limit` and the memory limit for the import part is set by `load_mem_limit`.
 
-Other import methods such as `BROKER LOAD`, `STREAM LOAD` still use `exec_mem_limit` for memory limit.
+Broker Load also uses this variable unless the `load_mem_limit` job property is specified. For Broker Load, this value limits both the query part and the import part of the job. Stream Load uses the `load_mem_limit` HTTP header instead. Routine Load does not use this variable.
 
 ### log_rejected_record_num (v3.1 and later)
 
@@ -1778,6 +1781,13 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Data Type**: int (seconds)
 * **Introduced in**: v3.2.0
 
+### query_history_load_interval_seconds (global)
+
+* **Description**: The interval at which the query history buffered in FE memory is written to the `_statistics_.query_history` table when `enable_query_history` is `true`. There is no background timer: the buffered history is written when a SELECT statement finishes after this interval has elapsed since the last write. On busy clusters, it can also be written before the interval elapses, once the serialized buffer reaches 200 MB.
+* **Default**: 900
+* **Unit**: Second
+* **Introduced in**: v4.0
+
 ### query_mem_limit
 
 * **Description**: Used to set the memory limit of a query on each BE node. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enabled. When the `Memory Exceed Limit` error happens, you could try to increase this variable. Setting it to `0` indicates no limit is imposed.
@@ -1833,11 +1843,19 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Scope**: Session
 * **Default**: `colocate`
 * **Data type**: String
-* **Valid values**: `colocate`, `parallel`
+* **Valid values**: `colocate`, `parallel`, `grouped`
 
 A nonempty parallel scan must select at least two logical partitions and two real tablets, and the selected compute resource must contain at least two eligible CNs. Among aggregates with the DISTINCT modifier, only `COUNT DISTINCT` is supported. Pipeline execution and `parallel_fragment_exec_instance_num = 1` are required. Parallel mode adds network and aggregate-state transfer costs and can increase non-owner remote reads; it does not guarantee a speedup or use of every compute node. Partition and tablet pruning remain unchanged.
 
 Parallel mode rejects writes/refreshes, joins, set operations, CTEs, subqueries, analytic functions, grouping sets, special/historical/metadata/cache-stat or sampled/hinted scans, MV/rollup source replacement, multiple final scans, Query Cache, phased scheduling, prepared physical split scans, single-node plans, and nonpipeline execution. Fully pruned input retains normal empty-aggregate semantics. Unsupported requests fail explicitly without changing other session settings.
+
+`grouped` is a session-only experimental opt-in. It forms temporary groups from tablet range boundaries and aligns scan tasks for the same key range across selected partitions. All input rows for a SQL aggregation group are processed by one aggregate logical driver on one CN, eliminating key-based shuffles of raw rows between CNs and within a CN. Filters, output aliases, HAVING, and final ORDER BY/LIMIT retain their semantics when the complete grouping proof is preserved. Applicability is checked during planning; requests outside the current experimental implementation fail explicitly.
+
+Grouped execution captures source versions and tablet ranges once, then forms complete key-range groups across all selected physical partitions. It requires at least two selected physical partitions and two nonempty key-range groups. Each group feeds one blocking HASH aggregate and only finalized scalar results are gathered. It requires Pipeline and Group Execution, and `parallel_fragment_exec_instance_num = 1`. The parallel-mode exclusions also apply; forced multi-stage aggregation and incompatible global late materialization are unsupported. Sort aggregation and per-bucket aggregation are disabled for this path. Fully pruned input retains normal empty-input semantics. PREPARE/EXECUTE re-plans aggregates under the current mode instead of reusing a complete physical plan.
+
+Grouped scans support ordinary, nonprepared physical rowid splitting when `enable_lake_tablet_internal_parallel` is enabled. Each complete key group still has one aggregate logical driver on one CN; additional I/O tasks feed that same driver without a key shuffle. Disabling `enable_lake_tablet_internal_parallel` retains the unsplit path. The default 16 I/O slots limit live I/O concurrency, not the number of generated child tasks.
+
+A scan supports at most 1,024 groups and 8,192 root clip tasks; these limits do not cap generated I/O children. Group Execution capacity also applies. EXPLAIN reports grouped execution and unique source/group/root-task counts. `RangeClipTasks` counts successfully opened root clips once and excludes children; `MorselsCount` includes roots and children. Use `PeakIOTasks` with scan time, rows and remote bytes to assess I/O concurrency. Ordinary tablet and segment counters may count repeated task reads and are not global unique-source counts. This mode does not guarantee a speedup or constant-memory DISTINCT aggregation. The default remains `colocate`.
 
 ### resource_group
 
@@ -2110,11 +2128,8 @@ The StarRocks version. Cannot be changed.
 
 ### wait_timeout
 
-* **Description**: The number of seconds the server waits for activity on a non-interactive connection before closing it. If a client does not interact with StarRocks for this length of time, StarRocks will actively close the connection.
+* **Description**: The number of seconds the server waits for activity on an idle connection before closing it. It applies to all connections, interactive or not. `interactive_timeout` is not used. If a client does not interact with StarRocks for this length of time, StarRocks will actively close the connection.
 * **Default**: 28800 (8 hours).
 * **Unit**: Second
 * **Data type**: Int
 
-<EditionSpecificVariable />
-
-<VariableWarehouse />

@@ -303,7 +303,9 @@ SQL Plan Manager 函数是一组特殊的占位符函数，具有两个主要目
 - `_spm_const_var(placeholdID)`：用于标记单个常量值。
 - `_spm_const_list(placeholdID)`：用于标记多个常量值，通常用于标记 IN 条件中的多个常量值。
 - `_spm_const_range(placeholdID, min, max)`：用于标记单个常量值，但要求常量值在指定范围`[min, max]`之内。
-- `_spm_const_num(placeholdID, value...)`：用于标记单个常量值，但要求常量值为指定`value...`中的一个值。
+- `_spm_const_enum(placeholdID, value...)`：用于标记单个常量值，但要求常量值为指定`value...`中的一个值。
+
+`_spm_const_range` 和 `_spm_const_enum` 均拒绝 `GEOGRAPHY`、`GEOMETRY` 以及包含这两种类型中任意一种的类型。
 
 其中 `placeholdID` 是一个整数，作为参数的唯一标识符，在绑定 Baseline 和改写 Plan 时，查找对应的参数使用。
 
@@ -648,7 +650,7 @@ group by i_item_id
 ```SQL
 set global enable_query_history=true;
 ```
-开启后查询历史存储在 `_statistics_.query_history` 表中。
+开启后查询历史存储在 `_statistics_.query_history` 表中。仅记录执行成功且执行计划中至少包含两个 Scan 节点的 SELECT 语句，统计信息任务发起的语句以及引用统计信息表的语句不会被记录。仅当 `enable_query_history` 为 `true` 时，系统才会清理超过 `query_history_keep_seconds` 的查询历史。
 
 开启自动捕获功能：
 ```SQL
@@ -660,7 +662,7 @@ set global enable_plan_capture=true;
 -- 存储查询历史时长，单位为秒，默认为 3 天
 set global query_history_keep_seconds = 259200;
 -- 捕获SQL的间隔时间，单位为秒，默认为 3 小时
-set global plan_capture_interval=10800;
+set global plan_capture_interval_seconds=10800;
 -- 捕获SQL的正则检查，仅捕获匹配 plan_capture_include_pattern 的表名(db.table)，默认为.*，表示所有表
 set global plan_capture_include_pattern=".*";
 ```

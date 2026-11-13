@@ -446,16 +446,12 @@ SELECT dt, c_city, sum(tax) FROM tbl GROUP BY dt, c_city;
 #### 非同期マテリアライズドビューのリソースを制御するリソースグループはどれですか？その設定を調整するにはどうすればよいですか？
 
 非同期マテリアライズドビューを作成する際に `resource_group` プロパティが指定されていない場合、システムはそれをデフォルトのリソースグループ `default_mv_wg` に割り当てます。そのデフォルト設定は次のとおりです：
-- `cpu_core_limit`: 1
+- `cpu_weight_percent`: 1
 - `mem_limit`: 80%
 - `concurrency_limit`: 0
 - `spill_mem_limit_threshold`: 80%
 
-次のBE設定項目を通じて、CPU制限、メモリ制限、同時実行制限、スピルしきい値を調整できます：
-- `default_mv_resource_group_cpu_limit`
-- `default_mv_resource_group_memory_limit`
-- `default_mv_resource_group_concurrency_limit`
-- `default_mv_resource_group_spill_mem_limit_threshold`
+`default_mv_wg` は FE に保存され、永続化されます。[ALTER RESOURCE GROUP](../../sql-reference/sql-statements/cluster-management/resource_group/ALTER_RESOURCE_GROUP.md) を使用して、CPU制限、メモリ制限、同時実行制限、スピルしきい値を調整できます。例：`ALTER RESOURCE GROUP default_mv_wg WITH ('mem_limit' = '60%')`。BE設定項目 `default_mv_resource_group_cpu_limit`、`default_mv_resource_group_memory_limit`、`default_mv_resource_group_concurrency_limit`、`default_mv_resource_group_spill_mem_limit_threshold` は非推奨であり、`default_mv_wg` には影響しなくなりました。
 
 `resource_group` プロパティを指定することで、マテリアライズドビューに専用のリソースグループを割り当てることもできます。
 

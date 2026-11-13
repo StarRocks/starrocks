@@ -451,16 +451,12 @@ SELECT dt, c_city, sum(tax) FROM tbl GROUP BY dt, c_city;
 #### 哪个资源组控制异步物化视图的资源？如何调整其配置？
 
 如果在创建异步物化视图时未指定 `resource_group` 属性，系统会将其分配给默认资源组 `default_mv_wg`。其默认配置为：
-- `cpu_core_limit`: 1
+- `cpu_weight_percent`: 1
 - `mem_limit`: 80%
 - `concurrency_limit`: 0
 - `spill_mem_limit_threshold`: 80%
 
-您可以通过以下 BE 配置项调整其 CPU 限制、内存限制、并发限制和溢出阈值：
-- `default_mv_resource_group_cpu_limit`
-- `default_mv_resource_group_memory_limit`
-- `default_mv_resource_group_concurrency_limit`
-- `default_mv_resource_group_spill_mem_limit_threshold`
+`default_mv_wg` 由 FE 存储并持久化。您可以通过 [ALTER RESOURCE GROUP](../../sql-reference/sql-statements/cluster-management/resource_group/ALTER_RESOURCE_GROUP.md) 调整其 CPU 限制、内存限制、并发限制和溢出阈值，例如 `ALTER RESOURCE GROUP default_mv_wg WITH ('mem_limit' = '60%')`。BE 配置项 `default_mv_resource_group_cpu_limit`、`default_mv_resource_group_memory_limit`、`default_mv_resource_group_concurrency_limit` 和 `default_mv_resource_group_spill_mem_limit_threshold` 已废弃，不再对 `default_mv_wg` 生效。
 
 您还可以通过指定 `resource_group` 属性为物化视图分配专用资源组。
 

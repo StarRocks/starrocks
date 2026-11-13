@@ -181,6 +181,7 @@ public class PipeAnalyzer {
         String insertSql = stmt.getOrigStmt().originStmt.substring(stmt.getInsertSqlStartIndex());
         stmt.setInsertSql(insertSql);
         Analyzer.analyze(insertStmt, context);
+        SavedSqlGeoValidator.validate(insertStmt);
         stmt.setTargetTableRef(insertStmt.getTableRef());
 
         analyzePipeName(stmt.getPipeName(), insertStmt.getDbName());

@@ -120,6 +120,7 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.statistics.ConnectorTableTriggerAnalyzeMgr;
 import com.starrocks.failpoint.FailPoint;
 import com.starrocks.failpoint.TriggerPolicy;
 import com.starrocks.http.BaseAction;
@@ -133,6 +134,9 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.load.LoadJobRedaction;
+import com.starrocks.load.LoadJobVisibility;
+import com.starrocks.load.LoadJobVisibility.VisibleTask;
 import com.starrocks.load.batchwrite.RequestLoadResult;
 import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.loadv2.LoadJob;
@@ -409,6 +413,9 @@ import com.starrocks.thrift.TTabletReshardJobsResponse;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTrackingLoadInfo;
 import com.starrocks.thrift.TTransactionStatus;
+import com.starrocks.thrift.TTriggerExternalAnalyzeRequest;
+import com.starrocks.thrift.TTriggerExternalAnalyzeResponse;
+import com.starrocks.thrift.TTriggerExternalAnalyzeTable;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateFailPointRequest;
@@ -2073,6 +2080,28 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return ScanCredentialsRefresher.refresh(request);
     }
 
+    // A follower's query found external table statistics missing or expired; the leader runs the analyze. Only
+    // buffered here, the trigger analyze scheduler resolves and queues the tables.
+    @Override
+    public TTriggerExternalAnalyzeResponse triggerExternalAnalyze(TTriggerExternalAnalyzeRequest request)
+            throws TException {
+        TTriggerExternalAnalyzeResponse response = new TTriggerExternalAnalyzeResponse();
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            TStatus status = new TStatus(TStatusCode.CANCELLED);
+            status.addToError_msgs("current node is not leader");
+            response.setStatus(status);
+            return response;
+        }
+        if (request != null && request.isSetTables()) {
+            ConnectorTableTriggerAnalyzeMgr mgr = GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr();
+            for (TTriggerExternalAnalyzeTable table : request.getTables()) {
+                mgr.addTriggeredColumns(table.getTable_uuid(), table.getColumns());
+            }
+        }
+        response.setStatus(new TStatus(OK));
+        return response;
+    }
+
     @Override
     public TRefreshConnectionsResponse refreshConnections(TRefreshConnectionsRequest request) throws TException {
         try {
@@ -3530,12 +3559,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("Receive getRoutineLoadJobs: {}", request);
         TGetRoutineLoadJobsResult result = new TGetRoutineLoadJobsResult();
         RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
+        ConnectContext caller = LoadJobVisibility.callerOf(request);
         List<TRoutineLoadJobInfo> loads = Lists.newArrayList();
         try {
             if (request.isSetJob_id()) {
                 RoutineLoadJob job = routineLoadManager.getJob(request.getJob_id());
                 if (job != null) {
-                    loads.add(job.toThrift());
+                    addRoutineLoadJobInfo(loads, caller, job);
                 }
             } else {
                 List<RoutineLoadJob> loadJobList;
@@ -3552,7 +3582,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         loadJobList = routineLoadManager.getJob(null, null, true);
                     }
                 }
-                loads.addAll(loadJobList.stream().map(RoutineLoadJob::toThrift).collect(Collectors.toList()));
+                for (RoutineLoadJob job : loadJobList) {
+                    addRoutineLoadJobInfo(loads, caller, job);
+                }
             }
             result.setLoads(loads);
         } catch (MetaNotFoundException e) {
@@ -3567,18 +3599,32 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("Receive getStreamLoads: {}", request);
         TGetStreamLoadsResult result = new TGetStreamLoadsResult();
         StreamLoadMgr loadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+        ConnectContext caller = LoadJobVisibility.callerOf(request);
         List<TStreamLoadInfo> loads = Lists.newArrayList();
         try {
             if (request.isSetJob_id()) {
-                AbstractStreamLoadTask task = loadManager.getTaskById(request.getJob_id());
-                if (task != null) {
-                    loads.addAll(task.toStreamLoadThrift());
+                long jobId = request.getJob_id();
+                if (LoadJobVisibility.isEnabled()) {
+                    // A statement of a multi-statement transaction is authorized with the transaction.
+                    AbstractStreamLoadTask task = loadManager.getRegisteredTaskById(jobId);
+                    if (task != null) {
+                        for (VisibleTask visibleTask : LoadJobVisibility.visibleTasks(caller, task)) {
+                            if (task.getId() == jobId || visibleTask.task().getId() == jobId) {
+                                addStreamLoadInfos(loads, visibleTask);
+                            }
+                        }
+                    }
+                } else {
+                    AbstractStreamLoadTask task = loadManager.getTaskById(jobId);
+                    if (task != null) {
+                        addStreamLoadInfos(loads, caller, task);
+                    }
                 }
             } else {
                 List<AbstractStreamLoadTask> streamLoadTaskList = loadManager.getTaskByName(request.getLabel());
                 if (streamLoadTaskList != null) {
                     for (AbstractStreamLoadTask task : streamLoadTaskList) {
-                        loads.addAll(task.toStreamLoadThrift());
+                        addStreamLoadInfos(loads, caller, task);
                     }
                 }
             }
@@ -3587,6 +3633,33 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             LOG.warn("Failed to getStreamLoads", e);
         }
         return result;
+    }
+
+    private static void addRoutineLoadJobInfo(List<TRoutineLoadJobInfo> loads, ConnectContext caller,
+                                              RoutineLoadJob job) {
+        // With the rule off the views check nothing, as before it.
+        LoadJobVisibility.Access access = LoadJobVisibility.isEnabled() ? LoadJobVisibility.accessOf(caller, job)
+                : LoadJobVisibility.Access.FULL;
+        if (access != LoadJobVisibility.Access.NONE) {
+            TRoutineLoadJobInfo info = job.toThrift();
+            loads.add(access == LoadJobVisibility.Access.FULL ? info : LoadJobRedaction.redact(info));
+        }
+    }
+
+    private static void addStreamLoadInfos(List<TStreamLoadInfo> loads, ConnectContext caller,
+                                           AbstractStreamLoadTask task) {
+        List<VisibleTask> visibleTasks = LoadJobVisibility.isEnabled() ? LoadJobVisibility.visibleTasks(caller, task)
+                : LoadJobVisibility.allTasksInFull(task);
+        for (VisibleTask visibleTask : visibleTasks) {
+            addStreamLoadInfos(loads, visibleTask);
+        }
+    }
+
+    private static void addStreamLoadInfos(List<TStreamLoadInfo> loads, VisibleTask visibleTask) {
+        for (TStreamLoadInfo info : visibleTask.task().toStreamLoadThrift()) {
+            boolean full = visibleTask.access() == LoadJobVisibility.Access.FULL;
+            loads.add(full ? info : LoadJobRedaction.redact(info));
+        }
     }
 
     @Override

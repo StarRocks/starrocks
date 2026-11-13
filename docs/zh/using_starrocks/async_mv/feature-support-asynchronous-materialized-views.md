@@ -43,7 +43,7 @@ sidebar_label: "能力边界"
 | enable_materialized_view_plan_cache             | 是否启用物化视图的 Plan Cache。默认情况下，缓存 1000 个物化视图 Plan。 | true       | v2.5.13+<br />v3.0.7+<br />v3.1.4+<br />v3.2.0+<br />v3.3.0+ |
 | query_including_mv_names                        | 查询改写时可使用的物化视图的白名单。                         |            | v3.1.11+<br />v3.2.5+                                        |
 | query_excluding_mv_names                        | 查询改写时不可使用的物化视图的黑名单。                       |            | v3.1.11+<br />v3.2.5+                                        |
-| cbo_materialized_view_rewrite_related_mvs_limit | 计划阶段候选物化视图的最大数量。                             | 64         | v3.1.9+<br /> v3.2.5+                                        |
+| cbo_materialized_view_rewrite_related_mvs_limit | 计划阶段候选物化视图的最大数量。                             | 16         | v3.1.9+<br /> v3.2.5+                                        |
 
 ## 属性
 
@@ -75,7 +75,7 @@ sidebar_label: "能力边界"
 | [时间粒度上卷对齐分区 (STRING 类型)](use_cases/create_partitioned_materialized_view.md#时间粒度上卷对齐分区) | 通过在分区键上使用 `date_trunc` 函数，创建一个分区粒度大于基表的物化视图。分区键必须为 STRING 类型。 | v3.1.4+<br />v3.2+ |
 | [自定义时间粒度对齐分区](use_cases/create_partitioned_materialized_view.md#自定义时间粒度对齐分区)             | 使用 `date_trunc` 函数与 `time_slice` 或 `date_slice` 函数自定义时间粒度来创建物化视图分区。 | v3.2+              |
 | [多基表对齐分区](use_cases/create_partitioned_materialized_view.md#多基表对齐分区)                     | 如果多张基表的分区可以互相对齐，即基表使用相同类型的分区键，可以基于多张基表创建分区物化视图。 | v3.3+              |
-| [多分区列对齐](use_cases/create_partitioned_materialized_view.md#多分区列对齐)                     | 为物化视图指定多个分区列，一一映射基表的分区列。                                 | v3.5+              |
+| [多分区列对齐](use_cases/create_partitioned_materialized_view.md#多分区列对齐)                     | 为物化视图指定多个分区列，映射基表的全部或者部分分区列。                                 | v3.5+              |
 
 **不同 Join 方式**
 

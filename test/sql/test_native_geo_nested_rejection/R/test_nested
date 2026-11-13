@@ -5,59 +5,68 @@ CREATE TABLE nested_fixture_${uuid0} (id INT, wkt VARCHAR(64)) DUPLICATE KEY(id)
 INSERT INTO nested_fixture_${uuid0} VALUES (1, 'POINT (1 2)'), (2, NULL), (3, 'POINT EMPTY');
 -- result:
 -- !result
-function: assert_query_error_contains("select array_agg(g) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+SELECT id, (array_map(x -> ST_AsText(x), array_filter(x -> x IS NOT NULL, [g])))[1], ST_AsText(map{1:g}[1]), ST_AsText(row([g]).col1[1]) FROM (SELECT id, ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0}) t ORDER BY id;
+-- result:
+1	POINT (1 2)	POINT (1 2)	POINT (1 2)
+2	None	None	None
+3	POINT EMPTY	POINT EMPTY	POINT EMPTY
+-- !result
+SELECT id, ST_AsText(x) FROM (SELECT id, ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0}) t, UNNEST([g]) u(x) ORDER BY id;
+-- result:
+1	POINT (1 2)
+2	None
+3	POINT EMPTY
+-- !result
+SELECT cardinality(array_agg(g)), ST_AsText((map_agg(id, g))[1]) FROM (SELECT id, ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0}) t;
+-- result:
+3	POINT (1 2)
+-- !result
+SELECT id, ST_AsText(m[id]) FROM (
+    SELECT id, IF(id = 1, map{id:g}, map{CAST(id AS BIGINT):g}) AS m
+    FROM (SELECT id, ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0}) t
+) q ORDER BY id;
+-- result:
+1	POINT (1 2)
+2	None
+3	POINT EMPTY
+-- !result
+WITH src AS (SELECT id, ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0})
+SELECT id, ST_AsText(m[id]) FROM (
+    SELECT id, map{id:g} AS m FROM src
+    UNION ALL
+    SELECT id, map{CAST(id AS BIGINT):g} AS m FROM src
+) q ORDER BY id;
+-- result:
+1	POINT (1 2)
+1	POINT (1 2)
+2	None
+2	None
+3	POINT EMPTY
+3	POINT EMPTY
+-- !result
+function: assert_query_error_contains("SELECT cardinality(map_from_arrays([g], [id])) FROM (SELECT id, ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0}) t", "Map key doesn't support type")
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select array_agg(distinct g) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "DISTINCT aggregation is not supported for GEOGRAPHY type")
+function: assert_query_error_contains("SELECT [g] = [g] FROM (SELECT id, ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0}) t", "does not support binary predicate operation")
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select named_struct('a', [g]) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("SELECT cardinality(array_sort([g])) FROM (SELECT id, ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0}) t", "No matching function with signature: array_sort")
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select max_by([g], id) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("SELECT array_agg(DISTINCT g) FROM (SELECT id, ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0}) t", "DISTINCT aggregation is not supported for GEOGRAPHY type")
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select map_agg(id, g) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("SELECT row(array_filter(x -> false, [g])) FROM (SELECT id, ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0}) t", "use ST_AsText or ST_AsBinary on geo elements")
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select row(array_filter(x -> false, [g])) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("CREATE VIEW nested_view_${uuid0} AS SELECT cardinality([g]) AS n FROM (SELECT id, ST_GeogFromText(wkt) AS g FROM nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in saved SQL definitions")
 -- result:
 None
--- !result
-function: assert_query_error_contains("select ST_AsText([g][1]) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
--- result:
-None
--- !result
-function: assert_query_error_contains("select cardinality(array_sortby(x -> g, [1])) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
--- result:
-None
--- !result
-function: assert_query_error_contains("select array_contains([], g) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
--- result:
-None
--- !result
-function: assert_query_error_contains("select array_position([], g) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
--- result:
-None
--- !result
-function: assert_query_error_contains("select array_contains(NULL, g) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
--- result:
-None
--- !result
-SELECT array_contains([ST_AsText(g)], ST_AsText(g)) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t WHERE id=1;
--- result:
-1
--- !result
-SELECT id, ST_AsText(g), g IS NULL from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t ORDER BY id;
--- result:
-1	POINT (1 2)	0
-2	None	1
-3	POINT EMPTY	0
 -- !result
 DROP TABLE nested_fixture_${uuid0};
 -- result:
@@ -69,59 +78,68 @@ CREATE TABLE nested_fixture_${uuid0} (id INT, wkt VARCHAR(64)) DUPLICATE KEY(id)
 INSERT INTO nested_fixture_${uuid0} VALUES (1, 'POINT (1 2)'), (2, NULL), (3, 'POINT EMPTY');
 -- result:
 -- !result
-function: assert_query_error_contains("select array_agg(g) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+SELECT id, (array_map(x -> ST_AsText(x), array_filter(x -> x IS NOT NULL, [g])))[1], ST_AsText(map{1:g}[1]), ST_AsText(row([g]).col1[1]) FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t ORDER BY id;
+-- result:
+1	POINT (1 2)	POINT (1 2)	POINT (1 2)
+2	None	None	None
+3	POINT EMPTY	POINT EMPTY	POINT EMPTY
+-- !result
+SELECT id, ST_AsText(x) FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t, UNNEST([g]) u(x) ORDER BY id;
+-- result:
+1	POINT (1 2)
+2	None
+3	POINT EMPTY
+-- !result
+SELECT cardinality(array_agg(g)), ST_AsText((map_agg(id, g))[1]) FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t;
+-- result:
+3	POINT (1 2)
+-- !result
+SELECT id, ST_AsText(m[id]) FROM (
+    SELECT id, IF(id = 1, map{id:g}, map{CAST(id AS BIGINT):g}) AS m
+    FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t
+) q ORDER BY id;
+-- result:
+1	POINT (1 2)
+2	None
+3	POINT EMPTY
+-- !result
+WITH src AS (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0})
+SELECT id, ST_AsText(m[id]) FROM (
+    SELECT id, map{id:g} AS m FROM src
+    UNION ALL
+    SELECT id, map{CAST(id AS BIGINT):g} AS m FROM src
+) q ORDER BY id;
+-- result:
+1	POINT (1 2)
+1	POINT (1 2)
+2	None
+2	None
+3	POINT EMPTY
+3	POINT EMPTY
+-- !result
+function: assert_query_error_contains("SELECT cardinality(map_from_arrays([g], [id])) FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t", "Map key doesn't support type")
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select array_agg(distinct g) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "DISTINCT aggregation is not supported for GEOMETRY type")
+function: assert_query_error_contains("SELECT [g] = [g] FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t", "does not support binary predicate operation")
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select named_struct('a', [g]) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("SELECT cardinality(array_sort([g])) FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t", "No matching function with signature: array_sort")
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select max_by([g], id) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("SELECT array_agg(DISTINCT g) FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t", "DISTINCT aggregation is not supported for GEOMETRY type")
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select map_agg(id, g) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("SELECT row(array_filter(x -> false, [g])) FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t", "use ST_AsText or ST_AsBinary on geo elements")
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select row(array_filter(x -> false, [g])) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("CREATE VIEW nested_view_${uuid0} AS SELECT cardinality([g]) AS n FROM (SELECT id, ST_GeomFromText(wkt, 'EPSG:3857') AS g FROM nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in saved SQL definitions")
 -- result:
 None
--- !result
-function: assert_query_error_contains("select ST_AsText([g][1]) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
--- result:
-None
--- !result
-function: assert_query_error_contains("select cardinality(array_sortby(x -> g, [1])) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
--- result:
-None
--- !result
-function: assert_query_error_contains("select array_contains([], g) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
--- result:
-None
--- !result
-function: assert_query_error_contains("select array_position([], g) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
--- result:
-None
--- !result
-function: assert_query_error_contains("select array_contains(NULL, g) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
--- result:
-None
--- !result
-SELECT array_contains([ST_AsText(g)], ST_AsText(g)) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t WHERE id=1;
--- result:
-1
--- !result
-SELECT id, ST_AsText(g), g IS NULL from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t ORDER BY id;
--- result:
-1	POINT (1 2)	0
-2	None	1
-3	POINT EMPTY	0
 -- !result
 DROP TABLE nested_fixture_${uuid0};
 -- result:

@@ -43,7 +43,7 @@ This document outlines the boundaries of competence for asynchronous materialize
 | enable_materialized_view_plan_cache             | Whether to enable plan cache for materialized views. By default, 1000 materialized view plans are cached. | TRUE        | v2.5.13+<br />v3.0.7+<br />v3.1.4+<br />v3.2.0+<br />v3.3.0+ |
 | query_including_mv_names                        | Whitelist of the materialized views that can be used for query rewrite. |             | v3.1.11+<br />v3.2.5+                                        |
 | query_excluding_mv_names                        | Blacklist of the materialized views that can be used for query rewrite. |             | v3.1.11+<br />v3.2.5+                                        |
-| cbo_materialized_view_rewrite_related_mvs_limit | Maximum number of candidate materialized views in the Plan stage. | 64          | v3.1.9+<br /> v3.2.5+                                        |
+| cbo_materialized_view_rewrite_related_mvs_limit | Maximum number of candidate materialized views in the Plan stage. | 16          | v3.1.9+<br /> v3.2.5+                                        |
 
 ## Properties
 
@@ -75,7 +75,7 @@ This document outlines the boundaries of competence for asynchronous materialize
 | [Align partitions with time granularity rollup (STRING type)](use_cases/create_partitioned_materialized_view.md#align-partitions-with-time-granularity-rollup) | Create a materialized view whose partitioning granularity is larger than that of the base table by using the `date_trunc` function on the Partitioning Key. The Partitioning Key must be the STRING type. | v3.1.4+<br />v3.2+       |
 | [Align partitions at a customized time granularity](use_cases/create_partitioned_materialized_view.md#align-partitions-at-a-customized-time-granularity)        | Create a materialized view and customize the time granularity for its partitions by using the `date_trunc` function with the `time_slice` or `date_slice` function. | v3.2+                    |
 | [Align partitions with multiple base tables](use_cases/create_partitioned_materialized_view.md#align-partitions-with-multiple-base-tables)               | Create a materialized view whose partitions are aligned with those of multiple base tables, as long as the base tables use the same type of Partitioning Key. | v3.3+                    |
-| [Align multiple partition columns](use_cases/create_partitioned_materialized_view.md#align-multiple-partition-columns)               | Specify multiple partition columns for the materialized view, and one-to-one map them to the partition columns of the base tables. | v3.5+                    |
+| [Align multiple partition columns](use_cases/create_partitioned_materialized_view.md#align-multiple-partition-columns)               | Specify multiple partition columns for the materialized view to map all or part of the partition columns of the base tables. | v3.5+                    |
 
 **Different Join Methods**
 

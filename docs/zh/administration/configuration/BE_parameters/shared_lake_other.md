@@ -146,6 +146,17 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否在写入存算分离集群的 Tablet 元数据和事务日志文件时附加 Adler-32 校验和，以便在读取时检测这些文件是否损坏。无论该配置项如何设置，读取端在文件包含校验和时都会自动识别并校验；该配置项仅控制写入格式。仅当集群仍可能降级到不支持该校验和格式的版本时，才将该配置项设置为 `false`。在滚动升级或降级期间，旧版本的 BE 或 CN 使用旧的读取逻辑，无法解析新格式写入的文件。
 - 引入版本：v4.2
 
+### lake_replication_enable_light_schema_change
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：允许存算分离集群复制包含兼容轻量加删列历史的活跃 Rowset 快照。源端与目标端的当前 Schema 必须在逻辑上匹配。新增列必须是具有默认值或可空语义的普通标量值列；不支持 Key 列、排序列、类型、生成列、嵌套列 UID、外部索引、捆绑文件及共享/范围 Tablet 的变更。关闭时，包含历史 Schema 活跃 Rowset 的快照会被拒绝。已验证删除的列会从 Segment footer 元数据中移除，不重写其数据页。每个复制任务启动时读取并固定该配置值。
+- 引入版本：-
+
+仅在**所有目标 CN** 均支持此能力后启用。规范化的复制事务会记录目标 Schema；若发布前目标 Schema 发生变化，发布将失败。关闭该配置只阻止新的准入，不改变已记录事务的回放行为。旧版 CN 无法安全回放这些事务日志；降级前必须完成或中止待处理的规范化事务，不能认为关闭配置就可以安全降级。
+
 ### lake_enable_publish_partial_meta
 
 - 默认值：true
@@ -308,7 +319,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_segment_metadata_cache_limit_percent
 
-- 默认值：20
+- 默认值：10
 - 类型：Int
 - 单位：-
 - 是否动态：是
@@ -326,7 +337,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_tablet_metadata_cache_limit_percent
 
-- 默认值：10
+- 默认值：5
 - 类型：Int
 - 单位：-
 - 是否动态：是
@@ -569,11 +580,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### datacache_disk_size
 
-- 默认值：0
+- 默认值：100%
 - 类型：String
 - 单位：-
 - 是否动态：是
-- 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。假设系统使用了两块磁盘进行缓存，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
+- 描述：单个磁盘缓存数据量的上限，可设为比例上限（如 `80%`）或物理上限（如 `2T`, `500G` 等）。假设系统使用了两块磁盘进行缓存，并设置 `datacache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。比例上限是相对于每个 `storage_root_path` 所在磁盘的容量。默认值为 `100%`。当 `enable_datacache_disk_auto_adjust` 为 `true`（默认）时，系统会根据磁盘使用率自动调整实际的磁盘缓存容量，该参数仅作为该容量的上限。设为 `0` 表示禁用磁盘缓存。
 - 引入版本：-
 
 ### datacache_enable
@@ -690,7 +701,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：毫秒
 - 是否动态：否
-- 描述：JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。
+- 描述：JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。如果某个连接池在此时间内没有被任何查询使用，BE 会关闭整个连接池（包括 `jdbc_minimum_idle_connections` 保留的连接），并在下一次查询时重新创建。这样可以释放已删除或已修改的 JDBC Catalog 和资源所对应的连接池。
 - 引入版本：-
 
 ### jdbc_connection_pool_size
@@ -862,8 +873,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：0
 - 类型：Int
 - 单位：-
-- 是否动态：是
-- 描述：物化视图刷新任务在单个 BE 上的并发上限。默认为 `0`，即不做并发数限制。
+- 是否动态：否
+- 描述：物化视图刷新任务在单个 BE 上的并发上限。默认为 `0`，即不做并发数限制。已弃用：自 v3.4 起，FE 持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：-
 
 ### default_mv_resource_group_cpu_limit
@@ -871,8 +882,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：1
 - 类型：Int
 - 单位：-
-- 是否动态：是
-- 描述：物化视图刷新任务占用单个 BE 的 CPU 核数上限。
+- 是否动态：否
+- 描述：物化视图刷新任务占用单个 BE 的 CPU 核数上限。已弃用：自 v3.4 起，FE 持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：-
 
 ### default_mv_resource_group_memory_limit
@@ -880,8 +891,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：0.8
 - 类型：Double
 - 单位：
-- 是否动态：是
-- 描述：物化视图刷新任务占用单个 BE 内存上限，默认 80%。
+- 是否动态：否
+- 描述：物化视图刷新任务占用单个 BE 内存上限，默认 80%。已弃用：自 v3.4 起，FE 持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：v3.1
 
 ### default_mv_resource_group_spill_mem_limit_threshold
@@ -889,8 +900,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 默认值：0.8
 - 类型：Double
 - 单位：
-- 是否动态：是
-- 描述：物化视图刷新任务触发落盘的内存占用阈值，默认80%。
+- 是否动态：否
+- 描述：物化视图刷新任务触发落盘的内存占用阈值，默认80%。已弃用：自 v3.4 起，FE 持久化 `default_mv_wg` 并下发给 BE，该参数不再生效。请使用 `ALTER RESOURCE GROUP default_mv_wg WITH (...)` 调整。
 - 引入版本：v3.1
 
 ### enable_resolve_hostname_to_ip_in_load_error_url

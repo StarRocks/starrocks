@@ -47,6 +47,7 @@
 #include "storage/rows_mapper.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_file_info.h"
+#include "storage/sort_key_bounds.h"
 #include "storage/sort_key_sampler.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema.h"
@@ -1246,9 +1247,9 @@ void TabletParallelCompactionManager::cleanup_tablet(int64_t tablet_id, int64_t 
     }
 
     // NOTE: Do NOT delete rows mapper files here!
-    // These files are needed by light_publish_primary_compaction which happens in a
-    // separate publish RPC after compaction completes. Each subtask's rows mapper file
-    // is cleaned up by RowsMapperIterator in its destructor during _light_publish_subtask().
+    // These files are needed by publish_primary_compaction which happens in a
+    // separate publish RPC after compaction completes. That publish records each
+    // rows mapper file as an orphan file, and vacuum deletes it.
 
     VLOG(1) << "Cleaned up parallel compaction state for tablet " << tablet_id << ", txn_id=" << txn_id;
 }
@@ -1729,8 +1730,7 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
     // Lock released here
 
     // Merge subtask LCRM files into a single LCRM for each large rowset split group.
-    // This enables the light publish path (SST ingestion) instead of the full publish
-    // path (try_replace), which is more robust and performant.
+    // Publish resolves a compaction through its LCRM, so the merged output needs one too.
     for (auto& task : lcrm_merge_tasks) {
         auto st = _merge_subtask_lcrm_files(tablet_id, txn_id, task.lcrm_files, task.num_rows_per_subtask,
                                             op_parallel->mutable_subtask_compactions(task.merged_compaction_idx));
@@ -1959,13 +1959,8 @@ Status TabletParallelCompactionManager::execute_sst_compaction_for_parallel(int6
     const auto& tablet = tablet_or.value();
     const auto& metadata = tablet.metadata();
 
-    // Check if this is a primary key table with cloud native persistent index
+    // Only a primary key tablet has an index to compact. Its index is always cloud native.
     if (!metadata || metadata->schema().keys_type() != KeysType::PRIMARY_KEYS) {
-        return Status::OK();
-    }
-
-    if (!metadata->enable_persistent_index() ||
-        metadata->persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE) {
         return Status::OK();
     }
 
@@ -3148,10 +3143,7 @@ bool TabletParallelCompactionManager::_can_use_range_split(const std::vector<Row
             return false;
         }
         for (const auto& segment_meta : rowset_meta.segment_metas()) {
-            if (!segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) {
-                return false;
-            }
-            if (segment_meta.sort_key_min().values_size() == 0 || segment_meta.sort_key_max().values_size() == 0) {
+            if (!has_segment_sort_key_bounds(segment_meta)) {
                 return false;
             }
         }
@@ -3260,8 +3252,7 @@ StatusOr<std::vector<SegmentSplitInfo>> TabletParallelCompactionManager::_collec
         for (int meta_pos = 0; meta_pos < num_segments; ++meta_pos) {
             const auto& segment_meta = rowset_meta.segment_metas(meta_pos);
             SegmentSplitInfo segment;
-            RETURN_IF_ERROR(segment.min_key.from_proto(segment_meta.sort_key_min()));
-            RETURN_IF_ERROR(segment.max_key.from_proto(segment_meta.sort_key_max()));
+            RETURN_IF_ERROR(decode_segment_sort_key_bounds(segment_meta, &segment.min_key, &segment.max_key));
             segment.num_rows = segment_meta.has_num_rows() ? segment_meta.num_rows() : 0;
             if (segment.num_rows > 0 && rowset_num_rows > 0) {
                 segment.data_size = rowset_data_size * segment.num_rows / rowset_num_rows;

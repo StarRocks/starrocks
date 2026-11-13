@@ -136,20 +136,14 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 .map(TvrTableSnapshotInfo::getTvrSnapshot)
                 .allMatch(TvrVersionRange::isEmpty);
         if (isTaskRunSkipped) {
-            if (mvRefreshParams.isNonTentativeForce()) {
-                logger.info("No base table has changed, but force refresh is requested, " +
-                        "proceed with refresh for materialized view: {}", mv.getName());
-            } else {
-                logger.info("No base table has changed, skip the refresh for materialized view: {}",
-                        mv.getName());
-                // No base-table change means the MV is confirmed fresh as of this run's start.
-                confirmFreshness();
-                // Every delta here is a point range (from == to): the window records that the
-                // bookmark had caught up with the base table head.
-                recordImvSourceRangesOnTaskRun();
-                // IVM rejects partial refresh above, so the whole MV is fresh, not just a range.
-                return ProcessExecPlan.skipped(ProcessExecPlan.SkipReason.MV_UP_TO_DATE);
-            }
+            logger.info("No base table has changed, skip the refresh for materialized view: {}", mv.getName());
+            // No base-table change means the MV is confirmed fresh as of this run's start.
+            confirmFreshness();
+            // Every delta here is a point range (from == to): the window records that the
+            // bookmark had caught up with the base table head.
+            recordImvSourceRangesOnTaskRun();
+            // IVM rejects partial refresh above, so the whole MV is fresh, not just a range.
+            return ProcessExecPlan.skipped(ProcessExecPlan.SkipReason.MV_UP_TO_DATE);
         }
 
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
@@ -262,14 +256,16 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         // InsertLoadTxnCallbackFactory registers the TVR-persistence callback.
         boolean prevIvmEnabled = ctx.getSessionVariable().isEnableIVMRefresh();
         String prevTvrTargetMvId = ctx.getSessionVariable().getTvrTargetMvId();
+        String prevTvrStagingOwner = ctx.getTvrStagingOwner();
+        String owner = mvContext.getStatus().getStartTaskRunId();
         ctx.getSessionVariable().setEnableIVMRefresh(true);
         ctx.getSessionVariable().setTvrTargetMvid(GsonUtils.GSON.toJson(mv.getMvId()));
+        ctx.setTvrStagingOwner(owner);
         try {
             try (Timer ignored = Tracers.watchScope("MVRefreshMaterializedView")) {
                 MaterializedView.AsyncRefreshContext mvRefreshContext =
                         mv.getRefreshScheme().getAsyncRefreshContext();
                 logger.info("staged tvr delta map: {}", stagedTvrDeltaMap);
-                String owner = mvContext.getStatus().getStartTaskRunId();
                 mvRefreshContext.replaceTempBaseTableInfoTvrDeltaMap(owner, stagedTvrDeltaMap);
                 executor.executePlan(execPlan, insertStmt);
             }
@@ -282,6 +278,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         } finally {
             ctx.getSessionVariable().setEnableIVMRefresh(prevIvmEnabled);
             ctx.getSessionVariable().setTvrTargetMvid(prevTvrTargetMvId);
+            ctx.setTvrStagingOwner(prevTvrStagingOwner);
         }
     }
 
@@ -406,8 +403,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         }
         // For now, we always refresh the latest snapshot from the last refresh.
         // current tvr snapshot
-        TvrVersionRange currentTvrSnapshot = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .acquireTvrSnapshot(baseTableInfo.getDbName(), snapshotTable, mv.getMvId());
+        TvrVersionRange currentTvrSnapshot = pinState().acquireSnapshot(baseTableInfo, snapshotTable);
         if (currentTvrSnapshot == null || !(currentTvrSnapshot instanceof TvrTableSnapshot)) {
             logger.warn("Current tvr snapshot is null for base table: {}, db: {}",
                     baseTableInfo.getTableName(), baseTableInfo.getDbName());
@@ -583,6 +579,15 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         return hasNextTaskRun;
     }
 
+    @Override
+    protected InsertStmt generateInsertAst(ConnectContext ctx, PCellSortedSet mvTargetPartitionNames,
+                                           String definition) throws AnalysisException {
+        // Parse a fixed plan-only level: bare EXPLAIN can inherit ANALYZE from query_explain_level.
+        // Even outer EXPLAIN ANALYZE / TRACE REFRESH only plans this INSERT.
+        String planSql = mvContext.isExplain() ? "EXPLAIN LOGICAL " + definition : definition;
+        return super.generateInsertAst(ctx, mvTargetPartitionNames, planSql);
+    }
+
     private InsertStmt prepareRefreshPlan() throws AnalysisException, LockTimeoutException {
         ConnectContext ctx = mvContext.getCtx();
         ctx.getAuditEventBuilder().reset();
@@ -634,17 +639,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
 
             try (Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
                 ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
-                boolean previousBypassAuthorizerCheck = ctx.isBypassAuthorizerCheck();
-                try {
-                    // Match PCT by skipping authorization for the trusted refresh INSERT. External column authorization
-                    // launches an auxiliary optimizer before InsertPlanner has bound the IVM aggregate state columns
-                    // required by the rewrite.
-                    ctx.setBypassAuthorizerCheck(true);
-                    ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
-                    mvContext.setExecPlan(execPlan);
-                } finally {
-                    ctx.setBypassAuthorizerCheck(previousBypassAuthorizerCheck);
-                }
+                ExecPlan execPlan = StatementPlanner.plan(insertStmt, ctx);
+                mvContext.setExecPlan(execPlan);
             }
             return insertStmt;
         } finally {

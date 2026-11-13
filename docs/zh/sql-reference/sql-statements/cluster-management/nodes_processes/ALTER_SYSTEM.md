@@ -77,10 +77,10 @@ description: "ALTER SYSTEM 管理 StarRocks 集群中的 FE、BE、CN 和 Broker
     ALTER SYSTEM ADD BACKEND "host:heartbeat_service_port"[, ...]
     ```
 
-- 删除 BE。如果有表是单副本且该表的部分 tablet 分布在要删除的 BE 上，则不允许删除该 BE。
+- 删除 BE。不指定 `FORCE` 时，如果有表是单副本且该表的部分 tablet 分布在要删除的 BE 上，则不允许删除该 BE。指定 `FORCE` 时会跳过该检查直接删除 BE，该 BE 上单副本表的 tablet 可能丢失。
 
     ```SQL
-    ALTER SYSTEM DROP BACKEND "host:heartbeat_service_port"[, ...]
+    ALTER SYSTEM DROP BACKEND "host:heartbeat_service_port"[, ...] [FORCE]
     ```
 
 - 下线 BE。

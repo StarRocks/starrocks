@@ -652,7 +652,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: Bytes
 - 是否可变: Yes
-- 描述: 执行 SPLIT 或 MERGE 操作后 Tablet 的目标大小。设置为 `0` 时，将禁用基于大小的 Tablet 自动分裂和合并。存算分离集群在该值为 `0` 时执行在线 Range Rewrite，会以各个最新基表索引当前的 Tablet 数量作为请求数量，并在新的排序键空间中重新计算边界，而不会复用原有边界。如果采样无法生成足够多的不同边界，实际 Tablet 数量可能更少。
+- 描述: 执行 SPLIT 或 MERGE 操作后 Tablet 的目标大小。该值为正数时，设置了同名表属性 `tablet_reshard_target_size` 的 Range 分布表改用该属性值作为目标大小，适用于自动分裂与合并、未指定目标大小的 SPLIT 和 MERGE 语句、Tablet 预分裂，以及在线 Range Rewrite 和 Rollup。设置为 `0` 时，将禁用所有表基于大小的 Tablet 自动分裂和合并，设置了该表属性的表也不例外。存算分离集群在该值为 `0` 时执行在线 Range Rewrite，会以各个最新基表索引当前的 Tablet 数量作为请求数量，并在新的排序键空间中重新计算边界，而不会复用原有边界。如果采样无法生成足够多的不同边界，实际 Tablet 数量可能更少。
 - 引入版本: v4.1.0
 
 ### `tablet_reshard_max_split_count`
@@ -697,7 +697,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: Bytes
 - 是否可变: Yes
-- 描述: Tablet 预分裂（pre-split）产生的 Tablet 的最小大小。该参数同时也是自动分裂所能采用的最小目标大小：当物化索引的 Tablet 数量少于其所属仓库的计算节点数（并受 `tablet_reshard_max_split_count` 上限约束）时，分裂会以“每个此类槽位一个 Tablet”对应的大小为目标，并以该参数为下限，Tablet 达到该目标的两倍时才会分裂。因此调大该参数也会推迟此类分裂；将其设置为大于或等于 `tablet_reshard_target_size` 即可关闭该行为，只保留基于大小的分裂规则。该参数还用于约束预分裂时按计算节点数对齐的行为，避免在节点较多的集群上将数据量较小的导入分裂成大量过小的 Tablet。其值不应大于 `tablet_reshard_target_size`。
+- 描述: Tablet 预分裂（pre-split）产生的 Tablet 的最小大小。该参数同时也是自动分裂扩充索引时所产生 Tablet 的最小大小：当物化索引的 Tablet 数量少于其所属仓库的计算节点数（并受 `tablet_reshard_max_split_count` 上限约束），且索引数据量小于该数量与表的目标大小（表设置了表属性 `tablet_reshard_target_size` 时为该属性值，否则为 FE 配置项 `tablet_reshard_target_size`）之积时，空余的槽位会逐个分配给未被按大小分裂的 Tablet，每次都分给按当前分裂份数计算、每份数据量最大的那个 Tablet，直到每个此类槽位都有一个 Tablet，或者任何 Tablet 再分裂都会产生小于该参数的 Tablet 为止。单个 Tablet 分裂出的数量不会超过单次分裂的上限。因此调大该参数也会推迟此类分裂；将其设置为大于或等于某张表的目标大小，即可对该表关闭该行为，只保留基于大小的分裂规则。该参数还用于约束预分裂时按计算节点数对齐的行为，避免在节点较多的集群上将数据量较小的导入分裂成大量过小的 Tablet。其值不应大于 `tablet_reshard_target_size`。
 - 引入版本: v4.1.0
 
 ### `tablet_reshard_history_job_max_keep_ms`
@@ -847,7 +847,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 单次基于采样的 Tablet 预分裂调用处理的预测目标分区数上限。超出该上限的预测分区（数据量最小的那部分：若 data tier 只采样了部分文件且分区值取自文件路径，按字节数判断，否则按样本数判断）会被丢弃，回退到 BE 运行时自动建分区且不做预分裂。用于约束病态多分区导入下钩子的耗时。设为 0 或负值可关闭该上限。
+- 描述: 单次基于采样的 Tablet 预分裂调用处理的预测目标分区数上限。对采样导入，超出该上限的预测分区（数据量最小的那部分：若 data tier 只采样了部分文件且分区值取自文件路径，按字节数判断，否则按样本数判断）会被丢弃，回退到 BE 运行时自动建分区且不做预分裂。用于约束病态多分区导入下钩子的耗时。若增量物化视图的 Row ID 是刷新查询计算出的指纹，其刷新写入的临时分区在预分裂之前已经建好：在符合条件的分区中按分区名取前面不超过上限的分区做预分裂，其余分区保持建分区时的单个 tablet。每个分区分到的份额仍按本次刷新写入的全部分区计算。设为 0 或负值可关闭该上限。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_target_size`
@@ -856,7 +856,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: Bytes
 - 是否可变: Yes
-- 描述: 基于采样的 Tablet 预分裂计算分裂数量时使用的目标 Tablet 大小。默认值 `0` 表示沿用 `tablet_reshard_target_size`。调小该值可以让单次导入获得更高的写并行度，同时不会缩小集群中其他 Tablet：后台 Tablet 分裂/合并守护线程仍然按 `tablet_reshard_target_size` 判定，会在导入结束后把这些较小的 Tablet 重新合并回去。该配置对写入全新 Range 分布分区的导入最为关键（例如 `INSERT OVERWRITE` 的替换分区），这类分区初始只有一个覆盖全域的 Tablet，否则只能由单个 BE 节点写入。
+- 描述: 基于采样的 Tablet 预分裂计算分裂数量时使用的目标 Tablet 大小。默认值 `0` 表示沿用 `tablet_reshard_target_size`。在 FE 配置项 `tablet_reshard_target_size` 为正数时，设置了同名表属性的 Range 分布表按该属性值预分裂。优先级从高到低依次为：表属性 `tablet_reshard_target_size`、本参数（大于 `0` 时）、FE 配置项 `tablet_reshard_target_size`。调小该值可以让单次导入获得更高的写并行度，同时不会缩小集群中其他 Tablet：后台 Tablet 分裂/合并守护线程仍然按 `tablet_reshard_target_size` 判定，会在导入结束后把这些较小的 Tablet 重新合并回去。该配置对写入全新 Range 分布分区的导入最为关键（例如 `INSERT OVERWRITE` 的替换分区），这类分区初始只有一个覆盖全域的 Tablet，否则只能由单个 BE 节点写入。
 
 #### 回滚基于采样的 Tablet 预分裂
 

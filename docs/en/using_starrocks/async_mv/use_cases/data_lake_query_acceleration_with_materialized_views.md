@@ -161,7 +161,7 @@ To enable the Hive metadata cache refresh feature, you can set the following FE 
 **Default**: 86400 (24 hours)<br/>
 **Description**: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second.
 
-From v3.1.4, StarRocks supports detecting data changes for Iceberg Catalog at the partition level. Currently, only Iceberg V1 tables are supported.
+From v3.1.4, StarRocks supports detecting data changes for Iceberg Catalog at the partition level.
 
 ### Enable query rewrite for external catalog-based materialized views
 

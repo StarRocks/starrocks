@@ -5,8 +5,6 @@ description: "大企業向けに統一認証・認可ワークフロー構築の
 
 # 認証と授権
 
-import AuthConcept from '../_assets/best_practices/auth_concept.mdx'
-import AuthFeature from '../_assets/best_practices/auth_feature.mdx'
 import AuthSeeAlso from '../_assets/best_practices/auth_see_also.mdx'
 
 このトピックは、一貫的の認証と授権のワークフローを開発するためのベストプラクティスを提供することを目的としています。
@@ -70,7 +68,28 @@ LDAP は以下のように使用できます。
 - **認証**ソースとして（ユーザー名とパスワードを検証するため）。
 - アクセス制御のための**グループ情報**プロバイダーとして。
 
-<AuthConcept />
+### UNIX グループ
+
+時には、ユーザーがセキュリティや分離の理由で LDAP グループをローカル（ホスト OS 上）でミラーリングし、外部 LDAP サーバーとの直接通信を避けることがあります。これらのローカル UNIX グループは、認証やアクセス制御の強制に使用できます。
+
+### OAuth, OIDC, and JWT
+
+:::tip
+
+**用語の簡単な説明**
+
+- **ID トークン**: アイデンティティの証明（私は私です。）
+- **アクセス トークン**: 特定のリソースにアクセスする権限の証明（私は特定のことができます。）
+- **OAuth 2.0**: アクセストークンを提供する授権フレームワーク。
+- **OIDC**: OAuth 上の認証レイヤー。ID とアクセス トークンを提供します。
+- **JWT**: トークン形式。OAuth と OIDC の両方で使用されます。
+
+:::
+
+**実際の使用法:**
+
+- **OAuth ベースのログイン**: 外部のログインページ（例: Google）にリダイレクトし、その後クラスターに戻ります。事前にブラウザアクセスとリダイレクト URL の設定が必要です。
+- **JWT ベースのログイン**: ユーザーはトークンを直接クラスターに渡し、事前に公開鍵またはエンドポイントの設定が必要です。
 
 ## 機能
 
@@ -86,7 +105,11 @@ LDAP は以下のように使用できます。
 
 ![Authentication and Authorization](../_assets/best_practices/auth_feature.png)
 
-<AuthFeature />
+機能の観点から:
+
+1. **認証プロバイダー** – サポートされているプロトコル: ネイティブユーザー、LDAP、OIDC、OAuth 2.0
+2. **Group Provider** – サポートされているソース: LDAP、オペレーティングシステム、ファイルベースの設定
+3. **授権システム** – サポートされているシステム: ネイティブ RBAC と IBAC、そして Apache Ranger
 
 ### 認証
 

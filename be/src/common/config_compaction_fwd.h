@@ -258,7 +258,8 @@ CONF_mDouble(lake_pk_compaction_delvec_benefit_weight, "12.0");
 // Set to 0 to disable the override (no size cap).
 CONF_mDouble(lake_pk_compaction_size_overflow_ratio, "2.0");
 
-// Skip get from pk index when light pk compaction publish is enabled
+// Skip get from pk index when light pk compaction publish is enabled.
+// Only for shared-nothing primary key tables: shared-data primary key tables always use light compaction publish.
 CONF_mBool(enable_light_pk_compaction_publish, "true");
 
 // if turned on, each compaction will use at most `max_cumulative_compaction_num_singleton_deltas` segments,

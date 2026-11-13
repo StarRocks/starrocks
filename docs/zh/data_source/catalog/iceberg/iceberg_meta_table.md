@@ -32,7 +32,7 @@ description: "Iceberg 元数据表提供 Iceberg 表的变更历史、快照和 
 
 ## Iceberg v3 Row Lineage 元数据列
 
-从 v4.1 开始，对于 Iceberg v3 表（format-version = 3），StarRocks 支持查询以下行血缘（Row Lineage）相关的元数据列：
+从 v4.1 开始，对于格式版本 3 及以上的 Iceberg 表，StarRocks 支持查询以下行血缘（Row Lineage）相关的元数据列：
 
 | 元数据列                     | 描述                                                                                       |
 | :--------------------------- | :----------------------------------------------------------------------------------------- |
@@ -50,7 +50,7 @@ SELECT _row_id, _last_updated_sequence_number, * FROM [<catalog>.][<database>.]t
 - `_row_id` 列需要数据文件具备 `firstRowId` 元信息。如果数据文件缺失 `firstRowId`，查询将失败并报错。
 - 对于新写入的数据，`_row_id` 通过 `firstRowId + row_position` 计算，`_last_updated_sequence_number` 取文件级别的 `dataSequenceNumber`。
 - 在 compaction（如 Iceberg OPTIMIZE / rewrite-data-files）后，如果 compactor 按照 Iceberg v3 规范将 `_row_id` 和 `_last_updated_sequence_number` 写入数据文件的物理列中，StarRocks 会读取每行的物理列值，从而在 compaction 后保留行血缘信息。
-- 这些元数据列仅对 Iceberg v3 表（format-version = 3）可用。
+- 这些元数据列仅对格式版本 3 及以上的 Iceberg 表可用。
 
 :::
 
@@ -185,7 +185,7 @@ SELECT * FROM [<catalog>.][<database>.]table$files;
 | sort_id            | 代表该文件排序顺序的 ID。                                    |
 | equality_ids       | 用于在相等删除文件（Equality Delete File）中进行相等比较的字段 ID 集。 |
 | key_metadata       | 文件加密所使用的密钥元数据（如适用）。                       |
-| first_row_id       | 格式版本 3 的表中，数据文件第一行的行 ID。删除文件为 `NULL`。 |
+| first_row_id       | 格式版本 3 及以上的表中，数据文件第一行的行 ID。删除文件为 `NULL`。 |
 | referenced_data_file | Deletion Vector 或文件级 Position Delete 文件所作用的数据文件的位置。数据文件为 `NULL`。 |
 | content_offset     | Deletion Vector 在其 Puffin 文件中的偏移量。其他文件为 `NULL`。 |
 | content_size_in_bytes | Deletion Vector 在其 Puffin 文件中的大小。其他文件为 `NULL`。 |

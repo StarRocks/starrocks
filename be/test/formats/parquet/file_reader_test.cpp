@@ -1392,6 +1392,38 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
     ASSERT_EQ(1, shared_buffered_input_stream->direct_io_count());
     ASSERT_EQ(1, shared_buffered_input_stream->shared_io_count());
 }
+// Several conjuncts on the same dict column must register the column (and its sub field path) only
+// once; otherwise the per row group dict predicate rewrite runs N^2 times for N conjuncts.
+TEST_F(FileReaderTest, TestDictFilterRegistersColumnOnceForMultipleConjuncts) {
+    auto file_reader = _create_file_reader(_file2_path);
+    auto* ctx = _create_file2_base_context();
+    // c3 >= "c" AND c3 <= "c"
+    auto& c3_conjuncts = ctx->format_scan_context.conjunct_ctxs_by_slot[2];
+    for (auto opcode : {TExprOpcode::GE, TExprOpcode::LE}) {
+        std::vector<ExprContext*> ctxs;
+        _create_string_conjunct_ctxs(opcode, 2, "c", &ctxs);
+        c3_conjuncts.insert(c3_conjuncts.end(), ctxs.begin(), ctxs.end());
+    }
+    ASSERT_EQ(2, c3_conjuncts.size());
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok());
+
+    const auto& materializer = file_reader->_row_group_readers[0]->_column_materializer;
+    const auto& dict_column_indices = materializer->dict_column_indices();
+    ASSERT_EQ(1, dict_column_indices.size());
+    int col_idx = dict_column_indices[0];
+    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id());
+    ASSERT_EQ(1, materializer->dict_column_sub_field_paths().at(col_idx).size());
+
+    auto chunk = _create_chunk();
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(3, chunk->num_rows());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.is_end_of_file());
+}
 
 TEST_F(FileReaderTest, TestGetNextOtherFilter) {
     auto file_reader = _create_file_reader(_file2_path);
@@ -2917,6 +2949,64 @@ TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
     }
     EXPECT_EQ(100, total_row_nums);
 }
+// Different sub field paths of one struct column are still registered separately, while repeated
+// conjuncts on the same sub field path are registered once.
+TEST_F(FileReaderTest, TestStructDictFilterRegistersEachSubFieldPathOnce) {
+    const std::string struct_in_struct_file_path =
+            "./be/test/formats/parquet/test_data/test_parquet_struct_in_struct.parquet";
+    auto ctx = _create_file_struct_in_struct_read_context(struct_in_struct_file_path);
+
+    TypeDescriptor type_struct =
+            TypeDescriptor::create_struct_type({"c0", "c1"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
+    TypeDescriptor type_struct_in_struct =
+            TypeDescriptor::create_struct_type({"c0", "c_struct"}, {TYPE_VARCHAR_DESC, type_struct});
+
+    std::vector<std::string> inner_path({"c_struct", "c0"});
+    std::vector<std::string> outer_path({"c0"});
+    auto& conjuncts = ctx->format_scan_context.conjunct_ctxs_by_slot[3];
+    auto add_conjunct = [&](TExprOpcode::type opcode, const std::vector<std::string>& path) {
+        std::vector<ExprContext*> ctxs;
+        _create_struct_subfield_predicate_conjunct_ctxs(opcode, 3, type_struct_in_struct, path, "55", &ctxs);
+        conjuncts.insert(conjuncts.end(), ctxs.begin(), ctxs.end());
+    };
+    // c_struct_struct.c_struct.c0 = '55' AND c_struct_struct.c_struct.c0 >= '55' AND c_struct_struct.c0 = '55'
+    add_conjunct(TExprOpcode::EQ, inner_path);
+    add_conjunct(TExprOpcode::GE, inner_path);
+    add_conjunct(TExprOpcode::EQ, outer_path);
+    ASSERT_EQ(3, conjuncts.size());
+
+    auto file_reader = _create_file_reader(struct_in_struct_file_path);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_struct_in_struct, true), chunk->num_columns());
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok());
+    const auto& materializer = file_reader->_row_group_readers[0]->_column_materializer;
+    const auto& dict_column_indices = materializer->dict_column_indices();
+    const auto& dict_column_sub_field_paths = materializer->dict_column_sub_field_paths();
+    ASSERT_EQ(1, dict_column_indices.size());
+    ASSERT_EQ(3, dict_column_indices[0]);
+    ASSERT_EQ(2, dict_column_sub_field_paths.at(3).size());
+    ASSERT_EQ(inner_path, dict_column_sub_field_paths.at(3)[0]);
+    ASSERT_EQ(outer_path, dict_column_sub_field_paths.at(3)[1]);
+
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        ASSERT_TRUE(status.ok() || status.is_end_of_file());
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        if (chunk->num_rows() != 0) {
+            ASSERT_EQ("{c0:'55',c_struct:{c0:'55',c1:'46'}}", chunk->get_column_by_slot_id(3)->debug_item(0));
+        }
+    }
+    EXPECT_EQ(100, total_row_nums);
+}
 
 // Reproduce: when a chunk is fully filtered (hit_count==0), the ScalarColumnReader's
 // fill_dst_column() is skipped and the subfield slot is left pointing at the internal
@@ -3188,6 +3278,61 @@ TEST_F(FileReaderTest, bloom_filter_reader_test_hit) {
     ASSERT_OK(file_reader->init(&ctx->format_scan_context));
 
     EXPECT_EQ(file_reader->row_group_size(), 1);
+}
+
+/*
+    c1 = [f"a{i:04d}" for i in range(1000) if i != 500] + ["a0999"] + [f"b{i:04d}" for i in range(1000)]
+    table = pa.table({
+        "c0": pa.array(range(len(c1)), pa.int32()),
+        "c_struct": pa.StructArray.from_arrays(
+                [pa.array(range(len(c1)), pa.int32()), pa.array(c1, pa.string())], ["c0", "c1"]),
+    })
+    pq.write_table(table, path, row_group_size=1000, use_dictionary=False, write_page_index=False,
+                   bloom_filter_options={"c_struct.c1": {"ndv": 1000, "fpp": 0.01}})
+ */
+TEST_F(FileReaderTest, StructSubfieldStringBloomFilter) {
+    const std::string file_path = "./be/test/formats/parquet/test_data/struct_subfield_bloom_filter.parquet";
+    TypeDescriptor type_struct = TypeDescriptor::create_struct_type({"c0", "c1"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC});
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {"c_struct", type_struct}, {""}};
+
+    auto scan = [&](const std::string& value, size_t* total_rows, int* bloom_filtered_row_groups) {
+        auto* ctx = _create_scan_context(slot_descs, file_path);
+        auto& conjunct_ctxs = ctx->format_scan_context.conjunct_ctxs_by_slot[1];
+        _create_struct_subfield_predicate_conjunct_ctxs(TExprOpcode::EQ, 1, type_struct, {"c1"}, value, &conjunct_ctxs);
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        ParquetUTBase::setup_conjuncts_manager(conjunct_ctxs, nullptr, tuple_desc, _runtime_state, ctx);
+        FormatScannerStats stats;
+        ctx->format_scan_context.stats = &stats;
+
+        auto file_reader = _create_file_reader(file_path);
+        Status status = file_reader->init(&ctx->format_scan_context);
+        ASSERT_OK(status);
+
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+        chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+        *total_rows = 0;
+        while (!status.is_end_of_file()) {
+            chunk->reset();
+            status = file_reader->get_next(&chunk);
+            chunk->check_or_die();
+            *total_rows += chunk->num_rows();
+        }
+        *bloom_filtered_row_groups = stats.bloom_filter_success_counter;
+    };
+
+    size_t total_rows = 0;
+    int bloom_filtered_row_groups = 0;
+
+    // Row group 0 holds 'a0400' and its bloom filter contains it, so it must not be pruned.
+    scan("a0400", &total_rows, &bloom_filtered_row_groups);
+    EXPECT_EQ(1, total_rows);
+    EXPECT_EQ(0, bloom_filtered_row_groups);
+
+    // 'a0500' is inside row group 0's min/max but absent, so only the bloom filter can prune it.
+    scan("a0500", &total_rows, &bloom_filtered_row_groups);
+    EXPECT_EQ(0, total_rows);
+    EXPECT_EQ(1, bloom_filtered_row_groups);
 }
 
 TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop) {
@@ -5370,6 +5515,128 @@ TEST_F(FileReaderTest, test_read_variant_shredding_full_column_ignores_extended_
               variant_row_json(variant_col, 0));
     // `note` lives only in its own fallback `value` column.
     ASSERT_EQ(R"({"extra":1,"kind":"identity","note":"n1"})", variant_row_json(variant_col, 2));
+}
+
+// The same path n is shredded as INT64 in one file and as DOUBLE in another. Reading both files into one column used to
+// merge n into a DOUBLE, which turned 2^53 + 1 into 2^53 and INT64_MAX into 9.2233720368547758e+18. The values of the
+// INT64 file must come back exact.
+TEST_F(FileReaderTest, test_read_variant_shredding_int64_and_double_files_merge_without_losing_precision) {
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    const auto read_file = [&](const std::string& file) {
+        const std::string path = "./be/test/formats/parquet/test_data/" + file;
+        auto file_reader = _create_file_reader(path);
+        Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+        auto ctx = _create_scan_context(slot_descs, path);
+        Status status = file_reader->init(&ctx->format_scan_context);
+        EXPECT_TRUE(status.ok()) << file << ": " << status.message();
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+        status = file_reader->get_next(&chunk);
+        EXPECT_TRUE(status.ok()) << file << ": " << status.message();
+        return chunk;
+    };
+    const auto variant_of = [](const ChunkPtr& chunk) {
+        const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+        return down_cast<const VariantColumn*>(nullable->data_column().get());
+    };
+
+    const ChunkPtr int64_chunk = read_file("variant_shredding_n_int64.parquet");
+    const ChunkPtr double_chunk = read_file("variant_shredding_n_double.parquet");
+    ASSERT_EQ(2, int64_chunk->num_rows());
+    ASSERT_EQ(1, double_chunk->num_rows());
+
+    // The order in which the files are appended must not matter.
+    for (const bool int64_first : {true, false}) {
+        auto merged = VariantColumn::create();
+        const VariantColumn* first = variant_of(int64_first ? int64_chunk : double_chunk);
+        const VariantColumn* second = variant_of(int64_first ? double_chunk : int64_chunk);
+        merged->append(*first, 0, first->size());
+        merged->append(*second, 0, second->size());
+        ASSERT_EQ(3, merged->size());
+
+        const size_t base = int64_first ? 0 : 1; // row of the first INT64 value
+        EXPECT_EQ(R"({"n":9007199254740993})", variant_row_json(merged.get(), base));
+        EXPECT_EQ(R"({"n":9223372036854775807})", variant_row_json(merged.get(), base + 1));
+        EXPECT_EQ(R"({"n":1.5})", variant_row_json(merged.get(), int64_first ? 2 : 0));
+    }
+}
+
+// A present variant group that holds neither `value` nor `typed_value` is a variant null; only a null group (a null
+// metadata) is a SQL NULL. The rows are: nothing set, typed_value 5, a null group, and an explicit variant null value.
+TEST_F(FileReaderTest, test_read_variant_shredding_reads_empty_group_as_variant_null) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_variant_null.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << status.message();
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(4, chunk->num_rows());
+
+    const ColumnPtr& column = chunk->get_column_by_index(0);
+    const auto* nullable = down_cast<const NullableColumn*>(column.get());
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_FALSE(nullable->is_null(0));
+    EXPECT_EQ("null", variant_row_json(variant_col, 0));
+    ASSERT_FALSE(nullable->is_null(1));
+    EXPECT_EQ("5", variant_row_json(variant_col, 1));
+    EXPECT_TRUE(nullable->is_null(2));
+    ASSERT_FALSE(nullable->is_null(3));
+    EXPECT_EQ("null", variant_row_json(variant_col, 3));
+}
+
+// A present object group with no value in it is an empty object, not SQL NULL. The rows are {}, NULL, {"x":1}
+// and {"p":{}}.
+TEST_F(FileReaderTest, test_read_variant_shredding_keeps_empty_objects) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_empty_object.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << status.message();
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(4, chunk->num_rows());
+
+    const ColumnPtr& column = chunk->get_column_by_index(0);
+    const auto* nullable = down_cast<const NullableColumn*>(column.get());
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_FALSE(nullable->is_null(0));
+    EXPECT_EQ("{}", variant_row_json(variant_col, 0));
+    EXPECT_TRUE(nullable->is_null(1));
+    ASSERT_FALSE(nullable->is_null(2));
+    EXPECT_EQ(R"({"x":1})", variant_row_json(variant_col, 2));
+    ASSERT_FALSE(nullable->is_null(3));
+    EXPECT_EQ(R"({"p":{}})", variant_row_json(variant_col, 3));
+}
+
+// A list of shredded variants whose typed_value is an object. The levels of the leaves below the variants have one entry
+// per element, so they cannot tell the presence of an object per row: the column must still read as before.
+TEST_F(FileReaderTest, test_read_variant_shredding_in_array_reads_objects_with_variant_null_rows) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_in_array.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+    TypeDescriptor array_of_variant = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
+    Utils::SlotDesc slot_descs[] = {{"arr", array_of_variant}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << status.message();
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(array_of_variant, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(2, chunk->num_rows());
+    EXPECT_EQ(R"([{"x":1},{"x":2}])", chunk->get_column_by_index(0)->debug_item(0));
+    EXPECT_EQ(R"([{"x":3}])", chunk->get_column_by_index(0)->debug_item(1));
 }
 
 } // namespace starrocks::parquet

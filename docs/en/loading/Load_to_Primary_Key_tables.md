@@ -8,7 +8,7 @@ description: "How to perform INSERT, UPDATE, DELETE, partial update, and conditi
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
-[Primary Key tables](../table_design/table_types/primary_key_table.md) provided by StarRocks allow you to make data changes to StarRocks tables by running [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), or [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) jobs. These data changes include inserts, updates, and deletions. However, Primary Key tables do not support changing data by using [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md) or [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md).
+[Primary Key tables](../table_design/table_types/primary_key_table.md) provided by StarRocks allow you to make data changes to StarRocks tables by running [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md), or [Routine Load](../sql-reference/sql-statements/loading_unloading/routine_load/CREATE_ROUTINE_LOAD.md) jobs. These data changes include inserts, updates, and deletions. However, Primary Key tables do not support changing data by using [Spark Load](../sql-reference/sql-statements/loading_unloading/SPARK_LOAD.md).
 
 StarRocks also supports partial updates and conditional updates.
 
@@ -656,7 +656,7 @@ Run a load to update the records whose `id` values are `101` and `102`, respecti
       -T example5.csv -XPUT \
       http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
   ```
-- Run a Insert Load job:
+- Run an INSERT job (supported from v3.5.8, v4.0.1, and v4.1.0 onwards):
   ```SQL
   INSERT INTO test_db.table5 properties("merge_condition" = "version")
   VALUES (101, 2, 70), (102, 3, 100);

@@ -272,14 +272,14 @@ GROUP BY
 
 ### Align multiple partition columns
 
-From v3.5.0 onwards, asynchronous materialized views support multi-column partition expressions. You can specify multiple partition columns for the materialized view, and one-to-one map them to the partition columns of the base tables. This enables Lakehouse integration and enhances the reuse of existing StarRocks internal table capabilities, providing a better Lakehouse solution:
+From v3.5.0 onwards, asynchronous materialized views support multi-column partition expressions. You can specify multiple partition columns for the materialized view to map all or part of the partition columns of the base tables. This enables Lakehouse integration and enhances the reuse of existing StarRocks internal table capabilities, providing a better Lakehouse solution:
 
 - **Simplified user experience**: Simplifies the process of transferring data from Data Lake to StarRocks.
 - **Accelerated query performance**: Reuses native table capabilities such as Colocate Group, Bitmap Index, Bloom Filter Index, Sort Key, and global dictionaries when creating materialized views. Queries directly referencing the base table will benefit from transparent query acceleration through automatic rewrite.
 
 #### Notes for multi-column partition expressions
 
-- Currently, multi-column partitions in materialized views can only be mapped one-to-one or in an N:1 relationship with the base table's partitions, not an M:N relationship. For example, if the base table has partition columns `(col1, col2, ..., coln)`, the materialized view partition expression can only be a single column partition, such as `col1`, `col2`, or `coln`, or a one-to-one mapping to the base table’s partition columns, that is, `(col1, col2, ..., coln)`. This limitation is designed to simplify the partition mapping logic between the base table and the materialized view, avoiding the complexity introduced by M:N relationships.
+- Multi-column partitions in materialized views can only be directly mapped to the base table's partition columns. Mapping using functions or expressions on the base table's partition columns is not supported, except for the `date_trunc` expressions that map Iceberg time transforms, as described below. From v3.5.2 onwards, the materialized view can use any subset of the base table's partition columns. In v3.5.0 and v3.5.1, it can use either a single partition column of the base table or all of them, that is, `(col1, col2, ..., coln)`.
 - Because Iceberg partition expressions support the `transform` function, additional handling is required when mapping Iceberg partition expressions to StarRocks materialized view partition expressions. The mapping relationship is as follows:
 
   | Iceberg Transform | Iceberg partition expression   | Materialized view partition expression   |
@@ -342,8 +342,8 @@ To achieve these goals, you must consider the following aspects when creating a 
   You can use the property `partition_refresh_number` to specify the granularity of each refresh operation. `partition_refresh_number` controls the maximum number of partitions to be refreshed in a refresh task when a refresh is triggered. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. The partitions are refreshed in chronological order from the least recent partition to the most recent partition (excluding partitions created dynamically for the future). When the value is `-1`, the refresh task will not be split. The default value is changed from `-1` to `1` since v3.3, meaning StarRocks refeshes partitions one by one.
 
   You can also use the `partition_refresh_strategy` property to control the adaptability of the refresh strategy. This parameter supports the following two values:
-  - "strict" (default): Partition refresh strictly follows the partition_refresh_number setting to control the refresh granularity.
-  - "adaptive": Adjusts the number of partitions refreshed per batch adaptively based on the amount of data in the base table partitions, improving refresh efficiency.
+  - "strict" (default in versions earlier than v4.1): Partition refresh strictly follows the partition_refresh_number setting to control the refresh granularity.
+  - "adaptive" (default from v4.1 onwards): Adjusts the number of partitions refreshed per batch adaptively based on the amount of data in the base table partitions, improving refresh efficiency.
 
 - **Materialization scope**
 

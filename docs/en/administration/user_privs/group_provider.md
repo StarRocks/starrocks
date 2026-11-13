@@ -6,10 +6,6 @@ description: "Enable Group Provider in StarRocks to authenticate, and authorize 
 
 # Authenticate User Groups
 
-import UnixFileIntro from '../../_assets/user_priv/unix_file_intro.mdx'
-import UnixFileSyntax from '../../_assets/user_priv/unix_file_syntax.mdx'
-import UnixFileParam from '../../_assets/user_priv/unix_file_param.mdx'
-import GroupProviderRangerLink from '../../_assets/user_priv/group_provider_ranger_link.mdx'
 
 Enable Group Provider in StarRocks to authenticate, and authorize user groups from external authentication systems.
 
@@ -37,7 +33,10 @@ The following flow chart uses LDAP and Apache Ranger as an example to explain th
 
 ## Create a group provider
 
-<UnixFileIntro />
+StarRocks supports three types of group providers: 
+- **LDAP group provider**: Search and match users with groups in your LDAP service
+- **Unix group provider**: Search and match users with groups in your operating system
+- **File group provider**: Search and match users with groups defined by a file
 
 ### Syntax
 
@@ -78,11 +77,45 @@ ldap_cache_arg ::=
     ["ldap_cache_max_stale_time" = ""]
 ```
 
-<UnixFileSyntax />
+- Unix group provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name> 
+PROPERTIES (
+    "type" = "unix"
+)
+```
+
+- File group provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name> 
+PROPERTIES (
+    "type" = "file",
+    "group_file_url" = ""
+)
+```
 
 ### Parameters
 
-<UnixFileParam />
+#### `type`
+
+The type of the group provider to create. Valid values:
+- `ldap`: Creates an LDAP group provider. When this value is set, you need to specify `ldap_info`, `ldap_search_group_arg`, `ldap_search_user_arg`, and optionally `ldap_cache_arg`.
+- `unix`: Creates a Unix group provider.
+- `file`: Creates a File group provider. When this value is set, you need to specify `group_file_url`.
+
+#### `group_file_url`
+
+The URL or relative path (under `fe/conf`) to the file that defines the user groups.
+
+:::note
+
+A group file contains a list of groups and their members. You can define a group in each line where the group name and members are separated by a colon. Multiple users are separated by commas. Example: `group_name:user_1,user_2,user_3`.
+
+An `http://` or `https://` URL is fetched with the connect and read timeouts set by the FE configuration items `group_provider_http_connect_timeout_ms` (default 5000) and `group_provider_http_read_timeout_ms` (default 30000). If the server does not answer within them, the statement fails and the group provider keeps its previous configuration.
+
+:::
 
 #### `ldap_info` parameter group
 
@@ -393,8 +426,13 @@ The following example grants the role `example_role` to the user group `analysts
 GRANT example_role TO EXTERNAL GROUP analysts;
 ```
 
+Roles granted to an external group also apply to tasks that run as the user who created them, such as asynchronous materialized view refreshes and tasks submitted with [SUBMIT TASK](../../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md). Each time such a task runs, StarRocks resolves the creator's groups again. Note the following points:
+
+- Groups that only a login credential carries, such as groups read from a claim of a JWT or OAuth 2.0 token, cannot be resolved for a task.
+- For a user who logs in through a JWT or OAuth 2.0 security integration, a task consults the group providers in the FE configuration item `group_provider`, not the `group_provider` property of the integration.
+
 ## Combine group provider with external authorization system (Apache Ranger)
 
 Once you configure the associated group provider in the security integration, StarRocks will record the user's group information upon login. This group information will then be automatically included in the authorization process with Ranger, eliminating the need for additional configuration.
 
-<GroupProviderRangerLink />
+For more instructions on integrating StarRocks with Ranger, see [Manage permissions with Apache Ranger](./authorization/ranger_plugin.md).

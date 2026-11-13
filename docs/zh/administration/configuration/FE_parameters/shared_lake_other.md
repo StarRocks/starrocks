@@ -13,7 +13,6 @@ import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note
 
 import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
-import EditonSpecificFEItemSharedLakeOther from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item_shared_lake_other.mdx'
 
 <FEConfigMethod />
 
@@ -490,6 +489,30 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 如果此项设置为 `true`，则在存算分离集群中，当子任务之一成功时，系统将认为 Compaction 操作成功。
 - 引入版本: v3.5.2
 
+### `lake_compaction_admission_mode`
+
+- 默认值: `NORMAL`
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 控制新的存算分离 Compaction 作业是否可以调度。有效值为 `NORMAL` 和 `ALLOWLIST`（区分大小写）。`NORMAL` 忽略 `lake_compaction_allow_table_ids`，保持原有调度行为；`ALLOWLIST` 仅允许名单中的表。非法模式会阻止新作业并输出日志警告。配置刷新后生效，无需重启，不取消或等待已运行的作业。两种模式下，原有黑名单和任务数量限制均有效，手动 Compaction 也受此策略限制。
+- 引入版本: -
+
+### `lake_compaction_allow_table_ids`
+
+- 默认值: ""
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 分号分隔的正整数**表 ID**，例如 `12345;98765`。仅在 `ALLOWLIST` 模式下生效，空名单不放行任何表。不支持分区 ID 或 `*`。表 ID 放行该表所有物理分区，包括未来新增的分区。非法名单在 `ALLOWLIST` 模式下阻止新作业并输出警告，但不影响 `NORMAL` 模式。`lake_compaction_disable_ids` 的表级或分区级黑名单优先，`lake_compaction_max_tasks = 0` 仍禁止所有新作业。配置刷新后生效，无需重启。
+- 引入版本: -
+
+用于 replication 迁移时，先保持 `lake_compaction_max_tasks = 0`，清空白名单并切换到 `ALLOWLIST`；开始 replication 前等待已有 Compaction 作业结束。确认模式生效后，再恢复非零任务上限。名单由用户手动维护，无需修改迁移工具，也不自动维护。
+
+仅在整张表的**所有** replication 事务均达到 **VISIBLE**、数据校验完成且没有排队、重试或后续 replication 时加白。一旦交接给目标写入或 Compaction，不得再次对该表启动 replication；如需重新迁移，必须 drop 并重建目标表。移出白名单不能恢复迁移资格。这是使用流程约束：白名单不提供 replication 与 Compaction 的事务互斥，也不实现永久禁止 replication 的状态。
+
+使用 `ADMIN SET FRONTEND CONFIG` 动态更新即可生效，无需逐台修改在线 FE 的配置文件；SQL 修改会转发到在线 FE。为保证重启和 Leader 切换后仍有效，在支持的环境中使用 `WITH PERSISTENT` 持久化两个参数；容器部署则通过部署平台保存配置。离线或新增 FE 在具备成为 Leader 的条件前，也应配置相同的值。
+
 ### `lake_compaction_disable_ids`
 
 - 默认值: ""
@@ -914,6 +937,51 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 每个 Iceberg 表待处理提交操作的最大数量。当使用提交队列 (`enable_iceberg_commit_queue=true`) 时，这限制了可以为一个表排队的提交操作的数量。当达到限制时，额外的提交操作将在调用者线程中执行（阻塞直到容量可用）。此配置在 FE 启动时读取，并应用于新创建的表执行器。需要重启 FE 才能生效。如果您预期对同一表有许多并发提交，请增加此值。如果此值过低，在高并发期间提交可能会在调用者线程中阻塞。
 - 引入版本: v4.1.0
 
+### `deltalake_checkpoint_meta_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Delta Lake Catalog 共用的一份 Delta Log Checkpoint 文件缓存可以使用的 FE JVM 堆比例，无论有多少个 Catalog，总量都受此上限约束。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `deltalake_checkpoint_meta_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `deltalake_json_meta_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Delta Lake Catalog 共用的一份 Delta Log JSON 文件缓存可以使用的 FE JVM 堆比例。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `deltalake_json_meta_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `iceberg_data_file_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Iceberg Catalog 共用的一份 Data File Manifest 缓存可以使用的 FE JVM 堆比例，无论有多少个 Catalog，总量都受此上限约束。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `iceberg_data_file_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `iceberg_delete_file_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Iceberg Catalog 共用的一份 Delete File Manifest 缓存可以使用的 FE JVM 堆比例；由删除文件构建的删除文件索引另有一份同样大小的缓存。默认值 `0` 表示两者都由每个 Catalog 独占，大小由 Catalog 属性 `iceberg_delete_file_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
+### `iceberg_partition_cache_global_memory_ratio`
+
+- 默认值: 0
+- 类型: Double
+- 单位: -
+- 是否可变: No
+- 描述: 所有 Iceberg Catalog 共用的一份分区缓存可以使用的 FE JVM 堆比例。默认值 `0` 表示每个 Catalog 独占一份缓存，大小由 Catalog 属性 `iceberg_partition_cache_memory_usage_ratio` 限制。大于 `0` 时，该 Catalog 属性不生效。取值范围为 `0` 到 `1`。修改后需要重启 FE 才能生效。
+- 引入版本: -
+
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
 - 默认值: 86400
@@ -931,8 +999,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变：Yes
 - 描述：系统用于判断存算分离集群中 Worker 之间 Tablet 分布平衡的阈值，不平衡因子的计算公式为 `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。如果该因子大于 `lake_balance_tablets_threshold`，则会触发节点间 Tablet 调度。此配置项仅在 `lake_enable_balance_tablets_between_workers` 设为 `true`时生效。
 - 引入版本：v3.3.4
-
-<EditonSpecificFEItemSharedLakeOther />
 
 ## 其他
 
@@ -1589,16 +1655,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位:
 - 是否可变: Yes
-- 描述: 物化视图计划缓存的最大大小（用于物化视图重写）。如果有很多物化视图用于透明查询重写，您可以增加此值。
+- 描述: 物化视图计划缓存的最大大小（用于物化视图重写）。如果有很多物化视图用于透明查询重写，您可以增加此值。该值仅在 FE 启动创建缓存时读取一次，因此运行时修改后需重启 FE 才会生效。
 - 引入版本: v3.2
 
 ### `mv_plan_cache_thread_pool_size`
 
-- 默认值: 3
+- 默认值: 8
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 物化视图计划缓存的默认线程池大小（用于物化视图重写）。
+- 描述: 已废弃。自 v3.5.14、v4.0.7 和 v4.1 起，设置后不生效。加载物化视图计划缓存（用于物化视图重写）的线程池大小固定为 2 与 CPU 核数的四分之三中的较大值。
 - 引入版本: v3.2
 
 ### `mv_refresh_default_planner_optimize_timeout`
@@ -1618,6 +1684,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 如果刷新过程中存在过滤数据，物化视图刷新失败，默认为 true，否则忽略过滤数据并返回成功。
 - 引入版本: -
+
+### `mv_refresh_force_partition_type`
+
+- 默认值: 0
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 对指定分区类型的物化视图，无论基表是否发生变化，刷新时都强制刷新。适用于基于外表、无法准确检测数据变化的物化视图。该值为位图：`0` 表示禁用，`1` 表示非分区物化视图，`2` 表示 Range 分区物化视图，`4` 表示 List 分区物化视图。可将多个值相加组合使用，例如 `7` 表示以上三种类型。对 `refresh_mode` 为 `INCREMENTAL` 的物化视图不生效。
+- 引入版本: v3.5.16, v4.0.9, v4.1
 
 ### `mv_refresh_try_lock_timeout_ms`
 

@@ -272,6 +272,8 @@ CONF_mInt32(lake_replication_max_parallel_files_per_tablet, "4");
 // Minimum number of files required to enable parallel copy in lake-to-lake replication.
 // Set to 0 to force disable parallel copy.
 CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
+// Allow compatible scalar add/drop histories in shared-data replication snapshots.
+CONF_mBool(lake_replication_enable_light_schema_change, "false");
 // Number of threads in the dedicated thread pool used by lake replication for per-file copy.
 // The fixed default bounds per-copy read buffers independently of CPU count. 0 means
 // cpu_cores * 4. Negative means -value * cpu_cores. The pool is built once at startup;
@@ -365,6 +367,10 @@ CONF_Int32(max_hdfs_scanner_num, "50");
 // once they are due. Not retried: on failure the scan keeps its current credentials and asks
 // again a minute later. A value <= 0 turns the refresh off for scans that start afterwards.
 CONF_mInt32(scan_credential_refresh_rpc_timeout_ms, "10000");
+// Max number of idle deserialized Iceberg tables the JNI metadata scanner keeps on one BE/CN. The scan tasks
+// of one Iceberg metadata table query share one deserialized table instead of each deserializing its own copy.
+// A value <= 0 turns the sharing off for scans that start afterwards.
+CONF_mInt32(iceberg_metadata_table_cache_capacity, "128");
 // Number of max scan keys.
 CONF_mInt32(max_scan_key_num, "1024");
 // The max number of push down values of a single column.
@@ -518,6 +524,12 @@ CONF_mInt32(update_compaction_delvec_file_io_amp_ratio, "2");
 CONF_mDouble(update_compaction_ratio_threshold, "0.5");
 // This config controls max memory that we can use for partial update.
 CONF_mInt64(partial_update_memory_limit_per_worker, "2147483648"); // 2GB
+// Rows per chunk when a primary key table reads segments to apply a load or a compaction, in both shared-data
+// and shared-nothing mode: the primary keys of the loaded rowset, the columns that partial updates read, and the
+// primary keys of a compaction output. Kept apart from vector_chunk_size so the apply batch can be tuned without
+// touching query execution. A value <= 0 falls back to 4096 and a value above 65535 is capped at 65535. Rebuilding
+// the primary key index from segments does not use it.
+CONF_mInt32(pk_vector_chunk_size, "4096");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");
@@ -1678,10 +1690,10 @@ CONF_mBool(starlet_write_file_with_tag, "false");
 // Capacity of the shared-data tablet metadata cache, as a percentage of the process memory limit, clamped to
 // [0, 100]. The cache holds tablet metadata and txn logs, apart from the segment metadata cache, so that segments
 // loaded by queries and compactions cannot evict them. Set to 0 to disable the cache.
-CONF_mInt32(lake_tablet_metadata_cache_limit_percent, "10");
+CONF_mInt32(lake_tablet_metadata_cache_limit_percent, "5");
 // Capacity of the shared-data segment metadata cache, as a percentage of the process memory limit, clamped to
 // [0, 100]. The cache holds opened segments, delete vectors and tablet schemas. Set to 0 to disable the cache.
-CONF_mInt32(lake_segment_metadata_cache_limit_percent, "20");
+CONF_mInt32(lake_segment_metadata_cache_limit_percent, "10");
 // Tracked memory budget for synchronously processing one dump_tablet_metadata request. It uses the standard
 // MemTracker accounting granularity. New requests fail closed when the value is non-positive.
 CONF_mInt64(lake_dump_tablet_metadata_per_request_memory_limit_bytes, "268435456");
@@ -2394,7 +2406,8 @@ CONF_mBool(enable_profile_for_external_plan, "false");
 // the max length supported for varchar type
 CONF_mInt32(olap_string_max_length, "1048576");
 
-// Skip get from pk index when light pk compaction publish is enabled
+// Skip get from pk index when light pk compaction publish is enabled.
+// Only for shared-nothing primary key tables: shared-data primary key tables always use light compaction publish.
 CONF_mBool(enable_light_pk_compaction_publish, "true");
 
 // jit LRU object cache size for total 32 shards, it will be an auto value if it < 0

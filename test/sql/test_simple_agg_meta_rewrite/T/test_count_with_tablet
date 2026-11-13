@@ -1,0 +1,18 @@
+-- name: test_count_with_tablet
+-- A duplicate key table answers COUNT(*) from tablet metadata. A tablet of a partition never loaded leaves the count
+-- nothing to read, so it is 0, as for any empty input; a tablet the table does not have is an error.
+CREATE TABLE t_dup (
+    k1 date NOT NULL,
+    k2 bigint NOT NULL,
+    v1 bigint NULL
+) DUPLICATE KEY(k1, k2)
+PARTITION BY RANGE(k1) (
+    PARTITION p1 VALUES LESS THAN ('2025-02-01'),
+    PARTITION p2 VALUES LESS THAN ('2025-03-01')
+)
+DISTRIBUTED BY HASH(k2) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+INSERT INTO t_dup VALUES ('2025-01-10', 1, 10), ('2025-01-10', 2, 10), ('2025-01-10', 3, 10);
+function: set_first_tablet_id("t_dup", "p2")
+SELECT count(*) FROM t_dup TABLET(${tablet_id});
+SELECT count(*) FROM t_dup TABLET(1);

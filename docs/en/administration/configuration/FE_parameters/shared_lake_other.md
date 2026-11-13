@@ -12,7 +12,6 @@ import AdminSetFrontendNote from '../../../_assets/commonMarkdown/FE_config_note
 
 import StaticFEConfigNote from '../../../_assets/commonMarkdown/StaticFE_config_note.mdx'
 
-import EditonSpecificFEItemSharedLakeOther from '../../../_assets/commonMarkdown/Edition_Specific_FE_Item_shared_lake_other.mdx'
 
 <FEConfigMethod />
 
@@ -489,6 +488,30 @@ This topic introduces the following types of FE configurations:
 - Description: If this item is set to `true`, the system will consider the Compaction operation in a shared-data cluster as successful when one of the sub-tasks succeeds.
 - Introduced in: v3.5.2
 
+### `lake_compaction_admission_mode`
+
+- Default: `NORMAL`
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Controls admission of new shared-data Compaction jobs. Valid values are `NORMAL` and `ALLOWLIST` (case-sensitive). `NORMAL` ignores `lake_compaction_allow_table_ids` and preserves existing scheduling. `ALLOWLIST` only permits tables listed in `lake_compaction_allow_table_ids`. An invalid mode blocks new jobs and logs a warning. Changes take effect on configuration refresh without a restart and do not cancel or drain running jobs. The existing denylist and task limits apply in both modes, including to manual Compaction.
+- Introduced in: -
+
+### `lake_compaction_allow_table_ids`
+
+- Default: ""
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Semicolon-separated positive **table IDs**, for example `12345;98765`. Used only in `ALLOWLIST` mode; an empty list permits no tables. Partition IDs and `*` are not supported. A table entry covers all its physical partitions, including future partitions. Invalid input blocks new jobs in `ALLOWLIST` mode and logs a warning; it does not affect `NORMAL` mode. `lake_compaction_disable_ids` takes precedence for both tables and partitions, and `lake_compaction_max_tasks = 0` still disables all new jobs. Changes take effect on configuration refresh without a restart.
+- Introduced in: -
+
+For a replication migration, keep `lake_compaction_max_tasks = 0` while setting an empty allowlist and switching to `ALLOWLIST`; wait for existing Compaction jobs to finish before starting replication. Restore a nonzero task limit only after the mode has taken effect. Users manage the list manually; no migration-tool changes or automatic list maintenance are required.
+
+Add a table only after **all** its replication transactions are **VISIBLE**, data validation is complete, and no queued, retrying, or future replication remains. Once the table is handed over to target writes or Compaction, do not start replication on it again; drop and recreate the target table if another migration is required. Removing its ID does not restore replication eligibility. This is an operational contract: the allowlist does not implement a replication/Compaction transaction fence or a permanent replication ban.
+
+Use `ADMIN SET FRONTEND CONFIG` for dynamic changes; you do not need to edit each live FE's configuration file for the change to take effect. SQL changes are forwarded to live FEs. To survive restarts and leader changes, persist both parameters with `WITH PERSISTENT` where supported, or through the deployment platform's configuration for containerized deployments. Ensure offline or newly added FEs receive the same settings before they can become leader.
+
 ### `lake_compaction_disable_ids`
 
 - Default: ""
@@ -914,6 +937,51 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of pending commit operations per Iceberg table. When using the commit queue (`enable_iceberg_commit_queue=true`), this limits the number of commit operations that can be queued for a single table. When the limit is reached, additional commit operations will execute in the caller thread (blocking until capacity available). This configuration is read at FE startup and applies to newly created table executors. Requires FE restart to take effect. Increase this value if you expect many concurrent commits to the same table. If this value is too low, commits may block in the caller thread during high concurrency.
 - Introduced in: v4.1.0
 
+### `deltalake_checkpoint_meta_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one Delta Log Checkpoint file cache shared by all Delta Lake catalogs, so that its total stays within this bound however many catalogs there are. `0` (default) keeps a cache per catalog, bounded by the catalog property `deltalake_checkpoint_meta_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `deltalake_json_meta_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one Delta Log JSON file cache shared by all Delta Lake catalogs. `0` (default) keeps a cache per catalog, bounded by the catalog property `deltalake_json_meta_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `iceberg_data_file_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one data file Manifest cache shared by all Iceberg catalogs, so that its total stays within this bound however many catalogs there are. `0` (default) keeps a cache per catalog, bounded by the catalog property `iceberg_data_file_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `iceberg_delete_file_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one delete file Manifest cache shared by all Iceberg catalogs; the delete file indexes built from them get the same share in a cache of their own. `0` (default) keeps both caches per catalog, bounded by the catalog property `iceberg_delete_file_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
+### `iceberg_partition_cache_global_memory_ratio`
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: No
+- Description: The share of the FE JVM heap for one partition cache shared by all Iceberg catalogs. `0` (default) keeps a cache per catalog, bounded by the catalog property `iceberg_partition_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored. Valid values are from `0` to `1`. Changing this item requires an FE restart.
+- Introduced in: -
+
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
 - Default: 86400
@@ -931,8 +999,6 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The threshold the system used to judge the tablet balance among workers in a shared-data cluster, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`. If the factor is greater than `lake_balance_tablets_threshold`, a tablet balance will be triggered. This item takes effect only when `lake_enable_balance_tablets_between_workers` is set to `true`.
 - Introduced in: v3.3.4
-
-<EditonSpecificFEItemSharedLakeOther />
 
 ## Other
 
@@ -1589,7 +1655,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit:
 - Is mutable: Yes
-- Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value.
+- Description: The maximum size of materialized view plan cache (which is used for materialized view rewrite). If there are many materialized views used for transparent query rewrite, you may increase this value. The value is read only once, when the cache is created at FE startup, so a value changed at runtime takes effect only after the FE restarts.
 - Introduced in: v3.2
 
 ### `mv_plan_cache_thread_pool_size`
@@ -1598,7 +1664,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The default thread pool size of materialized view plan cache (which is used for materialized view rewrite).
+- Description: Deprecated. From v3.5.14, v4.0.7, and v4.1 onwards, this parameter no longer takes effect. The size of the thread pool that loads the materialized view plan cache (which is used for materialized view rewrite) is fixed at the larger of 2 and three quarters of the number of CPU cores.
 - Introduced in: v3.2
 
 ### `mv_refresh_default_planner_optimize_timeout`
@@ -1618,6 +1684,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Mv refresh fails if there is filtered data in refreshing, true by default, otherwise return success by ignoring the filtered data.
 - Introduced in: -
+
+### `mv_refresh_force_partition_type`
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Forces materialized view refreshes of the specified partition types to refresh regardless of whether the base tables have changed. This is useful for materialized views on external tables, where data changes cannot be accurately detected. The value is a bitmap: `0` disables this behavior, `1` applies it to non-partitioned materialized views, `2` to range-partitioned materialized views, and `4` to list-partitioned materialized views. Add the values to combine types, for example, `7` applies to all three. It does not apply to a materialized view whose `refresh_mode` is `INCREMENTAL`.
+- Introduced in: v3.5.16, v4.0.9, v4.1
 
 ### `mv_refresh_try_lock_timeout_ms`
 
@@ -1843,4 +1918,3 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Whether to prefer string type for fixed length char/varchar columns in materialized view creation.
 - Introduced in: v4.0.0
-

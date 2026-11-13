@@ -6,14 +6,15 @@ description: "An Iceberg catalog is a type of external catalog that is supported
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
-import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
-import EditionSpecificIcebergCatalogSyntax from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Syntax.mdx'
-import EditionSpecificIcebergCatalogParam from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Param.mdx'
 
 # Iceberg catalog
 
-<QSTip />
+---
+---
+
+:::tip
+This example uses the Local Climatological Data(LCD) dataset featured in the [StarRocks Basics](../../../quick_start/shared-nothing.md) Quick Start. You can load the data and try the example yourself.
+:::
 
 An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:
 
@@ -116,7 +117,18 @@ If Kerberos authentication is enabled for your HDFS cluster or Hive metastore, c
 
 ### Syntax
 
-<EditionSpecificIcebergCatalogSyntax />
+```SQL
+CREATE EXTERNAL CATALOG <catalog_name>
+[COMMENT <comment>]
+PROPERTIES
+(
+    "type" = "iceberg",
+    [SecurityParams],
+    MetastoreParams,
+    StorageCredentialParams,
+    MetadataRelatedParams
+)
+```
 
 ---
 
@@ -141,7 +153,7 @@ The type of your data source. Set the value to `iceberg`.
 
 Parameter(s) about how StarRocks manages data access to the catalog.
 
-<IcebergCatalogIcebergRestSecurityLink />
+For detailed instructions on managing data access for Iceberg Catalogs, see [Security Setup for Iceberg REST Catalog](./iceberg_rest_security.md).
 
 ##### catalog.access.control
 
@@ -831,8 +843,8 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 | iceberg_manifest_cache_with_column_statistics | true                  | Whether to cache column statistics. When enabled, statistics of partition source columns, sort key columns, and identifier columns are always cached, together with other columns up to `iceberg_manifest_cache_statistics_max_columns` columns in total, so that file-level min/max pruning still works with a warm cache. |
 | iceberg_manifest_cache_statistics_max_columns | 100                   | The maximum number of columns whose statistics are cached per manifest when `iceberg_manifest_cache_with_column_statistics` is enabled. Partition source, sort key, and identifier columns are always cached; the remaining slots go first to columns whose metrics mode writes min/max bounds (`truncate(N)` or `full`), with columns set explicitly through `write.metadata.metrics.column.<col>` first, and then to `counts`-only columns; within each group, top-level primitive columns come in field ID order, then primitive fields inside structs. Fields inside arrays and maps are never cached, because predicates cannot prune on them. Statistics are stored column by column, about 25 bytes per column per data file; bounds of STRING and BINARY columns longer than 16 characters (bytes) are truncated in the cache, as Iceberg's default `truncate(16)` metrics mode does, so pruning on them is never wrong, only occasionally weaker. Set it to `0` to cache only partition source, sort key, and identifier columns. Negative values are treated as `0`. |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | The minimum Manifest file length that triggers a Data File Cache refresh. |
-| iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | The maximum memory usage ratio for the data file Manifest cache. Supported from v3.5.6 onwards. |
-| iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | The maximum memory usage ratio for the delete file Manifest cache. Supported from v3.5.6 onwards. |
+| iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | The maximum memory usage ratio for the data file Manifest cache. Ignored when the FE configuration item `iceberg_data_file_cache_global_memory_ratio` is greater than `0`. Supported from v3.5.6 onwards. |
+| iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | The maximum memory usage ratio for the delete file Manifest cache. Ignored when the FE configuration item `iceberg_delete_file_cache_global_memory_ratio` is greater than `0`. Supported from v3.5.6 onwards. |
 | iceberg_table_cache_refresh_interval_sec      | 60                    | The interval (in seconds) at which the asynchronous refresh of the Iceberg table cache is triggered. Supported from v3.5.7 onwards. |
 
 Starting from v3.4, StarRocks can obtain statistics of Iceberg tables by reading Iceberg metadata through setting the following parameters, without actively triggering the collection of Iceberg table statistics.
@@ -840,8 +852,6 @@ Starting from v3.4, StarRocks can obtain statistics of Iceberg tables by reading
 | **Parameter**                                 | **Default**           | **Description**                                         |
 | :-------------------------------------------- | :-------------------- | :-------------------------------------------------------|
 | enable_get_stats_from_external_metadata       | false                 | Whether to obtain statistics from Iceberg metadata. When this item is set to `true`, you can further control which type of statistics to collect through the session variable [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata).  |
-
-<EditionSpecificIcebergCatalogParam />
 
 ### Examples
 
@@ -1494,6 +1504,24 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 - Unit: Bytes
 - Default value: `8388608`, equivalent to 8 MB
 - Description: The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage.
+
+##### iceberg_data_file_cache_global_memory_ratio
+
+- Unit: N/A
+- Default value: `0`
+- Description: The share of the FE JVM heap for one data file Manifest cache shared by all Iceberg catalogs, so that its total stays within this bound however many catalogs there are. `0` (default) keeps a cache per catalog, bounded by the catalog property `iceberg_data_file_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored.
+
+##### iceberg_delete_file_cache_global_memory_ratio
+
+- Unit: N/A
+- Default value: `0`
+- Description: The share of the FE JVM heap for one delete file Manifest cache shared by all Iceberg catalogs; the delete file indexes built from them get the same share in a cache of their own. `0` (default) keeps both caches per catalog, bounded by the catalog property `iceberg_delete_file_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored.
+
+##### iceberg_partition_cache_global_memory_ratio
+
+- Unit: N/A
+- Default value: `0`
+- Description: The share of the FE JVM heap for one partition cache shared by all Iceberg catalogs. `0` (default) keeps a cache per catalog, bounded by the catalog property `iceberg_partition_cache_memory_usage_ratio`. When it is greater than `0`, that catalog property is ignored.
 
 ##### enable_background_refresh_connector_metadata
 

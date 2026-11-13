@@ -22,13 +22,27 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.ColumnStatsMeta;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTriggerExternalAnalyzeRequest;
+import com.starrocks.thrift.TTriggerExternalAnalyzeResponse;
+import com.starrocks.thrift.TTriggerExternalAnalyzeTable;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -47,6 +61,16 @@ public class ConnectorTableTriggerAnalyzeMgr {
     private final ScheduledExecutorService dispatchScheduler = Executors.newScheduledThreadPool(1);
     private final AtomicBoolean isStart = new AtomicBoolean(false);
 
+    // Columns due for analyze that this FE has not queued itself: tableUUID -> columns, in arrival order.
+    //
+    // Triggered analyze runs only on the leader, because collecting writes the edit log (AnalyzeStatus,
+    // ExternalBasicStatsMeta). A follower whose query finds statistics missing or expired buffers the columns
+    // here and the scheduler sends them to the leader (FrontendService#triggerExternalAnalyze, fire and forget).
+    // On the leader the same buffer receives those requests, and the scheduler resolves each table and queues
+    // it, so the RPC handler does no metadata IO. Bounded like the pending queue: a request that does not fit, or
+    // is lost on the way, is dropped, and the next query that sees the statistics missing raises it again.
+    private final Map<String, Set<String>> triggeredColumns = new LinkedHashMap<>();
+
     public void start() {
         if (isStart.compareAndSet(false, true)) {
             dispatchScheduler.scheduleAtFixedRate(this::schedulePendingTask, 0,
@@ -60,7 +84,10 @@ public class ConnectorTableTriggerAnalyzeMgr {
     void schedulePendingTask() {
         try {
             if (GlobalStateMgr.getCurrentState().isLeader()) {
+                queueTriggeredColumns();
                 connectorAnalyzeTaskQueue.schedulePendingTask();
+            } else {
+                forwardTriggeredColumnsToLeader();
             }
         } catch (Throwable e) {
             LOG.warn("[ExternalStats] schedule pending task failed", e);
@@ -96,6 +123,8 @@ public class ConnectorTableTriggerAnalyzeMgr {
         }
 
         Set<String> analyzeColumns = Sets.newHashSet();
+        LocalDateTime now = LocalDateTime.now();
+        ExternalBasicStatsMeta statsMeta = null;
         Triple<String, Database, Table> tableTriple = null;
         boolean tableExist = false;
         String tableUUID = null;
@@ -111,6 +140,9 @@ public class ConnectorTableTriggerAnalyzeMgr {
                     }
                     tableExist = true;
                     tableUUID = columnKey.tableUUID;
+                    statsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalTableBasicStatsMeta(
+                            tableTriple.getLeft(), tableTriple.getMiddle().getFullName(),
+                            tableTriple.getRight().getName());
                 } catch (Exception e) {
                     LOG.warn("[ExternalStats] trigger skip | table_uuid={} reason=table_not_found", columnKey.tableUUID);
                     return;
@@ -124,7 +156,7 @@ public class ConnectorTableTriggerAnalyzeMgr {
             } else {
                 // check column stats last update time
                 ConnectorTableColumnStats columnStatsValue = columnStatsOptional.get();
-                LocalDateTime lastUpdateTime = parseUpdateTime(columnStatsValue.getUpdateTime());
+                LocalDateTime lastUpdateTime = lastCollectionTime(statsMeta, columnKey.column, columnStatsValue);
                 if (lastUpdateTime == null) {
                     // No usable timestamp, so there is no interval this column can be inside: it is due.
                     // Letting the parse throw instead would abandon the whole table - every other column in
@@ -138,7 +170,7 @@ public class ConnectorTableTriggerAnalyzeMgr {
                 long timeInterval = rowCount < Config.connector_table_query_trigger_analyze_small_table_rows ?
                         Config.connector_table_query_trigger_analyze_small_table_interval :
                         Config.connector_table_query_trigger_analyze_large_table_interval;
-                if (!lastUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
+                if (!lastUpdateTime.plusSeconds(timeInterval).isAfter(now)) {
                     analyzeColumns.add(columnKey.column);
                 }
             }
@@ -146,8 +178,116 @@ public class ConnectorTableTriggerAnalyzeMgr {
 
         if (!analyzeColumns.isEmpty()) {
             // need to execute analyze
-            this.connectorAnalyzeTaskQueue.addPendingTask(tableUUID, new ConnectorAnalyzeTask(tableTriple, analyzeColumns));
+            if (GlobalStateMgr.getCurrentState().isLeader()) {
+                this.connectorAnalyzeTaskQueue.addPendingTask(tableUUID,
+                        new ConnectorAnalyzeTask(tableTriple, analyzeColumns));
+            } else {
+                addTriggeredColumns(tableUUID, analyzeColumns);
+            }
         }
+    }
+
+    // Buffers columns due for analyze, see triggeredColumns. Also the entry point of a follower's request.
+    public void addTriggeredColumns(String tableUUID, Collection<String> columns) {
+        if (tableUUID == null || columns == null || columns.isEmpty()) {
+            return;
+        }
+        synchronized (triggeredColumns) {
+            Set<String> existing = triggeredColumns.get(tableUUID);
+            if (existing != null) {
+                existing.addAll(columns);
+                return;
+            }
+            if (triggeredColumns.size() >= Config.connector_table_query_trigger_analyze_max_pending_task_num) {
+                LOG.warn("[ExternalStats] trigger drop | table_uuid={} reason=forward_buffer_full buffer_size={}",
+                        tableUUID, triggeredColumns.size());
+                return;
+            }
+            triggeredColumns.put(tableUUID, new HashSet<>(columns));
+        }
+    }
+
+    private Map<String, Set<String>> drainTriggeredColumns() {
+        synchronized (triggeredColumns) {
+            Map<String, Set<String>> drained = new LinkedHashMap<>(triggeredColumns);
+            triggeredColumns.clear();
+            return drained;
+        }
+    }
+
+    // Leader: queues what followers sent (and what this FE buffered before it became leader).
+    @VisibleForTesting
+    void queueTriggeredColumns() {
+        for (Map.Entry<String, Set<String>> entry : drainTriggeredColumns().entrySet()) {
+            String tableUUID = entry.getKey();
+            Triple<String, Database, Table> tableTriple;
+            try {
+                tableTriple = StatisticsUtils.getTableTripleByUUID(new ConnectContext(), tableUUID);
+                if (!tableTriple.getRight().isAnalyzableExternalTable()) {
+                    continue;
+                }
+            } catch (Exception e) {
+                LOG.warn("[ExternalStats] trigger skip | table_uuid={} reason=table_not_found", tableUUID, e);
+                continue;
+            }
+            connectorAnalyzeTaskQueue.addPendingTask(tableUUID, new ConnectorAnalyzeTask(tableTriple, entry.getValue()));
+        }
+    }
+
+    // Follower: sends the buffered columns to the leader, fire and forget. A lost request is not retried: the next
+    // query that finds the statistics missing or expired raises it again.
+    @VisibleForTesting
+    void forwardTriggeredColumnsToLeader() {
+        Map<String, Set<String>> drained = drainTriggeredColumns();
+        if (drained.isEmpty()) {
+            return;
+        }
+        TTriggerExternalAnalyzeRequest request = new TTriggerExternalAnalyzeRequest();
+        for (Map.Entry<String, Set<String>> entry : drained.entrySet()) {
+            TTriggerExternalAnalyzeTable t = new TTriggerExternalAnalyzeTable();
+            t.setTable_uuid(entry.getKey());
+            t.setColumns(new ArrayList<>(entry.getValue()));
+            request.addToTables(t);
+        }
+        try {
+            TTriggerExternalAnalyzeResponse response = sendToLeader(request);
+            TStatus status = response.getStatus();
+            if (status != null && status.getStatus_code() != TStatusCode.OK) {
+                LOG.warn("[ExternalStats] trigger forward rejected | tables={} error={}", drained.size(),
+                        status.getError_msgs());
+            }
+        } catch (Exception e) {
+            LOG.warn("[ExternalStats] trigger forward failed | tables={} error={}", drained.size(), e.getMessage());
+        }
+    }
+
+    @VisibleForTesting
+    TTriggerExternalAnalyzeResponse sendToLeader(TTriggerExternalAnalyzeRequest request) throws TException {
+        return ThriftRPCRequestExecutor.call(ThriftConnectionPool.frontendPool,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderRpcEndpoint(),
+                Config.thrift_rpc_timeout_ms,
+                client -> client.triggerExternalAnalyze(request));
+    }
+
+    @VisibleForTesting
+    int getTriggeredColumnsSize() {
+        synchronized (triggeredColumns) {
+            return triggeredColumns.size();
+        }
+    }
+
+    // When the column was last collected. Taken from the stats meta first, like native tables do: it is stamped
+    // with LocalDateTime.now() in the FE JVM zone, the same zone as the now() it is compared with here. The
+    // update_time of the statistics rows is written by SQL now() in the statistics session's time_zone (global,
+    // or the background warehouse's override), which can differ from the JVM zone and would shift the interval
+    // by that difference. The rows are only the fallback, for a column the meta does not know about.
+    private static LocalDateTime lastCollectionTime(ExternalBasicStatsMeta statsMeta, String column,
+                                                    ConnectorTableColumnStats columnStats) {
+        ColumnStatsMeta columnStatsMeta = statsMeta == null ? null : statsMeta.getColumnStatsMeta(column);
+        if (columnStatsMeta != null && columnStatsMeta.getUpdateTime() != null) {
+            return columnStatsMeta.getUpdateTime();
+        }
+        return parseUpdateTime(columnStats.getUpdateTime());
     }
 
     // The recorded collection time, or null when there is none or it cannot be read.

@@ -5,9 +5,6 @@ keywords: ['resource groups', 'isolation']
 description: "How to use resource groups in StarRocks to isolate resources and run multiple workloads concurrently in a single cluster."
 ---
 
-import ScopeParam from '../../../_assets/commonMarkdown/rg_scope_param.mdx'
-import WhSyntaxExample from '../../../_assets/commonMarkdown/rg_wh_syntax_example.mdx'
-import WhAlterSyntax from '../../../_assets/commonMarkdown/rg_wh_alter_syntax.mdx'
 
 # Resource group
 
@@ -50,7 +47,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 | exclusive_cpu_percent      | CPU hard isolation percentage for this resource group. Supported from v4.1.                                    | [0, 100] (takes effect when greater than 0)                    | 0                |
 | mem_limit                  | The percentage of memory available for queries by this resource group on the current BE node.                  | (0, 1] (required)                                              | -                |
 | mem_pool                   | Groups resource groups to share a memory limit.                                                                | String                                                         | default_mem_pool |
-| spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.                                                         | (0, 1]                                                         | 1.0              |
+| spill_mem_limit_threshold  | Memory usage threshold that triggers spilling to disk.                                                         | (0, 1)                                                         | 1.0              |
 | concurrency_limit          | Maximum number of concurrent queries in this resource group.                                                   | Integer (takes effect when greater than 0)                     | 0                |
 | mem_used_pct_limit         | Memory usage percentage limit in this resource group. Requires `enable_group_level_query_queue` to be enabled. Only available when `enable_query_queue_v2` is `false`. | [0, 1] (takes effect when greater than 0)                      | 0                |
 | big_query_cpu_second_limit | Maximum CPU time (in seconds) for big query tasks on each BE node.                                             | Integer (takes effect when greater than 0)                     | 0                |
@@ -66,9 +63,9 @@ These parameters specify the CPU scheduling weight of a resource group on a sing
 You can use one of the following parameters to set the CPU scheduling weight:
 
 - `cpu_weight`: Directly sets the CPU scheduling weight. Its value range is (0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` is the average number of CPU cores across all BE nodes. The parameter is effective only when it is set to greater than 0.
-- `cpu_weight_percent`: Supported from v4.1. Sets the CPU scheduling weight as a percentage. Its value range is [0, 100]. The parameter is effective only when it is set to greater than 0. If `min_be_cpu_cores * cpu_weight_percent / 100 < 1`, the system returns an error, where `min_be_cpu_cores` is the minimum number of CPU cores across all BE nodes.
+- `cpu_weight_percent`: Supported from v4.1. Sets the CPU scheduling weight as a percentage. Its value range is [0, 100]. The parameter is effective only when it is set to greater than 0.
 
-At runtime, each BE converts `cpu_weight_percent` to the actual `cpu_weight` based on the number of CPU cores on that BE (`be_cpu_cores`): `cpu_weight = be_cpu_cores * cpu_weight_percent / 100`.
+At runtime, each BE converts `cpu_weight_percent` to the actual `cpu_weight` based on the number of CPU cores on that BE (`be_cpu_cores`): `cpu_weight = max(1, be_cpu_cores * cpu_weight_percent / 100)`, where the division is rounded down.
 
 Only one of `cpu_weight`, `cpu_weight_percent`, `exclusive_cpu_cores`, and `exclusive_cpu_percent` can be greater than 0.
 
@@ -105,8 +102,6 @@ To modify this configuration dynamically, use the following command:
 UPDATE information_schema.be_configs SET VALUE = "false" WHERE NAME = "enable_resource_group_cpu_borrowing";
 ```
 
-<ScopeParam />
-
 #### Memory resource parameters
 
 ##### `mem_limit`
@@ -139,7 +134,7 @@ WITH (
 
 ##### `spill_mem_limit_threshold`
 
-Defines the memory usage threshold that triggers spilling to disk. The value range is (0,1], with the default being 1 (inactive). Introduced in v3.1.7.
+Defines the memory usage threshold that triggers spilling to disk. The value range is (0,1), with the default being 1 (inactive). Introduced in v3.1.7.
 
 - When automatic spilling is enabled (`spill_mode` set to `auto`), but resource groups are disabled, the system will spill intermediate results to disk when a query’s memory usage exceeds 80% of `query_mem_limit`.
 - When resource groups are enabled, spilling will occur if:
@@ -190,7 +185,7 @@ There are two system-defined resource groups in each StarRocks instance: `defaul
 
 `default_wg` will be assigned to regular queries that are under the management of resource groups but don't match any classifier. The default resource limits of `default_wg` are as follows:
 
-- `cpu_weight`: The number of CPU cores of the BE.
+- `cpu_weight_percent`: 100, that is, the number of CPU cores of each BE. (If `default_wg` was created before v4.1, it keeps `cpu_weight` set to the average number of CPU cores of the BEs at creation time, even after an upgrade.)
 - `mem_limit`: 100%.
 - `concurrency_limit`: 0.
 - `big_query_cpu_second_limit`: 0.
@@ -203,7 +198,7 @@ There are two system-defined resource groups in each StarRocks instance: `defaul
 
 `default_mv_wg` will be assigned to asynchronous materialized view refresh tasks if no resource group is allocated to the corresponding materialized view in the property `resource_group` during materialized view creation. The default resource limits of `default_mv_wg` are as follows:
 
-- `cpu_weight`: 1.
+- `cpu_weight_percent`: 1, which results in a CPU weight of 1 on BEs with fewer than 200 CPU cores. (If `default_mv_wg` was created before v4.1, it keeps `cpu_weight` set to 1.)
 - `mem_limit`: 80%.
 - `concurrency_limit`: 0.
 - `spill_mem_limit_threshold`: 80%.
@@ -295,7 +290,40 @@ SET GLOBAL enable_pipeline_engine = true;
 
 Execute the following statement to create a resource group, associate the resource group with a classifier, and allocate computing resources to the resource group:
 
-<WhSyntaxExample />
+```SQL
+CREATE RESOURCE GROUP <group_name> 
+TO (
+    user='string', 
+    role='string', 
+    query_type in ('select'), 
+    source_ip='cidr'
+) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (`,`).
+WITH (
+    "{ cpu_weight | exclusive_cpu_cores }" = "INT",
+    "mem_limit" = "m%",
+    "concurrency_limit" = "INT",
+    "type" = "str" --The type of the resource group. Set the value to normal.
+);
+```
+
+Example:
+
+```SQL
+CREATE RESOURCE GROUP rg1
+TO 
+    (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user2', query_type in ('select'), source_ip='192.168.x.x/24'),
+    (user='rg1_user3', source_ip='192.168.x.x/24'),
+    (user='rg1_user4'),
+    (db='db1')
+WITH (
+    'exclusive_cpu_cores' = '10',
+    'mem_limit' = '20%',
+    'big_query_cpu_second_limit' = '100',
+    'big_query_scan_rows_limit' = '100000',
+    'big_query_mem_limit' = '1073741824'
+);
+```
 
 ### Specify resource group (Optional)
 
@@ -360,7 +388,12 @@ You can modify the resource quotas for each resource group. You can also add or 
 
 Execute the following statement to modify the resource quotas for an existing resource group:
 
-<WhAlterSyntax />
+```SQL
+ALTER RESOURCE GROUP group_name WITH (
+    'cpu_core_limit' = 'INT',
+    'mem_limit' = 'm%'
+);
+```
 
 Execute the following statement to delete a resource group:
 

@@ -302,7 +302,9 @@ SQL Plan Manager 関数は、SQL Plan Manager 内のプレースホルダー関�
 - `_spm_const_var(placeholdID)`: 単一の定数値をマークするために使用されます。
 - `_spm_const_list(placeholdID)`: 複数の定数値をマークするために使用され、通常は IN 条件内の複数の定数値をマークするために使用されます。
 - `_spm_const_range(placeholdID, min, max)`: 単一の定数値をマークするために使用されますが、定数値が指定された範囲 '[min, max]' 内にある必要があります。
-- `_spm_const_num(placeholdID, value...)`: 単一の定数値をマークするために使用されますが、定数値が指定された列挙 'value...' の値である必要があります。
+- `_spm_const_enum(placeholdID, value...)`: 単一の定数値をマークするために使用されますが、定数値が指定された列挙 'value...' の値である必要があります。
+
+`_spm_const_range` と `_spm_const_enum` は、`GEOGRAPHY`、`GEOMETRY`、およびこれらを含む型を受け付けません。
 
 'placeholdID' は整数であり、パラメータの一意の識別子として使用され、ベースラインをバインドし、プランを生成する際に使用されます。
 
@@ -647,7 +649,7 @@ group by i_item_id
 ```SQL
 set global enable_query_history=true;
 ```
-クエリ履歴は '_statistics_.query_history' テーブルに保存されます。
+クエリ履歴は '_statistics_.query_history' テーブルに保存されます。記録されるのは、正常に完了し、実行プランに 2 つ以上のスキャンノードを含む SELECT 文のみです。統計情報ジョブが発行した文や統計情報テーブルを参照する文は記録されません。`query_history_keep_seconds` を超えたクエリ履歴は、`enable_query_history` が `true` の間のみ削除されます。
 
 自動キャプチャを有効にするには：
 ```SQL
@@ -659,7 +661,7 @@ set global enable_plan_capture=true;
 -- クエリ履歴の保存期間、単位：秒、デフォルトは3日
 set global query_history_keep_seconds = 259200;
 -- 自動キャプチャの作業間隔、単位：秒、デフォルトは3時間
-set global plan_capture_interval=10800;
+set global plan_capture_interval_seconds=10800;
 -- SQL テーブルの定期的なチェックをキャプチャし、plan_capture_include_pattern に一致するテーブル名（db.table）の場合にのみ SQL をキャプチャします。デフォルトは .* で、すべてのテーブルを表します。
 set global plan_capture_include_pattern=".*";
 ```

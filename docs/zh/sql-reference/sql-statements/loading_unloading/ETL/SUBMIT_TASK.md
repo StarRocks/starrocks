@@ -3,7 +3,6 @@ displayed_sidebar: docs
 description: "为 ETL 语句创建异步任务，支持长时间运行和定期执行。"
 ---
 
-import PropertyWarehouse from '../../../../_assets/commonMarkdown/property_warehouse_tip_default.mdx'
 
 # SUBMIT TASK
 
@@ -44,8 +43,6 @@ AS <etl_statement>
 | `session.insert_timeout` | Integer | INSERT 操作的超时时间。单位：秒。默认值：`14400`。自 v3.4.0 起支持。 |
 | `session.enable_profile` | Boolean | 是否为任务开启查询 Profile。默认值：`false`。 |
 | `session.new_planner_optimize_timeout` | Integer | 查询优化器的超时时间。单位：毫秒。默认值：`3000`。 |
-
-<PropertyWarehouse />
 
 例如，以下语句提交了一个名为 `test_task` 的任务，并启用了查询分析和增加了查询超时时间：
 

@@ -9,6 +9,8 @@ description: "ADMIN SHOW REPLICA STATUS shows replica status information for a t
 
 该语句用于展示一个表或分区的副本状态信息。
 
+该语句不支持存算分离集群中的云原生表，也不支持物化视图。对云原生表执行该语句会返回以 `Unsupported operation on lake table` 开头的错误；对物化视图执行该语句会返回错误 `Table does not exist or is not OLAP table`。
+
 :::tip
 
 该操作需要 SYSTEM 级 OPERATE 权限。请参考 [GRANT](../../account-management/GRANT.md) 为用户赋权。
