@@ -5,7 +5,6 @@ description: "StarRocks が提供する多くのシステム変数の設定と�
 
 # システム変数
 
-import EditionSpecificVariable from '../_assets/commonMarkdown/Edition_Specific_Variable.mdx'
 
 StarRocks は、多くのシステム変数を提供しており、要件に応じて設定や変更が可能です。このセクションでは、StarRocks がサポートする変数について説明します。これらの変数の設定を確認するには、MySQL クライアントで [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) コマンドを実行します。また、[SET](sql-statements/cluster-management/config_vars/SET.md) コマンドを使用して、変数を動的に設定または変更することもできます。これらの変数は、システム全体でグローバルに、現在のセッションのみで、または単一のクエリ文でのみ有効にすることができます。
 
@@ -1795,6 +1794,4 @@ StarRocks のバージョン。変更できません。
 * **デフォルト**: 28800（8 時間）。
 * **単位**: 秒
 * **データ型**: Int
-
-<EditionSpecificVariable />
 
