@@ -55,9 +55,10 @@ struct SegmentFileInfo : public FileInfo {
     // sparse one after compaction/merge.
     void to_proto(uint32_t segment_idx, SegmentMetadataPB* segment_meta) const;
 
-    // Serialize just the sort-key fields (min, max, samples, interval) into |segment_meta|, replacing
-    // whatever it already held. Shared by to_proto() and the replace paths, which refresh these fields
-    // on a segment_meta copied from a different file.
+    // Serialize just the sort-key fields (the encoded min/max bounds; the deprecated bounds and
+    // samples are cleared) into |segment_meta|, replacing whatever it already held, including a
+    // deprecated pair left by an older writer. Shared by to_proto() and the replace paths, which
+    // refresh these fields on a segment_meta copied from a different file.
     void sort_key_fields_to_proto(SegmentMetadataPB* segment_meta) const;
 };
 

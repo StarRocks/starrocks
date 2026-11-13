@@ -214,8 +214,10 @@ message DelfileWithRowsetId {
 }
 
 message SegmentMetadataPB {
-    optional TuplePB sort_key_min = 1;
-    optional TuplePB sort_key_max = 2;
+    // No longer written by new binaries. Read for segments written before the encoded fields existed,
+    // and preferred over the encoded pair when both are present (an older binary may have refreshed it).
+    optional TuplePB deprecated_sort_key_min = 1 [json_name = "sort_key_min"];
+    optional TuplePB deprecated_sort_key_max = 2 [json_name = "sort_key_max"];
     optional int64 num_rows = 3;
     // Segment index inside the rowset. The global rssid is `rowset_id + segment_idx`.
     // Initially assigned as a contiguous positional index at write time, but may become
@@ -266,6 +268,10 @@ message SegmentMetadataPB {
     // bundled and standalone segments. Readers still use offset 0; replication uses this flag
     // to distinguish that physical file from a shared bundle object.
     optional bool synthetic_bundle_file_offset = 14 [default=false];
+    // The exact first and last sort key of the segment, in the encoding documented in
+    // be/src/storage/sort_key_bounds.h. Both are set or both are unset.
+    optional bytes sort_key_min_encoded = 15;
+    optional bytes sort_key_max_encoded = 16;
 }
 
 message RowsetMetadataPB {
