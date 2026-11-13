@@ -23,6 +23,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "runtime/memory/process_memory.h"
 #include "storage/del_vector.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
@@ -170,19 +171,48 @@ static bvar::PassiveStatus<size_t> g_segment_metadata_cache_usage("lake", "segme
                                                                   get_segment_metadata_cache_usage, nullptr);
 #endif
 
+namespace {
+// Keep the Base LRU implementation independent of Runtime. These callbacks scope
+// only bookkeeping allocation/free; cache payload deleters keep their caller.
+const CacheStorageAllocator kProcessCacheStorageAllocator{
+        [](size_t bytes) -> void* {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(process_memory_tracker());
+            return std::malloc(bytes);
+        },
+        [](void* ptr) {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(process_memory_tracker());
+            std::free(ptr);
+        }};
+
+// The variant storage belongs to the cache, but a referenced object's lifetime
+// and accounting are independent. This also applies when it is the last ref.
+void delete_cache_value(CacheValue* ptr) {
+    auto value = std::move(*ptr);
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(process_memory_tracker());
+    delete ptr;
+}
+
+using CacheValuePtr = std::unique_ptr<CacheValue, decltype(&delete_cache_value)>;
+
+CacheValuePtr make_cache_value(CacheValue value) {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(process_memory_tracker());
+    return CacheValuePtr(new CacheValue(std::move(value)), delete_cache_value);
+}
+} // namespace
+
 int64_t metacache_capacity(int64_t mem_limit, int32_t percent) {
     return mem_limit * std::clamp(percent, 0, 100) / 100;
 }
 
 Metacache::Metacache(int64_t tablet_metadata_capacity, int64_t segment_metadata_capacity)
-        : _tablet_metadata_cache(new_lru_cache(tablet_metadata_capacity)),
-          _segment_metadata_cache(new_lru_cache(segment_metadata_capacity)) {}
+        : _tablet_metadata_cache(new_lru_cache(tablet_metadata_capacity, &kProcessCacheStorageAllocator)),
+          _segment_metadata_cache(new_lru_cache(segment_metadata_capacity, &kProcessCacheStorageAllocator)) {}
 
 Metacache::~Metacache() = default;
 
-void Metacache::cache_value_deleter(const CacheKey& /*key*/, void* value) {
+void Metacache::cache_value_deleter(const CacheKey&, void* value) {
     TEST_SYNC_POINT_CALLBACK("lake::Metacache::cache_value_deleter", value);
-    delete static_cast<CacheValue*>(value);
+    delete_cache_value(static_cast<CacheValue*>(value));
 }
 
 void Metacache::insert(Cache* cache, std::string_view key, CacheValue* ptr, size_t size) {
@@ -317,7 +347,7 @@ bool Metacache::lookup_bundled_metadata_marker(const MetacacheKey& key) {
 
 void Metacache::cache_segment(const MetacacheKey& key, std::shared_ptr<Segment> segment) {
     auto mem_cost = segment->mem_usage();
-    auto value = std::make_unique<CacheValue>(std::move(segment));
+    auto value = make_cache_value(std::move(segment));
     insert(_segment_metadata_cache.get(), key.view(), value.release(), mem_cost);
 }
 
@@ -325,7 +355,7 @@ std::shared_ptr<Segment> Metacache::cache_segment_if_absent(const MetacacheKey& 
                                                             const std::shared_ptr<Segment>& segment) {
     auto mem_cost = segment->mem_usage();
     // Destroyed on return unless the cache adopts it, i.e. never under a cache lock.
-    auto value = std::make_unique<CacheValue>(segment);
+    auto value = make_cache_value(segment);
     bool inserted = false;
     auto* handle = _segment_metadata_cache->insert_if_absent(CacheKey(key.view()), value.get(), mem_cost,
                                                              cache_value_deleter, &inserted);
@@ -359,7 +389,7 @@ bool Metacache::update_segment_cache_size(const MetacacheKey& key, size_t mem_co
 bool Metacache::replace_segment_if_matches(const MetacacheKey& key, const Segment* expected,
                                            const std::shared_ptr<Segment>& replacement) {
     const auto mem_cost = replacement->mem_usage();
-    auto value = std::make_unique<CacheValue>(replacement);
+    auto value = make_cache_value(replacement);
     if (!_segment_metadata_cache->replace_if(CacheKey(key.view()), value.get(), mem_cost, cache_value_deleter,
                                              segment_ptr_matches, expected)) {
         return false;
@@ -370,32 +400,32 @@ bool Metacache::replace_segment_if_matches(const MetacacheKey& key, const Segmen
 
 void Metacache::cache_delvec(const MetacacheKey& key, std::shared_ptr<const DelVector> delvec) {
     auto mem_cost = delvec->memory_usage();
-    auto value = std::make_unique<CacheValue>(std::move(delvec));
+    auto value = make_cache_value(std::move(delvec));
     insert(_segment_metadata_cache.get(), key.view(), value.release(), mem_cost);
 }
 
 void Metacache::cache_tablet_metadata(const MetacacheKey& key, std::shared_ptr<const TabletMetadataPB> metadata) {
-    auto value_ptr = std::make_unique<CacheValue>(metadata);
+    auto value_ptr = make_cache_value(metadata);
     insert(_tablet_metadata_cache.get(), key.view(), value_ptr.release(), metadata->SpaceUsedLong());
 }
 
 void Metacache::cache_txn_log(const MetacacheKey& key, std::shared_ptr<const TxnLogPB> log) {
-    auto value_ptr = std::make_unique<CacheValue>(log);
+    auto value_ptr = make_cache_value(log);
     insert(_tablet_metadata_cache.get(), key.view(), value_ptr.release(), log->SpaceUsedLong());
 }
 
 void Metacache::cache_combined_txn_log(const MetacacheKey& key, std::shared_ptr<const CombinedTxnLogPB> log) {
-    auto value_ptr = std::make_unique<CacheValue>(log);
+    auto value_ptr = make_cache_value(log);
     insert(_tablet_metadata_cache.get(), key.view(), value_ptr.release(), log->SpaceUsedLong());
 }
 
 void Metacache::cache_tablet_schema(const MetacacheKey& key, std::shared_ptr<const TabletSchema> schema, size_t size) {
-    auto cache_value = std::make_unique<CacheValue>(schema);
+    auto cache_value = make_cache_value(schema);
     insert(_segment_metadata_cache.get(), key.view(), cache_value.release(), size);
 }
 
 void Metacache::cache_bundled_metadata_marker(const MetacacheKey& key) {
-    auto cache_value = std::make_unique<CacheValue>(true);
+    auto cache_value = make_cache_value(true);
     insert(_tablet_metadata_cache.get(), key.view(), cache_value.release(), sizeof(bool));
 }
 

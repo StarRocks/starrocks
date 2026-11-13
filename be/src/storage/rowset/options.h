@@ -35,6 +35,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
 #include "cache/mem_cache/page_handle.h"
 #include "io/seekable_input_stream.h"
@@ -44,6 +45,7 @@
 namespace starrocks {
 
 class FileSystem;
+class MemTracker;
 class RandomAccessFile;
 
 namespace lake {
@@ -68,6 +70,12 @@ public:
 
     //RandomAccessFile* read_file = nullptr;
     io::SeekableInputStream* read_file = nullptr;
+    // Used only during a synchronous shared-metadata load. The borrowed stream
+    // may retain IO buffers beyond this call; allocate those in its caller's
+    // context, not in the process-owned index metadata context. A local copy
+    // must not escape the synchronous load: ZoneMap's temporary iterator may
+    // copy it, but must be destroyed before that load returns.
+    std::optional<MemTracker*> read_file_mem_tracker;
     OlapReaderStatistics* stats = nullptr;
 
     std::optional<size_t> segment_rows = std::nullopt;
