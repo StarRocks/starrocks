@@ -320,6 +320,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 共有データクラスタでの主キーテーブル軽量コンパクション publish 時、`RowsMapperIterator` のパイプライン化された `.lcrm` 読み取りにおける sub-chunk の粒度。各出力 segment は `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 個の sub-chunk に分割され、独立してパイプライン化されます。値を小さくするほど、少数の大きな出力 segment で達成可能な並列度が上がりますが、その代わりに範囲読み取りが増え、consume 時に追加の memcpy が発生します。デフォルトは 4 MiB で、starcache のディスク層 block サイズと一致させています。
 
+### lake_scan_read_ahead_segments
+
+- デフォルト: 16
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: リモート IO スケジューラーが有効な場合、Tablet の Segment を順番に読む lake クエリスキャン（Tablet が複数のスキャンタスクに分割されていない場合）は、現在の Segment が自身のブロックをすべて要求し終えると、現在の Segment を読みながら後続の Segment の先頭ブロックの取得を開始します。先読みする Segment はこの値までです。それらが要求済みで未読のブロックの合計が `remote_prefetch_window_blocks` 個のキャッシュブロック未満のときにのみ次の Segment の先読みを開始するため、最後に開始した Segment によって合計がウィンドウの約 2 倍に達することがあります。`0` を指定すると無効になり、各 Segment は自分の順番が来たときに先読みを開始します。分割スキャン、取り込み、Compaction には影響しません。クエリプロファイルの SegmentReadAheadStarted に記録されます。
+- 導入バージョン: -
+
 ### lake_segment_metadata_cache_limit_percent
 
 - デフォルト: 10
