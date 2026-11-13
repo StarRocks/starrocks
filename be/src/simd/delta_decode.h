@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <cstdint>
+#include <type_traits>
 
 #include "simd/multi_version.h"
 
@@ -21,11 +22,9 @@ namespace starrocks {
 static inline bool contains_negative_value(const int32_t* data, size_t size) {
     size_t i = 0;
 #ifdef __AVX2__
-    __m256i v_zero = _mm256_setzero_si256();
     for (; i + 8 <= size; i += 8) {
-        __m256i v = _mm256_loadu_si256((__m256i*)(data + i));
-        __m256i cmp = _mm256_cmpgt_epi32(v_zero, v);
-        if (_mm256_movemask_epi8(cmp)) return true;
+        __m256i v = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(data + i));
+        if (_mm256_movemask_ps(_mm256_castsi256_ps(v))) return true;
     }
 #endif
     for (; i < size; ++i) {
@@ -36,18 +35,29 @@ static inline bool contains_negative_value(const int32_t* data, size_t size) {
 
 template <typename T>
 static inline void delta_decode_chain_scalar_prefetch(T* buf, int n, T min_delta, T& last_value) noexcept {
-    T acc = last_value;
+    using U = std::make_unsigned_t<T>;
+    U acc = static_cast<U>(last_value);
+    const U u_min_delta = static_cast<U>(min_delta);
     int i = 0;
     for (i = 0; (i + 8) < n; ++i) {
         __builtin_prefetch(buf + i + 8);
-        acc += buf[i] + min_delta;
-        buf[i] = acc;
+        acc += static_cast<U>(buf[i]) + u_min_delta;
+        buf[i] = static_cast<T>(acc);
     }
     for (; i < n; ++i) {
-        acc += buf[i] + min_delta;
-        buf[i] = acc;
+        acc += static_cast<U>(buf[i]) + u_min_delta;
+        buf[i] = static_cast<T>(acc);
     }
-    last_value = acc;
+    last_value = static_cast<T>(acc);
+}
+
+// Portable scalar reference implementations.
+static inline void delta_decode_chain_int32_scalar(int32_t* buf, int n, int32_t min_delta, int32_t& last_value) {
+    delta_decode_chain_scalar_prefetch<int32_t>(buf, n, min_delta, last_value);
+}
+
+static inline void delta_decode_chain_int64_scalar(int64_t* buf, int n, int64_t min_delta, int64_t& last_value) {
+    delta_decode_chain_scalar_prefetch<int64_t>(buf, n, min_delta, last_value);
 }
 
 // =========================
@@ -90,8 +100,10 @@ MFV_AVX2(void delta_decode_chain_int32_avx2(int32_t* buf, int n, int32_t min_del
     }
 
     for (int i = sz; i < n; i++) {
-        buf[i] += last_value + min_delta;
-        last_value = buf[i];
+        uint32_t val =
+                static_cast<uint32_t>(buf[i]) + static_cast<uint32_t>(last_value) + static_cast<uint32_t>(min_delta);
+        buf[i] = static_cast<int32_t>(val);
+        last_value = static_cast<int32_t>(val);
     }
 });
 
@@ -129,8 +141,10 @@ MFV_AVX512VL(void delta_decode_chain_int32_avx2x(int32_t* buf, int n, int32_t mi
     }
 
     for (int i = sz; i < n; i++) {
-        buf[i] += last_value + min_delta;
-        last_value = buf[i];
+        uint32_t val =
+                static_cast<uint32_t>(buf[i]) + static_cast<uint32_t>(last_value) + static_cast<uint32_t>(min_delta);
+        buf[i] = static_cast<int32_t>(val);
+        last_value = static_cast<int32_t>(val);
     }
 });
 
@@ -196,8 +210,10 @@ MFV_AVX512F(void delta_decode_chain_int32_avx512(int32_t* buf, int n, int32_t mi
     }
 
     for (int i = sz; i < n; i++) {
-        buf[i] += last_value + min_delta;
-        last_value = buf[i];
+        uint32_t val =
+                static_cast<uint32_t>(buf[i]) + static_cast<uint32_t>(last_value) + static_cast<uint32_t>(min_delta);
+        buf[i] = static_cast<int32_t>(val);
+        last_value = static_cast<int32_t>(val);
     }
 });
 
@@ -232,7 +248,7 @@ MFV_AVX512F(void delta_decode_chain_int32(int32_t* buf, int n, int32_t min_delta
 #endif
 
 MFV_DEFAULT(void delta_decode_chain_int32(int32_t* buf, int n, int32_t min_delta, int32_t& last_value) {
-    return delta_decode_chain_scalar_prefetch<int32_t>(buf, n, min_delta, last_value);
+    return delta_decode_chain_int32_scalar(buf, n, min_delta, last_value);
 });
 
 // ==========================================
@@ -273,8 +289,10 @@ MFV_AVX512F(void delta_decode_chain_int64_avx512(int64_t* buf, int n, int64_t mi
     }
 
     for (int i = sz; i < n; i++) {
-        buf[i] += last_value + min_delta;
-        last_value = buf[i];
+        uint64_t val =
+                static_cast<uint64_t>(buf[i]) + static_cast<uint64_t>(last_value) + static_cast<uint64_t>(min_delta);
+        buf[i] = static_cast<int64_t>(val);
+        last_value = static_cast<int64_t>(val);
     }
 });
 
@@ -287,7 +305,7 @@ MFV_AVX512F(void delta_decode_chain_int64(int64_t* buf, int n, int64_t min_delta
 #endif
 
 MFV_DEFAULT(void delta_decode_chain_int64(int64_t* buf, int n, int64_t min_delta, int64_t& last_value) {
-    return delta_decode_chain_scalar_prefetch<int64_t>(buf, n, min_delta, last_value);
+    return delta_decode_chain_int64_scalar(buf, n, min_delta, last_value);
 });
 
 } // namespace starrocks
