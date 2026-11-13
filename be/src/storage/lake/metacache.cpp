@@ -434,21 +434,21 @@ void Metacache::erase(const MetacacheKey& key) {
     _segment_metadata_cache->erase(CacheKey(key.view()));
 }
 
-void Metacache::update_capacity(Cache* cache, size_t new_capacity) {
+size_t Metacache::update_capacity(Cache* cache, size_t new_capacity) {
+    // An absolute set, not a delta from a separately read capacity: the config update hooks and the background
+    // adjustment both resize these caches, and two deltas computed from the same old capacity would add up.
     size_t old_capacity = cache->get_capacity();
-    int64_t delta = (int64_t)new_capacity - (int64_t)old_capacity;
-    if (delta != 0) {
-        (void)cache->adjust_capacity(delta);
-        VLOG(5) << "Changed metadache capacity from " << old_capacity << " to " << cache->get_capacity();
-    }
+    size_t evicted = cache->set_capacity(new_capacity);
+    VLOG(5) << "Changed metadache capacity from " << old_capacity << " to " << new_capacity;
+    return evicted;
 }
 
-void Metacache::update_tablet_metadata_capacity(size_t new_capacity) {
-    update_capacity(_tablet_metadata_cache.get(), new_capacity);
+size_t Metacache::update_tablet_metadata_capacity(size_t new_capacity) {
+    return update_capacity(_tablet_metadata_cache.get(), new_capacity);
 }
 
-void Metacache::update_segment_metadata_capacity(size_t new_capacity) {
-    update_capacity(_segment_metadata_cache.get(), new_capacity);
+size_t Metacache::update_segment_metadata_capacity(size_t new_capacity) {
+    return update_capacity(_segment_metadata_cache.get(), new_capacity);
 }
 
 void Metacache::prune() {
@@ -470,6 +470,14 @@ size_t Metacache::segment_metadata_memory_usage() const {
 
 size_t Metacache::segment_metadata_capacity() const {
     return _segment_metadata_cache->get_capacity();
+}
+
+std::vector<size_t> Metacache::tablet_metadata_shard_memory_usages() const {
+    return _tablet_metadata_cache->get_shard_memory_usages();
+}
+
+std::vector<size_t> Metacache::segment_metadata_shard_memory_usages() const {
+    return _segment_metadata_cache->get_shard_memory_usages();
 }
 
 } // namespace starrocks::lake

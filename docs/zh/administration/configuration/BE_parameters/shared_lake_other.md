@@ -323,7 +323,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中 Segment 元数据缓存的容量，以 BE 进程内存上限的百分比表示。该缓存存放已打开的 Segment（包括 Footer、索引和列读取器）、Delete Vector 以及 Tablet Schema。它与 Tablet 元数据缓存（参见 `lake_tablet_metadata_cache_limit_percent`）相互独立，加载再多的 Segment 也不会把 Tablet 元数据和事务日志挤出缓存。超出 0–100 的取值按 0 或 100 处理。设为 `0` 即关闭该缓存。该项与 `lake_tablet_metadata_cache_limit_percent` 共同取代原有的 `lake_metadata_cache_limit`。
+- 描述：存算分离集群中 Segment 元数据缓存的容量，以 BE 进程内存上限的百分比表示。该缓存存放已打开的 Segment（包括 Footer、索引和列读取器）、Delete Vector 以及 Tablet Schema。它与 Tablet 元数据缓存（参见 `lake_tablet_metadata_cache_limit_percent`）相互独立，加载再多的 Segment 也不会把 Tablet 元数据和事务日志挤出缓存。超出 0–100 的取值按 0 或 100 处理。设为 `0` 即关闭该缓存。该项与 `lake_tablet_metadata_cache_limit_percent` 共同取代原有的 `lake_metadata_cache_limit`。该值是缓存容量的上限，BE 进程内存紧张时缓存会缩到该值以下（参见 `lake_tablet_metadata_cache_min_limit`）。
+- 引入版本：-
+
+### lake_segment_metadata_cache_min_limit
+
+- 默认值：1073741824
+- 类型：Long
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群中，Segment 元数据缓存在内存紧张时让出内存（参见 `lake_tablet_metadata_cache_min_limit`），容量不会缩到该值以下。如果该值大于 `lake_segment_metadata_cache_limit_percent` 设定的容量，缓存保持该容量不变。
 - 引入版本：-
 
 ### lake_shard_info_cache_ttl_sec
@@ -341,7 +350,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：存算分离集群中 Tablet 元数据缓存的容量，以 BE 进程内存上限的百分比表示。该缓存存放 Tablet 元数据和事务日志。它与 Segment 元数据缓存（参见 `lake_segment_metadata_cache_limit_percent`）相互独立，加载再多的 Segment 也不会把这些元数据挤出缓存。超出 0–100 的取值按 0 或 100 处理。设为 `0` 即关闭该缓存。该项与 `lake_segment_metadata_cache_limit_percent` 共同取代原有的 `lake_metadata_cache_limit`。
+- 描述：存算分离集群中 Tablet 元数据缓存的容量，以 BE 进程内存上限的百分比表示。该缓存存放 Tablet 元数据和事务日志。它与 Segment 元数据缓存（参见 `lake_segment_metadata_cache_limit_percent`）相互独立，加载再多的 Segment 也不会把这些元数据挤出缓存。超出 0–100 的取值按 0 或 100 处理。设为 `0` 即关闭该缓存。该项与 `lake_segment_metadata_cache_limit_percent` 共同取代原有的 `lake_metadata_cache_limit`。该值是缓存容量的上限，BE 进程内存紧张时缓存会缩到该值以下（参见 `lake_tablet_metadata_cache_min_limit`）。
+- 引入版本：-
+
+### lake_tablet_metadata_cache_min_limit
+
+- 默认值：1073741824
+- 类型：Long
+- 单位：Bytes
+- 是否动态：是
+- 描述：存算分离集群中，Tablet 元数据缓存容量的下限。BE 进程内存占用超过 `memory_high_level` 后，Tablet 元数据缓存和 Segment 元数据缓存把容量调到当前占用以下，淘汰最久未使用的条目。需要让出的内存，按两个缓存各自超出下限（该项和 `lake_segment_metadata_cache_min_limit`）的占用比例分摊。超出 `memory_high_level` 的部分在约 50 秒内逐步释放；如果占用还超过了 `memory_urgent_level`，超出 `memory_urgent_level` 的部分立即释放。占用回落到 `memory_high_level` 以下后，两个缓存的容量在约 200 秒内逐步恢复到 `lake_tablet_metadata_cache_limit_percent` 和 `lake_segment_metadata_cache_limit_percent` 设定的值。每 10 秒检查一次。如果该值大于 `lake_tablet_metadata_cache_limit_percent` 设定的容量，缓存保持该容量不变。
 - 引入版本：-
 
 ### lake_vacuum_enable_task_timeout
@@ -1002,7 +1020,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Long
 - 单位：Percent
 - 是否动态：是
-- 描述：以进程内存上限的百分比表示的高水位内存阈值。当总内存消耗上升超过该百分比时，BE 开始逐步释放内存（目前通过驱逐 data cache 和 update cache）以缓解压力。监控器使用此值来计算 `memory_high = mem_limit * memory_high_level / 100`，并且如果消耗大于 memory_high，则在 GC advisor 的指导下执行受控驱逐；如果消耗超过 memory_urgent_level（一个单独的配置），则会进行更激进的即时回收。此值还用于在超过阈值时禁用某些高内存消耗的操作（例如 primary-key preload）。必须满足与 memory_urgent_level 的校验关系（memory_urgent_level `>` memory_high_level，memory_high_level `>=` 1，memory_urgent_level `<=` 100）。
+- 描述：以进程内存上限的百分比表示的高水位内存阈值。当总内存消耗上升超过该百分比时，BE 开始逐步释放内存（目前通过驱逐 data cache 和 update cache，以及缩小存算分离的元数据缓存）以缓解压力。监控器使用此值来计算 `memory_high = mem_limit * memory_high_level / 100`，并且如果消耗大于 memory_high，则在 GC advisor 的指导下执行受控驱逐；如果消耗超过 memory_urgent_level（一个单独的配置），则会进行更激进的即时回收。此值还用于在超过阈值时禁用某些高内存消耗的操作（例如 primary-key preload）。必须满足与 memory_urgent_level 的校验关系（memory_urgent_level `>` memory_high_level，memory_high_level `>=` 1，memory_urgent_level `<=` 100）。
 - 引入版本：v3.2.0
 
 ### memory_urgent_level

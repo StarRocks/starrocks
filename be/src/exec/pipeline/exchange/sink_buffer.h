@@ -191,6 +191,7 @@ private:
     std::atomic<int32_t> _peak_in_flight_rpc = 0;
     std::atomic<int64_t> _num_buffered_requests = 0;
     std::atomic<int64_t> _peak_buffered_requests = 0;
+    std::atomic<int64_t> _peak_request_bytes = 0;
 
     size_t _memory_limit = 0;
 

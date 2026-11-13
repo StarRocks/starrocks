@@ -5639,4 +5639,86 @@ TEST_F(FileReaderTest, test_read_variant_shredding_in_array_reads_objects_with_v
     EXPECT_EQ(R"([{"x":3}])", chunk->get_column_by_index(0)->debug_item(1));
 }
 
+// A shredded BINARY and a shredded UUID leaf must not make the rebuild of the row drop the other fields. The exact
+// text of the binary/UUID values is not asserted; only that the fields are present and that n survives.
+TEST_F(FileReaderTest, test_read_variant_shredding_binary_uuid_keeps_other_fields) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_binary_uuid.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << status.message();
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(2, chunk->num_rows());
+
+    const ColumnPtr& column = chunk->get_column_by_index(0);
+    const auto* nullable = down_cast<const NullableColumn*>(column.get());
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_FALSE(nullable->is_null(0));
+    const std::string row0 = variant_row_json(variant_col, 0);
+    EXPECT_NE(row0.find("\"n\":5"), std::string::npos) << row0;
+    EXPECT_NE(row0.find("\"b\":"), std::string::npos) << row0;
+    EXPECT_NE(row0.find("\"u\":"), std::string::npos) << row0;
+    EXPECT_EQ(R"({"n":6})", variant_row_json(variant_col, 1));
+}
+
+// Boolean columns whose values are RLE-encoded: parquet-mr does this for every boolean column in
+// PARQUET_2_0 mode and pyarrow for data_page_version=2.0 (the v1-page file shows the encoding is
+// independent of the page layout). 200 rows: a run of true, a run of false, alternating literal
+// groups, then nulls interleaved with alternating values.
+TEST_F(FileReaderTest, test_rle_boolean_values) {
+    auto expected_flag = [](int i) -> int {
+        if (i < 50) return 1;
+        if (i < 100) return 0;
+        if (i < 150) return i % 2 == 0;
+        return i % 3 == 0 ? -1 : (i % 2 == 0);
+    };
+
+    for (const std::string& name :
+         {"rle_boolean_v2_parquet_mr.parquet", "rle_boolean_v2_pyarrow.parquet", "rle_boolean_v1_pyarrow.parquet"}) {
+        const std::string file_path = "./be/test/formats/parquet/test_data/" + name;
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+        chunk->append_column(ColumnHelper::create_column(TYPE_BOOLEAN_DESC, true), chunk->num_columns());
+
+        Utils::SlotDesc slot_descs[] = {{"id", TYPE_INT_DESC}, {"flag", TYPE_BOOLEAN_DESC}, {""}};
+        auto ctx = _create_file_random_read_context(file_path, slot_descs);
+        auto file_reader = _create_file_reader(file_path);
+        Status status = file_reader->init(&ctx->format_scan_context);
+        ASSERT_TRUE(status.ok()) << name << ": " << status.to_string();
+
+        size_t total_rows = 0;
+        while (!status.is_end_of_file()) {
+            chunk->reset();
+            status = file_reader->get_next(&chunk);
+            ASSERT_TRUE(status.ok() || status.is_end_of_file()) << name << ": " << status.to_string();
+            chunk->check_or_die();
+
+            const auto* id_col = down_cast<const NullableColumn*>(chunk->columns()[0].get());
+            const auto* flag_col = down_cast<const NullableColumn*>(chunk->columns()[1].get());
+            const auto& ids =
+                    down_cast<const FixedLengthColumn<int32_t>*>(id_col->data_column().get())->immutable_data();
+            const auto& flags =
+                    down_cast<const FixedLengthColumn<uint8_t>*>(flag_col->data_column().get())->immutable_data();
+            for (size_t r = 0; r < chunk->num_rows(); ++r) {
+                int id = ids[r];
+                int expected = expected_flag(id);
+                if (expected < 0) {
+                    ASSERT_TRUE(flag_col->is_null(r)) << name << " id=" << id;
+                } else {
+                    ASSERT_FALSE(flag_col->is_null(r)) << name << " id=" << id;
+                    ASSERT_EQ(expected, static_cast<int>(flags[r])) << name << " id=" << id;
+                }
+            }
+            total_rows += chunk->num_rows();
+        }
+        EXPECT_EQ(200, total_rows) << name;
+    }
+}
+
 } // namespace starrocks::parquet

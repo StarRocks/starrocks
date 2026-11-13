@@ -238,6 +238,7 @@ set(STORAGE_FILES
     lake/vertical_compaction_task.cpp
     lake/cloud_native_index_compaction_task.cpp
     lake/metacache.cpp
+    lake/metacache_adjuster.cpp
     lake/lake_primary_key_recover.cpp
     lake/spill_mem_table_sink.cpp
     lake/tablet_retain_info.cpp
