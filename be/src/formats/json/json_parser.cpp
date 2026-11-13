@@ -21,6 +21,27 @@
 
 namespace starrocks {
 
+namespace {
+
+struct RewindableDocument : simdjson::ondemand::document {
+    struct RewindableJsonIterator : simdjson::ondemand::json_iterator {
+        static bool is_finished_cleanly(const simdjson::ondemand::json_iterator& it) noexcept {
+            const auto& self = static_cast<const RewindableJsonIterator&>(it);
+            return self.is_alive() && self.error == simdjson::SUCCESS && self.depth() == 0;
+        }
+    };
+
+    static simdjson::ondemand::json_iterator& iter_of(simdjson::ondemand::document& doc) noexcept {
+        return static_cast<RewindableDocument&>(doc).iter;
+    }
+
+    static bool is_finished_cleanly(simdjson::ondemand::document& doc) noexcept {
+        return RewindableJsonIterator::is_finished_cleanly(iter_of(doc));
+    }
+};
+
+} // namespace
+
 const size_t MAX_RAW_JSON_LEN = 64;
 
 JsonDocumentStreamParser::JsonDocumentStreamParser(simdjson::ondemand::parser* parser) : JsonParser(parser) {
@@ -93,6 +114,7 @@ Status JsonDocumentStreamParser::_get_current_impl(simdjson::ondemand::object* r
                     return status_from_json_parse_error("The value should be object type in json document stream");
                 }
 
+                _doc_iter_snapshot = RewindableDocument::iter_of(doc);
                 _curr = doc.get_object();
                 *row = _curr;
                 _curr_ready = true;
@@ -152,20 +174,28 @@ Status JsonDocumentStreamParser::advance() noexcept {
     static_assert(simdjson::SIMDJSON_VERSION_MAJOR == 5,
                   "Re-validate JsonDocumentStreamParser::advance() mid-document error latching on simdjson upgrade");
     _curr_ready = false;
+    if (_first_object_parsed && _doc_stream_itr != _doc_stream.end() && _doc_stream_itr.error() == simdjson::SUCCESS) {
+        simdjson::ondemand::document_reference doc = *_doc_stream_itr;
+        if (!RewindableDocument::is_finished_cleanly(doc)) {
+            // In simdjson 5.x, if the caller stopped early or hit a mid-document error (which may abandon doc.iter,
+            // set doc.iter.error, or return INCORRECT_TYPE while leaving depth() > 1 at '}'), restore doc.iter to
+            // the root of the current object so ++_doc_stream_itr skips the record using the already-indexed stage-1
+            // batch rather than rescanning the remaining buffer with iterate_many().
+            RewindableDocument::iter_of(doc) = _doc_iter_snapshot;
+        }
+    }
     ++_doc_stream_itr;
     if (_first_object_parsed && _doc_stream_itr != _doc_stream.end() && _doc_stream_itr.error() != simdjson::SUCCESS &&
         _doc_stream_offset + _doc_stream_itr.current_index() == _last_begin_offset) {
-        // In simdjson 5.x, when the current document met a fatal error while being consumed by the caller,
-        // next_document() copies doc.iter.error into stream->error and stops without advancing doc_index or
-        // marking the iterator finished. Rebuild the stream from _last_begin_offset and skip the failed
-        // document so subsequent documents in the buffer can still be parsed.
         size_t cur_left_len = _len - _last_begin_offset;
         size_t batch_size = config::enable_dynamic_batch_size_for_json_parse_many ? std::min(_batch_size, cur_left_len)
                                                                                   : cur_left_len;
-        _doc_stream = _parser->iterate_many(_data + _last_begin_offset, cur_left_len, batch_size);
-        _doc_stream_offset = _last_begin_offset;
-        _doc_stream_itr = _doc_stream.begin();
-        ++_doc_stream_itr;
+        if (_batch_size < _len - _doc_stream_offset) {
+            _doc_stream = _parser->iterate_many(_data + _last_begin_offset, cur_left_len, batch_size);
+            _doc_stream_offset = _last_begin_offset;
+            _doc_stream_itr = _doc_stream.begin();
+            ++_doc_stream_itr;
+        }
         if (_doc_stream_itr.error() != simdjson::SUCCESS &&
             (batch_size >= cur_left_len || !_check_and_new_doc_stream_iterator())) {
             // EMPTY: nothing follows the skipped record. If stage 1 cut the tail (truncated_bytes() > 0), probe the

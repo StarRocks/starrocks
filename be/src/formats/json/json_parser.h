@@ -25,7 +25,7 @@ namespace starrocks {
 
 class JsonParser {
 public:
-    explicit JsonParser(simdjson::ondemand::parser* parser) : _parser(parser){};
+    explicit JsonParser(simdjson::ondemand::parser* parser) : _parser(parser) {};
     virtual ~JsonParser() = default;
     // parse initiates the parser. The inner iterator would point to the first object to be returned.
     virtual Status parse(char* data, size_t len, size_t allocated) noexcept = 0;
@@ -85,6 +85,8 @@ private:
     // iterator context for document stream.
     simdjson::ondemand::document_stream _doc_stream;
     simdjson::ondemand::document_stream::iterator _doc_stream_itr;
+    // Snapshot of _doc_stream's json_iterator at the root of the current object before field consumption.
+    simdjson::ondemand::json_iterator _doc_iter_snapshot;
 
     // Iterator (value, object, array, etc) in simdjson could be only parsed once.
     // If we want to access iterator twice, a call of rewind/reset is needed.
@@ -111,7 +113,7 @@ private:
 // input: [{"key": 1}, {"key": 2}].
 class JsonArrayParser : public JsonParser {
 public:
-    explicit JsonArrayParser(simdjson::ondemand::parser* parser) : JsonParser(parser){};
+    explicit JsonArrayParser(simdjson::ondemand::parser* parser) : JsonParser(parser) {};
     Status parse(char* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
