@@ -1832,7 +1832,7 @@ TEST_F(JsonDocumentStreamParserTest, document_stream_parser_multi_isa_equivalenc
             padded.resize(input.size() + simdjson::SIMDJSON_PADDING, '\0');
             simdjson::ondemand::parser local_parser;
             JsonDocumentStreamParser parser(&local_parser);
-            ASSERT_OK(parser.parse(padded.data(), input.size(), padded.size())) << impl->name();
+            ASSERT_OK(parser.parse(padded.data(), input.size(), padded.size()));
 
             std::vector<std::string> loaded_k1;
             int filtered = 0;
@@ -1844,7 +1844,7 @@ TEST_F(JsonDocumentStreamParserTest, document_stream_parser_multi_isa_equivalenc
                 if (st.is_end_of_file()) {
                     break;
                 }
-                ASSERT_OK(st) << impl->name();
+                ASSERT_OK(st);
                 bool ok = true;
                 std::string k1_val;
                 try {
@@ -1869,7 +1869,7 @@ TEST_F(JsonDocumentStreamParserTest, document_stream_parser_multi_isa_equivalenc
                 if (st.is_end_of_file()) {
                     break;
                 }
-                ASSERT_OK(st) << impl->name();
+                ASSERT_OK(st);
             }
             EXPECT_TRUE(st.is_end_of_file()) << impl->name();
             EXPECT_EQ((std::vector<std::string>{"汉字", "\xF0\x9F\x98\x80"}), loaded_k1) << impl->name();
