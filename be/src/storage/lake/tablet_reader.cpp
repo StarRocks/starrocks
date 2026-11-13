@@ -717,13 +717,15 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
 }
 
 void TabletReader::flush_reusable_iterator_io_stats() {
-    for (auto& rowset_iters : _reusable_rowset_iterators) {
-        for (auto& iter : rowset_iters) {
-            if (iter != nullptr) {
+    for (const auto& [rowset_idx, segment_idx] : _used_reusable_slots) {
+        if (rowset_idx < _reusable_rowset_iterators.size() &&
+            segment_idx < _reusable_rowset_iterators[rowset_idx].size()) {
+            if (const auto& iter = _reusable_rowset_iterators[rowset_idx][segment_idx]; iter != nullptr) {
                 flush_segment_iterator_io_stats(iter.get());
             }
         }
     }
+    _used_reusable_slots.clear();
 }
 
 void TabletReader::close() {
@@ -740,6 +742,7 @@ void TabletReader::close() {
         }
     }
     _reusable_rowset_iterators.clear();
+    _used_reusable_slots.clear();
     STLDeleteElements(&_predicate_free_list);
     _rowsets.clear();
     _obj_pool.clear();
@@ -1171,6 +1174,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                          enhance_error_prompt(rowset->read_prepared_segment(
                                  schema(), rs_opts, prepared_segments, segment_idx, params.prepared_segment_read_state,
                                  &_reusable_rowset_iterators[rowset_idx])));
+        _used_reusable_slots.emplace_back(rowset_idx, segment_idx);
         iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
         _stats.rowsets_read_count++;
         return Status::OK();

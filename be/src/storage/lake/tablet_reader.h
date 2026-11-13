@@ -17,6 +17,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "common/column_id.h"
@@ -96,8 +97,9 @@ public:
     // Precondition: the last method called must have been `prepare()`.
     Status open(const TabletReaderParams& read_params);
 
-    // Adds what the reused segment iterators have read since their last flush to stats(): they are not closed
-    // between the scans they serve.
+    // Adds what the reused segment iterators of the scans since the last call have read to stats(): they are not
+    // closed between the scans they serve. Only the slots those scans used are visited; the others have not read since
+    // their own last flush.
     void flush_reusable_iterator_io_stats();
 
     void close() override;
@@ -176,6 +178,8 @@ private:
     std::vector<RowsetPtr> _rowsets;
     std::vector<SegmentSharedPtr> _segments;
     std::vector<std::vector<ChunkIteratorPtr>> _reusable_rowset_iterators;
+    // (rowset, segment) of the reusable slots used since the last flush_reusable_iterator_io_stats().
+    std::vector<std::pair<size_t, size_t>> _used_reusable_slots;
     std::shared_ptr<ChunkIterator> _collect_iter;
 
     DeletePredicates _delete_predicates;
