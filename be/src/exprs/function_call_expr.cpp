@@ -140,7 +140,11 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
                                  _fn.fid == 10302 /* rand */ || _fn.fid == 10303 /* random */ ||
                                  _fn.fid == 100015 /* uuid */ || _fn.fid == 100016 /* uuid_numeric */ ||
                                  _fn.fid == 100025 /* uuid_v7 */ || _fn.fid == 100026 /* uuid_v7_numeric */ ||
-                                 _fn.fid == 30470 /* http_request */;
+                                 _fn.fid == 30470 /* http_request */ ||
+                                 _fn.fid == 210016 /* get_presigned_url */ ||
+                                 _fn.fid == 210017 /* get_presigned_url with expiration */ ||
+                                 _fn.fid == 210018 /* get_presigned_file */ ||
+                                 _fn.fid == 210019 /* get_presigned_file with expiration */;
 
     return Status::OK();
 }

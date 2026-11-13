@@ -360,6 +360,12 @@ public class AnalyzerUtils {
             if (isPresignedBuiltin(expr.getFn())) {
                 found = true;
             }
+            // SQL UDF bodies are not expression children; inspect them too so cached plans cannot skip
+            // storage volume authorization or retain stale credentials for nested presign calls.
+            if (expr.getFn() instanceof SqlFunction sqlFunction
+                    && sqlFunction.getAnalyzeExpr() != null) {
+                visit(sqlFunction.getAnalyzeExpr(), context);
+            }
             return super.visitExpression(expr, context);
         }
     }
