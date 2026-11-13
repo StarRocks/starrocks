@@ -507,7 +507,9 @@ private:
 
     ColumnAccessPath* _lookup_access_path(ColumnId cid, const TabletColumn& col);
 
-    void _update_stats(io::SeekableInputStream* rfile);
+    // Adds what `rfile` read since its last flush to the stats. `keep_baseline` records what it has reported so far,
+    // for a file that is read again afterwards; a file read for the last time needs none.
+    void _update_stats(io::SeekableInputStream* rfile, bool keep_baseline);
     // Installs the file of column `cid`, first flushing the statistics of the file it replaces.
     void _set_column_file(ColumnId cid, std::unique_ptr<io::SeekableInputStream> file);
 
@@ -4953,7 +4955,7 @@ Status SegmentIterator::_get_row_ranges_by_rowid_range() {
 }
 
 // Currently, update stats is only used for lake tablet, and numeric statistics is nullptr for local tablet.
-void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
+void SegmentIterator::_update_stats(io::SeekableInputStream* rfile, bool keep_baseline) {
     auto stats_or = rfile->get_numeric_statistics();
     if (!stats_or.ok()) {
         LOG(WARNING) << "failed to get statistics: " << stats_or.status();
@@ -4965,13 +4967,22 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
         return;
     }
 
-    // The statistics of a file are cumulative: add only what it read since the last flush.
-    auto& flushed = _flushed_io_stats[rfile];
+    // The statistics of a file are cumulative: subtract what an earlier flush already added. A file never flushed
+    // before -- every file of an iterator that is not reused -- has no baseline and adds its values as they are.
+    std::unordered_map<std::string, int64_t>* flushed = nullptr;
+    if (keep_baseline) {
+        flushed = &_flushed_io_stats[rfile];
+    } else if (auto it = _flushed_io_stats.find(rfile); it != _flushed_io_stats.end()) {
+        flushed = &it->second;
+    }
     for (int64_t i = 0, sz = stats->size(); i < sz; ++i) {
         auto&& name = stats->name(i);
-        int64_t& last = flushed[name];
-        const int64_t value = stats->value(i) - last;
-        last = stats->value(i);
+        int64_t value = stats->value(i);
+        if (flushed != nullptr) {
+            int64_t& last = (*flushed)[name];
+            value -= last;
+            last = stats->value(i);
+        }
         if (value == 0) {
             continue;
         }
@@ -5008,7 +5019,7 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
 void SegmentIterator::_set_column_file(ColumnId cid, std::unique_ptr<io::SeekableInputStream> file) {
     auto& slot = _column_files[cid];
     if (slot != nullptr) {
-        _update_stats(slot.get());
+        _update_stats(slot.get(), /*keep_baseline=*/false);
         _flushed_io_stats.erase(slot.get());
     }
     slot = std::move(file);
@@ -5017,7 +5028,7 @@ void SegmentIterator::_set_column_file(ColumnId cid, std::unique_ptr<io::Seekabl
 void SegmentIterator::flush_io_stats() {
     for (auto& [cid, rfile] : _column_files) {
         if (rfile != nullptr) {
-            _update_stats(rfile.get());
+            _update_stats(rfile.get(), /*keep_baseline=*/true);
         }
     }
 }
@@ -5044,7 +5055,7 @@ void SegmentIterator::close() {
     for (auto& [cid, rfile] : _column_files) {
         // update statistics before reset column file
         if (rfile != nullptr) {
-            _update_stats(rfile.get());
+            _update_stats(rfile.get(), /*keep_baseline=*/false);
             rfile.reset();
         }
     }

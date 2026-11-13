@@ -2028,6 +2028,16 @@ TEST_F(SegmentIteratorTest, ReusedIteratorFlushesStreamStatsOnce) {
     EXPECT_EQ(70000 * files, stats.io_ns_remote);
     // flush_segment_iterator_io_stats() ignores an iterator that is not a segment iterator.
     flush_segment_iterator_io_stats(scan.get());
+
+    // An iterator that is not reused is never flushed before close(), which adds all its files read.
+    stats = OlapReaderStatistics();
+    auto plain = segment->new_iterator(vec_schema, read_opts);
+    ASSERT_OK(plain.status());
+    drain(*plain);
+    g_reported = 230;
+    (*plain)->close();
+    EXPECT_EQ(60 * files, stats.compressed_bytes_read_remote);
+    EXPECT_EQ(6 * files, stats.io_count_remote);
 }
 
 // Reusing a slot whose predicate column layout differs from the first scan must rebuild the underlying
