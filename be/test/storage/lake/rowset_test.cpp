@@ -30,6 +30,7 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
+#include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
@@ -1480,6 +1481,56 @@ TEST_F(LakeRowsetTest, test_tablet_range_pruning_only_for_shared_segments) {
     ASSIGN_OR_ABORT(auto iters2, rowset2->read(input_schema, rs_opts));
     // Now tablet range [10, 12) should prune rows: per segment keys {10, 11}, total segments = 3.
     ASSERT_EQ(count_rows_from_iters(iters2), 3 * 2);
+}
+
+// union_segments = false: a non-overlapped rowset returns one iterator per segment, in segment order, instead of a
+// union of them, so that the caller's union reads the next segments ahead within the rowset too. The rows are the same.
+TEST_F(LakeRowsetTest, test_non_overlapped_rowset_without_segment_union) {
+    ASSERT_NO_FATAL_FAILURE(
+            add_rowset_with_segment_keys({{1, 2, 3}, {10, 11}, {20, 21, 22, 23}}, {false, false, false}));
+    const int rowset_index = _tablet_metadata->rowsets_size() - 1;
+    _tablet_metadata->mutable_rowsets(rowset_index)->set_overlapped(false);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    auto read_keys = [&](bool union_segments, size_t* num_iters) {
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, rowset_index,
+                                                     0 /* compaction_segment_limit */);
+        RowsetReadOptions rs_opts;
+        OlapReaderStatistics stats;
+        rs_opts.stats = &stats;
+        rs_opts.tablet_schema = std::make_shared<const TabletSchema>(_tablet_metadata->schema());
+        rs_opts.union_segments = union_segments;
+        auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+        std::vector<int32_t> keys;
+        auto iters_or = rowset->read(input_schema, rs_opts);
+        CHECK(iters_or.ok()) << iters_or.status();
+        *num_iters = iters_or.value().size();
+        for (const auto& it : iters_or.value()) {
+            CHECK(it->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+            CHECK(it->init_output_schema(std::unordered_set<uint32_t>()).ok());
+            auto chunk = ChunkFactory::new_chunk(it->schema(), 1024);
+            while (true) {
+                chunk->reset();
+                auto st = it->get_next(chunk.get());
+                if (st.is_end_of_file()) {
+                    break;
+                }
+                CHECK(st.ok()) << st.to_string();
+                for (size_t i = 0; i < chunk->num_rows(); ++i) {
+                    keys.push_back(chunk->get(i)[0].get_int32());
+                }
+            }
+            it->close();
+        }
+        return keys;
+    };
+    const std::vector<int32_t> expected{1, 2, 3, 10, 11, 20, 21, 22, 23};
+    size_t unioned = 0;
+    size_t separate = 0;
+    EXPECT_EQ(expected, read_keys(true, &unioned));
+    EXPECT_EQ(expected, read_keys(false, &separate));
+    EXPECT_EQ(1, unioned);
+    EXPECT_EQ(3, separate);
 }
 
 TEST_F(LakeRowsetTest, test_tablet_range_pruning_inclusive_exclusive) {

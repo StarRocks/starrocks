@@ -709,7 +709,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
             }
         }
     }
-    if (segment_iterators.size() > 1 && !is_overlapped()) {
+    if (segment_iterators.size() > 1 && !is_overlapped() && options.union_segments) {
         // union non-overlapped segment iterators
         auto iter = new_union_iterator(std::move(segment_iterators));
         return std::vector<ChunkIteratorPtr>{iter};
