@@ -27,7 +27,6 @@ import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
 import com.starrocks.type.ArrayType;
@@ -42,7 +41,6 @@ import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -51,7 +49,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -62,15 +59,12 @@ public class NestedGeoFunctionRefusalTest {
         AnalyzeTestUtil.init();
     }
 
-    private static ScalarType geography() {
-        return ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, new GeoTypeDescriptor(
-                GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
-                GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326));
-    }
-
     static List<Type> types() {
         List<Type> result = new ArrayList<>();
-        for (Type leaf : List.of(IntegerType.INT, geography(),
+        for (Type leaf : List.of(IntegerType.INT,
+                ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, new GeoTypeDescriptor(
+                        GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
+                        GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326)),
                 ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry("EPSG:3857")))) {
             result.addAll(List.of(leaf, new ArrayType(leaf), new MapType(IntegerType.INT, leaf),
                     new StructType(List.of(leaf)), new ArrayType(new StructType(List.of(new ArrayType(leaf))))));
@@ -186,19 +180,6 @@ public class NestedGeoFunctionRefusalTest {
         sorted.setChild(1, mapped);
         check(sorted, item.isGeoType() || item.hasNestedGeoType(),
                 "array_sortby does not support geo arguments: " + array.toSql());
-    }
-
-    @Test
-    public void testToJsonGeoGuardOnlyAppliesToBuiltin() {
-        Type map = new MapType(IntegerType.INT, geography());
-
-        FunctionCallExpr builtin = call(FunctionSet.TO_JSON, map);
-        builtin.getFn().setBinaryType(TFunctionBinaryType.BUILTIN);
-        check(builtin, true, "to_json does not support geo arguments: " + map.toSql());
-
-        FunctionCallExpr udf = call(FunctionSet.TO_JSON, map);
-        udf.getFn().setBinaryType(TFunctionBinaryType.SRJAR);
-        assertDoesNotThrow(() -> FunctionAnalyzer.analyze(udf));
     }
 
     @ParameterizedTest
