@@ -5561,37 +5561,6 @@ TEST_F(FileReaderTest, test_read_variant_shredding_int64_and_double_files_merge_
     }
 }
 
-<<<<<<< HEAD
-=======
-// A present variant group that holds neither `value` nor `typed_value` is a variant null; only a null group (a null
-// metadata) is a SQL NULL. The rows are: nothing set, typed_value 5, a null group, and an explicit variant null value.
-TEST_F(FileReaderTest, test_read_variant_shredding_reads_empty_group_as_variant_null) {
-    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_variant_null.parquet";
-    auto file_reader = _create_file_reader(variant_file_path);
-    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
-    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
-    auto ctx = _create_scan_context(slot_descs, variant_file_path);
-
-    Status status = file_reader->init(&ctx->format_scan_context);
-    ASSERT_TRUE(status.ok()) << status.message();
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
-    status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok()) << status.message();
-    ASSERT_EQ(4, chunk->num_rows());
-
-    const ColumnPtr& column = chunk->get_column_by_index(0);
-    const auto* nullable = down_cast<const NullableColumn*>(column.get());
-    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
-    ASSERT_FALSE(nullable->is_null(0));
-    EXPECT_EQ("null", variant_row_json(variant_col, 0));
-    ASSERT_FALSE(nullable->is_null(1));
-    EXPECT_EQ("5", variant_row_json(variant_col, 1));
-    EXPECT_TRUE(nullable->is_null(2));
-    ASSERT_FALSE(nullable->is_null(3));
-    EXPECT_EQ("null", variant_row_json(variant_col, 3));
-}
-
 // A present object group with no value in it is an empty object, not SQL NULL. The rows are {}, NULL, {"x":1}
 // and {"p":{}}.
 TEST_F(FileReaderTest, test_read_variant_shredding_keeps_empty_objects) {
@@ -5621,25 +5590,4 @@ TEST_F(FileReaderTest, test_read_variant_shredding_keeps_empty_objects) {
     EXPECT_EQ(R"({"p":{}})", variant_row_json(variant_col, 3));
 }
 
-// A list of shredded variants whose typed_value is an object. The levels of the leaves below the variants have one entry
-// per element, so they cannot tell the presence of an object per row: the column must still read as before.
-TEST_F(FileReaderTest, test_read_variant_shredding_in_array_reads_objects_with_variant_null_rows) {
-    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_in_array.parquet";
-    auto file_reader = _create_file_reader(variant_file_path);
-    TypeDescriptor array_of_variant = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
-    Utils::SlotDesc slot_descs[] = {{"arr", array_of_variant}, {""}};
-    auto ctx = _create_scan_context(slot_descs, variant_file_path);
-
-    Status status = file_reader->init(&ctx->format_scan_context);
-    ASSERT_TRUE(status.ok()) << status.message();
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(array_of_variant, true), chunk->num_columns());
-    status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok()) << status.message();
-    ASSERT_EQ(2, chunk->num_rows());
-    EXPECT_EQ(R"([{"x":1},{"x":2}])", chunk->get_column_by_index(0)->debug_item(0));
-    EXPECT_EQ(R"([{"x":3}])", chunk->get_column_by_index(0)->debug_item(1));
-}
-
->>>>>>> 7aaafdf ([BugFix] Keep empty objects when reading shredded VARIANT (#82981))
 } // namespace starrocks::parquet

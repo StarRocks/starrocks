@@ -2305,33 +2305,9 @@ public:
                 }
             }
         }
-<<<<<<< HEAD
-=======
         if (root_presence != nullptr && !root_presence->present.empty()) {
             mark_rows_with_empty_objects(*root_presence);
         }
-        // After the empty objects: a present `{}` row is flagged above and must not read as a variant null.
-        mark_variant_null_rows();
-    }
-
-    // The variant group is present (its metadata is set) but holds neither a value nor a typed value: the variant is
-    // a variant null, not a SQL NULL. A null metadata is what makes the whole variant SQL NULL.
-    void mark_variant_null_rows() {
-        const size_t num_rows = has_typed_value_bitmap.size();
-        for (size_t i = 0; i < num_rows; ++i) {
-            if (metadata_nulls[i] || has_typed_value_bitmap[i] || metadata_column->get_slice(i).size == 0) {
-                continue;
-            }
-            if (!value_nulls[i] && value_column->get_slice(i).size != 0) {
-                continue;
-            }
-            if (variant_null_row.empty()) {
-                variant_null_row.assign(num_rows, 0);
-            }
-            variant_null_row[i] = 1;
-            any_variant_null = true;
-        }
->>>>>>> 7aaafdf ([BugFix] Keep empty objects when reading shredded VARIANT (#82981))
     }
 
     // A present root object group with no value in it is `{}` (or holds empty objects below), and the typed columns
@@ -2378,24 +2354,14 @@ public:
     // Per-row "any typed payload exists" summary over shredded fields plus root typed_value.
     // Used only for top-level row null/materialization decisions.
     std::vector<bool> has_typed_value_bitmap;
-<<<<<<< HEAD
-=======
-    // Rows that are a variant null; empty unless the batch has one.
-    std::vector<uint8_t> variant_null_row;
-    bool any_variant_null = false;
     // Rows whose remain payload must be rebuilt to carry empty objects; empty unless the file has object presence.
     std::vector<uint8_t> synthesize_row;
     bool any_synthesized = false;
->>>>>>> 7aaafdf ([BugFix] Keep empty objects when reading shredded VARIANT (#82981))
     // Parallel to materialized_bindings: the batch ARRAY<VARIANT> column of each ARRAY binding, nullptr otherwise.
     std::vector<ColumnPtr> array_binding_columns;
 
     bool can_bulk_append_base_payload(bool has_outer_null_channel) const {
-<<<<<<< HEAD
-        if (root_typed_value_column != nullptr) {
-=======
-        if (root_typed_value_column != nullptr || any_variant_null || any_synthesized) {
->>>>>>> 7aaafdf ([BugFix] Keep empty objects when reading shredded VARIANT (#82981))
+        if (root_typed_value_column != nullptr || any_synthesized) {
             return false;
         }
         if (has_outer_null_channel) {
