@@ -194,6 +194,9 @@ private:
     std::atomic<int32_t> _num_uncancelled_sinkers = 0;
     std::atomic<int32_t> _num_remaining_eos = 0;
 
+    // Size of the largest request sent over the network, exposed by update_profile().
+    std::atomic<int64_t> _peak_request_bytes = 0;
+
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
     // but there may be still in-flight RPC running.
     // It becomes true, when all sinkers have sent EOS, or been set_finished/cancelled, or RPC has returned error.

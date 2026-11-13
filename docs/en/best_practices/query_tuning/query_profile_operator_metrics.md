@@ -256,6 +256,7 @@ Typical scenarios that can make Exchange Operator the bottleneck of a query:
 | BytesUnsent | Size of unsent data. This metric is non-zero when there is a short-circuit logic; otherwise, it is zero. |
 | BytesPassThrough | If the destination node is the current node, data will not be transmitted over the network, which is called passthrough data. This metric indicates the size of such passthrough data. Passthrough is controlled by `enable_exchange_pass_through`. |
 | PassThroughBufferPeakMemoryUsage | Peak memory usage of the PassThrough Buffer. |
+| PeakRequestBytes | Size of the largest request sent over the network, after compression if it applies. `BytesSent / RequestSent` gives the average request size. Passthrough data is not counted. |
 | CompressTime | Compression time. |
 | CompressedInputBytes | Size of the serialized (pre-compression) data that was actually fed to the compressor. Chunks skipped by the adaptive compression strategy are not counted. `CompressedInputBytes / CompressedBytes` gives the compression ratio, and `SerializedBytes - CompressedInputBytes` is the size of data that was not compressed. |
 | CompressedBytes | Size of compressed data. Only chunks that were actually compressed are counted. |
