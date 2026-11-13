@@ -403,6 +403,101 @@ public class SkewJoinTest extends PlanTestBase {
     }
 
     @Test
+    void testSkewJoinNullSafeWithNullSkewReplicatesOtherSideNulls() throws Exception {
+        final var oldStatisticsStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        final double oldThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
+        final boolean oldEnableStats = connectContext.getSessionVariable().isEnableStatsToOptimizeSkewJoin();
+        final boolean oldEnableRewrite = connectContext.getSessionVariable().isEnableOptimizerSkewJoinOptimizeV1();
+        try {
+            final var emptyStatisticsStorage = new EmptyStatisticStorage() {
+                @Override
+                public ColumnStatistic getColumnStatistic(Table table, String column) {
+                    if (table.getName().equalsIgnoreCase("t0") && column.equalsIgnoreCase("v1")) {
+                        return ColumnStatistic.builder() //
+                                .setNullsFraction(0.8) //
+                                .build();
+                    }
+
+                    return ColumnStatistic.builder() //
+                            .setNullsFraction(0.05) //
+                            .build();
+                }
+            };
+            setTableStatistics(getOlapTable("t0"), 1337);
+            setTableStatistics(getOlapTable("t1"), 1337);
+            connectContext.getGlobalStateMgr().setStatisticStorage(emptyStatisticsStorage);
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.1);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(true);
+
+            // With <=> NULL matches NULL: left side salts NULLs at random, so right side must
+            // give its NULLs one copy per salt value
+            String sql = "select * from t0 left join t1 on t0.v1 <=> t1.v4";
+            String plan = getFragmentPlan(sql);
+            assertCContains(plan, "IS NULL THEN");
+            assertCContains(plan, """
+                      |  <slot 9> : [NULL]
+                    """);
+            // Right side must join the salt table null-safe, so its NULLs match the NULL skew value
+            assertCContains(plan, "equal join conjunct: 4: v4 <=> 10: unnest");
+        } finally {
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(oldThreshold);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(oldEnableStats);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(oldEnableRewrite);
+            connectContext.getGlobalStateMgr().setStatisticStorage(oldStatisticsStorage);
+        }
+    }
+
+    @Test
+    void testSkewJoinNullSafeNoNullSaltWhenOtherSideHasTooManyNulls() throws Exception {
+        final var oldStatisticsStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        final double oldThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
+        final boolean oldEnableStats = connectContext.getSessionVariable().isEnableStatsToOptimizeSkewJoin();
+        final boolean oldEnableRewrite = connectContext.getSessionVariable().isEnableOptimizerSkewJoinOptimizeV1();
+        final long oldMaxOverlap = connectContext.getSessionVariable().getSkewJoinMaxOtherSideOverlapRowCount();
+        try {
+            final var emptyStatisticsStorage = new EmptyStatisticStorage() {
+                @Override
+                public ColumnStatistic getColumnStatistic(Table table, String column) {
+                    if (table.getName().equalsIgnoreCase("t0") && column.equalsIgnoreCase("v1")) {
+                        return ColumnStatistic.builder() //
+                                .setNullsFraction(0.8) //
+                                .build();
+                    }
+
+                    return ColumnStatistic.builder() //
+                            .setNullsFraction(0.5) //
+                            .build();
+                }
+            };
+            setTableStatistics(getOlapTable("t0"), 1337);
+            setTableStatistics(getOlapTable("t1"), 1337);
+            connectContext.getGlobalStateMgr().setStatisticStorage(emptyStatisticsStorage);
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.1);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(true);
+            connectContext.getSessionVariable().setSkewJoinMaxOtherSideOverlapRowCount(0);
+
+            // With <=> the other side's NULLs would get one copy per salt value which is too many
+            // then join shall not be rewritten
+            String sql = "select * from t0 left join t1 on t0.v1 <=> t1.v4";
+            String plan = getFragmentPlan(sql);
+            assertNotContains(plan, "rand_col");
+
+            // With = the other side's NULLs never join and are never copied, so the guard must not apply.
+            sql = "select * from t0 left join t1 on t0.v1 = t1.v4";
+            plan = getFragmentPlan(sql);
+            assertCContains(plan, "rand_col");
+        } finally {
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(oldThreshold);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(oldEnableStats);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(oldEnableRewrite);
+            connectContext.getGlobalStateMgr().setStatisticStorage(oldStatisticsStorage);
+            connectContext.getSessionVariable().setSkewJoinMaxOtherSideOverlapRowCount(oldMaxOverlap);
+        }
+    }
+
+    @Test
     void testSkewJoinWithMcvOnlySkewByStats() throws Exception {
         final var oldStatisticsStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
         final double oldThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
@@ -439,6 +534,55 @@ public class SkewJoinTest extends PlanTestBase {
             assertCContains(plan, "rand_col = ");
             assertCContains(plan, "unnest");
             assertCContains(plan, "generate_serials");
+            // MCV-only
+            assertCContains(plan, """
+                      |  <slot 9> : [11,22]
+                    """);
+        } finally {
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(oldThreshold);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(oldEnableStats);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(oldEnableRewrite);
+            connectContext.getGlobalStateMgr().setStatisticStorage(oldStatisticsStorage);
+        }
+    }
+
+    @Test
+    void testSkewJoinNullSafeWithMcvOnlySkewDoesNotSaltNulls() throws Exception {
+        final var oldStatisticsStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        final double oldThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
+        final boolean oldEnableStats = connectContext.getSessionVariable().isEnableStatsToOptimizeSkewJoin();
+        final boolean oldEnableRewrite = connectContext.getSessionVariable().isEnableOptimizerSkewJoinOptimizeV1();
+        try {
+            final var emptyStatisticsStorage = new EmptyStatisticStorage() {
+                @Override
+                public ColumnStatistic getColumnStatistic(Table table, String column) {
+                    if (table.getName().equalsIgnoreCase("t0") && column.equalsIgnoreCase("v1")) {
+                        return ColumnStatistic.builder() //
+                                .setNullsFraction(0.01) //
+                                .setHistogram(new Histogram(List.of(), Map.of("11", 400L, "22", 200L))) // MCV skew
+                                .build();
+                    }
+
+                    return ColumnStatistic.builder() //
+                            .setNullsFraction(0.0) //
+                            .build();
+                }
+            };
+            setTableStatistics(getOlapTable("t0"), 1337);
+            setTableStatistics(getOlapTable("t1"), 1337);
+            connectContext.getGlobalStateMgr().setStatisticStorage(emptyStatisticsStorage);
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.1);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(true);
+
+            // NULL is not a skew value, so right side must will not replicate its NULLs
+            // left side must keep its NULLs at salt 0 too otherwise NULL matches get lost
+            String sql = "select * from t0 left join t1 on t0.v1 <=> t1.v4";
+            String plan = getFragmentPlan(sql);
+
+            // Rewrite should add rand_col equality and build skew value salt infra
+            assertCContains(plan, "rand_col = ");
+            assertNotContains(plan, "IS NULL THEN");
             // MCV-only
             assertCContains(plan, """
                       |  <slot 9> : [11,22]
