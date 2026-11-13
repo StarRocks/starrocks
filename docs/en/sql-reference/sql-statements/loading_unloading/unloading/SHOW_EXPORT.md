@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW EXPORT queries the execution information of export jobs that meet the specified conditions."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW EXPORT

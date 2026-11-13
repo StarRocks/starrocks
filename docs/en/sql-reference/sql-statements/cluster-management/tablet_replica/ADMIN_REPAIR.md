@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Attempts to repair the specified table or partitions."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ADMIN REPAIR

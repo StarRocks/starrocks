@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Intercepts elements from a Bitmap value within the range of start_range and end_range (exclusive)."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_subset_in_range

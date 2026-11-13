@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "StarRocks のメモリ分類、管理戦略、jemalloc 統計、メモリ制限設定について説明します。"
 sidebar_position: 40
+products: [oss, enterprise, anywhere]
 ---
 
 # メモリ管理

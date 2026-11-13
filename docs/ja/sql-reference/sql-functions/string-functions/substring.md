@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された位置から指定した長さのサブストリングを抽出します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # substring, substr

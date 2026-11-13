@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "PAUSED 状態の Routine Load ジョブを変更します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ALTER ROUTINE LOAD

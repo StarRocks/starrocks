@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 60
 description: "How to obtain and analyze text-based Query Profiles in StarRocks to diagnose slow query execution."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Explain Analyze

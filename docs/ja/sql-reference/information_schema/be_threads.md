@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "be_threadsは各BEノードで実行されているスレッドに関する情報を提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # be_threads

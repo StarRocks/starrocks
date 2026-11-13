@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "CREATE USER creates a StarRocks user."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 创建用户

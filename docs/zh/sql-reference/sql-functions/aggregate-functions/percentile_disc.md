@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "percentile_disc 计算百分位数，未找到匹配值时返回较大的相邻值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_disc

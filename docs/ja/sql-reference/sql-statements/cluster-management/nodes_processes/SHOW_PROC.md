@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks クラスターの特定の指標を表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW PROC

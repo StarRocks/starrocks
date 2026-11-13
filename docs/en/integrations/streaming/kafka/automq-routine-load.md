@@ -2,6 +2,7 @@
 sidebar_position: 30
 displayed_sidebar: docs
 description: "How to load data into StarRocks from AutoMQ Kafka using Routine Load."
+products: [oss, enterprise, anywhere]
 ---
 
 # AutoMQ Kafka

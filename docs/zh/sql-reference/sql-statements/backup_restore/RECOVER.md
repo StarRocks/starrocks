@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "恢复之前通过 DROP 操作删除的 database、table 或 partition。"
 keywords: ['beifen']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # RECOVER

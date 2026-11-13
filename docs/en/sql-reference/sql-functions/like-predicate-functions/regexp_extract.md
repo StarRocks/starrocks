@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the first substring in a string that matches the specified regular expression pattern."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';

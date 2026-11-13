@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "値の平方根を計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # sqrt, dsqrt

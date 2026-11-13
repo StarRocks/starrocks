@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the standard deviation of an expression."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # std

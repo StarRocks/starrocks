@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DataX での INSERT サポート、キーワードのバッククォート囲み方法。"
+products: [oss, enterprise]
 ---
 
 # DataX

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW TABLET displays tablet related information for debugging and administration."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW TABLET

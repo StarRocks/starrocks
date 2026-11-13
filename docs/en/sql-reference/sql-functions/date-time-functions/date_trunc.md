@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Truncates a time value based on the specified date part, such as year, day, hour, or minute."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date_trunc

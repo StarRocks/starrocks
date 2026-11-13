@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 hide_table_of_contents: true
 description: "Alphabetical d - h"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 指标 d 到 h

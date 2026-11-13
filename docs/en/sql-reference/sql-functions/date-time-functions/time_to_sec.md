@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a time value into the number of seconds."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # time_to_sec

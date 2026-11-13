@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the interval from datetime_expr2 to datetime_expr1."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # timestampdiff

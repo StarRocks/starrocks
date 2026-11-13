@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns 1 if a string starts with the specified prefix, or 0 otherwise."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # starts_with

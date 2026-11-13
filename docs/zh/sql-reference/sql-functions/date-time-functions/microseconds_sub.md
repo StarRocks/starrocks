@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "从日期时间中减去指定的微秒数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # microseconds_sub

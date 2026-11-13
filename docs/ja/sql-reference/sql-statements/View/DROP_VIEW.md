@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP VIEW deletes a logical view from StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ビューの削除

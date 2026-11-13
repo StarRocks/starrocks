@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP CATALOG 用于删除指定的 external catalog。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP CATALOG

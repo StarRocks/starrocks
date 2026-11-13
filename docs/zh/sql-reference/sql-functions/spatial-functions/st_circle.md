@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将 WKT 转换为地球球面上的圆。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ST_Circle

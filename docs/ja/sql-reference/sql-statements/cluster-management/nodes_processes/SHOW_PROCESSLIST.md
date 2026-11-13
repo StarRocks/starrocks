@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW PROCESSLIST は、サーバー内で実行中のスレッドが現在実行している操作を一覧表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW PROCESSLIST

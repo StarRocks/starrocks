@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 10
 description: "Query tuning is essential for achieving high performance and reliability in StarRocks."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Introduction to Query Tuning

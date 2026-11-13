@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "expr 式の最大値を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # max

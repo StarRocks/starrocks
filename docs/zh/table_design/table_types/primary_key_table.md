@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "How to create and use Primary Key tables in StarRocks for real-time upsert and delete with consistency, supporting efficient ad-hoc queries."
 keywords: ['zhujian']
 sidebar_position: 20
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 主键表

@@ -3,6 +3,7 @@ sidebar_position: 90
 displayed_sidebar: docs
 description: "诊断和排查 StarRocks FE 堆内存问题。"
 sidebar_label: "FE 内存 FAQ"
+products: [oss, enterprise]
 ---
 
 # FE 堆内存故障排查

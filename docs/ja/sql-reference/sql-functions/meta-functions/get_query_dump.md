@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "デバッグ目的でクエリのダンプを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # get_query_dump

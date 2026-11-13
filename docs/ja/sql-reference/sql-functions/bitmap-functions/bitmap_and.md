@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "2つの入力ビットマップの交差を計算し、新しいビットマップを返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_and

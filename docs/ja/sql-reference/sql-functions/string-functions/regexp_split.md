@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "文字列を正規表現パターンで分割し、最大指定要素数のARRAY<VARCHAR>を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # regexp_split

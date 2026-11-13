@@ -3,6 +3,7 @@ sidebar_position: 50
 displayed_sidebar: docs
 description: "通过 SQL 接口监控数据导入作业状态、识别性能瓶颈和排查 StarRocks 导入异常。"
 sidebar_label: Troubleshooting
+products: [oss, enterprise, anywhere]
 ---
 
 # 数据导入故障排查

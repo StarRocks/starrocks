@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "be_txnsは各BEノード上のトランザクションに関する情報を提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # be_txns

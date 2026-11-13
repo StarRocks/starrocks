@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 2.3：永続的 Primary Key インデックス、Primary Key テーブルの DELETE WHERE、取り込み時のグローバル辞書更新、非同期 CREATE TABLE。"
+products: [oss]
 ---
 
 # StarRocks version 2.3

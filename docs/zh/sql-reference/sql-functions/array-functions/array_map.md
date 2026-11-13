@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "array_map()是高阶函数，使用Lambda函数对数组进行转换并返回新数组。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_map

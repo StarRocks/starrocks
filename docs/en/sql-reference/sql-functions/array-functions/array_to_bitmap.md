@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts an array into BITMAP values."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_to_bitmap

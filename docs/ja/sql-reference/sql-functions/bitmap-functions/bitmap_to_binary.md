@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Bitmap 値を Binary 文字列に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_to_binary

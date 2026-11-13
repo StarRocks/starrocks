@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the 1-based position of a string within a comma-separated list."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # find_in_set

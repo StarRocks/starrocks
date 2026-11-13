@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Thrift ルール：フィールドの required 指定禁止、順序変更禁止、命名規則。"
+products: [oss]
 ---
 
 # 規則

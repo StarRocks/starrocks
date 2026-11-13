@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "LIMIT clause limits the maximum number of rows returned in query results."
 sidebar_label: "LIMIT"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # LIMIT

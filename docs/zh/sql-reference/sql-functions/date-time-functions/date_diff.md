@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据指定的时间单位返回两个日期的差值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date_diff

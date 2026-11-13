@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 sidebar_position: 0.9
 description: "Lambda expressions are anonymous functions that can be passed as parameters into higher-order SQL functions."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Lambda expression

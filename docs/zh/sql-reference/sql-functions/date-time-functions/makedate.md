@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据给定的年份和天数值构造一个日期。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # makedate

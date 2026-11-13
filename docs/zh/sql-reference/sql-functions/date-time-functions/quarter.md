@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回给定日期值对应的季度，取值范围 1 到 4。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # quarter

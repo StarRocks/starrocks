@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ANALYZE PROFILE 以 Fragment 为单位分析指定 Query Profile，以树形结构展示。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ANALYZE PROFILE

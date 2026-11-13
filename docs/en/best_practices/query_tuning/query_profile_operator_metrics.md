@@ -3,6 +3,7 @@ displayed_sidebar: docs
 keywords: ['profile', 'query', 'metric']
 sidebar_position: 80
 description: "Reference for all raw metrics emitted by StarRocks Query Profile, organized by operator type."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Query Profile Metrics

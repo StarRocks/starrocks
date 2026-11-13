@@ -4,6 +4,7 @@ displayed_sidebar: docs
 toc_max_heading_level: 5
 description: "StarRocks Iceberg Catalog のデータベース、テーブル、ビュー作成を含む DDL 操作。"
 keywords: ['iceberg', 'ddl', 'create table', 'alter table', 'create database', 'drop table', 'create view', 'alter view']
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Iceberg DDL 操作

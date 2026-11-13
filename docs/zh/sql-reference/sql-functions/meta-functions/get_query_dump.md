@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回SQL查询的调试转储，包括表架构、统计信息和会话变量。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # get_query_dump

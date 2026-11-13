@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将多个数组拼接成一个包含所有元素的数组。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_concat

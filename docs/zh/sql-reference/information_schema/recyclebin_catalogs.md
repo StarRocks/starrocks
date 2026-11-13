@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "recyclebin_catalogs 提供 FE 回收站中已删除对象的元数据信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # recyclebin_catalogs

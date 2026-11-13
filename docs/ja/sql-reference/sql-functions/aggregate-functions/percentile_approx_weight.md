@@ -1,6 +1,10 @@
 ---
+<<<<<<< HEAD
 displayed_sidebar: docs
 description: "指定されたパーセンタイルの加重近似値を返します。PERCENTILE_APPROX の重み付きバージョンで、各入力値に重みを指定できます。"
+=======
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # percentile_approx_weight

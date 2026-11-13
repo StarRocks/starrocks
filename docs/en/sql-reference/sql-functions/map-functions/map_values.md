@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns an array of all the values in the specified map."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # map_values

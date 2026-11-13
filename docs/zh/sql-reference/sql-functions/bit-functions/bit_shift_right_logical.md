@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "通过逻辑右移将数值的二进制表示向右移动指定的位数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bit_shift_right_logical

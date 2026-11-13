@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "native_query は JDBC カタログテーブル関数です。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # native_query

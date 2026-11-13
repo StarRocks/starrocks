@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算两个日期时间表达式之间相差的年数，精确到年。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # years_diff

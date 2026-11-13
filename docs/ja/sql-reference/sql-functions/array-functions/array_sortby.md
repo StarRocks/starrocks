@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "別の配列またはラムダ式から変換された配列の昇順に基づいて配列内の要素をソートします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_sortby

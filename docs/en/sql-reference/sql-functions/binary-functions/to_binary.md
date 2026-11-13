@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a VARCHAR string to a binary value based on the specified binary format (binary_type) of the input string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # to_binary

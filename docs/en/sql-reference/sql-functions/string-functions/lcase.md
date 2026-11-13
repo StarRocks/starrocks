@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a string to lowercase; alias of lower."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # lcase

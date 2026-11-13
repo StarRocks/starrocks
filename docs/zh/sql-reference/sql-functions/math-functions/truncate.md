@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将数值x四舍五入到小数点后y位。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # truncate

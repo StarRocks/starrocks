@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 description: "View and monitor running queries in StarRocks using current_queries and related views, analyze resource consumption, and cancel long-running queries."
 sidebar_position: 9
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 実行中のクエリを表示

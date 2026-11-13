@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "计算参数的平方。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SQUARE

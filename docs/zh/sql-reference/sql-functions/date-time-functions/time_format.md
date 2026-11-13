@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "按指定格式格式化TIME类型时间值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # time_format

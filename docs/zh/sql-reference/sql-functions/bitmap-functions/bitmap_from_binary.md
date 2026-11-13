@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将特定格式的 Varbinary 字符串转换为 Bitmap。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_from_binary

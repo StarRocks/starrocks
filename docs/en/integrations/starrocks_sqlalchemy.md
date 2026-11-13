@@ -3,6 +3,7 @@ sidebar_position: 120
 displayed_sidebar: docs
 description: "How to manage StarRocks schemas using SQLAlchemy, Alembic, and sqlacodegen for schema migration."
 sidebar_label: Schema Migration
+products: [oss, enterprise, anywhere]
 ---
 
 # Schema Management and Migration with SQLAlchemy and Alembic

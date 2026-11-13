@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ラジアン単位の角度を度に変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # degrees

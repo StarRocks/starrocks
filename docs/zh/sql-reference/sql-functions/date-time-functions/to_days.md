@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回指定日期距离0000-01-01的天数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # to_days

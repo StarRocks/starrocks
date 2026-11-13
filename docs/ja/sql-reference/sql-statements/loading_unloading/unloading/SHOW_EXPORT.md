@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定した条件を満たすエクスポートジョブの実行情報をクエリします。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW EXPORT

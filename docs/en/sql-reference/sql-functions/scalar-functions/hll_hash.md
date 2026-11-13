@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Converts a value to an hll type."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # hll_hash

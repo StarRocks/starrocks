@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 2.4 release notes: asynchronous materialized views on multiple base tables, INSERT OVERWRITE, stateless Compute Nodes on Kubernetes, non-equi..."
+products: [oss]
 ---
 
 # StarRocks version 2.4

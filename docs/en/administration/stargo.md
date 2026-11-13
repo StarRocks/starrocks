@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarGo is a command line tool for multiple StarRocks clusters management."
+products: [oss]
 ---
 
 # Deploy and Manage StarRocks with StarGo

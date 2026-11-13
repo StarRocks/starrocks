@@ -3,6 +3,7 @@ displayed_sidebar: docs
 description: "Reference index for asynchronous materialized view SQL statements (CREATE, ALTER, REFRESH, DROP) and system views for monitoring in StarRocks."
 sidebar_position: 20
 sidebar_label: "関連リファレンス"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 非同期マテリアライズドビューリファレンス

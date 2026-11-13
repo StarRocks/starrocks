@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks が提供する多くのシステム変数の設定と変更について説明。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # システム変数

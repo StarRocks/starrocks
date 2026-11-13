@@ -1,6 +1,7 @@
 ---
 sidebar_position: 40
 description: "主键表使用了由 StarRocks 设计的新存储引擎。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 主键表

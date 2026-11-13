@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "移除数组中的重复元素。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_distinct

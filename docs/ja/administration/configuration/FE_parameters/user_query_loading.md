@@ -3,6 +3,7 @@ sidebar_position: 20
 displayed_sidebar: docs
 description: "FE 設定パラメーター：認証、クエリ実行、データロードに関連する設定項目。"
 sidebar_label: "認証、クエリ、およびロード"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # FE 設定 - 認証、クエリ、およびロード

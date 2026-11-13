@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "値をJSON型とSQL型の間で変換します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # cast

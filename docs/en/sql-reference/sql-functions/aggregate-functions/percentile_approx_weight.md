@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the approximation of the p-th percentile with weight. A weighted version of PERCENTILE_APPROX that accepts a weight column or constant for each..."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_approx_weight

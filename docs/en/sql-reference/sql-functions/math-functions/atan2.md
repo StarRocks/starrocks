@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the arc tangent of x divided by y, that is, the arc tangent of x/y."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # atan2

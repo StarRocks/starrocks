@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "PERCENTILE_CONT関数は線形補間によるパーセンタイル値を計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_cont

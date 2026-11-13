@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "array_repeat returns an array containing a given element repeated a specified number of times."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_repeat

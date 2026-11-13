@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "stream_loads provides information about stream load jobs."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # stream_loads

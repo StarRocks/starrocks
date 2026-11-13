@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 description: "STREAM LOAD allows you to load data from a local file system or a streaming data source."
+products: [oss, enterprise, cloud, anywhere]
 ---
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';
 import TableURLTip from '../../../_assets/commonMarkdown/stream_load_table_url_tip.mdx';

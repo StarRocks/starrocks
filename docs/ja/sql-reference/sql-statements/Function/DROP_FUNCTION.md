@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "DROP FUNCTION deletes a custom function by matching name and parameter types."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # DROP FUNCTION

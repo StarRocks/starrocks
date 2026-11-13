@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回字符串的字符数，支持多字节字符和 UTF-8 编码。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # char_length

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW SQLBLACKLIST は、SQL ブラックリストにある SQL 正規表現を表示します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW SQLBLACKLIST

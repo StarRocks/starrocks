@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Calculate the ngram similarity of the two strings."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ngram_search

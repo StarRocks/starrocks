@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
 description: "将 WKT（Well Known Text）转换为对应的内存几何形式。"
+=======
+description: "使用显式 CRS 从 WKT 构造原生 GEOMETRY，或使用旧版单参数格式。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ST_GeometryFromText, ST_GeomFromText

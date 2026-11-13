@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 description: "STREAM LOADを使用すると、ローカルファイルシステムまたはストリーミングデータソースからデータをロードできます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.mdx';

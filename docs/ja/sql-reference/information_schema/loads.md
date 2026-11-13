@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "loadsはロードジョブの結果を提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ロード

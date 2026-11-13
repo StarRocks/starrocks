@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns a slice of an array."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_slice

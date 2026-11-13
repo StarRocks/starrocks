@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the type name of a VARIANT value as a string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # variant_typeof

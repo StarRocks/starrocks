@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the value that corresponds to a specified percentile from x."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # percentile_approx_raw

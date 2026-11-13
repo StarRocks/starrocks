@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
 description: "StarRocks 4.1 リリースノート: マルチテナント範囲ベース tablet 自動分割、大容量 tablet サポート、Fast Schema Evolution V2。"
+=======
+description: "StarRocks 4.1 リリースノート：マルチテナントのレンジベース tablet 自動分割、大容量 tablet サポート（100 GB 目標）、Fast Schema Evolution V2 など..."
+products: [oss]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # StarRocks version 4.1

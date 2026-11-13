@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "現在の日付と時刻を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # now, current_timestamp, localtime, localtimestamp

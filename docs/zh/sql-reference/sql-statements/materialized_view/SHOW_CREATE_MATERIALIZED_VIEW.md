@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "查看指定异步物化视图的定义。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW CREATE MATERIALIZED VIEW

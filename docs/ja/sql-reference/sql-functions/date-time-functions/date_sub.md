@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された時間間隔を日付から減算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date_sub,subdate

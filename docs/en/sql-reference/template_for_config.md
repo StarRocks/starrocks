@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 unlisted: true
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # Template for writing FE/BE parameters and variables

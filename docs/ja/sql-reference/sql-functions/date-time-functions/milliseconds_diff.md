@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "開始日と終了日の時間差をミリ秒で返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # milliseconds_diff

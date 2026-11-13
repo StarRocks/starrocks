@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "若 expr1 与 expr2 相等，返回 NULL，否则返回 expr1。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # nullif

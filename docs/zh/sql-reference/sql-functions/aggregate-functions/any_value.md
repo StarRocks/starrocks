@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "any_value 在 GROUP BY 聚合中从每个分组中随机选择一行返回。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # any_value

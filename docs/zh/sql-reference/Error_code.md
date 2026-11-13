@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "StarRocks 查询请求常见错误码参考。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # 错误码

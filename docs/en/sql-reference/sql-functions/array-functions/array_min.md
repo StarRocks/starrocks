@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the minimum value among all elements in an ARRAY."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_min

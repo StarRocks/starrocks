@@ -2,6 +2,7 @@
 sidebar_position: 10
 displayed_sidebar: docs
 description: "部署 StarRocks 前的硬件和软件要求，包括 CPU、内存、存储和网络配置。"
+products: [oss]
 ---
 
 # 部署前提条件

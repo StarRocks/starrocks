@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
 description: "将几何图形转换为 WKT（Well Known Text）格式。"
+=======
+description: "将 GEOMETRY 或 GEOGRAPHY 值转换为 WKT（Well-Known Text）格式。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # ST_AsText, ST_AsWKT

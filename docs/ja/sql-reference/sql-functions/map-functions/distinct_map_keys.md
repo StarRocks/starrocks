@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "マップから重複するキーを削除します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # distinct_map_keys

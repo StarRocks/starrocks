@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "ARRAY_LENGTH関数は配列内の要素数を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_length

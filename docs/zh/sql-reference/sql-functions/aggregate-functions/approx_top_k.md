@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "approx_top_k 返回表达式中最常出现的 k 个项目及其近似出现次数。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # approx_top_k

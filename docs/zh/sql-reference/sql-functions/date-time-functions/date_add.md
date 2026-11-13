@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "向日期添加指定的时间间隔。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date_add,adddate

@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された日数を日付または日時から引いて、新しい日時を取得します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # days_sub

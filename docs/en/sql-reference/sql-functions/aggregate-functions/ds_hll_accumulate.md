@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Accumulates values into a DataSketches HyperLogLog (HLL) sketch and returns the serialized sketch as VARBINARY for approximate distinct counting."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # ds_hll_accumulate

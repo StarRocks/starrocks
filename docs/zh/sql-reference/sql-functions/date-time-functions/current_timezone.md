@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "获取当前时区，以 VARCHAR 类型返回。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # current_timezone

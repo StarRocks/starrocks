@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "返回表达式的样本标准差，支持作为窗口函数使用。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # stddev_samp

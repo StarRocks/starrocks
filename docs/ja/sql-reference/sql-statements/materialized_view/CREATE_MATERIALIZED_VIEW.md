@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "同期および非同期マテリアライズドビューを作成します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # CREATE MATERIALIZED VIEW

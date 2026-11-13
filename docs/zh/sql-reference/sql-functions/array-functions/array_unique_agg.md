@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "将列中的distinct值（包括NULL）聚合成数组。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # array_unique_agg

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+products: [oss, enterprise, anywhere]
 description: "Cancels an ongoing RESTORE task in a specified database."
 ---
 

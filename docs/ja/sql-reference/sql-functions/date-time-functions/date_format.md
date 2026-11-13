@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された単位で 2 つの日付値の差を返します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # date_format

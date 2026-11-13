@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Returns the 32-bit murmur3 hash value of the input string."
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # murmur_hash3_32

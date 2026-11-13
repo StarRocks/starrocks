@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "pipesは現在のまたは指定されたデータベースに保存されているすべてのパイプに関する情報を提供します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # pipes

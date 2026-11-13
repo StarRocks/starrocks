@@ -1,6 +1,11 @@
 ---
 displayed_sidebar: docs
+<<<<<<< HEAD
 description: "VARIANT 类型仅支持 Iceberg Catalog 中的表。"
+=======
+description: "VARIANT 类型仅支持 Iceberg Catalog 和 Paimon Catalog 中的表。"
+products: [oss, enterprise, cloud, anywhere]
+>>>>>>> 7fbe5e8 ([Doc] Add the products frontmatter line to the docs pages (#83243))
 ---
 
 # VARIANT

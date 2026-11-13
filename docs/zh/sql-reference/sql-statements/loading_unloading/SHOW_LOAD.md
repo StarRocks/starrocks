@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "查看数据库中指定导入作业的相关信息，包括 Broker Load、INSERT 和 Spark Load。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW LOAD

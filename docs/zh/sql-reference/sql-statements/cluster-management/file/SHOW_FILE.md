@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "SHOW FILE 查看保存在数据库中的文件的信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # SHOW FILE

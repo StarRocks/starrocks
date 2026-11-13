@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "グループ化後のビットマップの共通部分を計算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # bitmap_intersect

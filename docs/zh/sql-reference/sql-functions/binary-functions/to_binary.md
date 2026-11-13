@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据指定的二进制格式将 VARCHAR 字符串转换为二进制值。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # to_binary

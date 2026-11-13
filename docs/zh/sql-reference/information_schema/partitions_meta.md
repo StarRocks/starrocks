@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "partitions_meta 提供表分区的信息。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # partitions_meta

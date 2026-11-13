@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "VAR_SAMP関数は標本分散を返し、v2.5.10以降はウィンドウ関数としても使用できます。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # var_samp,variance_samp

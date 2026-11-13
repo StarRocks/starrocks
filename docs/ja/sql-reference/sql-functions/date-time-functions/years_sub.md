@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "指定された年数を日時値または日付値から減算します。"
+products: [oss, enterprise, cloud, anywhere]
 ---
 
 # years_sub
