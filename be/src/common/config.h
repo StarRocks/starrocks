@@ -1688,10 +1688,10 @@ CONF_mBool(starlet_write_file_with_tag, "false");
 // Capacity of the shared-data tablet metadata cache, as a percentage of the process memory limit, clamped to
 // [0, 100]. The cache holds tablet metadata and txn logs, apart from the segment metadata cache, so that segments
 // loaded by queries and compactions cannot evict them. Set to 0 to disable the cache.
-CONF_mInt32(lake_tablet_metadata_cache_limit_percent, "10");
+CONF_mInt32(lake_tablet_metadata_cache_limit_percent, "5");
 // Capacity of the shared-data segment metadata cache, as a percentage of the process memory limit, clamped to
 // [0, 100]. The cache holds opened segments, delete vectors and tablet schemas. Set to 0 to disable the cache.
-CONF_mInt32(lake_segment_metadata_cache_limit_percent, "20");
+CONF_mInt32(lake_segment_metadata_cache_limit_percent, "10");
 // Tracked memory budget for synchronously processing one dump_tablet_metadata request. It uses the standard
 // MemTracker accounting granularity. New requests fail closed when the value is non-positive.
 CONF_mInt64(lake_dump_tablet_metadata_per_request_memory_limit_bytes, "268435456");
