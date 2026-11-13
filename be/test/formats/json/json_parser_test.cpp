@@ -21,6 +21,7 @@
 #include <initializer_list>
 #include <memory>
 #include <numeric>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -1672,6 +1673,208 @@ TEST_F(JsonParserTest, test_debezium_json_document_stream_parser_error_cases) {
         ASSERT_TRUE(st.is_data_quality_error());
         std::string message(st.message());
         ASSERT_NE(nullptr, std::strstr(message.c_str(), "Failed to parse Debezium JSON envelope"));
+    }
+}
+
+TEST_F(JsonParserTest, array_parser_rejects_buffer_without_simdjson_padding) {
+    std::string unpadded = R"([{"k":1}])";
+    simdjson::ondemand::parser sp;
+    JsonArrayParser parser(&sp);
+    EXPECT_FALSE(parser.parse(unpadded.data(), unpadded.size(), unpadded.size()).ok());
+
+    std::string padded = unpadded;
+    padded.resize(unpadded.size() + simdjson::SIMDJSON_PADDING);
+    EXPECT_OK(parser.parse(padded.data(), unpadded.size(), padded.size()));
+
+    // simdjson 5.x also accepts >= SIMDJSON_PADDING trailing whitespace inside len.
+    std::string ws = unpadded + std::string(simdjson::SIMDJSON_PADDING, ' ');
+    EXPECT_OK(parser.parse(ws.data(), ws.size(), ws.size()));
+}
+
+TEST_F(JsonDocumentStreamParserTest, seeded_recoverable_error_stream_oracle) {
+    auto extract_row = [](simdjson::ondemand::object* row, std::string* id_out) -> bool {
+        try {
+            id_out->clear();
+            for (auto field : *row) {
+                std::string_view key = field.unescaped_key();
+                simdjson::ondemand::value val = field.value();
+                if (key == "k1") {
+                    std::string_view sv = val.get_string();
+                    id_out->assign(sv);
+                } else if (key == "k2") {
+                    [[maybe_unused]] int64_t v = val.get_int64();
+                }
+            }
+            return true;
+        } catch (simdjson::simdjson_error&) {
+            std::string_view sv;
+            (void)!row->raw_json().get(sv);
+            return false;
+        }
+    };
+
+    std::mt19937 rng(12345);
+    const int32_t batch_sizes[] = {64, 257, 1000000};
+    const char* eols[] = {"\n", "\r\n", "\n\n", " \n", "\t\n"};
+
+    for (int iter = 0; iter < 500; ++iter) {
+        int nlines = 1 + static_cast<int>(rng() % 30);
+        std::string buf;
+        std::vector<std::string> expected_ids;
+        int64_t expected_filtered = 0;
+        for (int i = 0; i < nlines; ++i) {
+            size_t pad_len = (rng() % 4 == 0) ? (rng() % 240) : (rng() % 12);
+            std::string id = "id" + std::to_string(i) + "_";
+            id.reserve(id.size() + pad_len);
+            for (size_t p = 0; p < pad_len; ++p) {
+                id.push_back(static_cast<char>('a' + (rng() % 26)));
+            }
+            int kind = static_cast<int>(rng() % 7);
+            std::string line;
+            bool valid = false;
+            switch (kind) {
+            case 0:
+            case 1:
+            case 2:
+                line = "{\"k1\":\"" + id + "\",\"k2\":" + std::to_string(static_cast<int>(rng() % 1000)) + "}";
+                valid = true;
+                break;
+            case 3:
+                line = "{\"k1\":\"" + id + "\",\"k2\":}";
+                break;
+            case 4:
+                line = "{\"k1\":\"" + id + "\",\"k2\":tru}";
+                break;
+            case 5:
+                line = "{\"k1\":\"" + id + "\" \"k2\":9}";
+                break;
+            case 6:
+                line = "{\"k1\":\"" + id + "\",\"k2\":\"notnum\"}";
+                break;
+            }
+            buf += line;
+            if (i + 1 < nlines || (rng() % 2 == 0)) {
+                buf += eols[rng() % 5];
+            }
+            if (valid) {
+                expected_ids.push_back(id);
+            } else {
+                ++expected_filtered;
+            }
+        }
+
+        for (int32_t batch_sz : batch_sizes) {
+            config::json_parse_many_batch_size = batch_sz;
+            std::string padded = buf;
+            padded.resize(buf.size() + simdjson::SIMDJSON_PADDING, '\0');
+            JsonDocumentStreamParser parser(&_simdjson_parser);
+            ASSERT_OK(parser.parse(padded.data(), buf.size(), padded.size()));
+
+            std::vector<std::string> actual_ids;
+            int64_t actual_filtered = 0;
+            Status st;
+            while (true) {
+                simdjson::ondemand::object row;
+                st = parser.get_current(&row);
+                if (st.is_end_of_file()) {
+                    if (!parser.truncated_tail().empty()) {
+                        ++actual_filtered;
+                    }
+                    break;
+                }
+                if (!st.ok()) {
+                    ++actual_filtered;
+                    break;
+                }
+                std::string id;
+                if (extract_row(&row, &id)) {
+                    actual_ids.push_back(std::move(id));
+                } else {
+                    ++actual_filtered;
+                }
+                st = parser.advance();
+                if (st.is_end_of_file()) {
+                    if (!parser.truncated_tail().empty()) {
+                        ++actual_filtered;
+                    }
+                    break;
+                }
+                if (!st.ok()) {
+                    ++actual_filtered;
+                    break;
+                }
+            }
+            ASSERT_TRUE(st.is_end_of_file()) << "iter=" << iter << " batch_sz=" << batch_sz << " st=" << st;
+            ASSERT_EQ(expected_ids, actual_ids) << "iter=" << iter << " batch_sz=" << batch_sz;
+            ASSERT_EQ(expected_filtered, actual_filtered) << "iter=" << iter << " batch_sz=" << batch_sz;
+        }
+    }
+}
+
+TEST_F(JsonDocumentStreamParserTest, document_stream_parser_multi_isa_equivalence) {
+    const simdjson::implementation* original_impl = simdjson::get_active_implementation();
+    DeferOp restore_impl([original_impl]() { simdjson::get_active_implementation() = original_impl; });
+
+    const std::string input =
+            "{\"k1\":\"\\u6C49\\u5B57\",\"k2\":1}\n"
+            "{\"k1\":\"bad\",\"k2\":}\n"
+            "{\"k1\":\"bad2\" \"k2\":9}\n"
+            "{\"k1\":\"\\uD83D\\uDE00\",\"k2\":2}\n";
+
+    for (const simdjson::implementation* impl : simdjson::get_available_implementations()) {
+        if (impl == nullptr || !impl->supported_by_runtime_system()) {
+            continue;
+        }
+        simdjson::get_active_implementation() = impl;
+        for (int32_t batch_sz : {64, 1000000}) {
+            config::json_parse_many_batch_size = batch_sz;
+            std::string padded = input;
+            padded.resize(input.size() + simdjson::SIMDJSON_PADDING, '\0');
+            simdjson::ondemand::parser local_parser;
+            JsonDocumentStreamParser parser(&local_parser);
+            ASSERT_OK(parser.parse(padded.data(), input.size(), padded.size())) << impl->name();
+
+            std::vector<std::string> loaded_k1;
+            int filtered = 0;
+            faststring str_buf;
+            Status st;
+            while (true) {
+                simdjson::ondemand::object row;
+                st = parser.get_current(&row);
+                if (st.is_end_of_file()) {
+                    break;
+                }
+                ASSERT_OK(st) << impl->name();
+                bool ok = true;
+                std::string k1_val;
+                try {
+                    for (auto field : row) {
+                        std::string_view key = field_unescaped_key_safe(field, &str_buf).value();
+                        simdjson::ondemand::value val = field.value();
+                        if (key == "k1") {
+                            k1_val.assign(value_get_string_safe(&val, &str_buf).value());
+                        } else if (key == "k2") {
+                            [[maybe_unused]] int64_t v = val.get_int64().value();
+                        }
+                    }
+                } catch (simdjson::simdjson_error&) {
+                    ok = false;
+                }
+                if (ok) {
+                    loaded_k1.push_back(std::move(k1_val));
+                } else {
+                    ++filtered;
+                }
+                st = parser.advance();
+                if (st.is_end_of_file()) {
+                    break;
+                }
+                ASSERT_OK(st) << impl->name();
+            }
+            EXPECT_TRUE(st.is_end_of_file()) << impl->name();
+            EXPECT_EQ((std::vector<std::string>{"汉字", "\xF0\x9F\x98\x80"}), loaded_k1) << impl->name();
+            EXPECT_EQ(2, filtered) << impl->name();
+        }
     }
 }
 

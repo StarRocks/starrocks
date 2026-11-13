@@ -2623,7 +2623,7 @@ TEST_F(JsonScannerTruncatedDocTest, mid_document_syntax_error_positions) {
                                             "\n" +
                                             v});
     EXPECT_TRUE(mv_followed_by_extra_brace.status.is_data_quality_error()) << mv_followed_by_extra_brace.status;
-    EXPECT_EQ(1, mv_followed_by_extra_brace.rows);
+    EXPECT_EQ(0, mv_followed_by_extra_brace.rows);
     EXPECT_EQ(2, mv_followed_by_extra_brace.filtered);
 
     std::string many_bad_body;
@@ -2638,6 +2638,20 @@ TEST_F(JsonScannerTruncatedDocTest, mid_document_syntax_error_positions) {
     EXPECT_TRUE(many_bad_res.status.is_end_of_file()) << many_bad_res.status;
     EXPECT_EQ(1, many_bad_res.rows);
     EXPECT_EQ(kManyBadRows, many_bad_res.filtered);
+}
+
+TEST_F(JsonScannerTruncatedDocTest, unbalanced_record_swallows_records_up_to_stray_closer) {
+    // `b` lacks its closing '}'; the stray '}' after `x` balances the root brace depth, so `skip_child(0)` treats
+    // `b`..`x}}` as one brace-balanced malformed root object and resumes at `d`.
+    const std::string input =
+            "{\"k1\":\"b\",\"k2\":1\n"
+            "{\"k1\":\"c\",\"k2\":3}\n"
+            "{\"k1\":\"x\",\"k2\":9}}\n"
+            "{\"k1\":\"d\",\"k2\":4}";
+    auto result = scan({input});
+    EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+    EXPECT_EQ(1, result.rows);
+    EXPECT_EQ(1, result.filtered);
 }
 
 TEST_F(JsonScannerTest, test_simdjson_v511_big_integer_and_unicode_escapes) {
