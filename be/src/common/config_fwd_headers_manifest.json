@@ -949,6 +949,8 @@
         "lake_metadata_fetch_thread_count",
         "lake_tablet_metadata_cache_limit_percent",
         "lake_segment_metadata_cache_limit_percent",
+        "lake_tablet_metadata_cache_min_limit",
+        "lake_segment_metadata_cache_min_limit",
         "lake_dump_tablet_metadata_per_request_memory_limit_bytes",
         "lake_dump_tablet_metadata_per_request_json_size_limit_bytes",
         "lake_dump_tablet_metadata_max_concurrency",

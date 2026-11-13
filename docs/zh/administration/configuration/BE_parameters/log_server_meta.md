@@ -518,7 +518,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：long
 - 单位：百分比 (0-100)
 - 是否动态：是
-- 描述：紧急内存水位，以进程内存限制的百分比表示。当进程内存消耗超过 `(limit * memory_urgent_level / 100)` 时，BE 会触发立即的内存回收，强制缩减 data cache、驱逐 update cache，并将 persistent/lake 的 MemTable 视为“已满”，以便尽快刷写/压缩。代码校验此设置必须大于 `memory_high_level`，且 `memory_high_level` 必须大于或等于 `1` 且小于或等于 `100`。较低的值会导致更激进、更早的回收（即更频繁的缓存驱逐和刷写）；较高的值会延迟回收，如果接近 100 则有 OOM 风险。请与 `memory_high_level` 及 Data Cache 相关的自动调整设置一起调优。
+- 描述：紧急内存水位，以进程内存限制的百分比表示。当进程内存消耗超过 `(limit * memory_urgent_level / 100)` 时，BE 会触发立即的内存回收，强制缩减 data cache 和存算分离的元数据缓存、驱逐 update cache，并将 persistent/lake 的 MemTable 视为“已满”，以便尽快刷写/压缩。代码校验此设置必须大于 `memory_high_level`，且 `memory_high_level` 必须大于或等于 `1` 且小于或等于 `100`。较低的值会导致更激进、更早的回收（即更频繁的缓存驱逐和刷写）；较高的值会延迟回收，如果接近 100 则有 OOM 风险。请与 `memory_high_level` 及 Data Cache 相关的自动调整设置一起调优。
 - 引入版本：v3.2.0
 
 ### net_use_ipv6_when_priority_networks_empty

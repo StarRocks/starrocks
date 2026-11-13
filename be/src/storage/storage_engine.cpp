@@ -646,6 +646,7 @@ void StorageEngine::stop() {
 
     JOIN_THREAD(_update_cache_expire_thread)
     JOIN_THREAD(_update_cache_evict_thread)
+    JOIN_THREAD(_lake_metacache_adjust_thread)
     JOIN_THREAD(_unused_rowset_monitor_thread)
     JOIN_THREAD(_garbage_sweeper_thread)
     JOIN_THREAD(_disk_stat_monitor_thread)

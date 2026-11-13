@@ -326,7 +326,16 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The capacity of the segment metadata cache in a shared-data cluster, as a percentage of the BE process memory limit. This cache holds opened segments (their footers, indexes, and column readers), delete vectors, and tablet schemas. It is separate from the tablet metadata cache (see `lake_tablet_metadata_cache_limit_percent`), so loading many segments does not evict tablet metadata or transaction logs. Values outside the range 0–100 are treated as 0 or 100. Set this item to `0` to disable the cache. Together with `lake_tablet_metadata_cache_limit_percent`, this item replaces `lake_metadata_cache_limit`.
+- Description: The capacity of the segment metadata cache in a shared-data cluster, as a percentage of the BE process memory limit. This cache holds opened segments (their footers, indexes, and column readers), delete vectors, and tablet schemas. It is separate from the tablet metadata cache (see `lake_tablet_metadata_cache_limit_percent`), so loading many segments does not evict tablet metadata or transaction logs. Values outside the range 0–100 are treated as 0 or 100. Set this item to `0` to disable the cache. Together with `lake_tablet_metadata_cache_limit_percent`, this item replaces `lake_metadata_cache_limit`. This value is the largest capacity of the cache: the cache shrinks below it when the BE process runs short of memory (see `lake_tablet_metadata_cache_min_limit`).
+- Introduced in: -
+
+### lake_segment_metadata_cache_min_limit
+
+- Default: 1073741824
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The capacity below which the segment metadata cache in a shared-data cluster does not shrink when it gives memory back under memory pressure (see `lake_tablet_metadata_cache_min_limit`). If this value is larger than the capacity set by `lake_segment_metadata_cache_limit_percent`, the cache stays at that capacity.
 - Introduced in: -
 
 ### lake_shard_info_cache_ttl_sec
@@ -344,7 +353,16 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The capacity of the tablet metadata cache in a shared-data cluster, as a percentage of the BE process memory limit. This cache holds tablet metadata and transaction logs. It is separate from the segment metadata cache (see `lake_segment_metadata_cache_limit_percent`), so loading many segments does not evict them. Values outside the range 0–100 are treated as 0 or 100. Set this item to `0` to disable the cache. Together with `lake_segment_metadata_cache_limit_percent`, this item replaces `lake_metadata_cache_limit`.
+- Description: The capacity of the tablet metadata cache in a shared-data cluster, as a percentage of the BE process memory limit. This cache holds tablet metadata and transaction logs. It is separate from the segment metadata cache (see `lake_segment_metadata_cache_limit_percent`), so loading many segments does not evict them. Values outside the range 0–100 are treated as 0 or 100. Set this item to `0` to disable the cache. Together with `lake_segment_metadata_cache_limit_percent`, this item replaces `lake_metadata_cache_limit`. This value is the largest capacity of the cache: the cache shrinks below it when the BE process runs short of memory (see `lake_tablet_metadata_cache_min_limit`).
+- Introduced in: -
+
+### lake_tablet_metadata_cache_min_limit
+
+- Default: 1073741824
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The capacity below which the tablet metadata cache in a shared-data cluster does not shrink. When the BE process memory usage exceeds `memory_high_level`, the tablet metadata cache and the segment metadata cache lower their capacities below their current usage and evict their least recently used entries. The memory to give back is shared between the two caches in proportion to how far each cache's usage is above its floor (this item and `lake_segment_metadata_cache_min_limit`). The usage above `memory_high_level` is released gradually over about 50 seconds. If the usage also exceeds `memory_urgent_level`, the part above `memory_urgent_level` is released at once. After the usage drops below `memory_high_level`, the capacities grow back over about 200 seconds to the values set by `lake_tablet_metadata_cache_limit_percent` and `lake_segment_metadata_cache_limit_percent`. The check runs every 10 seconds. If this value is larger than the capacity set by `lake_tablet_metadata_cache_limit_percent`, the cache stays at that capacity.
 - Introduced in: -
 
 ### lake_vacuum_enable_task_timeout
@@ -996,7 +1014,7 @@ Enable this option only after **all target CNs** support it. A normalized replic
 - Type: Long
 - Unit: Percent
 - Is mutable: Yes
-- Description: High water memory threshold expressed as a percentage of the process memory limit. When total memory consumption rises above this percentage, BE begins to free memory gradually (currently by evicting data cache and update cache) to relieve pressure. The monitor uses this value to compute memory_high = mem_limit * memory_high_level / 100 and, if consumption `>` memory_high, performs controlled eviction guided by the GC advisor; if consumption exceeds memory_urgent_level (a separate config), more aggressive immediate reductions occur. This value is also consulted to disable certain memory‑intensive operations (for example, primary-key preload) when the threshold is exceeded. Must satisfy validation with memory_urgent_level (memory_urgent_level `>` memory_high_level, memory_high_level `>=` 1, memory_urgent_level `<=` 100).
+- Description: High water memory threshold expressed as a percentage of the process memory limit. When total memory consumption rises above this percentage, BE begins to free memory gradually (currently by evicting data cache and update cache, and by shrinking the shared-data metadata caches) to relieve pressure. The monitor uses this value to compute memory_high = mem_limit * memory_high_level / 100 and, if consumption `>` memory_high, performs controlled eviction guided by the GC advisor; if consumption exceeds memory_urgent_level (a separate config), more aggressive immediate reductions occur. This value is also consulted to disable certain memory‑intensive operations (for example, primary-key preload) when the threshold is exceeded. Must satisfy validation with memory_urgent_level (memory_urgent_level `>` memory_high_level, memory_high_level `>=` 1, memory_urgent_level `<=` 100).
 - Introduced in: v3.2.0
 
 ### report_exec_rpc_request_retry_num
