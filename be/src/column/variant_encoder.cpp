@@ -662,6 +662,14 @@ Status encode_datum_to_variant_value(const Datum& datum, const TypeDescriptor& t
     case TYPE_VARCHAR:
         append_string_value(out, datum.get_slice());
         return Status::OK();
+    case TYPE_VARBINARY: {
+        // A shredded binary typed_value is read as VARBINARY, and so is a UUID one: both are written as a variant
+        // BINARY, which keeps the bytes. The UUID type identity is not kept. Without this case the rebuild of the row
+        // failed with "Unsupported type" and the whole row was lost.
+        const Slice bytes = datum.get_slice();
+        append_string_or_binary_value(out, VariantType::BINARY, std::string_view(bytes.data, bytes.size));
+        return Status::OK();
+    }
     case TYPE_JSON: {
         const JsonValue* json = datum.get_json();
         if (json == nullptr || json->is_null_or_none()) {
