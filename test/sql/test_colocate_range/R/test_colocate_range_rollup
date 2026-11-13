@@ -46,7 +46,7 @@ shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/coloc
 0
 stable=true
 -- !result
-select buckets from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 't1';
+function: print_query_columns("show partitions from t1", "Buckets")
 -- result:
 3
 -- !result
@@ -447,7 +447,7 @@ shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/coloc
 0
 stable=true
 -- !result
-select buckets from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'tp1';
+function: print_query_columns("show partitions from tp1", "Buckets")
 -- result:
 3
 -- !result
@@ -484,9 +484,9 @@ insert into tp1 values (3, 100001, 1), (15, 100002, 2), (25, 100003, 3), (15, 10
 insert into tp2 values (3, 100001, 10), (15, 100002, 20), (25, 100003, 30), (15, 100004, 40);
 -- result:
 -- !result
-select buckets >= 3 from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'tp1' and partition_name = 'p2';
+function: print_query_columns("show partitions from tp1 where PartitionName = 'p2' and Buckets >= 3", "PartitionName")
 -- result:
-1
+p2
 -- !result
 select count(*), sum(v) from tp1;
 -- result:
