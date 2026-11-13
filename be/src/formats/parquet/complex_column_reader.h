@@ -314,6 +314,21 @@ private:
 //   so pointers remain valid after moves. However, the _shredded_fields vector must NOT
 //   be resized after any reader is constructed. Fill the vector fully before calling
 //   any reader construction that captures these addresses.
+// Tells which rows hold an object `typed_value` group, even when every field below it is NULL (an empty object).
+// A group has no column of its own, so its presence is read from the definition levels of one scalar leaf below it:
+// a level at or above the group's own level means the group is present.
+struct ObjectPresenceSource {
+    // Reads the leaf, only for its levels.
+    ColumnReaderPtr reader;
+    // Heap-owned: the reader keeps a pointer to it.
+    std::unique_ptr<TypeDescriptor> read_type;
+    int16_t group_def_level = 0;
+    // batch-local, one flag per row, reset each read_range call. Empty when presence was not read.
+    std::vector<uint8_t> present;
+
+    bool is_present(size_t row) const { return row < present.size() && present[row] != 0; }
+};
+
 struct ShreddedFieldNode {
     enum class Kind : uint8_t { NONE = 0, SCALAR = 1, ARRAY = 2 };
 
@@ -330,6 +345,8 @@ struct ShreddedFieldNode {
     // In this mode, we read element.value as an additional per-element fallback source.
     bool scalar_array_layout = false;
     std::unique_ptr<ColumnReader> array_element_value_reader;
+    // Set for object nodes (typed_value is a group) outside arrays, when a leaf below it can give the levels.
+    std::unique_ptr<ObjectPresenceSource> presence;
 
     // batch-local columns filled during read_range, reset each call.
     ColumnPtr value_column;
@@ -386,6 +403,8 @@ private:
         ColumnReaderPtr root_typed_value_reader;
         std::unique_ptr<TypeDescriptor> root_typed_value_type;
         ColumnPtr root_typed_value_column;
+        // Presence of the root typed_value group when it is an object; set by the factory.
+        std::unique_ptr<ObjectPresenceSource> root_presence;
     };
 
 public:
@@ -430,6 +449,10 @@ public:
     }
 
     ~VariantColumnReader() override = default;
+
+    void set_root_presence(std::unique_ptr<ObjectPresenceSource> presence) {
+        _top_level.root_presence = std::move(presence);
+    }
 
     Status prepare() override;
 
