@@ -6,12 +6,12 @@ keywords: ['iceberg']
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
-import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
 
 # Iceberg catalog
 
-<QSTip />
+:::tip
+この例では、[StarRocks Basics](../../../quick_start/shared-nothing.md) クイックスタートで紹介されている Local Climatological Data (LCD) データセットを使用しています。データをロードして、自分で例を試すことができます。
+:::
 
 Iceberg catalog は、StarRocks が v2.4 以降でサポートする外部 catalog の一種です。Iceberg catalog を使用すると、以下のことが可能です。
 
@@ -147,7 +147,7 @@ Iceberg catalog の説明です。このパラメーターはオプションで�
 
 StarRock sがカタログへのデータアクセスを管理する方法に関するパラメータ。
 
-<IcebergCatalogIcebergRestSecurityLink />
+Iceberg REST カタログのデータアクセス管理の詳細な手順については、[Iceberg REST カタログのセキュリティ設定](./iceberg_rest_security.md)を参照してください。
 
 ##### catalog.access.control
 
