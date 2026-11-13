@@ -31,7 +31,7 @@ FILE get_presigned_file(VARCHAR storage_volume, FILE file_expr [, BIGINT expirat
 - `storage_volume`: the name of the storage volume whose credentials, endpoint, and region are used for signing. It must be a non-NULL string literal that names an enabled storage volume of the `S3` type. `builtin_storage_volume` is not allowed. See [CREATE STORAGE VOLUME](../../sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md).
 - `expiration_time`: optional. The validity period of the URL in seconds, from `1` to `3600`. TINYINT, SMALLINT, INT, and BIGINT are accepted; other types require an explicit CAST. If this parameter is omitted or NULL, the default value of `3600` is used.
 
-## Signing rules {#signing-rules}
+## Signing rules
 
 - You must have the USAGE privilege on the storage volume.
 - Signing is a local computation. The functions do not access the object, so they do not check whether the object exists or whether the credentials are allowed to read it.

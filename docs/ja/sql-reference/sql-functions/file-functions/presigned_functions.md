@@ -31,7 +31,7 @@ FILE get_presigned_file(VARCHAR storage_volume, FILE file_expr [, BIGINT expirat
 - `storage_volume`: ストレージボリュームの名前。署名には、このストレージボリュームの認証情報、エンドポイント、リージョンが使用されます。NULL でない文字列リテラルで、有効化された `S3` タイプのストレージボリュームを指定する必要があります。`builtin_storage_volume` は使用できません。[CREATE STORAGE VOLUME](../../sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) を参照してください。
 - `expiration_time`: 省略可能。URL の有効期間 (秒)。`1` から `3600` までの値を指定します。TINYINT、SMALLINT、INT、BIGINT を指定できます。その他の型は明示的な CAST が必要です。このパラメータを省略した場合、または NULL の場合は、デフォルト値の `3600` が使用されます。
 
-## 署名の規則 {#signing-rules}
+## 署名の規則
 
 - ストレージボリュームに対する USAGE 権限が必要です。
 - 署名はローカルで計算されます。これらの関数はオブジェクトにアクセスしないため、オブジェクトが存在するかどうか、認証情報にそのオブジェクトの読み取り権限があるかどうかは確認されません。

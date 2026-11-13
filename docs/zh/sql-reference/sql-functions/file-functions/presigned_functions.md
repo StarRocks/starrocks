@@ -31,7 +31,7 @@ FILE get_presigned_file(VARCHAR storage_volume, FILE file_expr [, BIGINT expirat
 - `storage_volume`：存储卷名称，签名使用该存储卷的凭证、Endpoint 和 Region。必须是非 NULL 的字符串字面量，对应一个已启用的 `S3` 类型存储卷。不允许使用 `builtin_storage_volume`。参见 [CREATE STORAGE VOLUME](../../sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md)。
 - `expiration_time`：可选。URL 的有效期，单位为秒，取值范围为 `1` 到 `3600`。支持 TINYINT、SMALLINT、INT 和 BIGINT，其他类型需要显式 CAST。省略该参数或该参数为 NULL 时，使用默认值 `3600`。
 
-## 签名规则 {#signing-rules}
+## 签名规则
 
 - 需要拥有该 Storage Volume 的 USAGE 权限。
 - 签名是本地计算。函数不访问对象，因此不检查对象是否存在，也不检查凭证是否有权读取该对象。
