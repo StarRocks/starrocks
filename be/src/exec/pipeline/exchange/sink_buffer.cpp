@@ -181,8 +181,17 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     COUNTER_SET(bytes_sent_counter, _bytes_sent);
     COUNTER_SET(request_sent_counter, _request_sent);
 
+<<<<<<< HEAD
     auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
     auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
+=======
+    RuntimeProfile::Counter* peak_request_bytes_counter = profile->add_counter(
+            "PeakRequestBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
+    COUNTER_SET(peak_request_bytes_counter, _peak_request_bytes.load());
+
+    RuntimeProfile::Counter* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
+    RuntimeProfile::Counter* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
+>>>>>>> 3d8ffac ([Enhancement] Add PeakRequestBytes to the exchange sink profile (#82343))
     COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
     COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
 
@@ -431,7 +440,15 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             }
         });
 
+<<<<<<< HEAD
         ++_total_in_flight_rpc;
+=======
+        closure->addFailureHandler(failed_function);
+        closure->addSuccessHandler(success_function);
+
+        update_peak(_peak_in_flight_rpc, ++_total_in_flight_rpc);
+        update_peak(_peak_request_bytes, static_cast<int64_t>(request.attachment.size()));
+>>>>>>> 3d8ffac ([Enhancement] Add PeakRequestBytes to the exchange sink profile (#82343))
         ++context.num_in_flight_rpcs;
 
         // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,
