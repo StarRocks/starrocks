@@ -5,7 +5,6 @@ toc_max_heading_level: 2
 sidebar_position: 20
 ---
 
-import CacheStats from '../../_assets/commonMarkdown/_cache_stats.mdx'
 
 # Data Cache
 
@@ -123,8 +122,6 @@ CN ノード上でキャッシュされたデータをクリアする手順は�
 
 - クラウドネイティブテーブルに対して `datacache.enable` プロパティが `false` に設定されている場合、そのテーブルに対して Data Cache は有効になりません。
 - `datacache.partition_duration` プロパティが特定の時間範囲に設定されている場合、その時間範囲を超えたデータはキャッシュされません。
-
-<CacheStats />
 
 ## 既知の問題
 

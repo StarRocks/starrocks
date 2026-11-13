@@ -5,9 +5,12 @@ description: "policy_references システムビューでオブジェクトの行
 
 # policy_references
 
-import FeatureAvailability from '../../_assets/commonMarkdown/_feature_availability.mdx'
 
-<FeatureAvailability />
+:::note
+
+このビューは、StarRocks で利用できない機能に適用されます。
+
+:::
 
 オブジェクトの行アクセスポリシーとカラムマスキングポリシーの参照を、ビュー `policy_references` をクエリすることで確認できます。
 

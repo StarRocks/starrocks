@@ -5,9 +5,12 @@ description: "系统视图，列出StarRocks集群中引用行访问策略和列
 
 # policy_references
 
-import FeatureAvailability from '../../_assets/commonMarkdown/_feature_availability.mdx'
 
-<FeatureAvailability />
+:::note
+
+此视图适用于 StarRocks 中不可用的功能。
+
+:::
 
 您可以通过查询视图 `policy_references` 来查看对象行访问策略和列掩码策略的参考。
 
