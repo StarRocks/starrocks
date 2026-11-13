@@ -258,6 +258,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     private final long sqlMode;
     // Expressions that their consumer reads only as a wall-clock time; Trino expressions compare by value, so by identity
     private final Set<Expression> wallClockArguments = Collections.newSetFromMap(new IdentityHashMap<>());
+    // with_timezone values whose consumer formats them, which in Trino rounds the instant to milliseconds; by identity
+    private final Set<Expression> formattedArguments = Collections.newSetFromMap(new IdentityHashMap<>());
 
     public AstBuilder(long sqlMode) {
         this.sqlMode = sqlMode;
@@ -820,11 +822,6 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }
         addWallClockArguments(node);
         List<Expr> arguments = visit(node.getArguments(), context, Expr.class);
-        String lowerName = node.getName().toString().toLowerCase();
-        if ((lowerName.equals("date_format") || lowerName.equals("format_datetime")) && arguments.size() == 2
-                && isZonedValue(node.getArguments().get(0))) {
-            arguments.set(0, roundHalfUp(arguments.get(0), 3));
-        }
 
         Expr callExpr;
         String functionName = node.getName().toString();
@@ -1191,11 +1188,15 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                     + "under one of these), with literal zones (UTC, +HH:MM or a region ID), and with a fixed-offset "
                     + "zone or a TIMESTAMP literal that isn't in a DST transition of that zone", node));
         }
-        Expr value = (Expr) visit(timestamp, context);
-        if (toZone == null) {
-            // Trino promotes a DATE argument to TIMESTAMP
-            return new CastExpr(new TypeDef(DATETIME), value);
+        // Trino promotes a DATE argument to TIMESTAMP. A format rounds the instant to milliseconds, which is rounding ts
+        // in the fixed offset attached to it, before the value is read in its zone
+        boolean formatted = formattedArguments.contains(node);
+        Expr value = roundHalfUp(new CastExpr(new TypeDef(DATETIME), (Expr) visit(timestamp, context)),
+                formatted ? 3 : 6);
+        if (toZone == null && (fromZone.get().getRules().isFixedOffset() || !formatted)) {
+            return value;
         }
+        // The rounding can cross a DST transition of the zone the value is read in
         return new FunctionCallExpr("convert_tz", List.of(value,
                 new com.starrocks.sql.ast.expression.StringLiteral(from.get()),
                 new com.starrocks.sql.ast.expression.StringLiteral(to.get().getId())));
@@ -1282,6 +1283,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 && arguments.get(1) instanceof StringLiteral
                 && !isFormatUnlikeTrino(name, ((StringLiteral) arguments.get(1)).getValue())) {
             wallClockArguments.add(arguments.get(0));
+            formattedArguments.add(arguments.get(0));
         } else if (name.equals("date_trunc") && arguments.size() == 2 && wallClockArguments.contains(node)
                 && isTruncationExact(arguments.get(0), arguments.get(1))) {
             wallClockArguments.add(arguments.get(1));
@@ -1612,7 +1614,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             wallClockArguments.add(node.getExpression());
         }
         Expr cast = new CastExpr(new TypeDef(getType(node.getType())), (Expr) visit(node.getExpression(), context));
-        if (isZonedValue(node.getExpression()) && node.getType() instanceof DateTimeDataType) {
+        // A cast to TIMESTAMP(p) rounds the wall-clock time in the value's zone, even onto a time the zone skips
+        if (resultZone(node.getExpression()).isPresent() && node.getType() instanceof DateTimeDataType) {
             return roundHalfUp(cast, castPrecision((DateTimeDataType) node.getType(), node));
         }
         return cast;
@@ -1635,8 +1638,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return precision;
     }
 
-    // Trino rounds a zoned value half up to `precision` fractional digits when casting it to TIMESTAMP(precision),
-    // and to milliseconds when formatting it; a DATETIME keeps microseconds. time_slice, unlike date_trunc, takes
+    // Trino rounds half up to `precision` fractional digits when casting a zoned value to TIMESTAMP(precision), and
+    // to milliseconds when formatting it; a DATETIME keeps microseconds. time_slice, unlike date_trunc, takes
     // milliseconds in the FE analyzer
     private static Expr roundHalfUp(Expr value, int precision) {
         if (precision >= 6) {
@@ -1652,14 +1655,6 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return new FunctionCallExpr(FunctionSet.TIME_SLICE, List.of(shifted, new IntLiteral(1, IntegerType.INT),
                 new com.starrocks.sql.ast.expression.StringLiteral("millisecond"),
                 new com.starrocks.sql.ast.expression.StringLiteral("floor")));
-    }
-
-    // A with_timezone value, or date_trunc of one
-    private static boolean isZonedValue(Expression expression) {
-        return resultZone(expression).isPresent() || (expression instanceof FunctionCall
-                && ((FunctionCall) expression).getName().toString().equalsIgnoreCase("date_trunc")
-                && ((FunctionCall) expression).getArguments().size() == 2
-                && resultZone(((FunctionCall) expression).getArguments().get(1)).isPresent());
     }
 
     @Override

@@ -92,6 +92,13 @@ public class TrinoWithTimezoneTest extends TrinoTestBase {
                 "'%H:%i:%s')", "time_slice(microseconds_add(");
         assertPlanContains("select format_datetime(with_timezone(TIMESTAMP '2024-08-19 14:36:41.9996', 'UTC'), " +
                 "'HH:mm:ss')", "time_slice(microseconds_add(");
+        // A format rounds the instant, then reads it in its zone: 01:59:59.9996 PST is 03:00:00 PDT. A cast rounds the
+        // wall-clock time in the zone instead, so the same value cast to TIMESTAMP is 02:00:00
+        assertPlanContains("select date_format(with_timezone(TIMESTAMP '2024-03-10 01:59:59.9996', " +
+                "'America/Los_Angeles'), '%H:%i:%s')", "convert_tz(time_slice(microseconds_add(",
+                "'-08:00', 'America/Los_Angeles')");
+        assertPlanContains("select cast(with_timezone(TIMESTAMP '2024-03-10 09:59:59.9996', 'UTC') " +
+                "AT TIME ZONE 'America/Los_Angeles' AS TIMESTAMP)", "time_slice(microseconds_add(convert_tz(");
         String plan = getFragmentPlan("select CAST(with_timezone(TIMESTAMP '2024-08-19 14:36:41.6', 'UTC') " +
                 "AS TIMESTAMP(6))");
         Assertions.assertFalse(plan.contains("microseconds_add"), plan);
