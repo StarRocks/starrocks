@@ -30,6 +30,15 @@
 
 namespace starrocks::pipeline {
 
+namespace {
+template <typename T>
+void update_peak(std::atomic<T>& peak, T value) {
+    T current = peak.load(std::memory_order_relaxed);
+    while (value > current && !peak.compare_exchange_weak(current, value, std::memory_order_relaxed)) {
+    }
+}
+} // namespace
+
 SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFragmentDestination>& destinations,
                        bool is_dest_merge)
         : _fragment_ctx(fragment_ctx),
@@ -180,6 +189,10 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     auto* request_sent_counter = ADD_COUNTER(profile, "RequestSent", TUnit::UNIT);
     COUNTER_SET(bytes_sent_counter, _bytes_sent);
     COUNTER_SET(request_sent_counter, _request_sent);
+
+    RuntimeProfile::Counter* peak_request_bytes_counter = profile->add_counter(
+            "PeakRequestBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
+    COUNTER_SET(peak_request_bytes_counter, _peak_request_bytes.load());
 
     auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
     auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
@@ -432,6 +445,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         });
 
         ++_total_in_flight_rpc;
+        update_peak(_peak_request_bytes, static_cast<int64_t>(request.attachment.size()));
         ++context.num_in_flight_rpcs;
 
         // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,

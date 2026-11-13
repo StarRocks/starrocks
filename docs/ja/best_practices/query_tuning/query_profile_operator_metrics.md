@@ -249,6 +249,7 @@ Exchange Operator がクエリのボトルネックになる可能性のある�
 | BytesUnsent | 送信されなかったデータのサイズ。このメトリクスはショートサーキットロジックがある場合にゼロ以外になります。それ以外の場合はゼロです。 |
 | BytesPassThrough | 目的地のノードが現在のノードである場合、データはネットワークを介して送信されず、パススルーデータと呼ばれます。このメトリクスはそのようなパススルーデータのサイズを示します。パススルーは `enable_exchange_pass_through` によって制御されます。 |
 | PassThroughBufferPeakMemoryUsage | パススルーバッファのピークメモリ使用量。 |
+| PeakRequestBytes | ネットワーク経由で送信された単一リクエストのサイズの最大値（圧縮される場合は圧縮後のサイズ）。`BytesSent / RequestSent` がリクエストの平均サイズです。パススルーデータは含まれません。 |
 | CompressTime | 圧縮時間。 |
 | CompressedInputBytes | 実際に圧縮器へ入力されたシリアライズ済み（圧縮前）データのサイズ。アダプティブ圧縮戦略によってスキップされた chunk は含まれません。`CompressedInputBytes / CompressedBytes` が圧縮率であり、`SerializedBytes - CompressedInputBytes` が圧縮されなかったデータのサイズです。 |
 | CompressedBytes | 圧縮データのサイズ。実際に圧縮された chunk のみが対象です。 |
