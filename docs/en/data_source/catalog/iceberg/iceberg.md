@@ -6,14 +6,15 @@ description: "An Iceberg catalog is a type of external catalog that is supported
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
-import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
-import EditionSpecificIcebergCatalogSyntax from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Syntax.mdx'
-import EditionSpecificIcebergCatalogParam from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Param.mdx'
 
 # Iceberg catalog
 
-<QSTip />
+---
+---
+
+:::tip
+This example uses the Local Climatological Data(LCD) dataset featured in the [StarRocks Basics](../../../quick_start/shared-nothing.md) Quick Start. You can load the data and try the example yourself.
+:::
 
 An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:
 
@@ -116,7 +117,18 @@ If Kerberos authentication is enabled for your HDFS cluster or Hive metastore, c
 
 ### Syntax
 
-<EditionSpecificIcebergCatalogSyntax />
+```SQL
+CREATE EXTERNAL CATALOG <catalog_name>
+[COMMENT <comment>]
+PROPERTIES
+(
+    "type" = "iceberg",
+    [SecurityParams],
+    MetastoreParams,
+    StorageCredentialParams,
+    MetadataRelatedParams
+)
+```
 
 ---
 
@@ -141,7 +153,7 @@ The type of your data source. Set the value to `iceberg`.
 
 Parameter(s) about how StarRocks manages data access to the catalog.
 
-<IcebergCatalogIcebergRestSecurityLink />
+For detailed instructions on managing data access for Iceberg Catalogs, see [Security Setup for Iceberg REST Catalog](./iceberg_rest_security.md).
 
 ##### catalog.access.control
 
@@ -840,8 +852,6 @@ Starting from v3.4, StarRocks can obtain statistics of Iceberg tables by reading
 | **Parameter**                                 | **Default**           | **Description**                                         |
 | :-------------------------------------------- | :-------------------- | :-------------------------------------------------------|
 | enable_get_stats_from_external_metadata       | false                 | Whether to obtain statistics from Iceberg metadata. When this item is set to `true`, you can further control which type of statistics to collect through the session variable [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata).  |
-
-<EditionSpecificIcebergCatalogParam />
 
 ### Examples
 

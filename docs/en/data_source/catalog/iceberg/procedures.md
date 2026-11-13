@@ -7,7 +7,6 @@ description: "Iceberg catalog procedures in StarRocks for snapshot management, b
 
 # Iceberg Procedures
 
-import AutoMetaMaintenance from '../../../_assets/commonMarkdown/auto_meta_maintenance.mdx'
 
 StarRocks Iceberg Catalog supports a variety of procedures for managing Iceberg tables, including snapshot management, branch management, data maintenance, metadata management, and table management.
 
@@ -316,8 +315,6 @@ Rewrite the data manifests of the current snapshot:
 ALTER TABLE iceberg.sales.order
 EXECUTE rewrite_manifests()
 ```
-
-<AutoMetaMaintenance />
 
 ## Table management
 

@@ -6,14 +6,12 @@ keywords: ['iceberg']
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
-import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
-import EditionSpecificIcebergCatalogSyntax from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Syntax.mdx'
-import EditionSpecificIcebergCatalogParam from '../../../_assets/commonMarkdown/Edition_Specific_Iceberg_Catalog_Param.mdx'
 
 # Iceberg catalog
 
-<QSTip />
+:::tip
+この例では、[StarRocks Basics](../../../quick_start/shared-nothing.md) クイックスタートで紹介されている Local Climatological Data (LCD) データセットを使用しています。データをロードして、自分で例を試すことができます。
+:::
 
 Iceberg catalog は、StarRocks が v2.4 以降でサポートする外部 catalog の一種です。Iceberg catalog を使用すると、以下のことが可能です。
 
@@ -115,7 +113,18 @@ HDFS クラスターまたは Hive metastore に Kerberos 認証が有効にな�
 
 ### 構文
 
-<EditionSpecificIcebergCatalogSyntax />
+```SQL
+CREATE EXTERNAL CATALOG <catalog_name>
+[COMMENT <comment>]
+PROPERTIES
+(
+    "type" = "iceberg",
+    [SecurityParams],
+    MetastoreParams,
+    StorageCredentialParams,
+    MetadataRelatedParams
+)
+```
 
 ---
 
@@ -140,7 +149,7 @@ Iceberg catalog の説明です。このパラメーターはオプションで�
 
 StarRock sがカタログへのデータアクセスを管理する方法に関するパラメータ。
 
-<IcebergCatalogIcebergRestSecurityLink />
+Iceberg REST カタログのデータアクセス管理の詳細な手順については、[Iceberg REST カタログのセキュリティ設定](./iceberg_rest_security.md)を参照してください。
 
 ##### catalog.access.control
 
@@ -839,8 +848,6 @@ v3.4 以降、StarRocks は、以下のパラメーターを設定すること�
 | **パラメーター**                                 | **デフォルト**           | **説明**                                                   |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_get_stats_from_external_metadata       | false                 | Iceberg メタデータから統計情報を取得するかどうか。この項目を `true` に設定すると、セッション変数 [`enable_get_stats_from_external_metadata`](../../../sql-reference/System_variable.md#enable_get_stats_from_external_metadata) を通じて、収集する統計情報の種類をさらに制御できます。  |
-
-<EditionSpecificIcebergCatalogParam />
 
 ### 例
 
