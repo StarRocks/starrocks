@@ -47,7 +47,7 @@ public class TimeWatcher {
         return t;
     }
 
-    public Optional<Timer> getTimer(String name) {
+    public synchronized Optional<Timer> getTimer(String name) {
         if (!scopedTimers.containsRow(name)) {
             return Optional.empty();
         }
@@ -61,7 +61,8 @@ public class TimeWatcher {
                 .orElse(null));
     }
 
-    public List<Timer> getAllTimerWithOrder() {
+    // A cancelled query can finalize its profile before a detached worker finishes merging timers.
+    public synchronized List<Timer> getAllTimerWithOrder() {
         return scopedTimers.values().stream().sorted(Comparator.comparingLong(o -> o.firstTimePointNanoSecond))
                 .collect(Collectors.toList());
     }

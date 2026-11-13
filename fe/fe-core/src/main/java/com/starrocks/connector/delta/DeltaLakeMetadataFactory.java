@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.delta;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
@@ -23,12 +24,20 @@ import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.connector.delta.CachingDeltaLakeMetastore.createQueryLevelInstance;
 import static com.starrocks.connector.delta.DeltaLakeConnector.HIVE_METASTORE_URIS;
 
 public class DeltaLakeMetadataFactory {
     private final String catalogName;
+    private final ThreadPoolExecutor prefetchExecutor = new ThreadPoolExecutor(2, 2, 60, TimeUnit.SECONDS,
+            new ArrayBlockingQueue<>(128),
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("delta-scan-prefetch-%d").build(),
+            new ThreadPoolExecutor.AbortPolicy());
     protected final IDeltaLakeMetastore metastore;
     protected final long perQueryMetastoreMaxNum;
     private final HdfsEnvironment hdfsEnvironment;
@@ -61,7 +70,7 @@ public class DeltaLakeMetadataFactory {
 
         Optional<DeltaLakeCacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
         return new DeltaLakeMetadata(hdfsEnvironment, catalogName, metastoreOperations,
-                cacheUpdateProcessor.orElse(null), connectorProperties);
+                cacheUpdateProcessor.orElse(null), connectorProperties, prefetchExecutor);
     }
 
     public synchronized Optional<DeltaLakeCacheUpdateProcessor> getCacheUpdateProcessor() {
@@ -73,6 +82,16 @@ public class DeltaLakeMetadataFactory {
         }
 
         return cacheUpdateProcessor;
+    }
+
+    public void shutdown() {
+        // shutdownNow removes queued futures without canceling them; wake any waiting query consumers.
+        for (Runnable task : prefetchExecutor.shutdownNow()) {
+            if (task instanceof Future<?> future) {
+                future.cancel(true);
+            }
+        }
+        metastoreCacheInvalidateCache();
     }
 
     public void metastoreCacheInvalidateCache() {
